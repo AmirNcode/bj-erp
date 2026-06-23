@@ -28,8 +28,7 @@ if (!supabaseAnonKey) {
 }
 
 /**
- * Creates a Supabase browser client.
- * Returns a generic SupabaseClient (no DB types yet — generated types added in a later phase).
+ * Creates a Supabase browser client typed with the generated Database schema.
  *
  * Call this inside a Client Component — each call returns the same singleton
  * instance (createBrowserClient handles deduplication internally).

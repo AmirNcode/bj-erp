@@ -247,11 +247,11 @@ create type department_kind as enum ('team','security','office');
 
 **Files:** Create: `lib/auth/usernameEmail.ts`, `app/[locale]/(auth)/login/page.tsx`, login server action. Test: `tests/unit/usernameEmail.test.ts`.
 
-**Interfaces:** Produces: `codeToAuthEmail(code: string): string` (e.g. `\`${code.toLowerCase()}@hr.internal\``), `signInWithCode(code, password)`.
+**Interfaces:** Produces: `codeToAuthEmail(code: string): string` (e.g. `\`${code.toLowerCase()}@bj-app.internal\``), `signInWithCode(code, password)`.
 
 Rationale: Supabase Auth keys on email/phone. We assign each user a **synthetic internal email** derived from `employee_code` so labourers log in with code+password and never see an email. **Confirm current Supabase auth options via Context7** (in case username/SMS support changed).
 
-- [ ] **Step 1: Failing test** for `codeToAuthEmail('A-100') === 'a-100@hr.internal'`.
+- [ ] **Step 1: Failing test** for `codeToAuthEmail('A-100') === 'a-100@bj-app.internal'`.
 - [ ] **Step 2: Run, verify fail.**
 - [ ] **Step 3: Implement** mapping + `signInWithCode` (calls `supabase.auth.signInWithPassword({ email: codeToAuthEmail(code), password })`).
 - [ ] **Step 4: Run, verify pass.**

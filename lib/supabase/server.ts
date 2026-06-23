@@ -27,11 +27,10 @@ if (!supabaseAnonKey) {
 }
 
 /**
- * Creates a Supabase client bound to the current request's cookies.
+ * Creates a Supabase client bound to the current request's cookies,
+ * typed with the generated Database schema.
  * Must be called inside an async context (Server Component, Server Action, etc.)
  * because Next.js 16 `cookies()` is async.
- *
- * Returns a generic SupabaseClient (no DB types yet — generated types added in a later phase).
  */
 export async function createClient() {
   const cookieStore = await cookies()
