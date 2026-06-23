@@ -1,5 +1,18 @@
 {
   "app": {
     "title": "HR System"
+  },
+  "login": {
+    "title": "Sign In",
+    "codeLabel": "Employee Code",
+    "codePlaceholder": "e.g. admin",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "submit": "Sign In",
+    "invalidCredentials": "Invalid employee code or password."
+  },
+  "home": {
+    "greeting": "Welcome, {name}",
+    "title": "Home"
   }
 }

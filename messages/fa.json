@@ -1,5 +1,18 @@
 {
   "app": {
     "title": "سامانه منابع انسانی"
+  },
+  "login": {
+    "title": "ورود به سامانه",
+    "codeLabel": "کد پرسنلی",
+    "codePlaceholder": "مثال: admin",
+    "passwordLabel": "رمز عبور",
+    "passwordPlaceholder": "رمز عبور خود را وارد کنید",
+    "submit": "ورود",
+    "invalidCredentials": "کد پرسنلی یا رمز عبور اشتباه است."
+  },
+  "home": {
+    "greeting": "خوش آمدید، {name}",
+    "title": "صفحه اصلی"
   }
 }

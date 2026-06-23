@@ -1,27 +1,26 @@
 /**
- * Locale root — redirects to /home if authenticated, else to /login.
+ * Auth guard layout for all (app) routes.
+ * Reads the session via the server client; redirects to /login if absent.
  */
 
 import { redirect } from 'next/navigation';
-import { setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = {
+  children: React.ReactNode;
   params: Promise<{ locale: string }>;
 };
 
-export default async function RootPage({ params }: Props) {
+export default async function AppLayout({ children, params }: Props) {
   const { locale } = await params;
-  setRequestLocale(locale);
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user) {
-    redirect(`/${locale}/home`);
-  } else {
+  if (!user) {
     redirect(`/${locale}/login`);
   }
+
+  return <>{children}</>;
 }
