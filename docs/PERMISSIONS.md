@@ -33,7 +33,10 @@ same_team(uid, target)     := (SELECT department_id FROM profiles WHERE id=uid)
                               = (SELECT department_id FROM profiles WHERE id=target)
 can_read_all(uid)    := is_admin(uid) OR has_role(uid,'manager') OR has_role(uid,'security')
 ```
-Helpers are `SECURITY DEFINER` functions to avoid recursive RLS on `profiles`/`user_roles`.
+Helpers are `SECURITY DEFINER` functions (with `SET search_path = ''`) to avoid recursive RLS on
+`profiles`/`user_roles`. They live in a **`private` schema** that PostgREST does **not** expose, so
+they are not callable via `/rest/v1/rpc/*` by `anon`/`authenticated` (closes an info-disclosure
+surface); `EXECUTE` is granted to `authenticated` only. Policies reference them as `private.<fn>`.
 
 ## Policy intent per table
 
@@ -71,7 +74,9 @@ Helpers are `SECURITY DEFINER` functions to avoid recursive RLS on `profiles`/`u
 
 ### `audit_log`
 - **SELECT**: `is_admin`.
-- **INSERT**: server-side on mutations.
+- **INSERT**: `authenticated` with `WITH CHECK (actor_id = auth.uid())` — a user may only write log
+  rows attributed to themselves (server actions set `actor_id` to the acting user). No
+  `UPDATE`/`DELETE` policies — append-only.
 
 ## Notes
 
