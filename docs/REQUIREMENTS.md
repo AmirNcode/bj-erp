@@ -27,18 +27,18 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-12** ☐ **Working-day count** excludes configured **weekend** days and **holidays**;
   half-day = 0.5. Computed **server-side**.
 - **FR-13** ☐ Request shows **remaining balance** before submit; blocks/ warns if insufficient.
-- **FR-14** ☐ **Approval**: the employee's **direct manager** approves/rejects; **admin can
+- **FR-14** ☑ **Approval**: the employee's **direct manager** approves/rejects; **admin can
   override** any decision. Ledger updates on approval.
-- **FR-15** ☐ Employee can **cancel** a pending request (and request cancellation of an approved
-  future one).
+- **FR-15** ◐ Employee can **cancel** a pending request (and request cancellation of an approved
+  future one). *(Pending-cancel done in Phase 2; approved-future cancellation deferred.)*
 
 ## Functional — Visibility (see also PERMISSIONS.md)
 
-- **FR-16** ☐ **Employee** sees only **their own team's** time-off + their own requests.
-- **FR-17** ☐ **Every manager** sees **company-wide** time-off (read), edits/approves only reports.
-- **FR-18** ☐ **Security** staff see **everyone's** calendar and time-off (read-only).
-- **FR-19** ☐ **Admin** sees and edits everything.
-- **FR-25** ☐ A leave request's free-text **`reason` is private**: visible only to the requester,
+- **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.
+- **FR-17** ☑ **Every manager** sees **company-wide** time-off (read), edits/approves only reports.
+- **FR-18** ☑ **Security** staff see **everyone's** calendar and time-off (read-only).
+- **FR-19** ☑ **Admin** sees and edits everything.
+- **FR-25** ☑ A leave request's free-text **`reason` is private**: visible only to the requester,
   their manager, security, and admin — NOT to teammates. The team calendar shows coworkers' dates +
   status only. (Decided 2026-06-23; enforce when the Phase 3 team-calendar read path is built — see
   PERMISSIONS.md.)
@@ -50,7 +50,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   status.
 - **FR-21** ☐ **Bottom tab bar**, role-driven. v1: Home · Request · Calendar · Profile/Settings;
   Admin & Manager get a Manage/Approvals tab. Future roles inject their own tabs.
-- **FR-22** ☐ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
+- **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
 - **FR-23** ☐ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
   English**. Persisted per user.
 - **FR-24** ☐ Admin can edit **work settings** (weekend days; default `[Friday]`) and the

@@ -5,12 +5,14 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
-> Current state: **Phases 0 ✅, 1 ✅, 2 ✅ COMPLETE and verified** (scaffold, i18n/RTL, PWA,
+> Current state: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅ COMPLETE and verified** (scaffold, i18n/RTL, PWA,
 > Supabase + hardened RLS, code+password auth, admin CRUD, manager edits, leave schema +
-> guarded write-path, Persian/Gregorian request form with day+balance preview). Branch
-> `feat/hr-timeoff-v1`; build green, unit 30/30, e2e 9/9. **Next: Phase 3 (approval flow +
-> visibility calendar), Phase 4 (home board + nav + settings), Phase 5 (full seed + deploy).**
-> Vercel deploy (0.6) still deferred. Granular history: `.superpowers/sdd/progress.md`.
+> guarded write-path, Persian/Gregorian request form with day+balance preview, approval flow
+> [approve/reject → ledger debit, `/manage/approvals`], FR-25 reason-private viewer-scoped
+> calendar [`/calendar`]). Branch `feat/hr-timeoff-v1`; build green, unit 34/34, e2e 11/11
+> (serial/CI). **Next: Phase 4 (home board + nav + settings), Phase 5 (full seed + deploy).**
+> Vercel deploy (0.6) still deferred. Phase 3 plan: `docs/plans/2026-06-24-hr-timeoff-phase3.md`.
+> Granular history: `.superpowers/sdd/progress.md`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -33,11 +35,11 @@ their own plan files when reached.
 - ☐ Allocation → ledger; balance derivation
 - ☐ Request form (type, dates via Persian/Gregorian picker, full/half), shows remaining balance
 
-## Phase 3 — Flow & visibility
-- ☐ Approval (manager approve/reject; admin override); ledger consumption on approval
-- ☐ Cancel pending request
-- ☐ RLS for visibility matrix (employee=team, manager/security=all read)
-- ☐ Calendar view scoped by viewer
+## Phase 3 — Flow & visibility ✅
+- ☑ Approval (manager approve/reject; admin override); ledger consumption on approval
+- ☑ Cancel pending request *(shipped in Phase 2)*
+- ☑ RLS for visibility matrix (employee=team, manager/security=all read) + FR-25 reason privacy
+- ☑ Calendar view scoped by viewer
 
 ## Phase 4 — Home board & polish
 - ☐ Home status board per role (employee statuses+balances+team; manager queue+reports)

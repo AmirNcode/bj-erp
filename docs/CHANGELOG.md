@@ -35,7 +35,13 @@ versioning once the app is scaffolded. Until then, entries track documentation a
 - **Request form** on `react-multi-date-picker` — Persian **or** Gregorian per `calendar_pref`, RTL; live working-day + remaining-balance preview; half-day gated by leave type. My-Requests list with cancel. Admin allocation UI.
 - Seed (interim): work settings (Friday weekend) + 3 leave types (annual 26d, sick, unpaid).
 
+### Implemented — Phase 3 (Flow & visibility)
+- **Approval** via guarded `SECURITY DEFINER` fns (`approve_leave_request` / `reject_leave_request`): the direct manager — or admin (override) — approves/rejects a pending request; approval atomically writes a `consumption` ledger row (−requested_days) with a row-count guard against double-debit; both decisions audit-logged.
+- **Approvals queue** UI (`/manage/approvals`, admin + manager), pending list narrowed to the viewer's reports by the pure `filterApprovable` (admin sees all).
+- **FR-25 reason privacy**: `leave_requests` SELECT tightened to `own | is_manager_of | security | admin` (teammates can no longer read another's free-text `reason`); a reason-less `team_leave_calendar` `SECURITY DEFINER` view (scoped `own | same_team | can_read_all`, pending+approved) backs the calendar. Verified on the live DB (a same-team peer reads the view, not the base row).
+- **Calendar** (`/calendar`, FR-22): viewer-scoped, agenda-style month view (type-colored, Jalali/Gregorian per pref), never showing `reason`.
+- Migrations 0008 (approval fns) + 0009 (reason privacy + view) applied; types regenerated. Tests: unit 34/34, e2e 11/11 (added approval + calendar suites, serial/CI). FR-15 approved-future cancellation still deferred.
+
 ### Next
-- Phase 3 — approval flow (manager approve/reject → ledger consumption) + visibility-scoped calendar.
 - Phase 4 — home status board, role-driven bottom-tab nav, settings (calendar/lang) toggles.
 - Phase 5 — seed (3 teams + Security, Iranian names, holidays) + demo deploy.
