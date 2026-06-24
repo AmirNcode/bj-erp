@@ -19,6 +19,8 @@ export default async function HomePage({ params }: Props) {
 
   const t = await getTranslations('home');
   const tTeam = await getTranslations('team');
+  const tRequest = await getTranslations('request');
+  const tAllocations = await getTranslations('allocations');
   const supabase = await createClient();
 
   // Get the authenticated user (already verified by layout auth guard).
@@ -50,12 +52,29 @@ export default async function HomePage({ params }: Props) {
       <h1 className="text-3xl font-semibold">
         {t('greeting', { name: fullName })}
       </h1>
+
+      {/* Leave request — all signed-in users */}
+      <Link
+        href={`/${locale}/request`}
+        className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+      >
+        {tRequest('navLink')}
+      </Link>
+
       {canManage && (
         <Link
           href={`/${locale}/manage/employees`}
           className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
           {t('manageLink')}
+        </Link>
+      )}
+      {canManage && (
+        <Link
+          href={`/${locale}/manage/allocations`}
+          className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
+        >
+          {tAllocations('navLink')}
         </Link>
       )}
       {isManager && (
