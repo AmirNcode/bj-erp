@@ -105,8 +105,6 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     await page.click('[data-testid="done-link"]');
     await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10000 });
 
-    // Grab manager's UUID from the edit link in the list
-    const mgrEditLink = page.locator(`a[href*="/manage/employees/"]`).filter({ hasText: /edit|ویرایش/i }).first();
     // We need to find M's row specifically. Use the code to find the row.
     const mgrRow = page.locator('tr').filter({ hasText: mgrCode });
     const mgrHref = await mgrRow.locator('a[href*="/manage/employees/"]').getAttribute('href');

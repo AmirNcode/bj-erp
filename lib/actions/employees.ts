@@ -139,12 +139,14 @@ export async function updateEmployee(
     .eq('id', id)
     .single();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update(filtered)
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: 'update denied or row not found' };
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,
