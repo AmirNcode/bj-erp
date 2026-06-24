@@ -5,14 +5,14 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
-> Current state: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅ COMPLETE and verified** (scaffold, i18n/RTL, PWA,
-> Supabase + hardened RLS, code+password auth, admin CRUD, manager edits, leave schema +
-> guarded write-path, Persian/Gregorian request form with day+balance preview, approval flow
-> [approve/reject → ledger debit, `/manage/approvals`], FR-25 reason-private viewer-scoped
-> calendar [`/calendar`]). Branch `feat/hr-timeoff-v1`; build green, unit 34/34, e2e 11/11
-> (serial/CI). **Next: Phase 4 (home board + nav + settings), Phase 5 (full seed + deploy).**
-> Vercel deploy (0.6) still deferred. Phase 3 plan: `docs/plans/2026-06-24-hr-timeoff-phase3.md`.
-> Granular history: `.superpowers/sdd/progress.md`.
+> Current state: **Phases 0 ✅, 1 ✅, 2 ✅, 3 ✅, 4 ✅ COMPLETE and verified** (scaffold, i18n/RTL,
+> PWA, Supabase + hardened RLS, code+password auth, admin CRUD, manager edits, leave schema +
+> guarded write-path, Persian/Gregorian request form, approval flow [`/manage/approvals`], FR-25
+> reason-private calendar [`/calendar`], role-aware home board, role-driven bottom-tab nav,
+> profile settings [calendar/language toggles] + logout, responsive/device-detection). Branch
+> `feat/hr-timeoff-v1`; build green, unit 54/54, e2e 14/14 (serial/CI). **Next: Phase 5 (full seed
+> + deploy; + deferred FR-24, FR-7 password-change).** Vercel deploy (0.6) still deferred. Plans:
+> `docs/plans/2026-06-24-hr-timeoff-phase3.md`, `…-phase4.md`. History: `.superpowers/sdd/progress.md`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -41,11 +41,11 @@ their own plan files when reached.
 - ☑ RLS for visibility matrix (employee=team, manager/security=all read) + FR-25 reason privacy
 - ☑ Calendar view scoped by viewer
 
-## Phase 4 — Home board & polish
-- ☐ Home status board per role (employee statuses+balances+team; manager queue+reports)
-- ☐ Role-driven bottom-tab nav (Home · Request · Calendar · Profile [+ Manage])
-- ☐ Settings: calendar (Persian/Gregorian) + language (fa/en) toggles, persisted
-- ☐ Responsive + device detection pass; accessibility/touch-target pass
+## Phase 4 — Home board & polish ✅
+- ☑ Home status board per role (employee statuses+balances+team; manager queue+reports)
+- ☑ Role-driven bottom-tab nav (Home · Request · Calendar · Profile [+ Manage])
+- ☑ Settings: calendar (Persian/Gregorian) + language (fa/en) toggles, persisted
+- ☑ Responsive + device detection pass; accessibility/touch-target pass
 
 ## Phase 5 — Seed & demo
 - ☐ Seed: 1 company, 3 teams + Security dept, Iranian names/roles, admin/managers/employees/security

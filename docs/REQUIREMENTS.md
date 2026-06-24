@@ -45,20 +45,20 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 
 ## Functional — UI / App shell
 
-- **FR-20** ☐ **Home page = status board** (notification surrogate): employee sees own request
+- **FR-20** ☑ **Home page = status board** (notification surrogate): employee sees own request
   statuses + balances + team time-off; manager additionally sees a pending-approval queue + reports'
   status.
-- **FR-21** ☐ **Bottom tab bar**, role-driven. v1: Home · Request · Calendar · Profile/Settings;
+- **FR-21** ☑ **Bottom tab bar**, role-driven. v1: Home · Request · Calendar · Profile/Settings;
   Admin & Manager get a Manage/Approvals tab. Future roles inject their own tabs.
 - **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
-- **FR-23** ☐ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
+- **FR-23** ☑ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
   English**. Persisted per user.
 - **FR-24** ☐ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
   **holiday list** (seeded with official Iranian 1404–1405 holidays).
 
 ## Non-functional
 
-- **NFR-1** ☐ **Responsive** for mobile and desktop; **detect** device (UA + viewport) so future
+- **NFR-1** ☑ **Responsive** for mobile and desktop; **detect** device (UA + viewport) so future
   modules can serve mobile-optimized forms vs desktop dashboards.
 - **NFR-2** ☐ **PWA**: installable to home screen; **persistent session** ("log in once").
 - **NFR-3** ☐ **RTL** correctness in Farsi; clean LTR in English.
@@ -69,7 +69,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   required).
 - **NFR-6** ☐ **Performance**: target a few hundred employees comfortably; list/calendar queries
   indexed.
-- **NFR-7** ☐ **Accessibility**: keyboard-navigable, adequate contrast, labelled controls; touch
+- **NFR-7** ☑ **Accessibility**: keyboard-navigable, adequate contrast, labelled controls; touch
   targets sized for factory-floor phone use.
 - **NFR-8** ☐ **Documentation** stays current (CLAUDE.md, this file, DATA_MODEL, PERMISSIONS,
   TASKS, CHANGELOG, specs) so any agent can resume cold.
