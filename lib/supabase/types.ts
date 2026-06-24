@@ -58,21 +58,9 @@ export type Database = {
         ]
       }
       companies: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-        }
+        Row: { created_at: string; id: string; name: string }
+        Insert: { created_at?: string; id?: string; name: string }
+        Update: { created_at?: string; id?: string; name?: string }
         Relationships: []
       }
       departments: {
@@ -116,6 +104,274 @@ export type Database = {
             columns: ["manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      holidays: {
+        Row: {
+          company_id: string
+          created_at: string
+          holiday_date: string
+          id: string
+          is_recurring: boolean
+          name_en: string | null
+          name_fa: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          holiday_date: string
+          id?: string
+          is_recurring?: boolean
+          name_en?: string | null
+          name_fa: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          holiday_date?: string
+          id?: string
+          is_recurring?: boolean
+          name_en?: string | null
+          name_fa?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "holidays_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_allocations: {
+        Row: {
+          allocated_days: number
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          leave_type_id: string
+          period_end: string
+          period_start: string
+        }
+        Insert: {
+          allocated_days: number
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          leave_type_id: string
+          period_end: string
+          period_start: string
+        }
+        Update: {
+          allocated_days?: number
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          leave_type_id?: string
+          period_end?: string
+          period_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_allocations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_allocations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_allocations_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_ledger: {
+        Row: {
+          balance_after: number
+          created_at: string
+          delta_days: number
+          employee_id: string
+          entry_type: Database["public"]["Enums"]["ledger_entry"]
+          id: string
+          leave_type_id: string
+          note: string | null
+          request_id: string | null
+        }
+        Insert: {
+          balance_after: number
+          created_at?: string
+          delta_days: number
+          employee_id: string
+          entry_type: Database["public"]["Enums"]["ledger_entry"]
+          id?: string
+          leave_type_id: string
+          note?: string | null
+          request_id?: string | null
+        }
+        Update: {
+          balance_after?: number
+          created_at?: string
+          delta_days?: number
+          employee_id?: string
+          entry_type?: Database["public"]["Enums"]["ledger_entry"]
+          id?: string
+          leave_type_id?: string
+          note?: string | null
+          request_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_ledger_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_ledger_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_ledger_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_requests: {
+        Row: {
+          created_at: string
+          day_part: Database["public"]["Enums"]["day_part"]
+          decided_at: string | null
+          decided_by: string | null
+          employee_id: string
+          end_date: string
+          id: string
+          leave_type_id: string
+          reason: string | null
+          requested_days: number
+          start_date: string
+          status: Database["public"]["Enums"]["leave_status"]
+        }
+        Insert: {
+          created_at?: string
+          day_part?: Database["public"]["Enums"]["day_part"]
+          decided_at?: string | null
+          decided_by?: string | null
+          employee_id: string
+          end_date: string
+          id?: string
+          leave_type_id: string
+          reason?: string | null
+          requested_days: number
+          start_date: string
+          status?: Database["public"]["Enums"]["leave_status"]
+        }
+        Update: {
+          created_at?: string
+          day_part?: Database["public"]["Enums"]["day_part"]
+          decided_at?: string | null
+          decided_by?: string | null
+          employee_id?: string
+          end_date?: string
+          id?: string
+          leave_type_id?: string
+          reason?: string | null
+          requested_days?: number
+          start_date?: string
+          status?: Database["public"]["Enums"]["leave_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_types: {
+        Row: {
+          active: boolean
+          affects_balance: boolean
+          allow_half_day: boolean
+          allow_hourly: boolean
+          color: string | null
+          company_id: string
+          default_annual_quota_days: number | null
+          id: string
+          is_paid: boolean
+          name_en: string | null
+          name_fa: string
+        }
+        Insert: {
+          active?: boolean
+          affects_balance?: boolean
+          allow_half_day?: boolean
+          allow_hourly?: boolean
+          color?: string | null
+          company_id: string
+          default_annual_quota_days?: number | null
+          id?: string
+          is_paid?: boolean
+          name_en?: string | null
+          name_fa: string
+        }
+        Update: {
+          active?: boolean
+          affects_balance?: boolean
+          allow_half_day?: boolean
+          allow_hourly?: boolean
+          color?: string | null
+          company_id?: string
+          default_annual_quota_days?: number | null
+          id?: string
+          is_paid?: boolean
+          name_en?: string | null
+          name_fa?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_types_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -210,6 +466,45 @@ export type Database = {
           },
         ]
       }
+      work_settings: {
+        Row: {
+          company_id: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          weekend_days: number[]
+        }
+        Insert: {
+          company_id: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          weekend_days?: number[]
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          weekend_days?: number[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -237,7 +532,10 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "manager" | "employee" | "security"
+      day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
+      leave_status: "pending" | "approved" | "rejected" | "cancelled"
+      ledger_entry: "allocation" | "consumption" | "adjustment" | "reversal"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -366,7 +664,10 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "manager", "employee", "security"],
+      day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
+      leave_status: ["pending", "approved", "rejected", "cancelled"],
+      ledger_entry: ["allocation", "consumption", "adjustment", "reversal"],
     },
   },
 } as const
