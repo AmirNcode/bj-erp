@@ -217,6 +217,13 @@ export async function setActive(
   if (!user) return { ok: false, error: 'Not authenticated' };
   if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
 
+  // Fetch current value for audit
+  const { data: beforeData } = await supabase
+    .from('profiles')
+    .select('active')
+    .eq('id', id)
+    .single();
+
   const { error } = await supabase
     .from('profiles')
     .update({ active })
@@ -229,7 +236,84 @@ export async function setActive(
     entity: 'profiles',
     entity_id: id,
     action: active ? 'activate_employee' : 'deactivate_employee',
+    before: { active: beforeData?.active ?? null } as import('@/lib/supabase/types').Json,
     after: { active } as import('@/lib/supabase/types').Json,
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Sets the team (department) for an employee. Admin-only.
+ */
+export async function setTeam(
+  id: string,
+  departmentId: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+
+  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+
+  // Fetch current value for audit
+  const { data: beforeData } = await supabase
+    .from('profiles')
+    .select('department_id')
+    .eq('id', id)
+    .single();
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ department_id: departmentId })
+    .eq('id', id);
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('audit_log').insert({
+    actor_id: user.id,
+    entity: 'profiles',
+    entity_id: id,
+    action: 'set_team',
+    before: { department_id: beforeData?.department_id ?? null } as import('@/lib/supabase/types').Json,
+    after: { department_id: departmentId } as import('@/lib/supabase/types').Json,
+  });
+
+  return { ok: true };
+}
+
+/**
+ * Sets the manager for an employee. Admin-only.
+ */
+export async function setManager(
+  id: string,
+  managerId: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+
+  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+
+  // Fetch current value for audit
+  const { data: beforeData } = await supabase
+    .from('profiles')
+    .select('manager_id')
+    .eq('id', id)
+    .single();
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ manager_id: managerId })
+    .eq('id', id);
+
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from('audit_log').insert({
+    actor_id: user.id,
+    entity: 'profiles',
+    entity_id: id,
+    action: 'set_manager',
+    before: { manager_id: beforeData?.manager_id ?? null } as import('@/lib/supabase/types').Json,
+    after: { manager_id: managerId } as import('@/lib/supabase/types').Json,
   });
 
   return { ok: true };

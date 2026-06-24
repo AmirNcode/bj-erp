@@ -39,11 +39,11 @@ describe('generateTempPassword', () => {
     expect(pw.length).toBeLessThanOrEqual(12);
   });
 
-  it('does not include ambiguous characters (0, O, I, l, 1)', () => {
+  it('does not include ambiguous characters (0, O, I, i, l, L, o, 1)', () => {
     // Run 100 times to be confident
     for (let i = 0; i < 100; i++) {
       const pw = generateTempPassword();
-      expect(pw).not.toMatch(/[0OIl1]/);
+      expect(pw).not.toMatch(/[0OILlio1]/);
     }
   });
 
@@ -53,7 +53,11 @@ describe('generateTempPassword', () => {
   });
 
   it('only uses allowed charset characters', () => {
-    const allowed = /^[A-HJ-NP-Z2-9a-km-z!@#$%^&*]+$/;
+    // Uppercase: A-H, J-K, M-N, P-Z (excludes I, L, O)
+    // Lowercase: a-h, j-k, m-n, p-z (excludes i, l, o)
+    // Digits: 2-9 (excludes 0, 1)
+    // Symbols: !@#$%^&*
+    const allowed = /^[A-HJ-KM-NP-Za-hj-km-np-z2-9!@#$%^&*]+$/;
     for (let i = 0; i < 50; i++) {
       const pw = generateTempPassword();
       expect(pw).toMatch(allowed);

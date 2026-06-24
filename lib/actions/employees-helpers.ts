@@ -25,13 +25,13 @@ export function allowedProfileFields(isAdmin: boolean): string[] {
 
 /**
  * Generates a readable ~10-char temporary password.
- * Excludes ambiguous characters: 0, O, I, l, 1 to avoid confusion when
+ * Excludes ambiguous characters: 0, O, I, i, l, L, o, 1 to avoid confusion when
  * the admin hands the code off verbally or on a printed slip.
  */
 export function generateTempPassword(): string {
-  // Charset: uppercase (no O, I), lowercase (no l), digits (no 0, 1), symbols
+  // Charset: uppercase (no O, I), lowercase (no i, l, o — ambiguous), digits (no 0, 1), symbols
   const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ'; // 23 chars
-  const lower = 'abcdefghjkmnpqrstuvwxyz'; // 23 chars (no l)
+  const lower = 'abcdefghjkmnpqrstuvwxyz'; // 23 chars (no i, l, o — ambiguous)
   const digits = '23456789'; // 8 chars
   const symbols = '!@#$%^&*';
   const all = upper + lower + digits + symbols;

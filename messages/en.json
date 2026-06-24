@@ -36,6 +36,7 @@
       "create": "Create Employee",
       "save": "Save",
       "cancel": "Cancel",
+      "done": "Done",
       "resetPwd": "Reset Password",
       "activate": "Activate",
       "deactivate": "Deactivate",

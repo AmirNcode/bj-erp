@@ -23,6 +23,7 @@ type Props = {
     hireDate: string;
     submit: string;
     cancel: string;
+    done: string;
     tempPasswordLabel: string;
     tempPasswordHint: string;
     errorLabel: string;
@@ -83,7 +84,7 @@ export function NewEmployeeForm({ departments, managers, locale, labels }: Props
           className="inline-block mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
           data-testid="done-link"
         >
-          ✓ {labels.cancel}
+          ✓ {labels.done}
         </a>
       </div>
     );

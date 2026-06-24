@@ -40,6 +40,7 @@ export default async function NewEmployeePage({ params }: Props) {
           hireDate: t('employees.hireDate'),
           submit: t('employees.create'),
           cancel: t('employees.cancel'),
+          done: t('employees.done'),
           tempPasswordLabel: t('employees.tempPasswordLabel'),
           tempPasswordHint: t('employees.tempPasswordHint'),
           errorLabel: t('employees.error'),
