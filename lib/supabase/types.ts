@@ -507,7 +507,46 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      team_leave_calendar: {
+        Row: {
+          day_part: Database["public"]["Enums"]["day_part"] | null
+          department_id: string | null
+          employee_id: string | null
+          employee_name: string | null
+          end_date: string | null
+          id: string | null
+          leave_type_color: string | null
+          leave_type_id: string | null
+          leave_type_name_en: string | null
+          leave_type_name_fa: string | null
+          requested_days: number | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["leave_status"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       app_create_employee: {
