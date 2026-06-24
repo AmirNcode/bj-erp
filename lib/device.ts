@@ -10,3 +10,11 @@ export function parseDeviceType(userAgent: string | null | undefined): 'mobile' 
     ? 'mobile'
     : 'desktop';
 }
+
+/**
+ * Viewport-width breakpoint (Tailwind `md` = 768). `0` (the SSR/pre-mount value)
+ * is treated as desktop so server output and first client paint agree.
+ */
+export function isMobileWidth(width: number): boolean {
+  return width > 0 && width < 768;
+}

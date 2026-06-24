@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDeviceType } from '@/lib/device';
+import { parseDeviceType, isMobileWidth } from '@/lib/device';
 
 describe('parseDeviceType', () => {
   it('iPhone UA -> mobile', () => {
@@ -19,4 +19,11 @@ describe('parseDeviceType', () => {
     expect(parseDeviceType(null)).toBe('desktop');
     expect(parseDeviceType(undefined)).toBe('desktop');
   });
+});
+
+describe('isMobileWidth', () => {
+  it('< 768 is mobile', () => expect(isMobileWidth(375)).toBe(true));
+  it('768 is desktop (boundary)', () => expect(isMobileWidth(768)).toBe(false));
+  it('1280 is desktop', () => expect(isMobileWidth(1280)).toBe(false));
+  it('0 (SSR/pre-mount) -> not mobile', () => expect(isMobileWidth(0)).toBe(false));
 });

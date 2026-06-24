@@ -18,6 +18,7 @@ export default async function EmployeesPage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('manage');
+  const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
   // Fetch all employees. RLS allows admin to read all profiles.
@@ -44,6 +45,12 @@ export default async function EmployeesPage({ params }: Props) {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t('employees.title')}</h1>
         <div className="flex items-center gap-3">
+          <Link
+            href={`/${locale}/team`}
+            className="text-blue-600 hover:underline px-2 py-2"
+          >
+            {tTeam('navLink')}
+          </Link>
           <Link
             href={`/${locale}/manage/approvals`}
             className="text-blue-600 hover:underline px-2 py-2"
