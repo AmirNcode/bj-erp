@@ -275,7 +275,7 @@ export async function getWorkSettings(): Promise<{
   return {
     ok: true,
     settings: {
-      weekendDays: ws?.weekend_days ?? [5, 6], // default Fri+Sat for Iran
+      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_days
       holidays: (hols ?? []).map((h) => h.holiday_date),
     },
   };

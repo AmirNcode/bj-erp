@@ -86,15 +86,6 @@ export async function createEmployee(
     return { ok: false, error: error.message };
   }
 
-  // Audit log
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: userId,
-    action: 'create_employee',
-    after: { employee_code: input.employee_code, full_name: input.full_name } as import('@/lib/supabase/types').Json,
-  });
-
   return { ok: true, tempPassword, userId: userId as string };
 }
 
