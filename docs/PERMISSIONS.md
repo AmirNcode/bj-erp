@@ -44,6 +44,11 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 - **SELECT**: self · `same_team` · `can_read_all`.
 - **UPDATE**: `is_admin` (all fields) · `is_manager_of(target)` (managed subset) · self (own
   limited subset: language/calendar prefs, password handled by Auth, contact fields).
+  **Column scope is enforced in the DB** by the `profiles_enforce_update_scope` BEFORE-UPDATE
+  trigger (migration 0007) — RLS is row-level only, so without the trigger a manager could PATCH
+  any column of a report via the anon key. Non-admins: self → `full_name`/`language_pref`/
+  `calendar_pref`; manager-of-row → `full_name`/`hire_date`; `department_id`/`manager_id`/
+  `active`/`employee_code`/`company_id` are admin-only.
 - **INSERT / deactivate**: `is_admin` only.
 
 ### `user_roles`
