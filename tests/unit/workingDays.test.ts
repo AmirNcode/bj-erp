@@ -76,4 +76,9 @@ describe('countWorkingDays', () => {
     // Mon 2026-06-22 through Sun 2026-06-28 = Mon,Tue,Wed,Thu,Sat,Sun = 6 (Fri=26 skipped)
     expect(countWorkingDays('2026-06-22', '2026-06-28', { ...W, dayPart: 'full' })).toBe(6);
   });
+
+  it('invalid date string returns 0', () => {
+    // Malformed input → NaN → guard returns 0
+    expect(countWorkingDays('not-a-date', '2026-06-25', { ...W, dayPart: 'full' })).toBe(0);
+  });
 });

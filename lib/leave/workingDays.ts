@@ -19,6 +19,9 @@ export function countWorkingDays(
   const startMs = Date.parse(start + 'T00:00:00Z');
   const endMs = Date.parse(end + 'T00:00:00Z');
 
+  // Guard against invalid dates
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 0;
+
   // Reversed range → 0
   if (endMs < startMs) return 0;
 
