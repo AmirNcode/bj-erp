@@ -102,3 +102,13 @@ user creation in-database and **identical on self-hosted Supabase** (portability
 The Supabase security advisor flags these two as exposed `SECURITY DEFINER` functions (lint 0029).
 **Accepted by design** — the in-function admin check is the intended gate. Production hardening:
 enable Auth "leaked password protection" (advisor `auth_leaked_password_protection`).
+
+## DECISION (enforce in Phase 3) — leave `reason` is private
+
+A leave request's free-text `reason` may contain medical/personal info. **Teammates must NOT see
+it.** The team calendar (Phase 3) shows a coworker's dates + status only; `reason` is visible only
+to the requester, their manager, security, and admin. Today `leave_requests` has a single
+`same_team` SELECT policy that includes `reason`, so this must be tightened when the team-calendar
+read path is built — e.g. a `team_leave_calendar` view that omits `reason` (granted for same-team
+reads), while full-row reads stay restricted to own / manager-of / can_read_all. Until then, no UI
+exposes other people's reasons.

@@ -38,6 +38,10 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-17** ☐ **Every manager** sees **company-wide** time-off (read), edits/approves only reports.
 - **FR-18** ☐ **Security** staff see **everyone's** calendar and time-off (read-only).
 - **FR-19** ☐ **Admin** sees and edits everything.
+- **FR-25** ☐ A leave request's free-text **`reason` is private**: visible only to the requester,
+  their manager, security, and admin — NOT to teammates. The team calendar shows coworkers' dates +
+  status only. (Decided 2026-06-23; enforce when the Phase 3 team-calendar read path is built — see
+  PERMISSIONS.md.)
 
 ## Functional — UI / App shell
 
