@@ -68,6 +68,12 @@
     },
     "days": "days"
   },
+  "calendar": {
+    "title": "Calendar",
+    "navLink": "Calendar",
+    "empty": "No time-off this month.",
+    "error": "Error"
+  },
   "allocations": {
     "title": "Leave Allocations",
     "navLink": "Allocations",

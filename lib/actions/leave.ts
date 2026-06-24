@@ -412,3 +412,59 @@ export async function getPendingApprovals(): Promise<
     requests: filterApprovable(mapped, user.id, roles.includes('admin')),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Calendar — viewer-scoped time-off (FR-22). Reads the reason-less
+// team_leave_calendar view, which scopes rows by the viewer automatically
+// (own + same_team for employees; everyone for manager/security/admin).
+// `reason` is never selected here.
+// ---------------------------------------------------------------------------
+
+export type CalendarEntry = {
+  id: string;
+  employee_id: string;
+  employee_name: string;
+  leave_type_name_fa: string;
+  leave_type_name_en: string | null;
+  leave_type_color: string | null;
+  start_date: string;
+  end_date: string;
+  day_part: DayPart;
+  status: 'pending' | 'approved';
+};
+
+export async function getCalendarEntries(
+  rangeStart: string,
+  rangeEnd: string
+): Promise<{ ok: true; entries: CalendarEntry[] } | { ok: false; error: string }> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+
+  // Overlap test: an entry intersects [rangeStart, rangeEnd] when it starts on
+  // or before rangeEnd AND ends on or after rangeStart.
+  const { data, error } = await supabase
+    .from('team_leave_calendar')
+    .select(
+      'id, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, status'
+    )
+    .lte('start_date', rangeEnd)
+    .gte('end_date', rangeStart)
+    .order('start_date', { ascending: true });
+
+  if (error) return { ok: false, error: error.message };
+
+  const entries: CalendarEntry[] = (data ?? []).map((r) => ({
+    id: r.id ?? '',
+    employee_id: r.employee_id ?? '',
+    employee_name: r.employee_name ?? '—',
+    leave_type_name_fa: r.leave_type_name_fa ?? '—',
+    leave_type_name_en: r.leave_type_name_en ?? null,
+    leave_type_color: r.leave_type_color ?? null,
+    start_date: r.start_date ?? '',
+    end_date: r.end_date ?? '',
+    day_part: (r.day_part ?? 'full') as DayPart,
+    status: (r.status ?? 'pending') as 'pending' | 'approved',
+  }));
+
+  return { ok: true, entries };
+}
