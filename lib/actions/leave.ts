@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
+import { filterApprovable } from '@/lib/leave/approvals';
 
 type DayPart = Database['public']['Enums']['day_part'];
 
@@ -307,4 +308,107 @@ export async function getAllEmployees(): Promise<{
   if (error) return { ok: false, error: error.message };
 
   return { ok: true, employees: (data ?? []) as EmployeeOption[] };
+}
+
+// ---------------------------------------------------------------------------
+// Approval flow (manager-of direct report / admin override) — FR-14
+// ---------------------------------------------------------------------------
+
+export type DecisionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Approve a pending request. The SQL fn enforces is_manager_of(employee)||admin,
+ * flips the status atomically, and debits the ledger for balance-affecting types.
+ */
+export async function approveRequest(requestId: string): Promise<DecisionResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+
+  const { error } = await supabase.rpc('approve_leave_request', { p_id: requestId });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/**
+ * Reject a pending request. Same guard as approve; writes no ledger row.
+ */
+export async function rejectRequest(
+  requestId: string,
+  reason?: string
+): Promise<DecisionResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+
+  const { error } = await supabase.rpc('reject_leave_request', {
+    p_id: requestId,
+    p_reason: reason ?? undefined,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export type PendingApproval = {
+  id: string;
+  employee_name: string;
+  employee_manager_id: string | null;
+  leave_type_name_fa: string;
+  leave_type_name_en: string | null;
+  start_date: string;
+  end_date: string;
+  day_part: DayPart;
+  requested_days: number;
+  reason: string | null;
+};
+
+/**
+ * Pending requests the caller may act on: admin → all; manager → own reports.
+ * RLS already scopes what is readable; filterApprovable narrows the queue to
+ * what the caller can actually decide (the SQL fn re-checks on write).
+ */
+export async function getPendingApprovals(): Promise<
+  { ok: true; requests: PendingApproval[] } | { ok: false; error: string }
+> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select(
+      `id, employee_id, start_date, end_date, day_part, requested_days, reason,
+       profiles!leave_requests_employee_id_fkey(full_name, manager_id),
+       leave_types(name_fa, name_en)`
+    )
+    .eq('status', 'pending')
+    .order('start_date', { ascending: true });
+
+  if (error) return { ok: false, error: error.message };
+
+  type Row = {
+    id: string;
+    start_date: string;
+    end_date: string;
+    day_part: DayPart;
+    requested_days: number;
+    reason: string | null;
+    profiles: { full_name: string; manager_id: string | null } | null;
+    leave_types: { name_fa: string; name_en: string | null } | null;
+  };
+
+  const mapped: PendingApproval[] = ((data ?? []) as unknown as Row[]).map((r) => ({
+    id: r.id,
+    employee_name: r.profiles?.full_name ?? '—',
+    employee_manager_id: r.profiles?.manager_id ?? null,
+    leave_type_name_fa: r.leave_types?.name_fa ?? '—',
+    leave_type_name_en: r.leave_types?.name_en ?? null,
+    start_date: r.start_date,
+    end_date: r.end_date,
+    day_part: r.day_part,
+    requested_days: r.requested_days,
+    reason: r.reason ?? null,
+  }));
+
+  return {
+    ok: true,
+    requests: filterApprovable(mapped, user.id, roles.includes('admin')),
+  };
 }
