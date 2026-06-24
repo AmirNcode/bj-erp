@@ -543,6 +543,14 @@ export type Database = {
         Args: { p_id: string }
         Returns: undefined
       }
+      approve_leave_request: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      reject_leave_request: {
+        Args: { p_id: string; p_reason?: string }
+        Returns: undefined
+      }
       allocate_leave: {
         Args: {
           p_employee_id: string
