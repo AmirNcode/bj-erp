@@ -84,3 +84,16 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `can_read_all`; write uses `is_manager_of`.
 - `same_team` gives employees their team calendar without exposing other teams.
 - Validate every policy on **self-hosted Supabase** before production cutover (NFR-4).
+
+## Privileged admin RPCs (runtime user creation)
+
+`public.app_create_employee(...)` and `public.app_set_employee_password(...)` are `SECURITY DEFINER`
+functions (search_path locked) that write to `auth.users` / `auth.identities` — work the
+`authenticated` role cannot do directly. They **self-guard** with `private.is_admin(auth.uid())`
+(non-admin callers get a `42501` exception) and are granted to `authenticated`, revoked from `anon`.
+This is the chosen alternative to shipping a `service_role` secret into the app server — it keeps
+user creation in-database and **identical on self-hosted Supabase** (portability, NFR-4).
+
+The Supabase security advisor flags these two as exposed `SECURITY DEFINER` functions (lint 0029).
+**Accepted by design** — the in-function admin check is the intended gate. Production hardening:
+enable Auth "leaked password protection" (advisor `auth_leaked_password_protection`).

@@ -215,7 +215,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      app_create_employee: {
+        Args: {
+          p_calendar_pref?: string
+          p_company_id: string
+          p_department_id?: string
+          p_employee_code: string
+          p_full_name: string
+          p_hire_date?: string
+          p_language_pref?: string
+          p_manager_id?: string
+          p_password: string
+          p_roles?: Database["public"]["Enums"]["app_role"][]
+        }
+        Returns: string
+      }
+      app_set_employee_password: {
+        Args: { p_password: string; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "manager" | "employee" | "security"
