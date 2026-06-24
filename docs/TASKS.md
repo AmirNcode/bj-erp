@@ -5,8 +5,10 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
-> Current state: **docs + design + Phase 0–2 plan written, all approved.** Next: execute Phase 0
-> (after user picks an execution approach). No app code yet.
+> Current state: **Phase 0 ✅ and Phase 1 ✅ COMPLETE and verified** (scaffold, i18n/RTL, PWA,
+> Supabase + hardened RLS, code+password auth, admin CRUD, manager edits). Branch
+> `feat/hr-timeoff-v1`. **Phase 2 (Leave core) is next.** Vercel deploy (0.6) deferred. Granular
+> task/commit history lives in `.superpowers/sdd/progress.md`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
