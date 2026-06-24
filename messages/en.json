@@ -2,6 +2,13 @@
   "app": {
     "title": "HR System"
   },
+  "nav": {
+    "home": "Home",
+    "request": "Request",
+    "calendar": "Calendar",
+    "profile": "Profile",
+    "manage": "Manage"
+  },
   "login": {
     "title": "Sign In",
     "codeLabel": "Employee Code",

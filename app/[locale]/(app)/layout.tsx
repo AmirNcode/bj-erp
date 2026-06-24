@@ -4,7 +4,9 @@
  */
 
 import { redirect } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { BottomNav } from './_components/BottomNav';
 
 type Props = {
   children: React.ReactNode;
@@ -22,5 +24,25 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  return <>{children}</>;
+  const { data: rolesData } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id);
+  const roles = (rolesData ?? []).map((r) => r.role as string);
+
+  const t = await getTranslations({ locale, namespace: 'nav' });
+  const labels = {
+    home: t('home'),
+    request: t('request'),
+    calendar: t('calendar'),
+    profile: t('profile'),
+    manage: t('manage'),
+  };
+
+  return (
+    <div className="min-h-dvh pb-20">
+      {children}
+      <BottomNav roles={roles} locale={locale} labels={labels} />
+    </div>
+  );
 }
