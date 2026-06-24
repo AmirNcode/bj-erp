@@ -16,6 +16,16 @@
     "title": "Home",
     "manageLink": "Manage Employees"
   },
+  "team": {
+    "title": "My Team",
+    "navLink": "My Team",
+    "code": "Employee Code",
+    "name": "Full Name",
+    "department": "Department",
+    "edit": "Edit",
+    "noReports": "You have no direct reports assigned.",
+    "managerNote": "As a manager you can edit only name and hire date."
+  },
   "manage": {
     "employees": {
       "title": "Manage Employees",

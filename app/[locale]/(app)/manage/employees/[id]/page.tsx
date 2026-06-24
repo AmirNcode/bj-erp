@@ -18,6 +18,7 @@ export default async function EditEmployeePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('manage');
+  const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
   const {
@@ -86,6 +87,7 @@ export default async function EditEmployeePage({ params }: Props) {
           selectMgr: t('employees.selectMgr'),
           noneOption: t('employees.none'),
           saved: t('employees.saved'),
+          managerNote: tTeam('managerNote'),
         }}
       />
     </main>

@@ -47,6 +47,7 @@ type Props = {
     selectMgr: string;
     noneOption: string;
     saved: string;
+    managerNote?: string;
   };
 };
 
@@ -140,6 +141,11 @@ export function EditEmployeeForm({
 
   return (
     <div className="space-y-6">
+      {!isAdmin && labels.managerNote && (
+        <p className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+          {labels.managerNote}
+        </p>
+      )}
       {error && (
         <p role="alert" className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm">
           {labels.errorLabel}: {error}

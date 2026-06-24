@@ -18,6 +18,7 @@ export default async function HomePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('home');
+  const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
   // Get the authenticated user (already verified by layout auth guard).
@@ -42,6 +43,7 @@ export default async function HomePage({ params }: Props) {
 
   const roles = (rolesData ?? []).map((r) => r.role);
   const canManage = roles.includes('admin') || roles.includes('manager');
+  const isManager = roles.includes('manager');
 
   return (
     <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
@@ -54,6 +56,14 @@ export default async function HomePage({ params }: Props) {
           className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
         >
           {t('manageLink')}
+        </Link>
+      )}
+      {isManager && (
+        <Link
+          href={`/${locale}/team`}
+          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+        >
+          {tTeam('navLink')}
         </Link>
       )}
     </main>
