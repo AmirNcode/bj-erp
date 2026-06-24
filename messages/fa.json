@@ -26,6 +26,60 @@
     "noReports": "هیچ زیردستی برای شما تعریف نشده است.",
     "managerNote": "به‌عنوان سرپرست فقط می‌توانید نام و تاریخ استخدام را ویرایش کنید."
   },
+  "request": {
+    "title": "درخواست مرخصی",
+    "navLink": "درخواست مرخصی",
+    "leaveType": "نوع مرخصی",
+    "selectType": "— انتخاب نوع مرخصی —",
+    "dateRange": "بازه تاریخی",
+    "dayPart": "نوع روز",
+    "dayPartFull": "روز کامل",
+    "dayPartAm": "نیمه اول (صبح)",
+    "dayPartPm": "نیمه دوم (بعدازظهر)",
+    "reason": "دلیل (اختیاری)",
+    "submit": "ارسال درخواست",
+    "preview": "پیش‌نمایش",
+    "workingDays": "روزهای کاری: {count}",
+    "remainingBalance": "مانده مرخصی: {days} روز",
+    "noBalance": "موجودی نامشخص",
+    "success": "درخواست با موفقیت ارسال شد.",
+    "error": "خطا",
+    "myRequests": "درخواست‌های من",
+    "noRequests": "هیچ درخواستی ثبت نشده است.",
+    "cancel": "لغو",
+    "cancelConfirm": "آیا از لغو این درخواست اطمینان دارید؟",
+    "cancelSuccess": "درخواست با موفقیت لغو شد.",
+    "from": "از",
+    "to": "تا"
+  },
+  "leave": {
+    "status": {
+      "pending": "در انتظار",
+      "approved": "تایید شده",
+      "rejected": "رد شده",
+      "cancelled": "لغو شده"
+    },
+    "dayPart": {
+      "full": "روز کامل",
+      "am": "نیمه اول",
+      "pm": "نیمه دوم"
+    },
+    "days": "روز"
+  },
+  "allocations": {
+    "title": "تخصیص مرخصی",
+    "navLink": "تخصیص‌ها",
+    "employee": "کارمند",
+    "selectEmployee": "— انتخاب کارمند —",
+    "leaveType": "نوع مرخصی",
+    "selectType": "— انتخاب نوع مرخصی —",
+    "periodStart": "شروع دوره",
+    "periodEnd": "پایان دوره",
+    "days": "تعداد روز",
+    "submit": "ثبت تخصیص",
+    "success": "تخصیص مرخصی با موفقیت ثبت شد.",
+    "error": "خطا"
+  },
   "manage": {
     "employees": {
       "title": "مدیریت کارمندان",

@@ -26,6 +26,60 @@
     "noReports": "You have no direct reports assigned.",
     "managerNote": "As a manager you can edit only name and hire date."
   },
+  "request": {
+    "title": "Request Leave",
+    "navLink": "Request Leave",
+    "leaveType": "Leave Type",
+    "selectType": "— Select Leave Type —",
+    "dateRange": "Date Range",
+    "dayPart": "Day Part",
+    "dayPartFull": "Full Day",
+    "dayPartAm": "Morning (AM)",
+    "dayPartPm": "Afternoon (PM)",
+    "reason": "Reason (optional)",
+    "submit": "Submit Request",
+    "preview": "Preview",
+    "workingDays": "Working days: {count}",
+    "remainingBalance": "Remaining balance: {days} days",
+    "noBalance": "Balance unknown",
+    "success": "Request submitted successfully.",
+    "error": "Error",
+    "myRequests": "My Requests",
+    "noRequests": "No requests found.",
+    "cancel": "Cancel",
+    "cancelConfirm": "Are you sure you want to cancel this request?",
+    "cancelSuccess": "Request cancelled successfully.",
+    "from": "From",
+    "to": "To"
+  },
+  "leave": {
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "dayPart": {
+      "full": "Full day",
+      "am": "Morning",
+      "pm": "Afternoon"
+    },
+    "days": "days"
+  },
+  "allocations": {
+    "title": "Leave Allocations",
+    "navLink": "Allocations",
+    "employee": "Employee",
+    "selectEmployee": "— Select Employee —",
+    "leaveType": "Leave Type",
+    "selectType": "— Select Leave Type —",
+    "periodStart": "Period Start",
+    "periodEnd": "Period End",
+    "days": "Days",
+    "submit": "Submit Allocation",
+    "success": "Leave allocation recorded successfully.",
+    "error": "Error"
+  },
   "manage": {
     "employees": {
       "title": "Manage Employees",

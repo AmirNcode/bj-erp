@@ -529,6 +529,30 @@ export type Database = {
         Args: { p_password: string; p_user_id: string }
         Returns: undefined
       }
+      submit_leave_request: {
+        Args: {
+          p_leave_type_id: string
+          p_start: string
+          p_end: string
+          p_day_part: Database["public"]["Enums"]["day_part"]
+          p_reason?: string | null
+        }
+        Returns: string
+      }
+      cancel_leave_request: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      allocate_leave: {
+        Args: {
+          p_employee_id: string
+          p_leave_type_id: string
+          p_period_start: string
+          p_period_end: string
+          p_days: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "admin" | "manager" | "employee" | "security"
