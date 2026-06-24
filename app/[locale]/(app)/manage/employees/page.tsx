@@ -43,12 +43,20 @@ export default async function EmployeesPage({ params }: Props) {
     <main className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">{t('employees.title')}</h1>
-        <Link
-          href={`/${locale}/manage/employees/new`}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          {t('employees.addNew')}
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/${locale}/manage/approvals`}
+            className="text-blue-600 hover:underline px-2 py-2"
+          >
+            {t('approvalsLink')}
+          </Link>
+          <Link
+            href={`/${locale}/manage/employees/new`}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {t('employees.addNew')}
+          </Link>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-gray-200">

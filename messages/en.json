@@ -82,7 +82,19 @@
     "success": "Leave allocation recorded successfully.",
     "error": "Error"
   },
+  "approvals": {
+    "title": "Approvals",
+    "navLink": "Approvals",
+    "empty": "No pending requests to review.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approveConfirm": "Approve this leave request?",
+    "rejectConfirm": "Reject this leave request?",
+    "reason": "Reason",
+    "error": "Error"
+  },
   "manage": {
+    "approvalsLink": "Approvals",
     "employees": {
       "title": "Manage Employees",
       "newTitle": "Add New Employee",
