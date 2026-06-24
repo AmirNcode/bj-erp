@@ -1,13 +1,21 @@
 /**
- * Authenticated home page.
- * Fetches the current user's profile row (RLS allows self-read)
- * and greets by full_name.
- * Admin/manager users also see a "Manage Employees" link.
+ * Home = role-aware status board (FR-20). Composes existing reads via the pure
+ * buildHomeBoard view-model. Navigation lives in the bottom-tab bar (Phase 4),
+ * so this page no longer carries link buttons.
  */
+
+export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import Link from 'next/link';
+import {
+  getMyLeaveRequests,
+  getMyBalances,
+  getCalendarEntries,
+  getPendingApprovals,
+} from '@/lib/actions/leave';
+import { buildHomeBoard } from '@/lib/home/board';
+import { HomeBoard } from './HomeBoard';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -18,73 +26,74 @@ export default async function HomePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('home');
-  const tTeam = await getTranslations('team');
-  const tRequest = await getTranslations('request');
-  const tAllocations = await getTranslations('allocations');
+  const tLeave = await getTranslations('leave');
   const supabase = await createClient();
 
-  // Get the authenticated user (already verified by layout auth guard).
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) return null;
 
-  // Fetch profile to get full_name.
   const { data: profile } = await supabase
     .from('profiles')
     .select('full_name')
-    .eq('id', user!.id)
+    .eq('id', user.id)
     .single();
+  const fullName = profile?.full_name ?? '';
 
-  const fullName = profile?.full_name ?? user!.email ?? '';
-
-  // Check if user has admin or manager role to show manage link
   const { data: rolesData } = await supabase
     .from('user_roles')
     .select('role')
-    .eq('user_id', user!.id);
+    .eq('user_id', user.id);
+  const roles = (rolesData ?? []).map((r) => r.role as string);
+  const canApprove = roles.includes('admin') || roles.includes('manager');
 
-  const roles = (rolesData ?? []).map((r) => r.role);
-  const canManage = roles.includes('admin') || roles.includes('manager');
-  const isManager = roles.includes('manager');
+  // Current Gregorian month range (UTC-safe), same as the calendar page.
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const rangeStart = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const rangeEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+
+  const [requestsRes, balancesRes, calendarRes] = await Promise.all([
+    getMyLeaveRequests(),
+    getMyBalances(),
+    getCalendarEntries(rangeStart, rangeEnd),
+  ]);
+
+  let pendingCount = 0;
+  if (canApprove) {
+    const approvals = await getPendingApprovals();
+    pendingCount = approvals.ok ? approvals.requests.length : 0;
+  }
+
+  const board = buildHomeBoard({
+    roles,
+    requests: requestsRes.ok ? requestsRes.requests : [],
+    balances: balancesRes.ok ? balancesRes.balances : [],
+    team: calendarRes.ok ? calendarRes.entries : [],
+    pendingCount,
+  });
+
+  const labels = {
+    balancesTitle: t('balancesTitle'),
+    recentTitle: t('recentTitle'),
+    teamTitle: t('teamTitle'),
+    approvalsTitle: t('approvalsTitle'),
+    approvalsPending: t('approvalsPending', { count: pendingCount }),
+    noRecent: t('noRecent'),
+    noTeam: t('noTeam'),
+    days: tLeave('days'),
+    statusPending: tLeave('status.pending'),
+    statusApproved: tLeave('status.approved'),
+    statusRejected: tLeave('status.rejected'),
+    statusCancelled: tLeave('status.cancelled'),
+  };
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-3xl font-semibold">
-        {t('greeting', { name: fullName })}
-      </h1>
-
-      {/* Leave request — all signed-in users */}
-      <Link
-        href={`/${locale}/request`}
-        className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-      >
-        {tRequest('navLink')}
-      </Link>
-
-      {canManage && (
-        <Link
-          href={`/${locale}/manage/employees`}
-          className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-        >
-          {t('manageLink')}
-        </Link>
-      )}
-      {canManage && (
-        <Link
-          href={`/${locale}/manage/allocations`}
-          className="bg-teal-600 text-white px-6 py-2 rounded-lg hover:bg-teal-700 transition-colors text-sm font-medium"
-        >
-          {tAllocations('navLink')}
-        </Link>
-      )}
-      {isManager && (
-        <Link
-          href={`/${locale}/team`}
-          className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
-        >
-          {tTeam('navLink')}
-        </Link>
-      )}
+    <main className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">{t('greeting', { name: fullName })}</h1>
+      <HomeBoard board={board} labels={labels} locale={locale} />
     </main>
   );
 }

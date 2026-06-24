@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
+import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
 
 type DayPart = Database['public']['Enums']['day_part'];
 
@@ -467,4 +468,43 @@ export async function getCalendarEntries(
   }));
 
   return { ok: true, entries };
+}
+
+// ---------------------------------------------------------------------------
+// getMyBalances — current balance per active leave type for the caller (home board).
+// ---------------------------------------------------------------------------
+
+export async function getMyBalances(): Promise<
+  { ok: true; balances: BalanceItem[] } | { ok: false; error: string }
+> {
+  const { supabase, user, companyId } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+
+  const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
+    await Promise.all([
+      supabase
+        .from('leave_types')
+        .select('id, name_fa, name_en')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .order('name_fa'),
+      supabase
+        .from('leave_ledger')
+        .select('leave_type_id, balance_after, created_at')
+        .eq('employee_id', user.id),
+    ]);
+
+  if (typesError) return { ok: false, error: typesError.message };
+  if (ledgerError) return { ok: false, error: ledgerError.message };
+
+  const byType = latestBalances(ledger ?? []);
+  const balances: BalanceItem[] = (types ?? []).map((t) => ({
+    leaveTypeId: t.id,
+    name_fa: t.name_fa,
+    name_en: t.name_en,
+    balance: byType[t.id] ?? 0,
+  }));
+
+  return { ok: true, balances };
 }

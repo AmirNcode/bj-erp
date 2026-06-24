@@ -21,7 +21,14 @@
   "home": {
     "greeting": "خوش آمدید، {name}",
     "title": "صفحه اصلی",
-    "manageLink": "مدیریت کارمندان"
+    "manageLink": "مدیریت کارمندان",
+    "balancesTitle": "مانده مرخصی من",
+    "recentTitle": "درخواست‌های اخیر من",
+    "teamTitle": "مرخصی تیم",
+    "approvalsTitle": "تأییدها",
+    "approvalsPending": "{count} در انتظار",
+    "noRecent": "هنوز درخواستی ثبت نشده است.",
+    "noTeam": "این ماه مرخصی‌ای در تیم نیست."
   },
   "team": {
     "title": "تیم من",

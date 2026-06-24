@@ -9,6 +9,9 @@ test('bottom nav shows role-correct tabs and navigates', async ({ page }) => {
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   await expect(page.locator('[data-testid="nav-home"]')).toBeVisible();
   await expect(page.locator('[data-testid="nav-manage"]')).toBeVisible();
+  // Admin (an approver) lands on the home board with an approvals card.
+  await expect(page.locator('[data-testid="home-board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="home-approvals-card"]')).toBeVisible();
   await page.locator('[data-testid="nav-calendar"]').click();
   await expect(page).toHaveURL(/\/calendar$/);
 
@@ -18,4 +21,7 @@ test('bottom nav shows role-correct tabs and navigates', async ({ page }) => {
   await login(page, `emp${ts}`, empPw.trim());
   await expect(page.locator('[data-testid="nav-home"]')).toBeVisible();
   await expect(page.locator('[data-testid="nav-manage"]')).toHaveCount(0);
+  // Plain employee: home board renders, but no approvals card.
+  await expect(page.locator('[data-testid="home-board"]')).toBeVisible();
+  await expect(page.locator('[data-testid="home-approvals-card"]')).toHaveCount(0);
 });

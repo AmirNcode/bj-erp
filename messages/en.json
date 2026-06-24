@@ -21,7 +21,14 @@
   "home": {
     "greeting": "Welcome, {name}",
     "title": "Home",
-    "manageLink": "Manage Employees"
+    "manageLink": "Manage Employees",
+    "balancesTitle": "My Balances",
+    "recentTitle": "My Recent Requests",
+    "teamTitle": "Team Time-Off",
+    "approvalsTitle": "Approvals",
+    "approvalsPending": "{count} pending",
+    "noRecent": "No requests yet.",
+    "noTeam": "No team time-off this month."
   },
   "team": {
     "title": "My Team",
