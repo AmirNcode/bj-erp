@@ -88,6 +88,20 @@
     "empty": "No time-off this month.",
     "error": "Error"
   },
+  "profile": {
+    "title": "Profile",
+    "name": "Name",
+    "code": "Employee Code",
+    "calendar": "Calendar",
+    "language": "Language",
+    "jalali": "Persian (Jalali)",
+    "gregorian": "Gregorian",
+    "langFa": "فارسی",
+    "langEn": "English",
+    "logout": "Log Out",
+    "saved": "Saved.",
+    "error": "Error"
+  },
   "allocations": {
     "title": "Leave Allocations",
     "navLink": "Allocations",

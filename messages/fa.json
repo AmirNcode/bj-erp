@@ -88,6 +88,20 @@
     "empty": "این ماه مرخصی‌ای ثبت نشده است.",
     "error": "خطا"
   },
+  "profile": {
+    "title": "پروفایل",
+    "name": "نام",
+    "code": "کد پرسنلی",
+    "calendar": "تقویم",
+    "language": "زبان",
+    "jalali": "شمسی (جلالی)",
+    "gregorian": "میلادی",
+    "langFa": "فارسی",
+    "langEn": "English",
+    "logout": "خروج",
+    "saved": "ذخیره شد.",
+    "error": "خطا"
+  },
   "allocations": {
     "title": "تخصیص مرخصی",
     "navLink": "تخصیص‌ها",
