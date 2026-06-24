@@ -28,5 +28,14 @@ versioning once the app is scaffolded. Until then, entries track documentation a
 - **Manager**: "My Team" view + edit of direct reports (RLS-scoped, column-limited).
 - Seed (interim): 1 company, 4 departments (3 teams + Security), 1 admin (`admin`).
 
+### Implemented — Phase 2 (Leave core)
+- Leave schema: `work_settings, holidays, leave_types, leave_allocations, leave_requests, leave_ledger` (+ enums). Transactional tables are **SELECT-only** for clients.
+- Write-path via guarded `SECURITY DEFINER` functions (no client fabrication): `submit_leave_request` (computes working-days server-side + validates balance), `cancel_leave_request`, `allocate_leave`; `compute_requested_days` + `current_leave_balance` internal-only.
+- Pure `countWorkingDays` (TS, weekend + holiday aware) for UI preview, mirrored by the SQL counter; parity confirmed (preview = server).
+- **Request form** on `react-multi-date-picker` — Persian **or** Gregorian per `calendar_pref`, RTL; live working-day + remaining-balance preview; half-day gated by leave type. My-Requests list with cancel. Admin allocation UI.
+- Seed (interim): work settings (Friday weekend) + 3 leave types (annual 26d, sick, unpaid).
+
 ### Next
-- Phase 2 — Leave core: leave schema, working-day counting (weekend + holidays), allocations + balance ledger, request submission on the Persian/Gregorian calendar.
+- Phase 3 — approval flow (manager approve/reject → ledger consumption) + visibility-scoped calendar.
+- Phase 4 — home status board, role-driven bottom-tab nav, settings (calendar/lang) toggles.
+- Phase 5 — seed (3 teams + Security, Iranian names, holidays) + demo deploy.
