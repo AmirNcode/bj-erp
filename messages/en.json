@@ -13,6 +13,40 @@
   },
   "home": {
     "greeting": "Welcome, {name}",
-    "title": "Home"
+    "title": "Home",
+    "manageLink": "Manage Employees"
+  },
+  "manage": {
+    "employees": {
+      "title": "Manage Employees",
+      "newTitle": "Add New Employee",
+      "editTitle": "Edit Employee",
+      "addNew": "Add Employee",
+      "code": "Employee Code",
+      "name": "Full Name",
+      "department": "Department",
+      "manager": "Direct Manager",
+      "roles": "Roles",
+      "hireDate": "Hire Date",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "edit": "Edit",
+      "create": "Create Employee",
+      "save": "Save",
+      "cancel": "Cancel",
+      "resetPwd": "Reset Password",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "tempPasswordLabel": "Temporary Password (shown once)",
+      "tempPasswordHint": "Hand this password to the employee. It cannot be recovered after you close this page.",
+      "error": "Error",
+      "selectDept": "— Select Department —",
+      "selectMgr": "— Select Manager —",
+      "none": "No Manager",
+      "noEmployees": "No employees found.",
+      "saved": "Changes saved successfully."
+    }
   }
 }
