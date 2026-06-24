@@ -80,6 +80,8 @@ export default async function RequestPage({ params }: Props) {
     cancelSuccess: t('cancelSuccess'),
     from: t('from'),
     to: t('to'),
+    validationSelectType: t('validationSelectType'),
+    validationSelectDate: t('validationSelectDate'),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
     statusRejected: tLeave('status.rejected'),

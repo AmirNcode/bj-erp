@@ -50,7 +50,9 @@
     "cancelConfirm": "Are you sure you want to cancel this request?",
     "cancelSuccess": "Request cancelled successfully.",
     "from": "From",
-    "to": "To"
+    "to": "To",
+    "validationSelectType": "Please select a leave type.",
+    "validationSelectDate": "Please select a date range."
   },
   "leave": {
     "status": {

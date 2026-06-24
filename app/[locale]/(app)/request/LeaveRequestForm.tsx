@@ -31,6 +31,8 @@ type Labels = {
   errorLabel: string;
   from: string;
   to: string;
+  validationSelectType: string;
+  validationSelectDate: string;
 };
 
 type Props = {
@@ -111,11 +113,11 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
     setSuccessMsg('');
 
     if (!selectedTypeId) {
-      setErrorMsg('نوع مرخصی را انتخاب کنید.');
+      setErrorMsg(labels.validationSelectType);
       return;
     }
     if (dateRange.length < 2) {
-      setErrorMsg('بازه تاریخی را انتخاب کنید.');
+      setErrorMsg(labels.validationSelectDate);
       return;
     }
 

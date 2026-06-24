@@ -50,7 +50,9 @@
     "cancelConfirm": "آیا از لغو این درخواست اطمینان دارید؟",
     "cancelSuccess": "درخواست با موفقیت لغو شد.",
     "from": "از",
-    "to": "تا"
+    "to": "تا",
+    "validationSelectType": "نوع مرخصی را انتخاب کنید.",
+    "validationSelectDate": "بازه تاریخی را انتخاب کنید."
   },
   "leave": {
     "status": {
