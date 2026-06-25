@@ -49,5 +49,13 @@ versioning once the app is scaffolded. Until then, entries track documentation a
 - **Responsive + device detection** (NFR-1, NFR-7): pure `parseDeviceType`/`isMobileWidth` + `useViewport` hook; e2e verifies no horizontal overflow at 375/1280 px and ≥44 px nav touch targets. `/team` re-surfaced from the Manage employees header.
 - No schema / RLS / SQL changes. Tests: unit 54/54, e2e 14/14 (serial). Deferred to Phase 5: admin work-settings/holiday UI (FR-24), self-service password change (FR-7 tail), balance-preview race polish.
 
+### Implemented — Phase 5 (Seed & demo) — v1 demo release
+- **Demo seed** (`scripts/seed-demo.mjs`, `npm run seed`): BJ Manufacturing with 3 teams (Production Line A, Quality Control, Maintenance) + Security; 12 curated users (3 managers, 6 employees, 3 security) with Iranian names, annual + sick allocations, and minimal 2026 holidays. Idempotent; created via the guarded `app_create_employee` / `allocate_leave` RPCs (no `service_role`). Non-curated e2e-throwaway profiles deactivated → 13 active (admin + roster). Password `Demo!2026`.
+- **Portable config baseline** `supabase/seed.sql` (company / departments / leave types / work settings).
+- **Polish:** the request form shows a balance loading state instead of flashing "unknown"; `/team` clarified as the manager's direct-reports view.
+- **Deploy runbook** `docs/DEPLOY.md` (Vercel + self-host parity); the demo deploy is the operator's to run.
+- e2e smoke (`seed-roles.spec`) logs in as manager / employee / security. Suite: unit 54/54, e2e 17/17 (serial).
+- **v1 is feature-complete** except FR-24 (admin work/holiday editor) and FR-7 (self-service password change), deferred to **Phase 6** with FR-15 (cancel approved leave) and the official Iranian holiday list.
+
 ### Next
-- Phase 5 — seed (3 teams + Security, Iranian names, holidays) + demo deploy.
+- Phase 6 — FR-24 admin work-settings/holiday editor · FR-7 password change · FR-15 cancel approved leave · official Iranian holiday list · then PLAN §6 modules.
