@@ -1,0 +1,166 @@
+{
+  "app": {
+    "title": "HR System"
+  },
+  "nav": {
+    "home": "Home",
+    "request": "Request",
+    "calendar": "Calendar",
+    "profile": "Profile",
+    "manage": "Manage"
+  },
+  "login": {
+    "title": "Sign In",
+    "codeLabel": "Employee Code",
+    "codePlaceholder": "e.g. admin",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "submit": "Sign In",
+    "invalidCredentials": "Invalid employee code or password."
+  },
+  "home": {
+    "greeting": "Welcome, {name}",
+    "title": "Home",
+    "manageLink": "Manage Employees",
+    "balancesTitle": "My Balances",
+    "recentTitle": "My Recent Requests",
+    "teamTitle": "Team Time-Off",
+    "approvalsTitle": "Approvals",
+    "approvalsPending": "{count} pending",
+    "noRecent": "No requests yet.",
+    "noTeam": "No team time-off this month."
+  },
+  "team": {
+    "title": "My Team",
+    "subtitle": "Your direct reports.",
+    "navLink": "My Team",
+    "code": "Employee Code",
+    "name": "Full Name",
+    "department": "Department",
+    "edit": "Edit",
+    "noReports": "You have no direct reports assigned.",
+    "managerNote": "As a manager you can edit only name and hire date."
+  },
+  "request": {
+    "title": "Request Leave",
+    "navLink": "Request Leave",
+    "leaveType": "Leave Type",
+    "selectType": "— Select Leave Type —",
+    "dateRange": "Date Range",
+    "dayPart": "Day Part",
+    "dayPartFull": "Full Day",
+    "dayPartAm": "Morning (AM)",
+    "dayPartPm": "Afternoon (PM)",
+    "reason": "Reason (optional)",
+    "submit": "Submit Request",
+    "preview": "Preview",
+    "workingDays": "Working days: {count}",
+    "remainingBalance": "Remaining balance: {days} days",
+    "noBalance": "Balance unknown",
+    "success": "Request submitted successfully.",
+    "error": "Error",
+    "myRequests": "My Requests",
+    "noRequests": "No requests found.",
+    "cancel": "Cancel",
+    "cancelConfirm": "Are you sure you want to cancel this request?",
+    "cancelSuccess": "Request cancelled successfully.",
+    "from": "From",
+    "to": "To",
+    "validationSelectType": "Please select a leave type.",
+    "validationSelectDate": "Please select a date range."
+  },
+  "leave": {
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "cancelled": "Cancelled"
+    },
+    "dayPart": {
+      "full": "Full day",
+      "am": "Morning",
+      "pm": "Afternoon"
+    },
+    "days": "days"
+  },
+  "calendar": {
+    "title": "Calendar",
+    "navLink": "Calendar",
+    "empty": "No time-off this month.",
+    "error": "Error"
+  },
+  "profile": {
+    "title": "Profile",
+    "name": "Name",
+    "code": "Employee Code",
+    "calendar": "Calendar",
+    "language": "Language",
+    "jalali": "Persian (Jalali)",
+    "gregorian": "Gregorian",
+    "langFa": "فارسی",
+    "langEn": "English",
+    "logout": "Log Out",
+    "saved": "Saved.",
+    "error": "Error"
+  },
+  "allocations": {
+    "title": "Leave Allocations",
+    "navLink": "Allocations",
+    "employee": "Employee",
+    "selectEmployee": "— Select Employee —",
+    "leaveType": "Leave Type",
+    "selectType": "— Select Leave Type —",
+    "periodStart": "Period Start",
+    "periodEnd": "Period End",
+    "days": "Days",
+    "submit": "Submit Allocation",
+    "success": "Leave allocation recorded successfully.",
+    "error": "Error"
+  },
+  "approvals": {
+    "title": "Approvals",
+    "navLink": "Approvals",
+    "empty": "No pending requests to review.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approveConfirm": "Approve this leave request?",
+    "rejectConfirm": "Reject this leave request?",
+    "reason": "Reason",
+    "error": "Error"
+  },
+  "manage": {
+    "approvalsLink": "Approvals",
+    "employees": {
+      "title": "Manage Employees",
+      "newTitle": "Add New Employee",
+      "editTitle": "Edit Employee",
+      "addNew": "Add Employee",
+      "code": "Employee Code",
+      "name": "Full Name",
+      "department": "Department",
+      "manager": "Direct Manager",
+      "roles": "Roles",
+      "hireDate": "Hire Date",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "inactive": "Inactive",
+      "edit": "Edit",
+      "create": "Create Employee",
+      "save": "Save",
+      "cancel": "Cancel",
+      "done": "Done",
+      "resetPwd": "Reset Password",
+      "activate": "Activate",
+      "deactivate": "Deactivate",
+      "tempPasswordLabel": "Temporary Password (shown once)",
+      "tempPasswordHint": "Hand this password to the employee. It cannot be recovered after you close this page.",
+      "error": "Error",
+      "selectDept": "— Select Department —",
+      "selectMgr": "— Select Manager —",
+      "none": "No Manager",
+      "noEmployees": "No employees found.",
+      "saved": "Changes saved successfully."
+    }
+  }
+}

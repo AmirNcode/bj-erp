@@ -1,0 +1,99 @@
+/**
+ * Home = role-aware status board (FR-20). Composes existing reads via the pure
+ * buildHomeBoard view-model. Navigation lives in the bottom-tab bar (Phase 4),
+ * so this page no longer carries link buttons.
+ */
+
+export const dynamic = 'force-dynamic';
+
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { createClient } from '@/lib/supabase/server';
+import {
+  getMyLeaveRequests,
+  getMyBalances,
+  getCalendarEntries,
+  getPendingApprovals,
+} from '@/lib/actions/leave';
+import { buildHomeBoard } from '@/lib/home/board';
+import { HomeBoard } from './HomeBoard';
+
+type Props = {
+  params: Promise<{ locale: string }>;
+};
+
+export default async function HomePage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const t = await getTranslations('home');
+  const tLeave = await getTranslations('leave');
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .single();
+  const fullName = profile?.full_name ?? '';
+
+  const { data: rolesData } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user.id);
+  const roles = (rolesData ?? []).map((r) => r.role as string);
+  const canApprove = roles.includes('admin') || roles.includes('manager');
+
+  // Current Gregorian month range (UTC-safe), same as the calendar page.
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const rangeStart = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const rangeEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+
+  const [requestsRes, balancesRes, calendarRes] = await Promise.all([
+    getMyLeaveRequests(),
+    getMyBalances(),
+    getCalendarEntries(rangeStart, rangeEnd),
+  ]);
+
+  let pendingCount = 0;
+  if (canApprove) {
+    const approvals = await getPendingApprovals();
+    pendingCount = approvals.ok ? approvals.requests.length : 0;
+  }
+
+  const board = buildHomeBoard({
+    roles,
+    requests: requestsRes.ok ? requestsRes.requests : [],
+    balances: balancesRes.ok ? balancesRes.balances : [],
+    team: calendarRes.ok ? calendarRes.entries : [],
+    pendingCount,
+  });
+
+  const labels = {
+    balancesTitle: t('balancesTitle'),
+    recentTitle: t('recentTitle'),
+    teamTitle: t('teamTitle'),
+    approvalsTitle: t('approvalsTitle'),
+    approvalsPending: t('approvalsPending', { count: pendingCount }),
+    noRecent: t('noRecent'),
+    noTeam: t('noTeam'),
+    days: tLeave('days'),
+    statusPending: tLeave('status.pending'),
+    statusApproved: tLeave('status.approved'),
+    statusRejected: tLeave('status.rejected'),
+    statusCancelled: tLeave('status.cancelled'),
+  };
+
+  return (
+    <main className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">{t('greeting', { name: fullName })}</h1>
+      <HomeBoard board={board} labels={labels} locale={locale} />
+    </main>
+  );
+}

@@ -1,0 +1,166 @@
+{
+  "app": {
+    "title": "سامانه منابع انسانی"
+  },
+  "nav": {
+    "home": "خانه",
+    "request": "درخواست",
+    "calendar": "تقویم",
+    "profile": "پروفایل",
+    "manage": "مدیریت"
+  },
+  "login": {
+    "title": "ورود به سامانه",
+    "codeLabel": "کد پرسنلی",
+    "codePlaceholder": "مثال: admin",
+    "passwordLabel": "رمز عبور",
+    "passwordPlaceholder": "رمز عبور خود را وارد کنید",
+    "submit": "ورود",
+    "invalidCredentials": "کد پرسنلی یا رمز عبور اشتباه است."
+  },
+  "home": {
+    "greeting": "خوش آمدید، {name}",
+    "title": "صفحه اصلی",
+    "manageLink": "مدیریت کارمندان",
+    "balancesTitle": "مانده مرخصی من",
+    "recentTitle": "درخواست‌های اخیر من",
+    "teamTitle": "مرخصی تیم",
+    "approvalsTitle": "تأییدها",
+    "approvalsPending": "{count} در انتظار",
+    "noRecent": "هنوز درخواستی ثبت نشده است.",
+    "noTeam": "این ماه مرخصی‌ای در تیم نیست."
+  },
+  "team": {
+    "title": "تیم من",
+    "subtitle": "زیردستان مستقیم شما.",
+    "navLink": "تیم من",
+    "code": "کد پرسنلی",
+    "name": "نام و نام‌خانوادگی",
+    "department": "واحد",
+    "edit": "ویرایش",
+    "noReports": "هیچ زیردستی برای شما تعریف نشده است.",
+    "managerNote": "به‌عنوان سرپرست فقط می‌توانید نام و تاریخ استخدام را ویرایش کنید."
+  },
+  "request": {
+    "title": "درخواست مرخصی",
+    "navLink": "درخواست مرخصی",
+    "leaveType": "نوع مرخصی",
+    "selectType": "— انتخاب نوع مرخصی —",
+    "dateRange": "بازه تاریخی",
+    "dayPart": "نوع روز",
+    "dayPartFull": "روز کامل",
+    "dayPartAm": "نیمه اول (صبح)",
+    "dayPartPm": "نیمه دوم (بعدازظهر)",
+    "reason": "دلیل (اختیاری)",
+    "submit": "ارسال درخواست",
+    "preview": "پیش‌نمایش",
+    "workingDays": "روزهای کاری: {count}",
+    "remainingBalance": "مانده مرخصی: {days} روز",
+    "noBalance": "موجودی نامشخص",
+    "success": "درخواست با موفقیت ارسال شد.",
+    "error": "خطا",
+    "myRequests": "درخواست‌های من",
+    "noRequests": "هیچ درخواستی ثبت نشده است.",
+    "cancel": "لغو",
+    "cancelConfirm": "آیا از لغو این درخواست اطمینان دارید؟",
+    "cancelSuccess": "درخواست با موفقیت لغو شد.",
+    "from": "از",
+    "to": "تا",
+    "validationSelectType": "نوع مرخصی را انتخاب کنید.",
+    "validationSelectDate": "بازه تاریخی را انتخاب کنید."
+  },
+  "leave": {
+    "status": {
+      "pending": "در انتظار",
+      "approved": "تایید شده",
+      "rejected": "رد شده",
+      "cancelled": "لغو شده"
+    },
+    "dayPart": {
+      "full": "روز کامل",
+      "am": "نیمه اول",
+      "pm": "نیمه دوم"
+    },
+    "days": "روز"
+  },
+  "calendar": {
+    "title": "تقویم مرخصی",
+    "navLink": "تقویم",
+    "empty": "این ماه مرخصی‌ای ثبت نشده است.",
+    "error": "خطا"
+  },
+  "profile": {
+    "title": "پروفایل",
+    "name": "نام",
+    "code": "کد پرسنلی",
+    "calendar": "تقویم",
+    "language": "زبان",
+    "jalali": "شمسی (جلالی)",
+    "gregorian": "میلادی",
+    "langFa": "فارسی",
+    "langEn": "English",
+    "logout": "خروج",
+    "saved": "ذخیره شد.",
+    "error": "خطا"
+  },
+  "allocations": {
+    "title": "تخصیص مرخصی",
+    "navLink": "تخصیص‌ها",
+    "employee": "کارمند",
+    "selectEmployee": "— انتخاب کارمند —",
+    "leaveType": "نوع مرخصی",
+    "selectType": "— انتخاب نوع مرخصی —",
+    "periodStart": "شروع دوره",
+    "periodEnd": "پایان دوره",
+    "days": "تعداد روز",
+    "submit": "ثبت تخصیص",
+    "success": "تخصیص مرخصی با موفقیت ثبت شد.",
+    "error": "خطا"
+  },
+  "approvals": {
+    "title": "تأیید درخواست‌ها",
+    "navLink": "تأییدها",
+    "empty": "درخواستی برای بررسی وجود ندارد.",
+    "approve": "تأیید",
+    "reject": "رد",
+    "approveConfirm": "این درخواست مرخصی تأیید شود؟",
+    "rejectConfirm": "این درخواست مرخصی رد شود؟",
+    "reason": "دلیل",
+    "error": "خطا"
+  },
+  "manage": {
+    "approvalsLink": "تأیید درخواست‌ها",
+    "employees": {
+      "title": "مدیریت کارمندان",
+      "newTitle": "افزودن کارمند جدید",
+      "editTitle": "ویرایش کارمند",
+      "addNew": "افزودن کارمند",
+      "code": "کد پرسنلی",
+      "name": "نام و نام‌خانوادگی",
+      "department": "واحد",
+      "manager": "مدیر مستقیم",
+      "roles": "نقش‌ها",
+      "hireDate": "تاریخ استخدام",
+      "status": "وضعیت",
+      "actions": "عملیات",
+      "active": "فعال",
+      "inactive": "غیرفعال",
+      "edit": "ویرایش",
+      "create": "ایجاد کارمند",
+      "save": "ذخیره",
+      "cancel": "انصراف",
+      "done": "بازگشت به فهرست",
+      "resetPwd": "بازنشانی رمز عبور",
+      "activate": "فعال‌سازی",
+      "deactivate": "غیرفعال‌سازی",
+      "tempPasswordLabel": "رمز عبور موقت (یک‌بار نمایش داده می‌شود)",
+      "tempPasswordHint": "این رمز را به کارمند تحویل دهید. پس از بستن این صفحه قابل بازیابی نیست.",
+      "error": "خطا",
+      "selectDept": "— انتخاب واحد —",
+      "selectMgr": "— انتخاب مدیر —",
+      "none": "بدون مدیر",
+      "noEmployees": "کارمندی یافت نشد.",
+      "saved": "تغییرات با موفقیت ذخیره شد."
+    }
+  }
+}
