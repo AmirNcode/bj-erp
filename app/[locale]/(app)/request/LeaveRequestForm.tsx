@@ -56,6 +56,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   const [dayPart, setDayPart] = useState<DayPart>('full');
   const [reason, setReason] = useState('');
   const [balance, setBalance] = useState<number | null>(null);
+  const [balanceFor, setBalanceFor] = useState<string | null>(null);
   const [workingDaysCount, setWorkingDaysCount] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -77,10 +78,15 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
       setBalance(null);
       return;
     }
+    let cancelled = false;
     getMyBalance(selectedTypeId).then((res) => {
-      if (res.ok) setBalance(res.balance);
-      else setBalance(null);
+      if (cancelled) return;
+      setBalance(res.ok ? res.balance : null);
+      setBalanceFor(selectedTypeId);
     });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedTypeId]);
 
   // Compute working days preview
@@ -152,6 +158,9 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
     previewStart,
     previewEnd
   );
+  // Derived (not a synchronous setState in an effect): the balance is "loading"
+  // until the fetch for the currently-selected type has resolved.
+  const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-xl border border-gray-200 p-6">
@@ -249,11 +258,13 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
           </div>
           {selectedType?.affects_balance && (
             <div data-testid="balance-display">
-              {balance !== null
-                ? (locale === 'fa'
-                    ? `مانده: ${balance} روز`
-                    : `Remaining balance: ${balance} days`)
-                : labels.noBalance}
+              {balanceLoading
+                ? '…'
+                : balance !== null
+                  ? (locale === 'fa'
+                      ? `مانده: ${balance} روز`
+                      : `Remaining balance: ${balance} days`)
+                  : labels.noBalance}
             </div>
           )}
         </div>

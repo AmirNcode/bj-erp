@@ -62,7 +62,8 @@ export default async function MyTeamPage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <h1 className="text-2xl font-bold mb-1">{t('title')}</h1>
+      <p className="text-gray-500 text-sm mb-6">{t('subtitle')}</p>
 
       {(reports ?? []).length === 0 ? (
         <p className="text-gray-500 py-8 text-center">{t('noReports')}</p>

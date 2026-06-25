@@ -32,6 +32,7 @@
   },
   "team": {
     "title": "My Team",
+    "subtitle": "Your direct reports.",
     "navLink": "My Team",
     "code": "Employee Code",
     "name": "Full Name",
