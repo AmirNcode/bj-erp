@@ -8,12 +8,6 @@ import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert
 
 describe('dateObjectToGregorian', () => {
   it('converts a Persian DateObject (1403/04/01) to Gregorian 2024-06-21', () => {
-    const jalaliDate = new DateObject({
-      calendar: persian,
-      locale: persian_fa,
-      date: new Date(2024, 5, 21), // construct via known Gregorian anchor
-    });
-    // Override to Jalali 1403/04/01 explicitly
     const d = new DateObject({ calendar: persian, locale: persian_fa, year: 1403, month: 4, day: 1 });
     expect(dateObjectToGregorian(d)).toBe('2024-06-21');
   });

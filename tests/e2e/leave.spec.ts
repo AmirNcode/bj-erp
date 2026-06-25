@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
@@ -6,7 +6,7 @@ const ADMIN_PASSWORD = 'Admin!2026';
 /**
  * Helper: log in with employee code + password.
  */
-async function login(page: Parameters<typeof test.fn>[0]['page'], code: string, password: string) {
+async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
   await page.fill('#code', code);
   await page.fill('#password', password);
@@ -17,7 +17,7 @@ async function login(page: Parameters<typeof test.fn>[0]['page'], code: string, 
 /**
  * Helper: navigate directly to /login and back to force a clean session.
  */
-async function logout(page: Parameters<typeof test.fn>[0]['page']) {
+async function logout(page: Page) {
   await page.goto('/login');
   await expect(page).toHaveURL(/\/login$/);
 }
@@ -242,7 +242,6 @@ test.describe('Leave request + allocation flow', () => {
     const farFutureStart = getNextMonday();
     const farFutureStartDate = new Date(farFutureStart);
     farFutureStartDate.setDate(farFutureStartDate.getDate() + 300);
-    const farFutureEnd = farFutureStartDate.toISOString().split('T')[0];
 
     const farStart = new Date(farFutureStart);
     const farEnd = farFutureStartDate;

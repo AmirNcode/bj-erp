@@ -9,13 +9,13 @@
  * 5. M tries to edit X via direct URL → action returns error / no change (RLS blocks).
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
 
 // Helper: log in as given code/password and expect redirect to /home
-async function loginAs(page: ReturnType<typeof test.info>['_test']['page'] extends infer P ? P : never, code: string, password: string) {
+async function loginAs(page: Page, code: string, password: string) {
   await page.goto('/login');
   await page.fill('#code', code);
   await page.fill('#password', password);
@@ -92,10 +92,10 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     const nonCode = `non${ts}`;
 
     // ── 1. Log in as admin ─────────────────────────────────────────────────
-    await loginAs(page as any, ADMIN_CODE, ADMIN_PASSWORD);
+    await loginAs(page, ADMIN_CODE, ADMIN_PASSWORD);
 
     // ── 2. Create manager M ────────────────────────────────────────────────
-    const mgrPassword = await createEmployee(page as any, {
+    const mgrPassword = await createEmployee(page, {
       code: mgrCode,
       name: `Manager ${ts}`,
       role: 'manager',
@@ -112,7 +112,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(mgrId).toBeTruthy();
 
     // ── 3. Create employee E (report of M) ─────────────────────────────────
-    const empPassword = await createEmployee(page as any, {
+    await createEmployee(page, {
       code: empCode,
       name: `Employee Report ${ts}`,
       role: 'employee',
@@ -129,7 +129,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(empId).toBeTruthy();
 
     // ── 4. Create employee X (no manager) ─────────────────────────────────
-    const nonPassword = await createEmployee(page as any, {
+    await createEmployee(page, {
       code: nonCode,
       name: `Non-Report ${ts}`,
       role: 'employee',

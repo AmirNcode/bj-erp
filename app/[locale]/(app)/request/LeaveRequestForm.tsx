@@ -57,7 +57,6 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   const [reason, setReason] = useState('');
   const [balance, setBalance] = useState<number | null>(null);
   const [balanceFor, setBalanceFor] = useState<string | null>(null);
-  const [workingDaysCount, setWorkingDaysCount] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -72,12 +71,37 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
     return { start, end };
   }, [dateRange]);
 
-  // Fetch balance when type changes
+  const { start: previewStart, end: previewEnd } = getGregorianRange();
+
+  // Half-day is only offered for a single eligible day; otherwise the day part
+  // is treated as a full day. Derived during render — no effect needed.
+  const showHalfDay = isHalfDayAllowed(
+    selectedType?.allow_half_day ?? false,
+    previewStart,
+    previewEnd
+  );
+  const effectiveDayPart: DayPart = showHalfDay ? dayPart : 'full';
+
+  // Working-days preview is a pure function of the range, work settings, and the
+  // effective day part — derive it rather than storing it via an effect.
+  const workingDaysCount =
+    dateRange.length < 2 || !previewStart || !previewEnd
+      ? null
+      : countWorkingDays(previewStart, previewEnd, {
+          weekendDays: workSettings.weekendDays,
+          holidays: workSettings.holidays,
+          dayPart: effectiveDayPart,
+        });
+
+  // Balance is fetched when the selected type changes; show it only once the
+  // fetch for the currently-selected type has resolved (derived, not an effect).
+  const effectiveBalance = balanceFor === selectedTypeId ? balance : null;
+  const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
+
+  // Fetch balance when the selected type changes. The only state updates happen
+  // in the async callback, so this effect does not set state synchronously.
   useEffect(() => {
-    if (!selectedTypeId) {
-      setBalance(null);
-      return;
-    }
+    if (!selectedTypeId) return;
     let cancelled = false;
     getMyBalance(selectedTypeId).then((res) => {
       if (cancelled) return;
@@ -88,30 +112,6 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
       cancelled = true;
     };
   }, [selectedTypeId]);
-
-  // Compute working days preview
-  useEffect(() => {
-    if (dateRange.length < 2) {
-      setWorkingDaysCount(null);
-      return;
-    }
-    const { start, end } = getGregorianRange();
-    if (!start || !end) return;
-    const count = countWorkingDays(start, end, {
-      weekendDays: workSettings.weekendDays,
-      holidays: workSettings.holidays,
-      dayPart,
-    });
-    setWorkingDaysCount(count);
-  }, [dateRange, dayPart, workSettings, getGregorianRange]);
-
-  // Reset day_part to 'full' when no longer allowed
-  useEffect(() => {
-    const { start, end } = getGregorianRange();
-    if (!isHalfDayAllowed(selectedType?.allow_half_day ?? false, start, end)) {
-      setDayPart('full');
-    }
-  }, [selectedType, dateRange, getGregorianRange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +134,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
         leaveTypeId: selectedTypeId,
         start,
         end,
-        dayPart,
+        dayPart: effectiveDayPart,
         reason: reason || undefined,
       });
 
@@ -143,7 +143,6 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
         setDateRange([]);
         setReason('');
         setDayPart('full');
-        setWorkingDaysCount(null);
         // Refresh the page to show new request in list
         window.location.reload();
       } else {
@@ -151,16 +150,6 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
       }
     });
   };
-
-  const { start: previewStart, end: previewEnd } = getGregorianRange();
-  const showHalfDay = isHalfDayAllowed(
-    selectedType?.allow_half_day ?? false,
-    previewStart,
-    previewEnd
-  );
-  // Derived (not a synchronous setState in an effect): the balance is "loading"
-  // until the fetch for the currently-selected type has resolved.
-  const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-xl border border-gray-200 p-6">
@@ -260,10 +249,10 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             <div data-testid="balance-display">
               {balanceLoading
                 ? '…'
-                : balance !== null
+                : effectiveBalance !== null
                   ? (locale === 'fa'
-                      ? `مانده: ${balance} روز`
-                      : `Remaining balance: ${balance} days`)
+                      ? `مانده: ${effectiveBalance} روز`
+                      : `Remaining balance: ${effectiveBalance} days`)
                   : labels.noBalance}
             </div>
           )}
