@@ -110,7 +110,6 @@ export default async function RequestPage({ params }: Props) {
         <MyRequestsList
           requests={requests}
           labels={labels}
-          locale={locale}
           calendarPref={calendarPref}
         />
       </div>

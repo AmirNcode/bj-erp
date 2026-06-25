@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
+import { gregorianToJalali } from '@/lib/leave/dateConvert';
 
 type Labels = {
   myRequests: string;
@@ -24,7 +25,6 @@ type Labels = {
 type Props = {
   requests: LeaveRequestWithType[];
   labels: Labels;
-  locale: string;
   calendarPref: string;
 };
 
@@ -36,12 +36,11 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatDate(dateStr: string, calendarPref: string): string {
-  // For now we display Gregorian regardless — in Phase 4 we'd convert to Jalali here.
-  // The stored date is always Gregorian YYYY-MM-DD.
-  return dateStr;
+  // Stored dates are Gregorian; show Jalali when that's the user's preference.
+  return calendarPref === 'jalali' ? gregorianToJalali(dateStr) : dateStr;
 }
 
-export function MyRequestsList({ requests, labels, locale, calendarPref }: Props) {
+export function MyRequestsList({ requests, labels, calendarPref }: Props) {
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
