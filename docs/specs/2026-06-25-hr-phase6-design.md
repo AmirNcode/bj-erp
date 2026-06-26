@@ -16,7 +16,8 @@ v1 (Phases 0–5) is feature-complete and demo-ready except three deferred requi
 closes them, leaving no v1 FR outstanding:
 
 - **FR-24** ☐ — Admin can edit **work settings** (weekend days) and the **holiday list**. Tables
-  (`work_settings`, `holidays`) exist and are client-SELECT-only; there is no write path or UI.
+  (`work_settings`, `holidays`) exist and **already carry admin `INSERT/UPDATE/DELETE` RLS policies**
+  (leave migration L159–182, guarded by `private.is_admin`); only the admin **UI** is missing.
 - **FR-7** ◐ — Login is admin-issued username + password. Admin can reset a password
   (`app_set_employee_password`); the user has **no self-service password change**.
 - **FR-15** ◐ — Pending-request cancellation shipped in Phase 2. Cancelling an **approved future**
@@ -53,15 +54,15 @@ UI + docs**, matching the established guarded-RPC convention.
 | P6-4 | Password change scope (FR-7) | **Settings form only**; no forced first-login gate | User choice; smallest scope, no `must_change` flag / redirect / migration. |
 | P6-5 | Password change implementation | Guarded RPC **`app_change_my_password(p_current, p_new)`**, verifies current in-DB | Mirrors `app_set_employee_password`; verifies current password (client `auth.updateUser` cannot); portable, audited. |
 | P6-6 | Holiday data (FR-24) | **Ship editor only**; keep current minimal placeholder seed; admin enters authoritative dates | User choice; avoids fabricating lunar/religious dates. Real 1404–1405 list entered in-app. |
-| P6-7 | FR-24 write-path | Admin-guarded **RPCs**; tables stay client-SELECT-only | Matches every other write; centralizes `is_admin` + audit. Not RLS write-policies. |
+| P6-7 | FR-24 write-path | **Direct admin writes via the existing RLS policies** on `work_settings`/`holidays`; no new RPC or migration | Both tables already have `is_admin`-guarded INSERT/UPDATE/DELETE policies (leave migration L159–182) — the schema's config-table convention (vs. transactional tables, which are SELECT-only + audited RPCs). Tradeoff (accepted): holiday edits write no `audit_log` row; `work_settings` self-audits via `updated_by`/`updated_at`. |
 | P6-8 | FR-24 access | **Admin-only** page under `/manage`; Manager has no access | FR-24 says admin. Manage tab still shows for admin+manager; the settings page guards admin. |
 
 ## 4. Scope
 
 FR-24 (work-settings + holiday admin editor), FR-7 (self-service password change), FR-15
-(cancel approved future leave + ledger reversal). **3 new SQL migrations (functions only), ~3 server
-actions, ~4 UI components, a few pure helpers, i18n, docs.** No tables/enums/columns/RLS-policy
-changes.
+(cancel approved future leave + ledger reversal). **2 new SQL migrations (FR-15 + FR-7 functions
+only; FR-24 needs none), ~3 server actions, ~4 UI components, a few pure helpers, i18n, docs.** No
+tables/enums/columns/RLS-policy changes.
 
 ## 5. Architecture & components
 
@@ -104,17 +105,20 @@ changes.
 
 ### 5.3 FR-24 — Admin work-settings + holiday editor
 
-- **SQL** — new migration `…_admin_settings_fns.sql`, all `private.is_admin`-guarded + audited:
-  - `app_update_work_settings(p_weekend_days int[])` — validate every element ∈ `1..7` and
-    `array_length < 7` (cannot make every day a weekend → zero working days); upsert the caller's
-    company `work_settings` row (`updated_by = auth.uid()`, `updated_at = now()`).
-  - `app_upsert_holiday(p_id uuid, p_date date, p_name_fa text, p_name_en text, p_is_recurring bool)`
-    — `company_id` from the caller's profile; insert when `p_id` is null, else update that row.
-  - `app_delete_holiday(p_id uuid)` — delete by id (company-scoped).
-  - Grants: revoke anon/public; grant `authenticated` (self-guarded). Tables stay SELECT-only.
-- **TS** — `lib/actions/settings.ts`: `getCompanyHolidays()`, `updateWorkSettings(weekendDays)`,
-  `upsertHoliday(...)`, `deleteHoliday(id)` (admin-gated in the action; RPC re-guards). Optional pure
-  `lib/leave/weekend.ts` (weekday labels + the ⊆1..7/not-all-7 validation), unit-tested.
+- **SQL** — **none.** `work_settings` and `holidays` already accept admin writes through the existing
+  `private.is_admin`-guarded RLS policies (leave migration L159–182).
+- **TS** — `lib/actions/settings.ts` (server actions, admin-gated by a `roles.includes('admin')`
+  check; the RLS policy is the real enforcement):
+  - `getCompanyHolidays()` — SELECT the caller's company holidays.
+  - `updateWorkSettings(weekendDays: number[])` — `supabase.from('work_settings').update({
+    weekend_days, updated_by: uid }).eq('company_id', companyId)`. Reject input via the pure validator
+    before writing.
+  - `upsertHoliday({ id?, date, nameFa, nameEn, isRecurring })` — `insert` when `id` is absent, else
+    `update().eq('id', id)`; `company_id` set from the caller's profile on insert.
+  - `deleteHoliday(id)` — `supabase.from('holidays').delete().eq('id', id)`.
+  - Pure `lib/leave/weekend.ts` — `WEEKDAYS` labels + `validateWeekendDays(days)` (every element ∈
+    `1..7`, deduped, **not all 7** → at least one working day), unit-tested; used by the action and
+    the form.
 - **UI** — new admin page `app/[locale]/(app)/manage/settings/page.tsx` (admin guard → redirect/403)
   with `WorkSettingsForm.tsx` (Sat…Fri multi-toggle, ISO weekday ints, default `[5]`) and
   `HolidayEditor.tsx` (list shown Jalali/Gregorian per the admin's `calendar_pref`; add/edit via
@@ -123,8 +127,9 @@ changes.
 
 ### 5.4 Cross-cutting
 
-- **3 migrations** with sequential timestamps after `20260624090002`; regenerate
-  `lib/supabase/types.ts`. No table/enum/column changes.
+- **2 migrations** (FR-15 cancel extension, FR-7 password fn) with sequential timestamps after
+  `20260624090002`; regenerate `lib/supabase/types.ts`. FR-24 adds no migration. No
+  table/enum/column changes.
 - **i18n** — fa/en strings in `messages/` for the password form, settings + holiday editor, and the
   cancel-approved confirm.
 - **No retroactive recompute**: changing weekend/holidays affects only *future* day-counting; already
@@ -160,5 +165,7 @@ changes.
 
 Forced first-login password change (P6-4); manager-approved cancellation flow (P6-1); partial/in-
 progress leave cancellation (P6-2); an authoritative pre-seeded 1404–1405 holiday dataset (P6-6 — the
-editor is delivered, data is entered in-app). No hourly leave, notifications, or non-HR modules
-(PLAN §6). No table/enum/RLS-policy changes.
+editor is delivered, data is entered in-app). Audit-log rows for holiday/work-settings edits (P6-7 —
+config edits use direct RLS writes, matching the schema's convention; `work_settings` self-audits via
+`updated_by`). No hourly leave, notifications, or non-HR modules (PLAN §6). No table/enum/RLS-policy
+changes.
