@@ -63,6 +63,7 @@
     "noRequests": "No requests found.",
     "cancel": "Cancel",
     "cancelConfirm": "Are you sure you want to cancel this request?",
+    "cancelApprovedConfirm": "This approved leave will be cancelled and your balance restored. Continue?",
     "cancelSuccess": "Request cancelled successfully.",
     "from": "From",
     "to": "To",
