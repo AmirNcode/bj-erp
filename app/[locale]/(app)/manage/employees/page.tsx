@@ -21,6 +21,15 @@ export default async function EmployeesPage({ params }: Props) {
   const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: myRoles } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user?.id ?? '');
+  const isAdmin = (myRoles ?? []).some((r) => r.role === 'admin');
+
   // Fetch all employees. RLS allows admin to read all profiles.
   // Use '!profiles_department_id_fkey' to disambiguate from the manager_id FK.
   const { data: employees } = await supabase
@@ -51,6 +60,15 @@ export default async function EmployeesPage({ params }: Props) {
           >
             {tTeam('navLink')}
           </Link>
+          {isAdmin && (
+            <Link
+              href={`/${locale}/manage/settings`}
+              className="text-blue-600 hover:underline px-2 py-2"
+              data-testid="nav-settings"
+            >
+              {t('settingsLink')}
+            </Link>
+          )}
           <Link
             href={`/${locale}/manage/approvals`}
             className="text-blue-600 hover:underline px-2 py-2"

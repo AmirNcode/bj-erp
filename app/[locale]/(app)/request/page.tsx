@@ -77,6 +77,8 @@ export default async function RequestPage({ params }: Props) {
     myRequests: t('myRequests'),
     noRequests: t('noRequests'),
     cancel: t('cancel'),
+    cancelConfirm: t('cancelConfirm'),
+    cancelApprovedConfirm: t('cancelApprovedConfirm'),
     cancelSuccess: t('cancelSuccess'),
     from: t('from'),
     to: t('to'),
@@ -110,7 +112,6 @@ export default async function RequestPage({ params }: Props) {
         <MyRequestsList
           requests={requests}
           labels={labels}
-          locale={locale}
           calendarPref={calendarPref}
         />
       </div>

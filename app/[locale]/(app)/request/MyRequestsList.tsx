@@ -3,12 +3,18 @@
 import { useState, useTransition } from 'react';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
+import { gregorianToJalali } from '@/lib/leave/dateConvert';
+import { isCancellable } from '@/lib/leave/cancellable';
+
+// Client "today" (YYYY-MM-DD); the SQL re-checks against current_date on cancel.
+const TODAY = new Date().toISOString().slice(0, 10);
 
 type Labels = {
   myRequests: string;
   noRequests: string;
   cancel: string;
   cancelConfirm?: string;
+  cancelApprovedConfirm?: string;
   cancelSuccess: string;
   errorLabel: string;
   statusPending: string;
@@ -24,7 +30,6 @@ type Labels = {
 type Props = {
   requests: LeaveRequestWithType[];
   labels: Labels;
-  locale: string;
   calendarPref: string;
 };
 
@@ -36,18 +41,21 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatDate(dateStr: string, calendarPref: string): string {
-  // For now we display Gregorian regardless — in Phase 4 we'd convert to Jalali here.
-  // The stored date is always Gregorian YYYY-MM-DD.
-  return dateStr;
+  // Stored dates are Gregorian; show Jalali when that's the user's preference.
+  return calendarPref === 'jalali' ? gregorianToJalali(dateStr) : dateStr;
 }
 
-export function MyRequestsList({ requests, labels, locale, calendarPref }: Props) {
+export function MyRequestsList({ requests, labels, calendarPref }: Props) {
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const handleCancel = (id: string) => {
-    if (!confirm(labels.cancelConfirm ?? 'Cancel this request?')) return;
+  const handleCancel = (id: string, status: string) => {
+    const prompt =
+      status === 'approved'
+        ? labels.cancelApprovedConfirm ?? labels.cancelConfirm ?? 'Cancel this request?'
+        : labels.cancelConfirm ?? 'Cancel this request?';
+    if (!confirm(prompt)) return;
     setErrorMsg('');
     startTransition(async () => {
       const res = await cancelRequest(id);
@@ -117,10 +125,10 @@ export function MyRequestsList({ requests, labels, locale, calendarPref }: Props
                     {statusLabel(req.status)}
                   </span>
 
-                  {/* Cancel button — only for pending */}
-                  {req.status === 'pending' && (
+                  {/* Cancel — pending, or an approved leave that hasn't started */}
+                  {isCancellable(req.status, req.start_date, TODAY) && (
                     <button
-                      onClick={() => handleCancel(req.id)}
+                      onClick={() => handleCancel(req.id, req.status)}
                       disabled={isPending}
                       className="text-xs text-red-600 hover:underline disabled:opacity-50"
                       data-testid={`cancel-btn-${req.id}`}

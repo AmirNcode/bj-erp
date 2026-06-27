@@ -1,0 +1,80 @@
+/**
+ * Admin work-settings + holiday editor (FR-24). Admin-only (managers are bounced
+ * to /home). Writes go through lib/actions/settings via the existing admin RLS
+ * policies on work_settings / holidays.
+ */
+export const dynamic = 'force-dynamic';
+
+import { redirect } from 'next/navigation';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { createClient } from '@/lib/supabase/server';
+import { getCompanyHolidays } from '@/lib/actions/settings';
+import { WorkSettingsForm } from './WorkSettingsForm';
+import { HolidayEditor } from './HolidayEditor';
+
+type Props = { params: Promise<{ locale: string }> };
+
+export default async function SettingsPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${locale}/login`);
+
+  const [{ data: roles }, { data: profile }] = await Promise.all([
+    supabase.from('user_roles').select('role').eq('user_id', user.id),
+    supabase.from('profiles').select('calendar_pref').eq('id', user.id).single(),
+  ]);
+  const isAdmin = (roles ?? []).some((r) => r.role === 'admin');
+  if (!isAdmin) redirect(`/${locale}/home`);
+
+  const t = await getTranslations('manage.settings');
+  const data = await getCompanyHolidays();
+  const weekendDays = data.ok ? data.weekendDays : [5];
+  const holidays = data.ok ? data.holidays : [];
+
+  const days = {
+    sat: t('days.sat'),
+    sun: t('days.sun'),
+    mon: t('days.mon'),
+    tue: t('days.tue'),
+    wed: t('days.wed'),
+    thu: t('days.thu'),
+    fri: t('days.fri'),
+  };
+
+  return (
+    <main className="p-6 max-w-2xl mx-auto space-y-10">
+      <h1 className="text-2xl font-bold">{t('title')}</h1>
+      <WorkSettingsForm
+        initial={weekendDays}
+        labels={{
+          weekendTitle: t('weekendTitle'),
+          weekendHint: t('weekendHint'),
+          save: t('save'),
+          saved: t('saved'),
+          errorLabel: t('error'),
+          days,
+        }}
+      />
+      <HolidayEditor
+        initial={holidays}
+        calendarPref={profile?.calendar_pref ?? 'jalali'}
+        labels={{
+          holidaysTitle: t('holidaysTitle'),
+          addHoliday: t('addHoliday'),
+          dateLabel: t('dateLabel'),
+          nameFaLabel: t('nameFaLabel'),
+          nameEnLabel: t('nameEnLabel'),
+          recurringLabel: t('recurringLabel'),
+          delete: t('delete'),
+          noHolidays: t('noHolidays'),
+          errorLabel: t('error'),
+        }}
+      />
+    </main>
+  );
+}

@@ -83,6 +83,7 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_days numeric`
 (+ for allocation, − for consumption) · `balance_after numeric` · `note` · `created_at`.
 **Balance = latest `balance_after` per (employee, leave_type)**, derived not stored elsewhere.
+Cancelling an **approved future** request writes a `reversal` row (`+requested_days`) — FR-15.
 
 ## Working-day counting (server-side)
 

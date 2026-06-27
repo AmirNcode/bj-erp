@@ -57,5 +57,18 @@ versioning once the app is scaffolded. Until then, entries track documentation a
 - e2e smoke (`seed-roles.spec`) logs in as manager / employee / security. Suite: unit 54/54, e2e 17/17 (serial).
 - **v1 is feature-complete** except FR-24 (admin work/holiday editor) and FR-7 (self-service password change), deferred to **Phase 6** with FR-15 (cancel approved leave) and the official Iranian holiday list.
 
+### Implemented — Phase 6 (Settings, password, cancel-approved)
+- **FR-15**: `cancel_leave_request` now also cancels an **approved** request whose `start_date` is in
+  the future, writing a `reversal` ledger row (+requested_days) for balance-affecting types (atomic,
+  row-count guarded). My Requests shows Cancel on eligible approved rows (pure `isCancellable`).
+- **FR-7**: self-service password change — guarded `app_change_my_password` verifies the current
+  password in-DB (`crypt`; no `service_role`); a Change-Password form on Profile/Settings.
+- **FR-24**: admin work-settings (weekend days) + holiday add/edit/delete editor at
+  `/manage/settings`, writing directly via the pre-existing admin RLS policies on
+  `work_settings`/`holidays` (no new RPC/migration). Linked from Manage for admins only.
+- Migrations `20260626120001` (cancel reversal) + `20260626120002` (password fn); types regenerated.
+  No table/enum/RLS-policy changes. Tests: unit 65/65 (+11), e2e 20/20 (+3, serial).
+
 ### Next
-- Phase 6 — FR-24 admin work-settings/holiday editor · FR-7 password change · FR-15 cancel approved leave · official Iranian holiday list · then PLAN §6 modules.
+- Official Iranian 1404–1405 holiday dataset (entered via the FR-24 editor) · demo deploy
+  (`docs/DEPLOY.md`) · then PLAN §6 modules (attendance, shifts, …).

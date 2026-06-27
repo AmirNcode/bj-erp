@@ -5,14 +5,14 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
-> Current state: **Phases 0–5 COMPLETE — v1 feature-complete & demo-ready**, except deferred FR-24
-> (admin work/holiday UI) + FR-7 (self-service password change) → **Phase 6**. Identity/org,
+> Current state: **Phases 0–6 COMPLETE — v1 feature-complete & demo-ready; no v1 FR outstanding.**
+> Phase 6 added FR-24 admin settings, FR-7 password change, FR-15 cancel-approved. Identity/org,
 > code+password auth, admin CRUD + manager edits, leave core (types/allocations/ledger/request),
 > approval flow [`/manage/approvals`], FR-25 reason-private calendar [`/calendar`], role-aware home
 > board + bottom-tab nav, settings + logout, responsive/device-detection, and a **seeded demo**
 > (BJ Manufacturing — 3 teams + Security, 12 users, `Demo!2026`). Branch `feat/hr-timeoff-v1`; build
 > green, unit 54/54, e2e 17/17 (serial/CI). **Deploy = runbook (`docs/DEPLOY.md`), not executed.**
-> **Next: Phase 6** (FR-24, FR-7, FR-15, official holidays). History: `.superpowers/sdd/progress.md`.
+> **Next: PLAN §6 backlog** (attendance, shifts, …) + demo deploy. History: `.superpowers/sdd/progress.md`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -52,6 +52,13 @@ their own plan files when reached.
 - ☑ Seed: leave types + annual allocations; Iranian holidays (minimal placeholders, admin-editable)
 - ◐ Deploy demo (runbook `docs/DEPLOY.md`; not executed); smoke-test each role e2e ☑ (`seed-roles.spec`)
 - ☑ Update CHANGELOG + flip REQUIREMENTS statuses
+
+## Phase 6 — Settings, password, cancel-approved ✅
+- ☑ FR-24 admin work-settings (weekend days) + holiday add/edit/delete editor (`/manage/settings`),
+  direct admin RLS writes (no migration)
+- ☑ FR-7 self-service password change (in-DB current-password verify; `app_change_my_password`)
+- ☑ FR-15 cancel an approved-future request with ledger `reversal`
+- ☑ Docs (REQUIREMENTS/PERMISSIONS/DATA_MODEL/CHANGELOG) + SDD ledger
 
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved

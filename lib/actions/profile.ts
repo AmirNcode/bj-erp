@@ -42,3 +42,24 @@ export async function signOut(locale: string): Promise<void> {
   await supabase.auth.signOut();
   redirect(`/${locale}/login`);
 }
+
+export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+
+/** Self-service password change. The RPC verifies the current password in-DB. */
+export async function changeMyPassword(
+  current: string,
+  next: string
+): Promise<ChangePasswordResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+
+  const { error } = await supabase.rpc('app_change_my_password', {
+    p_current: current,
+    p_new: next,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}

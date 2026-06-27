@@ -63,6 +63,7 @@
     "noRequests": "No requests found.",
     "cancel": "Cancel",
     "cancelConfirm": "Are you sure you want to cancel this request?",
+    "cancelApprovedConfirm": "This approved leave will be cancelled and your balance restored. Continue?",
     "cancelSuccess": "Request cancelled successfully.",
     "from": "From",
     "to": "To",
@@ -101,7 +102,18 @@
     "langEn": "English",
     "logout": "Log Out",
     "saved": "Saved.",
-    "error": "Error"
+    "error": "Error",
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Change password",
+      "changed": "Password changed successfully.",
+      "tooShort": "New password must be at least 8 characters.",
+      "mismatch": "Password confirmation does not match.",
+      "emptyCurrent": "Enter your current password."
+    }
   },
   "allocations": {
     "title": "Leave Allocations",
@@ -130,6 +142,7 @@
   },
   "manage": {
     "approvalsLink": "Approvals",
+    "settingsLink": "Settings",
     "employees": {
       "title": "Manage Employees",
       "newTitle": "Add New Employee",
@@ -161,6 +174,31 @@
       "none": "No Manager",
       "noEmployees": "No employees found.",
       "saved": "Changes saved successfully."
+    },
+    "settings": {
+      "title": "Work settings",
+      "weekendTitle": "Weekly days off",
+      "weekendHint": "Days that do not count as working days.",
+      "save": "Save",
+      "saved": "Saved.",
+      "holidaysTitle": "Official holidays",
+      "addHoliday": "Add holiday",
+      "dateLabel": "Date",
+      "nameFaLabel": "Name (Farsi)",
+      "nameEnLabel": "Name (English)",
+      "recurringLabel": "Repeats yearly",
+      "delete": "Delete",
+      "noHolidays": "No holidays yet.",
+      "error": "Error",
+      "days": {
+        "sat": "Saturday",
+        "sun": "Sunday",
+        "mon": "Monday",
+        "tue": "Tuesday",
+        "wed": "Wednesday",
+        "thu": "Thursday",
+        "fri": "Friday"
+      }
     }
   }
 }
