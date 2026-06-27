@@ -568,6 +568,10 @@ export type Database = {
         Args: { p_password: string; p_user_id: string }
         Returns: undefined
       }
+      app_change_my_password: {
+        Args: { p_current: string; p_new: string }
+        Returns: undefined
+      }
       submit_leave_request: {
         Args: {
           p_leave_type_id: string
