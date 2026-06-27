@@ -12,8 +12,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   a **manager hierarchy** (`manager_id` self-reference).
 - **FR-5** ☑ **Managers** can edit employees that **directly report** to them (subset of fields).
 - **FR-6** ☑ Employees can edit a limited set of their own profile fields.
-- **FR-7** ◐ Login is **username (employee code) + password**, issued by admin. **No email
-  required.** Self-service password change after first login.
+- **FR-7** ☑ Login is **username (employee code) + password**, issued by admin. **No email
+  required.** Self-service password change (Profile → Change password; verifies current password).
 
 ## Functional — Time-Off
 
@@ -29,8 +29,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-13** ☑ Request shows **remaining balance** before submit; blocks/ warns if insufficient.
 - **FR-14** ☑ **Approval**: the employee's **direct manager** approves/rejects; **admin can
   override** any decision. Ledger updates on approval.
-- **FR-15** ◐ Employee can **cancel** a pending request (and request cancellation of an approved
-  future one). *(Pending-cancel done in Phase 2; approved-future cancellation deferred.)*
+- **FR-15** ☑ Employee can **cancel** a pending request, and an **approved future** request
+  (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
+  shipped in Phase 2; approved-future in Phase 6.)*
 
 ## Functional — Visibility (see also PERMISSIONS.md)
 
@@ -53,8 +54,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
 - **FR-23** ☑ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
   English**. Persisted per user.
-- **FR-24** ☐ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
-  **holiday list** (seeded with official Iranian 1404–1405 holidays).
+- **FR-24** ☑ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
+  **holiday list** (add/edit/delete) at `/manage/settings`. Editor shipped in Phase 6; the
+  authoritative Iranian 1404–1405 dates are entered in-app (placeholder seed retained).
 
 ## Non-functional
 
