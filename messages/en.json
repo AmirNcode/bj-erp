@@ -102,7 +102,18 @@
     "langEn": "English",
     "logout": "Log Out",
     "saved": "Saved.",
-    "error": "Error"
+    "error": "Error",
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Change password",
+      "changed": "Password changed successfully.",
+      "tooShort": "New password must be at least 8 characters.",
+      "mismatch": "Password confirmation does not match.",
+      "emptyCurrent": "Enter your current password."
+    }
   },
   "allocations": {
     "title": "Leave Allocations",
