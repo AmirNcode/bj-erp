@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { useState, FormEvent } from 'react';
 import { signInWithCode } from '@/lib/auth/usernameEmail';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ export default function LoginPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-center text-2xl">{t('title')}</CardTitle>
+            <h1 className="text-center text-2xl font-semibold">{t('title')}</h1>
           </CardHeader>
 
           <CardContent>
