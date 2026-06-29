@@ -204,12 +204,16 @@ test.describe('Approval flow', () => {
 
     await approveButtons.first().click();
     // Confirm the approve AlertDialog
-    await page.locator('[data-testid^="approve-confirm-"]').first().click();
+    const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
+    await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+    await approveConfirm.click();
     await expect(approveButtons).toHaveCount(1); // approved row removed optimistically
 
     await page.locator('[data-testid^="reject-btn-"]').first().click();
     // Confirm the reject AlertDialog
-    await page.locator('[data-testid^="reject-confirm-"]').first().click();
+    const rejectConfirm = page.locator('[data-testid^="reject-confirm-"]').first();
+    await expect(rejectConfirm).toBeVisible({ timeout: 5_000 });
+    await rejectConfirm.click();
     await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 10_000 });
 
     // 4. Employee sees one approved + one rejected.
