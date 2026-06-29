@@ -80,7 +80,7 @@ export default async function ProfilePage({ params }: Props) {
       {/* Preferences */}
       <Card>
         <CardHeader className="border-b pb-4">
-          <CardTitle>{t('calendar')}</CardTitle>
+          <CardTitle>{t('preferences')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
           <SettingsForm

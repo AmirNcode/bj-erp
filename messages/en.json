@@ -96,6 +96,7 @@
     "title": "Profile",
     "name": "Name",
     "code": "Employee Code",
+    "preferences": "Preferences",
     "calendar": "Calendar",
     "language": "Language",
     "jalali": "Persian (Jalali)",
