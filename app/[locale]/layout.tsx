@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
@@ -17,6 +17,10 @@ const vazirmatn = localFont({
 export const metadata: Metadata = {
   title: 'سامانه منابع انسانی',
   description: 'HR Management System',
+};
+
+export const viewport: Viewport = {
+  themeColor: '#2E3C92',
 };
 
 export function generateStaticParams() {
