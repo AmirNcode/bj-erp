@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
-import DatePicker from 'react-multi-date-picker';
+import { useRouter } from 'next/navigation';
+import { LazyDatePicker } from './LazyDatePicker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import gregorian from 'react-date-object/calendars/gregorian';
@@ -10,6 +11,10 @@ import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
 import { submitRequest, getMyBalance } from '@/lib/actions/leave';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 type DayPart = 'full' | 'am' | 'pm';
 
@@ -46,7 +51,11 @@ type Props = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DateObjectLike = any;
 
+const selectClassName =
+  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+
 export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, labels, locale }: Props) {
+  const router = useRouter();
   const isJalali = calendarPref === 'jalali';
   const calendar = isJalali ? persian : gregorian;
   const calLocale = isJalali ? persian_fa : gregorian_en;
@@ -143,8 +152,8 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
         setDateRange([]);
         setReason('');
         setDayPart('full');
-        // Refresh the page to show new request in list
-        window.location.reload();
+        // Refresh server data without a full page reload
+        router.refresh();
       } else {
         setErrorMsg(result.error);
       }
@@ -152,132 +161,128 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5 bg-white rounded-xl border border-gray-200 p-6">
-      {/* Leave type */}
-      <div>
-        <label htmlFor="leave_type_id" className="block text-sm font-medium text-gray-700 mb-1">
-          {labels.leaveType}
-        </label>
-        <select
-          id="leave_type_id"
-          value={selectedTypeId}
-          onChange={(e) => setSelectedTypeId(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">{labels.selectType}</option>
-          {leaveTypes.map((lt) => (
-            <option key={lt.id} value={lt.id}>
-              {lt.name_fa}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Date range picker */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          {labels.dateRange}
-        </label>
-        <div
-          style={{ direction: isJalali ? 'rtl' : 'ltr' }}
-          className="w-full"
-        >
-          <DatePicker
-            range
-            value={dateRange}
-            onChange={(dates: DateObjectLike) => {
-              if (Array.isArray(dates)) {
-                setDateRange(dates);
-              } else {
-                setDateRange([]);
-              }
-            }}
-            calendar={calendar}
-            locale={calLocale}
-            calendarPosition={isJalali ? 'bottom-right' : 'bottom-left'}
-            inputClass="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            containerClassName="w-full"
-            format="YYYY/MM/DD"
-            dateSeparator=" — "
-          />
-        </div>
-      </div>
-
-      {/* Day part — only shown when single day + allow_half_day */}
-      {showHalfDay && (
-        <div>
-          <label htmlFor="day_part" className="block text-sm font-medium text-gray-700 mb-1">
-            {labels.dayPart}
-          </label>
-          <select
-            id="day_part"
-            value={dayPart}
-            onChange={(e) => setDayPart(e.target.value as DayPart)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="full">{labels.dayPartFull}</option>
-            <option value="am">{labels.dayPartAm}</option>
-            <option value="pm">{labels.dayPartPm}</option>
-          </select>
-        </div>
-      )}
-
-      {/* Reason */}
-      <div>
-        <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
-          {labels.reason}
-        </label>
-        <textarea
-          id="reason"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          rows={2}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-        />
-      </div>
-
-      {/* Live preview */}
-      {workingDaysCount !== null && (
-        <div
-          className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800 space-y-1"
-          data-testid="leave-preview"
-        >
-          <div data-testid="working-days-count">
-            {labels.preview}: <strong>{workingDaysCount}</strong> {locale === 'fa' ? 'روز کاری' : 'working days'}
+    <Card>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Leave type */}
+          <div className="space-y-1.5">
+            <Label htmlFor="leave_type_id">{labels.leaveType}</Label>
+            <select
+              id="leave_type_id"
+              value={selectedTypeId}
+              onChange={(e) => setSelectedTypeId(e.target.value)}
+              className={selectClassName}
+            >
+              <option value="">{labels.selectType}</option>
+              {leaveTypes.map((lt) => (
+                <option key={lt.id} value={lt.id}>
+                  {lt.name_fa}
+                </option>
+              ))}
+            </select>
           </div>
-          {selectedType?.affects_balance && (
-            <div data-testid="balance-display">
-              {balanceLoading
-                ? '…'
-                : effectiveBalance !== null
-                  ? (locale === 'fa'
-                      ? `مانده: ${effectiveBalance} روز`
-                      : `Remaining balance: ${effectiveBalance} days`)
-                  : labels.noBalance}
+
+          {/* Date range picker */}
+          <div className="space-y-1.5">
+            <Label>{labels.dateRange}</Label>
+            <div
+              style={{ direction: isJalali ? 'rtl' : 'ltr' }}
+              className="w-full"
+            >
+              <LazyDatePicker
+                range
+                value={dateRange}
+                onChange={(dates: DateObjectLike) => {
+                  if (Array.isArray(dates)) {
+                    setDateRange(dates);
+                  } else {
+                    setDateRange([]);
+                  }
+                }}
+                calendar={calendar}
+                locale={calLocale}
+                calendarPosition={isJalali ? 'bottom-right' : 'bottom-left'}
+                inputClass={`w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50`}
+                containerClassName="rmdp-container w-full"
+                format="YYYY/MM/DD"
+                dateSeparator=" — "
+              />
+            </div>
+          </div>
+
+          {/* Day part — only shown when single day + allow_half_day */}
+          {showHalfDay && (
+            <div className="space-y-1.5">
+              <Label htmlFor="day_part">{labels.dayPart}</Label>
+              <select
+                id="day_part"
+                value={dayPart}
+                onChange={(e) => setDayPart(e.target.value as DayPart)}
+                className={selectClassName}
+              >
+                <option value="full">{labels.dayPartFull}</option>
+                <option value="am">{labels.dayPartAm}</option>
+                <option value="pm">{labels.dayPartPm}</option>
+              </select>
             </div>
           )}
-        </div>
-      )}
 
-      {/* Success / error */}
-      {successMsg && (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800" data-testid="success-msg">
-          {successMsg}
-        </div>
-      )}
-      {errorMsg && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800" data-testid="error-msg">
-          <strong>{labels.errorLabel}:</strong> {errorMsg}
-        </div>
-      )}
+          {/* Reason */}
+          <div className="space-y-1.5">
+            <Label htmlFor="reason">{labels.reason}</Label>
+            <Textarea
+              id="reason"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className="resize-none"
+            />
+          </div>
 
-      <button
-        type="submit"
-        disabled={isPending}
-        className="w-full bg-blue-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-      >
-        {isPending ? '...' : labels.submit}
-      </button>
-    </form>
+          {/* Live preview */}
+          {workingDaysCount !== null && (
+            <div
+              className="rounded-lg bg-secondary px-4 py-3 text-sm space-y-1"
+              data-testid="leave-preview"
+            >
+              <div data-testid="working-days-count">
+                {labels.preview}: <strong>{workingDaysCount}</strong> {locale === 'fa' ? 'روز کاری' : 'working days'}
+              </div>
+              {selectedType?.affects_balance && (
+                <div data-testid="balance-display">
+                  {balanceLoading
+                    ? '…'
+                    : effectiveBalance !== null
+                      ? (locale === 'fa'
+                          ? `مانده: ${effectiveBalance} روز`
+                          : `Remaining balance: ${effectiveBalance} days`)
+                      : labels.noBalance}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Success / error */}
+          {successMsg && (
+            <div className="rounded-lg px-4 py-3 text-sm text-success bg-success/10 border border-success/20" data-testid="success-msg">
+              {successMsg}
+            </div>
+          )}
+          {errorMsg && (
+            <div className="rounded-lg px-4 py-3 text-sm text-destructive bg-destructive/10 border border-destructive/20" data-testid="error-msg">
+              <strong>{labels.errorLabel}:</strong> {errorMsg}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            disabled={isPending}
+            className="w-full"
+          >
+            {isPending ? '...' : labels.submit}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

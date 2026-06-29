@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
@@ -71,6 +72,8 @@ export async function submitRequest(
     // Surface the Postgres error message directly
     return { ok: false, error: error.message };
   }
+
+  revalidatePath('/[locale]/(app)/request', 'page');
 
   return { ok: true, requestId: data as string };
 }

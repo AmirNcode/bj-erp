@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { gregorianToJalali } from '@/lib/leave/dateConvert';
@@ -49,6 +49,11 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
+
+  // Sync localRequests when the server re-renders with fresh data (e.g. after router.refresh())
+  useEffect(() => {
+    setLocalRequests(requests);
+  }, [requests]);
 
   const handleCancel = (id: string, status: string) => {
     const prompt =
