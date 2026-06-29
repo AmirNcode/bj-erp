@@ -3,6 +3,7 @@
     "title": "HR System"
   },
   "nav": {
+    "appName": "Behsazan Jonoob",
     "home": "Home",
     "request": "Request",
     "calendar": "Calendar",
