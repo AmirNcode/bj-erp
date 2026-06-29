@@ -5,6 +5,7 @@
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '../../../_components/PageHeader';
 import { NewEmployeeForm } from './NewEmployeeForm';
 
 type Props = {
@@ -26,7 +27,7 @@ export default async function NewEmployeePage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('employees.newTitle')}</h1>
+      <PageHeader title={t('employees.newTitle')} />
       <NewEmployeeForm
         departments={departments ?? []}
         managers={managers ?? []}

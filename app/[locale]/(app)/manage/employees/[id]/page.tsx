@@ -7,6 +7,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
+import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
 
 type Props = {
@@ -59,8 +60,12 @@ export default async function EditEmployeePage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-2">{t('employees.editTitle')}</h1>
-      <p className="text-gray-500 mb-6 font-mono">{employee.employee_code}</p>
+      <PageHeader
+        title={t('employees.editTitle')}
+        action={
+          <span className="font-mono text-sm text-muted-foreground">{employee.employee_code}</span>
+        }
+      />
       <EditEmployeeForm
         employee={employee}
         empRoles={empRoles as string[]}

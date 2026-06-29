@@ -8,6 +8,10 @@ export const dynamic = 'force-dynamic';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
+import { PageHeader } from '../../_components/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -48,113 +52,155 @@ export default async function EmployeesPage({ params }: Props) {
     )
     .order('full_name');
 
-
   return (
     <main className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">{t('employees.title')}</h1>
-        <div className="flex items-center gap-3">
-          <Link
-            href={`/${locale}/team`}
-            className="text-blue-600 hover:underline px-2 py-2"
-          >
-            {tTeam('navLink')}
-          </Link>
-          {isAdmin && (
-            <Link
-              href={`/${locale}/manage/settings`}
-              className="text-blue-600 hover:underline px-2 py-2"
-              data-testid="nav-settings"
-            >
-              {t('settingsLink')}
-            </Link>
-          )}
-          <Link
-            href={`/${locale}/manage/approvals`}
-            className="text-blue-600 hover:underline px-2 py-2"
-          >
-            {t('approvalsLink')}
-          </Link>
-          <Link
-            href={`/${locale}/manage/employees/new`}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            {t('employees.addNew')}
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={t('employees.title')}
+        action={
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/${locale}/team`}>{tTeam('navLink')}</Link>
+            </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/${locale}/manage/settings`} data-testid="nav-settings">
+                  {t('settingsLink')}
+                </Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
+            </Button>
+          </div>
+        }
+      />
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.code')}
-              </th>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.name')}
-              </th>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.department')}
-              </th>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.roles')}
-              </th>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.status')}
-              </th>
-              <th className="text-start px-4 py-3 font-semibold text-gray-700">
-                {t('employees.actions')}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {(employees ?? []).map((emp) => (
-              <tr key={emp.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-mono">{emp.employee_code}</td>
-                <td className="px-4 py-3">{emp.full_name}</td>
-                <td className="px-4 py-3">
-                  {emp.departments
-                    ? locale === 'fa'
-                      ? (emp.departments as { name_fa: string }).name_fa
-                      : (emp.departments as { name_en: string }).name_en
-                    : '—'}
-                </td>
-                <td className="px-4 py-3">
-                  {(emp.user_roles as { role: string }[])
-                    .map((r) => r.role)
-                    .join(', ') || '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                      emp.active
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {emp.active ? t('employees.active') : t('employees.inactive')}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/${locale}/manage/employees/${emp.id}`}
-                    className="text-blue-600 hover:underline"
-                  >
+      {/* Desktop table */}
+      <Card className="hidden md:block overflow-hidden py-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/40">
+              <tr>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.code')}
+                </th>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.name')}
+                </th>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.department')}
+                </th>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.roles')}
+                </th>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.status')}
+                </th>
+                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
+                  {t('employees.actions')}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {(employees ?? []).map((emp) => (
+                <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-mono text-sm">{emp.employee_code}</td>
+                  <td className="px-4 py-3">{emp.full_name}</td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {emp.departments
+                      ? locale === 'fa'
+                        ? (emp.departments as { name_fa: string }).name_fa
+                        : (emp.departments as { name_en: string }).name_en
+                      : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {(emp.user_roles as { role: string }[])
+                      .map((r) => r.role)
+                      .join(', ') || '—'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge
+                      variant={emp.active ? 'default' : 'secondary'}
+                      className={
+                        emp.active
+                          ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                          : 'bg-red-100 text-red-700 hover:bg-red-100'
+                      }
+                    >
+                      {emp.active ? t('employees.active') : t('employees.inactive')}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button variant="link" size="sm" className="p-0 h-auto" asChild>
+                      <Link href={`/${locale}/manage/employees/${emp.id}`}>
+                        {t('employees.edit')}
+                      </Link>
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {(employees ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                    {t('employees.noEmployees')}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Mobile stacked cards */}
+      <div className="md:hidden space-y-3">
+        {(employees ?? []).length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              {t('employees.noEmployees')}
+            </CardContent>
+          </Card>
+        )}
+        {(employees ?? []).map((emp) => (
+          <Card key={emp.id}>
+            <CardContent className="py-4 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-medium">{emp.full_name}</p>
+                  <p className="font-mono text-sm text-muted-foreground">{emp.employee_code}</p>
+                </div>
+                <Badge
+                  className={
+                    emp.active
+                      ? 'bg-green-100 text-green-700 hover:bg-green-100 shrink-0'
+                      : 'bg-red-100 text-red-700 hover:bg-red-100 shrink-0'
+                  }
+                >
+                  {emp.active ? t('employees.active') : t('employees.inactive')}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {emp.departments
+                  ? locale === 'fa'
+                    ? (emp.departments as { name_fa: string }).name_fa
+                    : (emp.departments as { name_en: string }).name_en
+                  : '—'}
+              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {(emp.user_roles as { role: string }[]).map((r) => r.role).join(', ') || '—'}
+                </p>
+                <Button variant="link" size="sm" className="p-0 h-auto" asChild>
+                  <Link href={`/${locale}/manage/employees/${emp.id}`}>
                     {t('employees.edit')}
                   </Link>
-                </td>
-              </tr>
-            ))}
-            {(employees ?? []).length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                  {t('employees.noEmployees')}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </main>
   );

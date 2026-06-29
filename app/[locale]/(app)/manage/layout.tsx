@@ -36,5 +36,9 @@ export default async function ManageLayout({ children, params }: Props) {
     redirect(`/${locale}/home`);
   }
 
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-background">
+      {children}
+    </div>
+  );
 }
