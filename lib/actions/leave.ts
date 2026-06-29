@@ -73,7 +73,9 @@ export async function submitRequest(
     return { ok: false, error: error.message };
   }
 
-  revalidatePath('/[locale]/(app)/request', 'page');
+  // Route-group `(app)` is not part of the URL; revalidate the real dynamic
+  // route so all locale variants of /request are invalidated server-side.
+  revalidatePath('/[locale]/request', 'page');
 
   return { ok: true, requestId: data as string };
 }
