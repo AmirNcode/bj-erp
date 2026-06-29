@@ -15,8 +15,6 @@ test('employee cancels an approved future leave', async ({ page }) => {
   const code = `cxl${ts}`;
   const name = `Cancel Tester ${ts}`;
 
-  page.on('dialog', (d) => d.accept()); // approve + cancel confirm() dialogs
-
   // Admin: create the employee and allocate annual leave.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const pw = await createEmployee(page, { code, name, roles: ['employee'] });
@@ -30,7 +28,9 @@ test('employee cancels an approved future leave', async ({ page }) => {
 
   // Admin approves this employee's request. Scope the queue row by employee name
   // so other pending rows in the admin-wide queue don't interfere.
+  // The approvals page still uses native confirm() for approve/reject actions.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+  page.on('dialog', (d) => d.accept()); // accept the admin approve-btn native confirm()
   await page.goto('/manage/approvals');
   const approvalRow = page.locator('[data-testid^="approval-row-"]').filter({ hasText: name });
   await expect(approvalRow).toBeVisible({ timeout: 15_000 });
@@ -38,8 +38,8 @@ test('employee cancels an approved future leave', async ({ page }) => {
   await expect(approvalRow).toHaveCount(0, { timeout: 10_000 }); // removed optimistically
   await logout(page);
 
-  // Employee: the approved future request shows Cancel; cancelling flips the badge
-  // to "cancelled" and removes the button.
+  // Employee: the approved future request shows Cancel; cancelling opens an AlertDialog,
+  // confirming flips the badge to "cancelled" and removes the button.
   await login(page, code, pw.trim());
   await page.goto('/request');
   const row = page.locator('[data-testid^="request-row-"]').first();
@@ -47,6 +47,10 @@ test('employee cancels an approved future leave', async ({ page }) => {
   const cancelBtn = row.locator('[data-testid^="cancel-btn-"]');
   await expect(cancelBtn).toBeVisible();
   await cancelBtn.click();
+  // Click the AlertDialog confirm button (replaces native confirm() dialog)
+  const confirmBtn = page.locator('[data-testid^="cancel-confirm-"]').first();
+  await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+  await confirmBtn.click();
   const badge = row.locator('[data-testid^="status-badge-"]');
   await expect(badge).toHaveText(/لغو|cancel/i, { timeout: 10_000 });
   await expect(cancelBtn).toHaveCount(0);

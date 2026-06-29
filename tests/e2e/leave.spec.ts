@@ -228,8 +228,11 @@ test.describe('Leave request + allocation flow', () => {
     // ── 9. Cancel the request ─────────────────────────────────────────────
     const cancelBtn = page.locator('[data-testid^="cancel-btn-"]').first();
     await expect(cancelBtn).toBeVisible({ timeout: 5_000 });
-    page.on('dialog', (dialog) => dialog.accept());
     await cancelBtn.click();
+    // Click the AlertDialog confirm button (replaces native confirm() dialog)
+    const confirmBtn = page.locator('[data-testid^="cancel-confirm-"]').first();
+    await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+    await confirmBtn.click();
 
     // Status should change to cancelled
     const cancelledBadge = page.locator('[data-testid^="status-badge-"]').filter({ hasText: /cancel|لغو/i });
