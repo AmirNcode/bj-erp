@@ -6,7 +6,7 @@ import { createEmployee } from '@/lib/actions/employees';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -101,9 +101,6 @@ export function NewEmployeeForm({ departments, managers, locale, labels }: Props
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{labels.submit}</CardTitle>
-      </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
