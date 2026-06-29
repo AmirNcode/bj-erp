@@ -6,6 +6,17 @@ import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type Labels = {
   empty: string;
@@ -34,11 +45,9 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
 
   const decide = (
     id: string,
-    confirmMsg: string,
     successMsg: string,
     action: (id: string) => Promise<DecisionResult>
   ) => {
-    if (!confirm(confirmMsg)) return;
     setErrorMsg('');
     startTransition(async () => {
       const res = await action(id);
@@ -92,29 +101,67 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                     </div>
 
                     <div className="flex flex-col items-end gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          decide(req.id, labels.approveConfirm, labels.approveSuccess, approveRequest)
-                        }
-                        disabled={isPending}
-                        data-testid={`approve-btn-${req.id}`}
-                      >
-                        {labels.approve}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          decide(req.id, labels.rejectConfirm, labels.rejectSuccess, (id) =>
-                            rejectRequest(id)
-                          )
-                        }
-                        disabled={isPending}
-                        data-testid={`reject-btn-${req.id}`}
-                      >
-                        {labels.reject}
-                      </Button>
+                      {/* Approve */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            disabled={isPending}
+                            data-testid={`approve-btn-${req.id}`}
+                          >
+                            {labels.approve}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent size="sm">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {labels.approveConfirm}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel />
+                            <AlertDialogAction
+                              onClick={() => decide(req.id, labels.approveSuccess, approveRequest)}
+                              data-testid={`approve-confirm-${req.id}`}
+                            >
+                              {labels.approve}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+
+                      {/* Reject */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isPending}
+                            data-testid={`reject-btn-${req.id}`}
+                          >
+                            {labels.reject}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent size="sm">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{labels.reject}</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {labels.rejectConfirm}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel />
+                            <AlertDialogAction
+                              variant="destructive"
+                              onClick={() => decide(req.id, labels.rejectSuccess, (id) => rejectRequest(id))}
+                              data-testid={`reject-confirm-${req.id}`}
+                            >
+                              {labels.reject}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </CardContent>

@@ -180,9 +180,6 @@ test.describe('Approval flow', () => {
     const mgrCode = `mgr${ts}`;
     const empCode = `emp${ts}`;
 
-    // Accept all confirm() dialogs (approve/reject).
-    page.on('dialog', (dialog) => dialog.accept());
-
     // 1. Admin sets up a manager and a report.
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
     const mgrPw = await createEmployee(page, { code: mgrCode, name: `Manager ${ts}`, roles: ['manager'] });
@@ -206,9 +203,13 @@ test.describe('Approval flow', () => {
     await expect(approveButtons).toHaveCount(2); // exactly this report's two requests
 
     await approveButtons.first().click();
+    // Confirm the approve AlertDialog
+    await page.locator('[data-testid^="approve-confirm-"]').first().click();
     await expect(approveButtons).toHaveCount(1); // approved row removed optimistically
 
     await page.locator('[data-testid^="reject-btn-"]').first().click();
+    // Confirm the reject AlertDialog
+    await page.locator('[data-testid^="reject-confirm-"]').first().click();
     await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 10_000 });
 
     // 4. Employee sees one approved + one rejected.

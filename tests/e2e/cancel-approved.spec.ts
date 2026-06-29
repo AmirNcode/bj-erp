@@ -28,13 +28,17 @@ test('employee cancels an approved future leave', async ({ page }) => {
 
   // Admin approves this employee's request. Scope the queue row by employee name
   // so other pending rows in the admin-wide queue don't interfere.
-  // The approvals page still uses native confirm() for approve/reject actions.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  page.on('dialog', (d) => d.accept()); // accept the admin approve-btn native confirm()
   await page.goto('/manage/approvals');
   const approvalRow = page.locator('[data-testid^="approval-row-"]').filter({ hasText: name });
   await expect(approvalRow).toBeVisible({ timeout: 15_000 });
-  await approvalRow.locator('[data-testid^="approve-btn-"]').click();
+  // Get the request id from the approval row's data-testid, then click approve trigger + confirm.
+  const approveBtn = approvalRow.locator('[data-testid^="approve-btn-"]');
+  await approveBtn.click();
+  // Confirm the approve AlertDialog
+  const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
+  await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+  await approveConfirm.click();
   await expect(approvalRow).toHaveCount(0, { timeout: 10_000 }); // removed optimistically
   await logout(page);
 
