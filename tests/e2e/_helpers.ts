@@ -28,10 +28,10 @@ export const ADMIN_PASSWORD = 'Admin!2026';
  * day is allowed to spill into the next month because the calendar filter only
  * requires the start to be in the current month.
  *
- * Month-end edge: on the very last day(s) of a month it can be impossible to
- * find a future start in that month (e.g. today IS the last day and that day
- * is also a Friday).  In that case the function throws a clear error so the
- * test fails with a descriptive message rather than a cryptic picker error.
+ * Month-end edge: on the last calendar day of any month, tomorrow is already
+ * in the next month, so no future working-day start exists in the current
+ * month. In that case the function throws a clear error so the test fails with
+ * a descriptive message rather than a cryptic picker error.
  */
 export function jalali2DayRange(): string {
   const WEEKEND_ISO = [5]; // Friday = ISO 5
