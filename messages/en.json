@@ -1,4 +1,7 @@
 {
+  "common": {
+    "dismiss": "Cancel"
+  },
   "app": {
     "title": "HR System"
   },

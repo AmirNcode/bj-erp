@@ -18,6 +18,17 @@ import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
+function RequestPageSkeleton() {
+  return (
+    <>
+      <FormSkeleton />
+      <div className="mt-10">
+        <ListSkeleton count={2} />
+      </div>
+    </>
+  );
+}
+
 type Props = {
   params: Promise<{ locale: string }>;
 };
@@ -127,7 +138,7 @@ export default async function RequestPage({ params }: Props) {
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
-      <Suspense fallback={<><FormSkeleton /><div className="mt-10"><ListSkeleton count={2} /></div></>}>
+      <Suspense fallback={<RequestPageSkeleton />}>
         <RequestPageData locale={locale} />
       </Suspense>
     </main>

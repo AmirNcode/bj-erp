@@ -46,7 +46,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
   return (
     <>
       {loadError && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">
+        <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
           <strong>{labels.errorLabel}:</strong> {loadError}
         </div>
       )}

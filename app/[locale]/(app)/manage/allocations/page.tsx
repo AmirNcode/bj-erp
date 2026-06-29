@@ -66,7 +66,6 @@ export default async function AllocationsPage({ params }: Props) {
         employees={employees}
         leaveTypes={leaveTypes}
         labels={labels}
-        locale={locale}
       />
     </main>
   );

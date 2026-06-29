@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { updateMyPrefs, signOut } from '@/lib/actions/profile';
 import { Button } from '@/components/ui/button';
+import { nativeSelectClass } from '@/lib/native-select';
 
 type Labels = {
   calendar: string;
@@ -22,9 +23,6 @@ type Props = {
   locale: string;
   labels: Labels;
 };
-
-const SELECT_CLASS =
-  'w-full border border-input rounded-md bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 h-9';
 
 export function SettingsForm({ current, locale, labels }: Props) {
   const router = useRouter();
@@ -55,7 +53,7 @@ export function SettingsForm({ current, locale, labels }: Props) {
   return (
     <div className="space-y-5">
       {msg && (
-        <p role="status" className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800">
+        <p role="status" className="rounded-lg bg-success-foreground border border-success/20 px-4 py-2 text-sm text-success">
           {msg}
         </p>
       )}
@@ -70,7 +68,7 @@ export function SettingsForm({ current, locale, labels }: Props) {
           value={calendar}
           onChange={(e) => onCalendar(e.target.value)}
           disabled={isPending}
-          className={SELECT_CLASS}
+          className={nativeSelectClass}
         >
           <option value="jalali">{labels.jalali}</option>
           <option value="gregorian">{labels.gregorian}</option>
@@ -87,7 +85,7 @@ export function SettingsForm({ current, locale, labels }: Props) {
           value={language}
           onChange={(e) => onLanguage(e.target.value)}
           disabled={isPending}
-          className={SELECT_CLASS}
+          className={nativeSelectClass}
         >
           <option value="fa">{labels.langFa}</option>
           <option value="en">{labels.langEn}</option>
@@ -100,7 +98,7 @@ export function SettingsForm({ current, locale, labels }: Props) {
         data-testid="settings-logout"
         onClick={() => startTransition(async () => { await signOut(locale); })}
         disabled={isPending}
-        className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
+        className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
       >
         {labels.logout}
       </Button>

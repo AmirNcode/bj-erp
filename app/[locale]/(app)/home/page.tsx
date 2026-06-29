@@ -25,27 +25,21 @@ type Props = {
 };
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function HomeBoardData({ locale }: { locale: string }) {
+async function HomeBoardData({
+  locale,
+  userId,
+}: {
+  locale: string;
+  userId: string;
+}) {
   const t = await getTranslations('home');
   const tLeave = await getTranslations('leave');
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single();
-  const fullName = profile?.full_name ?? '';
-
   const { data: rolesData } = await supabase
     .from('user_roles')
     .select('role')
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
   const roles = (rolesData ?? []).map((r) => r.role as string);
   const canApprove = roles.includes('admin') || roles.includes('manager');
 
@@ -120,7 +114,7 @@ export default async function HomePage({ params }: Props) {
     <main className="p-6 max-w-3xl mx-auto">
       <PageHeader title={t('greeting', { name: fullName })} />
       <Suspense fallback={<BoardSkeleton />}>
-        <HomeBoardData locale={locale} />
+        <HomeBoardData locale={locale} userId={user.id} />
       </Suspense>
     </main>
   );

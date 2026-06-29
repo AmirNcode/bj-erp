@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
@@ -47,6 +48,7 @@ export function HolidayEditor({
   calendarPref: string;
   labels: Labels;
 }) {
+  const tc = useTranslations('common');
   const isJalali = calendarPref === 'jalali';
   const [holidays, setHolidays] = useState<Holiday[]>(initial);
   const [picked, setPicked] = useState<DateObjectLike | null>(null);
@@ -189,7 +191,7 @@ export function HolidayEditor({
                     <AlertDialogDescription>{h.name_fa}</AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel />
+                    <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
                     <AlertDialogAction
                       variant="destructive"
                       onClick={() => onDelete(h.id)}

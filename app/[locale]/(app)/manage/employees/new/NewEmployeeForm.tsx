@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { nativeSelectClass } from '@/lib/native-select';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -36,9 +37,6 @@ type Props = {
     noneOption: string;
   };
 };
-
-const nativeSelectClass =
-  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
 
 export function NewEmployeeForm({ departments, managers, locale, labels }: Props) {
   const router = useRouter();
@@ -80,16 +78,16 @@ export function NewEmployeeForm({ departments, managers, locale, labels }: Props
 
   if (tempPassword) {
     return (
-      <Card className="border-2 border-green-300 bg-green-50">
+      <Card className="border-2 border-success/30 bg-success-foreground">
         <CardContent className="space-y-4 pt-6">
-          <h2 className="text-lg font-semibold text-green-800">{labels.tempPasswordLabel}</h2>
-          <p className="font-mono text-2xl bg-white border border-green-300 rounded-lg px-4 py-3 select-all tracking-widest">
+          <h2 className="text-lg font-semibold text-success">{labels.tempPasswordLabel}</h2>
+          <p className="font-mono text-2xl bg-background border border-success/20 rounded-lg px-4 py-3 select-all tracking-widest">
             {tempPassword}
           </p>
-          <p className="text-sm text-green-700">{labels.tempPasswordHint}</p>
+          <p className="text-sm text-success">{labels.tempPasswordHint}</p>
           <a
             href={`/${locale}/manage/employees`}
-            className="inline-block mt-4 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+            className="inline-block mt-4 bg-success text-success-foreground px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
             data-testid="done-link"
           >
             ✓ {labels.done}
@@ -106,7 +104,7 @@ export function NewEmployeeForm({ departments, managers, locale, labels }: Props
           {error && (
             <p
               role="alert"
-              className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm"
+              className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
             >
               {labels.errorLabel}: {error}
             </p>

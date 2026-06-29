@@ -46,7 +46,7 @@ export function WorkSettingsForm({ initial, labels }: { initial: number[]; label
         <p className="text-xs text-muted-foreground mt-0.5">{labels.weekendHint}</p>
       </div>
       {okMsg && (
-        <p role="status" data-testid="work-settings-saved" className="text-sm text-green-700">
+        <p role="status" data-testid="work-settings-saved" className="text-sm text-success">
           {okMsg}
         </p>
       )}

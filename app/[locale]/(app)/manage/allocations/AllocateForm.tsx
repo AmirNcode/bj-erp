@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { nativeSelectClass } from '@/lib/native-select';
 
 type Labels = {
   employee: string;
@@ -26,12 +27,7 @@ type Props = {
   employees: EmployeeOption[];
   leaveTypes: LeaveType[];
   labels: Labels;
-  locale: string;
 };
-
-/** Matches the native-select style used in employee forms. */
-const nativeSelectClass =
-  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
 
 export function AllocateForm({ employees, leaveTypes, labels }: Props) {
   const [employeeId, setEmployeeId] = useState('');
@@ -157,7 +153,7 @@ export function AllocateForm({ employees, leaveTypes, labels }: Props) {
           {/* Success callout — kept visible for e2e waits */}
           {successMsg && (
             <div
-              className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800"
+              className="rounded-lg bg-success-foreground border border-success/20 px-4 py-3 text-sm text-success"
               data-testid="alloc-success"
             >
               {successMsg}
@@ -167,7 +163,7 @@ export function AllocateForm({ employees, leaveTypes, labels }: Props) {
           {/* Inline error */}
           {errorMsg && (
             <div
-              className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800"
+              className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive"
               data-testid="alloc-error"
             >
               <strong>{labels.errorLabel}:</strong> {errorMsg}

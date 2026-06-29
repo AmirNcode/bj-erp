@@ -63,7 +63,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
         <p
           role="status"
           data-testid="password-success"
-          className="rounded-lg bg-green-50 border border-green-200 px-4 py-2 text-sm text-green-800"
+          className="rounded-lg bg-success-foreground border border-success/20 px-4 py-2 text-sm text-success"
         >
           {okMsg}
         </p>
@@ -72,7 +72,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
         <p
           role="alert"
           data-testid="password-error"
-          className="rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-800"
+          className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-2 text-sm text-destructive"
         >
           <strong>{labels.errorLabel}:</strong> {errMsg}
         </p>

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { nativeSelectClass } from '@/lib/native-select';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -54,9 +55,6 @@ type Props = {
     managerNote?: string;
   };
 };
-
-const nativeSelectClass =
-  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm';
 
 export function EditEmployeeForm({
   employee,
@@ -156,7 +154,7 @@ export function EditEmployeeForm({
       {error && (
         <p
           role="alert"
-          className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm"
+          className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
         >
           {labels.errorLabel}: {error}
         </p>
@@ -164,19 +162,19 @@ export function EditEmployeeForm({
       {success && (
         <p
           role="status"
-          className="bg-green-50 border border-green-300 text-green-700 px-4 py-3 rounded-lg text-sm"
+          className="bg-success-foreground border border-success/20 text-success px-4 py-3 rounded-lg text-sm"
         >
           {labels.saved}
         </p>
       )}
       {newTempPassword && (
-        <Card className="border-2 border-green-300 bg-green-50">
+        <Card className="border-2 border-success/30 bg-success-foreground">
           <CardContent className="space-y-2 pt-4">
-            <p className="text-sm font-semibold text-green-800">{labels.tempPasswordLabel}</p>
-            <p className="font-mono text-xl bg-white border border-green-300 rounded-lg px-4 py-2 select-all tracking-widest">
+            <p className="text-sm font-semibold text-success">{labels.tempPasswordLabel}</p>
+            <p className="font-mono text-xl bg-background border border-success/20 rounded-lg px-4 py-2 select-all tracking-widest">
               {newTempPassword}
             </p>
-            <p className="text-xs text-green-700">{labels.tempPasswordHint}</p>
+            <p className="text-xs text-success">{labels.tempPasswordHint}</p>
           </CardContent>
         </Card>
       )}
@@ -299,8 +297,8 @@ export function EditEmployeeForm({
               disabled={pending}
               className={
                 employee.active
-                  ? 'border-red-300 text-red-700 hover:bg-red-50'
-                  : 'border-green-300 text-green-700 hover:bg-green-50'
+                  ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
+                  : 'border-success/30 text-success hover:bg-success-foreground'
               }
             >
               {employee.active ? labels.deactivate : labels.activate}

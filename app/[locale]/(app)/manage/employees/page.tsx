@@ -20,19 +20,9 @@ type Props = {
 };
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function EmployeesData({ locale }: { locale: string }) {
+async function EmployeesData({ locale, isAdmin }: { locale: string; isAdmin: boolean }) {
   const t = await getTranslations('manage');
-  const tTeam = await getTranslations('team');
   const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: myRoles } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user?.id ?? '');
-  const isAdmin = (myRoles ?? []).some((r) => r.role === 'admin');
 
   // Fetch all employees. RLS allows admin to read all profiles.
   // Use '!profiles_department_id_fkey' to disambiguate from the manager_id FK.
@@ -102,8 +92,8 @@ async function EmployeesData({ locale }: { locale: string }) {
                       variant={emp.active ? 'default' : 'secondary'}
                       className={
                         emp.active
-                          ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                          : 'bg-red-100 text-red-700 hover:bg-red-100'
+                          ? 'bg-success-foreground text-success hover:bg-success-foreground'
+                          : 'bg-destructive/10 text-destructive hover:bg-destructive/10'
                       }
                     >
                       {emp.active ? t('employees.active') : t('employees.inactive')}
@@ -179,8 +169,6 @@ async function EmployeesData({ locale }: { locale: string }) {
         ))}
       </div>
 
-      {/* Action buttons rendered as part of data section for Suspense */}
-      <div className="hidden" data-admin={isAdmin ? 'true' : 'false'} />
     </>
   );
 }
@@ -231,7 +219,7 @@ export default async function EmployeesPage({ params }: Props) {
         }
       />
       <Suspense fallback={<ListSkeleton count={4} />}>
-        <EmployeesData locale={locale} />
+        <EmployeesData locale={locale} isAdmin={isAdmin} />
       </Suspense>
     </main>
   );

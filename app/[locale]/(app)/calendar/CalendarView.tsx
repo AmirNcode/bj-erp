@@ -54,7 +54,7 @@ export function CalendarView({ entries, locale, calendarPref, labels }: Props) {
               <Card
                 key={e.id}
                 data-testid={`cal-entry-${e.id}`}
-                className="flex-row items-center gap-3 rounded-xl p-3 py-3 gap-0"
+                className="flex-row items-center gap-0 rounded-xl p-3"
                 style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}
               >
                 <CardContent className="flex items-center gap-3 p-0 w-full">

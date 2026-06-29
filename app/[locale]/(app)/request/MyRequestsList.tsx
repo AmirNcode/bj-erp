@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
@@ -54,6 +55,7 @@ function formatDate(dateStr: string, calendarPref: string): string {
 }
 
 export function MyRequestsList({ requests, labels, calendarPref }: Props) {
+  const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -160,7 +162,7 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel />
+                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
                             <AlertDialogAction
                               variant="destructive"
                               onClick={() => handleCancel(req.id)}

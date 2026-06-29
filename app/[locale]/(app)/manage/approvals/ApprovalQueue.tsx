@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
@@ -39,6 +40,7 @@ type Props = {
 };
 
 export function ApprovalQueue({ requests, labels, locale }: Props) {
+  const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -64,7 +66,7 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
   return (
     <div>
       {errorMsg && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">
+        <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
           <strong>{labels.errorLabel}:</strong> {errorMsg}
         </div>
       )}
@@ -82,7 +84,7 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                 : req.leave_type_name_en ?? req.leave_type_name_fa;
             return (
               <Card key={req.id} data-testid={`approval-row-${req.id}`}>
-                <CardContent className="pt-4 pb-4">
+                <CardContent className="py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold text-sm text-foreground">{req.employee_name}</div>
@@ -120,7 +122,7 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel />
+                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={() => decide(req.id, labels.approveSuccess, approveRequest)}
                               data-testid={`approve-confirm-${req.id}`}
@@ -151,10 +153,10 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
-                            <AlertDialogCancel />
+                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
                             <AlertDialogAction
                               variant="destructive"
-                              onClick={() => decide(req.id, labels.rejectSuccess, (id) => rejectRequest(id))}
+                              onClick={() => decide(req.id, labels.rejectSuccess, rejectRequest)}
                               data-testid={`reject-confirm-${req.id}`}
                             >
                               {labels.reject}
