@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
@@ -8,6 +9,18 @@ import gregorian from 'react-date-object/calendars/gregorian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
 import { dateObjectToGregorian, gregorianToJalali } from '@/lib/leave/dateConvert';
 import { upsertHoliday, deleteHoliday, getCompanyHolidays, type Holiday } from '@/lib/actions/settings';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type Labels = {
   holidaysTitle: string;
@@ -56,6 +69,7 @@ export function HolidayEditor({
       const res = await upsertHoliday({ date, nameFa, nameEn, isRecurring: recurring });
       if (!res.ok) {
         setErrMsg(res.error);
+        toast.error(`${labels.errorLabel}: ${res.error}`);
         return;
       }
       // Re-read so rows carry their real DB ids (needed for a subsequent delete).
@@ -65,6 +79,7 @@ export function HolidayEditor({
       setNameFa('');
       setNameEn('');
       setRecurring(false);
+      toast.success(labels.addHoliday);
     });
   };
 
@@ -74,31 +89,34 @@ export function HolidayEditor({
       const res = await deleteHoliday(id);
       if (!res.ok) {
         setErrMsg(res.error);
+        toast.error(`${labels.errorLabel}: ${res.error}`);
         return;
       }
       const refreshed = await getCompanyHolidays();
       if (refreshed.ok) setHolidays(refreshed.holidays);
+      toast.success(labels.delete);
     });
   };
 
   return (
     <section className="space-y-4" data-testid="holiday-editor">
-      <h2 className="text-lg font-semibold">{labels.holidaysTitle}</h2>
+      <p className="text-sm font-medium">{labels.holidaysTitle}</p>
       {errMsg && (
-        <p role="alert" data-testid="holiday-error" className="text-sm text-red-700">
+        <p role="alert" data-testid="holiday-error" className="text-sm text-destructive">
           {labels.errorLabel}: {errMsg}
         </p>
       )}
 
-      <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+      <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
         <div className="flex flex-col gap-1">
           <label className="text-sm font-medium">{labels.dateLabel}</label>
+          {/* rmdp-container class is intentional — e2e locates input via .rmdp-container input */}
           <DatePicker
             value={picked}
             onChange={setPicked}
             calendar={isJalali ? persian : gregorian}
             locale={isJalali ? persian_fa : gregorian_en}
-            inputClass="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full"
+            inputClass="border border-input rounded-lg px-3 py-2 text-sm w-full bg-background"
           />
         </div>
         <div className="flex flex-col gap-1">
@@ -110,7 +128,7 @@ export function HolidayEditor({
             data-testid="holiday-name-fa"
             value={nameFa}
             onChange={(e) => setNameFa(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-input rounded-lg px-3 py-2 text-sm bg-background"
             disabled={isPending}
           />
         </div>
@@ -122,47 +140,66 @@ export function HolidayEditor({
             id="hol-name-en"
             value={nameEn}
             onChange={(e) => setNameEn(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+            className="border border-input rounded-lg px-3 py-2 text-sm bg-background"
             disabled={isPending}
           />
         </div>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"
             checked={recurring}
             onChange={(e) => setRecurring(e.target.checked)}
             disabled={isPending}
+            className="rounded border-input"
           />
           {labels.recurringLabel}
         </label>
-        <button
+        <Button
           type="button"
           data-testid="holiday-add"
           onClick={onAdd}
           disabled={isPending}
-          className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
           {labels.addHoliday}
-        </button>
+        </Button>
       </div>
 
       {holidays.length === 0 ? (
-        <p className="text-sm text-gray-500">{labels.noHolidays}</p>
+        <p className="text-sm text-muted-foreground">{labels.noHolidays}</p>
       ) : (
-        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200" data-testid="holiday-list">
+        <ul className="divide-y divide-border rounded-xl border border-border" data-testid="holiday-list">
           {holidays.map((h) => (
             <li key={h.id} className="flex items-center justify-between px-4 py-3 text-sm">
               <span>
                 <span className="font-mono">{show(h.holiday_date)}</span> · {h.name_fa}
               </span>
-              <button
-                type="button"
-                onClick={() => onDelete(h.id)}
-                disabled={isPending}
-                className="text-red-600 hover:underline text-xs disabled:opacity-50"
-              >
-                {labels.delete}
-              </button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="xs"
+                    disabled={isPending}
+                  >
+                    {labels.delete}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent size="sm">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{labels.delete}</AlertDialogTitle>
+                    <AlertDialogDescription>{h.name_fa}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel />
+                    <AlertDialogAction
+                      variant="destructive"
+                      onClick={() => onDelete(h.id)}
+                      data-testid={`holiday-delete-confirm-${h.id}`}
+                    >
+                      {labels.delete}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </li>
           ))}
         </ul>

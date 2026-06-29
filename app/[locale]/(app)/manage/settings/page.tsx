@@ -9,6 +9,8 @@ import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCompanyHolidays } from '@/lib/actions/settings';
+import { PageHeader } from '../../_components/PageHeader';
+import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
 
@@ -47,34 +49,44 @@ export default async function SettingsPage({ params }: Props) {
   };
 
   return (
-    <main className="p-6 max-w-2xl mx-auto space-y-10">
-      <h1 className="text-2xl font-bold">{t('title')}</h1>
-      <WorkSettingsForm
-        initial={weekendDays}
-        labels={{
-          weekendTitle: t('weekendTitle'),
-          weekendHint: t('weekendHint'),
-          save: t('save'),
-          saved: t('saved'),
-          errorLabel: t('error'),
-          days,
-        }}
-      />
-      <HolidayEditor
-        initial={holidays}
-        calendarPref={profile?.calendar_pref ?? 'jalali'}
-        labels={{
-          holidaysTitle: t('holidaysTitle'),
-          addHoliday: t('addHoliday'),
-          dateLabel: t('dateLabel'),
-          nameFaLabel: t('nameFaLabel'),
-          nameEnLabel: t('nameEnLabel'),
-          recurringLabel: t('recurringLabel'),
-          delete: t('delete'),
-          noHolidays: t('noHolidays'),
-          errorLabel: t('error'),
-        }}
-      />
+    <main className="p-6 max-w-2xl mx-auto space-y-6">
+      <PageHeader title={t('title')} />
+
+      <Card>
+        <CardContent>
+          <WorkSettingsForm
+            initial={weekendDays}
+            labels={{
+              weekendTitle: t('weekendTitle'),
+              weekendHint: t('weekendHint'),
+              save: t('save'),
+              saved: t('saved'),
+              errorLabel: t('error'),
+              days,
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <HolidayEditor
+            initial={holidays}
+            calendarPref={profile?.calendar_pref ?? 'jalali'}
+            labels={{
+              holidaysTitle: t('holidaysTitle'),
+              addHoliday: t('addHoliday'),
+              dateLabel: t('dateLabel'),
+              nameFaLabel: t('nameFaLabel'),
+              nameEnLabel: t('nameEnLabel'),
+              recurringLabel: t('recurringLabel'),
+              delete: t('delete'),
+              noHolidays: t('noHolidays'),
+              errorLabel: t('error'),
+            }}
+          />
+        </CardContent>
+      </Card>
     </main>
   );
 }

@@ -44,7 +44,9 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   await page.click('[data-testid="work-settings-save"]');
   await expect(page.locator('[data-testid="work-settings-saved"]')).toBeVisible({ timeout: 10_000 });
 
-  // Cleanup: delete the holiday we added; it disappears from the list.
-  await addedRow.locator('button').click();
+  // Cleanup: delete the holiday we added via AlertDialog confirm; it disappears from the list.
+  await addedRow.locator('button').click(); // opens AlertDialog
+  // Click the confirm action button inside the AlertDialog (data-testid includes the holiday id)
+  await page.locator('[data-testid^="holiday-delete-confirm-"]').click();
   await expect(addedRow).toHaveCount(0, { timeout: 10_000 });
 });
