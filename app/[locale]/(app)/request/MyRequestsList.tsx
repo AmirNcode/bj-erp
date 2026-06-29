@@ -60,8 +60,11 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  // Sync localRequests when the server re-renders with fresh data (e.g. after router.refresh())
+  // Sync localRequests when the server re-renders with fresh data (e.g. after
+  // router.refresh() surfaces a newly-submitted request). This server→local
+  // resync is the intended use of the effect, not a derived-state smell.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync
     setLocalRequests(requests);
   }, [requests]);
 

@@ -20,7 +20,7 @@ type Props = {
 };
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function EmployeesData({ locale, isAdmin }: { locale: string; isAdmin: boolean }) {
+async function EmployeesData({ locale }: { locale: string }) {
   const t = await getTranslations('manage');
   const supabase = await createClient();
 
@@ -219,7 +219,7 @@ export default async function EmployeesPage({ params }: Props) {
         }
       />
       <Suspense fallback={<ListSkeleton count={4} />}>
-        <EmployeesData locale={locale} isAdmin={isAdmin} />
+        <EmployeesData locale={locale} />
       </Suspense>
     </main>
   );
