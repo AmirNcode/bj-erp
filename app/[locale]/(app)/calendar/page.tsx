@@ -11,6 +11,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCalendarEntries } from '@/lib/actions/leave';
 import { CalendarView } from './CalendarView';
+import { PageHeader } from '../_components/PageHeader';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -55,7 +56,7 @@ export default async function CalendarPage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <PageHeader title={t('title')} />
 
       {loadError && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">
