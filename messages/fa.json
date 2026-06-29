@@ -11,6 +11,7 @@
     "manage": "مدیریت"
   },
   "login": {
+    "brand": "بهسازان جنوب",
     "title": "ورود به سامانه",
     "codeLabel": "کد پرسنلی",
     "codePlaceholder": "مثال: admin",

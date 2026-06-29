@@ -11,6 +11,7 @@
     "manage": "Manage"
   },
   "login": {
+    "brand": "Behsazan Jonoob",
     "title": "Sign In",
     "codeLabel": "Employee Code",
     "codePlaceholder": "e.g. admin",
