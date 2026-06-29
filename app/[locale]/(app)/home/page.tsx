@@ -16,6 +16,7 @@ import {
 } from '@/lib/actions/leave';
 import { buildHomeBoard } from '@/lib/home/board';
 import { HomeBoard } from './HomeBoard';
+import { PageHeader } from '../_components/PageHeader';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -92,7 +93,7 @@ export default async function HomePage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('greeting', { name: fullName })}</h1>
+      <PageHeader title={t('greeting', { name: fullName })} />
       <HomeBoard board={board} labels={labels} locale={locale} />
     </main>
   );
