@@ -10,8 +10,7 @@ describe('StatusBadge', () => {
     expect(screen.getByText('تأیید شد')).toBeTruthy();
   });
   it('applies a status-specific class', () => {
-    const { container } = render(<StatusBadge status="rejected" labels={labels} />);
-    expect(container.firstChild).toHaveProperty('className');
-    expect((container.firstChild as HTMLElement).className).toContain('destructive');
+    render(<StatusBadge status="rejected" labels={labels} />);
+    expect(screen.getByText('رد شد').className).toContain('destructive');
   });
 });
