@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 
 type Labels = {
   empty: string;
@@ -12,6 +15,8 @@ type Labels = {
   approveConfirm: string;
   rejectConfirm: string;
   errorLabel: string;
+  approveSuccess: string;
+  rejectSuccess: string;
   days: string;
   dayPartLabels: { full: string; am: string; pm: string };
 };
@@ -30,6 +35,7 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
   const decide = (
     id: string,
     confirmMsg: string,
+    successMsg: string,
     action: (id: string) => Promise<DecisionResult>
   ) => {
     if (!confirm(confirmMsg)) return;
@@ -38,8 +44,10 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
       const res = await action(id);
       if (res.ok) {
         setLocalRequests((prev) => prev.filter((r) => r.id !== id));
+        toast.success(successMsg);
       } else {
         setErrorMsg(res.error);
+        toast.error(res.error);
       }
     });
   };
@@ -53,7 +61,7 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
       )}
 
       {localRequests.length === 0 ? (
-        <p className="text-gray-500 text-sm" data-testid="approvals-empty">
+        <p className="text-muted-foreground text-sm" data-testid="approvals-empty">
           {labels.empty}
         </p>
       ) : (
@@ -64,48 +72,53 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                 ? req.leave_type_name_fa
                 : req.leave_type_name_en ?? req.leave_type_name_fa;
             return (
-              <div
-                key={req.id}
-                className="border border-gray-200 rounded-xl p-4 bg-white"
-                data-testid={`approval-row-${req.id}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-gray-900">{req.employee_name}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{typeName}</div>
-                    <div className="text-xs text-gray-500">
-                      {req.start_date} — {req.end_date}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {labels.dayPartLabels[req.day_part]} · {req.requested_days} {labels.days}
-                    </div>
-                    {req.reason && (
-                      <div className="text-xs text-gray-600 mt-1">
-                        {labels.reason}: {req.reason}
+              <Card key={req.id} data-testid={`approval-row-${req.id}`}>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-foreground">{req.employee_name}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{typeName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {req.start_date} — {req.end_date}
                       </div>
-                    )}
-                  </div>
+                      <div className="text-xs text-muted-foreground">
+                        {labels.dayPartLabels[req.day_part]} · {req.requested_days} {labels.days}
+                      </div>
+                      {req.reason && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {labels.reason}: {req.reason}
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="flex flex-col items-end gap-2 shrink-0">
-                    <button
-                      onClick={() => decide(req.id, labels.approveConfirm, approveRequest)}
-                      disabled={isPending}
-                      className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 disabled:opacity-50"
-                      data-testid={`approve-btn-${req.id}`}
-                    >
-                      {labels.approve}
-                    </button>
-                    <button
-                      onClick={() => decide(req.id, labels.rejectConfirm, (id) => rejectRequest(id))}
-                      disabled={isPending}
-                      className="text-xs text-red-600 hover:underline disabled:opacity-50"
-                      data-testid={`reject-btn-${req.id}`}
-                    >
-                      {labels.reject}
-                    </button>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          decide(req.id, labels.approveConfirm, labels.approveSuccess, approveRequest)
+                        }
+                        disabled={isPending}
+                        data-testid={`approve-btn-${req.id}`}
+                      >
+                        {labels.approve}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          decide(req.id, labels.rejectConfirm, labels.rejectSuccess, (id) =>
+                            rejectRequest(id)
+                          )
+                        }
+                        disabled={isPending}
+                        data-testid={`reject-btn-${req.id}`}
+                      >
+                        {labels.reject}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>

@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getPendingApprovals } from '@/lib/actions/leave';
+import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 
 type Props = {
@@ -32,6 +33,8 @@ export default async function ApprovalsPage({ params }: Props) {
     approveConfirm: t('approveConfirm'),
     rejectConfirm: t('rejectConfirm'),
     errorLabel: t('error'),
+    approveSuccess: t('approveSuccess'),
+    rejectSuccess: t('rejectSuccess'),
     days: tLeave('days'),
     dayPartLabels: {
       full: tLeave('dayPart.full'),
@@ -42,7 +45,7 @@ export default async function ApprovalsPage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <PageHeader title={t('title')} />
 
       {loadError && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">

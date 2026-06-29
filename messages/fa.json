@@ -140,7 +140,9 @@
     "approveConfirm": "این درخواست مرخصی تأیید شود؟",
     "rejectConfirm": "این درخواست مرخصی رد شود؟",
     "reason": "دلیل",
-    "error": "خطا"
+    "error": "خطا",
+    "approveSuccess": "درخواست تأیید شد.",
+    "rejectSuccess": "درخواست رد شد."
   },
   "manage": {
     "approvalsLink": "تأیید درخواست‌ها",

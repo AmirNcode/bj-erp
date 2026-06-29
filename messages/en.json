@@ -140,7 +140,9 @@
     "approveConfirm": "Approve this leave request?",
     "rejectConfirm": "Reject this leave request?",
     "reason": "Reason",
-    "error": "Error"
+    "error": "Error",
+    "approveSuccess": "Request approved.",
+    "rejectSuccess": "Request rejected."
   },
   "manage": {
     "approvalsLink": "Approvals",
