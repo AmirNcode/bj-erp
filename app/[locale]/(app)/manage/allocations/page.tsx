@@ -9,6 +9,7 @@ import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAllEmployees, getActiveLeaveTypes } from '@/lib/actions/leave';
+import { PageHeader } from '../../_components/PageHeader';
 import { AllocateForm } from './AllocateForm';
 
 type Props = {
@@ -60,7 +61,7 @@ export default async function AllocationsPage({ params }: Props) {
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{labels.title}</h1>
+      <PageHeader title={labels.title} />
       <AllocateForm
         employees={employees}
         leaveTypes={leaveTypes}
