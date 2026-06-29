@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { updateMyPrefs, signOut } from '@/lib/actions/profile';
+import { Button } from '@/components/ui/button';
 
 type Labels = {
   calendar: string;
@@ -23,7 +24,7 @@ type Props = {
 };
 
 const SELECT_CLASS =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+  'w-full border border-input rounded-md bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 h-9';
 
 export function SettingsForm({ current, locale, labels }: Props) {
   const router = useRouter();
@@ -93,15 +94,16 @@ export function SettingsForm({ current, locale, labels }: Props) {
         </select>
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="outline"
         data-testid="settings-logout"
         onClick={() => startTransition(async () => { await signOut(locale); })}
         disabled={isPending}
-        className="w-full border border-red-300 text-red-700 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
+        className="w-full border-red-300 text-red-700 hover:bg-red-50 hover:text-red-700"
       >
         {labels.logout}
-      </button>
+      </Button>
     </div>
   );
 }

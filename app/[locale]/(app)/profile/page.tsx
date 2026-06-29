@@ -6,6 +6,8 @@ export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { PageHeader } from '../_components/PageHeader';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SettingsForm } from './SettingsForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
 
@@ -58,32 +60,49 @@ export default async function ProfilePage({ params }: Props) {
   };
 
   return (
-    <main className="p-6 max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+    <main className="p-4 max-w-lg mx-auto space-y-4">
+      <PageHeader title={t('title')} />
 
-      <div className="mb-6 rounded-xl border border-gray-200 p-4 text-sm space-y-1">
-        <div className="flex justify-between">
-          <span className="text-gray-500">{t('name')}</span>
-          <span className="font-medium">{profile?.full_name ?? '—'}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-gray-500">{t('code')}</span>
-          <span className="font-mono">{profile?.employee_code ?? '—'}</span>
-        </div>
-      </div>
+      {/* Employee info */}
+      <Card>
+        <CardContent className="pt-2 text-sm space-y-1">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{t('name')}</span>
+            <span className="font-medium">{profile?.full_name ?? '—'}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">{t('code')}</span>
+            <span className="font-mono">{profile?.employee_code ?? '—'}</span>
+          </div>
+        </CardContent>
+      </Card>
 
-      <SettingsForm
-        current={{
-          calendarPref: profile?.calendar_pref ?? 'jalali',
-          languagePref: profile?.language_pref ?? 'fa',
-        }}
-        locale={locale}
-        labels={formLabels}
-      />
+      {/* Preferences */}
+      <Card>
+        <CardHeader className="border-b pb-4">
+          <CardTitle>{t('calendar')}</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <SettingsForm
+            current={{
+              calendarPref: profile?.calendar_pref ?? 'jalali',
+              languagePref: profile?.language_pref ?? 'fa',
+            }}
+            locale={locale}
+            labels={formLabels}
+          />
+        </CardContent>
+      </Card>
 
-      <div className="mt-8">
-        <ChangePasswordForm labels={passwordLabels} />
-      </div>
+      {/* Change password */}
+      <Card>
+        <CardHeader className="border-b pb-4">
+          <CardTitle>{tp('title')}</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <ChangePasswordForm labels={passwordLabels} />
+        </CardContent>
+      </Card>
     </main>
   );
 }

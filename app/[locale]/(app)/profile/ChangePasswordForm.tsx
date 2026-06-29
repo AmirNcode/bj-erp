@@ -3,6 +3,9 @@
 import { useState, useTransition } from 'react';
 import { changeMyPassword } from '@/lib/actions/profile';
 import { validatePassword } from '@/lib/auth/passwordPolicy';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 type Labels = {
   title: string;
@@ -16,9 +19,6 @@ type Labels = {
   emptyCurrent: string;
   errorLabel: string;
 };
-
-const INPUT_CLASS =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 export function ChangePasswordForm({ labels }: { labels: Labels }) {
   const [current, setCurrent] = useState('');
@@ -58,8 +58,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 border-t border-gray-200 pt-6" data-testid="password-form">
-      <h2 className="text-lg font-semibold">{labels.title}</h2>
+    <form onSubmit={onSubmit} className="space-y-4" data-testid="password-form">
       {okMsg && (
         <p
           role="status"
@@ -78,56 +77,47 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           <strong>{labels.errorLabel}:</strong> {errMsg}
         </p>
       )}
-      <div>
-        <label htmlFor="pwd-current" className="block text-sm font-medium mb-1">
-          {labels.current}
-        </label>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="pwd-current">{labels.current}</Label>
+        <Input
           id="pwd-current"
           type="password"
           autoComplete="current-password"
-          className={INPUT_CLASS}
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
           disabled={isPending}
         />
       </div>
-      <div>
-        <label htmlFor="pwd-new" className="block text-sm font-medium mb-1">
-          {labels.new}
-        </label>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="pwd-new">{labels.new}</Label>
+        <Input
           id="pwd-new"
           type="password"
           autoComplete="new-password"
-          className={INPUT_CLASS}
           value={next}
           onChange={(e) => setNext(e.target.value)}
           disabled={isPending}
         />
       </div>
-      <div>
-        <label htmlFor="pwd-confirm" className="block text-sm font-medium mb-1">
-          {labels.confirm}
-        </label>
-        <input
+      <div className="space-y-1.5">
+        <Label htmlFor="pwd-confirm">{labels.confirm}</Label>
+        <Input
           id="pwd-confirm"
           type="password"
           autoComplete="new-password"
-          className={INPUT_CLASS}
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
           disabled={isPending}
         />
       </div>
-      <button
+      <Button
         type="submit"
         data-testid="password-submit"
         disabled={isPending}
-        className="w-full bg-blue-600 text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        className="w-full"
       >
         {labels.submit}
-      </button>
+      </Button>
     </form>
   );
 }
