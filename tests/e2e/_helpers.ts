@@ -1,12 +1,95 @@
 import { expect, type Page } from '@playwright/test';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const DateObject = require('react-date-object').default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const persian = require('react-date-object/calendars/persian');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const persian_en = require('react-date-object/locales/persian_en');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gregorian = require('react-date-object/calendars/gregorian');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gregorian_en = require('react-date-object/locales/gregorian_en');
+
 export const ADMIN_CODE = 'admin';
 export const ADMIN_PASSWORD = 'Admin!2026';
 
-// Jalali 1405/04/08–09 = Gregorian 2026-06-29 (Mon) + 2026-06-30 (Tue): 2 working
-// days under a Fri(+Sat) weekend, and within June 2026 (the current month) so the
-// resulting request shows on the current-month calendar.
-export const JALALI_2DAY = '1405/04/08 — 1405/04/09';
+/**
+ * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' for the next
+ * 2-working-day window that satisfies all three test constraints:
+ *
+ *   1. start_date > today  (strictly future — required by cancel-approved.spec)
+ *   2. start in the current Gregorian month  (required by calendar.spec — entry
+ *      shows on the team calendar for the current month)
+ *   3. exactly 2 working days under the seeded Fri weekend (ISO 5)
+ *
+ * Algorithm: walk forward from tomorrow, skip Fridays (ISO 5), pick the first
+ * two consecutive working days whose start is in the current month.  The end
+ * day is allowed to spill into the next month because the calendar filter only
+ * requires the start to be in the current month.
+ *
+ * Month-end edge: on the very last day(s) of a month it can be impossible to
+ * find a future start in that month (e.g. today IS the last day and that day
+ * is also a Friday).  In that case the function throws a clear error so the
+ * test fails with a descriptive message rather than a cryptic picker error.
+ */
+export function jalali2DayRange(): string {
+  const WEEKEND_ISO = [5]; // Friday = ISO 5
+
+  function getISOWeekday(d: Date): number {
+    const dow = d.getUTCDay(); // 0 Sun … 6 Sat
+    return dow === 0 ? 7 : dow; // ISO Mon=1…Sun=7
+  }
+
+  function isWorkingDay(d: Date): boolean {
+    return !WEEKEND_ISO.includes(getISOWeekday(d));
+  }
+
+  function addDays(d: Date, n: number): Date {
+    const r = new Date(d);
+    r.setUTCDate(r.getUTCDate() + n);
+    return r;
+  }
+
+  function toGregorianParts(d: Date): [number, number, number] {
+    return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+  }
+
+  function toJalaliStr(d: Date): string {
+    const [y, m, day] = toGregorianParts(d);
+    const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day });
+    return obj.convert(persian, persian_en).format('YYYY/MM/DD');
+  }
+
+  const today = new Date(Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate(),
+  ));
+  const currentMonth = today.getUTCMonth();
+
+  // Walk forward from tomorrow to find a working-day start in the current month.
+  let start = addDays(today, 1);
+  while (true) {
+    if (start.getUTCMonth() !== currentMonth) {
+      // Exhausted current month without finding a valid start.
+      throw new Error(
+        `jalali2DayRange: no future working day in current month (today=${today.toISOString().slice(0, 10)}). ` +
+        'This edge occurs on the final day(s) of a month. Update the test or run tomorrow.'
+      );
+    }
+    if (isWorkingDay(start)) break;
+    start = addDays(start, 1);
+  }
+
+  // Find the next working day after start (end of the 2-day range).
+  let end = addDays(start, 1);
+  while (!isWorkingDay(end)) {
+    end = addDays(end, 1);
+  }
+
+  return `${toJalaliStr(start)} — ${toJalaliStr(end)}`;
+}
 
 export async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
@@ -133,7 +216,7 @@ export async function submitLeave(page: Page, opts: { leaveTypeValue: string; re
   await page.goto('/request');
   await expect(page).toHaveURL(/\/request$/);
   await page.locator('#leave_type_id').selectOption({ value: opts.leaveTypeValue });
-  await fillPicker(page, JALALI_2DAY);
+  await fillPicker(page, jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
   if (opts.reason) await page.fill('#reason', opts.reason);
   await page.click('button[type="submit"]');

@@ -1,11 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
+import { jalali2DayRange } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
 
-// Jalali 1405/04/08–09 = Gregorian 2026-06-29 (Mon) + 2026-06-30 (Tue) = 2 working
-// days under a Fri (+Sat) weekend. Proven end-to-end in leave.spec.ts.
-const JALALI_2DAY = '1405/04/08 — 1405/04/09';
+// JALALI_2DAY was removed — date is now computed dynamically at test time.
+// See jalali2DayRange() in _helpers.ts for the 3-constraint algorithm.
 
 async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
@@ -164,7 +164,7 @@ async function submitTwoDayRequest(page: Page, leaveTypeValue: string) {
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
   await typeSelect.selectOption({ value: leaveTypeValue });
 
-  await fillPicker(page, JALALI_2DAY);
+  await fillPicker(page, jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
 
   await page.click('button[type="submit"]');
@@ -229,7 +229,7 @@ test.describe('Approval flow', () => {
     //    re-pick the range to surface the balance; assert 24 if it propagated.
     const typeSelect = page.locator('#leave_type_id');
     await typeSelect.selectOption({ value: ltValue });
-    await fillPicker(page, JALALI_2DAY);
+    await fillPicker(page, jalali2DayRange());
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
     const balText = await page.locator('[data-testid="balance-display"]').textContent();
     expect(balText).toBeTruthy();

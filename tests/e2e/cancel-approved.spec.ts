@@ -7,8 +7,8 @@ import {
 // cancelled and the Cancel control disappears. Throwaway employee (the seed
 // deactivates such codes), so no shared-state cleanup. Admin approves via override.
 //
-// submitLeave uses the fixed JALALI_2DAY (= 2026-06-29/30); this test requires
-// "today" to be before that start date so the approved leave is still cancellable.
+// submitLeave uses jalali2DayRange() which computes a strictly-future 2-working-day
+// range at test time, so the approved leave is always cancellable.
 test('employee cancels an approved future leave', async ({ page }) => {
   test.setTimeout(240_000); // a cold `next dev` compiles each route on first hit
   const ts = Date.now();

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { jalali2DayRange } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
@@ -143,17 +144,12 @@ test.describe('Leave request + allocation flow', () => {
 
     // ── 7. Pick a 2-working-day range using the Persian (Jalali) date picker ────────────────
     // The new employee defaults to calendar_pref='jalali', so the picker is in Persian mode.
-    // We fill a Jalali range that maps to Saturday 2026-06-27 + Sunday 2026-06-28, which are
-    // both weekend days when the company uses a Fri+Sat weekend. However since 2026-06-27 is
-    // a Saturday and 2026-06-28 is a Sunday (both non-working for Fri+Sat weekends), we instead
-    // use Jalali 1405/04/07 (2026-06-28 Sun) + 1405/04/08 (2026-06-29 Mon) — 1 working day — or
-    // better: 1405/04/08 (Mon 2026-06-29) + 1405/04/09 (Tue 2026-06-30) for 2 working days.
-    // Verified pair: Jalali 1405/04/08 = Gregorian 2026-06-29 (Mon), 1405/04/09 = 2026-06-30 (Tue).
-    // With Fri+Sat as weekend, Mon+Tue = 2 working days — exercises the full Persian→Gregorian chain.
-    //
-    // Approach: fill the picker's text input with the Jalali range in the form's format
-    // "YYYY/MM/DD — YYYY/MM/DD" (format="YYYY/MM/DD" + dateSeparator=" — " per LeaveRequestForm.tsx).
-    const jalaliRangeStr = '1405/04/08 — 1405/04/09';
+    // We compute the range dynamically (see jalali2DayRange() in _helpers.ts) so the test
+    // never rots as real dates pass.  The function guarantees:
+    //   • start > today (strictly future — isCancellable guard)
+    //   • start in current Gregorian month (calendar.spec visibility)
+    //   • exactly 2 working days under the seeded Fri weekend (balance assertions)
+    const jalaliRangeStr = jalali2DayRange();
 
     const pickerInput = page.locator('input.rmdp-input').first();
     const altInput = page.locator('.rmdp-container input').first();
@@ -171,7 +167,7 @@ test.describe('Leave request + allocation flow', () => {
     // Wait for preview to appear — the working days preview
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
     const previewText = await page.locator('[data-testid="working-days-count"]').textContent();
-    // 2 working days: Jalali 1405/04/08–09 = Gregorian 2026-06-29 Mon + 2026-06-30 Tue
+    // 2 working days (dynamic range from jalali2DayRange()).
     // This asserts the full Persian→Gregorian conversion → server day-count chain end-to-end.
     expect(previewText).toContain('2');
 
