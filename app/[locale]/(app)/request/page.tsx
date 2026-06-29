@@ -6,6 +6,7 @@
 
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -15,15 +16,14 @@ import {
 } from '@/lib/actions/leave';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
+import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function RequestPage({ params }: Props) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-
+// ── async child that owns all data fetching ────────────────────────────────
+async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
   const supabase = await createClient();
@@ -97,9 +97,7 @@ export default async function RequestPage({ params }: Props) {
   };
 
   return (
-    <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{labels.title}</h1>
-
+    <>
       <LeaveRequestForm
         leaveTypes={leaveTypes}
         workSettings={workSettings}
@@ -115,6 +113,23 @@ export default async function RequestPage({ params }: Props) {
           calendarPref={calendarPref}
         />
       </div>
+    </>
+  );
+}
+
+// ── page shell ─────────────────────────────────────────────────────────────
+export default async function RequestPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const t = await getTranslations('request');
+
+  return (
+    <main className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <Suspense fallback={<><FormSkeleton /><div className="mt-10"><ListSkeleton count={2} /></div></>}>
+        <RequestPageData locale={locale} />
+      </Suspense>
     </main>
   );
 }

@@ -5,6 +5,7 @@
 
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
@@ -12,15 +13,14 @@ import { PageHeader } from '../../_components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function EmployeesPage({ params }: Props) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-
+// ── async child that owns all data fetching ────────────────────────────────
+async function EmployeesData({ locale }: { locale: string }) {
   const t = await getTranslations('manage');
   const tTeam = await getTranslations('team');
   const supabase = await createClient();
@@ -53,31 +53,7 @@ export default async function EmployeesPage({ params }: Props) {
     .order('full_name');
 
   return (
-    <main className="p-6 max-w-5xl mx-auto">
-      <PageHeader
-        title={t('employees.title')}
-        action={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/${locale}/team`}>{tTeam('navLink')}</Link>
-            </Button>
-            {isAdmin && (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={`/${locale}/manage/settings`} data-testid="nav-settings">
-                  {t('settingsLink')}
-                </Link>
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
-            </Button>
-          </div>
-        }
-      />
-
+    <>
       {/* Desktop table */}
       <Card className="hidden md:block overflow-hidden py-0">
         <div className="overflow-x-auto">
@@ -202,6 +178,61 @@ export default async function EmployeesPage({ params }: Props) {
           </Card>
         ))}
       </div>
+
+      {/* Action buttons rendered as part of data section for Suspense */}
+      <div className="hidden" data-admin={isAdmin ? 'true' : 'false'} />
+    </>
+  );
+}
+
+// ── page shell ─────────────────────────────────────────────────────────────
+export default async function EmployeesPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const t = await getTranslations('manage');
+  const tTeam = await getTranslations('team');
+
+  // Resolve isAdmin for the header action buttons — needs to be outside
+  // Suspense so that navigation links render immediately.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: myRoles } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', user?.id ?? '');
+  const isAdmin = (myRoles ?? []).some((r) => r.role === 'admin');
+
+  return (
+    <main className="p-6 max-w-5xl mx-auto">
+      <PageHeader
+        title={t('employees.title')}
+        action={
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/${locale}/team`}>{tTeam('navLink')}</Link>
+            </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href={`/${locale}/manage/settings`} data-testid="nav-settings">
+                  {t('settingsLink')}
+                </Link>
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" asChild>
+              <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
+            </Button>
+          </div>
+        }
+      />
+      <Suspense fallback={<ListSkeleton count={4} />}>
+        <EmployeesData locale={locale} />
+      </Suspense>
     </main>
   );
 }
