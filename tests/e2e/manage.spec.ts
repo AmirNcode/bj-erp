@@ -5,6 +5,7 @@ const ADMIN_PASSWORD = 'Admin!2026';
 
 test.describe('Employee CRUD — admin flow', () => {
   test('admin creates employee → appears in list → new employee can log in', async ({ page }) => {
+    test.setTimeout(120_000);
     const uniqueCode = `e2e${Date.now()}`;
     const fullName = `Test Worker ${uniqueCode}`;
 
@@ -26,6 +27,8 @@ test.describe('Employee CRUD — admin flow', () => {
     // ── 4. Fill the form ──────────────────────────────────────────────────
     await page.fill('#employee_code', uniqueCode);
     await page.fill('#full_name', fullName);
+    await page.fill('[data-testid="alloc-days-annual"]', '12');
+    await page.fill('[data-testid="alloc-days-sick"]', '3');
 
     // Select a department by choosing the first non-empty option
     const deptSelect = page.locator('#department_id');
@@ -73,17 +76,30 @@ test.describe('Employee CRUD — admin flow', () => {
     // Use .first() to avoid strict-mode failure when code appears in both code and name columns
     await expect(page.getByText(uniqueCode).first()).toBeVisible({ timeout: 10000 });
 
-    // ── 7. Sign out by navigating directly to login ────────────────────
+    // ── 7. Admin can edit the employee's current balances ────────────────
+    const row = page.locator('tr', { hasText: uniqueCode }).first();
+    await row.locator('a[href*="/manage/employees/"]').click();
+    await expect(page).toHaveURL(/\/manage\/employees\/[^/]+$/);
+    await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 10000 });
+    await page.fill('[data-testid="balance-days-annual"]', '7');
+    await page.click('button[type="submit"]');
+    await expect(page.getByRole('status')).toBeVisible({ timeout: 15000 });
+    await page.reload();
+    await expect(page.locator('[data-testid="balance-days-annual"]')).toHaveValue('7');
+
+    // ── 8. Sign out by navigating directly to login ────────────────────
     // There's no /logout route; we go to login directly
     // The existing session will be cleared on next sign-in attempt
     await page.goto('/login');
     await expect(page).toHaveURL(/\/login$/);
 
-    // ── 8. Log in as the new employee ─────────────────────────────────────
+    // ── 9. Log in as the new employee ─────────────────────────────────────
     await page.fill('#code', uniqueCode);
     await page.fill('#password', tempPassword.trim());
     await page.click('button[type="submit"]');
 
     await expect(page).toHaveURL(/\/home$/, { timeout: 15000 });
+    await expect(page.locator('[data-testid="home-board"]')).toContainText('7');
+    await expect(page.locator('[data-testid="home-board"]')).toContainText('3');
   });
 });

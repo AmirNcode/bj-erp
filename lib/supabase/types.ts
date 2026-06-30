@@ -604,6 +604,27 @@ export type Database = {
         }
         Returns: undefined
       }
+      set_leave_balance: {
+        Args: {
+          p_employee_id: string
+          p_leave_type_id: string
+          p_target: number
+        }
+        Returns: number
+      }
+      get_my_team_directory: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          profile_id: string
+          full_name: string
+          employee_code: string
+          relation: string
+          roles: Database["public"]["Enums"]["app_role"][]
+          department_name_fa: string | null
+          department_name_en: string | null
+          manager_name: string | null
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "manager" | "employee" | "security"

@@ -71,5 +71,5 @@ Password for all seeded users: **`Demo!2026`** (admin: `Admin!2026`).
   used in the data/auth layer, so the move is config-only.
 - Apply the same `supabase/migrations/*` + `supabase/seed.sql`, then seed users as above.
 - Validate RLS policies + auth behave identically on the self-hosted stack before cutover (NFR-4).
-- Holidays are minimal placeholders for the demo — replace with the official Iranian list (admin-
-  editable once the Phase 6 work-settings/holiday UI lands).
+- Holidays are minimal placeholders for the demo — replace with the official Iranian list via the
+  admin work-settings/holiday editor at `/manage/settings`.

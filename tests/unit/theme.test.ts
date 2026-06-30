@@ -9,6 +9,15 @@ describe('globals.css theme', () => {
   it('defines the brand primary token', () => {
     expect(css).toMatch(/--primary:\s*oklch\(0\.3983/);
   });
+  it('locks the page to a light color-scheme', () => {
+    expect(css).toMatch(/color-scheme:\s*light/);
+  });
+  it('uses Rubik first, Vazirmatn as the Persian fallback', () => {
+    const sans = css.match(/--font-sans:\s*([^;]+);/)?.[1] ?? '';
+
+    expect(sans.indexOf('--font-rubik')).toBeGreaterThanOrEqual(0);
+    expect(sans.indexOf('--font-rubik')).toBeLessThan(sans.indexOf('--font-vazirmatn'));
+  });
   it('has no dark-mode block (light-only v1)', () => {
     expect(css).not.toMatch(/prefers-color-scheme|\.dark\s*\{/);
   });

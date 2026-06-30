@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
@@ -8,6 +10,12 @@ type Labels = {
   balancesTitle: string;
   recentTitle: string;
   teamTitle: string;
+  managerLabel: string;
+  teammatesLabel: string;
+  rolesLabel: string;
+  titleLabel: string;
+  upcomingLabel: string;
+  noUpcoming: string;
   approvalsTitle: string;
   approvalsPending: string;
   noRecent: string;
@@ -23,15 +31,24 @@ type Props = {
   board: HomeBoardData;
   labels: Labels;
   locale: string;
+  calendarPref: string;
 };
 
-export function HomeBoard({ board, labels, locale }: Props) {
+export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
     rejected: labels.statusRejected,
     cancelled: labels.statusCancelled,
   };
+  const manager = board.directory.find((member) => member.relation === 'manager');
+  const teammates = board.directory.filter((member) => member.relation === 'teammate');
+
+  const formatDate = (date: string) => formatCalendarDate(date, calendarPref, locale);
+  const titleFor = (member: HomeBoardData['directory'][number]) =>
+    locale === 'fa'
+      ? member.departmentNameFa ?? member.departmentNameEn ?? '—'
+      : member.departmentNameEn ?? member.departmentNameFa ?? '—';
 
   return (
     <div className="space-y-4" data-testid="home-board">
@@ -68,7 +85,7 @@ export function HomeBoard({ board, labels, locale }: Props) {
                       {locale === 'fa' ? b.name_fa : b.name_en ?? b.name_fa}
                     </span>
                     <span className="text-2xl font-bold tabular-nums leading-none">
-                      {b.balance}
+                      {formatNumber(b.balance, locale)}
                       <span className="ms-1 text-xs font-normal text-muted-foreground">
                         {labels.days}
                       </span>
@@ -93,10 +110,11 @@ export function HomeBoard({ board, labels, locale }: Props) {
                   <div key={r.id} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {r.leave_types?.name_fa ?? '—'}
+                        {r.leave_types ? localizedLeaveTypeName(r.leave_types, locale) : '—'}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {r.start_date} — {r.end_date} · {r.requested_days} {labels.days}
+                        {formatDate(r.start_date)} — {formatDate(r.end_date)} ·{' '}
+                        {formatNumber(r.requested_days, locale)} {labels.days}
                       </div>
                     </div>
                     <StatusBadge
@@ -115,34 +133,123 @@ export function HomeBoard({ board, labels, locale }: Props) {
             <CardTitle>{labels.teamTitle}</CardTitle>
           </CardHeader>
           <CardContent>
-            {board.team.length === 0 ? (
+            {board.directory.length === 0 ? (
               <EmptyState message={labels.noTeam} />
             ) : (
-              <div className="space-y-3">
-                {board.team.map((e) => {
-                  const typeName =
-                    locale === 'fa'
-                      ? e.leave_type_name_fa
-                      : e.leave_type_name_en ?? e.leave_type_name_fa;
-                  const color = e.leave_type_color ?? '#64748b';
-                  return (
-                    <div key={e.id} className="flex items-center gap-2 text-sm">
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: color }}
-                      />
-                      <span className="flex-1 truncate">{e.employee_name}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {e.start_date}
-                        {e.start_date !== e.end_date ? ` — ${e.end_date}` : ''} · {typeName}
-                      </span>
+              <div className="space-y-4" data-testid="home-my-team">
+                {manager && (
+                  <section>
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {labels.managerLabel}
+                    </h3>
+                    <TeamMemberRow
+                      member={manager}
+                      title={titleFor(manager)}
+                      labels={labels}
+                      locale={locale}
+                      calendarPref={calendarPref}
+                    />
+                  </section>
+                )}
+
+                <section>
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {labels.teammatesLabel}
+                  </h3>
+                  {teammates.length === 0 ? (
+                    <p className="mt-2 text-sm text-muted-foreground">{labels.noTeam}</p>
+                  ) : (
+                    <div className="mt-2 divide-y divide-border">
+                      {teammates.map((member) => (
+                        <TeamMemberRow
+                          key={member.id}
+                          member={member}
+                          title={titleFor(member)}
+                          labels={labels}
+                          locale={locale}
+                          calendarPref={calendarPref}
+                        />
+                      ))}
                     </div>
-                  );
-                })}
+                  )}
+                </section>
               </div>
             )}
           </CardContent>
         </Card>
+      </div>
+    </div>
+  );
+}
+
+function TeamMemberRow({
+  member,
+  title,
+  labels,
+  locale,
+  calendarPref,
+}: {
+  member: HomeBoardData['directory'][number];
+  title: string;
+  labels: Labels;
+  locale: string;
+  calendarPref: string;
+}) {
+  const roleText = member.roles.length > 0 ? member.roles.join(', ') : '—';
+
+  return (
+    <div className="py-3 first:pt-2 last:pb-0" data-testid={`team-member-${member.id}`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">{member.fullName}</div>
+          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <span>
+              {labels.rolesLabel}: {roleText}
+            </span>
+            <span>
+              {labels.titleLabel}: {title}
+            </span>
+            {member.managerName && member.relation !== 'manager' && (
+              <span>
+                {labels.managerLabel}: {member.managerName}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="sm:min-w-56">
+          <div className="text-xs font-semibold text-muted-foreground">
+            {labels.upcomingLabel}
+          </div>
+          {member.upcomingTimeOff.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">{labels.noUpcoming}</p>
+          ) : (
+            <div className="mt-1 space-y-1.5">
+              {member.upcomingTimeOff.map((leave) => {
+                const typeName = localizedLeaveTypeName(
+                  { name_fa: leave.leave_type_name_fa, name_en: leave.leave_type_name_en },
+                  locale
+                );
+                const color = leave.leave_type_color ?? '#64748b';
+                return (
+                  <div key={leave.id} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="text-muted-foreground">
+                      {formatCalendarDate(leave.start_date, calendarPref, locale)}
+                      {leave.start_date !== leave.end_date
+                        ? ` — ${formatCalendarDate(leave.end_date, calendarPref, locale)}`
+                        : ''}{' '}
+                      · {typeName}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

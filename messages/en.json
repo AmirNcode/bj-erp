@@ -30,11 +30,17 @@
     "manageLink": "Manage Employees",
     "balancesTitle": "My Balances",
     "recentTitle": "My Recent Requests",
-    "teamTitle": "Team Time-Off",
+    "teamTitle": "My Team",
+    "managerLabel": "Manager",
+    "teammatesLabel": "Teammates",
+    "rolesLabel": "Role",
+    "titleLabel": "Title",
+    "upcomingLabel": "Upcoming time off",
     "approvalsTitle": "Approvals",
     "approvalsPending": "{count} pending",
     "noRecent": "No requests yet.",
-    "noTeam": "No team time-off this month."
+    "noTeam": "No teammates found.",
+    "noUpcoming": "No upcoming time off."
   },
   "team": {
     "title": "My Team",
@@ -60,7 +66,9 @@
     "reason": "Reason (optional)",
     "submit": "Submit Request",
     "preview": "Preview",
+    "workingDaysLabel": "Working days",
     "workingDays": "Working days: {count}",
+    "remainingBalanceLabel": "Remaining balance",
     "remainingBalance": "Remaining balance: {days} days",
     "noBalance": "Balance unknown",
     "success": "Request submitted successfully.",
@@ -94,6 +102,11 @@
     "title": "Calendar",
     "navLink": "Calendar",
     "empty": "No time-off this month.",
+    "listView": "List",
+    "monthView": "Month",
+    "offOn": "Off on",
+    "noOffThisDay": "No one is off this day.",
+    "returns": "Returns",
     "error": "Error"
   },
   "profile": {
@@ -182,7 +195,10 @@
       "selectMgr": "— Select Manager —",
       "none": "No Manager",
       "noEmployees": "No employees found.",
-      "saved": "Changes saved successfully."
+      "saved": "Changes saved successfully.",
+      "allocTitle": "Initial leave balance",
+      "allocWarn": "Employee created, but setting leave balance failed:",
+      "balancesTitle": "Leave balances"
     },
     "settings": {
       "title": "Work settings",

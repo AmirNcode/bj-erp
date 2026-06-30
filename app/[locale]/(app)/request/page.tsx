@@ -80,8 +80,8 @@ async function RequestPageData({ locale }: { locale: string }) {
     reason: t('reason'),
     submit: t('submit'),
     preview: t('preview'),
-    workingDays: t('workingDays', { count: 0 }),
-    remainingBalance: t('remainingBalance', { days: 0 }),
+    workingDaysLabel: t('workingDaysLabel'),
+    remainingBalanceLabel: t('remainingBalanceLabel'),
     noBalance: t('noBalance'),
     success: t('success'),
     errorLabel: t('error'),
@@ -122,6 +122,7 @@ async function RequestPageData({ locale }: { locale: string }) {
           requests={requests}
           labels={labels}
           calendarPref={calendarPref}
+          locale={locale}
         />
       </div>
     </>

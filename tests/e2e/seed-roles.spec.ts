@@ -22,6 +22,10 @@ test.describe('Seeded demo roles', () => {
     test.setTimeout(60_000);
     await login(page, 'e-prod-1', PW);
     await expect(page.locator('[data-testid="home-board"]')).toBeVisible();
+    await expect(page.locator('[data-testid="home-my-team"]')).toBeVisible();
+    await expect(page.locator('[data-testid="home-my-team"]')).toContainText('Reza Karimi');
+    await expect(page.locator('[data-testid="home-my-team"]')).toContainText('Hossein Ahmadi');
+    await expect(page.locator('[data-testid="home-my-team"]')).toContainText('employee');
     await expect(page.locator('[data-testid="nav-manage"]')).toHaveCount(0);
   });
 

@@ -1,14 +1,41 @@
 # CHANGELOG
 
-Format: [Keep a Changelog](https://keepachangelog.com/). This project will adopt semantic
-versioning once the app is scaffolded. Until then, entries track documentation and design.
+Format: [Keep a Changelog](https://keepachangelog.com/). The app is built; v1 (Phases 0–6 +
+frontend overhaul) is feature-complete and merged to `main`. `[Unreleased]` holds the v1 work
+pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Added — Home My Team + mobile calendar/manage polish (2026-06-30)
+- **Home:** replaced the Team Time-Off card with **My Team**, showing the caller's manager,
+  same-department teammates, role labels, team/title context, and each member's upcoming time off.
+  Added the scoped `get_my_team_directory()` security-definer function so employees can see
+  teammate role labels without broad `user_roles` access.
+- **Calendar:** month view now uses explicit seven-column tracks on mobile and keeps multi-day leave
+  names visible on every covered date.
+- **Manage Employees:** mobile header actions now stack below the page title instead of squeezing
+  beside it.
+
+### Added — Calendar month view + locale polish (2026-06-30)
+- **Calendar** now has a List/Month toggle. Month view highlights each in-month day with visible
+  time-off, shows a localized per-day count badge, previews the first names with `...` overflow, and
+  opens a selected-day detail panel showing who is off and the next configured working return date.
+- **Request page localization:** leave-type selects, date picker locale/digits, working-day previews,
+  balance previews, request-row dates, and request-row day counts now follow the user's language
+  preference (English or Persian). User names remain unchanged.
+
+### Added — UI polish + allocation at create/edit (2026-06-30)
+- **Admin employee forms:** create employee now accepts initial PTO/annual and sick balances, and
+  edit employee now sets current leave balances through the audited `set_leave_balance` RPC
+  (`20260630120001_set_leave_balance.sql`).
+- **Brand polish:** app/login logo, light-only color-scheme lock, Rubik primary font with Vazirmatn
+  fallback for Persian glyphs, opaque mobile/desktop chrome, clearer active nav state, and more
+  prominent primary buttons.
+
 ### Changed — Frontend Overhaul (UI/UX redesign)
 - **Design system:** brand OKLCH tokens derived from the Behsazan Jonoob logo (primary `#2E3C92`),
-  mapped via Tailwind v4 `@theme`; self-hosted **Vazirmatn** font (replacing the Arial fallback);
-  **shadcn/ui** primitives (new-york) with RTL migration. Light-only v1.
+  mapped via Tailwind v4 `@theme`; self-hosted **Rubik** font with **Vazirmatn** fallback for
+  Persian glyphs; **shadcn/ui** primitives (new-york) with RTL migration. Light-only v1.
 - **Responsive shell:** new `AppShell` — sticky app bar + a nav that is a bottom tab bar on mobile
   and a left side-rail on desktop (replacing the stretched-phone bottom bar); `Toaster` mounted once.
 - **All 11 screens reskinned** onto Card/Input/Button/Select/Badge/Dialog primitives plus

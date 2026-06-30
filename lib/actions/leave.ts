@@ -145,6 +145,36 @@ export async function allocateLeave(
   return { ok: true };
 }
 
+export type SetLeaveBalanceResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Admin sets an employee's current balance for a leave type to an absolute
+ * target. The RPC writes an auditable adjustment ledger row and re-checks admin
+ * privileges server-side.
+ */
+export async function setLeaveBalance(
+  employeeId: string,
+  leaveTypeId: string,
+  target: number
+): Promise<SetLeaveBalanceResult> {
+  const { supabase, user, roles } = await getCallerContext();
+
+  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+
+  const { error } = await supabase.rpc('set_leave_balance', {
+    p_employee_id: employeeId,
+    p_leave_type_id: leaveTypeId,
+    p_target: target,
+  });
+
+  if (error) return { ok: false, error: error.message };
+
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Read helpers
 // ---------------------------------------------------------------------------
@@ -498,6 +528,43 @@ export async function getMyBalances(): Promise<
         .from('leave_ledger')
         .select('leave_type_id, balance_after, created_at')
         .eq('employee_id', user.id),
+    ]);
+
+  if (typesError) return { ok: false, error: typesError.message };
+  if (ledgerError) return { ok: false, error: ledgerError.message };
+
+  const byType = latestBalances(ledger ?? []);
+  const balances: BalanceItem[] = (types ?? []).map((t) => ({
+    leaveTypeId: t.id,
+    name_fa: t.name_fa,
+    name_en: t.name_en,
+    balance: byType[t.id] ?? 0,
+  }));
+
+  return { ok: true, balances };
+}
+
+export async function getEmployeeBalances(
+  employeeId: string
+): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
+  const { supabase, user, roles, companyId } = await getCallerContext();
+  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+
+  const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
+    await Promise.all([
+      supabase
+        .from('leave_types')
+        .select('id, name_fa, name_en')
+        .eq('company_id', companyId)
+        .eq('active', true)
+        .eq('affects_balance', true)
+        .order('name_fa'),
+      supabase
+        .from('leave_ledger')
+        .select('leave_type_id, balance_after, created_at')
+        .eq('employee_id', employeeId),
     ]);
 
   if (typesError) return { ok: false, error: typesError.message };

@@ -2,10 +2,11 @@
 @import "tw-animate-css";
 
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
 
   /* Surfaces & text */
-  --background: oklch(0.9792 0.0041 271.37);   /* page #F7F8FB */
+  --background: oklch(0.9711 0.0060 264.54);   /* page #F2F4F8 */
   --foreground: oklch(0.2013 0.0144 272.55);   /* ink #14161D */
   --card: oklch(1 0 0);                          /* white */
   --card-foreground: var(--foreground);
@@ -66,7 +67,7 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
 
-  --font-sans: var(--font-vazirmatn), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-rubik), var(--font-vazirmatn), ui-sans-serif, system-ui, sans-serif;
 }
 
 * { border-color: var(--color-border); }

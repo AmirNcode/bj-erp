@@ -198,18 +198,18 @@ export default async function EmployeesPage({ params }: Props) {
       <PageHeader
         title={t('employees.title')}
         action={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="ghost" size="sm" asChild>
+          <div className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 sm:w-auto sm:justify-end sm:gap-2">
+            <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
               <Link href={`/${locale}/team`}>{tTeam('navLink')}</Link>
             </Button>
             {isAdmin && (
-              <Button variant="ghost" size="sm" asChild>
+              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
                 <Link href={`/${locale}/manage/settings`} data-testid="nav-settings">
                   {t('settingsLink')}
                 </Link>
               </Button>
             )}
-            <Button variant="ghost" size="sm" asChild>
+            <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
               <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
             </Button>
             <Button asChild size="sm">

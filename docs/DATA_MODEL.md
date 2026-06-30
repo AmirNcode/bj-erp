@@ -44,6 +44,11 @@ The 3 teams (`kind='team'`) + Security (`kind='security'`).
 `id` · `user_id → profiles` · `role app_role` · unique(`user_id`,`role`).
 A user may have several rows. RLS uses `has_role(uid, role)`.
 
+### Directory read helper
+`get_my_team_directory()` returns the caller's direct manager plus active teammates in the same
+department, including role labels and department names for the Home **My Team** card. It is scoped
+by `auth.uid()` and grants execute only to `authenticated`.
+
 ### `audit_log`
 `id` · `actor_id → profiles` · `action` · `entity` · `entity_id` · `before jsonb` · `after jsonb` ·
 `created_at`. Written on admin/manager mutations.

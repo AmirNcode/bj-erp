@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
+import { setLeaveBalance } from '@/lib/actions/leave';
+import type { BalanceItem } from '@/lib/leave/balances';
+import { balanceAdjustments } from '@/lib/leave/allocations';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -32,6 +35,7 @@ type Props = {
   isAdmin: boolean;
   departments: Department[];
   managers: Manager[];
+  balances: BalanceItem[];
   locale: string;
   labels: {
     code: string;
@@ -53,8 +57,16 @@ type Props = {
     noneOption: string;
     saved: string;
     managerNote?: string;
+    balancesTitle: string;
   };
 };
+
+function leaveTypeSlug(type: { name_en: string | null; name_fa: string }) {
+  const label = (type.name_en ?? type.name_fa).toLowerCase();
+  if (label.includes('annual')) return 'annual';
+  if (label.includes('sick')) return 'sick';
+  return label.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'leave';
+}
 
 export function EditEmployeeForm({
   employee,
@@ -62,6 +74,7 @@ export function EditEmployeeForm({
   isAdmin,
   departments,
   managers,
+  balances,
   locale,
   labels,
 }: Props) {
@@ -72,6 +85,9 @@ export function EditEmployeeForm({
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(
     (empRoles as Role[]).filter((r) => ALL_ROLES.includes(r))
+  );
+  const [targets, setTargets] = useState<Record<string, number>>(
+    Object.fromEntries(balances.map((balance) => [balance.leaveTypeId, balance.balance]))
   );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -107,6 +123,23 @@ export function EditEmployeeForm({
         setPending(false);
         setError(rolesResult.error);
         return;
+      }
+
+      const changes = balanceAdjustments(
+        balances.map((balance) => ({
+          leaveTypeId: balance.leaveTypeId,
+          balance: balance.balance,
+        })),
+        Object.entries(targets).map(([leaveTypeId, target]) => ({ leaveTypeId, target }))
+      );
+
+      for (const change of changes) {
+        const balanceResult = await setLeaveBalance(employee.id, change.leaveTypeId, change.target);
+        if (!balanceResult.ok) {
+          setPending(false);
+          setError(balanceResult.error);
+          return;
+        }
       }
     }
 
@@ -256,6 +289,42 @@ export function EditEmployeeForm({
                     ))}
                   </div>
                 </div>
+
+                {balances.length > 0 && (
+                  <div
+                    className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
+                    data-testid="balances-section"
+                  >
+                    <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
+                    {balances.map((balance) => {
+                      const slug = leaveTypeSlug(balance);
+                      const label =
+                        locale === 'fa'
+                          ? balance.name_fa
+                          : balance.name_en ?? balance.name_fa;
+                      return (
+                        <div className="space-y-1.5" key={balance.leaveTypeId}>
+                          <Label htmlFor={`balance-${balance.leaveTypeId}`}>{label}</Label>
+                          <Input
+                            id={`balance-${balance.leaveTypeId}`}
+                            type="number"
+                            min={0}
+                            step="0.5"
+                            value={targets[balance.leaveTypeId] ?? 0}
+                            onChange={(event) =>
+                              setTargets((prev) => ({
+                                ...prev,
+                                [balance.leaveTypeId]: Number(event.target.value),
+                              }))
+                            }
+                            data-testid={`balance-days-${slug}`}
+                            data-leave-type-id={balance.leaveTypeId}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </>
             )}
 

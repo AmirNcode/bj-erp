@@ -19,16 +19,23 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   const t = await getTranslations('manage');
   const supabase = await createClient();
 
-  // Fetch departments and potential managers in parallel
-  const [{ data: departments }, { data: managers }] = await Promise.all([
+  // Fetch departments, potential managers, and balance-affecting leave types in parallel.
+  const [{ data: departments }, { data: managers }, { data: leaveTypes }] = await Promise.all([
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
     supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name'),
+    supabase
+      .from('leave_types')
+      .select('id, name_fa, name_en, default_annual_quota_days')
+      .eq('active', true)
+      .eq('affects_balance', true)
+      .order('name_fa'),
   ]);
 
   return (
     <NewEmployeeForm
       departments={departments ?? []}
       managers={managers ?? []}
+      leaveTypes={leaveTypes ?? []}
       locale={locale}
       labels={{
         code: t('employees.code'),
@@ -46,6 +53,8 @@ async function NewEmployeeData({ locale }: { locale: string }) {
         selectDept: t('employees.selectDept'),
         selectMgr: t('employees.selectMgr'),
         noneOption: t('employees.none'),
+        allocTitle: t('employees.allocTitle'),
+        allocWarn: t('employees.allocWarn'),
       }}
     />
   );

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
@@ -41,7 +42,17 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-6">
         {/* Brand wordmark */}
-        <p className="text-center text-xl font-bold text-primary">{t('brand')}</p>
+        <div className="flex flex-col items-center gap-2">
+          <Image
+            src="/bj-logo.png"
+            alt={t('brand')}
+            width={160}
+            height={80}
+            priority
+            className="h-16 w-auto object-contain"
+          />
+          <p className="text-center text-xl font-bold text-primary">{t('brand')}</p>
+        </div>
 
         <Card>
           <CardHeader>

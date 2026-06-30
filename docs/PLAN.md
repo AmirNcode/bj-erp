@@ -59,6 +59,10 @@ Details: `docs/DATA_MODEL.md` (schema) and `docs/PERMISSIONS.md` (RLS).
 
 ## 5. Phased roadmap (v1)
 
+**Status (2026-06-30): Phases 0–6 all complete** — v1 is feature-complete, demo-ready, and merged
+to `main`, plus a full frontend overhaul (shadcn/ui + brand tokens + Rubik with Vazirmatn fallback). Detail in
+`docs/CHANGELOG.md`; what's next in `docs/TASKS.md` (§6 below).
+
 | Phase | Goal | Done when |
 |---|---|---|
 | **0 — Scaffold** | Next.js + TS + Tailwind, Supabase project, env, PWA manifest, i18n/RTL shell, CI-less Vercel deploy | App boots in fa-RTL on Vercel; Supabase connected |
@@ -67,6 +71,7 @@ Details: `docs/DATA_MODEL.md` (schema) and `docs/PERMISSIONS.md` (RLS).
 | **3 — Flow & visibility** | Approval (manager + admin override); RLS for visibility matrix; calendar views | Manager approves; employee sees only own team; security/managers see all |
 | **4 — Home board & polish** | Home-page status board per role; settings (calendar/lang); PWA install + persistent session; responsive/device passes | Labourer sees request status on home; installs to phone; stays logged in |
 | **5 — Seed & demo** | Seed 3 teams + Security dept w/ Iranian names/roles; seed 1404–1405 holidays; deploy demo | Client can log in as each role and see realistic data |
+| **6 — Settings, password, cancel** | Admin work/holiday editor (FR-24); self-service password change (FR-7); cancel an approved-future request w/ ledger reversal (FR-15) | Admin edits weekend/holidays; user changes own password; approved-future leave is cancellable |
 
 ## 6. Future modules / features (roadmap, not v1)
 

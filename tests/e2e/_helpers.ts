@@ -14,15 +14,18 @@ const gregorian_en = require('react-date-object/locales/gregorian_en');
 export const ADMIN_CODE = 'admin';
 export const ADMIN_PASSWORD = 'Admin!2026';
 
-const WEEKEND_ISO = [5]; // Friday = ISO 5
+const SEEDED_WEEKEND_ISO = [5]; // Friday = ISO 5
+// Keep dynamic 2-day request ranges stable even while admin-settings.spec
+// mutates shared weekend settings in the demo company.
+const RANGE_HELPER_SKIP_ISO = [4, 5, 6]; // Thursday + Friday + Saturday
 
 function getISOWeekday(d: Date): number {
   const dow = d.getUTCDay(); // 0 Sun … 6 Sat
   return dow === 0 ? 7 : dow; // ISO Mon=1…Sun=7
 }
 
-function isWorkingDay(d: Date): boolean {
-  return !WEEKEND_ISO.includes(getISOWeekday(d));
+function isWorkingDay(d: Date, weekendDays = SEEDED_WEEKEND_ISO): boolean {
+  return !weekendDays.includes(getISOWeekday(d));
 }
 
 function addDays(d: Date, n: number): Date {
@@ -69,16 +72,17 @@ function todayUTC(): Date {
 export function jalali2DayRange(): string {
   const today = todayUTC();
 
-  // Walk forward from tomorrow to find the first future working day.
+  // Walk forward from tomorrow to find two adjacent calendar days that remain
+  // working under both the seeded settings and the parallel admin-settings
+  // mutation. Using adjacent days avoids counting any skipped day between them.
   let start = addDays(today, 1);
-  while (!isWorkingDay(start)) {
-    start = addDays(start, 1);
-  }
-
-  // Find the next working day after start (end of the 2-day range).
   let end = addDays(start, 1);
-  while (!isWorkingDay(end)) {
-    end = addDays(end, 1);
+  while (
+    !isWorkingDay(start, RANGE_HELPER_SKIP_ISO) ||
+    !isWorkingDay(end, RANGE_HELPER_SKIP_ISO)
+  ) {
+    start = addDays(start, 1);
+    end = addDays(start, 1);
   }
 
   return `${toJalaliStr(start)} — ${toJalaliStr(end)}`;

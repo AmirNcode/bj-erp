@@ -86,6 +86,7 @@ async function createEmployee(
 
 test.describe('Manager "My Team" view + direct-report edits', () => {
   test('manager sees only reports, can edit report, cannot persist X change', async ({ page }) => {
+    test.setTimeout(120_000);
     const ts = Date.now();
     const mgrCode = `mgr${ts}`;
     const empCode = `emp${ts}`;

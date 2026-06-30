@@ -43,6 +43,37 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
       page.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
     ).toBeVisible({ timeout: 10_000 });
 
+    // The month toggle highlights days with time-off, shows a count, and the
+    // selected-day detail lists who is off plus their return date.
+    await page.locator('[data-testid="calendar-month-toggle"]').click();
+    await expect(page.locator('[data-testid="calendar-month-grid"]')).toBeVisible();
+
+    const todayIso = new Date(
+      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())
+    )
+      .toISOString()
+      .slice(0, 10);
+    await expect(page.locator(`[data-testid="calendar-day-count-${todayIso}"]`)).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.locator(`[data-testid="calendar-day-${todayIso}"]`).click();
+    await expect(page.locator('[data-testid="calendar-day-detail"]')).toContainText(requesterName);
+    await expect(page.locator('[data-testid="calendar-day-detail"]')).toContainText(/Returns|بازگشت/);
+
+    // Mobile must stay as a seven-column month grid, not one day per row.
+    await page.setViewportSize({ width: 390, height: 844 });
+    const firstWeekBoxes = await page
+      .locator('button[data-testid^="calendar-day-"]')
+      .evaluateAll((nodes) =>
+        nodes.slice(0, 7).map((node) => {
+          const box = node.getBoundingClientRect();
+          return { x: Math.round(box.x), y: Math.round(box.y), width: Math.round(box.width) };
+        })
+      );
+    expect(new Set(firstWeekBoxes.map((box) => box.y)).size).toBe(1);
+    expect(new Set(firstWeekBoxes.map((box) => box.x)).size).toBe(7);
+    expect(Math.max(...firstWeekBoxes.map((box) => box.width))).toBeLessThan(60);
+
     // ...but the private reason must NOT appear anywhere on the calendar (FR-25).
     await expect(page.locator('body')).not.toContainText(SECRET);
 

@@ -1,7 +1,7 @@
 # REQUIREMENTS
 
 Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ todo · ◐ partial ·
-☑ done. All ☐ until implementation begins.
+☑ done. Statuses reflect the current build: v1 (Phases 0–6) is complete and merged to `main`.
 
 ## Functional — Identity & Org
 
@@ -41,19 +41,22 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-19** ☑ **Admin** sees and edits everything.
 - **FR-25** ☑ A leave request's free-text **`reason` is private**: visible only to the requester,
   their manager, security, and admin — NOT to teammates. The team calendar shows coworkers' dates +
-  status only. (Decided 2026-06-23; enforce when the Phase 3 team-calendar read path is built — see
-  PERMISSIONS.md.)
+  status only. (Decided 2026-06-23; enforced in the Phase 3 team-calendar read path via the
+  reason-less `team_leave_calendar` view — see PERMISSIONS.md.)
 
 ## Functional — UI / App shell
 
 - **FR-20** ☑ **Home page = status board** (notification surrogate): employee sees own request
-  statuses + balances + team time-off; manager additionally sees a pending-approval queue + reports'
-  status.
+  statuses, balances, and **My Team** (manager, teammates, role/title context, upcoming time-off);
+  manager additionally sees a pending-approval queue + reports' status.
 - **FR-21** ☑ **Bottom tab bar**, role-driven. v1: Home · Request · Calendar · Profile/Settings;
   Admin & Manager get a Manage/Approvals tab. Future roles inject their own tabs.
 - **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
+  Supports both agenda/list and month-grid views; month cells show per-day off counts, visible names
+  with overflow, and selected-day return-to-work details.
 - **FR-23** ☑ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
-  English**. Persisted per user.
+  English**. Persisted per user; leave/request/calendar labels and numeric displays follow the
+  selected language (user names are not translated).
 - **FR-24** ☑ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
   **holiday list** (add/edit/delete) at `/manage/settings`. Editor shipped in Phase 6; the
   authoritative Iranian 1404–1405 dates are entered in-app (placeholder seed retained).

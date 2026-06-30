@@ -169,7 +169,7 @@ test.describe('Leave request + allocation flow', () => {
     const previewText = await page.locator('[data-testid="working-days-count"]').textContent();
     // 2 working days (dynamic range from jalali2DayRange()).
     // This asserts the full Persian→Gregorian conversion → server day-count chain end-to-end.
-    expect(previewText).toContain('2');
+    expect(previewText).toMatch(/[2۲]/);
 
     // ── M1: Balance check — reload to let the ledger propagate, then assert 26 days ──────
     // Reload so the allocation that was just created is visible in the balance ledger.
@@ -219,7 +219,7 @@ test.describe('Leave request + allocation flow', () => {
     const requestRows = page.locator('[data-testid^="request-row-"]');
     await expect(requestRows.first()).toBeVisible({ timeout: 5_000 });
     const rowText = await requestRows.first().textContent();
-    expect(rowText).toContain('2');
+    expect(rowText).toMatch(/[2۲]/);
 
     // ── 9. Cancel the request ─────────────────────────────────────────────
     const cancelBtn = page.locator('[data-testid^="cancel-btn-"]').first();

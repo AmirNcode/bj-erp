@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCalendarEntries } from '@/lib/actions/leave';
+import { getCalendarEntries, getWorkSettings } from '@/lib/actions/leave';
+import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { CalendarView } from './CalendarView';
 import { PageHeader } from '../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -37,19 +38,25 @@ async function CalendarData({ locale }: { locale: string }) {
     .single();
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 
-  // Current Gregorian month range (UTC-safe).
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const rangeStart = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const rangeEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+  const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, new Date(), locale);
 
-  const result = await getCalendarEntries(rangeStart, rangeEnd);
+  const [result, workSettingsResult] = await Promise.all([
+    getCalendarEntries(rangeStart, rangeEnd),
+    getWorkSettings(),
+  ]);
   const entries = result.ok ? result.entries : [];
   const loadError = result.ok ? null : result.error;
+  const workSettings = workSettingsResult.ok
+    ? workSettingsResult.settings
+    : { weekendDays: [5], holidays: [] as string[] };
 
   const labels = {
     empty: t('empty'),
+    listView: t('listView'),
+    monthView: t('monthView'),
+    offOn: t('offOn'),
+    noOffThisDay: t('noOffThisDay'),
+    returns: t('returns'),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
   };
@@ -61,7 +68,16 @@ async function CalendarData({ locale }: { locale: string }) {
           <strong>{t('error')}:</strong> {loadError}
         </div>
       )}
-      <CalendarView entries={entries} locale={locale} calendarPref={calendarPref} labels={labels} />
+      <CalendarView
+        entries={entries}
+        locale={locale}
+        calendarPref={calendarPref}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        monthLabel={monthLabel}
+        workSettings={workSettings}
+        labels={labels}
+      />
     </>
   );
 }

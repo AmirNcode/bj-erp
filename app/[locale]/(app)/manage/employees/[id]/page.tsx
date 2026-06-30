@@ -6,6 +6,7 @@
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { getEmployeeBalances } from '@/lib/actions/leave';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
@@ -57,6 +58,8 @@ export default async function EditEmployeePage({ params }: Props) {
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
     supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name'),
   ]);
+  const balancesRes = isAdmin ? await getEmployeeBalances(id) : null;
+  const balances = balancesRes?.ok ? balancesRes.balances : [];
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
@@ -72,6 +75,7 @@ export default async function EditEmployeePage({ params }: Props) {
         isAdmin={isAdmin}
         departments={departments ?? []}
         managers={managers ?? []}
+        balances={balances}
         locale={locale}
         labels={{
           code: t('employees.code'),
@@ -93,6 +97,7 @@ export default async function EditEmployeePage({ params }: Props) {
           noneOption: t('employees.none'),
           saved: t('employees.saved'),
           managerNote: tTeam('managerNote'),
+          balancesTitle: t('employees.balancesTitle'),
         }}
       />
     </main>

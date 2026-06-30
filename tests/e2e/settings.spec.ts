@@ -26,7 +26,15 @@ test('profile settings persist, language switches locale, logout clears session'
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
 
+  // The request form follows the language preference, including native select options.
+  await page.goto('/en/request');
+  await expect(page).toHaveURL(/\/en\/request$/, { timeout: 10_000 });
+  await expect(page.locator('#leave_type_id')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('#leave_type_id')).toContainText('Annual Leave');
+  await expect(page.locator('#leave_type_id')).not.toContainText('مرخصی استحقاقی');
+
   // Logout returns to the login page.
+  await page.goto('/profile');
   await page.locator('[data-testid="settings-logout"]').click();
   await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
 });

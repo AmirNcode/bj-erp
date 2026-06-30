@@ -5,19 +5,21 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
-> Current state: **Phases 0–6 COMPLETE — v1 feature-complete & demo-ready; no v1 FR outstanding.**
-> Phase 6 added FR-24 admin settings, FR-7 password change, FR-15 cancel-approved. Identity/org,
-> code+password auth, admin CRUD + manager edits, leave core (types/allocations/ledger/request),
-> approval flow [`/manage/approvals`], FR-25 reason-private calendar [`/calendar`], role-aware home
-> board + bottom-tab nav, settings + logout, responsive/device-detection, and a **seeded demo**
-> (BJ Manufacturing — 3 teams + Security, 12 users, `Demo!2026`). Branch `feat/hr-timeoff-v1`; build
-> green, unit 54/54, e2e 17/17 (serial/CI). **Deploy = runbook (`docs/DEPLOY.md`), not executed.**
-> **Next: PLAN §6 backlog** (attendance, shifts, …) + demo deploy. History: `.superpowers/sdd/progress.md`.
->
-> **Frontend Overhaul (UI/UX) ✅ COMPLETE** on branch `feat/frontend-overhaul` (not merged): design
-> system (shadcn/ui + brand OKLCH tokens + Vazirmatn), responsive `AppShell` (bottom tabs → desktop
-> rail), all **11 screens** reskinned, lazy date picker, AlertDialog + toasts, Suspense/skeletons.
-> lint clean · unit 73/73 · e2e 20/20 (serial) · build green. Spec + plan in `docs/specs/` + `docs/plans/`.
+> Current state: **Phases 0–6 + frontend overhaul COMPLETE — all merged to `main`; v1
+> feature-complete & demo-ready, no v1 FR outstanding.** Identity/org, code+password auth, admin
+> CRUD + manager edits, leave core (types/allocations/ledger/request), approval flow
+> [`/manage/approvals`], FR-25 reason-private calendar [`/calendar`], role-aware home board,
+> FR-23 settings + FR-7 password change + logout, FR-24 admin work/holiday editor, FR-15
+> cancel-approved, and a **seeded demo** (BJ Manufacturing — 3 teams + Security, 12 users,
+> `Demo!2026`). UI: shadcn/ui + brand OKLCH tokens + Rubik with Vazirmatn fallback across all
+> **11 screens**, responsive `AppShell` (bottom tabs → desktop rail), lazy date picker,
+> AlertDialog + toasts, Suspense/skeletons.
+> **2026-06-30 polish:** account create/edit now manages PTO/annual + sick balances; logo,
+> light-only lock, opaque chrome, active-tab highlight, and stronger buttons are implemented.
+> **Gates:** lint clean · unit 73/73 · e2e 20/20 (serial/CI) · build green.
+> **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
+> shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in
+> `.superpowers/sdd/progress.md`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -64,6 +66,15 @@ their own plan files when reached.
 - ☑ FR-7 self-service password change (in-DB current-password verify; `app_change_my_password`)
 - ☑ FR-15 cancel an approved-future request with ledger `reversal`
 - ☑ Docs (REQUIREMENTS/PERMISSIONS/DATA_MODEL/CHANGELOG) + SDD ledger
+
+## Post-v1 polish ✅
+- ☑ Calendar list/month toggle with highlighted off days, per-day counts, visible names, overflow
+  marker, and selected-day return-to-work details
+- ☑ Request-page language consistency for leave type names, date picker locale/digits, preview
+  counts, balances, request-row dates, and request-row day counts
+- ☑ Home **My Team** section with manager, teammates, role/title context, and upcoming time-off
+- ☑ Mobile calendar month grid fixed to seven columns; Manage Employees mobile actions moved below
+  the title
 
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved

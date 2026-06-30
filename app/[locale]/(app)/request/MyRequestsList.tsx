@@ -5,7 +5,8 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
-import { gregorianToJalali } from '@/lib/leave/dateConvert';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card } from '@/components/ui/card';
@@ -47,14 +48,10 @@ type Props = {
   requests: LeaveRequestWithType[];
   labels: Labels;
   calendarPref: string;
+  locale: string;
 };
 
-function formatDate(dateStr: string, calendarPref: string): string {
-  // Stored dates are Gregorian; show Jalali when that's the user's preference.
-  return calendarPref === 'jalali' ? gregorianToJalali(dateStr) : dateStr;
-}
-
-export function MyRequestsList({ requests, labels, calendarPref }: Props) {
+export function MyRequestsList({ requests, labels, calendarPref, locale }: Props) {
   const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
@@ -119,16 +116,17 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
                   <div className="flex-1 min-w-0">
                     {/* Leave type name */}
                     <div className="font-medium text-sm text-foreground">
-                      {req.leave_types?.name_fa ?? '—'}
+                      {req.leave_types ? localizedLeaveTypeName(req.leave_types, locale) : '—'}
                     </div>
                     {/* Date range */}
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {labels.from} {formatDate(req.start_date, calendarPref)}{' '}
-                      {labels.to} {formatDate(req.end_date, calendarPref)}
+                      {labels.from} {formatCalendarDate(req.start_date, calendarPref, locale)}{' '}
+                      {labels.to} {formatCalendarDate(req.end_date, calendarPref, locale)}
                     </div>
                     {/* Day part */}
                     <div className="text-xs text-muted-foreground">
-                      {labels.dayPartLabels[req.day_part]} · {req.requested_days} {labels.days}
+                      {labels.dayPartLabels[req.day_part]} ·{' '}
+                      {formatNumber(req.requested_days, locale)} {labels.days}
                     </div>
                   </div>
 

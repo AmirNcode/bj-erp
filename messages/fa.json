@@ -30,11 +30,17 @@
     "manageLink": "مدیریت کارمندان",
     "balancesTitle": "مانده مرخصی من",
     "recentTitle": "درخواست‌های اخیر من",
-    "teamTitle": "مرخصی تیم",
+    "teamTitle": "تیم من",
+    "managerLabel": "مدیر",
+    "teammatesLabel": "هم‌تیمی‌ها",
+    "rolesLabel": "نقش",
+    "titleLabel": "عنوان",
+    "upcomingLabel": "مرخصی‌های پیش‌رو",
     "approvalsTitle": "تأییدها",
     "approvalsPending": "{count} در انتظار",
     "noRecent": "هنوز درخواستی ثبت نشده است.",
-    "noTeam": "این ماه مرخصی‌ای در تیم نیست."
+    "noTeam": "هم‌تیمی‌ای یافت نشد.",
+    "noUpcoming": "مرخصی پیش‌رویی ثبت نشده است."
   },
   "team": {
     "title": "تیم من",
@@ -60,7 +66,9 @@
     "reason": "دلیل (اختیاری)",
     "submit": "ارسال درخواست",
     "preview": "پیش‌نمایش",
+    "workingDaysLabel": "روزهای کاری",
     "workingDays": "روزهای کاری: {count}",
+    "remainingBalanceLabel": "مانده مرخصی",
     "remainingBalance": "مانده مرخصی: {days} روز",
     "noBalance": "موجودی نامشخص",
     "success": "درخواست با موفقیت ارسال شد.",
@@ -94,6 +102,11 @@
     "title": "تقویم مرخصی",
     "navLink": "تقویم",
     "empty": "این ماه مرخصی‌ای ثبت نشده است.",
+    "listView": "فهرست",
+    "monthView": "ماه",
+    "offOn": "مرخصی در",
+    "noOffThisDay": "در این روز کسی در مرخصی نیست.",
+    "returns": "بازگشت",
     "error": "خطا"
   },
   "profile": {
@@ -182,7 +195,10 @@
       "selectMgr": "— انتخاب مدیر —",
       "none": "بدون مدیر",
       "noEmployees": "کارمندی یافت نشد.",
-      "saved": "تغییرات با موفقیت ذخیره شد."
+      "saved": "تغییرات با موفقیت ذخیره شد.",
+      "allocTitle": "موجودی اولیه مرخصی",
+      "allocWarn": "کارمند ایجاد شد، اما تنظیم موجودی مرخصی ناموفق بود:",
+      "balancesTitle": "موجودی مرخصی"
     },
     "settings": {
       "title": "تنظیمات کاری",

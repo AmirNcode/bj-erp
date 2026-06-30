@@ -14,6 +14,15 @@ const vazirmatn = localFont({
   display: 'swap',
 });
 
+const rubik = localFont({
+  src: [
+    { path: './../fonts/Rubik-VariableFont_wght.ttf', style: 'normal', weight: '300 900' },
+    { path: './../fonts/Rubik-Italic-VariableFont_wght.ttf', style: 'italic', weight: '300 900' },
+  ],
+  variable: '--font-rubik',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'سامانه منابع انسانی',
   description: 'HR Management System',
@@ -21,6 +30,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: '#2E3C92',
+  colorScheme: 'light',
 };
 
 export function generateStaticParams() {
@@ -49,7 +59,7 @@ export default async function LocaleLayout({ children, params }: Props) {
     <html
       lang={locale}
       dir={dir}
-      className={`${vazirmatn.variable} h-full antialiased font-sans`}
+      className={`${rubik.variable} ${vazirmatn.variable} h-full antialiased font-sans`}
     >
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider messages={messages}>

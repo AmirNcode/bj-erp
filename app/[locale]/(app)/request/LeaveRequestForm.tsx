@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation';
 import { LazyDatePicker } from './LazyDatePicker';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
+import persian_en from 'react-date-object/locales/persian_en';
 import gregorian from 'react-date-object/calendars/gregorian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
+import gregorian_fa from 'react-date-object/locales/gregorian_fa';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
+import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { submitRequest, getMyBalance } from '@/lib/actions/leave';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
@@ -29,9 +32,10 @@ type Labels = {
   reason: string;
   submit: string;
   preview: string;
-  workingDays: string;
-  remainingBalance: string;
+  workingDaysLabel: string;
+  remainingBalanceLabel: string;
   noBalance: string;
+  days: string;
   success: string;
   errorLabel: string;
   from: string;
@@ -57,8 +61,11 @@ const selectClassName =
 export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, labels, locale }: Props) {
   const router = useRouter();
   const isJalali = calendarPref === 'jalali';
+  const isRtl = locale === 'fa';
   const calendar = isJalali ? persian : gregorian;
-  const calLocale = isJalali ? persian_fa : gregorian_en;
+  const calLocale = isJalali
+    ? (isRtl ? persian_fa : persian_en)
+    : (isRtl ? gregorian_fa : gregorian_en);
 
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [dateRange, setDateRange] = useState<DateObjectLike[]>([]);
@@ -176,7 +183,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
               <option value="">{labels.selectType}</option>
               {leaveTypes.map((lt) => (
                 <option key={lt.id} value={lt.id}>
-                  {lt.name_fa}
+                  {localizedLeaveTypeName(lt, locale)}
                 </option>
               ))}
             </select>
@@ -186,7 +193,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
           <div className="space-y-1.5">
             <Label>{labels.dateRange}</Label>
             <div
-              style={{ direction: isJalali ? 'rtl' : 'ltr' }}
+              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
               className="w-full"
             >
               <LazyDatePicker
@@ -201,7 +208,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
                 }}
                 calendar={calendar}
                 locale={calLocale}
-                calendarPosition={isJalali ? 'bottom-right' : 'bottom-left'}
+                calendarPosition={isRtl ? 'bottom-right' : 'bottom-left'}
                 inputClass={`w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50`}
                 containerClassName="rmdp-container w-full"
                 format="YYYY/MM/DD"
@@ -246,16 +253,15 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
               data-testid="leave-preview"
             >
               <div data-testid="working-days-count">
-                {labels.preview}: <strong>{workingDaysCount}</strong> {locale === 'fa' ? 'روز کاری' : 'working days'}
+                {labels.preview}: {labels.workingDaysLabel}{' '}
+                <strong>{formatNumber(workingDaysCount, locale)}</strong>
               </div>
               {selectedType?.affects_balance && (
                 <div data-testid="balance-display">
                   {balanceLoading
                     ? '…'
                     : effectiveBalance !== null
-                      ? (locale === 'fa'
-                          ? `مانده: ${effectiveBalance} روز`
-                          : `Remaining balance: ${effectiveBalance} days`)
+                      ? `${labels.remainingBalanceLabel}: ${formatNumber(effectiveBalance, locale)} ${labels.days}`
                       : labels.noBalance}
                 </div>
               )}

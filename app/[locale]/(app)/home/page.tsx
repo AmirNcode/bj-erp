@@ -15,6 +15,7 @@ import {
   getCalendarEntries,
   getPendingApprovals,
 } from '@/lib/actions/leave';
+import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import { buildHomeBoard } from '@/lib/home/board';
 import { HomeBoard } from './HomeBoard';
 import { PageHeader } from '../_components/PageHeader';
@@ -43,17 +44,31 @@ async function HomeBoardData({
   const roles = (rolesData ?? []).map((r) => r.role as string);
   const canApprove = roles.includes('admin') || roles.includes('manager');
 
-  // Current Gregorian month range (UTC-safe), same as the calendar page.
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const rangeStart = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
-  const rangeEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('calendar_pref')
+    .eq('id', userId)
+    .single();
+  const calendarPref = profile?.calendar_pref ?? 'jalali';
 
-  const [requestsRes, balancesRes, calendarRes] = await Promise.all([
+  // Upcoming time off for the team directory.
+  const now = new Date();
+  const rangeStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  )
+    .toISOString()
+    .slice(0, 10);
+  const rangeEnd = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 90)
+  )
+    .toISOString()
+    .slice(0, 10);
+
+  const [requestsRes, balancesRes, calendarRes, directoryRes] = await Promise.all([
     getMyLeaveRequests(),
     getMyBalances(),
     getCalendarEntries(rangeStart, rangeEnd),
+    getMyTeamDirectory(),
   ]);
 
   let pendingCount = 0;
@@ -67,6 +82,7 @@ async function HomeBoardData({
     requests: requestsRes.ok ? requestsRes.requests : [],
     balances: balancesRes.ok ? balancesRes.balances : [],
     team: calendarRes.ok ? calendarRes.entries : [],
+    directory: directoryRes.ok ? directoryRes.members : [],
     pendingCount,
   });
 
@@ -74,6 +90,12 @@ async function HomeBoardData({
     balancesTitle: t('balancesTitle'),
     recentTitle: t('recentTitle'),
     teamTitle: t('teamTitle'),
+    managerLabel: t('managerLabel'),
+    teammatesLabel: t('teammatesLabel'),
+    rolesLabel: t('rolesLabel'),
+    titleLabel: t('titleLabel'),
+    upcomingLabel: t('upcomingLabel'),
+    noUpcoming: t('noUpcoming'),
     approvalsTitle: t('approvalsTitle'),
     approvalsPending: t('approvalsPending', { count: pendingCount }),
     noRecent: t('noRecent'),
@@ -85,7 +107,7 @@ async function HomeBoardData({
     statusCancelled: tLeave('status.cancelled'),
   };
 
-  return <HomeBoard board={board} labels={labels} locale={locale} />;
+  return <HomeBoard board={board} labels={labels} locale={locale} calendarPref={calendarPref} />;
 }
 
 // ── page shell: resolves locale then streams ───────────────────────────────
