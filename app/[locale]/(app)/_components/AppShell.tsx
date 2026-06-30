@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { Toaster } from '@/components/ui/sonner';
 import { MainNav } from './MainNav';
+import { RoutePrefetcher } from './RoutePrefetcher';
 import type { TabKey } from '@/lib/nav/tabs';
 
 type Props = { roles: string[]; locale: string; labels: Record<TabKey, string>; appName: string; children: React.ReactNode };
@@ -24,6 +25,7 @@ export function AppShell({ roles, locale, labels, appName, children }: Props) {
       </header>
       <main className="mx-auto w-full max-w-2xl px-4 py-5 pb-24 md:max-w-4xl md:pb-8">{children}</main>
       <MainNav roles={roles} locale={locale} labels={labels} />
+      <RoutePrefetcher roles={roles} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
   );

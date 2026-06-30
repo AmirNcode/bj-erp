@@ -14,6 +14,10 @@
     "profile": "Profile",
     "manage": "Manage"
   },
+  "refresh": {
+    "updated": "Updated {time}",
+    "pending": "Updating..."
+  },
   "login": {
     "brand": "Behsazan Jonoob",
     "title": "Sign In",
