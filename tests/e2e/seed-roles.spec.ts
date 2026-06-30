@@ -12,7 +12,10 @@ test.describe('Seeded demo roles', () => {
     await expect(page.locator('[data-testid="nav-manage"]')).toBeVisible();
     await expect(page.locator('[data-testid="home-approvals-card"]')).toBeVisible();
     await page.goto('/team');
-    await expect(page.getByText('Ali Rezaei')).toBeVisible({ timeout: 10_000 }); // a direct report
+    // .first(): the responsive /team layout renders both a desktop table and
+    // mobile stacked cards (one hidden via CSS per viewport), so the name
+    // appears twice in the DOM — same pattern as team.spec.ts and manage.spec.ts.
+    await expect(page.getByText('Ali Rezaei').first()).toBeVisible({ timeout: 10_000 }); // a direct report
   });
 
   test('employee (e-prod-1): home board, no Manage tab', async ({ page }) => {

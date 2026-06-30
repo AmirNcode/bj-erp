@@ -140,8 +140,8 @@ async function EmployeesData({ locale }: { locale: string }) {
                 <Badge
                   className={
                     emp.active
-                      ? 'bg-green-100 text-green-700 hover:bg-green-100 shrink-0'
-                      : 'bg-red-100 text-red-700 hover:bg-red-100 shrink-0'
+                      ? 'bg-success-foreground text-success hover:bg-success-foreground shrink-0'
+                      : 'bg-destructive/10 text-destructive hover:bg-destructive/10 shrink-0'
                   }
                 >
                   {emp.active ? t('employees.active') : t('employees.inactive')}

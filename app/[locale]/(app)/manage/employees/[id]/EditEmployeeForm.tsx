@@ -147,7 +147,7 @@ export function EditEmployeeForm({
   return (
     <div className="space-y-6">
       {!isAdmin && labels.managerNote && (
-        <p className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+        <p className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm">
           {labels.managerNote}
         </p>
       )}

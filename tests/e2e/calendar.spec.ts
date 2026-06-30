@@ -7,6 +7,7 @@ import {
   createEmployee,
   allocate,
   submitLeave,
+  jalaliCurrentMonthRange,
 } from './_helpers';
 
 test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
@@ -29,7 +30,7 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     // 2. Requester submits a request carrying a private reason.
     await logout(page);
     await login(page, authCode, authPw.trim());
-    await submitLeave(page, { leaveTypeValue: ltValue, reason: SECRET });
+    await submitLeave(page, { leaveTypeValue: ltValue, reason: SECRET, range: jalaliCurrentMonthRange() });
 
     // 3. Teammate opens the calendar.
     await logout(page);

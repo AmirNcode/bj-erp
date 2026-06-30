@@ -102,14 +102,12 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
       )}
 
       {localRequests.length === 0 ? (
-        <p className="text-gray-500 text-sm">{labels.noRequests}</p>
+        <p className="text-muted-foreground text-sm">{labels.noRequests}</p>
       ) : (
         <div className="space-y-3">
           {localRequests.map((req) => {
             const cancelPrompt =
-              req.status === 'approved'
-                ? labels.cancelApprovedConfirm ?? labels.cancelConfirm ?? 'Cancel this request?'
-                : labels.cancelConfirm ?? 'Cancel this request?';
+              req.status === 'approved' ? labels.cancelApprovedConfirm : labels.cancelConfirm;
 
             return (
               <Card
@@ -120,16 +118,16 @@ export function MyRequestsList({ requests, labels, calendarPref }: Props) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     {/* Leave type name */}
-                    <div className="font-medium text-sm text-gray-900">
+                    <div className="font-medium text-sm text-foreground">
                       {req.leave_types?.name_fa ?? '—'}
                     </div>
                     {/* Date range */}
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-muted-foreground mt-0.5">
                       {labels.from} {formatDate(req.start_date, calendarPref)}{' '}
                       {labels.to} {formatDate(req.end_date, calendarPref)}
                     </div>
                     {/* Day part */}
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-muted-foreground">
                       {labels.dayPartLabels[req.day_part]} · {req.requested_days} {labels.days}
                     </div>
                   </div>

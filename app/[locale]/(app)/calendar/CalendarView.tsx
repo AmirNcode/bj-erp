@@ -68,7 +68,7 @@ export function CalendarView({ entries, locale, calendarPref, labels }: Props) {
                   </span>
                   <span
                     className={`text-xs shrink-0 ${
-                      e.status === 'approved' ? 'text-green-700' : 'text-yellow-700'
+                      e.status === 'approved' ? 'text-success' : 'text-warning'
                     }`}
                   >
                     {e.status === 'approved' ? labels.statusApproved : labels.statusPending}

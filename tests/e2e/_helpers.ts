@@ -14,71 +14,64 @@ const gregorian_en = require('react-date-object/locales/gregorian_en');
 export const ADMIN_CODE = 'admin';
 export const ADMIN_PASSWORD = 'Admin!2026';
 
-/**
- * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' for the next
- * 2-working-day window that satisfies all three test constraints:
- *
- *   1. start_date > today  (strictly future — required by cancel-approved.spec)
- *   2. start in the current Gregorian month  (required by calendar.spec — entry
- *      shows on the team calendar for the current month)
- *   3. exactly 2 working days under the seeded Fri weekend (ISO 5)
- *
- * Algorithm: walk forward from tomorrow, skip Fridays (ISO 5), pick the first
- * two consecutive working days whose start is in the current month.  The end
- * day is allowed to spill into the next month because the calendar filter only
- * requires the start to be in the current month.
- *
- * Month-end edge: on the last calendar day of any month, tomorrow is already
- * in the next month, so no future working-day start exists in the current
- * month. In that case the function throws a clear error so the test fails with
- * a descriptive message rather than a cryptic picker error.
- */
-export function jalali2DayRange(): string {
-  const WEEKEND_ISO = [5]; // Friday = ISO 5
+const WEEKEND_ISO = [5]; // Friday = ISO 5
 
-  function getISOWeekday(d: Date): number {
-    const dow = d.getUTCDay(); // 0 Sun … 6 Sat
-    return dow === 0 ? 7 : dow; // ISO Mon=1…Sun=7
-  }
+function getISOWeekday(d: Date): number {
+  const dow = d.getUTCDay(); // 0 Sun … 6 Sat
+  return dow === 0 ? 7 : dow; // ISO Mon=1…Sun=7
+}
 
-  function isWorkingDay(d: Date): boolean {
-    return !WEEKEND_ISO.includes(getISOWeekday(d));
-  }
+function isWorkingDay(d: Date): boolean {
+  return !WEEKEND_ISO.includes(getISOWeekday(d));
+}
 
-  function addDays(d: Date, n: number): Date {
-    const r = new Date(d);
-    r.setUTCDate(r.getUTCDate() + n);
-    return r;
-  }
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + n);
+  return r;
+}
 
-  function toGregorianParts(d: Date): [number, number, number] {
-    return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
-  }
+function toGregorianParts(d: Date): [number, number, number] {
+  return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+}
 
-  function toJalaliStr(d: Date): string {
-    const [y, m, day] = toGregorianParts(d);
-    const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day });
-    return obj.convert(persian, persian_en).format('YYYY/MM/DD');
-  }
+function toJalaliStr(d: Date): string {
+  const [y, m, day] = toGregorianParts(d);
+  const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day });
+  return obj.convert(persian, persian_en).format('YYYY/MM/DD');
+}
 
-  const today = new Date(Date.UTC(
+function todayUTC(): Date {
+  return new Date(Date.UTC(
     new Date().getUTCFullYear(),
     new Date().getUTCMonth(),
     new Date().getUTCDate(),
   ));
-  const currentMonth = today.getUTCMonth();
+}
 
-  // Walk forward from tomorrow to find a working-day start in the current month.
+/**
+ * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' for the next
+ * strictly-future 2-working-day window:
+ *
+ *   1. start_date > today  (strictly future — required by cancel-approved.spec,
+ *      whose isCancellable guard needs an approved leave that hasn't started yet)
+ *   2. exactly 2 working days under the seeded Fri weekend (ISO 5)
+ *
+ * Algorithm: walk forward from tomorrow, skip Fridays (ISO 5), pick the first
+ * two consecutive working days. No month restriction — the range may spill
+ * into the next Gregorian month (e.g. when run on a month-end day). That's
+ * fine for leave/approval/cancel-approved, which only care about the leave
+ * being in the future, not which calendar month it falls in.
+ *
+ * If you need the entry to show up on the *current month's* team calendar
+ * (calendar.spec), use jalaliCurrentMonthRange() instead.
+ */
+export function jalali2DayRange(): string {
+  const today = todayUTC();
+
+  // Walk forward from tomorrow to find the first future working day.
   let start = addDays(today, 1);
-  while (true) {
-    if (start.getUTCMonth() !== currentMonth) {
-      // Exhausted current month without finding a valid start.
-      throw new Error(
-        `jalali2DayRange: no future working day in current month (today=${today.toISOString().slice(0, 10)}). ` +
-        'This edge occurs on the final day(s) of a month. Update the test or run tomorrow.'
-      );
-    }
-    if (isWorkingDay(start)) break;
+  while (!isWorkingDay(start)) {
     start = addDays(start, 1);
   }
 
@@ -89,6 +82,19 @@ export function jalali2DayRange(): string {
   }
 
   return `${toJalaliStr(start)} — ${toJalaliStr(end)}`;
+}
+
+/**
+ * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' starting **today**
+ * and ending tomorrow (calendar days, not working days — submit_leave_request
+ * accepts any date, including today and weekends). Used where the entry must
+ * overlap the *current* Gregorian month on the team calendar (calendar.spec),
+ * which always holds since the range starts today.
+ */
+export function jalaliCurrentMonthRange(): string {
+  const today = todayUTC();
+  const end = addDays(today, 1);
+  return `${toJalaliStr(today)} — ${toJalaliStr(end)}`;
 }
 
 export async function login(page: Page, code: string, password: string) {
@@ -212,11 +218,14 @@ export async function allocate(page: Page, employeeCodeSubstring: string, days: 
 }
 
 /** Submit a fresh 2-working-day request for the given leave type, optionally with a reason. */
-export async function submitLeave(page: Page, opts: { leaveTypeValue: string; reason?: string }) {
+export async function submitLeave(
+  page: Page,
+  opts: { leaveTypeValue: string; reason?: string; range?: string }
+) {
   await page.goto('/request');
   await expect(page).toHaveURL(/\/request$/);
   await page.locator('#leave_type_id').selectOption({ value: opts.leaveTypeValue });
-  await fillPicker(page, jalali2DayRange());
+  await fillPicker(page, opts.range ?? jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
   if (opts.reason) await page.fill('#reason', opts.reason);
   await page.click('button[type="submit"]');

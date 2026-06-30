@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { tabsForRoles, type TabKey } from '@/lib/nav/tabs';
 import { cn } from '@/lib/utils';
 import { NAV_ICONS } from './nav-icons';
@@ -8,6 +9,7 @@ import { NAV_ICONS } from './nav-icons';
 type Props = { roles: string[]; locale: string; labels: Record<TabKey, string> };
 
 export function MainNav({ roles, locale, labels }: Props) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const tabs = tabsForRoles(roles);
   const isActive = (href: string) => {
@@ -16,7 +18,7 @@ export function MainNav({ roles, locale, labels }: Props) {
   };
   return (
     <nav
-      aria-label="Primary"
+      aria-label={t('primary')}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       className={cn(
         'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card', // mobile bottom bar
