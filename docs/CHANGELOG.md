@@ -6,6 +6,14 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Added — Navigation prefetch + manual page update pill (2026-06-30)
+- **Performance/UX:** the app shell now prefetches every role-visible bottom/side-tab route after
+  login so tab changes can reuse the client route cache instead of showing empty panels while each
+  page fetches from scratch.
+- **Manual freshness:** every app page header now includes a pill-shaped update button above the
+  page title. It shows the last loaded time, invalidates the current route, and refreshes the page
+  payload when tapped.
+
 ### Added — Home My Team + mobile calendar/manage polish (2026-06-30)
 - **Home:** replaced the Team Time-Off card with **My Team**, showing the caller's manager,
   same-department teammates, role labels, team/title context, and each member's upcoming time off.

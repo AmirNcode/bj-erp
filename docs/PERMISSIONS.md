@@ -54,6 +54,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 ### `user_roles`
 - **SELECT**: self · `can_read_all`.
 - **INSERT/UPDATE/DELETE**: `is_admin` only. (Only the admin changes roles.)
+- **Teammate role labels** are surfaced read-only through the `get_my_team_directory()` SECURITY
+  DEFINER fn (scoped to the caller's manager + same-department active colleagues) so the Home
+  **My Team** card can show role/title context without granting employees broad `user_roles` read
+  access. Granted to `authenticated`, revoked from `anon`.
 
 ### `departments`, `work_settings`, `holidays`, `leave_types`
 - **SELECT**: any authenticated company member.
@@ -78,8 +82,9 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `leave_ledger`
 - **SELECT**: own · `is_manager_of` · `can_read_all`.
-- **INSERT**: **server-side only** (SECURITY DEFINER fns — allocation, `consumption` on approval,
-  `reversal` on approved-future cancel). No direct client writes — clients must not fabricate balances.
+- **INSERT**: **server-side only** (SECURITY DEFINER fns — `allocation`, `consumption` on approval,
+  `reversal` on approved-future cancel, and `adjustment` when an admin sets an absolute balance via
+  `set_leave_balance`). No direct client writes — clients must not fabricate balances.
 
 ### `audit_log`
 - **SELECT**: `is_admin`.
@@ -106,16 +111,21 @@ user creation in-database and **identical on self-hosted Supabase** (portability
 `auth.uid()`** — any signed-in user changes *their own* password: it verifies the current password via
 `crypt` before updating `auth.users`, and is audited (`change_own_password`).
 
+`public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin-only; self-guards via
+`private.is_admin(auth.uid())`, `42501` otherwise) sets an employee's **current** balance for a leave
+type to an absolute value by writing an `adjustment` ledger row (audited `set_leave_balance`); additive
+grants still go through `allocate_leave`. Granted to `authenticated`, revoked from `anon`. Used by the
+admin employee create/edit forms.
+
 The Supabase security advisor flags these two as exposed `SECURITY DEFINER` functions (lint 0029).
 **Accepted by design** — the in-function admin check is the intended gate. Production hardening:
 enable Auth "leaked password protection" (advisor `auth_leaked_password_protection`).
 
-## DECISION (enforce in Phase 3) — leave `reason` is private
+## FR-25 — leave `reason` is private (ENFORCED in Phase 3)
 
-A leave request's free-text `reason` may contain medical/personal info. **Teammates must NOT see
-it.** The team calendar (Phase 3) shows a coworker's dates + status only; `reason` is visible only
-to the requester, their manager, security, and admin. Today `leave_requests` has a single
-`same_team` SELECT policy that includes `reason`, so this must be tightened when the team-calendar
-read path is built — e.g. a `team_leave_calendar` view that omits `reason` (granted for same-team
-reads), while full-row reads stay restricted to own / manager-of / can_read_all. Until then, no UI
-exposes other people's reasons.
+A leave request's free-text `reason` may contain medical/personal info, so **teammates must not see
+it.** Enforced: `leave_requests` SELECT is restricted to own / `is_manager_of` / `security` / `admin`
+(the broad `same_team` read was dropped), and the team calendar reads a reason-less
+`team_leave_calendar` SECURITY DEFINER view (scoped `own | same_team | can_read_all`, pending +
+approved) that never selects `reason`. Verified on the live DB: a same-team peer reads the view, not
+the base row, and no UI exposes another person's reason.

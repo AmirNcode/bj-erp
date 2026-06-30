@@ -16,7 +16,7 @@ their own plan files when reached.
 > AlertDialog + toasts, Suspense/skeletons.
 > **2026-06-30 polish:** account create/edit now manages PTO/annual + sick balances; logo,
 > light-only lock, opaque chrome, active-tab highlight, and stronger buttons are implemented.
-> **Gates:** lint clean · unit 73/73 · e2e 20/20 (serial/CI) · build green.
+> **Gates:** unit 98/98 · build green · e2e 20 specs (serial/CI; needs live Supabase + dev server).
 > **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
 > shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in
 > `.superpowers/sdd/progress.md`.
@@ -75,6 +75,7 @@ their own plan files when reached.
 - ☑ Home **My Team** section with manager, teammates, role/title context, and upcoming time-off
 - ☑ Mobile calendar month grid fixed to seven columns; Manage Employees mobile actions moved below
   the title
+- ☑ App-shell tab prefetching plus a per-page update pill for manual data refresh / last-loaded time
 
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved

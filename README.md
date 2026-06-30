@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3FCF8E?logo=supabase&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-73%20unit%20%C2%B7%2020%20e2e-success)
+![Tests](https://img.shields.io/badge/tests-98%20unit%20%C2%B7%2020%20e2e-success)
 ![Status](https://img.shields.io/badge/v1-feature--complete-2E3C92)
 
 A unified, mobile-first web application for a manufacturing company (Behsazan Jonoob). The
@@ -27,8 +27,9 @@ or Gregorian calendar.
   hierarchy. Admin CRUD for employees; managers edit their direct reports.
 - **Roles** — `admin · manager · employee · security`; a user can hold several. Enforced by
   Postgres Row-Level Security, not just the UI.
-- **Leave core** — configurable leave types, per-employee yearly allocations, and an auditable
-  **balance ledger** (every allocation / consumption / reversal is a row).
+- **Leave core** — configurable leave types and an auditable **balance ledger** (every allocation /
+  consumption / reversal / adjustment is a row). Admins set a worker's PTO + sick balances right in
+  the employee **create/edit** forms (audited `set_leave_balance` RPC), or via the allocation screen.
 - **Requests** — pick a type and date range (full or half day) on a Persian **or** Gregorian
   picker; working days are counted **server-side**, excluding configured weekends + holidays, with
   a live remaining-balance preview.
@@ -37,9 +38,11 @@ or Gregorian calendar.
 - **Cancellation** — cancel a pending request, or an **approved future** request (balance restored
   via a `reversal` ledger row).
 - **Reason privacy (FR-25)** — a request's free-text reason is visible only to the requester, their
-  manager, security, and admin — never to teammates. The shared calendar shows dates + status only.
+  manager, security, and admin — never to teammates. The shared calendar (list **or** month view)
+  shows dates + status only.
 - **Home status board** — a role-aware dashboard (the notification surrogate): balances, recent
-  requests, team time-off, and — for managers/admins — a pending-approval queue.
+  requests, a **My Team** panel (your manager + same-team colleagues and their upcoming leave), and
+  — for managers/admins — a pending-approval queue.
 - **Admin settings** — edit weekend days and the holiday list in-app.
 - **Self-service** — change your own password; switch language (فارسی ⇄ English) and calendar
   (Jalali ⇄ Gregorian), persisted per user.
@@ -54,10 +57,10 @@ or Gregorian calendar.
 | Backend | **Supabase** — Postgres + Auth + Row-Level Security + Storage (self-hostable) |
 | Auth | Admin-issued employee code + password (synthetic-email mapping; no `service_role` in app) |
 | i18n / layout | **next-intl** — Farsi (`fa`) default + RTL, English (`en`) toggle |
-| UI | **Tailwind CSS v4** + **shadcn/ui** (new-york), brand OKLCH tokens (`#2E3C92`), Vazirmatn font |
+| UI | **Tailwind CSS v4** + **shadcn/ui** (new-york), brand OKLCH tokens (`#2E3C92`), Rubik + Vazirmatn (Persian) fonts, light-only |
 | Calendar | `react-multi-date-picker` + `react-date-object` (Persian + Gregorian) |
 | PWA | Installable, persistent session, brand theme color |
-| Testing | **Vitest** (73 unit) + **Playwright** (20 e2e) |
+| Testing | **Vitest** (98 unit) + **Playwright** (20 e2e) |
 | Hosting | Demo: Vercel + Supabase Cloud · Production: company's own servers (self-hosted) |
 
 ## 🏛️ Architecture principles
@@ -99,7 +102,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx_or_legacy_anon_jwt
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run test:unit` | Vitest unit suite (73 tests) |
+| `npm run test:unit` | Vitest unit suite (98 tests) |
 | `npm run test:e2e` | Playwright e2e (20 specs; needs a reachable Supabase + dev server — run serial with `--workers=1`) |
 | `npm run seed` | Seed the demo org (BJ Manufacturing) via guarded RPCs |
 

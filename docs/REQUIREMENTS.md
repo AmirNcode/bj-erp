@@ -73,7 +73,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   **audit log** of admin/manager changes; minimize sensitive PII (avoid storing national ID unless
   required).
 - **NFR-6** ☑ **Performance**: target a few hundred employees comfortably; list/calendar queries
-  indexed.
+  indexed. App-tab routes are prefetched after login and each page exposes a manual update pill for
+  explicit refresh when fresher data is needed.
 - **NFR-7** ☑ **Accessibility**: keyboard-navigable, adequate contrast, labelled controls; touch
   targets sized for factory-floor phone use.
 - **NFR-8** ☑ **Documentation** stays current (CLAUDE.md, this file, DATA_MODEL, PERMISSIONS,

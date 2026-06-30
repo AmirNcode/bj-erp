@@ -89,7 +89,7 @@ cp .env.example .env.local     # fill NEXT_PUBLIC_SUPABASE_URL + ANON_KEY (publi
 npm run dev                    # http://localhost:3000 → boots fa-RTL at /login
 ```
 
-Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest, 73 tests) ·
+Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest, 98 tests) ·
 `npm run test:e2e` (Playwright, 20 specs — needs a reachable Supabase + dev server; run serial
 `--workers=1`) · `npm run seed` (demo org). Database setup, Vercel demo deploy, and self-host
 production: see `docs/DEPLOY.md`. Demo admin login: `admin` / `Admin!2026`.
