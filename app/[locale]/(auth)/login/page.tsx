@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { useState, FormEvent } from 'react';
 import { signInWithCode } from '@/lib/auth/usernameEmail';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 export default function LoginPage() {
   const t = useTranslations('login');
@@ -36,55 +40,58 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-6">
-        <h1 className="text-2xl font-semibold text-center">{t('title')}</h1>
+        {/* Brand wordmark */}
+        <p className="text-center text-xl font-bold text-primary">{t('brand')}</p>
 
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="code" className="text-sm font-medium">
-              {t('codeLabel')}
-            </label>
-            <input
-              id="code"
-              type="text"
-              autoComplete="username"
-              placeholder={t('codePlaceholder')}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              className="rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-1"
-            />
-          </div>
+        <Card>
+          <CardHeader>
+            <h1 className="text-center text-2xl font-semibold">{t('title')}</h1>
+          </CardHeader>
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor="password" className="text-sm font-medium">
-              {t('passwordLabel')}
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              placeholder={t('passwordPlaceholder')}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-offset-1"
-            />
-          </div>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="code">{t('codeLabel')}</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  autoComplete="username"
+                  placeholder={t('codePlaceholder')}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                />
+              </div>
 
-          {error && (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          )}
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="password">{t('passwordLabel')}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  placeholder={t('passwordPlaceholder')}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? '...' : t('submit')}
-          </button>
-        </form>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full"
+              >
+                {loading ? '...' : t('submit')}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

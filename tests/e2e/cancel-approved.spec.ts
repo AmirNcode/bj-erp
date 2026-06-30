@@ -7,15 +7,13 @@ import {
 // cancelled and the Cancel control disappears. Throwaway employee (the seed
 // deactivates such codes), so no shared-state cleanup. Admin approves via override.
 //
-// submitLeave uses the fixed JALALI_2DAY (= 2026-06-29/30); this test requires
-// "today" to be before that start date so the approved leave is still cancellable.
+// submitLeave uses jalali2DayRange() which computes a strictly-future 2-working-day
+// range at test time, so the approved leave is always cancellable.
 test('employee cancels an approved future leave', async ({ page }) => {
   test.setTimeout(240_000); // a cold `next dev` compiles each route on first hit
   const ts = Date.now();
   const code = `cxl${ts}`;
   const name = `Cancel Tester ${ts}`;
-
-  page.on('dialog', (d) => d.accept()); // approve + cancel confirm() dialogs
 
   // Admin: create the employee and allocate annual leave.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
@@ -34,12 +32,18 @@ test('employee cancels an approved future leave', async ({ page }) => {
   await page.goto('/manage/approvals');
   const approvalRow = page.locator('[data-testid^="approval-row-"]').filter({ hasText: name });
   await expect(approvalRow).toBeVisible({ timeout: 15_000 });
-  await approvalRow.locator('[data-testid^="approve-btn-"]').click();
+  // Get the request id from the approval row's data-testid, then click approve trigger + confirm.
+  const approveBtn = approvalRow.locator('[data-testid^="approve-btn-"]');
+  await approveBtn.click();
+  // Confirm the approve AlertDialog
+  const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
+  await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+  await approveConfirm.click();
   await expect(approvalRow).toHaveCount(0, { timeout: 10_000 }); // removed optimistically
   await logout(page);
 
-  // Employee: the approved future request shows Cancel; cancelling flips the badge
-  // to "cancelled" and removes the button.
+  // Employee: the approved future request shows Cancel; cancelling opens an AlertDialog,
+  // confirming flips the badge to "cancelled" and removes the button.
   await login(page, code, pw.trim());
   await page.goto('/request');
   const row = page.locator('[data-testid^="request-row-"]').first();
@@ -47,6 +51,10 @@ test('employee cancels an approved future leave', async ({ page }) => {
   const cancelBtn = row.locator('[data-testid^="cancel-btn-"]');
   await expect(cancelBtn).toBeVisible();
   await cancelBtn.click();
+  // Click the AlertDialog confirm button (replaces native confirm() dialog)
+  const confirmBtn = page.locator('[data-testid^="cancel-confirm-"]').first();
+  await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+  await confirmBtn.click();
   const badge = row.locator('[data-testid^="status-badge-"]');
   await expect(badge).toHaveText(/لغو|cancel/i, { timeout: 10_000 });
   await expect(cancelBtn).toHaveCount(0);

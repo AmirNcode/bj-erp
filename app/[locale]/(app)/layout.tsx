@@ -6,7 +6,7 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { BottomNav } from './_components/BottomNav';
+import { AppShell } from './_components/AppShell';
 
 type Props = {
   children: React.ReactNode;
@@ -40,9 +40,8 @@ export default async function AppLayout({ children, params }: Props) {
   };
 
   return (
-    <div className="min-h-dvh pb-20">
+    <AppShell roles={roles} locale={locale} labels={labels} appName={t('appName')}>
       {children}
-      <BottomNav roles={roles} locale={locale} labels={labels} />
-    </div>
+    </AppShell>
   );
 }

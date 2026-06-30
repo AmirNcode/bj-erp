@@ -1,11 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
+import { jalali2DayRange } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
 
-// Jalali 1405/04/08–09 = Gregorian 2026-06-29 (Mon) + 2026-06-30 (Tue) = 2 working
-// days under a Fri (+Sat) weekend. Proven end-to-end in leave.spec.ts.
-const JALALI_2DAY = '1405/04/08 — 1405/04/09';
+// JALALI_2DAY was removed — date is now computed dynamically at test time.
+// See jalali2DayRange() in _helpers.ts for the 3-constraint algorithm.
 
 async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
@@ -164,7 +164,7 @@ async function submitTwoDayRequest(page: Page, leaveTypeValue: string) {
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
   await typeSelect.selectOption({ value: leaveTypeValue });
 
-  await fillPicker(page, JALALI_2DAY);
+  await fillPicker(page, jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
 
   await page.click('button[type="submit"]');
@@ -179,9 +179,6 @@ test.describe('Approval flow', () => {
     const ts = Date.now();
     const mgrCode = `mgr${ts}`;
     const empCode = `emp${ts}`;
-
-    // Accept all confirm() dialogs (approve/reject).
-    page.on('dialog', (dialog) => dialog.accept());
 
     // 1. Admin sets up a manager and a report.
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
@@ -206,9 +203,17 @@ test.describe('Approval flow', () => {
     await expect(approveButtons).toHaveCount(2); // exactly this report's two requests
 
     await approveButtons.first().click();
+    // Confirm the approve AlertDialog
+    const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
+    await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+    await approveConfirm.click();
     await expect(approveButtons).toHaveCount(1); // approved row removed optimistically
 
     await page.locator('[data-testid^="reject-btn-"]').first().click();
+    // Confirm the reject AlertDialog
+    const rejectConfirm = page.locator('[data-testid^="reject-confirm-"]').first();
+    await expect(rejectConfirm).toBeVisible({ timeout: 5_000 });
+    await rejectConfirm.click();
     await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 10_000 });
 
     // 4. Employee sees one approved + one rejected.
@@ -224,7 +229,7 @@ test.describe('Approval flow', () => {
     //    re-pick the range to surface the balance; assert 24 if it propagated.
     const typeSelect = page.locator('#leave_type_id');
     await typeSelect.selectOption({ value: ltValue });
-    await fillPicker(page, JALALI_2DAY);
+    await fillPicker(page, jalali2DayRange());
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
     const balText = await page.locator('[data-testid="balance-display"]').textContent();
     expect(balText).toBeTruthy();

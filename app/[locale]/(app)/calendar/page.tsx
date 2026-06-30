@@ -7,19 +7,20 @@
 
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCalendarEntries } from '@/lib/actions/leave';
 import { CalendarView } from './CalendarView';
+import { PageHeader } from '../_components/PageHeader';
+import { ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function CalendarPage({ params }: Props) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-
+// ── async child that owns all data fetching ────────────────────────────────
+async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
   const tLeave = await getTranslations('leave');
   const supabase = await createClient();
@@ -54,16 +55,30 @@ export default async function CalendarPage({ params }: Props) {
   };
 
   return (
-    <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
-
+    <>
       {loadError && (
-        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 mb-4">
+        <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
           <strong>{t('error')}:</strong> {loadError}
         </div>
       )}
-
       <CalendarView entries={entries} locale={locale} calendarPref={calendarPref} labels={labels} />
+    </>
+  );
+}
+
+// ── page shell ─────────────────────────────────────────────────────────────
+export default async function CalendarPage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const t = await getTranslations('calendar');
+
+  return (
+    <main className="p-6 max-w-3xl mx-auto">
+      <PageHeader title={t('title')} />
+      <Suspense fallback={<ListSkeleton count={4} />}>
+        <CalendarData locale={locale} />
+      </Suspense>
     </main>
   );
 }

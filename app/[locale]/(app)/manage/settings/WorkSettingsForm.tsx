@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { toast } from 'sonner';
 import { updateWorkSettings } from '@/lib/actions/settings';
 import { WEEKDAYS } from '@/lib/leave/weekend';
+import { Button } from '@/components/ui/button';
 
 type Labels = {
   weekendTitle: string;
@@ -27,22 +29,29 @@ export function WorkSettingsForm({ initial, labels }: { initial: number[]; label
     setErrMsg('');
     startTransition(async () => {
       const res = await updateWorkSettings(selected);
-      if (res.ok) setOkMsg(labels.saved);
-      else setErrMsg(res.error);
+      if (res.ok) {
+        setOkMsg(labels.saved);
+        toast.success(labels.saved);
+      } else {
+        setErrMsg(res.error);
+        toast.error(`${labels.errorLabel}: ${res.error}`);
+      }
     });
   };
 
   return (
-    <section className="space-y-3" data-testid="work-settings">
-      <h2 className="text-lg font-semibold">{labels.weekendTitle}</h2>
-      <p className="text-xs text-gray-500">{labels.weekendHint}</p>
+    <section className="space-y-4" data-testid="work-settings">
+      <div>
+        <p className="text-sm font-medium">{labels.weekendTitle}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{labels.weekendHint}</p>
+      </div>
       {okMsg && (
-        <p role="status" data-testid="work-settings-saved" className="text-sm text-green-700">
+        <p role="status" data-testid="work-settings-saved" className="text-sm text-success">
           {okMsg}
         </p>
       )}
       {errMsg && (
-        <p role="alert" data-testid="work-settings-error" className="text-sm text-red-700">
+        <p role="alert" data-testid="work-settings-error" className="text-sm text-destructive">
           {labels.errorLabel}: {errMsg}
         </p>
       )}
@@ -51,10 +60,10 @@ export function WorkSettingsForm({ initial, labels }: { initial: number[]; label
           <label
             key={d.iso}
             data-testid={`weekend-${d.key}`}
-            className={`cursor-pointer select-none rounded-full border px-3 py-1.5 text-sm ${
+            className={`cursor-pointer select-none rounded-full border px-3 py-1.5 text-sm transition-colors ${
               selected.includes(d.iso)
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'bg-white text-gray-700 border-gray-300'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-foreground border-input hover:bg-accent hover:text-accent-foreground'
             }`}
           >
             <input
@@ -68,15 +77,14 @@ export function WorkSettingsForm({ initial, labels }: { initial: number[]; label
           </label>
         ))}
       </div>
-      <button
+      <Button
         type="button"
         data-testid="work-settings-save"
         onClick={onSave}
         disabled={isPending}
-        className="bg-blue-600 text-white rounded-lg px-4 py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {labels.save}
-      </button>
+      </Button>
     </section>
   );
 }

@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'HR Management System — سامانه منابع انسانی',
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#1e40af',
+    background_color: '#F7F8FB',
+    theme_color: '#2E3C92',
     lang: 'fa',
     dir: 'rtl',
     icons: [

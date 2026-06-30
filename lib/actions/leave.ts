@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
@@ -71,6 +72,10 @@ export async function submitRequest(
     // Surface the Postgres error message directly
     return { ok: false, error: error.message };
   }
+
+  // Route-group `(app)` is not part of the URL; revalidate the real dynamic
+  // route so all locale variants of /request are invalidated server-side.
+  revalidatePath('/[locale]/request', 'page');
 
   return { ok: true, requestId: data as string };
 }

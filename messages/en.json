@@ -1,8 +1,13 @@
 {
+  "common": {
+    "dismiss": "Cancel"
+  },
   "app": {
     "title": "HR System"
   },
   "nav": {
+    "appName": "Behsazan Jonoob",
+    "primary": "Primary",
     "home": "Home",
     "request": "Request",
     "calendar": "Calendar",
@@ -10,6 +15,7 @@
     "manage": "Manage"
   },
   "login": {
+    "brand": "Behsazan Jonoob",
     "title": "Sign In",
     "codeLabel": "Employee Code",
     "codePlaceholder": "e.g. admin",
@@ -94,6 +100,7 @@
     "title": "Profile",
     "name": "Name",
     "code": "Employee Code",
+    "preferences": "Preferences",
     "calendar": "Calendar",
     "language": "Language",
     "jalali": "Persian (Jalali)",
@@ -138,7 +145,9 @@
     "approveConfirm": "Approve this leave request?",
     "rejectConfirm": "Reject this leave request?",
     "reason": "Reason",
-    "error": "Error"
+    "error": "Error",
+    "approveSuccess": "Request approved.",
+    "rejectSuccess": "Request rejected."
   },
   "manage": {
     "approvalsLink": "Approvals",

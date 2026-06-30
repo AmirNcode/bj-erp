@@ -3,6 +3,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { nativeSelectClass } from '@/lib/native-select';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -142,158 +147,164 @@ export function EditEmployeeForm({
   return (
     <div className="space-y-6">
       {!isAdmin && labels.managerNote && (
-        <p className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+        <p className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm">
           {labels.managerNote}
         </p>
       )}
       {error && (
-        <p role="alert" className="bg-red-50 border border-red-300 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <p
+          role="alert"
+          className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
+        >
           {labels.errorLabel}: {error}
         </p>
       )}
       {success && (
-        <p role="status" className="bg-green-50 border border-green-300 text-green-700 px-4 py-3 rounded-lg text-sm">
+        <p
+          role="status"
+          className="bg-success-foreground border border-success/20 text-success px-4 py-3 rounded-lg text-sm"
+        >
           {labels.saved}
         </p>
       )}
       {newTempPassword && (
-        <div className="rounded-xl border-2 border-green-300 bg-green-50 p-4 space-y-2">
-          <p className="text-sm font-semibold text-green-800">{labels.tempPasswordLabel}</p>
-          <p className="font-mono text-xl bg-white border border-green-300 rounded-lg px-4 py-2 select-all tracking-widest">
-            {newTempPassword}
-          </p>
-          <p className="text-xs text-green-700">{labels.tempPasswordHint}</p>
-        </div>
+        <Card className="border-2 border-success/30 bg-success-foreground">
+          <CardContent className="space-y-2 pt-4">
+            <p className="text-sm font-semibold text-success">{labels.tempPasswordLabel}</p>
+            <p className="font-mono text-xl bg-background border border-success/20 rounded-lg px-4 py-2 select-all tracking-widest">
+              {newTempPassword}
+            </p>
+            <p className="text-xs text-success">{labels.tempPasswordHint}</p>
+          </CardContent>
+        </Card>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="full_name">
-            {labels.name}
-          </label>
-          <input
-            id="full_name"
-            name="full_name"
-            required
-            defaultValue={employee.full_name}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="full_name">{labels.name}</Label>
+              <Input
+                id="full_name"
+                name="full_name"
+                required
+                defaultValue={employee.full_name}
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium mb-1" htmlFor="hire_date">
-            {labels.hireDate}
-          </label>
-          <input
-            id="hire_date"
-            name="hire_date"
-            type="date"
-            defaultValue={employee.hire_date ?? ''}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="hire_date">{labels.hireDate}</Label>
+              <Input
+                id="hire_date"
+                name="hire_date"
+                type="date"
+                defaultValue={employee.hire_date ?? ''}
+              />
+            </div>
 
-        {isAdmin && (
-          <>
-            <div>
-              <label className="block text-sm font-medium mb-1" htmlFor="department_id">
-                {labels.department}
-              </label>
-              <select
-                id="department_id"
-                name="department_id"
-                defaultValue={employee.department_id ?? ''}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            {isAdmin && (
+              <>
+                {/* Native <select> — must stay native for Playwright selectOption e2e */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="department_id">{labels.department}</Label>
+                  <select
+                    id="department_id"
+                    name="department_id"
+                    defaultValue={employee.department_id ?? ''}
+                    className={nativeSelectClass}
+                  >
+                    <option value="">{labels.selectDept}</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {locale === 'fa' ? d.name_fa : d.name_en}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="manager_id">{labels.manager}</Label>
+                  <select
+                    id="manager_id"
+                    name="manager_id"
+                    defaultValue={employee.manager_id ?? ''}
+                    className={nativeSelectClass}
+                  >
+                    <option value="">{labels.noneOption}</option>
+                    {managers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name} ({m.employee_code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Native role checkboxes — must stay native for Playwright label+checkbox e2e */}
+                <div className="space-y-2">
+                  <span className="block text-sm font-medium leading-none">{labels.roles}</span>
+                  <div className="flex flex-wrap gap-3">
+                    {ALL_ROLES.map((role) => (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedRoles.includes(role)}
+                          onChange={() => toggleRole(role)}
+                          className="rounded border-input text-primary focus:ring-ring"
+                        />
+                        <span className="text-sm">{role}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" disabled={pending}>
+                {pending ? '...' : labels.save}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push(`/${locale}/manage/employees`)}
               >
-                <option value="">{labels.selectDept}</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {locale === 'fa' ? d.name_fa : d.name_en}
-                  </option>
-                ))}
-              </select>
+                {labels.cancel}
+              </Button>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-1" htmlFor="manager_id">
-                {labels.manager}
-              </label>
-              <select
-                id="manager_id"
-                name="manager_id"
-                defaultValue={employee.manager_id ?? ''}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">{labels.noneOption}</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.full_name} ({m.employee_code})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <span className="block text-sm font-medium mb-2">{labels.roles}</span>
-              <div className="flex flex-wrap gap-3">
-                {ALL_ROLES.map((role) => (
-                  <label key={role} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.includes(role)}
-                      onChange={() => toggleRole(role)}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm">{role}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        <div className="flex gap-3 pt-2">
-          <button
-            type="submit"
-            disabled={pending}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {pending ? '...' : labels.save}
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push(`/${locale}/manage/employees`)}
-            className="border border-gray-300 px-6 py-2 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            {labels.cancel}
-          </button>
-        </div>
-      </form>
+          </form>
+        </CardContent>
+      </Card>
 
       {isAdmin && (
-        <div className="border-t border-gray-200 pt-6 space-y-3">
-          <h2 className="text-sm font-semibold text-gray-700">Admin actions</h2>
-          <div className="flex flex-wrap gap-3">
-            <button
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">Admin actions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleResetPassword}
               disabled={pending}
-              className="border border-orange-300 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-50 disabled:opacity-50 transition-colors text-sm"
+              className="border-orange-300 text-orange-700 hover:bg-orange-50"
             >
               {labels.resetPwd}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleToggleActive}
               disabled={pending}
-              className={`px-4 py-2 rounded-lg text-sm transition-colors disabled:opacity-50 ${
+              className={
                 employee.active
-                  ? 'border border-red-300 text-red-700 hover:bg-red-50'
-                  : 'border border-green-300 text-green-700 hover:bg-green-50'
-              }`}
+                  ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
+                  : 'border-success/30 text-success hover:bg-success-foreground'
+              }
             >
               {employee.active ? labels.deactivate : labels.activate}
-            </button>
-          </div>
-        </div>
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

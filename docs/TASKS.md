@@ -13,6 +13,11 @@ their own plan files when reached.
 > (BJ Manufacturing — 3 teams + Security, 12 users, `Demo!2026`). Branch `feat/hr-timeoff-v1`; build
 > green, unit 54/54, e2e 17/17 (serial/CI). **Deploy = runbook (`docs/DEPLOY.md`), not executed.**
 > **Next: PLAN §6 backlog** (attendance, shifts, …) + demo deploy. History: `.superpowers/sdd/progress.md`.
+>
+> **Frontend Overhaul (UI/UX) ✅ COMPLETE** on branch `feat/frontend-overhaul` (not merged): design
+> system (shadcn/ui + brand OKLCH tokens + Vazirmatn), responsive `AppShell` (bottom tabs → desktop
+> rail), all **11 screens** reskinned, lazy date picker, AlertDialog + toasts, Suspense/skeletons.
+> lint clean · unit 73/73 · e2e 20/20 (serial) · build green. Spec + plan in `docs/specs/` + `docs/plans/`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind

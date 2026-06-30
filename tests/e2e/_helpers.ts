@@ -1,12 +1,101 @@
 import { expect, type Page } from '@playwright/test';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const DateObject = require('react-date-object').default;
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const persian = require('react-date-object/calendars/persian');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const persian_en = require('react-date-object/locales/persian_en');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gregorian = require('react-date-object/calendars/gregorian');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const gregorian_en = require('react-date-object/locales/gregorian_en');
+
 export const ADMIN_CODE = 'admin';
 export const ADMIN_PASSWORD = 'Admin!2026';
 
-// Jalali 1405/04/08–09 = Gregorian 2026-06-29 (Mon) + 2026-06-30 (Tue): 2 working
-// days under a Fri(+Sat) weekend, and within June 2026 (the current month) so the
-// resulting request shows on the current-month calendar.
-export const JALALI_2DAY = '1405/04/08 — 1405/04/09';
+const WEEKEND_ISO = [5]; // Friday = ISO 5
+
+function getISOWeekday(d: Date): number {
+  const dow = d.getUTCDay(); // 0 Sun … 6 Sat
+  return dow === 0 ? 7 : dow; // ISO Mon=1…Sun=7
+}
+
+function isWorkingDay(d: Date): boolean {
+  return !WEEKEND_ISO.includes(getISOWeekday(d));
+}
+
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setUTCDate(r.getUTCDate() + n);
+  return r;
+}
+
+function toGregorianParts(d: Date): [number, number, number] {
+  return [d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate()];
+}
+
+function toJalaliStr(d: Date): string {
+  const [y, m, day] = toGregorianParts(d);
+  const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day });
+  return obj.convert(persian, persian_en).format('YYYY/MM/DD');
+}
+
+function todayUTC(): Date {
+  return new Date(Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate(),
+  ));
+}
+
+/**
+ * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' for the next
+ * strictly-future 2-working-day window:
+ *
+ *   1. start_date > today  (strictly future — required by cancel-approved.spec,
+ *      whose isCancellable guard needs an approved leave that hasn't started yet)
+ *   2. exactly 2 working days under the seeded Fri weekend (ISO 5)
+ *
+ * Algorithm: walk forward from tomorrow, skip Fridays (ISO 5), pick the first
+ * two consecutive working days. No month restriction — the range may spill
+ * into the next Gregorian month (e.g. when run on a month-end day). That's
+ * fine for leave/approval/cancel-approved, which only care about the leave
+ * being in the future, not which calendar month it falls in.
+ *
+ * If you need the entry to show up on the *current month's* team calendar
+ * (calendar.spec), use jalaliCurrentMonthRange() instead.
+ */
+export function jalali2DayRange(): string {
+  const today = todayUTC();
+
+  // Walk forward from tomorrow to find the first future working day.
+  let start = addDays(today, 1);
+  while (!isWorkingDay(start)) {
+    start = addDays(start, 1);
+  }
+
+  // Find the next working day after start (end of the 2-day range).
+  let end = addDays(start, 1);
+  while (!isWorkingDay(end)) {
+    end = addDays(end, 1);
+  }
+
+  return `${toJalaliStr(start)} — ${toJalaliStr(end)}`;
+}
+
+/**
+ * Returns a Jalali picker string 'YYYY/MM/DD — YYYY/MM/DD' starting **today**
+ * and ending tomorrow (calendar days, not working days — submit_leave_request
+ * accepts any date, including today and weekends). Used where the entry must
+ * overlap the *current* Gregorian month on the team calendar (calendar.spec),
+ * which always holds since the range starts today.
+ */
+export function jalaliCurrentMonthRange(): string {
+  const today = todayUTC();
+  const end = addDays(today, 1);
+  return `${toJalaliStr(today)} — ${toJalaliStr(end)}`;
+}
 
 export async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
@@ -129,11 +218,14 @@ export async function allocate(page: Page, employeeCodeSubstring: string, days: 
 }
 
 /** Submit a fresh 2-working-day request for the given leave type, optionally with a reason. */
-export async function submitLeave(page: Page, opts: { leaveTypeValue: string; reason?: string }) {
+export async function submitLeave(
+  page: Page,
+  opts: { leaveTypeValue: string; reason?: string; range?: string }
+) {
   await page.goto('/request');
   await expect(page).toHaveURL(/\/request$/);
   await page.locator('#leave_type_id').selectOption({ value: opts.leaveTypeValue });
-  await fillPicker(page, JALALI_2DAY);
+  await fillPicker(page, opts.range ?? jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
   if (opts.reason) await page.fill('#reason', opts.reason);
   await page.click('button[type="submit"]');

@@ -5,6 +5,23 @@ versioning once the app is scaffolded. Until then, entries track documentation a
 
 ## [Unreleased]
 
+### Changed — Frontend Overhaul (UI/UX redesign)
+- **Design system:** brand OKLCH tokens derived from the Behsazan Jonoob logo (primary `#2E3C92`),
+  mapped via Tailwind v4 `@theme`; self-hosted **Vazirmatn** font (replacing the Arial fallback);
+  **shadcn/ui** primitives (new-york) with RTL migration. Light-only v1.
+- **Responsive shell:** new `AppShell` — sticky app bar + a nav that is a bottom tab bar on mobile
+  and a left side-rail on desktop (replacing the stretched-phone bottom bar); `Toaster` mounted once.
+- **All 11 screens reskinned** onto Card/Input/Button/Select/Badge/Dialog primitives plus
+  `StatusBadge`/`PageHeader`/`EmptyState`: login, home, request, my-requests, calendar, approvals,
+  manage employees/allocations/settings, profile, team. Behavior and every `data-testid` preserved;
+  FR-25 reason-privacy verified intact.
+- **UX / perf:** lazy-loaded date picker (off the initial bundle); `router.refresh()` + `revalidatePath`
+  instead of a full-page reload on submit; native `confirm()` → styled `AlertDialog` throughout;
+  `toast` result feedback; `Suspense` + skeletons on data pages; consistent focus rings; PWA
+  `theme-color` set to the brand.
+- **Tooling:** e2e leave dates computed dynamically (no longer rot over time). All gates green —
+  lint clean, unit 73/73, e2e 20/20 (serial), build clean. Branch `feat/frontend-overhaul`.
+
 ### Added
 - Project documentation scaffold: `CLAUDE.md` (agent onboarding) and `docs/` —
   `PLAN.md`, `REQUIREMENTS.md`, `DATA_MODEL.md`, `PERMISSIONS.md`, `TASKS.md`, this changelog.

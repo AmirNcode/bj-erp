@@ -6,6 +6,7 @@
 
 export const dynamic = 'force-dynamic';
 
+import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -16,35 +17,29 @@ import {
 } from '@/lib/actions/leave';
 import { buildHomeBoard } from '@/lib/home/board';
 import { HomeBoard } from './HomeBoard';
+import { PageHeader } from '../_components/PageHeader';
+import { BoardSkeleton } from '@/components/Skeletons';
 
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function HomePage({ params }: Props) {
-  const { locale } = await params;
-  setRequestLocale(locale);
-
+// ── async child that owns all data fetching ────────────────────────────────
+async function HomeBoardData({
+  locale,
+  userId,
+}: {
+  locale: string;
+  userId: string;
+}) {
   const t = await getTranslations('home');
   const tLeave = await getTranslations('leave');
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single();
-  const fullName = profile?.full_name ?? '';
-
   const { data: rolesData } = await supabase
     .from('user_roles')
     .select('role')
-    .eq('user_id', user.id);
+    .eq('user_id', userId);
   const roles = (rolesData ?? []).map((r) => r.role as string);
   const canApprove = roles.includes('admin') || roles.includes('manager');
 
@@ -90,10 +85,37 @@ export default async function HomePage({ params }: Props) {
     statusCancelled: tLeave('status.cancelled'),
   };
 
+  return <HomeBoard board={board} labels={labels} locale={locale} />;
+}
+
+// ── page shell: resolves locale then streams ───────────────────────────────
+export default async function HomePage({ params }: Props) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+
+  const t = await getTranslations('home');
+
+  // We need the user's name for the greeting header.
+  // Read it here so the header can render immediately (outside Suspense).
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .eq('id', user.id)
+    .single();
+  const fullName = profile?.full_name ?? '';
+
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('greeting', { name: fullName })}</h1>
-      <HomeBoard board={board} labels={labels} locale={locale} />
+      <PageHeader title={t('greeting', { name: fullName })} />
+      <Suspense fallback={<BoardSkeleton />}>
+        <HomeBoardData locale={locale} userId={user.id} />
+      </Suspense>
     </main>
   );
 }
