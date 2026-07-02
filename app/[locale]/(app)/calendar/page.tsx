@@ -12,6 +12,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { getCalendarEntries, getWorkSettings } from '@/lib/actions/leave';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
+import { nowInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
 import { PageHeader } from '../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -30,7 +31,8 @@ async function CalendarData({ locale }: { locale: string }) {
   const profile = await getCachedProfile(user.id);
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 
-  const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, new Date(), locale);
+  // "This month" in the company timezone, not the server's (Vercel = UTC).
+  const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, nowInAppTz(), locale);
 
   const [result, workSettingsResult] = await Promise.all([
     getCalendarEntries(rangeStart, rangeEnd),

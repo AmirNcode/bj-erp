@@ -16,6 +16,7 @@ import {
   getPendingApprovals,
 } from '@/lib/actions/leave';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
+import { nowInAppTz } from '@/lib/appDate';
 import { buildHomeBoard } from '@/lib/home/board';
 import { HomeBoard } from './HomeBoard';
 import { PageHeader } from '../_components/PageHeader';
@@ -42,8 +43,9 @@ async function HomeBoardData({
   const profile = await getCachedProfile(userId);
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 
-  // Upcoming time off for the team directory.
-  const now = new Date();
+  // Upcoming time off for the team directory. "Today" in the company
+  // timezone, not the server's (Vercel = UTC).
+  const now = nowInAppTz();
   const rangeStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   )
