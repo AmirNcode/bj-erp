@@ -185,8 +185,13 @@ export function CalendarView({
       }),
     [calendarPref, entries, locale, rangeEnd, rangeStart, workSettings]
   );
+  // Default selection: today (when it falls in the displayed month), else the
+  // first day with time-off, else the month start.
+  const todayInMonth = todayIso
+    ? month.days.find((day) => day.inMonth && day.iso === todayIso)?.iso
+    : undefined;
   const firstBusyDay = month.days.find((day) => day.inMonth && day.count > 0)?.iso ?? rangeStart;
-  const [selectedIso, setSelectedIso] = useState(firstBusyDay);
+  const [selectedIso, setSelectedIso] = useState(todayInMonth ?? firstBusyDay);
   const selectedDay = month.days.find((day) => day.iso === selectedIso) ?? month.days[0];
 
   const fmt = (iso: string) => formatCalendarDate(iso, calendarPref, locale);
