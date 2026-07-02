@@ -5,14 +5,29 @@
  * `reason` is never part of CalendarEntry, so it cannot leak here (FR-25).
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { CalendarDays, List } from 'lucide-react';
-import type { CalendarEntry, WorkSettings } from '@/lib/actions/leave';
+import { toast } from 'sonner';
+import { approveRequest, rejectRequest } from '@/lib/actions/leave';
+import type { CalendarEntry, DecisionResult, WorkSettings } from '@/lib/actions/leave';
 import { buildCalendarMonth, formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 type Labels = {
   empty: string;
@@ -23,6 +38,12 @@ type Labels = {
   returns: string;
   statusPending: string;
   statusApproved: string;
+  approve: string;
+  reject: string;
+  approveConfirm: string;
+  rejectConfirm: string;
+  approveSuccess: string;
+  rejectSuccess: string;
 };
 
 type Props = {
@@ -34,9 +55,76 @@ type Props = {
   monthLabel: string;
   workSettings: WorkSettings;
   labels: Labels;
+  /** Pending request ids the viewer may decide (admin: all; manager: own reports). */
+  decidableIds?: string[];
 };
 
 const sevenColumnGridStyle = { gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' };
+
+/** Approve/Reject pair with confirm dialogs — shown on decidable pending entries. */
+function DecideButtons({
+  id,
+  labels,
+  disabled,
+  onDecide,
+}: {
+  id: string;
+  labels: Labels;
+  disabled: boolean;
+  onDecide: (id: string, successMsg: string, action: (id: string) => Promise<DecisionResult>) => void;
+}) {
+  const tc = useTranslations('common');
+  return (
+    <div className="flex items-center gap-2">
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button size="sm" disabled={disabled} data-testid={`cal-approve-btn-${id}`}>
+            {labels.approve}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
+            <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onDecide(id, labels.approveSuccess, approveRequest)}
+              data-testid={`cal-approve-confirm-${id}`}
+            >
+              {labels.approve}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button size="sm" variant="outline" disabled={disabled} data-testid={`cal-reject-btn-${id}`}>
+            {labels.reject}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{labels.reject}</AlertDialogTitle>
+            <AlertDialogDescription>{labels.rejectConfirm}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => onDecide(id, labels.rejectSuccess, rejectRequest)}
+              data-testid={`cal-reject-confirm-${id}`}
+            >
+              {labels.reject}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 export function CalendarView({
   entries,
@@ -47,8 +135,34 @@ export function CalendarView({
   monthLabel,
   workSettings,
   labels,
+  decidableIds,
 }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  // Ids decided in this session — hides the buttons instantly; router.refresh()
+  // then re-fetches the entries so the status text/row catches up.
+  const [decidedIds, setDecidedIds] = useState<ReadonlySet<string>>(new Set());
+  const decidableSet = useMemo(() => new Set(decidableIds ?? []), [decidableIds]);
+  const canDecide = (entry: CalendarEntry) =>
+    entry.status === 'pending' && decidableSet.has(entry.id) && !decidedIds.has(entry.id);
+
+  const decide = (
+    id: string,
+    successMsg: string,
+    action: (id: string) => Promise<DecisionResult>
+  ) => {
+    startTransition(async () => {
+      const res = await action(id);
+      if (res.ok) {
+        setDecidedIds((prev) => new Set(prev).add(id));
+        toast.success(successMsg);
+        router.refresh();
+      } else {
+        toast.error(res.error);
+      }
+    });
+  };
   const month = useMemo(
     () =>
       buildCalendarMonth({
@@ -94,23 +208,30 @@ export function CalendarView({
               className="flex-row items-center gap-0 rounded-xl p-3"
               style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}
             >
-              <CardContent className="flex items-center gap-3 p-0 w-full">
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{entry.employee_name}</div>
-                  <div className="text-xs text-muted-foreground">{range}</div>
+              <CardContent className="flex flex-col gap-2 p-0 w-full">
+                <div className="flex items-center gap-3 w-full">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{entry.employee_name}</div>
+                    <div className="text-xs text-muted-foreground">{range}</div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
+                    {typeName(entry)}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-xs shrink-0',
+                      entry.status === 'approved' ? 'text-success' : 'text-warning'
+                    )}
+                  >
+                    {statusLabel(entry)}
+                  </span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                  {typeName(entry)}
-                </span>
-                <span
-                  className={cn(
-                    'text-xs shrink-0',
-                    entry.status === 'approved' ? 'text-success' : 'text-warning'
-                  )}
-                >
-                  {statusLabel(entry)}
-                </span>
+                {canDecide(entry) && (
+                  <div className="flex justify-end">
+                    <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -158,7 +279,7 @@ export function CalendarView({
             {day.count > 0 && (
               <span
                 data-testid={`calendar-day-count-${day.iso}`}
-                className="absolute right-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground sm:right-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-[10px]"
+                className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground sm:end-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-[10px]"
               >
                 {formatNumber(day.count, locale)}
               </span>
@@ -206,6 +327,11 @@ export function CalendarView({
                       <div className="text-xs text-muted-foreground">
                         {labels.returns} {fmt(entry.returnDate)}
                       </div>
+                      {canDecide(entry) && (
+                        <div className="mt-2">
+                          <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
+                        </div>
+                      )}
                     </div>
                     <span
                       className={cn(

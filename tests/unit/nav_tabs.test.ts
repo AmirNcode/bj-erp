@@ -2,12 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { tabsForRoles } from '@/lib/nav/tabs';
 
 describe('tabsForRoles', () => {
-  it('employee: 4 base tabs, no manage', () => {
+  it('employee: 3 base tabs, no manage (profile lives in the header)', () => {
     expect(tabsForRoles(['employee']).map((t) => t.key)).toEqual([
       'home',
       'request',
       'calendar',
-      'profile',
     ]);
   });
   it('manager gets the manage tab', () => {

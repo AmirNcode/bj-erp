@@ -26,7 +26,9 @@ describe('MainNav', () => {
   it('renders a link per role-visible tab with its testid', () => {
     renderWithIntl(<MainNav roles={['employee']} locale="fa" labels={labels} />);
     expect(screen.getByTestId('nav-home')).toBeTruthy();
-    expect(screen.getByTestId('nav-profile')).toBeTruthy();
+    expect(screen.getByTestId('nav-calendar')).toBeTruthy();
+    // Profile moved out of the nav into the AppShell header.
+    expect(screen.queryByTestId('nav-profile')).toBeNull();
     expect(screen.queryByTestId('nav-manage')).toBeNull();
   });
   it('shows the manage tab for managers', () => {

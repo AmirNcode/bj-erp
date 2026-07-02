@@ -17,6 +17,8 @@ export function RoutePrefetcher({ roles, locale }: Props) {
     for (const tab of tabs) {
       router.prefetch(`/${locale}${tab.href}`);
     }
+    // Profile lives in the header, not the tab list — still warm it.
+    router.prefetch(`/${locale}/profile`);
   }, [locale, router, tabs]);
 
   return null;

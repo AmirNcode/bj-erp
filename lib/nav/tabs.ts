@@ -7,11 +7,12 @@
 export type TabKey = 'home' | 'request' | 'calendar' | 'profile' | 'manage';
 export type Tab = { key: TabKey; href: string; labelKey: string };
 
+// Profile is NOT a tab — it lives in the app header (see AppShell), but stays
+// in TabKey so labels/icons remain keyed consistently.
 const BASE: Tab[] = [
   { key: 'home', href: '/home', labelKey: 'home' },
   { key: 'request', href: '/request', labelKey: 'request' },
   { key: 'calendar', href: '/calendar', labelKey: 'calendar' },
-  { key: 'profile', href: '/profile', labelKey: 'profile' },
 ];
 
 export function tabsForRoles(roles: string[]): Tab[] {
