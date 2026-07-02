@@ -7,8 +7,10 @@
  * 2. Create the Supabase server client using the *incoming* request cookies
  *    for getAll, and writing new cookies onto the next-intl response in setAll.
  *    This ensures neither middleware clobbers the other's cookie work.
- * 3. Call supabase.auth.getUser() to trigger the session refresh (which
+ * 3. Call supabase.auth.getClaims() to trigger the session refresh (which
  *    writes updated auth cookies back via setAll if the token was refreshed).
+ *    Unlike getUser(), getClaims() verifies the JWT locally (asymmetric
+ *    signing keys) — no network round-trip to the Auth server per request.
  * 4. Return the (now cookie-enriched) next-intl response.
  */
 
@@ -41,9 +43,10 @@ export default async function middleware(request: NextRequest) {
     }
   );
 
-  // Step 3: Trigger session refresh (no-op if session is still fresh;
-  // writes updated tokens via setAll if refresh was needed).
-  await supabase.auth.getUser();
+  // Step 3: Validate the session and refresh it if near expiry (refresh
+  // writes updated tokens via setAll). Verification is local — the only
+  // network call is a once-per-process JWKS fetch, cached afterwards.
+  await supabase.auth.getClaims();
 
   // Step 4: Return next-intl response (now carrying any refreshed cookies).
   return response;
