@@ -9,8 +9,8 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
-import { getCalendarEntries, getWorkSettings } from '@/lib/actions/leave';
+import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
+import { getCalendarEntries, getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { nowInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
@@ -25,24 +25,33 @@ type Props = {
 async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
   const tLeave = await getTranslations('leave');
+  const tApprovals = await getTranslations('approvals');
   const user = await getCachedUser();
   if (!user) return null;
 
   const profile = await getCachedProfile(user.id);
   const calendarPref = profile?.calendar_pref ?? 'jalali';
+  const roles = await getCachedRoles(user.id);
+  const canApprove = roles.includes('admin') || roles.includes('manager');
 
   // "This month" in the company timezone, not the server's (Vercel = UTC).
   const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, nowInAppTz(), locale);
 
-  const [result, workSettingsResult] = await Promise.all([
+  const [result, workSettingsResult, approvalsResult] = await Promise.all([
     getCalendarEntries(rangeStart, rangeEnd),
     getWorkSettings(),
+    // Pending requests the viewer may decide (admin: all; manager: own reports)
+    // — powers the approve/reject buttons on calendar cards. The SQL fn
+    // re-checks permission on write, so this is display scoping only.
+    canApprove ? getPendingApprovals() : Promise.resolve(null),
   ]);
   const entries = result.ok ? result.entries : [];
   const loadError = result.ok ? null : result.error;
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
     : { weekendDays: [5], holidays: [] as string[] };
+  const decidableIds =
+    approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
 
   const labels = {
     empty: t('empty'),
@@ -53,6 +62,12 @@ async function CalendarData({ locale }: { locale: string }) {
     returns: t('returns'),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
+    approve: tApprovals('approve'),
+    reject: tApprovals('reject'),
+    approveConfirm: tApprovals('approveConfirm'),
+    rejectConfirm: tApprovals('rejectConfirm'),
+    approveSuccess: tApprovals('approveSuccess'),
+    rejectSuccess: tApprovals('rejectSuccess'),
   };
 
   return (
@@ -71,6 +86,7 @@ async function CalendarData({ locale }: { locale: string }) {
         monthLabel={monthLabel}
         workSettings={workSettings}
         labels={labels}
+        decidableIds={decidableIds}
       />
     </>
   );

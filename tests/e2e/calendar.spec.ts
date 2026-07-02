@@ -80,5 +80,32 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     // 4. And it must not leak on the teammate's own request page either.
     await page.goto('/request');
     await expect(page.locator('body')).not.toContainText(SECRET);
+
+    // 5. A plain employee never sees approve/reject buttons on the calendar.
+    await page.goto('/calendar');
+    await expect(page.locator('[data-testid="calendar-view"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid^="cal-approve-btn-"]')).toHaveCount(0);
+
+    // 6. An approver can decide the pending request straight from the calendar.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await logout(page);
+    await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+    await page.goto('/calendar');
+    const entryCard = page
+      .locator('[data-testid^="cal-entry-"]')
+      .filter({ hasText: requesterName })
+      .first();
+    await expect(entryCard).toBeVisible({ timeout: 10_000 });
+    await entryCard.locator('[data-testid^="cal-approve-btn-"]').click();
+    const confirmBtn = page.locator('[data-testid^="cal-approve-confirm-"]').first();
+    await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+    await confirmBtn.click();
+    // Buttons disappear once decided; entry stays (now approved).
+    await expect(entryCard.locator('[data-testid^="cal-approve-btn-"]')).toHaveCount(0, {
+      timeout: 10_000,
+    });
+    await expect(
+      page.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
+    ).toBeVisible();
   });
 });
