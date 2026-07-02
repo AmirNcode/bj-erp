@@ -6,6 +6,33 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### UI polish, e2e hygiene & perf investigation (2026-07-02, later)
+- **Approve/reject from the calendar:** approvers (admin: all; manager: own reports) now
+  see approve/reject buttons — with the same confirm dialogs as `/manage/approvals` — on
+  pending entries in both the calendar list view and the month view's day detail. Display
+  scoping reuses `getPendingApprovals()`; the SQL function still re-checks permission on
+  write. Plain employees see no buttons (asserted in `calendar.spec`).
+- **Calendar month view (fixed):** in Farsi/RTL the per-day people-count badge overlapped
+  the day number (both top-right). The badge now uses logical positioning (`end-*`) —
+  top-left in Farsi, top-right in English.
+- **Profile moved to the header:** the Profile tab left the bottom-tab/side-rail nav; a
+  profile button now sits in the app header opposite the logo (`data-testid="nav-profile"`
+  preserved). Nav is Home · Request · Calendar (+ Manage). Route still prefetched.
+- **Demo DB cleanup:** deleted 380 throwaway accounts (and, by cascade, their requests,
+  ledger rows, allocations, roles) accumulated from Playwright runs — codes matching
+  `mgr|emp|cxl|auth|peer|lv|non|ov|e2e|set` + 13-digit timestamp or `set|pwd` + 6 digits.
+  16 real accounts remain (admin, 12 seeded, 3 manually created).
+- **Self-cleaning e2e:** new admin-guarded `app_cleanup_e2e_users()` RPC (migration
+  `20260702140000_e2e_cleanup_fn.sql`, hardcoded test-code patterns only, audited),
+  `scripts/cleanup-e2e.mjs` (`npm run cleanup:e2e`), and a Playwright `globalTeardown`
+  that runs it after every e2e run.
+- **Navigation performance:** investigated the 1–2 s tab-switch lag; root cause is a
+  serial waterfall of 5–6 Supabase round-trips per navigation (double session validation
+  in middleware + layout, then roles/profile/data) amplified by dev-mode compile &
+  no-prefetch. Findings + ranked fix plan (local JWT verification via `getClaims`,
+  roles-in-JWT, router cache reuse, region co-location): `docs/plans/2026-07-02-nav-performance.md`.
+  Nothing implemented yet.
+
 ### Security & hardening — production-readiness review (2026-07-02)
 A full codebase review (security, correctness, i18n, performance) with fixes. Two new
 migrations (`20260702120001_hardening.sql`, `20260702120002_perf_rls_initplan.sql`) are
