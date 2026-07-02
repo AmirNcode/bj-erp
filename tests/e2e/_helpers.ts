@@ -69,13 +69,16 @@ function todayUTC(): Date {
  * If you need the entry to show up on the *current month's* team calendar
  * (calendar.spec), use jalaliCurrentMonthRange() instead.
  */
-export function jalali2DayRange(): string {
+export function jalali2DayRange(offsetDays = 0): string {
   const today = todayUTC();
 
   // Walk forward from tomorrow to find two adjacent calendar days that remain
   // working under both the seeded settings and the parallel admin-settings
   // mutation. Using adjacent days avoids counting any skipped day between them.
-  let start = addDays(today, 1);
+  // `offsetDays` shifts the walk start — submit_leave_request rejects ranges
+  // overlapping the caller's own pending/approved requests, so a second
+  // request for the same employee must use a later window.
+  let start = addDays(today, 1 + offsetDays);
   let end = addDays(start, 1);
   while (
     !isWorkingDay(start, RANGE_HELPER_SKIP_ISO) ||
@@ -103,8 +106,15 @@ export function jalaliCurrentMonthRange(): string {
 
 export async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
-  await page.fill('#code', code);
-  await page.fill('#password', password);
+  // Fill-and-verify: on a cold `next dev` the first fill can land before React
+  // hydrates, and hydration resets the controlled inputs to empty. Retry the
+  // fills until the values stick.
+  await expect(async () => {
+    await page.fill('#code', code);
+    await page.fill('#password', password);
+    await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
+    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
 }

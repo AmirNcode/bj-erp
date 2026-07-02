@@ -9,8 +9,14 @@ const ADMIN_PASSWORD = 'Admin!2026';
 
 async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
-  await page.fill('#code', code);
-  await page.fill('#password', password);
+  // Fill-and-verify (see _helpers.login): guards the cold-dev hydration race
+  // where React remounts the controlled inputs and wipes the first fill.
+  await expect(async () => {
+    await page.fill('#code', code);
+    await page.fill('#password', password);
+    await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
+    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
+  }).toPass({ timeout: 20_000 });
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
 }
@@ -157,14 +163,14 @@ async function fillPicker(page: Page, value: string) {
 }
 
 /** Submit a fresh 2-working-day request for the given leave type (Persian picker). */
-async function submitTwoDayRequest(page: Page, leaveTypeValue: string) {
+async function submitTwoDayRequest(page: Page, leaveTypeValue: string, offsetDays = 0) {
   await page.goto('/request');
   await expect(page).toHaveURL(/\/request$/);
   const typeSelect = page.locator('#leave_type_id');
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
   await typeSelect.selectOption({ value: leaveTypeValue });
 
-  await fillPicker(page, jalali2DayRange());
+  await fillPicker(page, jalali2DayRange(offsetDays));
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
 
   await page.click('button[type="submit"]');
@@ -187,11 +193,13 @@ test.describe('Approval flow', () => {
     await setManager(page, empCode, mgrCode);
     const ltValue = await allocate(page, empCode, 26);
 
-    // 2. Employee submits two 2-day requests (both pending; balance 26 ≥ 2 each).
+    // 2. Employee submits two NON-overlapping 2-day requests (both pending;
+    //    balance 26 ≥ 2 each). Overlapping ranges are rejected at submit since
+    //    the 2026-07-02 hardening, so the second uses a window a week later.
     await logout(page);
     await login(page, empCode, empPw.trim());
     await submitTwoDayRequest(page, ltValue);
-    await submitTwoDayRequest(page, ltValue);
+    await submitTwoDayRequest(page, ltValue, 7);
 
     // 3. Manager decides: approve one, reject the other.
     await logout(page);
