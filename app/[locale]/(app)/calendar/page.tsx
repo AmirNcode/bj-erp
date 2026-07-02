@@ -12,7 +12,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
 import { getCalendarEntries, getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
-import { nowInAppTz } from '@/lib/appDate';
+import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
 import { PageHeader } from '../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -87,6 +87,7 @@ async function CalendarData({ locale }: { locale: string }) {
         workSettings={workSettings}
         labels={labels}
         decidableIds={decidableIds}
+        todayIso={todayInAppTz()}
       />
     </>
   );

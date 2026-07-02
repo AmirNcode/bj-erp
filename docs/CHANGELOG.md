@@ -12,6 +12,9 @@ pending a tagged release; semantic versioning starts at the first tag.
   pending entries in both the calendar list view and the month view's day detail. Display
   scoping reuses `getPendingApprovals()`; the SQL function still re-checks permission on
   write. Plain employees see no buttons (asserted in `calendar.spec`).
+- **Today highlighted on the calendar:** the current day's tile in the month view now
+  has a gold fill (`#DACC3E` at 70% transparency) and a darkened-gold border, so today
+  stands out from the other tiles. "Today" is the company timezone (Asia/Tehran).
 - **Calendar month view (fixed):** in Farsi/RTL the per-day people-count badge overlapped
   the day number (both top-right). The badge now uses logical positioning (`end-*`) —
   top-left in Farsi, top-right in English.

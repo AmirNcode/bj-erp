@@ -57,9 +57,18 @@ type Props = {
   labels: Labels;
   /** Pending request ids the viewer may decide (admin: all; manager: own reports). */
   decidableIds?: string[];
+  /** Today (company timezone) as YYYY-MM-DD, to highlight the current day tile. */
+  todayIso?: string;
 };
 
 const sevenColumnGridStyle = { gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' };
+
+// Today highlight: #DACC3E at 70% transparency (30% opaque) fill, with a
+// darkened-gold border so today reads darker than the surrounding tiles.
+const TODAY_TILE_STYLE = {
+  backgroundColor: 'rgba(218, 204, 62, 0.3)',
+  borderColor: '#837A25',
+} as const;
 
 /** Approve/Reject pair with confirm dialogs — shown on decidable pending entries. */
 function DecideButtons({
@@ -136,6 +145,7 @@ export function CalendarView({
   workSettings,
   labels,
   decidableIds,
+  todayIso,
 }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
   const router = useRouter();
@@ -257,14 +267,18 @@ export function CalendarView({
         style={sevenColumnGridStyle}
         data-testid="calendar-month-grid"
       >
-        {month.days.map((day) => (
+        {month.days.map((day) => {
+          const isToday = day.inMonth && day.iso === todayIso;
+          return (
           <button
             key={day.iso}
             type="button"
             aria-pressed={selectedIso === day.iso}
             aria-label={day.ariaLabel}
             data-testid={`calendar-day-${day.iso}`}
+            data-today={isToday ? 'true' : undefined}
             onClick={() => setSelectedIso(day.iso)}
+            style={isToday ? TODAY_TILE_STYLE : undefined}
             className={cn(
               'relative min-h-14 min-w-0 rounded-lg border p-1 text-start transition-colors sm:min-h-24 sm:p-2',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -293,7 +307,8 @@ export function CalendarView({
               {day.hasMore && <span>...</span>}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <Card className="gap-0 p-4" data-testid="calendar-day-detail">
