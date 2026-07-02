@@ -20,6 +20,12 @@ their own plan files when reached.
 > atomic `app_set_user_roles`, employee-code validation, CSPRNG temp passwords, localized (fa/en)
 > DB errors, security headers, company-timezone (Asia/Tehran) "today", RLS initplan + FK-index
 > perf pass — 3 new migrations applied to the demo DB. See CHANGELOG 2026-07-02.
+> **2026-07-02 nav-performance pass:** per-navigation Supabase round-trips cut 5–6 → 1–2
+> (`getClaims` local JWT verification, roles-in-JWT via custom access token hook with DB
+> fallback, parallel home reads, `staleTimes` 5-min client router cache + mutation-side
+> `invalidateAppCache()`, Vercel `fra1` pin). Plan: `docs/plans/2026-07-02-nav-performance.md`.
+> ⊘ Operator steps pending: apply migration `20260702150001_custom_access_token_hook.sql`
+> to the hosted project, then enable the hook (Dashboard → Auth → Hooks).
 > **Gates:** unit 103/103 · build green · e2e 21 specs (serial/CI; needs live Supabase + dev server).
 > **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
 > shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in

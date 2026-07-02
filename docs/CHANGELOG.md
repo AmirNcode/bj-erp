@@ -6,6 +6,46 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Navigation performance — the round-trip diet (2026-07-02, evening)
+Implements `docs/plans/2026-07-02-nav-performance.md` (P1–P5; P6 cleanup deliberately
+skipped). Per-navigation server work drops from **5–6 serial Supabase round-trips to 1–2**,
+and recently visited tabs re-render instantly from the client router cache.
+
+- **Local JWT verification (P1):** both per-request `auth.getUser()` network calls
+  (middleware + layout guard via `getCachedUser`) are now `auth.getClaims()`, which
+  verifies the token **locally** (WebCrypto; the project's asymmetric ES256 signing key
+  was confirmed active via JWKS). Session refresh behavior is unchanged — `getClaims()`
+  still refreshes near-expiry tokens. `getCachedUser` returns a lean `{ id, email }`;
+  no call site used anything else. Root locale page + profile/password actions switched
+  to the shared cached helper too.
+- **Roles ride inside the JWT (P2):** new migration `20260702150001_custom_access_token_hook.sql`
+  adds a Supabase **Custom Access Token hook** that embeds the caller's role slugs as an
+  `app_roles` claim; `getCachedRoles` reads the claim (0 round-trips) and falls back to
+  the old `user_roles` query for tokens that predate the hook — so the app behaves
+  identically until the hook is enabled (dashboard → Auth → Hooks; local stack wired in
+  `supabase/config.toml`). Accepted trade-off: an admin's role edit reaches the affected
+  user on their next token refresh (≤ 1 h), not instantly; RLS still enforces from the
+  table in real time.
+- **Home page streams instantly:** the greeting `profile` read no longer blocks the page
+  shell — the header moved inside the Suspense boundary, and profile + board data +
+  pending approvals now fetch in **one parallel burst** (approvals used to be a second
+  serial leg after the board batch).
+- **Client router cache (P3):** `experimental.staleTimes.dynamic = 300` — a tab visited
+  in the last 5 minutes re-renders from cache with zero server work. Correctness: every
+  mutating server action (leave submit/cancel/approve/reject, allocations, balance set,
+  employee CRUD/roles/team/manager, holidays/work-settings, own prefs) now calls a shared
+  `invalidateAppCache()` (`revalidatePath('/', 'layout')`), so the acting user always
+  sees their own change on the next navigation; other users get freshness via the
+  staleness window or the per-page refresh pill (`router.refresh()` bypasses the cache).
+- **Vercel region pinned (P5):** new `vercel.json` pins functions to `fra1` (Frankfurt),
+  co-located with the eu-central-1 Supabase project — the remaining server↔DB legs become
+  ~1–5 ms on the demo deployment.
+- **Operator steps (pending, in this order):** (1) apply migration
+  `20260702150001_custom_access_token_hook.sql` to the hosted project, (2) enable the
+  hook: Dashboard → Authentication → Hooks → Customize Access Token (Postgres function
+  `public.custom_access_token_hook`). Until then the fallback path keeps everything
+  working at the old roles-query cost.
+
 ### UI polish, e2e hygiene & perf investigation (2026-07-02, later)
 - **Approve/reject from the calendar:** approvers (admin: all; manager: own reports) now
   see approve/reject buttons — with the same confirm dialogs as `/manage/approvals` — on

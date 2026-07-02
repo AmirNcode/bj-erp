@@ -1,7 +1,11 @@
 # Navigation performance — findings & fix plan (2026-07-02)
 
-> Status: **investigation only — nothing implemented.** Each fix below must be
-> verified against current library docs (Context7) before coding, per CLAUDE.md.
+> Status: **P1–P5 implemented 2026-07-02 (evening); P6 skipped by decision.**
+> All APIs were verified via Context7 before coding. See CHANGELOG
+> "Navigation performance — the round-trip diet" for what shipped, including
+> the two pending operator steps (apply hook migration + enable the hook in
+> the Supabase dashboard). Until those run, roles fall back to the old
+> `user_roles` query — app behavior is unchanged, just one round-trip slower.
 
 ## Symptom
 
