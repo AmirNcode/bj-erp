@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import {
   getActiveLeaveTypes,
   getMyLeaveRequests,
@@ -37,21 +37,13 @@ type Props = {
 async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
-  const supabase = await createClient();
-
   // Get the authenticated user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) return null;
 
   // Fetch calendar preference from profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('calendar_pref')
-    .eq('id', user.id)
-    .single();
+  const profile = await getCachedProfile(user.id);
 
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 

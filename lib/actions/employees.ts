@@ -2,6 +2,7 @@
 
 import type { Database } from '@/lib/supabase/types';
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 
 // Re-export pure helpers so the unit test can import from this path
 export { allowedProfileFields, generateTempPassword };
@@ -15,25 +16,21 @@ type AppRole = Database['public']['Enums']['app_role'];
 async function getCallerContext() {
   const { createClient } = await import('@/lib/supabase/server');
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
-  if (userError || !user) {
+  if (!user) {
     return { supabase, user: null, roles: [] as AppRole[], companyId: null };
   }
 
-  const [{ data: rolesData }, { data: profile }] = await Promise.all([
-    supabase.from('user_roles').select('role').eq('user_id', user.id),
-    supabase.from('profiles').select('company_id').eq('id', user.id).single(),
+  const [roles, profile] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedProfile(user.id),
   ]);
 
-  const roles = (rolesData ?? []).map((r) => r.role as AppRole);
   return {
     supabase,
     user,
-    roles,
+    roles: roles as AppRole[],
     companyId: profile?.company_id ?? null,
   };
 }

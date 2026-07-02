@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { getCalendarEntries, getWorkSettings } from '@/lib/actions/leave';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { CalendarView } from './CalendarView';
@@ -24,18 +24,10 @@ type Props = {
 async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
   const tLeave = await getTranslations('leave');
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('calendar_pref')
-    .eq('id', user.id)
-    .single();
+  const profile = await getCachedProfile(user.id);
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 
   const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, new Date(), locale);

@@ -5,7 +5,7 @@
 export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { PageHeader } from '../_components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SettingsForm } from './SettingsForm';
@@ -20,18 +20,10 @@ export default async function ProfilePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('profile');
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, employee_code, calendar_pref, language_pref')
-    .eq('id', user.id)
-    .single();
+  const profile = await getCachedProfile(user.id);
 
   const formLabels = {
     calendar: t('calendar'),

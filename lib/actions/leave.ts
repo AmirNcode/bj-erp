@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
@@ -14,21 +15,17 @@ type DayPart = Database['public']['Enums']['day_part'];
 
 async function getCallerContext() {
   const supabase = await createClient();
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
-  if (userError || !user) {
+  if (!user) {
     return { supabase, user: null, roles: [] as string[], companyId: null };
   }
 
-  const [{ data: rolesData }, { data: profile }] = await Promise.all([
-    supabase.from('user_roles').select('role').eq('user_id', user.id),
-    supabase.from('profiles').select('company_id').eq('id', user.id).single(),
+  const [roles, profile] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedProfile(user.id),
   ]);
 
-  const roles = (rolesData ?? []).map((r) => r.role as string);
   return {
     supabase,
     user,

@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
 
 export type Holiday = {
@@ -20,19 +21,17 @@ type Ctx = {
 
 async function getCtx(): Promise<Ctx | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
-  const [{ data: roles }, { data: profile }] = await Promise.all([
-    supabase.from('user_roles').select('role').eq('user_id', user.id),
-    supabase.from('profiles').select('company_id').eq('id', user.id).single(),
+  const [roles, profile] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedProfile(user.id),
   ]);
   return {
     supabase,
     userId: user.id,
     companyId: profile?.company_id ?? '',
-    isAdmin: (roles ?? []).some((r) => r.role === 'admin'),
+    isAdmin: roles.includes('admin'),
   };
 }
 

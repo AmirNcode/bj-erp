@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import Link from 'next/link';
 import { PageHeader } from '../../_components/PageHeader';
 import { Button } from '@/components/ui/button';
@@ -183,15 +184,9 @@ export default async function EmployeesPage({ params }: Props) {
 
   // Resolve isAdmin for the header action buttons — needs to be outside
   // Suspense so that navigation links render immediately.
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: myRoles } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user?.id ?? '');
-  const isAdmin = (myRoles ?? []).some((r) => r.role === 'admin');
+  const user = await getCachedUser();
+  const myRoles = user ? await getCachedRoles(user.id) : [];
+  const isAdmin = myRoles.includes('admin');
 
   return (
     <main className="p-6 max-w-5xl mx-auto">

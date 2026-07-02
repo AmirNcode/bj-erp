@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import {
   getMyLeaveRequests,
   getMyBalances,
@@ -35,20 +35,11 @@ async function HomeBoardData({
 }) {
   const t = await getTranslations('home');
   const tLeave = await getTranslations('leave');
-  const supabase = await createClient();
 
-  const { data: rolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', userId);
-  const roles = (rolesData ?? []).map((r) => r.role as string);
+  const roles = await getCachedRoles(userId);
   const canApprove = roles.includes('admin') || roles.includes('manager');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('calendar_pref')
-    .eq('id', userId)
-    .single();
+  const profile = await getCachedProfile(userId);
   const calendarPref = profile?.calendar_pref ?? 'jalali';
 
   // Upcoming time off for the team directory.
@@ -119,17 +110,10 @@ export default async function HomePage({ params }: Props) {
 
   // We need the user's name for the greeting header.
   // Read it here so the header can render immediately (outside Suspense).
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single();
+  const profile = await getCachedProfile(user.id);
   const fullName = profile?.full_name ?? '';
 
   return (

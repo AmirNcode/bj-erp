@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getAllEmployees, getActiveLeaveTypes } from '@/lib/actions/leave';
 import { PageHeader } from '../../_components/PageHeader';
 import { AllocateForm } from './AllocateForm';
@@ -20,19 +20,12 @@ export default async function AllocationsPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) redirect(`/${locale}/login`);
 
   // Admin guard
-  const { data: rolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id);
-  const roles = (rolesData ?? []).map((r) => r.role);
+  const roles = await getCachedRoles(user.id);
   if (!roles.includes('admin')) redirect(`/${locale}/home`);
 
   const t = await getTranslations('allocations');

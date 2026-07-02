@@ -6,6 +6,7 @@
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getEmployeeBalances } from '@/lib/actions/leave';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '../../../_components/PageHeader';
@@ -23,18 +24,12 @@ export default async function EditEmployeePage({ params }: Props) {
   const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) return notFound();
 
   // Fetch caller's roles
-  const { data: rolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id);
-  const callerRoles = (rolesData ?? []).map((r) => r.role);
+  const callerRoles = await getCachedRoles(user.id);
   const isAdmin = callerRoles.includes('admin');
 
   // Fetch target employee

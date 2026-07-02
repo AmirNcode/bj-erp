@@ -5,7 +5,7 @@
  */
 
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 
 type Props = {
   children: React.ReactNode;
@@ -14,22 +14,13 @@ type Props = {
 
 export default async function ManageLayout({ children, params }: Props) {
   const { locale } = await params;
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) {
     redirect(`/${locale}/login`);
   }
 
-  const { data: rolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id);
-
-  const roles = (rolesData ?? []).map((r) => r.role);
+  const roles = await getCachedRoles(user.id);
   const canAccess = roles.includes('admin') || roles.includes('manager');
 
   if (!canAccess) {

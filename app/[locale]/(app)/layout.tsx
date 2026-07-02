@@ -5,7 +5,7 @@
 
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { AppShell } from './_components/AppShell';
 
 type Props = {
@@ -15,20 +15,13 @@ type Props = {
 
 export default async function AppLayout({ children, params }: Props) {
   const { locale } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) {
     redirect(`/${locale}/login`);
   }
 
-  const { data: rolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', user.id);
-  const roles = (rolesData ?? []).map((r) => r.role as string);
+  const roles = await getCachedRoles(user.id);
 
   const t = await getTranslations({ locale, namespace: 'nav' });
   const labels = {
