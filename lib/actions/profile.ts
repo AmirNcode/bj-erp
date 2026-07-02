@@ -2,6 +2,8 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser } from '@/lib/auth/context';
+import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 
 export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
@@ -16,9 +18,7 @@ export async function updateMyPrefs(input: {
   languagePref?: 'fa' | 'en';
 }): Promise<UpdatePrefsResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return dbErr('not authenticated');
 
   const patch: { calendar_pref?: string; language_pref?: string } = {};
@@ -34,6 +34,8 @@ export async function updateMyPrefs(input: {
 
   const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
   if (error) return dbErr(error.message);
+  // Prefs (calendar/language) change how every page renders — drop all of it.
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -52,9 +54,7 @@ export async function changeMyPassword(
   next: string
 ): Promise<ChangePasswordResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return dbErr('not authenticated');
 
   const { error } = await supabase.rpc('app_change_my_password', {

@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
+import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
@@ -71,10 +71,7 @@ export async function submitRequest(
     return dbErr(error.message);
   }
 
-  // Route-group `(app)` is not part of the URL; revalidate the real dynamic
-  // route so all locale variants of /request are invalidated server-side.
-  revalidatePath('/[locale]/request', 'page');
-
+  invalidateAppCache();
   return { ok: true, requestId: data as string };
 }
 
@@ -101,6 +98,7 @@ export async function cancelRequest(
     return dbErr(error.message);
   }
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -140,6 +138,7 @@ export async function allocateLeave(
     return dbErr(error.message);
   }
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -170,6 +169,7 @@ export async function setLeaveBalance(
 
   if (error) return dbErr(error.message);
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -360,6 +360,7 @@ export async function approveRequest(requestId: string): Promise<DecisionResult>
 
   const { error } = await supabase.rpc('approve_leave_request', { p_id: requestId });
   if (error) return dbErr(error.message);
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -378,6 +379,7 @@ export async function rejectRequest(
     p_reason: reason ?? undefined,
   });
   if (error) return dbErr(error.message);
+  invalidateAppCache();
   return { ok: true };
 }
 

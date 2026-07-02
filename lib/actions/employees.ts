@@ -8,6 +8,7 @@ import {
   isValidEmployeeCode,
 } from './employees-helpers';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 
 // Re-export pure helpers so the unit test can import from this path
@@ -94,6 +95,7 @@ export async function createEmployee(
     return dbErr(error.message);
   }
 
+  invalidateAppCache();
   return { ok: true, tempPassword, userId: userId as string };
 }
 
@@ -156,6 +158,7 @@ export async function updateEmployee(
     after: filtered as import('@/lib/supabase/types').Json,
   });
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -179,6 +182,7 @@ export async function setRoles(
   });
   if (error) return dbErr(error.message);
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -217,6 +221,7 @@ export async function setActive(
     after: { active } as import('@/lib/supabase/types').Json,
   });
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -255,6 +260,7 @@ export async function setTeam(
     after: { department_id: departmentId } as import('@/lib/supabase/types').Json,
   });
 
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -293,6 +299,7 @@ export async function setManager(
     after: { manager_id: managerId } as import('@/lib/supabase/types').Json,
   });
 
+  invalidateAppCache();
   return { ok: true };
 }
 

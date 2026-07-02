@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
+import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 
 export type Holiday = {
@@ -75,6 +76,7 @@ export async function updateWorkSettings(
       { onConflict: 'company_id' }
     );
   if (error) return dbErr(error.message);
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -100,6 +102,7 @@ export async function upsertHoliday(input: {
     ? await c.supabase.from('holidays').update(row).eq('id', input.id).eq('company_id', c.companyId)
     : await c.supabase.from('holidays').insert({ ...row, company_id: c.companyId });
   if (error) return dbErr(error.message);
+  invalidateAppCache();
   return { ok: true };
 }
 
@@ -109,5 +112,6 @@ export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: fa
   if (!c.isAdmin) return dbErr('admin role required');
   const { error } = await c.supabase.from('holidays').delete().eq('id', id).eq('company_id', c.companyId);
   if (error) return dbErr(error.message);
+  invalidateAppCache();
   return { ok: true };
 }

@@ -21,6 +21,7 @@ import { buildHomeBoard } from '@/lib/home/board';
 import { HomeBoard } from './HomeBoard';
 import { PageHeader } from '../_components/PageHeader';
 import { BoardSkeleton } from '@/components/Skeletons';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -34,14 +35,12 @@ async function HomeBoardData({
   locale: string;
   userId: string;
 }) {
-  const t = await getTranslations('home');
-  const tLeave = await getTranslations('leave');
-
-  const roles = await getCachedRoles(userId);
+  const [t, tLeave, roles] = await Promise.all([
+    getTranslations('home'),
+    getTranslations('leave'),
+    getCachedRoles(userId),
+  ]);
   const canApprove = roles.includes('admin') || roles.includes('manager');
-
-  const profile = await getCachedProfile(userId);
-  const calendarPref = profile?.calendar_pref ?? 'jalali';
 
   // Upcoming time off for the team directory. "Today" in the company
   // timezone, not the server's (Vercel = UTC).
@@ -57,18 +56,21 @@ async function HomeBoardData({
     .toISOString()
     .slice(0, 10);
 
-  const [requestsRes, balancesRes, calendarRes, directoryRes] = await Promise.all([
-    getMyLeaveRequests(),
-    getMyBalances(),
-    getCalendarEntries(rangeStart, rangeEnd),
-    getMyTeamDirectory(),
-  ]);
+  // One parallel burst — the profile and (for approvers) the pending list used
+  // to run as extra serial round-trips after this batch.
+  const [profile, requestsRes, balancesRes, calendarRes, directoryRes, approvalsRes] =
+    await Promise.all([
+      getCachedProfile(userId),
+      getMyLeaveRequests(),
+      getMyBalances(),
+      getCalendarEntries(rangeStart, rangeEnd),
+      getMyTeamDirectory(),
+      canApprove ? getPendingApprovals() : Promise.resolve(null),
+    ]);
 
-  let pendingCount = 0;
-  if (canApprove) {
-    const approvals = await getPendingApprovals();
-    pendingCount = approvals.ok ? approvals.requests.length : 0;
-  }
+  const calendarPref = profile?.calendar_pref ?? 'jalali';
+  const fullName = profile?.full_name ?? '';
+  const pendingCount = approvalsRes?.ok ? approvalsRes.requests.length : 0;
 
   const board = buildHomeBoard({
     roles,
@@ -100,28 +102,35 @@ async function HomeBoardData({
     statusCancelled: tLeave('status.cancelled'),
   };
 
-  return <HomeBoard board={board} labels={labels} locale={locale} calendarPref={calendarPref} />;
+  return (
+    <>
+      <PageHeader title={t('greeting', { name: fullName })} />
+      <HomeBoard board={board} labels={labels} locale={locale} calendarPref={calendarPref} />
+    </>
+  );
 }
 
-// ── page shell: resolves locale then streams ───────────────────────────────
+// ── page shell: paints instantly, all data streams in via Suspense ─────────
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const t = await getTranslations('home');
-
-  // We need the user's name for the greeting header.
-  // Read it here so the header can render immediately (outside Suspense).
+  // Local JWT check only — no network. The greeting needs the profile row, so
+  // it lives inside the Suspense child; blocking the shell on that read cost
+  // one Postgres round-trip before anything painted.
   const user = await getCachedUser();
   if (!user) return null;
 
-  const profile = await getCachedProfile(user.id);
-  const fullName = profile?.full_name ?? '';
-
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <PageHeader title={t('greeting', { name: fullName })} />
-      <Suspense fallback={<BoardSkeleton />}>
+      <Suspense
+        fallback={
+          <div className="space-y-5">
+            <Skeleton className="h-8 w-44" />
+            <BoardSkeleton />
+          </div>
+        }
+      >
         <HomeBoardData locale={locale} userId={user.id} />
       </Suspense>
     </main>

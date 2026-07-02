@@ -7,6 +7,17 @@ const nextConfig: NextConfig = {
   // default. List the host(s) the phone uses to reach this machine.
   allowedDevOrigins: ['192.168.2.48'],
 
+  experimental: {
+    // Client router cache: reuse a visited (dynamic) page for 5 minutes, so
+    // switching back to a recent tab renders instantly instead of re-running
+    // the full server render. Safe here: leave data changes rarely, the user's
+    // own mutations revalidate their paths, and every page has an explicit
+    // refresh pill (router.refresh() bypasses this cache).
+    staleTimes: {
+      dynamic: 300,
+    },
+  },
+
   async headers() {
     return [
       {
