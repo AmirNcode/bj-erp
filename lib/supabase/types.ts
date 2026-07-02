@@ -58,9 +58,21 @@ export type Database = {
         ]
       }
       companies: {
-        Row: { created_at: string; id: string; name: string }
-        Insert: { created_at?: string; id?: string; name: string }
-        Update: { created_at?: string; id?: string; name?: string }
+        Row: {
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+        }
         Relationships: []
       }
       departments: {
@@ -255,6 +267,13 @@ export type Database = {
             columns: ["request_id"]
             isOneToOne: false
             referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_ledger_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "team_leave_calendar"
             referencedColumns: ["id"]
           },
         ]
@@ -549,6 +568,20 @@ export type Database = {
       }
     }
     Functions: {
+      allocate_leave: {
+        Args: {
+          p_days: number
+          p_employee_id: string
+          p_leave_type_id: string
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: string
+      }
+      app_change_my_password: {
+        Args: { p_current: string; p_new: string }
+        Returns: undefined
+      }
       app_create_employee: {
         Args: {
           p_calendar_pref?: string
@@ -568,40 +601,43 @@ export type Database = {
         Args: { p_password: string; p_user_id: string }
         Returns: undefined
       }
-      app_change_my_password: {
-        Args: { p_current: string; p_new: string }
-        Returns: undefined
-      }
-      submit_leave_request: {
+      app_set_user_roles: {
         Args: {
-          p_leave_type_id: string
-          p_start: string
-          p_end: string
-          p_day_part: Database["public"]["Enums"]["day_part"]
-          p_reason?: string | null
+          p_roles: Database["public"]["Enums"]["app_role"][]
+          p_user_id: string
         }
-        Returns: string
-      }
-      cancel_leave_request: {
-        Args: { p_id: string }
         Returns: undefined
       }
-      approve_leave_request: {
-        Args: { p_id: string }
-        Returns: undefined
+      approve_leave_request: { Args: { p_id: string }; Returns: undefined }
+      cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
+      compute_requested_days: {
+        Args: {
+          p_company_id: string
+          p_day_part: Database["public"]["Enums"]["day_part"]
+          p_end: string
+          p_start: string
+        }
+        Returns: number
+      }
+      current_leave_balance: {
+        Args: { p_employee_id: string; p_leave_type_id: string }
+        Returns: number
+      }
+      get_my_team_directory: {
+        Args: never
+        Returns: {
+          department_name_en: string
+          department_name_fa: string
+          employee_code: string
+          full_name: string
+          manager_name: string
+          profile_id: string
+          relation: string
+          roles: Database["public"]["Enums"]["app_role"][]
+        }[]
       }
       reject_leave_request: {
         Args: { p_id: string; p_reason?: string }
-        Returns: undefined
-      }
-      allocate_leave: {
-        Args: {
-          p_employee_id: string
-          p_leave_type_id: string
-          p_period_start: string
-          p_period_end: string
-          p_days: number
-        }
         Returns: undefined
       }
       set_leave_balance: {
@@ -612,18 +648,15 @@ export type Database = {
         }
         Returns: number
       }
-      get_my_team_directory: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          profile_id: string
-          full_name: string
-          employee_code: string
-          relation: string
-          roles: Database["public"]["Enums"]["app_role"][]
-          department_name_fa: string | null
-          department_name_en: string | null
-          manager_name: string | null
-        }[]
+      submit_leave_request: {
+        Args: {
+          p_day_part: Database["public"]["Enums"]["day_part"]
+          p_end: string
+          p_leave_type_id: string
+          p_reason?: string
+          p_start: string
+        }
+        Returns: string
       }
     }
     Enums: {
