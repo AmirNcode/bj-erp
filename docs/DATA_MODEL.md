@@ -56,14 +56,17 @@ by `auth.uid()` and grants execute only to `authenticated`.
 ## HR module tables
 
 ### `work_settings`
-`id` · `company_id` · `weekend_days int[]` (ISO weekday numbers; default `{5}` = Friday) ·
-`updated_by` · `updated_at`. Drives working-day counting.
+`id` · `company_id` **(unique — one row per company, 2026-07-02)** · `weekend_days int[]`
+(ISO weekday numbers; default `{5}` = Friday) · `updated_by` · `updated_at`. Drives working-day
+counting. The settings UI upserts on `company_id`.
 
 ### `holidays`
 `id` · `company_id` · `holiday_date date` (Gregorian) · `name_fa` · `name_en` ·
 `is_recurring bool` · `created_at`. Seeded with official Iranian (Jalali) public holidays for the
-current year(s), stored as their Gregorian equivalents. Admin-editable. Index on
-(`company_id`,`holiday_date`).
+current year(s), stored as their Gregorian equivalents. Admin-editable. **Unique**
+(`company_id`,`holiday_date`) (2026-07-02). `is_recurring` is informational only — day counting
+matches exact dates, so each year's occurrences must be entered (Jalali recurrence has no fixed
+Gregorian month-day); the editor UI says so.
 
 ### `leave_types`
 `id` · `company_id` · `name_fa` · `name_en` · `is_paid bool` · `affects_balance bool` ·
@@ -89,6 +92,9 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 (+ for allocation, − for consumption) · `balance_after numeric` · `note` · `created_at`.
 **Balance = latest `balance_after` per (employee, leave_type)**, derived not stored elsewhere.
 Cancelling an **approved future** request writes a `reversal` row (`+requested_days`) — FR-15.
+Index (`employee_id`,`leave_type_id`,`created_at desc`,`id desc`) backs the latest-balance lookup.
+**All ledger writes are serialized per employee** via `pg_advisory_xact_lock` inside the definer
+functions (2026-07-02), so concurrent approve/allocate/cancel/adjust cannot write stale balances.
 
 ## Working-day counting (server-side)
 
@@ -103,6 +109,12 @@ requested_days(start, end, day_part, weekend_days, holidays):
 Implemented as a Postgres function (callable from a Server Action) so the client cannot fabricate
 day counts. Approval writes a `consumption` ledger row of `-requested_days` and sets
 `balance_after`.
+
+**Submit/approve rules (2026-07-02 hardening):** `submit_leave_request` rejects ranges longer than
+366 days and ranges overlapping the employee's own pending/approved requests;
+`approve_leave_request` re-checks overlap against approved requests and re-checks the balance
+(balance-affecting types can never go negative). Error messages are stable English strings mapped
+to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
 
 ## Entity relationships (text ER)
 

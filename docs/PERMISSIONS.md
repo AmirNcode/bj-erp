@@ -117,9 +117,28 @@ type to an absolute value by writing an `adjustment` ledger row (audited `set_le
 grants still go through `allocate_leave`. Granted to `authenticated`, revoked from `anon`. Used by the
 admin employee create/edit forms.
 
-The Supabase security advisor flags these two as exposed `SECURITY DEFINER` functions (lint 0029).
-**Accepted by design** — the in-function admin check is the intended gate. Production hardening:
-enable Auth "leaked password protection" (advisor `auth_leaked_password_protection`).
+`public.app_set_user_roles(p_user_id, p_roles)` (2026-07-02 hardening) **atomically replaces** a
+user's roles in one transaction (the app previously did delete-then-insert as two client
+statements — a failed insert lost all roles). Admin-only (`42501` otherwise) and refuses to remove
+the **caller's own** `admin` role (lockout guard, `22023`). Audited (`set_roles`). Granted to
+`authenticated`, revoked from `anon`. The app's `setRoles` server action calls this RPC.
+
+The Supabase security advisor flags these as exposed `SECURITY DEFINER` functions (lint 0029).
+**Accepted by design** — the in-function admin check is the intended gate. Note on the advisor's
+`auth_leaked_password_protection` item: it only affects GoTrue's own password endpoints, which this
+app does not use (passwords are set via the in-DB RPCs above), so enabling it adds nothing here;
+password strength is enforced by `lib/auth/passwordPolicy.ts` + the in-DB ≥8-char check.
+
+## Concurrency & write-path validation (2026-07-02 hardening)
+
+Every function that reads-then-writes `leave_ledger` (`allocate_leave`, `approve_leave_request`,
+`cancel_leave_request` reversal, `set_leave_balance`) first takes
+`pg_advisory_xact_lock(hashtextextended('leave:'||employee_id, 0))`, serializing all leave writes
+per employee so concurrent writers cannot write stale `balance_after` values. On top of that:
+`submit_leave_request` rejects ranges > 366 days and ranges overlapping the caller's own
+pending/approved requests; `approve_leave_request` re-reads the request under the lock and rejects
+overlap with an already-approved request or insufficient balance (a balance can no longer go
+negative). All RLS policies use `(select auth.uid())` (advisor lint 0003, initplan).
 
 ## FR-25 — leave `reason` is private (ENFORCED in Phase 3)
 

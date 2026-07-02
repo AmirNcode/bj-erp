@@ -16,7 +16,11 @@ their own plan files when reached.
 > AlertDialog + toasts, Suspense/skeletons.
 > **2026-06-30 polish:** account create/edit now manages PTO/annual + sick balances; logo,
 > light-only lock, opaque chrome, active-tab highlight, and stronger buttons are implemented.
-> **Gates:** unit 98/98 · build green · e2e 20 specs (serial/CI; needs live Supabase + dev server).
+> **2026-07-02 production-readiness review:** ledger advisory locks, overlap + balance re-checks,
+> atomic `app_set_user_roles`, employee-code validation, CSPRNG temp passwords, localized (fa/en)
+> DB errors, security headers, company-timezone (Asia/Tehran) "today", RLS initplan + FK-index
+> perf pass — 3 new migrations applied to the demo DB. See CHANGELOG 2026-07-02.
+> **Gates:** unit 103/103 · build green · e2e 21 specs (serial/CI; needs live Supabase + dev server).
 > **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
 > shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in
 > `.superpowers/sdd/progress.md`.

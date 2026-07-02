@@ -6,6 +6,62 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Security & hardening — production-readiness review (2026-07-02)
+A full codebase review (security, correctness, i18n, performance) with fixes. Two new
+migrations (`20260702120001_hardening.sql`, `20260702120002_perf_rls_initplan.sql`) are
+applied to the demo project and are idempotent.
+
+- **Ledger concurrency (fixed):** `allocate_leave`, `approve_leave_request`,
+  `cancel_leave_request` (reversal), and `set_leave_balance` all read the latest
+  `balance_after` and then wrote a new row; two concurrent writers could write stale
+  balances. All four now take a per-employee `pg_advisory_xact_lock` first.
+- **Approval integrity (fixed):** approving could drive a balance negative (several
+  pending requests could each pass the submit-time check) and could double-book dates.
+  `approve_leave_request` now re-reads under the lock and rejects insufficient balance
+  or overlap with an already-approved request.
+- **Request validation (added):** `submit_leave_request` now rejects ranges longer than
+  366 days (bounds the per-day counting loop — a DoS vector) and ranges overlapping the
+  caller's own pending/approved requests.
+- **Roles (fixed):** replacing a user's roles was a non-atomic delete-then-insert (a
+  failed insert lost all roles) and an admin could remove their own admin role
+  (lockout). New atomic `app_set_user_roles()` RPC guards both; the app now calls it.
+- **Employee codes (fixed):** codes become the synthetic auth email
+  (`code@bj-app.internal`); non-latin/whitespace codes produced accounts that cannot
+  log in. Codes are now normalized (lowercase/trim) and validated in the form, the
+  server action, and in-DB; duplicates get a friendly error.
+- **Temp passwords (fixed):** were generated with `Math.random()` (predictable); now
+  CSPRNG via `node:crypto` `randomInt` (same charset/length).
+- **Localized errors (added):** raw English Postgres errors were shown in the Farsi
+  UI. New `lib/errors/db-error.ts` maps every SQL-raised message (and known constraint
+  violations) to fa/en `dbErrors` translations; unknown errors are logged server-side
+  and replaced with a generic message so internals never leak.
+- **Misc security:** `refreshRoute` server action now requires auth (was anonymous
+  cache purging); security headers (`X-Frame-Options: DENY`, `nosniff`,
+  `Referrer-Policy`, `Permissions-Policy`) added in `next.config.ts`;
+  `get_my_team_directory` search_path tightened to `''`.
+- **Data integrity:** unique `work_settings(company_id)` (updateWorkSettings now
+  upserts instead of silently updating 0 rows) and unique
+  `holidays(company_id, holiday_date)`, both with dedupe of existing data; holiday
+  update/delete now company-scoped in the action too.
+- **Performance:** all RLS policies now use `(select auth.uid())` (advisor lint 0003 —
+  evaluated once per statement instead of per row); covering indexes added for every
+  advisor-flagged FK plus the `leave_ledger` latest-balance hot path.
+- **UX polish:** approve/reject now `router.refresh()` so home-board counts update;
+  employee-code inputs are LTR with a latin-only pattern; leave reason capped at 500
+  chars; recurring-holiday checkbox now explains that day counting only honors exact
+  saved dates; "cancellable" date check no longer freezes at page load.
+- **Company timezone (fixed):** server-side "today" used the server clock (UTC on
+  Vercel/Supabase), so between 00:00 and 03:30 Tehran time the home-board range, the
+  calendar "current month", and the cancel-eligibility check were on yesterday's date.
+  New `lib/appDate.ts` (Asia/Tehran) drives the home board and calendar month;
+  `cancel_leave_request` compares against the Tehran date
+  (`20260702120003_company_tz_cancel.sql`).
+- **Supabase advisor status:** remaining lints are the documented by-design
+  acceptances (0010 security-definer view, 0029 self-guarded RPCs). "Leaked password
+  protection" stays off — passwords are set via our in-DB RPCs, which GoTrue's HIBP
+  check does not cover; policy is enforced by `lib/auth/passwordPolicy.ts` + in-DB
+  length check.
+
 ### Added — Navigation prefetch + manual page update pill (2026-06-30)
 - **Performance/UX:** the app shell now prefetches every role-visible bottom/side-tab route after
   login so tab changes can reuse the client route cache instead of showing empty panels while each
