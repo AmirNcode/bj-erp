@@ -30,6 +30,7 @@ type Labels = {
   nameFaLabel: string;
   nameEnLabel: string;
   recurringLabel: string;
+  recurringHint: string;
   delete: string;
   noHolidays: string;
   errorLabel: string;
@@ -146,16 +147,19 @@ export function HolidayEditor({
             disabled={isPending}
           />
         </div>
-        <label className="flex items-center gap-2 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={recurring}
-            onChange={(e) => setRecurring(e.target.checked)}
-            disabled={isPending}
-            className="rounded border-input"
-          />
-          {labels.recurringLabel}
-        </label>
+        <div className="space-y-1">
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={recurring}
+              onChange={(e) => setRecurring(e.target.checked)}
+              disabled={isPending}
+              className="rounded border-input"
+            />
+            {labels.recurringLabel}
+          </label>
+          <p className="text-xs text-muted-foreground">{labels.recurringHint}</p>
+        </div>
         <Button
           type="button"
           data-testid="holiday-add"

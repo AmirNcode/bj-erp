@@ -3,6 +3,23 @@
  * No Supabase imports — safe to import in unit tests without env vars.
  */
 
+import { randomInt } from 'node:crypto';
+
+/**
+ * Employee codes become the synthetic auth email local-part
+ * (`code@bj-app.internal`), so they must stay within safe email characters.
+ * Mirrors the in-DB check in app_create_employee (migration 20260702120001).
+ */
+export const EMPLOYEE_CODE_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+export function normalizeEmployeeCode(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+export function isValidEmployeeCode(code: string): boolean {
+  return EMPLOYEE_CODE_RE.test(code);
+}
+
 /**
  * Returns the profile columns a caller may update.
  * Admin gets all writable columns; a non-admin manager gets a restricted subset.
@@ -36,15 +53,16 @@ export function generateTempPassword(): string {
   const symbols = '!@#$%^&*';
   const all = upper + lower + digits + symbols;
 
-  // Guarantee at least one from each category
-  const pick = (pool: string) => pool[Math.floor(Math.random() * pool.length)];
+  // CSPRNG — these are real credentials handed to employees; Math.random()
+  // output is predictable.
+  const pick = (pool: string) => pool[randomInt(pool.length)];
   const required = [pick(upper), pick(lower), pick(digits), pick(symbols)];
   const extra = Array.from({ length: 6 }, () => pick(all));
   const raw = [...required, ...extra];
 
-  // Shuffle
+  // Fisher–Yates shuffle
   for (let i = raw.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomInt(i + 1);
     [raw[i], raw[j]] = [raw[j], raw[i]];
   }
   return raw.join('');

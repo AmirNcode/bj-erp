@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { dbErr } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
@@ -55,19 +56,19 @@ export async function submitRequest(
 ): Promise<SubmitRequestResult> {
   const { supabase, user } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase.rpc('submit_leave_request', {
     p_leave_type_id: input.leaveTypeId,
     p_start: input.start,
     p_end: input.end,
     p_day_part: input.dayPart,
-    p_reason: input.reason ?? null,
+    p_reason: input.reason ?? undefined,
   });
 
   if (error) {
-    // Surface the Postgres error message directly
-    return { ok: false, error: error.message };
+    // Known SQL-raised messages are translated; unknown ones become generic.
+    return dbErr(error.message);
   }
 
   // Route-group `(app)` is not part of the URL; revalidate the real dynamic
@@ -90,14 +91,14 @@ export async function cancelRequest(
 ): Promise<CancelRequestResult> {
   const { supabase, user } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { error } = await supabase.rpc('cancel_leave_request', {
     p_id: requestId,
   });
 
   if (error) {
-    return { ok: false, error: error.message };
+    return dbErr(error.message);
   }
 
   return { ok: true };
@@ -124,8 +125,8 @@ export async function allocateLeave(
 ): Promise<AllocateLeaveResult> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   const { error } = await supabase.rpc('allocate_leave', {
     p_employee_id: input.employeeId,
@@ -136,7 +137,7 @@ export async function allocateLeave(
   });
 
   if (error) {
-    return { ok: false, error: error.message };
+    return dbErr(error.message);
   }
 
   return { ok: true };
@@ -158,8 +159,8 @@ export async function setLeaveBalance(
 ): Promise<SetLeaveBalanceResult> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   const { error } = await supabase.rpc('set_leave_balance', {
     p_employee_id: employeeId,
@@ -167,7 +168,7 @@ export async function setLeaveBalance(
     p_target: target,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   return { ok: true };
 }
@@ -201,7 +202,7 @@ export async function getMyLeaveRequests(): Promise<{
   requests: LeaveRequestWithType[];
 } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase
     .from('leave_requests')
@@ -212,7 +213,7 @@ export async function getMyLeaveRequests(): Promise<{
     .eq('employee_id', user.id)
     .order('created_at', { ascending: false });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   return { ok: true, requests: (data ?? []) as unknown as LeaveRequestWithType[] };
 }
@@ -226,7 +227,7 @@ export async function getMyBalance(
   leaveTypeId: string
 ): Promise<{ ok: true; balance: number | null } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase
     .from('leave_ledger')
@@ -237,7 +238,7 @@ export async function getMyBalance(
     .limit(1)
     .maybeSingle();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   return { ok: true, balance: data?.balance_after ?? null };
 }
@@ -259,8 +260,8 @@ export async function getActiveLeaveTypes(): Promise<{
   types: LeaveType[];
 } | { ok: false; error: string }> {
   const { supabase, user, companyId } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+  if (!user) return dbErr('not authenticated');
+  if (!companyId) return dbErr('no profile for caller');
 
   const { data, error } = await supabase
     .from('leave_types')
@@ -269,7 +270,7 @@ export async function getActiveLeaveTypes(): Promise<{
     .eq('active', true)
     .order('name_fa');
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   return { ok: true, types: (data ?? []) as LeaveType[] };
 }
@@ -288,8 +289,8 @@ export async function getWorkSettings(): Promise<{
   settings: WorkSettings;
 } | { ok: false; error: string }> {
   const { supabase, user, companyId } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+  if (!user) return dbErr('not authenticated');
+  if (!companyId) return dbErr('no profile for caller');
 
   const [{ data: ws, error: wsError }, { data: hols, error: holsError }] = await Promise.all([
     supabase
@@ -303,8 +304,8 @@ export async function getWorkSettings(): Promise<{
       .eq('company_id', companyId),
   ]);
 
-  if (wsError) return { ok: false, error: wsError.message };
-  if (holsError) return { ok: false, error: holsError.message };
+  if (wsError) return dbErr(wsError.message);
+  if (holsError) return dbErr(holsError.message);
 
   return {
     ok: true,
@@ -329,8 +330,8 @@ export async function getAllEmployees(): Promise<{
   employees: EmployeeOption[];
 } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   const { data, error } = await supabase
     .from('profiles')
@@ -338,7 +339,7 @@ export async function getAllEmployees(): Promise<{
     .eq('active', true)
     .order('full_name');
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   return { ok: true, employees: (data ?? []) as EmployeeOption[] };
 }
@@ -355,10 +356,10 @@ export type DecisionResult = { ok: true } | { ok: false; error: string };
  */
 export async function approveRequest(requestId: string): Promise<DecisionResult> {
   const { supabase, user } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { error } = await supabase.rpc('approve_leave_request', { p_id: requestId });
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
   return { ok: true };
 }
 
@@ -370,13 +371,13 @@ export async function rejectRequest(
   reason?: string
 ): Promise<DecisionResult> {
   const { supabase, user } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { error } = await supabase.rpc('reject_leave_request', {
     p_id: requestId,
     p_reason: reason ?? undefined,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
   return { ok: true };
 }
 
@@ -402,7 +403,7 @@ export async function getPendingApprovals(): Promise<
   { ok: true; requests: PendingApproval[] } | { ok: false; error: string }
 > {
   const { supabase, user, roles } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase
     .from('leave_requests')
@@ -414,7 +415,7 @@ export async function getPendingApprovals(): Promise<
     .eq('status', 'pending')
     .order('start_date', { ascending: true });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   type Row = {
     id: string;
@@ -471,7 +472,7 @@ export async function getCalendarEntries(
   rangeEnd: string
 ): Promise<{ ok: true; entries: CalendarEntry[] } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   // Overlap test: an entry intersects [rangeStart, rangeEnd] when it starts on
   // or before rangeEnd AND ends on or after rangeStart.
@@ -484,7 +485,7 @@ export async function getCalendarEntries(
     .gte('end_date', rangeStart)
     .order('start_date', { ascending: true });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   const entries: CalendarEntry[] = (data ?? []).map((r) => ({
     id: r.id ?? '',
@@ -510,8 +511,8 @@ export async function getMyBalances(): Promise<
   { ok: true; balances: BalanceItem[] } | { ok: false; error: string }
 > {
   const { supabase, user, companyId } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+  if (!user) return dbErr('not authenticated');
+  if (!companyId) return dbErr('no profile for caller');
 
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
@@ -527,8 +528,8 @@ export async function getMyBalances(): Promise<
         .eq('employee_id', user.id),
     ]);
 
-  if (typesError) return { ok: false, error: typesError.message };
-  if (ledgerError) return { ok: false, error: ledgerError.message };
+  if (typesError) return dbErr(typesError.message);
+  if (ledgerError) return dbErr(ledgerError.message);
 
   const byType = latestBalances(ledger ?? []);
   const balances: BalanceItem[] = (types ?? []).map((t) => ({
@@ -545,9 +546,9 @@ export async function getEmployeeBalances(
   employeeId: string
 ): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
   const { supabase, user, roles, companyId } = await getCallerContext();
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
-  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+  if (!companyId) return dbErr('no profile for caller');
 
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
@@ -564,8 +565,8 @@ export async function getEmployeeBalances(
         .eq('employee_id', employeeId),
     ]);
 
-  if (typesError) return { ok: false, error: typesError.message };
-  if (ledgerError) return { ok: false, error: ledgerError.message };
+  if (typesError) return dbErr(typesError.message);
+  if (ledgerError) return dbErr(ledgerError.message);
 
   const byType = latestBalances(ledger ?? []);
   const balances: BalanceItem[] = (types ?? []).map((t) => ({

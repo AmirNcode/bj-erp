@@ -195,6 +195,11 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             <div
               style={{ direction: isRtl ? 'rtl' : 'ltr' }}
               className="w-full"
+              onKeyDown={(e) => {
+                // Enter inside the picker input commits the date (handled by the
+                // picker itself) — it must not ALSO submit the whole form.
+                if (e.key === 'Enter') e.preventDefault();
+              }}
             >
               <LazyDatePicker
                 range
@@ -242,6 +247,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
+              maxLength={500}
               className="resize-none"
             />
           </div>

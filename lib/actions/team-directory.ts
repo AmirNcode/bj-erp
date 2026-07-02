@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser } from '@/lib/auth/context';
+import { dbErr } from '@/lib/errors/db-error';
 import type { TeamDirectoryMember } from '@/lib/home/board';
 
 type TeamDirectoryRow = {
@@ -21,10 +22,10 @@ export async function getMyTeamDirectory(): Promise<
   const supabase = await createClient();
   const user = await getCachedUser();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase.rpc('get_my_team_directory');
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   const members: TeamDirectoryMember[] = ((data ?? []) as TeamDirectoryRow[]).map((row) => {
     const relation: TeamDirectoryMember['relation'] =

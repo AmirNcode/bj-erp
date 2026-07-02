@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
@@ -41,6 +42,7 @@ type Props = {
 
 export function ApprovalQueue({ requests, labels, locale }: Props) {
   const tc = useTranslations('common');
+  const router = useRouter();
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -56,6 +58,8 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
       if (res.ok) {
         setLocalRequests((prev) => prev.filter((r) => r.id !== id));
         toast.success(successMsg);
+        // Re-fetch server data so badges/counts elsewhere reflect the decision.
+        router.refresh();
       } else {
         setErrorMsg(res.error);
         toast.error(res.error);

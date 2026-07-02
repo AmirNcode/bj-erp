@@ -67,6 +67,9 @@ export default function LoginPage() {
                   id="code"
                   type="text"
                   autoComplete="username"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  dir="ltr"
                   placeholder={t('codePlaceholder')}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}

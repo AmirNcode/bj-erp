@@ -1,8 +1,14 @@
 'use server';
 
 import type { Database } from '@/lib/supabase/types';
-import { allowedProfileFields, generateTempPassword } from './employees-helpers';
+import {
+  allowedProfileFields,
+  generateTempPassword,
+  normalizeEmployeeCode,
+  isValidEmployeeCode,
+} from './employees-helpers';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { dbErr } from '@/lib/errors/db-error';
 
 // Re-export pure helpers so the unit test can import from this path
 export { allowedProfileFields, generateTempPassword };
@@ -60,14 +66,19 @@ export async function createEmployee(
 ): Promise<{ ok: true; tempPassword: string; userId: string } | { ok: false; error: string }> {
   const { supabase, user, roles, companyId } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
-  if (!companyId) return { ok: false, error: 'Could not determine your company' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+  if (!companyId) return dbErr('no profile for caller');
+
+  // The code becomes the auth email — validate before it reaches auth.users.
+  // (The SQL fn re-checks; this just gives a fast, localized error.)
+  const code = normalizeEmployeeCode(input.employee_code);
+  if (!isValidEmployeeCode(code)) return dbErr('invalid employee code');
 
   const tempPassword = generateTempPassword();
 
   const { data: userId, error } = await supabase.rpc('app_create_employee', {
-    p_employee_code: input.employee_code,
+    p_employee_code: code,
     p_full_name: input.full_name,
     p_password: tempPassword,
     p_company_id: companyId,
@@ -80,7 +91,7 @@ export async function createEmployee(
   });
 
   if (error) {
-    return { ok: false, error: error.message };
+    return dbErr(error.message);
   }
 
   return { ok: true, tempPassword, userId: userId as string };
@@ -106,10 +117,10 @@ export async function updateEmployee(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
   const isAdmin = roles.includes('admin');
   const isManager = roles.includes('manager');
-  if (!isAdmin && !isManager) return { ok: false, error: 'Admin or manager role required' };
+  if (!isAdmin && !isManager) return dbErr('admin or manager role required');
 
   const allowed = allowedProfileFields(isAdmin);
   const filtered = Object.fromEntries(
@@ -117,7 +128,7 @@ export async function updateEmployee(
   ) as UpdateEmployeeFields;
 
   if (Object.keys(filtered).length === 0) {
-    return { ok: false, error: 'No allowed fields to update' };
+    return dbErr('not permitted to update these fields');
   }
 
   // Fetch current value for audit
@@ -133,8 +144,8 @@ export async function updateEmployee(
     .eq('id', id)
     .select('id');
 
-  if (error) return { ok: false, error: error.message };
-  if (!data || data.length === 0) return { ok: false, error: 'update denied or row not found' };
+  if (error) return dbErr(error.message);
+  if (!data || data.length === 0) return dbErr('not allowed to update this profile');
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,
@@ -149,8 +160,9 @@ export async function updateEmployee(
 }
 
 /**
- * Replaces the target user's roles entirely (delete removed, insert added).
- * Admin-only.
+ * Replaces the target user's roles entirely via the atomic
+ * app_set_user_roles RPC (transactional delete+insert, admin-guarded in-DB,
+ * refuses to strip your own admin role, writes its own audit row).
  */
 export async function setRoles(
   id: string,
@@ -158,39 +170,14 @@ export async function setRoles(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles: callerRoles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!callerRoles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!callerRoles.includes('admin')) return dbErr('admin role required');
 
-  // Fetch existing for audit
-  const { data: before } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', id);
-
-  // Delete all existing roles
-  const { error: deleteError } = await supabase
-    .from('user_roles')
-    .delete()
-    .eq('user_id', id);
-
-  if (deleteError) return { ok: false, error: deleteError.message };
-
-  // Insert new roles
-  if (roles.length > 0) {
-    const { error: insertError } = await supabase.from('user_roles').insert(
-      roles.map((role) => ({ user_id: id, role }))
-    );
-    if (insertError) return { ok: false, error: insertError.message };
-  }
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'user_roles',
-    entity_id: id,
-    action: 'set_roles',
-    before: { roles: (before ?? []).map((r) => r.role) } as import('@/lib/supabase/types').Json,
-    after: { roles } as import('@/lib/supabase/types').Json,
+  const { error } = await supabase.rpc('app_set_user_roles', {
+    p_user_id: id,
+    p_roles: roles,
   });
+  if (error) return dbErr(error.message);
 
   return { ok: true };
 }
@@ -204,8 +191,8 @@ export async function setActive(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   // Fetch current value for audit
   const { data: beforeData } = await supabase
@@ -219,7 +206,7 @@ export async function setActive(
     .update({ active })
     .eq('id', id);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,
@@ -242,8 +229,8 @@ export async function setTeam(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   // Fetch current value for audit
   const { data: beforeData } = await supabase
@@ -257,7 +244,7 @@ export async function setTeam(
     .update({ department_id: departmentId })
     .eq('id', id);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,
@@ -280,8 +267,8 @@ export async function setManager(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   // Fetch current value for audit
   const { data: beforeData } = await supabase
@@ -295,7 +282,7 @@ export async function setManager(
     .update({ manager_id: managerId })
     .eq('id', id);
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,
@@ -318,8 +305,8 @@ export async function resetPassword(
 ): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
 
-  if (!user) return { ok: false, error: 'Not authenticated' };
-  if (!roles.includes('admin')) return { ok: false, error: 'Admin role required' };
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
 
   const tempPassword = generateTempPassword();
 
@@ -328,7 +315,7 @@ export async function resetPassword(
     p_password: tempPassword,
   });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
 
   await supabase.from('audit_log').insert({
     actor_id: user.id,

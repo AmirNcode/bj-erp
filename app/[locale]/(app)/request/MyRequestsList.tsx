@@ -24,7 +24,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 // Client "today" (YYYY-MM-DD); the SQL re-checks against current_date on cancel.
-const TODAY = new Date().toISOString().slice(0, 10);
+// Computed per call (not module scope) so a tab left open overnight stays correct.
+const today = () => new Date().toISOString().slice(0, 10);
 
 type Labels = {
   myRequests: string;
@@ -140,7 +141,7 @@ export function MyRequestsList({ requests, labels, calendarPref, locale }: Props
                     </span>
 
                     {/* Cancel — pending, or an approved leave that hasn't started */}
-                    {isCancellable(req.status, req.start_date, TODAY) && (
+                    {isCancellable(req.status, req.start_date, today()) && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
                           <Button

@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { dbErr } from '@/lib/errors/db-error';
 
 export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
 
@@ -18,7 +19,7 @@ export async function updateMyPrefs(input: {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const patch: { calendar_pref?: string; language_pref?: string } = {};
   if (input.calendarPref === 'jalali' || input.calendarPref === 'gregorian') {
@@ -28,11 +29,11 @@ export async function updateMyPrefs(input: {
     patch.language_pref = input.languagePref;
   }
   if (Object.keys(patch).length === 0) {
-    return { ok: false, error: 'No valid preference to update' };
+    return dbErr('not permitted to update these fields');
   }
 
   const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
   return { ok: true };
 }
 
@@ -54,12 +55,12 @@ export async function changeMyPassword(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return { ok: false, error: 'Not authenticated' };
+  if (!user) return dbErr('not authenticated');
 
   const { error } = await supabase.rpc('app_change_my_password', {
     p_current: current,
     p_new: next,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
   return { ok: true };
 }

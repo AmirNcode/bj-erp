@@ -227,7 +227,36 @@
         "wed": "Wednesday",
         "thu": "Thursday",
         "fri": "Friday"
-      }
+      },
+      "recurringHint": "Recurring holidays must still be entered for each year; day counting only treats the exact saved dates as holidays."
     }
+  },
+  "dbErrors": {
+    "notAuthenticated": "You are not signed in. Please sign in again.",
+    "notAllowed": "You are not allowed to perform this action.",
+    "insufficientBalance": "Insufficient leave balance ({requested} day(s) requested, {available} available).",
+    "overlap": "You already have a pending or approved request overlapping these dates.",
+    "overlapApproved": "Another approved leave overlaps these dates.",
+    "zeroDays": "The selected range contains no working days (weekend/holiday, or invalid range).",
+    "invalidLeaveType": "Invalid or inactive leave type.",
+    "rangeTooLong": "The selected date range is too long.",
+    "datesRequired": "Start and end dates are required.",
+    "alreadyDecided": "This request has already been decided.",
+    "onlyPending": "Only pending requests can be changed.",
+    "cannotCancel": "Only pending requests, or approved requests that have not started yet, can be cancelled.",
+    "requestNotFound": "Request not found.",
+    "wrongCurrentPassword": "The current password is incorrect.",
+    "passwordTooShort": "The new password must be at least 8 characters.",
+    "invalidEmployeeCode": "Invalid employee code (latin letters, digits, dot, dash, underscore only).",
+    "duplicateEmployeeCode": "This employee code already exists.",
+    "duplicateHoliday": "A holiday already exists on this date.",
+    "cannotRemoveOwnAdmin": "You cannot remove the admin role from your own account.",
+    "noProfile": "Your profile could not be found. Contact the administrator.",
+    "allocationInvalid": "Allocation days must be greater than 0.",
+    "balanceNegative": "The target balance must be 0 or more.",
+    "unexpected": "An unexpected error occurred. Please try again.",
+    "allWeekWeekend": "At least one working day must remain.",
+    "invalidWeekend": "Invalid weekend days.",
+    "holidayFieldsRequired": "Holiday date and Farsi name are required."
   }
 }

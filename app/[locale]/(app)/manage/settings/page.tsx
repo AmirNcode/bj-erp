@@ -77,6 +77,7 @@ export default async function SettingsPage({ params }: Props) {
               nameFaLabel: t('nameFaLabel'),
               nameEnLabel: t('nameEnLabel'),
               recurringLabel: t('recurringLabel'),
+              recurringHint: t('recurringHint'),
               delete: t('delete'),
               noHolidays: t('noHolidays'),
               errorLabel: t('error'),

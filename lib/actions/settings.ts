@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
+import { dbErr } from '@/lib/errors/db-error';
 
 export type Holiday = {
   id: string;
@@ -11,6 +12,8 @@ export type Holiday = {
   name_en: string | null;
   is_recurring: boolean;
 };
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Ctx = {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -39,7 +42,7 @@ export async function getCompanyHolidays(): Promise<
   { ok: true; holidays: Holiday[]; weekendDays: number[] } | { ok: false; error: string }
 > {
   const c = await getCtx();
-  if (!c) return { ok: false, error: 'Not authenticated' };
+  if (!c) return dbErr('not authenticated');
   const [{ data: hols, error: he }, { data: ws, error: we }] = await Promise.all([
     c.supabase
       .from('holidays')
@@ -48,8 +51,8 @@ export async function getCompanyHolidays(): Promise<
       .order('holiday_date'),
     c.supabase.from('work_settings').select('weekend_days').eq('company_id', c.companyId).maybeSingle(),
   ]);
-  if (he) return { ok: false, error: he.message };
-  if (we) return { ok: false, error: we.message };
+  if (he) return dbErr(he.message);
+  if (we) return dbErr(we.message);
   return { ok: true, holidays: (hols ?? []) as Holiday[], weekendDays: ws?.weekend_days ?? [5] };
 }
 
@@ -57,20 +60,21 @@ export async function updateWorkSettings(
   weekendDays: number[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = await getCtx();
-  if (!c) return { ok: false, error: 'Not authenticated' };
-  if (!c.isAdmin) return { ok: false, error: 'Admin role required' };
+  if (!c) return dbErr('not authenticated');
+  if (!c.isAdmin) return dbErr('admin role required');
   const v = validateWeekendDays(weekendDays);
   if (!v.ok) {
-    return {
-      ok: false,
-      error: v.reason === 'all_week' ? 'At least one working day is required' : 'Invalid weekend days',
-    };
+    return dbErr(v.reason === 'all_week' ? 'at least one working day is required' : 'invalid weekend days');
   }
+  // Upsert on the company_id unique key so a missing row is created instead of
+  // a silent 0-row update (the old code reported success without saving).
   const { error } = await c.supabase
     .from('work_settings')
-    .update({ weekend_days: v.days, updated_by: c.userId })
-    .eq('company_id', c.companyId);
-  if (error) return { ok: false, error: error.message };
+    .upsert(
+      { company_id: c.companyId, weekend_days: v.days, updated_by: c.userId },
+      { onConflict: 'company_id' }
+    );
+  if (error) return dbErr(error.message);
   return { ok: true };
 }
 
@@ -82,27 +86,28 @@ export async function upsertHoliday(input: {
   isRecurring?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = await getCtx();
-  if (!c) return { ok: false, error: 'Not authenticated' };
-  if (!c.isAdmin) return { ok: false, error: 'Admin role required' };
-  if (!input.date || !input.nameFa) return { ok: false, error: 'Date and Farsi name are required' };
+  if (!c) return dbErr('not authenticated');
+  if (!c.isAdmin) return dbErr('admin role required');
+  if (!input.date || !input.nameFa) return dbErr('holiday date and farsi name are required');
+  if (!ISO_DATE_RE.test(input.date)) return dbErr('holiday date and farsi name are required');
   const row = {
     holiday_date: input.date,
-    name_fa: input.nameFa,
-    name_en: input.nameEn ?? null,
+    name_fa: input.nameFa.trim(),
+    name_en: input.nameEn?.trim() || null,
     is_recurring: input.isRecurring ?? false,
   };
   const { error } = input.id
-    ? await c.supabase.from('holidays').update(row).eq('id', input.id)
+    ? await c.supabase.from('holidays').update(row).eq('id', input.id).eq('company_id', c.companyId)
     : await c.supabase.from('holidays').insert({ ...row, company_id: c.companyId });
-  if (error) return { ok: false, error: error.message };
+  if (error) return dbErr(error.message);
   return { ok: true };
 }
 
 export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = await getCtx();
-  if (!c) return { ok: false, error: 'Not authenticated' };
-  if (!c.isAdmin) return { ok: false, error: 'Admin role required' };
-  const { error } = await c.supabase.from('holidays').delete().eq('id', id);
-  if (error) return { ok: false, error: error.message };
+  if (!c) return dbErr('not authenticated');
+  if (!c.isAdmin) return dbErr('admin role required');
+  const { error } = await c.supabase.from('holidays').delete().eq('id', id).eq('company_id', c.companyId);
+  if (error) return dbErr(error.message);
   return { ok: true };
 }

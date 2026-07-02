@@ -169,7 +169,16 @@ export function NewEmployeeForm({ departments, managers, leaveTypes, locale, lab
 
           <div className="space-y-1.5">
             <Label htmlFor="employee_code">{labels.code}</Label>
-            <Input id="employee_code" name="employee_code" required />
+            {/* The code becomes the login identifier (latin-only); LTR even in fa. */}
+            <Input
+              id="employee_code"
+              name="employee_code"
+              required
+              dir="ltr"
+              autoCapitalize="off"
+              autoCorrect="off"
+              pattern="[A-Za-z0-9][A-Za-z0-9._\-]*"
+            />
           </div>
 
           <div className="space-y-1.5">
