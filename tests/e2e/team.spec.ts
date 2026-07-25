@@ -10,6 +10,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { nextTestPersonnelNo } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
@@ -17,27 +18,36 @@ const ADMIN_PASSWORD = 'Admin!2026';
 // Helper: log in as given code/password and expect redirect to /home
 async function loginAs(page: Page, code: string, password: string) {
   await page.goto('/login');
-  await page.fill('#code', code);
-  await page.fill('#password', password);
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/home$/, { timeout: 15000 });
+  // Fill-and-verify, then click-and-verify, all inside one retry loop: on a
+  // cold `next dev` the first fill can land before React hydrates (hydration
+  // resets the controlled inputs) and the first submit click can hit a
+  // not-yet-hydrated button (the form never submits). Retrying the whole
+  // cycle covers both races.
+  await expect(async () => {
+    if (/\/home$/.test(page.url())) return; // already navigated on a prior pass
+    await page.fill('#code', code);
+    await page.fill('#password', password);
+    await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
+    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
 }
 
 async function createEmployee(
   page: Parameters<typeof loginAs>[0],
   opts: {
-    code: string;
     name: string;
     role: string;
     managerId?: string; // value of the manager <option>
     deptFirst?: boolean;
   }
-): Promise<string> {
+): Promise<{ code: string; password: string }> {
   // Navigate to new employee form
   await page.goto('/fa/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
-  await page.fill('#employee_code', opts.code);
+  await page.fill('#personnel_no', nextTestPersonnelNo());
   await page.fill('#full_name', opts.name);
 
   // Pick the first real department
@@ -73,31 +83,30 @@ async function createEmployee(
     }
   }
 
+  const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
+  expect(code).toMatch(/^[a-z0-9]{2,6}-999[0-9]{7}$/);
+
   await page.click('button[type="submit"]');
 
   // Grab temp password
-  const pwEl = page.locator('.font-mono').first();
+  const pwEl = page.locator('[data-testid="temp-password"]');
   await expect(pwEl).toBeVisible({ timeout: 15000 });
   const tempPassword = (await pwEl.textContent()) ?? '';
   expect(tempPassword.trim().length).toBeGreaterThan(6);
 
-  return tempPassword.trim();
+  return { code, password: tempPassword.trim() };
 }
 
 test.describe('Manager "My Team" view + direct-report edits', () => {
   test('manager sees only reports, can edit report, cannot persist X change', async ({ page }) => {
     test.setTimeout(120_000);
     const ts = Date.now();
-    const mgrCode = `mgr${ts}`;
-    const empCode = `emp${ts}`;
-    const nonCode = `non${ts}`;
 
     // ── 1. Log in as admin ─────────────────────────────────────────────────
     await loginAs(page, ADMIN_CODE, ADMIN_PASSWORD);
 
     // ── 2. Create manager M ────────────────────────────────────────────────
-    const mgrPassword = await createEmployee(page, {
-      code: mgrCode,
+    const { code: mgrCode, password: mgrPassword } = await createEmployee(page, {
       name: `Manager ${ts}`,
       role: 'manager',
     });
@@ -113,8 +122,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(mgrId).toBeTruthy();
 
     // ── 3. Create employee E (report of M) ─────────────────────────────────
-    await createEmployee(page, {
-      code: empCode,
+    const { code: empCode } = await createEmployee(page, {
       name: `Employee Report ${ts}`,
       role: 'employee',
       managerId: mgrId,
@@ -130,8 +138,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(empId).toBeTruthy();
 
     // ── 4. Create employee X (no manager) ─────────────────────────────────
-    await createEmployee(page, {
-      code: nonCode,
+    const { code: nonCode } = await createEmployee(page, {
       name: `Non-Report ${ts}`,
       role: 'employee',
     });

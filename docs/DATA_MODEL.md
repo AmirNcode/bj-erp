@@ -30,11 +30,16 @@ ledger_entry    : 'allocation' | 'consumption' | 'adjustment' | 'reversal'
 
 ### `departments`
 `id` · `company_id → companies` · `name_fa` · `name_en` · `kind department_kind` ·
-`manager_id → profiles` (nullable) · `created_at`.
-The 3 teams (`kind='team'`) + Security (`kind='security'`).
+`manager_id → profiles` (nullable) · `code` (latin `^[a-z0-9]{2,6}$`, unique per company;
+admin-editable in Manage → Settings) · `created_at`.
+The 3 teams (`kind='team'`) + Security (`kind='security'`). `code` is the prefix of generated
+employee codes (`prod-1042`); changing it affects only future accounts.
 
 ### `profiles`
-`id` (= auth user id) · `company_id` · `employee_code` (unique, the login username) · `full_name` ·
+`id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; since
+2026-07-13 **generated in-DB** as `departments.code || '-' || personnel_no`, never typed) ·
+`personnel_no` (client HR number, `^[0-9]{1,10}$`, unique per company, nullable for pre-existing
+users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
 `language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali|gregorian`, default `jalali`) ·
 `active bool` · `created_at`.

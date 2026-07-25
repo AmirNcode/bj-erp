@@ -14,16 +14,14 @@ import {
 test('overlapping request is rejected with a localized error', async ({ page }) => {
   test.setTimeout(180_000);
   const ts = Date.now();
-  const code = `ov${ts}`;
-
   // Admin creates a throwaway employee with balance.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  const pw = await createEmployee(page, { code, name: `Overlap Test ${ts}`, roles: ['employee'] });
+  const { code, password } = await createEmployee(page, { name: `Overlap Test ${ts}`, roles: ['employee'] });
   const ltValue = await allocate(page, code, 10);
   await logout(page);
 
   // Employee submits the same 2-day window twice.
-  await login(page, code, pw.trim());
+  await login(page, code, password);
   await submitLeave(page, { leaveTypeValue: ltValue });
   await expect(page.locator('[data-testid="success-msg"]')).toBeVisible({ timeout: 10_000 });
 

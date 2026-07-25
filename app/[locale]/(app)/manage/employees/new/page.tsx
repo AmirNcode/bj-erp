@@ -1,11 +1,15 @@
 /**
- * Create new employee page.
- * Fetches departments and potential managers server-side for selects.
+ * Create new employee page — role-adaptive.
+ * Admin: any department / manager / roles, plus manual allocations.
+ * Manager: locked to own department + self as manager, employee role only,
+ * default quotas applied in-DB. Enforcement lives in app_create_employee;
+ * this page only mirrors it.
  */
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { PageHeader } from '../../../_components/PageHeader';
 import { NewEmployeeForm } from './NewEmployeeForm';
 import { FormSkeleton } from '@/components/Skeletons';
@@ -19,26 +23,48 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   const t = await getTranslations('manage');
   const supabase = await createClient();
 
-  // Fetch departments, potential managers, and balance-affecting leave types in parallel.
-  const [{ data: departments }, { data: managers }, { data: leaveTypes }] = await Promise.all([
-    supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
-    supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name'),
-    supabase
-      .from('leave_types')
-      .select('id, name_fa, name_en, default_annual_quota_days')
-      .eq('active', true)
-      .eq('affects_balance', true)
-      .order('name_fa'),
+  const user = await getCachedUser();
+  if (!user) return null;
+  const [roles, callerProfile] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedProfile(user.id),
   ]);
+  const isAdmin = roles.includes('admin');
+
+  // Admin picks dept/manager and types allocations; a manager's variant only
+  // needs their own department row.
+  const [{ data: departments }, { data: managers }, { data: leaveTypes }] = await Promise.all([
+    supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
+    isAdmin
+      ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
+      : Promise.resolve({ data: [] }),
+    isAdmin
+      ? supabase
+          .from('leave_types')
+          .select('id, name_fa, name_en, default_annual_quota_days')
+          .eq('active', true)
+          .eq('affects_balance', true)
+          .order('name_fa')
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const ownDepartment =
+    (departments ?? []).find((d) => d.id === callerProfile?.department_id) ?? null;
 
   return (
     <NewEmployeeForm
+      isAdmin={isAdmin}
+      ownDepartment={ownDepartment}
+      ownName={callerProfile?.full_name ?? ''}
       departments={departments ?? []}
       managers={managers ?? []}
       leaveTypes={leaveTypes ?? []}
       locale={locale}
       labels={{
-        code: t('employees.code'),
+        personnelNo: t('employees.personnelNo'),
+        jobTitle: t('employees.jobTitle'),
+        codePreview: t('employees.codePreview'),
+        defaultQuotaHint: t('employees.defaultQuotaHint'),
         name: t('employees.name'),
         department: t('employees.department'),
         manager: t('employees.manager'),

@@ -103,8 +103,15 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 `public.app_create_employee(...)` and `public.app_set_employee_password(...)` are `SECURITY DEFINER`
 functions (search_path locked) that write to `auth.users` / `auth.identities` — work the
-`authenticated` role cannot do directly. They **self-guard** with `private.is_admin(auth.uid())`
-(non-admin callers get a `42501` exception) and are granted to `authenticated`, revoked from `anon`.
+`authenticated` role cannot do directly. They **self-guard** in-DB and are granted to
+`authenticated`, revoked from `anon`. Since migration `20260713120001`, `app_create_employee`
+has two authorization paths: **admin** (free choice of department/manager/roles, as before) and
+**manager** (every privileged input is overwritten in-DB: department forced to the caller's own,
+`manager_id` forced to the caller, roles forced to `{employee}`; default leave quotas are applied
+in the same transaction via `private.allocate_leave_impl`). Anyone else gets `42501`. Assigning
+admin/manager/security roles therefore stays admin-only. `app_bulk_create_employees(jsonb)`
+(CSV import, admin-only, all-or-nothing single transaction) reuses the same
+`private.create_employee_impl`.
 This is the chosen alternative to shipping a `service_role` secret into the app server — it keeps
 user creation in-database and **identical on self-hosted Supabase** (portability, NFR-4).
 `public.app_change_my_password(p_current, p_new)` (FR-7) follows the same pattern but **self-guards by

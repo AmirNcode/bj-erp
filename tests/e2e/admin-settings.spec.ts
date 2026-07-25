@@ -11,10 +11,9 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
 
   // A non-admin is redirected away from /manage/settings (manage layout guard).
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  const code = `set${ts.toString().slice(-6)}`;
-  const pw = await createEmployee(page, { code, name: 'Settings Outsider', roles: ['employee'] });
+  const { code, password } = await createEmployee(page, { name: 'Settings Outsider', roles: ['employee'] });
   await logout(page);
-  await login(page, code, pw.trim());
+  await login(page, code, password);
   await page.goto('/manage/settings');
   await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
   await logout(page);

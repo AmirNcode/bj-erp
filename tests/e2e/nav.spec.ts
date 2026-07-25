@@ -16,9 +16,9 @@ test('bottom nav shows role-correct tabs and navigates', async ({ page }) => {
   await expect(page).toHaveURL(/\/calendar$/);
 
   // Plain employee: no Manage tab.
-  const empPw = await createEmployee(page, { code: `emp${ts}`, name: `E ${ts}`, roles: ['employee'] });
+  const { code: empCode, password: empPw } = await createEmployee(page, { name: `E ${ts}`, roles: ['employee'] });
   await logout(page);
-  await login(page, `emp${ts}`, empPw.trim());
+  await login(page, empCode, empPw);
   await expect(page.locator('[data-testid="nav-home"]')).toBeVisible();
   await expect(page.locator('[data-testid="nav-manage"]')).toHaveCount(0);
   // Plain employee: home board renders, but no approvals card.

@@ -15,12 +15,21 @@ values ('00000000-0000-0000-0000-0000000000c0', 'BJ Manufacturing')
 on conflict (id) do nothing;
 
 -- Departments: 3 teams + Security (fixed ids; matches the demo).
-insert into public.departments (id, company_id, name_fa, name_en, kind) values
-  ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c0', 'خط تولید الف',      'Production Line A', 'team'),
-  ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000c0', 'کنترل کیفیت',        'Quality Control',   'team'),
-  ('00000000-0000-0000-0000-0000000000d3', '00000000-0000-0000-0000-0000000000c0', 'نگهداری و تعمیرات', 'Maintenance',       'team'),
-  ('00000000-0000-0000-0000-0000000000d4', '00000000-0000-0000-0000-0000000000c0', 'حراست',              'Security',          'security')
+-- `code` is the latin prefix of generated employee codes (e.g. prod-1042).
+insert into public.departments (id, company_id, name_fa, name_en, kind, code) values
+  ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c0', 'خط تولید الف',      'Production Line A', 'team',     'prod'),
+  ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000c0', 'کنترل کیفیت',        'Quality Control',   'team',     'qc'),
+  ('00000000-0000-0000-0000-0000000000d3', '00000000-0000-0000-0000-0000000000c0', 'نگهداری و تعمیرات', 'Maintenance',       'team',     'mant'),
+  ('00000000-0000-0000-0000-0000000000d4', '00000000-0000-0000-0000-0000000000c0', 'حراست',              'Security',          'security', 'sec')
 on conflict (id) do nothing;
+
+-- Older installs created these rows before `code` existed — align them.
+update public.departments set code = c.v
+from (values ('00000000-0000-0000-0000-0000000000d1','prod'),
+             ('00000000-0000-0000-0000-0000000000d2','qc'),
+             ('00000000-0000-0000-0000-0000000000d3','mant'),
+             ('00000000-0000-0000-0000-0000000000d4','sec')) as c(i,v)
+where id = c.i::uuid and code is distinct from c.v;
 
 -- Work settings: Friday weekend. Keyed on company (no unique constraint -> guard).
 insert into public.work_settings (company_id, weekend_days)

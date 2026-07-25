@@ -1,6 +1,8 @@
 /**
  * Employee list page — admin sees all employees (RLS allows admin to read all profiles).
  * Manager sees employees they manage (RLS filters automatically).
+ * Desktop table is a client component (admin row-selection for bulk password
+ * regeneration); mobile stacked cards stay server-rendered, read-only.
  */
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ListSkeleton } from '@/components/Skeletons';
+import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -23,7 +26,13 @@ type Props = {
 // ── async child that owns all data fetching ────────────────────────────────
 async function EmployeesData({ locale }: { locale: string }) {
   const t = await getTranslations('manage');
+  const tr = await getTranslations('manage.employees.regen');
+  const tc = await getTranslations('manage.import.credentials');
   const supabase = await createClient();
+
+  const user = await getCachedUser();
+  const roles = user ? await getCachedRoles(user.id) : [];
+  const isAdmin = roles.includes('admin');
 
   // Fetch all employees. RLS allows admin to read all profiles.
   // Use '!profiles_department_id_fkey' to disambiguate from the manager_id FK.
@@ -43,100 +52,76 @@ async function EmployeesData({ locale }: { locale: string }) {
     )
     .order('full_name');
 
+  const rows: EmployeeRow[] = (employees ?? []).map((emp) => ({
+    id: emp.id,
+    employee_code: emp.employee_code,
+    full_name: emp.full_name,
+    active: emp.active,
+    departmentLabel: emp.departments
+      ? locale === 'fa'
+        ? (emp.departments as { name_fa: string }).name_fa
+        : (emp.departments as { name_en: string }).name_en
+      : '—',
+    rolesLabel:
+      (emp.user_roles as { role: string }[]).map((r) => r.role).join(', ') || '—',
+    isSelf: emp.id === user?.id,
+  }));
+
   return (
     <>
-      {/* Desktop table */}
-      <Card className="hidden md:block overflow-hidden py-0">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40">
-              <tr>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.code')}
-                </th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.name')}
-                </th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.department')}
-                </th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.roles')}
-                </th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.status')}
-                </th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">
-                  {t('employees.actions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {(employees ?? []).map((emp) => (
-                <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-mono text-sm">{emp.employee_code}</td>
-                  <td className="px-4 py-3">{emp.full_name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {emp.departments
-                      ? locale === 'fa'
-                        ? (emp.departments as { name_fa: string }).name_fa
-                        : (emp.departments as { name_en: string }).name_en
-                      : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {(emp.user_roles as { role: string }[])
-                      .map((r) => r.role)
-                      .join(', ') || '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge
-                      variant={emp.active ? 'default' : 'secondary'}
-                      className={
-                        emp.active
-                          ? 'bg-success-foreground text-success hover:bg-success-foreground'
-                          : 'bg-destructive/10 text-destructive hover:bg-destructive/10'
-                      }
-                    >
-                      {emp.active ? t('employees.active') : t('employees.inactive')}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Button variant="link" size="sm" className="p-0 h-auto" asChild>
-                      <Link href={`/${locale}/manage/employees/${emp.id}`}>
-                        {t('employees.edit')}
-                      </Link>
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {(employees ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                    {t('employees.noEmployees')}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      {/* Desktop table (client: admin selection + bulk password regeneration) */}
+      <EmployeesTable
+        employees={rows}
+        isAdmin={isAdmin}
+        locale={locale}
+        labels={{
+          code: t('employees.code'),
+          name: t('employees.name'),
+          department: t('employees.department'),
+          roles: t('employees.roles'),
+          status: t('employees.status'),
+          actions: t('employees.actions'),
+          active: t('employees.active'),
+          inactive: t('employees.inactive'),
+          edit: t('employees.edit'),
+          noEmployees: t('employees.noEmployees'),
+          errorLabel: t('employees.error'),
+          regen: {
+            button: tr('button'),
+            confirmTitle: tr('confirmTitle'),
+            confirmBody: tr('confirmBody'),
+            cancel: tr('cancel'),
+            confirm: tr('confirm'),
+          },
+          credentials: {
+            title: tc('title'),
+            warn: tc('warn'),
+            download: tc('download'),
+            name: tc('name'),
+            code: tc('code'),
+            password: tc('password'),
+          },
+        }}
+      />
 
       {/* Mobile stacked cards */}
       <div className="md:hidden space-y-3">
-        {(employees ?? []).length === 0 && (
+        {rows.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground">
               {t('employees.noEmployees')}
             </CardContent>
           </Card>
         )}
-        {(employees ?? []).map((emp) => (
+        {rows.map((emp) => (
           <Card key={emp.id}>
             <CardContent className="py-4 space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-medium">{emp.full_name}</p>
-                  <p className="font-mono text-sm text-muted-foreground">{emp.employee_code}</p>
+                  <p className="font-mono text-sm text-muted-foreground" dir="ltr">
+                    {emp.employee_code}
+                  </p>
                 </div>
                 <Badge
                   className={
@@ -148,17 +133,9 @@ async function EmployeesData({ locale }: { locale: string }) {
                   {emp.active ? t('employees.active') : t('employees.inactive')}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {emp.departments
-                  ? locale === 'fa'
-                    ? (emp.departments as { name_fa: string }).name_fa
-                    : (emp.departments as { name_en: string }).name_en
-                  : '—'}
-              </p>
+              <p className="text-sm text-muted-foreground">{emp.departmentLabel}</p>
               <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                  {(emp.user_roles as { role: string }[]).map((r) => r.role).join(', ') || '—'}
-                </p>
+                <p className="text-sm text-muted-foreground">{emp.rolesLabel}</p>
                 <Button variant="link" size="sm" className="p-0 h-auto" asChild>
                   <Link href={`/${locale}/manage/employees/${emp.id}`}>
                     {t('employees.edit')}
@@ -169,7 +146,6 @@ async function EmployeesData({ locale }: { locale: string }) {
           </Card>
         ))}
       </div>
-
     </>
   );
 }
@@ -207,6 +183,13 @@ export default async function EmployeesPage({ params }: Props) {
             <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
               <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
             </Button>
+            {isAdmin && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/${locale}/manage/employees/import`} data-testid="import-link">
+                  {t('employees.regen.importLink')}
+                </Link>
+              </Button>
+            )}
             <Button asChild size="sm">
               <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
             </Button>

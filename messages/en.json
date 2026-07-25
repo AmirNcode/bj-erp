@@ -124,7 +124,6 @@
     "gregorian": "Gregorian",
     "langFa": "فارسی",
     "langEn": "English",
-    "logout": "Log Out",
     "saved": "Saved.",
     "error": "Error",
     "password": {
@@ -137,6 +136,13 @@
       "tooShort": "New password must be at least 8 characters.",
       "mismatch": "Password confirmation does not match.",
       "emptyCurrent": "Enter your current password."
+    },
+    "logoutConfirm": {
+      "trigger": "Log out",
+      "title": "Log out?",
+      "body": "You will need your employee code and password to sign in again.",
+      "cancel": "Cancel",
+      "confirm": "Log out"
     }
   },
   "allocations": {
@@ -202,7 +208,19 @@
       "saved": "Changes saved successfully.",
       "allocTitle": "Initial leave balance",
       "allocWarn": "Employee created, but setting leave balance failed:",
-      "balancesTitle": "Leave balances"
+      "balancesTitle": "Leave balances",
+      "personnelNo": "Personnel number",
+      "jobTitle": "Job title",
+      "codePreview": "Login code (automatic)",
+      "defaultQuotaHint": "Default leave quotas are assigned to the new employee automatically.",
+      "regen": {
+        "button": "Regenerate passwords",
+        "confirmTitle": "Regenerate passwords?",
+        "confirmBody": "New passwords will be generated for {count} people and their old passwords stop working immediately.",
+        "cancel": "Cancel",
+        "confirm": "Generate new passwords",
+        "importLink": "Bulk import (CSV)"
+      }
     },
     "settings": {
       "title": "Work settings",
@@ -228,7 +246,46 @@
         "thu": "Thursday",
         "fri": "Friday"
       },
-      "recurringHint": "Recurring holidays must still be entered for each year; day counting only treats the exact saved dates as holidays."
+      "recurringHint": "Recurring holidays must still be entered for each year; day counting only treats the exact saved dates as holidays.",
+      "departments": {
+        "title": "Department codes",
+        "hint": "Latin prefix of new employees' login codes (e.g. prod-1042). Existing employees keep their codes.",
+        "invalid": "Code must be 2-6 latin letters or digits."
+      }
+    },
+    "import": {
+      "title": "Bulk employee import",
+      "intro": "Download the template, fill it in Excel, and upload it here. Starred columns are required. Hire dates may be Jalali or Gregorian.",
+      "template": "Download template (CSV)",
+      "templateHint": "Filled example (do not enter these two rows — each team's manager must come before their team members):",
+      "upload": "Upload CSV file",
+      "rowsValid": "Valid rows",
+      "rowsInvalid": "Errors",
+      "line": "Line",
+      "problem": "Problem",
+      "import": "Create employees",
+      "importing": "Creating…",
+      "error": "Error",
+      "errors": {
+        "missingColumn": "A required column is missing — use the template file.",
+        "required": "A required value is empty.",
+        "badPersonnelNo": "Personnel number must be 1-10 digits.",
+        "dupInFile": "Personnel number is duplicated within this file.",
+        "dupExisting": "This personnel number is already registered.",
+        "unknownDept": "Unknown department code (see the codes at the bottom).",
+        "unknownManager": "Manager not found — managers must appear in earlier rows or already exist.",
+        "badDate": "Invalid date (example: 1404/04/22 or 2025-07-13).",
+        "badRole": "Role must be manager or employee.",
+        "badDays": "Invalid day count."
+      },
+      "credentials": {
+        "title": "Accounts created — login credentials",
+        "warn": "This file can be downloaded only once; passwords cannot be recovered later. Download it and store it somewhere safe.",
+        "download": "Download credentials (CSV)",
+        "name": "Name",
+        "code": "Login code",
+        "password": "Password"
+      }
     }
   },
   "dbErrors": {

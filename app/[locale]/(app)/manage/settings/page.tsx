@@ -13,6 +13,8 @@ import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
+import { DepartmentCodesForm } from './DepartmentCodesForm';
+import { createClient } from '@/lib/supabase/server';
 
 type Props = { params: Promise<{ locale: string }> };
 
@@ -31,7 +33,12 @@ export default async function SettingsPage({ params }: Props) {
   if (!isAdmin) redirect(`/${locale}/home`);
 
   const t = await getTranslations('manage.settings');
-  const data = await getCompanyHolidays();
+  const supabase = await createClient();
+  const [holidayData, { data: departments }] = await Promise.all([
+    getCompanyHolidays(),
+    supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
+  ]);
+  const data = holidayData;
   const weekendDays = data.ok ? data.weekendDays : [5];
   const holidays = data.ok ? data.holidays : [];
 
@@ -80,6 +87,23 @@ export default async function SettingsPage({ params }: Props) {
               recurringHint: t('recurringHint'),
               delete: t('delete'),
               noHolidays: t('noHolidays'),
+              errorLabel: t('error'),
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <DepartmentCodesForm
+            departments={departments ?? []}
+            locale={locale}
+            labels={{
+              title: t('departments.title'),
+              hint: t('departments.hint'),
+              save: t('save'),
+              saved: t('saved'),
+              invalid: t('departments.invalid'),
               errorLabel: t('error'),
             }}
           />

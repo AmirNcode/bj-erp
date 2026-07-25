@@ -7,9 +7,9 @@ test('profile settings persist, language switches locale, logout clears session'
 
   // Create a throwaway employee and log in as them.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  const pw = await createEmployee(page, { code: `set${ts}`, name: `Set ${ts}`, roles: ['employee'] });
+  const { code, password } = await createEmployee(page, { name: `Set ${ts}`, roles: ['employee'] });
   await logout(page);
-  await login(page, `set${ts}`, pw.trim());
+  await login(page, code, password);
 
   await page.goto('/profile');
   await expect(page.locator('[data-testid="settings-calendar"]')).toBeVisible({ timeout: 10_000 });
@@ -33,8 +33,16 @@ test('profile settings persist, language switches locale, logout clears session'
   await expect(page.locator('#leave_type_id')).toContainText('Annual Leave');
   await expect(page.locator('#leave_type_id')).not.toContainText('مرخصی استحقاقی');
 
-  // Logout returns to the login page.
+  // Logout asks for confirmation first; cancelling keeps the session.
   await page.goto('/profile');
   await page.locator('[data-testid="settings-logout"]').click();
+  await expect(page.locator('[data-testid="logout-confirm"]')).toBeVisible({ timeout: 10_000 });
+  await page.locator('[data-testid="logout-cancel"]').click();
+  await expect(page.locator('[data-testid="logout-confirm"]')).toBeHidden();
+  await expect(page).toHaveURL(/\/profile$/);
+
+  // Confirming logs out and returns to the login page.
+  await page.locator('[data-testid="settings-logout"]').click();
+  await page.locator('[data-testid="logout-confirm"]').click();
   await expect(page).toHaveURL(/\/login$/, { timeout: 10_000 });
 });

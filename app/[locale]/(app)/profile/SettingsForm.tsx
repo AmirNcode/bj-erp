@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter, usePathname } from '@/i18n/navigation';
-import { updateMyPrefs, signOut } from '@/lib/actions/profile';
-import { Button } from '@/components/ui/button';
+import { updateMyPrefs } from '@/lib/actions/profile';
 import { nativeSelectClass } from '@/lib/native-select';
 
 type Labels = {
@@ -13,18 +12,16 @@ type Labels = {
   gregorian: string;
   langFa: string;
   langEn: string;
-  logout: string;
   saved: string;
   errorLabel: string;
 };
 
 type Props = {
   current: { calendarPref: string; languagePref: string };
-  locale: string;
   labels: Labels;
 };
 
-export function SettingsForm({ current, locale, labels }: Props) {
+export function SettingsForm({ current, labels }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [calendar, setCalendar] = useState(current.calendarPref);
@@ -91,17 +88,6 @@ export function SettingsForm({ current, locale, labels }: Props) {
           <option value="en">{labels.langEn}</option>
         </select>
       </div>
-
-      <Button
-        type="button"
-        variant="outline"
-        data-testid="settings-logout"
-        onClick={() => startTransition(async () => { await signOut(locale); })}
-        disabled={isPending}
-        className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-      >
-        {labels.logout}
-      </Button>
     </div>
   );
 }

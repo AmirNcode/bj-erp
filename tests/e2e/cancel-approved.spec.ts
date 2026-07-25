@@ -12,17 +12,16 @@ import {
 test('employee cancels an approved future leave', async ({ page }) => {
   test.setTimeout(240_000); // a cold `next dev` compiles each route on first hit
   const ts = Date.now();
-  const code = `cxl${ts}`;
   const name = `Cancel Tester ${ts}`;
 
   // Admin: create the employee and allocate annual leave.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  const pw = await createEmployee(page, { code, name, roles: ['employee'] });
+  const { code, password } = await createEmployee(page, { name, roles: ['employee'] });
   const leaveTypeValue = await allocate(page, code, 26);
   await logout(page);
 
   // Employee: submit a future 2-day leave request (pending).
-  await login(page, code, pw.trim());
+  await login(page, code, password);
   await submitLeave(page, { leaveTypeValue });
   await logout(page);
 
@@ -44,7 +43,7 @@ test('employee cancels an approved future leave', async ({ page }) => {
 
   // Employee: the approved future request shows Cancel; cancelling opens an AlertDialog,
   // confirming flips the badge to "cancelled" and removes the button.
-  await login(page, code, pw.trim());
+  await login(page, code, password);
   await page.goto('/request');
   const row = page.locator('[data-testid^="request-row-"]').first();
   await expect(row).toBeVisible({ timeout: 15_000 });

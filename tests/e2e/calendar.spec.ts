@@ -15,26 +15,25 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     // Long multi-role flow against a cold `next dev`; generous budget.
     test.setTimeout(240_000);
     const ts = Date.now();
-    const authCode = `auth${ts}`;
-    const peerCode = `peer${ts}`;
+
     const requesterName = `Requester ${ts}`;
     const SECRET = `SECRETMED${ts}`; // distinctive, space-free reason string
 
     // 1. Admin creates a requester + a teammate (same department → same_team) and
     //    allocates balance to the requester.
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-    const authPw = await createEmployee(page, { code: authCode, name: requesterName, roles: ['employee'] });
-    const peerPw = await createEmployee(page, { code: peerCode, name: `Peer ${ts}`, roles: ['employee'] });
+    const { code: authCode, password: authPw } = await createEmployee(page, { name: requesterName, roles: ['employee'] });
+    const { code: peerCode, password: peerPw } = await createEmployee(page, { name: `Peer ${ts}`, roles: ['employee'] });
     const ltValue = await allocate(page, authCode, 26);
 
     // 2. Requester submits a request carrying a private reason.
     await logout(page);
-    await login(page, authCode, authPw.trim());
+    await login(page, authCode, authPw);
     await submitLeave(page, { leaveTypeValue: ltValue, reason: SECRET, range: jalaliCurrentMonthRange() });
 
     // 3. Teammate opens the calendar.
     await logout(page);
-    await login(page, peerCode, peerPw.trim());
+    await login(page, peerCode, peerPw);
     await page.goto('/calendar');
     await expect(page.locator('[data-testid="calendar-view"]')).toBeVisible({ timeout: 10_000 });
 
@@ -48,11 +47,11 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await page.locator('[data-testid="calendar-month-toggle"]').click();
     await expect(page.locator('[data-testid="calendar-month-grid"]')).toBeVisible();
 
-    const todayIso = new Date(
-      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate())
-    )
-      .toISOString()
-      .slice(0, 10);
+    // "Today" is Asia/Tehran (lib/appDate.ts) — the UTC date is one day
+    // behind between 20:30 and 24:00 UTC.
+    const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(
+      new Date()
+    );
     await expect(page.locator(`[data-testid="calendar-day-count-${todayIso}"]`)).toBeVisible({
       timeout: 10_000,
     });

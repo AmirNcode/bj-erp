@@ -53,3 +53,4 @@ if (error) {
   process.exit(1);
 }
 console.log(`cleanup-e2e: deleted ${data} throwaway e2e user(s).`);
+
