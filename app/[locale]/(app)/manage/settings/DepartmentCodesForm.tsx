@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { updateDepartmentCode } from '@/lib/actions/departments';
+import { isValidDepartmentCode, normalizeDepartmentCode } from '@/lib/departments/code';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -32,8 +33,8 @@ export function DepartmentCodesForm({ departments, locale, labels }: Props) {
   const [isPending, startTransition] = useTransition();
 
   const save = (id: string) => {
-    const value = (codes[id] ?? '').trim().toLowerCase();
-    if (!/^[a-z0-9]{2,6}$/.test(value)) {
+    const value = normalizeDepartmentCode(codes[id] ?? '');
+    if (!isValidDepartmentCode(value)) {
       setStatus((s) => ({ ...s, [id]: labels.invalid }));
       return;
     }

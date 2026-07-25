@@ -32,8 +32,10 @@ ledger_entry    : 'allocation' | 'consumption' | 'adjustment' | 'reversal'
 `id` · `company_id → companies` · `name_fa` · `name_en` · `kind department_kind` ·
 `manager_id → profiles` (nullable) · `code` (latin `^[a-z0-9]{2,6}$`, unique per company;
 admin-editable in Manage → Settings) · `created_at`.
-The 3 teams (`kind='team'`) + Security (`kind='security'`). `code` is the prefix of generated
-employee codes (`prod-1042`); changing it affects only future accounts.
+The 3 teams (`kind='team'`) + Security (`kind='security'`) are seeded; admins add more from
+Manage → Employees → **Add Department** (`/manage/departments/new`). `code` is the prefix of
+generated employee codes (`prod-1042`); changing it affects only future accounts. `kind` is
+descriptive — no app logic reads it, new departments default to `team`.
 
 ### `profiles`
 `id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; since

@@ -106,6 +106,18 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☑ Migration `20260713120001`, unit 130/130, e2e 23/23, lint+build clean; local Docker stack
   rebuilt with the new image (uncommitted — pending Amir's go)
 
+## Add departments from the app (2026-07-25) ✅
+- ☑ Admin-only **Add Department** button beside *Add Employee* on Manage → Employees
+- ☑ `/manage/departments/new`: fa/en names, login-code prefix (auto-suggested from the English
+  name), `kind`; taken codes listed; success screen links into *Add employee*
+- ☑ `createDepartment` server action on the existing `departments_insert_admin` RLS policy —
+  no migration; audit row + cache invalidation; shared code validation in `lib/departments/code.ts`
+- ☑ fa/en messages + `dbErrors` for duplicate/invalid code and missing name
+- ☑ `tests/unit/department-code.test.ts` + `tests/e2e/department.spec.ts` (test departments use
+  the reserved `zz` prefix, cleaned up by `scripts/cleanup-e2e.mjs`)
+- ☑ Gates: unit **139/139**, e2e **25/25** serial against the local Docker stack, lint + tsc +
+  build green (uncommitted — pending Amir's go)
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen

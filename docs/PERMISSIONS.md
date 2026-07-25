@@ -63,7 +63,11 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 - **SELECT**: any authenticated company member.
 - **WRITE**: `is_admin` only. The FR-24 admin editor (`/manage/settings`) writes `work_settings` /
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
-  unlike transactional `leave_*`, are admin-writable by design).
+  unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
+  admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs
+  through `departments_insert_admin`, and Manage → Settings UPDATEs codes through
+  `departments_update_admin`. Managers reach `/manage/*` but are redirected away from the
+  department page — departments are company-wide config, not team data.
 
 ### `leave_allocations`
 - **SELECT**: own · `is_manager_of` · `can_read_all`.

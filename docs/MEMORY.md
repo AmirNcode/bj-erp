@@ -53,6 +53,15 @@ Repeated runs left 380 junk accounts (purged 2026-07-02, user-approved). Suite n
 admin-guarded `app_cleanup_e2e_users()` RPC (hardcoded test-code patterns) + Playwright
 `globalTeardown` + `npm run cleanup:e2e`. New specs must use matching throwaway code patterns.
 
+### e2e: Playwright's 120s webServer window can't cold-boot this app
+`npx playwright test` on a cold machine dies with "Timed out waiting 120000ms from
+config.webServer" — `next dev` boots, but compiling the first routes outruns the window, and
+Playwright then kills the server it started, so nothing ran. Start the server yourself first
+(`npm run dev`, wait for `/fa/login` to answer), then run Playwright: `reuseExistingServer`
+attaches to it and the suite starts immediately. Same story for the backend — the local Docker
+stack (`docker start bj-erp-db-1 bj-erp-auth-1 bj-erp-rest-1 bj-erp-gateway-1`) must be up and
+`/auth/v1/health` returning 200 before any spec runs; the cloud demo project is paused.
+
 ### e2e: hardcoded dates rot; parallelism flakes
 Fixed Jalali fixtures expired and turned the suite red on month-end. Use dynamic
 `jalali2DayRange()` / `jalaliCurrentMonthRange()` (tests/e2e/_helpers). Run e2e serial

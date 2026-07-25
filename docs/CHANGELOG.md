@@ -6,6 +6,27 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Add departments from the app (2026-07-25)
+- **Admin can create departments in the UI.** Manage → Employees gains an **Add Department**
+  button beside *Add Employee* (admin only), opening `/manage/departments/new`: Farsi + English
+  name, the latin `code` that becomes the login-code prefix (auto-suggested from the English
+  name, editable), and the descriptive `kind`. Existing departments and their taken codes are
+  listed under the form, and the success screen links straight into *Add employee* — closing
+  the gap where a new hire could only join a department that already existed in the seed.
+- New server action `createDepartment` (`lib/actions/departments.ts`), admin-guarded and
+  enforced by the existing `departments_insert_admin` RLS policy — **no migration needed**;
+  writes an `audit_log` row (`create_department`) and invalidates the app cache.
+- Code validation shared by the form, the action, and the settings editor
+  (`lib/departments/code.ts`, mirrors the `departments_code_format` check + Persian-digit
+  normalization). New `dbErrors` entries map duplicate/invalid codes and missing names to
+  fa/en messages (the old unmapped "invalid department code" now localizes too).
+- Tests: `tests/unit/department-code.test.ts` (139 unit tests total) and
+  `tests/e2e/department.spec.ts` — admin creates a department, hires into it, and the new
+  employee logs in with the generated `<code>-<personnel_no>`; a manager is bounced from the
+  page and never sees the button. Test departments use the reserved `zz` code prefix and are
+  deleted by `scripts/cleanup-e2e.mjs` (plain admin DELETE under the existing RLS policy).
+  Gates: unit 139/139, e2e 25/25 serial, lint + tsc + build green.
+
 ### Employee onboarding & logout UX (2026-07-13)
 Spec: `docs/specs/2026-07-13-employee-onboarding-design.md` · plan: `docs/plans/2026-07-13-employee-onboarding.md`
 
