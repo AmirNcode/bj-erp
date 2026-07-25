@@ -1,12 +1,8 @@
 'use server';
 
 import type { Database } from '@/lib/supabase/types';
-import {
-  allowedProfileFields,
-  generateTempPassword,
-  normalizeEmployeeCode,
-  isValidEmployeeCode,
-} from './employees-helpers';
+import { allowedProfileFields, generateTempPassword } from './employees-helpers';
+import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
@@ -47,8 +43,9 @@ async function getCallerContext() {
 // ---------------------------------------------------------------------------
 
 export type CreateEmployeeInput = {
-  employee_code: string;
+  personnel_no: string;
   full_name: string;
+  job_title?: string;
   department_id?: string;
   manager_id?: string;
   roles?: AppRole[];
@@ -59,7 +56,10 @@ export type CreateEmployeeInput = {
 
 /**
  * Creates a new employee auth account + profile + roles in one RPC transaction.
- * Returns the temp password so the admin can hand it to the worker.
+ * The employee code is composed in-DB (department code + personnel number).
+ * Admins create freely; managers are scoped in-DB to their own department and
+ * team with the employee role only — the fast-path check here just mirrors it.
+ * Returns the temp password so the creator can hand it to the worker.
  * The temp password is never logged or stored — shown once in the UI.
  */
 export async function createEmployee(
@@ -68,18 +68,20 @@ export async function createEmployee(
   const { supabase, user, roles, companyId } = await getCallerContext();
 
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  if (!roles.includes('admin') && !roles.includes('manager')) {
+    return dbErr('admin or manager role required');
+  }
   if (!companyId) return dbErr('no profile for caller');
 
-  // The code becomes the auth email — validate before it reaches auth.users.
+  // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)
-  const code = normalizeEmployeeCode(input.employee_code);
-  if (!isValidEmployeeCode(code)) return dbErr('invalid employee code');
+  const personnelNo = normalizePersonnelNo(input.personnel_no);
+  if (!isValidPersonnelNo(personnelNo)) return dbErr('invalid personnel number');
 
   const tempPassword = generateTempPassword();
 
   const { data: userId, error } = await supabase.rpc('app_create_employee', {
-    p_employee_code: code,
+    p_personnel_no: personnelNo,
     p_full_name: input.full_name,
     p_password: tempPassword,
     p_company_id: companyId,
@@ -89,6 +91,7 @@ export async function createEmployee(
     ...(input.hire_date ? { p_hire_date: input.hire_date } : {}),
     ...(input.language_pref ? { p_language_pref: input.language_pref } : {}),
     ...(input.calendar_pref ? { p_calendar_pref: input.calendar_pref } : {}),
+    ...(input.job_title ? { p_job_title: input.job_title } : {}),
   });
 
   if (error) {
@@ -333,4 +336,112 @@ export async function resetPassword(
   });
 
   return { ok: true, tempPassword };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk import / credential regeneration (admin-only)
+// ---------------------------------------------------------------------------
+
+export type BulkImportRow = {
+  full_name: string;
+  personnel_no: string;
+  hire_date: string | null;
+  department_code: string;
+  manager_personnel_no: string | null;
+  role: 'manager' | 'employee';
+  job_title: string | null;
+  annual_days: number;
+  sick_days: number;
+};
+
+export type IssuedCredential = {
+  fullName: string;
+  employeeCode: string;
+  password: string;
+};
+
+/**
+ * Imports employees from validated CSV rows in ONE transaction
+ * (app_bulk_create_employees: the first bad row rolls everything back).
+ * Generates a random password per row and returns the credentials once —
+ * they are never logged or stored; passwords in the DB are bcrypt-hashed.
+ */
+export async function bulkCreateEmployees(
+  rows: BulkImportRow[]
+): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
+  const { supabase, user, roles, companyId } = await getCallerContext();
+
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+  if (!companyId) return dbErr('no profile for caller');
+  if (rows.length === 0) return dbErr('no rows to import');
+
+  const withPasswords = rows.map((row) => ({ ...row, password: generateTempPassword() }));
+
+  const { data, error } = await supabase.rpc('app_bulk_create_employees', {
+    p_company_id: companyId,
+    p_rows: withPasswords as unknown as import('@/lib/supabase/types').Json,
+  });
+
+  if (error) return dbErr(error.message);
+
+  const created = (data ?? []) as { personnel_no: string; employee_code: string }[];
+  const byPno = new Map(withPasswords.map((r) => [r.personnel_no, r]));
+  const credentials: IssuedCredential[] = created.map((c) => ({
+    fullName: byPno.get(c.personnel_no)?.full_name ?? c.personnel_no,
+    employeeCode: c.employee_code,
+    password: byPno.get(c.personnel_no)?.password ?? '',
+  }));
+
+  invalidateAppCache();
+  return { ok: true, credentials };
+}
+
+/**
+ * Regenerates passwords for the selected employees (recovery path when the
+ * one-time credentials file is lost). Old passwords stop working immediately.
+ * Refuses to include the caller — locking yourself out of the admin account
+ * from a bulk action would be unrecoverable without DB access.
+ */
+export async function bulkResetPasswords(
+  userIds: string[]
+): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+  if (userIds.length === 0) return dbErr('no employees selected');
+  if (userIds.includes(user.id)) return dbErr('cannot bulk-reset your own password');
+
+  const { data: profiles, error: readError } = await supabase
+    .from('profiles')
+    .select('id, full_name, employee_code')
+    .in('id', userIds);
+  if (readError) return dbErr(readError.message);
+
+  const credentials: IssuedCredential[] = [];
+  for (const profile of profiles ?? []) {
+    const password = generateTempPassword();
+    const { error } = await supabase.rpc('app_set_employee_password', {
+      p_user_id: profile.id,
+      p_password: password,
+    });
+    if (error) return dbErr(`${profile.employee_code}: ${error.message}`);
+
+    await supabase.from('audit_log').insert({
+      actor_id: user.id,
+      entity: 'profiles',
+      entity_id: profile.id,
+      action: 'reset_password',
+      after: {} as import('@/lib/supabase/types').Json,
+    });
+    credentials.push({
+      fullName: profile.full_name,
+      employeeCode: profile.employee_code,
+      password,
+    });
+  }
+
+  invalidateAppCache();
+  return { ok: true, credentials };
 }

@@ -5,13 +5,18 @@ import { useRouter } from 'next/navigation';
 import { createEmployee } from '@/lib/actions/employees';
 import { allocateLeave } from '@/lib/actions/leave';
 import { currentYearPeriod } from '@/lib/leave/allocations';
+import {
+  buildEmployeeCode,
+  isValidPersonnelNo,
+  normalizePersonnelNo,
+} from '@/lib/employees/code';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
 
-type Department = { id: string; name_fa: string; name_en: string };
+type Department = { id: string; name_fa: string; name_en: string; code: string };
 type Manager = { id: string; full_name: string; employee_code: string };
 type InitialLeaveType = {
   id: string;
@@ -24,12 +29,18 @@ const ROLES = ['admin', 'manager', 'employee', 'security'] as const;
 type Role = (typeof ROLES)[number];
 
 type Props = {
+  isAdmin: boolean;
+  ownDepartment: Department | null;
+  ownName: string;
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
   locale: string;
   labels: {
-    code: string;
+    personnelNo: string;
+    jobTitle: string;
+    codePreview: string;
+    defaultQuotaHint: string;
     name: string;
     department: string;
     manager: string;
@@ -60,13 +71,35 @@ function defaultDaysFor(type: InitialLeaveType) {
   return type.default_annual_quota_days ?? 0;
 }
 
-export function NewEmployeeForm({ departments, managers, leaveTypes, locale, labels }: Props) {
+export function NewEmployeeForm({
+  isAdmin,
+  ownDepartment,
+  ownName,
+  departments,
+  managers,
+  leaveTypes,
+  locale,
+  labels,
+}: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(['employee']);
+  const [personnelNo, setPersonnelNo] = useState('');
+  // Admin picks a department; manager is locked to their own.
+  const [deptId, setDeptId] = useState(isAdmin ? '' : ownDepartment?.id ?? '');
+
+  const selectedDept = isAdmin
+    ? departments.find((d) => d.id === deptId) ?? null
+    : ownDepartment;
+
+  const normalizedPno = normalizePersonnelNo(personnelNo);
+  const codePreview =
+    selectedDept && isValidPersonnelNo(normalizedPno)
+      ? buildEmployeeCode(selectedDept.code, normalizedPno)
+      : '—';
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -75,19 +108,22 @@ export function NewEmployeeForm({ departments, managers, leaveTypes, locale, lab
     setPending(true);
 
     const fd = new FormData(e.currentTarget);
-    const requestedAllocations = leaveTypes
-      .map((type) => ({
-        typeId: type.id,
-        days: Number(fd.get(`alloc_${type.id}`) || 0),
-      }))
-      .filter((allocation) => allocation.days > 0);
+    const requestedAllocations = isAdmin
+      ? leaveTypes
+          .map((type) => ({
+            typeId: type.id,
+            days: Number(fd.get(`alloc_${type.id}`) || 0),
+          }))
+          .filter((allocation) => allocation.days > 0)
+      : [];
 
     const result = await createEmployee({
-      employee_code: (fd.get('employee_code') as string).trim(),
+      personnel_no: normalizedPno,
       full_name: (fd.get('full_name') as string).trim(),
-      department_id: (fd.get('department_id') as string) || undefined,
-      manager_id: (fd.get('manager_id') as string) || undefined,
-      roles: selectedRoles,
+      job_title: ((fd.get('job_title') as string) || '').trim() || undefined,
+      department_id: isAdmin ? (fd.get('department_id') as string) || undefined : undefined,
+      manager_id: isAdmin ? (fd.get('manager_id') as string) || undefined : undefined,
+      roles: isAdmin ? selectedRoles : undefined,
       hire_date: (fd.get('hire_date') as string) || undefined,
     });
 
@@ -130,7 +166,10 @@ export function NewEmployeeForm({ departments, managers, leaveTypes, locale, lab
       <Card className="border-2 border-success/30 bg-success-foreground">
         <CardContent className="space-y-4 pt-6">
           <h2 className="text-lg font-semibold text-success">{labels.tempPasswordLabel}</h2>
-          <p className="font-mono text-2xl bg-background border border-success/20 rounded-lg px-4 py-3 select-all tracking-widest">
+          <p
+            data-testid="temp-password"
+            className="font-mono text-2xl bg-background border border-success/20 rounded-lg px-4 py-3 select-all tracking-widest"
+          >
             {tempPassword}
           </p>
           <p className="text-sm text-success">{labels.tempPasswordHint}</p>
@@ -168,81 +207,120 @@ export function NewEmployeeForm({ departments, managers, leaveTypes, locale, lab
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="employee_code">{labels.code}</Label>
-            {/* The code becomes the login identifier (latin-only); LTR even in fa. */}
-            <Input
-              id="employee_code"
-              name="employee_code"
-              required
-              dir="ltr"
-              autoCapitalize="off"
-              autoCorrect="off"
-              pattern="[A-Za-z0-9][A-Za-z0-9._\-]*"
-            />
-          </div>
-
-          <div className="space-y-1.5">
             <Label htmlFor="full_name">{labels.name}</Label>
             <Input id="full_name" name="full_name" required />
           </div>
 
-          {/* Native <select> — must stay native for Playwright selectOption e2e */}
           <div className="space-y-1.5">
-            <Label htmlFor="department_id">{labels.department}</Label>
-            <select
-              id="department_id"
-              name="department_id"
-              className={nativeSelectClass}
-            >
-              <option value="">{labels.selectDept}</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {locale === 'fa' ? d.name_fa : d.name_en}
-                </option>
-              ))}
-            </select>
+            <Label htmlFor="personnel_no">{labels.personnelNo}</Label>
+            {/* Becomes part of the login code — digits only, LTR even in fa. */}
+            <Input
+              id="personnel_no"
+              name="personnel_no"
+              data-testid="personnel-no"
+              required
+              dir="ltr"
+              inputMode="numeric"
+              autoCapitalize="off"
+              autoCorrect="off"
+              value={personnelNo}
+              onChange={(e) => setPersonnelNo(e.target.value)}
+            />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="manager_id">{labels.manager}</Label>
-            <select
-              id="manager_id"
-              name="manager_id"
-              className={nativeSelectClass}
-            >
-              <option value="">{labels.selectMgr}</option>
-              {managers.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.full_name} ({m.employee_code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Native role checkboxes — must stay native for Playwright label+checkbox e2e */}
-          <div className="space-y-2">
-            <span className="block text-sm font-medium leading-none">{labels.roles}</span>
-            <div className="flex flex-wrap gap-3">
-              {ROLES.map((role) => (
-                <label key={role} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedRoles.includes(role)}
-                    onChange={() => toggleRole(role)}
-                    className="rounded border-input text-primary focus:ring-ring"
-                  />
-                  <span className="text-sm">{role}</span>
-                </label>
-              ))}
+          {isAdmin ? (
+            /* Native <select> — must stay native for Playwright selectOption e2e */
+            <div className="space-y-1.5">
+              <Label htmlFor="department_id">{labels.department}</Label>
+              <select
+                id="department_id"
+                name="department_id"
+                required
+                className={nativeSelectClass}
+                value={deptId}
+                onChange={(e) => setDeptId(e.target.value)}
+              >
+                <option value="">{labels.selectDept}</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {locale === 'fa' ? d.name_fa : d.name_en}
+                  </option>
+                ))}
+              </select>
             </div>
+          ) : (
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium leading-none">{labels.department}</span>
+              <p className="text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="dept-locked">
+                {locale === 'fa' ? ownDepartment?.name_fa : ownDepartment?.name_en}
+              </p>
+            </div>
+          )}
+
+          {isAdmin ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="manager_id">{labels.manager}</Label>
+              <select id="manager_id" name="manager_id" className={nativeSelectClass}>
+                <option value="">{labels.selectMgr}</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name} ({m.employee_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium leading-none">{labels.manager}</span>
+              <p className="text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="mgr-locked">
+                {ownName}
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job_title">{labels.jobTitle}</Label>
+            <Input id="job_title" name="job_title" data-testid="job-title" />
           </div>
+
+          {/* Live preview of the generated login code (source of truth: DB). */}
+          <div className="space-y-1.5">
+            <span className="block text-sm font-medium leading-none">{labels.codePreview}</span>
+            <p
+              className="font-mono text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2 select-all"
+              dir="ltr"
+              data-testid="code-preview"
+            >
+              {codePreview}
+            </p>
+          </div>
+
+          {isAdmin && (
+            /* Native role checkboxes — must stay native for Playwright label+checkbox e2e */
+            <div className="space-y-2">
+              <span className="block text-sm font-medium leading-none">{labels.roles}</span>
+              <div className="flex flex-wrap gap-3">
+                {ROLES.map((role) => (
+                  <label key={role} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedRoles.includes(role)}
+                      onChange={() => toggleRole(role)}
+                      className="rounded border-input text-primary focus:ring-ring"
+                    />
+                    <span className="text-sm">{role}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <Label htmlFor="hire_date">{labels.hireDate}</Label>
             <Input id="hire_date" name="hire_date" type="date" />
           </div>
 
-          {leaveTypes.length > 0 && (
+          {isAdmin && leaveTypes.length > 0 && (
             <div
               className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
               data-testid="alloc-section"
@@ -267,6 +345,12 @@ export function NewEmployeeForm({ departments, managers, leaveTypes, locale, lab
                 );
               })}
             </div>
+          )}
+
+          {!isAdmin && (
+            <p className="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="default-quota-hint">
+              {labels.defaultQuotaHint}
+            </p>
           )}
 
           <div className="flex gap-3 pt-2">

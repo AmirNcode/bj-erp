@@ -87,6 +87,37 @@ their own plan files when reached.
   the title
 - ☑ App-shell tab prefetching plus a per-page update pill for manual data refresh / last-loaded time
 
+## Self-host installer (2026-07-03) ✅
+- ☑ `deploy/` package: Docker Compose stack (Supabase Postgres + GoTrue + PostgREST + app +
+  Caddy HTTPS gateway w/ internal CA), `install.sh` (secrets, migrations, seed, first admin,
+  CA export), `package.sh` (offline bundle, all images saved), `RUNBOOK.md` (en + fa)
+- ☑ App support: `output: 'standalone'`, runtime `SUPABASE_URL` override for server-side calls,
+  entrypoint placeholder substitution for baked `NEXT_PUBLIC_*` values
+
+## Employee onboarding & logout UX (2026-07-13) ✅
+Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2026-07-13-employee-onboarding.md`
+- ☑ Logout: bottom of profile page, outside cards, AlertDialog confirmation
+- ☑ `departments.code` + `profiles.personnel_no`/`job_title`; employee codes generated in-DB
+  (`prod-1042`), read-only preview in the form; dept codes editable in Manage → Settings
+- ☑ Manager-scoped creation (own dept/team, employee role only, default quotas) enforced in
+  `app_create_employee` v2; admin path unchanged
+- ☑ Admin bulk CSV import with validation preview + one-time credentials CSV;
+  bulk password regeneration on the employees list as the recovery path
+- ☑ Migration `20260713120001`, unit 130/130, e2e 23/23, lint+build clean; local Docker stack
+  rebuilt with the new image; landed via PR #4
+
+## Add departments from the app (2026-07-25) ✅
+- ☑ Admin-only **Add Department** button beside *Add Employee* on Manage → Employees
+- ☑ `/manage/departments/new`: fa/en names, login-code prefix (auto-suggested from the English
+  name), `kind`; taken codes listed; success screen links into *Add employee*
+- ☑ `createDepartment` server action on the existing `departments_insert_admin` RLS policy —
+  no migration; audit row + cache invalidation; shared code validation in `lib/departments/code.ts`
+- ☑ fa/en messages + `dbErrors` for duplicate/invalid code and missing name
+- ☑ `tests/unit/department-code.test.ts` + `tests/e2e/department.spec.ts` (test departments use
+  the reserved `zz` prefix, cleaned up by `scripts/cleanup-e2e.mjs`)
+- ☑ Gates: unit **139/139**, e2e **25/25** serial against the local Docker stack, lint + tsc +
+  build green; landed via PR #4
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen

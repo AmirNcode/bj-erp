@@ -6,21 +6,6 @@
 import { randomInt } from 'node:crypto';
 
 /**
- * Employee codes become the synthetic auth email local-part
- * (`code@bj-app.internal`), so they must stay within safe email characters.
- * Mirrors the in-DB check in app_create_employee (migration 20260702120001).
- */
-export const EMPLOYEE_CODE_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
-
-export function normalizeEmployeeCode(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-export function isValidEmployeeCode(code: string): boolean {
-  return EMPLOYEE_CODE_RE.test(code);
-}
-
-/**
  * Returns the profile columns a caller may update.
  * Admin gets all writable columns; a non-admin manager gets a restricted subset.
  * RLS already restricts WHICH rows each role can update — this restricts WHICH columns.

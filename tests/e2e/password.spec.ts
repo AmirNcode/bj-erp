@@ -5,14 +5,13 @@ import { ADMIN_CODE, ADMIN_PASSWORD, login, logout, createEmployee } from './_he
 // current password is rejected. Throwaway employee → no shared-state cleanup needed.
 test('self-service password change', async ({ page }) => {
   test.setTimeout(180_000); // cold `next dev` compiles each route on first hit
-  const code = `pwd${Date.now().toString().slice(-6)}`;
   const NEW_PW = 'NewPass!2026';
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  const tempPw = await createEmployee(page, { code, name: 'Password Tester', roles: ['employee'] });
+  const { code, password: tempPw } = await createEmployee(page, { name: 'Password Tester', roles: ['employee'] });
   await logout(page);
 
-  await login(page, code, tempPw.trim());
+  await login(page, code, tempPw);
   await page.goto('/profile');
 
   // Wrong current password → error.

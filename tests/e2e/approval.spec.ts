@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { jalali2DayRange } from './_helpers';
+import { jalali2DayRange, nextTestPersonnelNo } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
@@ -9,16 +9,20 @@ const ADMIN_PASSWORD = 'Admin!2026';
 
 async function login(page: Page, code: string, password: string) {
   await page.goto('/login');
-  // Fill-and-verify (see _helpers.login): guards the cold-dev hydration race
-  // where React remounts the controlled inputs and wipes the first fill.
+  // Fill-and-verify, then click-and-verify, all inside one retry loop: on a
+  // cold `next dev` the first fill can land before React hydrates (hydration
+  // resets the controlled inputs) and the first submit click can hit a
+  // not-yet-hydrated button (the form never submits). Retrying the whole
+  // cycle covers both races.
   await expect(async () => {
+    if (/\/home$/.test(page.url())) return; // already navigated on a prior pass
     await page.fill('#code', code);
     await page.fill('#password', password);
     await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
     await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
-  }).toPass({ timeout: 20_000 });
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
 }
 
 async function logout(page: Page) {
@@ -26,15 +30,15 @@ async function logout(page: Page) {
   await expect(page).toHaveURL(/\/login$/);
 }
 
-/** Create an employee via the admin console; returns the temp password. */
+/** Create an employee via the admin console; returns generated code + temp password. */
 async function createEmployee(
   page: Page,
-  opts: { code: string; name: string; roles: string[] }
-): Promise<string> {
+  opts: { name: string; roles: string[] }
+): Promise<{ code: string; password: string }> {
   await page.goto('/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
-  await page.fill('#employee_code', opts.code);
+  await page.fill('#personnel_no', nextTestPersonnelNo());
   await page.fill('#full_name', opts.name);
 
   // First real department.
@@ -60,13 +64,16 @@ async function createEmployee(
     }
   }
 
+  const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
+  expect(code).toMatch(/^[a-z0-9]{2,6}-999[0-9]{7}$/);
+
   await page.click('button[type="submit"]');
 
-  const pwEl = page.locator('.font-mono').first();
+  const pwEl = page.locator('[data-testid="temp-password"]');
   await expect(pwEl).toBeVisible({ timeout: 15_000 });
   const pw = (await pwEl.textContent())?.trim() ?? '';
   expect(pw.length).toBeGreaterThan(6);
-  return pw;
+  return { code, password: pw };
 }
 
 /** On the employee's edit page, set their direct manager (match by code substring). */
@@ -183,13 +190,11 @@ test.describe('Approval flow', () => {
     // first hit, so give it a generous budget (CI retries twice on top).
     test.setTimeout(240_000);
     const ts = Date.now();
-    const mgrCode = `mgr${ts}`;
-    const empCode = `emp${ts}`;
 
     // 1. Admin sets up a manager and a report.
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-    const mgrPw = await createEmployee(page, { code: mgrCode, name: `Manager ${ts}`, roles: ['manager'] });
-    const empPw = await createEmployee(page, { code: empCode, name: `Report ${ts}`, roles: ['employee'] });
+    const { code: mgrCode, password: mgrPw } = await createEmployee(page, { name: `Manager ${ts}`, roles: ['manager'] });
+    const { code: empCode, password: empPw } = await createEmployee(page, { name: `Report ${ts}`, roles: ['employee'] });
     await setManager(page, empCode, mgrCode);
     const ltValue = await allocate(page, empCode, 26);
 
@@ -197,13 +202,13 @@ test.describe('Approval flow', () => {
     //    balance 26 ≥ 2 each). Overlapping ranges are rejected at submit since
     //    the 2026-07-02 hardening, so the second uses a window a week later.
     await logout(page);
-    await login(page, empCode, empPw.trim());
+    await login(page, empCode, empPw);
     await submitTwoDayRequest(page, ltValue);
     await submitTwoDayRequest(page, ltValue, 7);
 
     // 3. Manager decides: approve one, reject the other.
     await logout(page);
-    await login(page, mgrCode, mgrPw.trim());
+    await login(page, mgrCode, mgrPw);
     await page.goto('/manage/approvals');
 
     const approveButtons = page.locator('[data-testid^="approve-btn-"]');
@@ -226,7 +231,7 @@ test.describe('Approval flow', () => {
 
     // 4. Employee sees one approved + one rejected.
     await logout(page);
-    await login(page, empCode, empPw.trim());
+    await login(page, empCode, empPw);
     await page.goto('/request');
 
     const badges = page.locator('[data-testid^="status-badge-"]');

@@ -6,6 +6,81 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Add departments from the app (2026-07-25)
+- **Admin can create departments in the UI.** Manage → Employees gains an **Add Department**
+  button beside *Add Employee* (admin only), opening `/manage/departments/new`: Farsi + English
+  name, the latin `code` that becomes the login-code prefix (auto-suggested from the English
+  name, editable), and the descriptive `kind`. Existing departments and their taken codes are
+  listed under the form, and the success screen links straight into *Add employee* — closing
+  the gap where a new hire could only join a department that already existed in the seed.
+- New server action `createDepartment` (`lib/actions/departments.ts`), admin-guarded and
+  enforced by the existing `departments_insert_admin` RLS policy — **no migration needed**;
+  writes an `audit_log` row (`create_department`) and invalidates the app cache.
+- Code validation shared by the form, the action, and the settings editor
+  (`lib/departments/code.ts`, mirrors the `departments_code_format` check + Persian-digit
+  normalization). New `dbErrors` entries map duplicate/invalid codes and missing names to
+  fa/en messages (the old unmapped "invalid department code" now localizes too).
+- Tests: `tests/unit/department-code.test.ts` (139 unit tests total) and
+  `tests/e2e/department.spec.ts` — admin creates a department, hires into it, and the new
+  employee logs in with the generated `<code>-<personnel_no>`; a manager is bounced from the
+  page and never sees the button. Test departments use the reserved `zz` code prefix and are
+  deleted by `scripts/cleanup-e2e.mjs` (plain admin DELETE under the existing RLS policy).
+  Gates: unit 139/139, e2e 25/25 serial, lint + tsc + build green.
+
+### Employee onboarding & logout UX (2026-07-13)
+Spec: `docs/specs/2026-07-13-employee-onboarding-design.md` · plan: `docs/plans/2026-07-13-employee-onboarding.md`
+
+- **Logout moved + confirmed**: button now sits at the very bottom of the profile page
+  (outside any card) and opens an AlertDialog before signing out — no more accidental logouts
+  (`profile/LogoutButton.tsx`; `settings-logout` testid preserved, confirm is `logout-confirm`).
+- **Generated employee codes**: `departments.code` (latin, admin-editable in Manage → Settings)
+  + `profiles.personnel_no` (client HR number, typed by the creator) compose the login code
+  in-DB as `prod-1042`; nobody hand-types codes anymore (read-only live preview in the form).
+  New display-only `profiles.job_title`. Existing users keep their codes.
+- **Manager-scoped creation**: managers get the new-employee page with department locked to
+  their own, themselves as manager, employee role only — enforced inside the rebuilt
+  `app_create_employee` (SECURITY DEFINER), which also applies default leave quotas for the
+  manager path via the extracted `private.allocate_leave_impl` (advisory-lock pattern kept).
+  Admin path unchanged. Old text-code RPC signature dropped.
+- **Admin bulk CSV import** (`/manage/employees/import`): Farsi template download, client-side
+  parse/validation preview (Excel BOM, Persian digits, Jalali *or* Gregorian hire dates,
+  duplicate/unknown-reference checks; managers may be referenced from earlier rows of the same
+  file), then one-transaction `app_bulk_create_employees` (all-or-nothing). Credentials
+  (name, code, password) are returned **once** and downloaded as CSV — passwords stay
+  bcrypt-hashed and unrecoverable, so the employees list gains admin bulk-select →
+  **Regenerate passwords** as the recovery path (self excluded to prevent lockout).
+- Migration `20260713120001_employee_onboarding.sql`; e2e cleanup pattern extended
+  (test personnel numbers are `999#######`). e2e suite migrated to the generated-code flow and
+  de-flaked: login/upload helpers retry through the cold-dev hydration race, and "today" in
+  range helpers is now Asia/Tehran (UTC drifted one day behind every night 20:30–24:00 UTC).
+- Dev/e2e now run against the **local Docker stack** (`.env.local` → gateway `:8080`; cloud
+  demo project is paused). Gateway fixes shipped to `deploy/caddy/Caddyfile`: `default_sni`
+  so browsers can reach the site by raw IP, and CORS preflight answers on the internal
+  listener (GoTrue does none itself — Kong used to, on Supabase Cloud).
+
+### Self-host installer package (2026-07-03)
+- **`deploy/` — turnkey offline installer** for running the whole product (app + Postgres +
+  auth + data API + HTTPS gateway) on the client's own Linux server: `deploy/package.sh`
+  builds `dist/bj-erp-installer-<version>.tar.gz` (all container images saved inside — no
+  registry/internet needed on the server, sanctions-safe); the client runs `sudo ./install.sh`,
+  answers two prompts (server address, first-admin password), and the stack comes up with all
+  migrations + baseline seed applied and the roles-in-JWT auth hook enabled.
+- HTTPS via Caddy's internal CA; `install.sh` exports `bj-root-ca.crt` for the one-time phone
+  trust step (required for PWA install). `deploy/RUNBOOK.md` documents requirements, backups,
+  restore, updates, and day-2 ops in English + Farsi.
+- App changes to support it: `output: 'standalone'` in `next.config.ts`; server-side Supabase
+  clients (`lib/supabase/server.ts`, `proxy.ts`) prefer a runtime `SUPABASE_URL` (internal
+  plain-HTTP gateway) over the baked public URL; build-time placeholder env values substituted
+  at container start; **auth cookie name pinned** to `bj-auth` in all three Supabase clients
+  (`lib/supabase/constants.ts`) — the default is derived from the Supabase URL's host, which
+  differs between browser and server in the package and broke the session hand-off. Existing
+  demo sessions are invalidated once by the rename (users just log in again).
+- Verified end-to-end on a local Docker install: `install.sh` from scratch → HTTPS login as
+  the bootstrapped admin → home board renders; roles claim (`app_roles: ["admin"]`) present in
+  self-host-issued JWTs (auth hook enabled via GoTrue env). Also fixed en route: a
+  `package-lock.json` gap (`next-intl`'s nested `@swc/helpers` missing — npm 10 in the Docker
+  build rejects what local npm 11 tolerated).
+
 ### Navigation performance — the round-trip diet (2026-07-02, evening)
 Implements `docs/plans/2026-07-02-nav-performance.md` (P1–P5; P6 cleanup deliberately
 skipped). Per-navigation server work drops from **5–6 serial Supabase round-trips to 1–2**,

@@ -77,6 +77,7 @@ export type Database = {
       }
       departments: {
         Row: {
+          code: string
           company_id: string
           created_at: string
           id: string
@@ -86,6 +87,7 @@ export type Database = {
           name_fa: string
         }
         Insert: {
+          code: string
           company_id: string
           created_at?: string
           id?: string
@@ -95,6 +97,7 @@ export type Database = {
           name_fa: string
         }
         Update: {
+          code?: string
           company_id?: string
           created_at?: string
           id?: string
@@ -406,8 +409,10 @@ export type Database = {
           full_name: string
           hire_date: string | null
           id: string
+          job_title: string | null
           language_pref: string
           manager_id: string | null
+          personnel_no: string | null
         }
         Insert: {
           active?: boolean
@@ -419,8 +424,10 @@ export type Database = {
           full_name: string
           hire_date?: string | null
           id: string
+          job_title?: string | null
           language_pref?: string
           manager_id?: string | null
+          personnel_no?: string | null
         }
         Update: {
           active?: boolean
@@ -432,8 +439,10 @@ export type Database = {
           full_name?: string
           hire_date?: string | null
           id?: string
+          job_title?: string | null
           language_pref?: string
           manager_id?: string | null
+          personnel_no?: string | null
         }
         Relationships: [
           {
@@ -582,17 +591,22 @@ export type Database = {
         Args: { p_current: string; p_new: string }
         Returns: undefined
       }
+      app_bulk_create_employees: {
+        Args: { p_company_id: string; p_rows: Json }
+        Returns: Json
+      }
       app_create_employee: {
         Args: {
           p_calendar_pref?: string
           p_company_id: string
           p_department_id?: string
-          p_employee_code: string
           p_full_name: string
           p_hire_date?: string
+          p_job_title?: string
           p_language_pref?: string
           p_manager_id?: string
           p_password: string
+          p_personnel_no: string
           p_roles?: Database["public"]["Enums"]["app_role"][]
         }
         Returns: string

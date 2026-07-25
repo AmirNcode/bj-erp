@@ -64,12 +64,28 @@ Password for all seeded users: **`Demo!2026`** (admin: `Admin!2026`).
 | `s-sup` | Naser Ebrahimi | security (supervisor) |
 | `g-01` / `g-02` | Kazem Moradi / Javad Rostami | security (guard) |
 
-## Production (self-host) notes
+## Production (self-host) — the installer package
 
-- Run **self-hosted Supabase** (Postgres + Auth + Storage) and the Next.js app on the company
-  servers (Node). Point the two env vars at the self-hosted Supabase. No Vercel-only features are
-  used in the data/auth layer, so the move is config-only.
-- Apply the same `supabase/migrations/*` + `supabase/seed.sql`, then seed users as above.
-- Validate RLS policies + auth behave identically on the self-hosted stack before cutover (NFR-4).
-- Holidays are minimal placeholders for the demo — replace with the official Iranian list via the
-  admin work-settings/holiday editor at `/manage/settings`.
+Production ships as a **single offline installer bundle** the client runs on their own Linux
+server — app + database + auth, no internet, no Supabase account. Everything lives in
+[`deploy/`](../deploy):
+
+```bash
+./deploy/package.sh          # on OUR machine (Docker + internet) → dist/bj-erp-installer-<v>.tar.gz
+# hand the tarball to the client; on their server:
+tar xzf bj-erp-installer-<v>.tar.gz && cd bj-erp-installer && sudo ./install.sh
+```
+
+- **Stack (Docker Compose, versions pinned as a tested set):** Supabase Postgres, GoTrue (auth),
+  PostgREST (data API), the app (standalone Next.js build), Caddy (HTTPS gateway with a
+  self-signed internal CA; phones trust the exported `bj-root-ca.crt` once).
+- `install.sh` generates all secrets, applies every `supabase/migrations/*` + `seed.sql`,
+  bootstraps the first admin (`deploy/sql/bootstrap_admin.sql`), and enables the roles-in-JWT
+  auth hook. Re-runnable (idempotent migrations, secrets preserved).
+- The app image bakes placeholder env values; the real URL/anon key are substituted at container
+  start (`deploy/docker-entrypoint.sh`). Server-side code talks to the API over the internal
+  plain-HTTP gateway listener (`SUPABASE_URL`), browsers over public HTTPS.
+- Ops (backup/restore/update/logs), requirements, and the phone-certificate step live in
+  [`deploy/RUNBOOK.md`](../deploy/RUNBOOK.md) (English + Farsi).
+- After install: create employees, enter the official Iranian holidays via `/manage/settings`,
+  allocate balances. Company/departments/leave types come from `seed.sql`.

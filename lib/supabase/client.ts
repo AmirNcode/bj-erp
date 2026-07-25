@@ -11,6 +11,7 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
+import { AUTH_COOKIE_NAME } from './constants'
 import type { Database } from './types'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -34,5 +35,8 @@ if (!supabaseAnonKey) {
  * instance (createBrowserClient handles deduplication internally).
  */
 export function createClient() {
-  return createBrowserClient<Database>(supabaseUrl!, supabaseAnonKey!)
+  return createBrowserClient<Database>(supabaseUrl!, supabaseAnonKey!, {
+    // Must match the server/middleware clients (see lib/supabase/constants.ts).
+    cookieOptions: { name: AUTH_COOKIE_NAME },
+  })
 }

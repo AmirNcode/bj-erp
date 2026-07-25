@@ -10,6 +10,7 @@ import { PageHeader } from '../_components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SettingsForm } from './SettingsForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
+import { LogoutButton } from './LogoutButton';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -32,9 +33,17 @@ export default async function ProfilePage({ params }: Props) {
     gregorian: t('gregorian'),
     langFa: t('langFa'),
     langEn: t('langEn'),
-    logout: t('logout'),
     saved: t('saved'),
     errorLabel: t('error'),
+  };
+
+  const tl = await getTranslations('profile.logoutConfirm');
+  const logoutLabels = {
+    trigger: tl('trigger'),
+    title: tl('title'),
+    body: tl('body'),
+    cancel: tl('cancel'),
+    confirm: tl('confirm'),
   };
 
   const tp = await getTranslations('profile.password');
@@ -80,7 +89,6 @@ export default async function ProfilePage({ params }: Props) {
               calendarPref: profile?.calendar_pref ?? 'jalali',
               languagePref: profile?.language_pref ?? 'fa',
             }}
-            locale={locale}
             labels={formLabels}
           />
         </CardContent>
@@ -95,6 +103,9 @@ export default async function ProfilePage({ params }: Props) {
           <ChangePasswordForm labels={passwordLabels} />
         </CardContent>
       </Card>
+
+      {/* Logout — deliberately outside any card, at the very bottom */}
+      <LogoutButton locale={locale} labels={logoutLabels} />
     </main>
   );
 }

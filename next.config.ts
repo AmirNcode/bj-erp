@@ -2,6 +2,10 @@ import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
 const nextConfig: NextConfig = {
+  // Self-host packaging (deploy/): emit a minimal standalone server bundle so
+  // the Docker image ships only what it runs. No effect on Vercel deploys.
+  output: 'standalone',
+
   // Dev-only: let devices on the LAN (e.g. a phone on the same Wi-Fi) load the
   // dev server's HMR / _next assets. Next blocks cross-origin dev requests by
   // default. List the host(s) the phone uses to reach this machine.
