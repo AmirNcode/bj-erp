@@ -18,6 +18,7 @@ import createMiddleware from 'next-intl/middleware';
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest } from 'next/server';
 import { routing } from './i18n/routing';
+import { AUTH_COOKIE_NAME } from './lib/supabase/constants';
 
 const handleI18nRouting = createMiddleware(routing);
 
@@ -28,9 +29,13 @@ export default async function middleware(request: NextRequest) {
   // Step 2: Create Supabase client — reads cookies from the request,
   // writes refreshed auth cookies onto the response from step 1.
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    // Self-host (deploy/): prefer the internal plain-HTTP gateway URL — the
+    // public HTTPS cert is a private CA this process doesn't trust.
+    process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Must match the browser/server clients (lib/supabase/constants.ts).
+      cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {

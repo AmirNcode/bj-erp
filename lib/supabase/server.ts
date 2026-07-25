@@ -10,9 +10,13 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { AUTH_COOKIE_NAME } from './constants'
 import type { Database } from './types'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+// Self-host (deploy/): server-side calls use the internal plain-HTTP gateway
+// URL (SUPABASE_URL) when set — the public HTTPS cert is a private CA the app
+// container doesn't trust. Browser code keeps using NEXT_PUBLIC_SUPABASE_URL.
+const supabaseUrl = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 if (!supabaseUrl) {
@@ -36,6 +40,9 @@ export async function createClient() {
   const cookieStore = await cookies()
 
   return createServerClient<Database>(supabaseUrl!, supabaseAnonKey!, {
+    // Explicit name — browser and server clients may use different Supabase
+    // URLs in the self-host package; the derived default would diverge.
+    cookieOptions: { name: AUTH_COOKIE_NAME },
     cookies: {
       getAll: () => cookieStore.getAll(),
       setAll: (cookiesToSet) => {

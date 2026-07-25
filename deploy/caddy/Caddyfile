@@ -1,0 +1,73 @@
+# =============================================================================
+# deploy/caddy/Caddyfile — HTTPS gateway for the BJ ERP self-host stack.
+#
+# One public HTTPS site (self-signed via Caddy's internal CA — the root
+# certificate is exported by install.sh for phones to trust), routing:
+#   /auth/v1/*  -> GoTrue   (login, token refresh)
+#   /rest/v1/*  -> PostgREST (data API, RLS enforced)
+#   everything else -> the Next.js app
+#
+# Plus a plain-HTTP :8080 listener with the same API routes, used ONLY by the
+# app container's server-side code (private CA isn't in its trust store).
+# =============================================================================
+
+{
+	local_certs
+	# Browsers hitting the site by raw IP send no SNI; without this Caddy
+	# refuses the handshake ("tlsv1 alert internal error").
+	default_sni {$APP_HOST}
+}
+
+https://{$APP_HOST} {
+	tls internal
+
+	handle /auth/v1/* {
+		uri strip_prefix /auth/v1
+		reverse_proxy auth:9999
+	}
+
+	handle /rest/v1/* {
+		uri strip_prefix /rest/v1
+		reverse_proxy rest:3000
+	}
+
+	handle {
+		reverse_proxy app:3000
+	}
+}
+
+# Redirect plain HTTP to HTTPS for browsers that try http:// first.
+http://{$APP_HOST} {
+	redir https://{host}{uri} permanent
+}
+
+# Internal (container-network only; port not published) — server-side calls.
+# GoTrue does no CORS of its own (Kong does it on Supabase Cloud), so the
+# gateway answers CORS here for cross-origin dev use (`npm run dev` on a host
+# pointing at this listener). PostgREST handles its own CORS. Inert in
+# production: the port is unpublished and in-container calls are same-origin.
+http://:8080 {
+	@auth_preflight {
+		method OPTIONS
+		path /auth/v1/*
+	}
+	handle @auth_preflight {
+		header Access-Control-Allow-Origin "*"
+		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+		header Access-Control-Allow-Headers "Authorization, apikey, content-type, x-client-info, x-supabase-api-version"
+		header Access-Control-Max-Age "86400"
+		respond "" 204
+	}
+
+	handle /auth/v1/* {
+		uri strip_prefix /auth/v1
+		# GoTrue sets Access-Control-Allow-Origin on actual responses itself;
+		# only its preflight lacks CORS headers (handled above).
+		reverse_proxy auth:9999
+	}
+
+	handle /rest/v1/* {
+		uri strip_prefix /rest/v1
+		reverse_proxy rest:3000
+	}
+}
