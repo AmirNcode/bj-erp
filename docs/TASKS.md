@@ -104,7 +104,7 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☑ Admin bulk CSV import with validation preview + one-time credentials CSV;
   bulk password regeneration on the employees list as the recovery path
 - ☑ Migration `20260713120001`, unit 130/130, e2e 23/23, lint+build clean; local Docker stack
-  rebuilt with the new image (uncommitted — pending Amir's go)
+  rebuilt with the new image; landed via PR #4
 
 ## Add departments from the app (2026-07-25) ✅
 - ☑ Admin-only **Add Department** button beside *Add Employee* on Manage → Employees
@@ -116,7 +116,7 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☑ `tests/unit/department-code.test.ts` + `tests/e2e/department.spec.ts` (test departments use
   the reserved `zz` prefix, cleaned up by `scripts/cleanup-e2e.mjs`)
 - ☑ Gates: unit **139/139**, e2e **25/25** serial against the local Docker stack, lint + tsc +
-  build green (uncommitted — pending Amir's go)
+  build green; landed via PR #4
 
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved
