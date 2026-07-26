@@ -47,18 +47,40 @@ Screen" / "Install app".
 
 ## Backups (do this on a schedule)
 
+Every release already takes a verified backup automatically (see *Updating the
+app*), kept in `bj-erp-installer/backups/` — newest 14 — and copied to the
+developer's Mac. The command below is for **scheduled backups between
+releases**, which you still need.
+
+The database image's superuser is `supabase_admin`, and it requires password
+auth even over the local socket — hence the `.env` sourcing:
+
 ```bash
 cd bj-erp-installer
-docker compose exec -T db pg_dump -U postgres -d postgres -Fc > backup-$(date +%F).dump
+sudo bash -c 'set -a; . ./.env; set +a
+  docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+    pg_dump -U supabase_admin -d postgres -Fc' > backup-$(date +%F).dump
 ```
+
+**Always verify a dump before trusting it** — a failed dump leaves a file that
+looks fine but restores nothing:
+
+```bash
+sudo docker compose exec -T db pg_restore -l < backup-$(date +%F).dump | head
+```
+
+Expect a table-of-contents listing (`profiles`, `leave_requests`, …). An empty
+result means the backup is worthless — investigate before relying on it.
 
 Copy the dump files off the server. Also back up the `.env` file **once**
 (it holds the secrets; without it a restore cannot decrypt logins).
 
-**Restore** onto a fresh install (same `.env`):
+**Restore** (same `.env`):
 
 ```bash
-docker compose exec -T db pg_restore -U postgres -d postgres --clean --if-exists < backup-YYYY-MM-DD.dump
+cd bj-erp-installer
+sudo docker compose exec -T db pg_restore -U supabase_admin -d postgres \
+  --clean --if-exists < backup-YYYY-MM-DD.dump
 ```
 
 ## Updating the app
@@ -66,49 +88,54 @@ docker compose exec -T db pg_restore -U postgres -d postgres --clean --if-exists
 An update ships **only a new app image** — never the full installer bundle. The
 database, its volume, and the four service images stay exactly as they are.
 
-### 1. Build and ship the new image (developer's machine)
+**Step-by-step operator instructions: [`../docs/DEPLOY-GUIDE.md`](../docs/DEPLOY-GUIDE.md).**
 
-The client's server is **x86_64/amd64**. If you build on an Apple-Silicon Mac
-you MUST cross-build, or the image will not start on the server
-(`exec format error`):
+### The pipeline
+
+Releases are built on the developer's Mac and pushed to the server — the server
+needs no internet, no git, and no build toolchain, exactly like the original
+installer. One command, with the company VPN connected:
 
 ```bash
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -f deploy/Dockerfile -t bj-erp-app:latest .
-docker save bj-erp-app:latest -o dist/bj-erp-app.tar
+./deploy/release.sh 2026-08-14
 ```
 
-Confirm before shipping — this must print `amd64`:
+`deploy/release.sh` (Mac) runs lint + unit tests, cross-builds the image for
+**linux/amd64** and verifies the architecture, compresses it, ships it with
+resumable `rsync`, then triggers `deploy/update.sh` on the server.
+
+`deploy/update.sh` (server, re-shipped with every release) takes a lock, checks
+disk and database health, takes a **verified** `pg_dump` backup, records row
+counts, loads the image, replays migrations, swaps only the `app` container,
+health-checks for 90s, **re-checks row counts**, and **rolls back automatically**
+if the app does not come up. `release.sh` then copies the backup to the Mac.
+
+One-time setup on a new machine (SSH key + `bj` host alias):
 
 ```bash
-docker image inspect bj-erp-app:latest --format '{{.Architecture}}'
+./deploy/setup-release.sh
 ```
 
-Copy it over (add `-P <port>` if SSH is not on 22):
+### Manual fallback (if the scripts are unavailable)
 
 ```bash
-scp dist/bj-erp-app.tar <user>@<server>:~/bj-erp-installer/
+# on the Mac — the cross-build is mandatory; an arm64 image will not start
+DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -f deploy/Dockerfile -t bj-erp-app:manual .
+docker image inspect bj-erp-app:manual --format '{{.Architecture}}'   # must print amd64
+docker save bj-erp-app:manual -o dist/bj-erp-app.tar
+scp -P 2222 dist/bj-erp-app.tar <user>@<server>:~/bj-erp-installer/
 ```
 
-### 2a. Routine update — app code only, no new migrations
-
 ```bash
+# on the server — back up FIRST, then load and restart
 cd bj-erp-installer
 sudo docker load -i bj-erp-app.tar
+sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=manual/' .env
 sudo docker compose up -d app
 ```
 
-Only the `app` container restarts (a few seconds of downtime). The database is
-never stopped.
-
-### 2b. Update that includes new database migrations
-
-Copy the new `*.sql` files into `migrations/` first, then:
-
-```bash
-cd bj-erp-installer
-sudo docker load -i bj-erp-app.tar
-sudo ./install.sh        # replays migrations (idempotent), restarts services
-```
+If the release includes new migrations, copy the `*.sql` files into
+`migrations/` first and run `sudo ./install.sh` instead of `compose up`.
 
 Re-running `install.sh` is safe by design: it reuses the existing `.env`
 (secrets are **not** regenerated), reuses the existing database volume, replays
@@ -240,10 +267,16 @@ volume. Never add `-v`.
 **پشتیبان‌گیری:** دستور `pg_dump` بالا را به‌صورت منظم اجرا و فایل‌ها را جای
 امن نگه دارید. فایل `.env` را هم یک‌بار پشتیبان بگیرید.
 
-**به‌روزرسانی:** فقط image برنامه عوض می‌شود، نه دیتابیس. اطلاعات کارمندان،
-مرخصی‌ها، مانده‌ها و رمزها در volume دیتابیس (`bj-erp_db-data`) ذخیره شده و با
-به‌روزرسانی برنامه **پاک نمی‌شوند**. اجرای دوبارهٔ `install.sh` هم بی‌خطر است
-(migration ها idempotent هستند و secret ها دوباره ساخته نمی‌شوند).
+**به‌روزرسانی:** نسخهٔ جدید با یک دستور از کامپیوتر توسعه‌دهنده ارسال و نصب
+می‌شود (`./deploy/release.sh`). پیش از هر به‌روزرسانی، به‌صورت خودکار از
+دیتابیس backup گرفته و صحت آن بررسی می‌شود؛ سپس تعداد رکوردهای هر جدول قبل و
+بعد مقایسه می‌شود و اگر داده‌ای کم شده باشد، عملیات با هشدار متوقف می‌شود. اگر
+نسخهٔ جدید بالا نیاید، سیستم خودش به نسخهٔ قبلی برمی‌گردد (rollback).
+
+فقط image برنامه عوض می‌شود، نه دیتابیس. اطلاعات کارمندان، مرخصی‌ها، مانده‌ها و
+رمزها در volume دیتابیس (`bj-erp_db-data`) ذخیره شده و با به‌روزرسانی برنامه
+**پاک نمی‌شوند**. اجرای دوبارهٔ `install.sh` هم بی‌خطر است (migration ها
+idempotent هستند و secret ها دوباره ساخته نمی‌شوند).
 
 **هشدار:** دستورهای `docker compose down -v` و `docker volume rm bj-erp_db-data`
 کل دیتابیس را **حذف می‌کنند**. هرگز اجرا نکنید. قبل از هر به‌روزرسانی که
