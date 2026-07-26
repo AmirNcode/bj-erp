@@ -42,3 +42,6 @@ yarn-debug.log*
 yarn-error.log*
 .vercel
 dist/
+
+# Pre-deploy database dumps fetched from the server (employee PII).
+backups/
