@@ -94,6 +94,22 @@ their own plan files when reached.
 - ☑ App support: `output: 'standalone'`, runtime `SUPABASE_URL` override for server-side calls,
   entrypoint placeholder substitution for baked `NEXT_PUBLIC_*` values
 
+## Production deploy + release pipeline (2026-07-26)
+Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
+- ☑ **Live on the client's Ubuntu server** at `https://10.10.10.50` (LAN-only by design;
+  off-site staff reach it over the company's existing corporate VPN)
+- ☑ `deploy/setup-release.sh` — one-time SSH key + `bj` alias + connection multiplexing
+- ☑ `deploy/release.sh` — gates, amd64 cross-build + architecture verification, resumable
+  ship, remote trigger, pre-deploy backup copied back to the Mac
+- ☑ `deploy/update.sh` — lock, preflight, verified backup, row-count assertions, idempotent
+  migrations, single-container cutover, health check, automatic rollback, retention
+- ☑ `RUNBOOK.md` update section rewritten; backup command corrected to `supabase_admin`
+- ☐ **Run the acceptance test** (plan Task 5): first real release, verify row counts and the
+  volume timestamp are unchanged, confirm login survives, rehearse the rollback drill
+- ☐ Scheduled off-server backups between releases (cron `pg_dump` + periodic pull)
+- ☐ Enter the real 1404–1405 Iranian holidays via `/manage/settings`; import the client's
+  employee roster (CSV)
+
 ## Employee onboarding & logout UX (2026-07-13) ✅
 Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2026-07-13-employee-onboarding.md`
 - ☑ Logout: bottom of profile page, outside cards, AlertDialog confirmation

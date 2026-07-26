@@ -1,5 +1,13 @@
 # Tag-Gated Deploy Automation — Implementation Plan
 
+> **⚠️ SUPERSEDED (2026-07-26) — DO NOT IMPLEMENT.**
+> This plan built the app image **on the client's server** from a git clone. Rejected because the
+> build would depend on Docker Hub and the npm registry being reachable from an Iranian network
+> at deploy time — Docker Hub is commonly blocked there, and a mid-deploy failure would strand a
+> live HR system. Kept as the decision record for *why* server-side builds were ruled out.
+> **Active plan: [`2026-07-26-release-pipeline.md`](2026-07-26-release-pipeline.md)** — build on
+> the Mac, ship the image, deploy on the server (this document's Appendix B, expanded).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`)
 > syntax for tracking. **Every task in Phases A–C runs commands on the CLIENT'S LIVE SERVER
@@ -78,22 +86,39 @@ splitting a ~150-line ops script across helpers costs more than it saves.
 - Produces: a go/no-go decision. **Fail here → abandon Phases A–C and implement Appendix B
   (Mac-side build) instead.** Everything downstream assumes all four checks pass.
 
-- [ ] **Step 1: Check GitHub reachability, RAM, disk, and CPU on the server**
+- [ ] **Step 1: Check ALL THREE build sources, plus RAM, disk, and CPU**
+
+Building on the server needs three remote services, not just GitHub: the source, the base
+image, and the npm packages. **Docker Hub is frequently blocked from Iran** — the very reason
+this project ships offline image tarballs — so this is the check most likely to fail.
 
 ```bash
-echo "== github =="; curl -sI --max-time 10 https://github.com | head -1
-echo "== git ==";    git --version 2>/dev/null || echo "git MISSING"
-echo "== ram ==";    free -h | awk '/Mem:/{print "total="$2" available="$7}'
-echo "== disk ==";   df -h / | awk 'NR==2{print "free="$4}'
-echo "== cpu ==";    nproc
+echo "== github (source) ==";  curl -sI --max-time 10 https://github.com | head -1
+echo "== npm (packages) ==";   curl -sI --max-time 10 https://registry.npmjs.org | head -1
+echo "== git ==";              git --version 2>/dev/null || echo "git MISSING"
+echo "== ram ==";              free -h | awk '/Mem:/{print "total="$2" available="$7}'
+echo "== disk ==";             df -h / | awk 'NR==2{print "free="$4}'
+echo "== cpu ==";              nproc
+```
+
+Then the decisive one — can Docker actually pull the base image the Dockerfile needs?
+
+```bash
+sudo docker pull node:22-alpine && echo "DOCKER HUB OK"
 ```
 
 Expected for Plan A to proceed:
 - github → `HTTP/2 200`
+- npm → `HTTP/2 200`
+- `docker pull` → succeeds, printing `DOCKER HUB OK`
 - ram → `available` **≥ 2.5 G** (a Next.js production build peaks around 2 GB; the stack itself
   needs ~1 GB. The documented server floor is 4 GB total)
 - disk → **≥ 8 G** free (each app image is ~1 GB; we keep 3)
 - cpu → ≥ 2
+
+**If `docker pull node:22-alpine` fails, or npm is unreachable, STOP — Plan A is impossible on
+this network. Go to Appendix B.** A proxy/mirror could be configured instead, but that adds a
+dependency on IT and another thing to break; Appendix B needs neither.
 
 - [ ] **Step 2: If `git` is missing, install it**
 
@@ -113,9 +138,11 @@ Expected: `Swap:` row now shows `4.0Gi`.
 
 - [ ] **Step 4: Record the decision**
 
-Write the four values into the PR/handoff notes. If GitHub is unreachable → **stop, go to
-Appendix B**. A blocked registry does not matter (we never pull images), but a blocked
-`github.com` kills pull-based deploys outright.
+Write the results into the handoff notes. Plan A requires **all three** of github.com, npm, and
+Docker Hub to be reachable *and* enough RAM. Any one of them failing → **stop, implement
+Appendix B instead** (build stays on the Mac, only the shipping is automated). This is a likely
+outcome on an Iranian network and is not a failure of the approach — Appendix B still removes
+every manual step, it just moves ~1 GB per release over the wire.
 
 > **REVIEW GATE — do not continue without Amir's explicit go.**
 

@@ -6,6 +6,41 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### One-command release pipeline (2026-07-26)
+- **Deploying an update is now a single command on the developer's Mac** —
+  `./deploy/release.sh <version>` — replacing the manual build → `scp` → `docker load` →
+  restart ritual. Step-by-step operator instructions: **`docs/DEPLOY-GUIDE.md`**.
+- `deploy/release.sh` (Mac): validates the version string, checks Docker and SSH reachability
+  **before** the slow build, warns on a dirty working tree, runs `lint` + `test:unit`,
+  cross-builds for **linux/amd64** and *verifies the built architecture* (an arm64 image dies on
+  the server with `exec format error`), gzips, ships with resumable `rsync --partial`, triggers
+  the remote update, and copies the pre-deploy database dump back to the Mac.
+- `deploy/update.sh` (server, re-shipped every release): `flock` so two updates cannot
+  interleave; preflight on disk space and database health; **verified** `pg_dump -Fc` backup
+  (proven restorable with `pg_restore -l` — an empty or invalid dump aborts the deploy before
+  anything changes); row-count snapshot; image load with an architecture guard; idempotent
+  migration replay; cutover of **only** the `app` container; 90s health check on the app and
+  GoTrue; **automatic image rollback** if it fails; a second row-count pass that fails loudly
+  with the restore command if any table shrank; retention of 3 images and 14 backups.
+- `deploy/setup-release.sh`: one-time SSH key + `bj` host alias with connection multiplexing,
+  so a release involves no SSH password prompts (only the server's `sudo` password, once).
+- **Database safety, by construction:** the only Docker commands used against the stack are
+  `docker load` and `docker compose up -d app`; `docker compose down`, `down -v` and
+  `volume rm` appear nowhere. All SQL is piped to `psql` over **stdin** rather than the
+  container bind mounts — `./sql/seed.sql` is a single-*file* mount, so a replaced file gets a
+  new inode while the mount keeps serving stale content. `release.sh` ships `seed.sql` with
+  `rsync --inplace` to preserve the inode for `install.sh` re-runs.
+- `deploy/RUNBOOK.md`: the update section now documents the pipeline (with a manual fallback),
+  and the **backup command is corrected** — it documented `pg_dump -U postgres`, but the image's
+  superuser is `supabase_admin` and requires password auth even over the local socket; added a
+  `pg_restore -l` verification step and a Farsi summary of the new update flow.
+- `backups/` added to `.gitignore` — pre-deploy dumps contain employee PII and password hashes
+  and must never be committed.
+- Plan: `docs/plans/2026-07-26-release-pipeline.md`. The earlier server-side-build plan
+  (`docs/plans/2026-07-25-deploy-automation.md`) is **superseded** and kept as the decision
+  record: building on the server would depend on Docker Hub and npm being reachable from an
+  Iranian network at deploy time, and a blocked registry mid-deploy would strand a live system.
+
 ### Add departments from the app (2026-07-25)
 - **Admin can create departments in the UI.** Manage → Employees gains an **Add Department**
   button beside *Add Employee* (admin only), opening `/manage/departments/new`: Farsi + English
