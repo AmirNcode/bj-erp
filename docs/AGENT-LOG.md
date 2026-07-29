@@ -78,6 +78,85 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-29 — Rejection reason (new column); employee-code field latin-only; local stack rebuilt
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `bd8efd7`, clean tree
+**Trigger:** (1) Make the login *username* field English-only + LTR like the password field.
+(2) Add an optional free-text reason when rejecting a request; dropdown of presets comes later.
+
+**What changed**
+
+- `lib/employees/code.ts` — `toLatinCode()`; wired into `#code` on `login/page.tsx` with
+  `lang="en"`, `spellCheck={false}` (it already had `dir="ltr"`). Drops spaces too — codes never
+  contain one. The code becomes the synthetic auth email, so a Persian character could only ever
+  produce an unmatchable login.
+- **`supabase/migrations/20260729120001_reject_reason.sql` — new nullable
+  `leave_requests.decision_note` (≤500 chars) + `reject_leave_request` updated to persist it.**
+  `p_reason` had existed since `20260624090001` but was written **only to `audit_log`**, which
+  employees cannot read — the reason was invisible to the one person it was written for. Wiring
+  the existing parameter to the UI alone would have shipped a field with no reader, so the
+  column was the point of the feature, not scope creep. Chose a separate column from
+  `leave_requests.reason` deliberately: that one is the requester's and FR-25-private from
+  peers; this one is the decider's. `team_leave_calendar` selects an explicit column list
+  (`20260624090002:39-50`) so the note cannot leak through the shared calendar — checked, not
+  assumed.
+- `lib/actions/leave.ts` — `decision_note` added to `LeaveRequestWithType` and to the
+  `getMyLeaveRequests` select; `rejectRequest` trims and caps the note, sends `undefined` when
+  blank.
+- `manage/approvals/ApprovalQueue.tsx`, `calendar/CalendarView.tsx` — optional `Textarea` in
+  both reject dialogs (`reject-reason-*` / `cal-reject-reason-*`), per-request state in the
+  queue, local state in the calendar's `DecideButtons`.
+- `request/MyRequestsList.tsx` — shows the note on the employee's own rejected row
+  (`decision-note-*`).
+- `messages/{en,fa}.json` — `approvals.rejectReasonLabel/Placeholder`, `request.rejectedReason`;
+  key trees verified identical (320 keys). `login.codePlaceholder` changed from `admin` to
+  `prod-1042` at the user's request — the login page no longer names the admin account.
+- `lib/supabase/types.ts` — hand-added `decision_note` to the `leave_requests` Row/Insert/Update
+  (generator not run; no network to a Supabase project from here).
+- Tests: `toLatinCode` unit cases; `approval.spec.ts` now types a Farsi reason and asserts the
+  employee reads it back. `docs/CHANGELOG.md`, `TASKS.md`, `DATA_MODEL.md` updated.
+
+**Actions outside the repo**
+- **Local Docker stack only — nothing against the client's server, no SSH, no VPN.**
+- Applied `20260729120001_reject_reason.sql` to the **local** `bj-erp-db-1` by piping it to
+  `psql` over stdin. Output: `ALTER TABLE / ALTER TABLE / COMMENT / CREATE FUNCTION / REVOKE /
+  GRANT`, plus a harmless "constraint does not exist, skipping" notice.
+- Rebuilt `bj-erp-app` twice from the working tree (native arm64 — **local testing only, the
+  server needs the amd64 cross-build via `release.sh`**) and recreated `bj-erp-app-1`.
+  `docker compose` was unusable here: `.env` is root-owned `600` and there is no passwordless
+  sudo, so the container was recreated with `docker run`, copying env/network/labels off the
+  running container. Compose labels preserved, so `sudo docker compose up -d app` still adopts it.
+- e2e teardown deleted 20 throwaway users + 1 throwaway department from the **local** DB.
+
+**Verification**
+- unit **147/147**; full e2e **26/26** serial; `npm run lint`, `npx tsc --noEmit` clean.
+- Confirmed live in the local container: `#code` renders `dir="ltr" lang="en" spellCheck="false"`;
+  `information_schema` reports `decision_note | text`; `/login` and `/auth/v1/health` both 200.
+- The reject→read-back path is covered end-to-end by `approval.spec.ts`, not just by unit tests.
+
+**State left behind**
+- Committed to `main` and pushed.
+- Local stack runs the new image; `bj-erp-app:78a324a` remains for rollback. **The local image
+  predates the placeholder change** — rebuild if you want it reflected in the container.
+- Temporary `pw-tmp.config.ts` at the repo root was deleted; dev server stopped.
+
+**Flake worth knowing (pre-existing, not caused by this work)**
+- `auth.spec.ts:8` failed on the first run after each `next dev` start and passed immediately
+  after, twice in a row. Cause: it fills `#code` directly instead of using the retrying `login()`
+  helper, so it races the first-hit compile of the **authenticated** `/home` tree. Curling
+  `/home` while logged out does not warm it — the redirect never reaches the route. Either run
+  the suite twice or switch that spec to the helper.
+
+**For the next agent**
+- **The client's database does not have `decision_note` yet.** It ships on the next
+  `release.sh`, which replays migrations — but the app build and the migration must go together.
+  Deploying the new image against the old schema breaks `/request` (the select names a column
+  that does not exist).
+- The reject reason is deliberately free text for now; the user plans preset options plus a
+  dropdown, keeping free text as the "other" case. `decision_note` is text and unconstrained
+  beyond length, so presets can be layered on without another schema change.
+
 ## 2026-07-29 — Deploy guide rewritten for the 3500 port move; password work committed
 
 **Agent:** Claude Opus 5 via Claude Code

@@ -85,6 +85,7 @@ async function RequestPageData({ locale }: { locale: string }) {
     cancelSuccess: t('cancelSuccess'),
     from: t('from'),
     to: t('to'),
+    rejectedReason: t('rejectedReason'),
     validationSelectType: t('validationSelectType'),
     validationSelectDate: t('validationSelectDate'),
     statusPending: tLeave('status.pending'),

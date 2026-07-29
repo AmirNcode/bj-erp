@@ -145,6 +145,16 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☐ Pre-existing non-latin passwords (if any exist on the client's install) need an admin reset —
   undetectable from here, passwords are hashed
 
+## Rejection reason + latin login fields (2026-07-29) ✅
+- ☑ Optional free-text reason on reject, in both dialogs (approvals queue + calendar)
+- ☑ Stored on `leave_requests.decision_note` (migration `20260729120001`) and shown to the
+  employee on their own request — it was previously written to `audit_log` only, where the
+  person it was written for could never read it
+- ☑ Employee-code field on `/login` latin-only + LTR via `toLatinCode()`, matching the password
+- ☑ Gates: unit **147/147**, e2e **26/26** serial, lint + tsc + build green
+- ☐ Follow-up (user's plan): replace the free-text field with preset reasons + dropdown,
+  keeping free text as the "other" case
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen

@@ -22,7 +22,7 @@
     "brand": "بهسازان جنوب",
     "title": "ورود به سامانه",
     "codeLabel": "کد پرسنلی",
-    "codePlaceholder": "مثال: admin",
+    "codePlaceholder": "مثال: prod-1042",
     "passwordLabel": "رمز عبور",
     "passwordPlaceholder": "رمز عبور خود را وارد کنید",
     "showPassword": "نمایش رمز عبور",
@@ -88,7 +88,8 @@
     "from": "از",
     "to": "تا",
     "validationSelectType": "نوع مرخصی را انتخاب کنید.",
-    "validationSelectDate": "بازه تاریخی را انتخاب کنید."
+    "validationSelectDate": "بازه تاریخی را انتخاب کنید.",
+    "rejectedReason": "دلیل رد درخواست"
   },
   "leave": {
     "status": {
@@ -169,6 +170,8 @@
     "reject": "رد",
     "approveConfirm": "این درخواست مرخصی تأیید شود؟",
     "rejectConfirm": "این درخواست مرخصی رد شود؟",
+    "rejectReasonLabel": "دلیل رد درخواست (اختیاری)",
+    "rejectReasonPlaceholder": "دلیل را بنویسید تا کارمند تصمیم را متوجه شود",
     "reason": "دلیل",
     "error": "خطا",
     "approveSuccess": "درخواست تأیید شد.",

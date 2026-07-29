@@ -8,6 +8,7 @@ import { useState, FormEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { signInWithCode } from '@/lib/auth/usernameEmail';
 import { toLatinPassword } from '@/lib/auth/passwordPolicy';
+import { toLatinCode } from '@/lib/employees/code';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -66,16 +67,19 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4" noValidate>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="code">{t('codeLabel')}</Label>
+                {/* The code becomes the auth email — latin only, LTR even in fa. */}
                 <Input
                   id="code"
                   type="text"
                   autoComplete="username"
                   autoCapitalize="off"
                   autoCorrect="off"
+                  spellCheck={false}
                   dir="ltr"
+                  lang="en"
                   placeholder={t('codePlaceholder')}
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  onChange={(e) => setCode(toLatinCode(e.target.value))}
                   required
                 />
               </div>

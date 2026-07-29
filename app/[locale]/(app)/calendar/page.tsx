@@ -66,6 +66,8 @@ async function CalendarData({ locale }: { locale: string }) {
     reject: tApprovals('reject'),
     approveConfirm: tApprovals('approveConfirm'),
     rejectConfirm: tApprovals('rejectConfirm'),
+    rejectReasonLabel: tApprovals('rejectReasonLabel'),
+    rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
     approveSuccess: tApprovals('approveSuccess'),
     rejectSuccess: tApprovals('rejectSuccess'),
   };

@@ -22,7 +22,7 @@
     "brand": "Behsazan Jonoob",
     "title": "Sign In",
     "codeLabel": "Employee Code",
-    "codePlaceholder": "e.g. admin",
+    "codePlaceholder": "e.g. prod-1042",
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter your password",
     "showPassword": "Show password",
@@ -88,7 +88,8 @@
     "from": "From",
     "to": "To",
     "validationSelectType": "Please select a leave type.",
-    "validationSelectDate": "Please select a date range."
+    "validationSelectDate": "Please select a date range.",
+    "rejectedReason": "Reason for rejection"
   },
   "leave": {
     "status": {
@@ -169,6 +170,8 @@
     "reject": "Reject",
     "approveConfirm": "Approve this leave request?",
     "rejectConfirm": "Reject this leave request?",
+    "rejectReasonLabel": "Reason for rejection (optional)",
+    "rejectReasonPlaceholder": "Explain why, so the employee understands the decision",
     "reason": "Reason",
     "error": "Error",
     "approveSuccess": "Request approved.",

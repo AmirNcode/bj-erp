@@ -3,6 +3,8 @@ import { jalali2DayRange, nextTestPersonnelNo } from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
+// Optional rejection note — typed by the manager, read back by the employee.
+const REJECT_REASON = 'پوشش شیفت کافی نیست';
 
 // JALALI_2DAY was removed — date is now computed dynamically at test time.
 // See jalali2DayRange() in _helpers.ts for the 3-constraint algorithm.
@@ -223,9 +225,10 @@ test.describe('Approval flow', () => {
     await expect(approveButtons).toHaveCount(1); // approved row removed optimistically
 
     await page.locator('[data-testid^="reject-btn-"]').first().click();
-    // Confirm the reject AlertDialog
+    // Confirm the reject AlertDialog, with an optional reason the employee will read.
     const rejectConfirm = page.locator('[data-testid^="reject-confirm-"]').first();
     await expect(rejectConfirm).toBeVisible({ timeout: 5_000 });
+    await page.locator('[data-testid^="reject-reason-"]').first().fill(REJECT_REASON);
     await rejectConfirm.click();
     await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 10_000 });
 
@@ -237,6 +240,12 @@ test.describe('Approval flow', () => {
     const badges = page.locator('[data-testid^="status-badge-"]');
     await expect(badges.filter({ hasText: /approved|تایید/i }).first()).toBeVisible({ timeout: 10_000 });
     await expect(badges.filter({ hasText: /reject|رد/i }).first()).toBeVisible({ timeout: 10_000 });
+
+    // The rejection reason the manager typed reaches the employee.
+    await expect(page.locator('[data-testid^="decision-note-"]').first()).toContainText(
+      REJECT_REASON,
+      { timeout: 10_000 }
+    );
 
     // 5. Balance debited by the approved request (tolerant, like leave.spec.ts):
     //    re-pick the range to surface the balance; assert 24 if it propagated.

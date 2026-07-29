@@ -188,6 +188,8 @@ export type LeaveRequestWithType = {
   requested_days: number;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
+  /** Set by the decider on reject; the requester reads it on their own row. */
+  decision_note: string | null;
   created_at: string;
   leave_types: {
     id: string;
@@ -207,7 +209,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, requested_days, status, reason, created_at,
+      `id, start_date, end_date, day_part, requested_days, status, reason, decision_note, created_at,
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', user.id)
@@ -366,6 +368,8 @@ export async function approveRequest(requestId: string): Promise<DecisionResult>
 
 /**
  * Reject a pending request. Same guard as approve; writes no ledger row.
+ * The optional note is stored on the request (visible to the employee) and in
+ * the audit row. Blank input is sent as no note at all.
  */
 export async function rejectRequest(
   requestId: string,
@@ -374,9 +378,11 @@ export async function rejectRequest(
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
 
+  const note = reason?.trim() ? reason.trim().slice(0, 500) : undefined;
+
   const { error } = await supabase.rpc('reject_leave_request', {
     p_id: requestId,
-    p_reason: reason ?? undefined,
+    p_reason: note,
   });
   if (error) return dbErr(error.message);
   invalidateAppCache();

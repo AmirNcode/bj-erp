@@ -8,6 +8,8 @@ import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +29,8 @@ type Labels = {
   reject: string;
   approveConfirm: string;
   rejectConfirm: string;
+  rejectReasonLabel: string;
+  rejectReasonPlaceholder: string;
   errorLabel: string;
   approveSuccess: string;
   rejectSuccess: string;
@@ -46,6 +50,8 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
+  // Per-request rejection note. Optional — an untouched field sends nothing.
+  const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
 
   const decide = (
     id: string,
@@ -156,11 +162,33 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                               {labels.rejectConfirm}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
+
+                          <div className="space-y-1.5 text-start">
+                            <Label htmlFor={`reject-reason-${req.id}`}>
+                              {labels.rejectReasonLabel}
+                            </Label>
+                            <Textarea
+                              id={`reject-reason-${req.id}`}
+                              data-testid={`reject-reason-${req.id}`}
+                              rows={3}
+                              maxLength={500}
+                              placeholder={labels.rejectReasonPlaceholder}
+                              value={rejectNotes[req.id] ?? ''}
+                              onChange={(e) =>
+                                setRejectNotes((n) => ({ ...n, [req.id]: e.target.value }))
+                              }
+                            />
+                          </div>
+
                           <AlertDialogFooter>
                             <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
                             <AlertDialogAction
                               variant="destructive"
-                              onClick={() => decide(req.id, labels.rejectSuccess, rejectRequest)}
+                              onClick={() =>
+                                decide(req.id, labels.rejectSuccess, (id) =>
+                                  rejectRequest(id, rejectNotes[id])
+                                )
+                              }
                               data-testid={`reject-confirm-${req.id}`}
                             >
                               {labels.reject}

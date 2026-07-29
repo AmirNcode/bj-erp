@@ -10,6 +10,29 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Rejection reason; employee-code field latin-only (2026-07-29)
+- **Rejecting a request can now carry a reason.** Optional free-text field (max 500 chars) in
+  both reject dialogs — the approvals queue and the calendar's day-detail decide buttons.
+  Leaving it blank behaves exactly as before. A dropdown of preset reasons is the planned
+  follow-up; this is the free-text stage.
+- **The reason is stored where the employee can read it.** `reject_leave_request` already
+  accepted `p_reason` but wrote it only to `audit_log`, which employees cannot read — so the
+  reason was invisible to the person it was for. New nullable
+  `leave_requests.decision_note` (migration `20260729120001_reject_reason.sql`) is set on
+  reject and shown on the employee's own request row in `/request`.
+- Deliberately separate from `leave_requests.reason`: that one is the requester's and is
+  FR-25-private from peers; `decision_note` is the decider's and follows the row's own RLS
+  (own · manager-of · admin · security). `team_leave_calendar` selects an explicit column list
+  and is untouched, so the note is never exposed through the shared calendar.
+- **The employee-code field on `/login` is now latin-only and left-to-right**, matching the
+  password field: `toLatinCode()` (`lib/employees/code.ts`) converts Persian/Arabic-Indic digits
+  and drops everything outside printable ASCII, spaces included. The code becomes the synthetic
+  auth email, so a Persian character could only ever produce an unmatchable login.
+- The login code placeholder is now `prod-1042` (a generated-code example) instead of `admin` —
+  the login page no longer names the administrator account.
+- Tests: `toLatinCode` unit cases (147 unit tests total) + the approval e2e now types a Farsi
+  rejection reason and asserts the employee reads it back on their request.
+
 ### Login password field: reveal toggle + latin-only entry (2026-07-29)
 - **Show/hide password toggle** on `/login` (eye button inside the field, `password-toggle`
   testid, localized `aria-label`). The field and its toggle sit in a `dir="ltr"` wrapper so the

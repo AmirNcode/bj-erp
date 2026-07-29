@@ -287,6 +287,7 @@ export type Database = {
           day_part: Database["public"]["Enums"]["day_part"]
           decided_at: string | null
           decided_by: string | null
+          decision_note: string | null
           employee_id: string
           end_date: string
           id: string
@@ -301,6 +302,7 @@ export type Database = {
           day_part?: Database["public"]["Enums"]["day_part"]
           decided_at?: string | null
           decided_by?: string | null
+          decision_note?: string | null
           employee_id: string
           end_date: string
           id?: string
@@ -315,6 +317,7 @@ export type Database = {
           day_part?: Database["public"]["Enums"]["day_part"]
           decided_at?: string | null
           decided_by?: string | null
+          decision_note?: string | null
           employee_id?: string
           end_date?: string
           id?: string

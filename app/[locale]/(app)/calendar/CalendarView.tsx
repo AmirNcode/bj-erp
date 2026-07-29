@@ -17,6 +17,8 @@ import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +44,8 @@ type Labels = {
   reject: string;
   approveConfirm: string;
   rejectConfirm: string;
+  rejectReasonLabel: string;
+  rejectReasonPlaceholder: string;
   approveSuccess: string;
   rejectSuccess: string;
 };
@@ -83,6 +87,8 @@ function DecideButtons({
   onDecide: (id: string, successMsg: string, action: (id: string) => Promise<DecisionResult>) => void;
 }) {
   const tc = useTranslations('common');
+  // Optional rejection note, local to this entry's dialog.
+  const [rejectNote, setRejectNote] = useState('');
   return (
     <div className="flex items-center gap-2">
       <AlertDialog>
@@ -119,11 +125,27 @@ function DecideButtons({
             <AlertDialogTitle>{labels.reject}</AlertDialogTitle>
             <AlertDialogDescription>{labels.rejectConfirm}</AlertDialogDescription>
           </AlertDialogHeader>
+
+          <div className="space-y-1.5 text-start">
+            <Label htmlFor={`cal-reject-reason-${id}`}>{labels.rejectReasonLabel}</Label>
+            <Textarea
+              id={`cal-reject-reason-${id}`}
+              data-testid={`cal-reject-reason-${id}`}
+              rows={3}
+              maxLength={500}
+              placeholder={labels.rejectReasonPlaceholder}
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+          </div>
+
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
-              onClick={() => onDecide(id, labels.rejectSuccess, rejectRequest)}
+              onClick={() =>
+                onDecide(id, labels.rejectSuccess, (rid) => rejectRequest(rid, rejectNote))
+              }
               data-testid={`cal-reject-confirm-${id}`}
             >
               {labels.reject}

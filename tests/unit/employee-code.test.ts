@@ -3,7 +3,30 @@ import {
   buildEmployeeCode,
   isValidPersonnelNo,
   normalizePersonnelNo,
+  toLatinCode,
 } from '@/lib/employees/code';
+
+describe('toLatinCode', () => {
+  it('leaves a real login code untouched', () => {
+    expect(toLatinCode('prod-1042')).toBe('prod-1042');
+    expect(toLatinCode('admin')).toBe('admin');
+  });
+
+  it('converts Persian and Arabic-Indic digits', () => {
+    expect(toLatinCode('prod-۱۰۴۲')).toBe('prod-1042');
+    expect(toLatinCode('prod-١٠٤٢')).toBe('prod-1042');
+  });
+
+  it('drops Persian letters typed on a Farsi keyboard', () => {
+    expect(toLatinCode('مدیر')).toBe('');
+    expect(toLatinCode('prodمdash-7')).toBe('proddash-7');
+  });
+
+  it('drops spaces — codes never contain one', () => {
+    expect(toLatinCode(' prod-1042 ')).toBe('prod-1042');
+    expect(toLatinCode('prod 1042')).toBe('prod1042');
+  });
+});
 
 describe('normalizePersonnelNo', () => {
   it('trims whitespace', () => {

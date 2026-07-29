@@ -43,6 +43,7 @@ type Labels = {
   days: string;
   from: string;
   to: string;
+  rejectedReason: string;
 };
 
 type Props = {
@@ -129,6 +130,16 @@ export function MyRequestsList({ requests, labels, calendarPref, locale }: Props
                       {labels.dayPartLabels[req.day_part]} ·{' '}
                       {formatNumber(req.requested_days, locale)} {labels.days}
                     </div>
+                    {/* Why it was rejected — optional, set by the decider. */}
+                    {req.status === 'rejected' && req.decision_note && (
+                      <div
+                        className="mt-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                        data-testid={`decision-note-${req.id}`}
+                      >
+                        <span className="font-medium">{labels.rejectedReason}:</span>{' '}
+                        {req.decision_note}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col items-end gap-2 shrink-0">

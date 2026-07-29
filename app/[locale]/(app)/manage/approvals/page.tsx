@@ -32,6 +32,8 @@ async function ApprovalsData({ locale }: { locale: string }) {
     reject: t('reject'),
     approveConfirm: t('approveConfirm'),
     rejectConfirm: t('rejectConfirm'),
+    rejectReasonLabel: t('rejectReasonLabel'),
+    rejectReasonPlaceholder: t('rejectReasonPlaceholder'),
     errorLabel: t('error'),
     approveSuccess: t('approveSuccess'),
     rejectSuccess: t('rejectSuccess'),

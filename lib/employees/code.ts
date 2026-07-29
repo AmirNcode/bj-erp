@@ -27,6 +27,17 @@ export function isValidPersonnelNo(value: string): boolean {
   return /^[0-9]{1,10}$/.test(value);
 }
 
+/**
+ * Login-field sanitiser for the employee code. The code becomes the synthetic
+ * auth email (`code@bj-app.internal`), so a Persian character typed on a Farsi
+ * keyboard yields a code that can never match any account. Persian/Arabic-Indic
+ * digits are converted; everything outside printable ASCII is dropped, spaces
+ * included — codes never contain one.
+ */
+export function toLatinCode(value: string): string {
+  return toAsciiDigits(value).replace(/[^\x21-\x7E]/g, '');
+}
+
 /** Mirrors the in-DB composition; department codes are stored lowercase. */
 export function buildEmployeeCode(deptCode: string, personnelNo: string): string {
   return `${deptCode.toLowerCase()}-${personnelNo}`;

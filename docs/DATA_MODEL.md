@@ -90,7 +90,11 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `start_date date` ·
 `end_date date` · `day_part day_part` · `requested_days numeric` (computed, see below) ·
 `status leave_status` (default `pending`) · `reason text` · `decided_by → profiles` (nullable) ·
-`decided_at` · `created_at`. Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
+`decided_at` · `decision_note text` (nullable, ≤500 chars) · `created_at`.
+Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
+`reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
+**decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
+their own row and never exposed through `team_leave_calendar` (explicit column list).
 *Hourly later*: add nullable `start_time`/`end_time` + `requested_hours`; `allow_hourly` gates UI.
 
 ### `leave_ledger`
