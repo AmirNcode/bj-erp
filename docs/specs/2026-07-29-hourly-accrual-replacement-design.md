@@ -98,7 +98,8 @@ jalali_months
   unique (gregorian_start)
 ```
 
-Seeded for **1400–1450** (600 rows, generated once and checked into the migration). Every date
+Seeded for **1400–1450** (612 rows — 51 years × 12, generated once and checked into the
+migration). Every date
 question becomes a join instead of arithmetic:
 
 - month containing date `d` → `where d between gregorian_start and gregorian_end`
@@ -255,7 +256,7 @@ employee view, and inside the submit path before the balance check. Because accr
 must be an RPC invoked before the RLS-protected `leave_ledger` read — it can never live inside
 `team_leave_calendar` or any view.
 
-Cost is bounded: ≤ 12 rows scanned per employee per year against a 600-row indexed table.
+Cost is bounded: ≤ 12 rows scanned per employee per year against a 612-row indexed table.
 
 ## 7. Hourly requests
 
