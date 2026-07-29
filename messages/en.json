@@ -103,7 +103,10 @@
       "am": "Morning",
       "pm": "Afternoon"
     },
-    "days": "days"
+    "days": "days",
+    "hours": "hours",
+    "minutes": "minutes",
+    "and": "and"
   },
   "calendar": {
     "title": "Calendar",
