@@ -24,6 +24,35 @@ Copied from `docs/specs/2026-07-29-hourly-accrual-replacement-design.md`; every 
 - **Commit after every task.** Never commit to `main`; this plan runs on `feat/leave-v2-hourly-accrual-replacement`.
 - **Verify library APIs against Context7 before use** — no training-data signatures.
 
+## Environment (verified 2026-07-29 on Amir's Mac, not assumed)
+
+The plan originally assumed a `supabase start` dev stack. That is **not** this machine. Verified facts:
+
+| Thing | Reality |
+|---|---|
+| `supabase` CLI | **Not installed**, and `npx supabase` cannot install it (no network consent). So `supabase db reset` and `supabase gen types` are unavailable. |
+| Local database | The self-hosted **docker-compose stack** from `deploy/` is running: `bj-erp-db-1`, `bj-erp-{app,gateway,auth,rest}-1`. Postgres port is **not published to the host** — reach it with `docker exec`, not `psql` from the host. |
+| What the dev app targets | `.env.local` → `NEXT_PUBLIC_SUPABASE_URL=http://192.168.2.48:8080` (the docker gateway). The cloud project is **paused**. |
+| Local data | Real rows: 27 `leave_ledger`, 3 `leave_requests`. The backfill therefore runs against actual data — a better test than an empty reset. |
+| `tsx` | Not installed. Node is **v24.13.0**, which strips TypeScript types natively, so `node scripts/gen-jalali-months.mjs` can import a `.ts` module directly. |
+| `react-date-object` under plain Node ESM | Subpath imports need the explicit **`.js`** extension (no `exports` map), and the package is CJS, so the default export arrives wrapped as `.default`. Both are handled in `jalaliMonths.ts`; bundler resolution (Next, vitest) is unaffected. |
+
+**Canonical commands for this machine:**
+
+```bash
+# apply a migration (idempotent replay — the same mechanism deploy/update.sh uses)
+docker exec -i bj-erp-db-1 psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -f - < supabase/migrations/<file>.sql
+
+# query
+docker exec bj-erp-db-1 psql -U postgres -d postgres -c "<sql>"
+```
+
+There is **no `db reset`** available, so migrations are replayed forward onto a database with data.
+Every migration in this plan must therefore be **idempotent** (`if not exists`, `create or replace`,
+guarded `update`) — which they already are, and which is also what `deploy/update.sh` requires on the
+client's server.
+
 ---
 
 ## File Structure
@@ -149,11 +178,20 @@ Create `lib/leave/jalaliMonths.ts`:
  * carryover boundary, and serial years all join against that table instead of
  * converting calendars at query time.
  */
-import DateObject from 'react-date-object';
-import persian from 'react-date-object/calendars/persian';
-import persian_en from 'react-date-object/locales/persian_en';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
+// Subpaths carry the explicit `.js` extension and DateObject goes through an
+// interop shim because this module is also imported by scripts/gen-jalali-months.mjs
+// under plain Node ESM, where react-date-object (CJS, no exports map) resolves
+// neither bare subpaths nor an unwrapped default. Bundler resolution (Next,
+// vitest) is unaffected by both. This is why it differs from lib/leave/dateConvert.ts.
+import DateObjectModule from 'react-date-object';
+import persian from 'react-date-object/calendars/persian.js';
+import persian_en from 'react-date-object/locales/persian_en.js';
+import gregorian from 'react-date-object/calendars/gregorian.js';
+import gregorian_en from 'react-date-object/locales/gregorian_en.js';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const DateObject = ((DateObjectModule as any).default ??
+  DateObjectModule) as typeof DateObjectModule;
 
 export type JalaliMonthRow = {
   jalaliYear: number;
@@ -253,7 +291,9 @@ const sql = `-- ================================================================
 -- Range: ${FROM}–${TO} (${rows.length} rows).
 -- =============================================================================
 
-create table public.jalali_months (
+-- Idempotent throughout: there is no \`db reset\` on the dev machine and
+-- deploy/update.sh replays every migration file on the client's server.
+create table if not exists public.jalali_months (
   jalali_year     int  not null,
   jalali_month    int  not null check (jalali_month between 1 and 12),
   gregorian_start date not null,
@@ -262,15 +302,17 @@ create table public.jalali_months (
   constraint jalali_months_range check (gregorian_end >= gregorian_start)
 );
 
-create unique index jalali_months_start_uniq on public.jalali_months (gregorian_start);
-create index jalali_months_span_idx on public.jalali_months (gregorian_start, gregorian_end);
+create unique index if not exists jalali_months_start_uniq on public.jalali_months (gregorian_start);
+create index if not exists jalali_months_span_idx on public.jalali_months (gregorian_start, gregorian_end);
 
 insert into public.jalali_months (jalali_year, jalali_month, gregorian_start, gregorian_end) values
-${values};
+${values}
+on conflict (jalali_year, jalali_month) do nothing;
 
 -- Read-only reference data: every authenticated user may read it, nobody writes it
 -- (not even admins — widening the range is a migration, so the rows stay verifiable).
 alter table public.jalali_months enable row level security;
+drop policy if exists "jalali_months_select" on public.jalali_months;
 create policy "jalali_months_select"
   on public.jalali_months for select to authenticated using (true);
 
@@ -297,30 +339,39 @@ console.log(`wrote ${OUT} (${rows.length} rows)`);
 
 - [ ] **Step 6: Generate the migration and verify its shape**
 
-Run: `npx tsx scripts/gen-jalali-months.mjs` (if `tsx` is unavailable, run `npx tsx@latest`; the script imports a `.ts` module so plain `node` will not work)
+Run: `node scripts/gen-jalali-months.mjs`
 Expected: `wrote supabase/migrations/20260729130001_jalali_calendar.sql (612 rows)`
+
+Node 24 strips the types in the imported `.ts` module, so no `tsx` is needed. A
+`MODULE_TYPELESS_PACKAGE_JSON` warning on stderr is expected noise, not a failure.
 
 Then: `grep -c "^  (" supabase/migrations/20260729130001_jalali_calendar.sql`
 Expected: `612`
 
 - [ ] **Step 7: Apply it locally and verify against the database**
 
-Run: `npx supabase db reset`
-Expected: every migration applies, seed runs, no error.
-
-Run:
 ```bash
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c \
+docker exec -i bj-erp-db-1 psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -f - < supabase/migrations/20260729130001_jalali_calendar.sql
+```
+Expected: `CREATE TABLE`, `CREATE INDEX` ×2, `INSERT 0 612`, `ALTER TABLE`, `CREATE POLICY`, `CREATE FUNCTION` — and no `ERROR`.
+
+```bash
+docker exec bj-erp-db-1 psql -U postgres -d postgres -c \
   "select count(*) as rows, min(gregorian_start) as first, max(gregorian_end) as last from public.jalali_months;"
 ```
 Expected: `rows = 612`, `first` in March 2021, `last` in March 2072.
 
-Run (contiguity holds in SQL too — no gaps, no overlaps):
+Contiguity must hold in SQL too — no gaps, no overlaps:
 ```bash
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c \
+docker exec bj-erp-db-1 psql -U postgres -d postgres -c \
   "select count(*) from (select gregorian_end, lead(gregorian_start) over (order by gregorian_start) nxt from public.jalali_months) t where nxt is not null and nxt <> gregorian_end + 1;"
 ```
 Expected: `0`
+
+Re-run the migration once more and confirm it is idempotent (no `db reset` exists here, and
+`deploy/update.sh` replays every file on the client's server):
+Expected: no error; `insert … on conflict do nothing` leaves the count at 612.
 
 - [ ] **Step 8: Commit**
 
@@ -653,7 +704,7 @@ begin
   return new;
 end; $$;
 
-create trigger leave_ledger_sync_minutes_trg
+create or replace trigger leave_ledger_sync_minutes_trg
   before insert or update on public.leave_ledger
   for each row execute function public.leave_ledger_sync_minutes();
 
@@ -664,7 +715,7 @@ begin
   return new;
 end; $$;
 
-create trigger leave_requests_sync_minutes_trg
+create or replace trigger leave_requests_sync_minutes_trg
   before insert or update on public.leave_requests
   for each row execute function public.leave_requests_sync_minutes();
 
@@ -675,20 +726,25 @@ begin
   return new;
 end; $$;
 
-create trigger leave_allocations_sync_minutes_trg
+create or replace trigger leave_allocations_sync_minutes_trg
   before insert or update on public.leave_allocations
   for each row execute function public.leave_allocations_sync_minutes();
 ```
 
 - [ ] **Step 2: Apply it locally**
 
-Run: `npx supabase db reset`
-Expected: all migrations apply, seed runs, no error.
+```bash
+docker exec -i bj-erp-db-1 psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -f - < supabase/migrations/20260729130002_leave_minutes_expand.sql
+```
+Expected: `ALTER TABLE` / `UPDATE` / `CREATE FUNCTION` / `CREATE TRIGGER` lines, no `ERROR`.
+The `UPDATE` counts should be non-zero on the first run (27 ledger rows exist) and `UPDATE 0` on a
+replay — that is the guarded backfill proving itself idempotent.
 
 - [ ] **Step 3: Run the acceptance query — this is the gate for the whole plan**
 
 ```bash
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "
+docker exec bj-erp-db-1 psql -U postgres -d postgres -c "
 select
   (select count(*) from public.leave_ledger      where balance_after_minutes <> round(balance_after * 480)) as bad_balances,
   (select count(*) from public.leave_ledger      where delta_minutes         <> round(delta_days * 480))    as bad_deltas,
@@ -1446,21 +1502,26 @@ create or replace view public.team_leave_calendar as
 revoke all    on public.team_leave_calendar from public, anon;
 grant  select on public.team_leave_calendar to authenticated;
 
-alter table public.leave_ledger      drop column delta_days,     drop column balance_after;
-alter table public.leave_requests    drop column requested_days;
-alter table public.leave_allocations drop column allocated_days;
+alter table public.leave_ledger      drop column if exists delta_days,
+                                     drop column if exists balance_after;
+alter table public.leave_requests    drop column if exists requested_days;
+alter table public.leave_allocations drop column if exists allocated_days;
 ```
 
 **Note on the view:** it is intentionally recreated *without* `security_invoker`, so it keeps running as owner and bypassing the strict base-table RLS — the FR-25 design from `20260624090002`. `reason` and `decision_note` stay unselected. Do not add them.
 
 - [ ] **Step 6: Apply and verify the schema is clean**
 
-Run: `npx supabase db reset`
-Expected: all migrations apply, seed runs, no error.
+```bash
+docker exec -i bj-erp-db-1 psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  -f - < supabase/migrations/20260729130003_leave_minutes_contract.sql
+```
+Expected: no `ERROR`. Replay it once more to confirm idempotency (`drop … if exists`,
+`create or replace`, `drop column if exists`).
 
 Run — no day column may survive:
 ```bash
-psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c "
+docker exec bj-erp-db-1 psql -U postgres -d postgres -c "
 select table_name, column_name from information_schema.columns
  where table_schema = 'public'
    and column_name in ('delta_days','balance_after','requested_days','allocated_days');"
