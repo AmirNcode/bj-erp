@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { changeMyPassword } from '@/lib/actions/profile';
-import { validatePassword } from '@/lib/auth/passwordPolicy';
+import { validatePassword, toLatinPassword } from '@/lib/auth/passwordPolicy';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -79,12 +79,19 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
       )}
       <div className="space-y-1.5">
         <Label htmlFor="pwd-current">{labels.current}</Label>
+        {/* Latin + LTR, same rule as the login field — a password that cannot
+            be typed on the login page must not be settable here. */}
         <Input
           id="pwd-current"
           type="password"
           autoComplete="current-password"
+          dir="ltr"
+          lang="en"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={current}
-          onChange={(e) => setCurrent(e.target.value)}
+          onChange={(e) => setCurrent(toLatinPassword(e.target.value))}
           disabled={isPending}
         />
       </div>
@@ -94,8 +101,13 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           id="pwd-new"
           type="password"
           autoComplete="new-password"
+          dir="ltr"
+          lang="en"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={next}
-          onChange={(e) => setNext(e.target.value)}
+          onChange={(e) => setNext(toLatinPassword(e.target.value))}
           disabled={isPending}
         />
       </div>
@@ -105,8 +117,13 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           id="pwd-confirm"
           type="password"
           autoComplete="new-password"
+          dir="ltr"
+          lang="en"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={(e) => setConfirm(toLatinPassword(e.target.value))}
           disabled={isPending}
         />
       </div>

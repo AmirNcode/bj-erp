@@ -134,6 +134,17 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☑ Gates: unit **139/139**, e2e **25/25** serial against the local Docker stack, lint + tsc +
   build green; landed via PR #4
 
+## Login password field (2026-07-29) ✅
+- ☑ Show/hide password toggle on `/login` (`password-toggle` testid, localized `aria-label`,
+  `dir="ltr"` on the wrapper so it sits at the visual end of the field in RTL)
+- ☑ Password inputs forced latin + LTR via `toLatinPassword()` (`lib/auth/passwordPolicy.ts`) —
+  a Farsi keyboard was producing passwords that could never match
+- ☑ Same rule applied to the change-password form, so a password can't be set that login
+  refuses to accept
+- ☑ Gates: unit **143/143**, e2e **26/26** serial, lint + tsc + build green (uncommitted)
+- ☐ Pre-existing non-latin passwords (if any exist on the client's install) need an admin reset —
+  undetectable from here, passwords are hashed
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen

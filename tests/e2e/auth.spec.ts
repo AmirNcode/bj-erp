@@ -29,6 +29,25 @@ test.describe('Login flow', () => {
     await expect(page.locator('p[role="alert"]')).toContainText('کد پرسنلی یا رمز عبور اشتباه است');
   });
 
+  test('password field reveals on toggle and stays latin LTR', async ({ page }) => {
+    await page.goto('/login');
+    const field = page.locator('#password');
+    const toggle = page.locator('[data-testid="password-toggle"]');
+
+    // Latin-only + left-to-right: a Farsi keyboard must not be able to put
+    // Persian characters into a password that could then never match.
+    await expect(field).toHaveAttribute('dir', 'ltr');
+    await field.fill('رمز۱۲۳abc!');
+    await expect(field).toHaveValue('123abc!');
+
+    // Hidden by default, revealed on toggle, hidden again on second press.
+    await expect(field).toHaveAttribute('type', 'password');
+    await toggle.click();
+    await expect(field).toHaveAttribute('type', 'text');
+    await toggle.click();
+    await expect(field).toHaveAttribute('type', 'password');
+  });
+
   test('reloading /home after login keeps session (no redirect to login)', async ({ page }) => {
     // Log in first
     await page.goto('/login');

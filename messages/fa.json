@@ -25,6 +25,8 @@
     "codePlaceholder": "مثال: admin",
     "passwordLabel": "رمز عبور",
     "passwordPlaceholder": "رمز عبور خود را وارد کنید",
+    "showPassword": "نمایش رمز عبور",
+    "hidePassword": "پنهان کردن رمز عبور",
     "submit": "ورود",
     "invalidCredentials": "کد پرسنلی یا رمز عبور اشتباه است."
   },

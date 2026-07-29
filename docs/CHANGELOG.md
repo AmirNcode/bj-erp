@@ -4,7 +4,25 @@ Format: [Keep a Changelog](https://keepachangelog.com/). The app is built; v1 (P
 frontend overhaul) is feature-complete and merged to `main`. `[Unreleased]` holds the v1 work
 pending a tagged release; semantic versioning starts at the first tag.
 
+> This file records **what shipped**, for a release reader. For *what the last agent actually
+> did this session* — including investigations, dead ends, and commands run against the client's
+> live server — see **`docs/AGENT-LOG.md`**, which every agent is required to append to.
+
 ## [Unreleased]
+
+### Login password field: reveal toggle + latin-only entry (2026-07-29)
+- **Show/hide password toggle** on `/login` (eye button inside the field, `password-toggle`
+  testid, localized `aria-label`). The field and its toggle sit in a `dir="ltr"` wrapper so the
+  button stays at the visual end of the input inside the Farsi RTL layout.
+- **Passwords are latin-only, left-to-right.** On a Farsi keyboard the field silently collected
+  Persian characters, producing a password that could never match while the user saw only
+  bullets. `toLatinPassword()` (`lib/auth/passwordPolicy.ts`) converts Persian/Arabic-Indic
+  digits and drops anything outside printable ASCII.
+- Applied to the **change-password form** too (`profile/ChangePasswordForm.tsx`, all three
+  fields): filtering only the login field would let a user set a Persian password here that
+  they could never type again. Pre-existing non-latin passwords, if any, need an admin reset.
+- Tests: `toLatinPassword` unit cases (143 unit tests total) + an `auth.spec.ts` case asserting
+  `dir="ltr"`, the Persian→latin filtering, and the reveal toggle round-trip.
 
 ### Configurable HTTPS port; port 80 dropped (2026-07-29)
 - **The published HTTPS port is now a first-class setting.** The client's IT reserved 443 and 80,

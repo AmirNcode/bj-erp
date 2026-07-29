@@ -5,7 +5,9 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import { useState, FormEvent } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { signInWithCode } from '@/lib/auth/usernameEmail';
+import { toLatinPassword } from '@/lib/auth/passwordPolicy';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +21,7 @@ export default function LoginPage() {
 
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -79,15 +82,39 @@ export default function LoginPage() {
 
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="password">{t('passwordLabel')}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder={t('passwordPlaceholder')}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+                {/* dir="ltr" on the wrapper too, so the reveal button stays at the
+                    visual end of the field in the Farsi RTL layout. */}
+                <div className="relative" dir="ltr">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    dir="ltr"
+                    lang="en"
+                    className="pe-10"
+                    placeholder={t('passwordPlaceholder')}
+                    value={password}
+                    onChange={(e) => setPassword(toLatinPassword(e.target.value))}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? t('hidePassword') : t('showPassword')}
+                    aria-pressed={showPassword}
+                    data-testid="password-toggle"
+                    className="absolute inset-y-0 end-0 flex items-center rounded-md px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    {showPassword ? (
+                      <EyeOff aria-hidden="true" className="size-4" />
+                    ) : (
+                      <Eye aria-hidden="true" className="size-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               {error && (

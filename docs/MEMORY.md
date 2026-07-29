@@ -2,7 +2,9 @@
 
 Distilled memory for agents starting a session on this repo: the themes, corrections, and
 conventions that are NOT obvious from the code. Read alongside `CLAUDE.md` (read order there).
-Not a changelog — that's `docs/CHANGELOG.md`.
+Not a changelog — that's `docs/CHANGELOG.md`. Not a session journal either — that's
+`docs/AGENT-LOG.md`, which every agent must append to before finishing. This file takes only
+the lessons that will still matter in six months.
 
 ## Core themes
 
@@ -109,6 +111,16 @@ and ignores the `Host` header's port when matching, so `APP_PORT` only ever chan
 of the compose port mapping. Two traps: putting the port in `APP_HOST` corrupts `default_sni` and
 the certificate name; and changing `APP_ORIGIN` needs `up -d --force-recreate app`, because a
 plain `restart` reuses a container whose files were already substituted.
+
+### Passwords are latin — and both entry points must agree
+A Farsi keyboard silently fills a `type="password"` field with Persian characters; the user sees
+bullets and an unexplained failed login. Passwords here are always latin (temp passwords come
+from an ASCII alphabet), so every password input filters through `toLatinPassword()`
+(`lib/auth/passwordPolicy.ts`) — Persian/Arabic-Indic digits converted, other non-ASCII dropped.
+The trap is asymmetry: filtering the **login** field alone, while the change-password form still
+accepts Persian, lets a user set a password they can never type again. Any new password field
+must filter too. Also RTL-specific: an LTR input inside the RTL layout needs `dir="ltr"` on the
+**wrapper** as well, or an `end-0` affordance (the reveal toggle) lands on the visual left.
 
 ### e2e: one `.font-mono`/selector class is not a contract
 The new-employee success screen's temp password was scraped via `.font-mono` — adding a second

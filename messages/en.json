@@ -25,6 +25,8 @@
     "codePlaceholder": "e.g. admin",
     "passwordLabel": "Password",
     "passwordPlaceholder": "Enter your password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "submit": "Sign In",
     "invalidCredentials": "Invalid employee code or password."
   },

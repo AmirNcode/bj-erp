@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { validatePassword, MIN_PASSWORD_LENGTH } from '@/lib/auth/passwordPolicy';
+import { validatePassword, toLatinPassword, MIN_PASSWORD_LENGTH } from '@/lib/auth/passwordPolicy';
+
+describe('toLatinPassword', () => {
+  it('leaves an ASCII password untouched', () => {
+    expect(toLatinPassword('Admin!2026')).toBe('Admin!2026');
+    expect(toLatinPassword('a B~ 1_9')).toBe('a B~ 1_9');
+  });
+
+  it('converts Persian and Arabic-Indic digits', () => {
+    expect(toLatinPassword('pass۱۲۳')).toBe('pass123');
+    expect(toLatinPassword('pass١٢٣')).toBe('pass123');
+  });
+
+  it('drops Persian letters typed on a Farsi keyboard', () => {
+    expect(toLatinPassword('رمز۱۲۳abc!')).toBe('123abc!');
+    expect(toLatinPassword('رمزعبور')).toBe('');
+  });
+
+  it('drops other non-printable-ASCII input', () => {
+    expect(toLatinPassword('a‏b')).toBe('ab'); // RTL mark
+    expect(toLatinPassword('emoji🙂ok')).toBe('emojiok');
+  });
+});
 
 describe('validatePassword', () => {
   it('requires a current password', () => {
