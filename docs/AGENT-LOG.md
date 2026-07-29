@@ -78,6 +78,83 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-29 — Leave v2 design: hourly leave, monthly accrual, replacement person (spec only)
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `cce7b16`, tree had untracked `docs/forms/`
+**Trigger:** Client feedback after reviewing the live app: add hourly leave (≤4h), make PTO accrue
+1 day/month cumulatively, add the replacement/cover person from their paper forms, and document
+(not solve) their insurance/ink-signature concern. User asked for a thorough blueprint and
+clarifying questions before any code.
+
+**What changed**
+
+- **`docs/specs/2026-07-29-hourly-accrual-replacement-design.md` — new, the only deliverable.**
+  Frozen design record: 15 decisions the user made, then the design. No code, no migrations, no
+  schema touched this session.
+- Nothing else in the repo was modified. `docs/forms/*.jpeg` (client's two paper forms) remain
+  untracked — the user added them, I only read them.
+
+**Key design decisions (full rationale in the spec §2)**
+
+- **Ledger unit becomes integer minutes**, replacing `delta_days`/`balance_after`/
+  `requested_days`/`allocated_days`. Backfill is `× 480` and exact (existing values are whole or
+  `.5`). This is the highest-risk step — it rewrites every `SECURITY DEFINER` leave function and
+  runs against the client's live balances.
+- **Accrual is lazy + idempotent**, not cron: missing months are posted whenever a balance is
+  read, guarded by a partial unique index on `(employee, type, entry_type, period_month)`.
+  Rejected `pg_cron` because the client's VM is LAN-only and can be powered off — it would need
+  catch-up logic anyway, i.e. this design plus a dependency.
+- **New `jalali_months` reference table** (1400–1450, 600 rows). Accrual anchors on Jalali month
+  starts, carryover fires on Farvardin 1, serials key on the Jalali year — all three become joins
+  instead of a hand-rolled conversion algorithm inside a definer function. This is a **documented
+  exception to CLAUDE.md convention 1** (Jalali never persisted): it is a calendar dimension, and
+  no profile/request/ledger row stores a Jalali value.
+- **Approval stays single-step.** Their paper forms carry four signatures each (incl. حراست on
+  the hourly form) — multi-step approval is deferred to its own spec, and it is the same work as
+  the security gate check that would actually solve their insurance problem.
+- Replacement selection is strict (any overlapping pending/approved leave disqualifies a
+  candidate) but being *named* as a cover never blocks that person's own leave request. **This
+  asymmetry is intentional and is flagged in the spec §2.1 so a future agent does not "fix" it.**
+
+**Actions outside the repo**
+
+- None. Nothing run against the client's server, no DB changes, no deploy.
+
+**Verification**
+
+- Not applicable — spec only, no code. Did **not** run the test suites.
+- While reading the code I found the recorded test counts disagree: CLAUDE.md says 103 unit,
+  `docs/MEMORY.md` says 130, a static grep of `tests/unit/*` gives 146 cases and 26 e2e specs.
+  Left all three alone rather than guessing which is right; the spec §10.2 tells the implementer
+  to measure the baseline before touching anything.
+
+**State left behind**
+
+- **Uncommitted.** The new spec file is untracked, as is `docs/forms/`. User has not asked for a
+  commit. Nothing else pending.
+- The implementation plan (`writing-plans`) was **not** written yet — the user is reviewing the
+  spec first.
+
+**For the next agent**
+
+- Read the spec's §10.3 before writing any migration. The minutes conversion runs against real
+  balances on `https://10.10.10.50`; the spec requires a dump + a written acceptance query
+  (`old_days × 480 == new_minutes`) + a timed rollback rehearsal. The amd64 `package.sh --platform`
+  landmine from 2026-07-25 still applies.
+- The opening-balance mechanism **already exists** — `NewEmployeeForm.tsx:107` collects per-type
+  days and calls `allocate_leave` (`lib/actions/leave.ts:129`), pre-filled from
+  `leave_types.default_annual_quota_days`. Extend that block with the accrual policy fields; do
+  not build a second path.
+- `leave_types.allow_hourly` has existed unused since `20260623120005_leave.sql:74` and is the
+  intended gate for hourly. Seed it `true` for annual + unpaid, `false` for sick — the client's
+  hourly paper form offers no sick option.
+- Accepted v1 limitation, recorded so it is not mistaken for a bug: an am half-day plus a 2h
+  afternoon hourly request will be refused, because am/pm is stored as `unit='day'` and the
+  overlap predicate treats any whole-day request as blocking.
+- Insurance/signature (spec §11) is deliberately unbuilt. The recommended next step is a question
+  for the client's insurer, not a sprint: *what will you accept in a claim file?*
+
 ## 2026-07-29 — Rejection reason (new column); employee-code field latin-only; local stack rebuilt
 
 **Agent:** Claude Opus 5 via Claude Code
