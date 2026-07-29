@@ -63,6 +63,8 @@ scripts/seed-demo.mjs      `npm run seed` — demo org via guarded RPCs (no serv
 tests/                     unit/* (Vitest) + e2e/* (Playwright)
 proxy.ts                   middleware: Supabase session refresh + next-intl routing (Next 16 name)
 docs/
+  AGENT-LOG.md             MANDATORY session journal — every agent appends what it did, incl.
+                           actions run against the client's live server. Read first, write last.
   PLAN.md                  architecture blueprint + phased roadmap (start here for the big picture)
   REQUIREMENTS.md          numbered functional (FR-*) + non-functional (NFR-*) requirements
   DATA_MODEL.md            tables, columns, enums, ledger + day-counting logic (source of truth)
@@ -76,9 +78,10 @@ Granular task + commit history: `.superpowers/sdd/progress.md`.
 
 ## Read order for a new agent
 
-1. This file → 2. `docs/PLAN.md` → 3. `docs/REQUIREMENTS.md` → 4. `docs/DATA_MODEL.md` →
-5. `docs/PERMISSIONS.md` → 6. current spec in `docs/specs/` → 7. `docs/TASKS.md` (what's next) →
-8. `docs/CHANGELOG.md` (what's done).
+1. This file → 2. **`docs/AGENT-LOG.md`** (what the last agent did — read this before touching
+anything) → 3. `docs/PLAN.md` → 4. `docs/REQUIREMENTS.md` → 5. `docs/DATA_MODEL.md` →
+6. `docs/PERMISSIONS.md` → 7. current spec in `docs/specs/` → 8. `docs/TASKS.md` (what's next) →
+9. `docs/CHANGELOG.md` (what's done).
 
 ## How to run
 
@@ -95,7 +98,13 @@ production: see `docs/DEPLOY.md`. Demo admin login: `admin` / `Admin!2026`.
 
 ## Working agreements
 
+- **Log every session in `docs/AGENT-LOG.md` — mandatory, no exceptions.** Append an entry
+  before you finish, using the template in that file. It is the running journal of who changed
+  what, why, what was run against the client's live server, and what was left half-done. Log
+  dead ends and abandoned attempts too. Multiple agents work on this repo and git alone does
+  not carry the reasoning or the out-of-repo actions.
 - **Plan before code.** Design → spec → plan → implement, with user review gates.
 - **Commit only when user asks.**
-- Keep `docs/CHANGELOG.md` and `docs/TASKS.md` current as work lands — how next agent learns
-  what happened.
+- Keep `docs/CHANGELOG.md` (what shipped) and `docs/TASKS.md` (what's next) current as work
+  lands. `docs/MEMORY.md` takes lessons that will still matter in six months. `AGENT-LOG.md` is
+  always updated; these three only when they apply.

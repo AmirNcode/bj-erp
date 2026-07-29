@@ -1,21 +1,99 @@
 # DEPLOY GUIDE — shipping a new version to the client's server
 
-Follow top to bottom. Every command runs **on your Mac**, in Terminal, from the project folder,
-unless it says otherwise.
+Open this file every time you want to put an update on the client's server. Follow it top to
+bottom.
 
-Project folder:
+Every command runs **on your Mac**, in Terminal, from the project folder, unless the step says
+otherwise. Start by going there:
 
 ```bash
 cd /Users/amir/Workspace/bj
 ```
 
+**Read PART 0 first if you have not deployed since the port change (2026-07-29).** It is a
+one-time fix, and without it the deploy stops with an error.
+
 ---
 
-## PART 1 — One-time setup (do this once, ever)
+## PART 0 — One-time: the server's `.env` needs the new port settings
+
+Skip this only if you have already done it once and a deploy has succeeded since.
+
+Since the app moved off port 443 to **3500**, the server's `.env` must carry three separate
+values. Older `.env` files only have `APP_HOST`, and the deploy will stop with:
+
+```
+set APP_ORIGIN in .env — re-run ./install.sh once
+```
+
+### 0.1 Connect the company VPN
+
+Nothing below works without it.
+
+### 0.2 Look at what the server currently has
+
+```bash
+ssh bj "grep -E '^APP_(HOST|PORT|ORIGIN)=' bj-erp-installer/.env"
+```
+
+If you see all three lines (`APP_HOST`, `APP_PORT`, `APP_ORIGIN`), you are done — go to PART 1.
+
+If you only see `APP_HOST`, continue.
+
+### 0.3 Add the two missing lines
+
+`APP_HOST` must stay a bare address with **no port** — it is the name on the security
+certificate. The port belongs in the other two values.
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo sh -c 'printf \"APP_PORT=3500\nAPP_ORIGIN=https://10.10.10.50:3500\n\" >> .env'"
+```
+
+### 0.4 Check it took
+
+```bash
+ssh bj "grep -E '^APP_(HOST|PORT|ORIGIN)=' bj-erp-installer/.env"
+```
+
+Expect exactly this:
+
+```
+APP_HOST=10.10.10.50
+APP_PORT=3500
+APP_ORIGIN=https://10.10.10.50:3500
+```
+
+If `APP_HOST` has `:3500` stuck on the end, remove it:
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo sed -i 's|^APP_HOST=.*|APP_HOST=10.10.10.50|' .env"
+```
+
+### 0.5 Apply it
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo docker compose up -d --force-recreate app"
+```
+
+`--force-recreate` matters. A plain restart reuses a container that already has the old address
+written into it, and nothing changes.
+
+### 0.6 Confirm the app answers on the new port
+
+```bash
+ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50:3500/"
+```
+
+Expect `app: 200`.
+
+Then open `https://10.10.10.50:3500` on your phone and log in. **Do a hard refresh** — phones
+cache the old page aggressively. On an installed app icon, remove it and re-add it.
+
+---
+
+## PART 1 — One-time setup for deploying (do this once, ever)
 
 ### 1.1 Connect the company VPN
-
-Turn on the L2TP VPN on your Mac or phone. The server is unreachable without it.
 
 ### 1.2 Run the setup script
 
@@ -23,7 +101,8 @@ Turn on the L2TP VPN on your Mac or phone. The server is unreachable without it.
 ./deploy/setup-release.sh
 ```
 
-Enter the **server password** when `ssh-copy-id` asks. This is the last time you will need it.
+Enter the **server's** password when it asks. This is the last time you will need to type it for
+connecting. It creates a shortcut named `bj` so later commands do not ask for a password.
 
 ### 1.3 Confirm it worked
 
@@ -31,7 +110,7 @@ Enter the **server password** when `ssh-copy-id` asks. This is the last time you
 ssh -o BatchMode=yes bj 'echo OK'
 ```
 
-Expect `OK` with no password prompt. If it fails, re-check the VPN and re-run 1.2.
+Expect `OK`, with no password prompt. If it fails, check the VPN and run 1.2 again.
 
 ---
 
@@ -39,7 +118,7 @@ Expect `OK` with no password prompt. If it fails, re-check the VPN and re-run 1.
 
 ### 2.1 Connect the company VPN
 
-### 2.2 Commit your changes
+### 2.2 Save your changes to the repository
 
 ```bash
 git status
@@ -53,65 +132,128 @@ git commit -m "describe what changed"
 git push origin main
 ```
 
+You *can* deploy with unsaved changes — the script warns and asks — but then nothing on the
+server matches any saved version, and you cannot get back to it later. Commit first.
+
 ### 2.3 Start Docker Desktop
 
-Open Docker Desktop and wait until it says **Running**. Then verify:
+Open Docker Desktop and wait until it says **Running**. Then check:
 
 ```bash
 docker info > /dev/null 2>&1 && echo "Docker ready"
 ```
 
-### 2.4 Deploy
+### 2.4 Run the deploy
 
-Pick a version name — use today's date:
+Pick a version name. Use today's date:
 
 ```bash
 ./deploy/release.sh 2026-08-14
 ```
 
-Then:
+What happens, in order:
 
-1. Wait. Build takes **5–15 minutes** (it emulates the server's CPU).
-2. When it asks for a password, type the **server's** password (for `sudo`).
-3. Wait for the upload (~300 MB) and the health check.
+1. It checks Docker, the VPN connection, and your code (spelling/type checks and the unit
+   tests). Anything wrong stops it here, before the slow part.
+2. It builds the app for the server's processor type. **This takes 5–15 minutes.**
+3. It asks for the **server's** password once, for administrator rights on the server.
+4. It uploads (~300 MB), backs up the database, applies any database changes, swaps in the new
+   app, and checks the app answers.
 
-### 2.5 Confirm success
+### 2.5 Confirm it succeeded
 
-The last lines must show:
+The last lines must look like this:
 
 ```
  Deployed 2026-08-14
-   App:      https://10.10.10.50
+   App:      https://10.10.10.50:3500
    Data:     verified — no table lost rows
 ```
 
-Then open `https://10.10.10.50` on your phone and log in.
+Both lines matter. `Data: verified` means no table lost rows during the update.
+
+Then open `https://10.10.10.50:3500` on your phone and log in.
 
 **Done.**
 
 ---
 
-## PART 3 — If something goes wrong
+## PART 3 — Checking everything is running correctly
 
-### 3.1 It stopped with an error — what do I do?
+Run these any time. Nothing here changes anything — they only report.
+
+**Is the app up?**
+
+```bash
+ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50:3500/"
+```
+
+Expect `app: 200`.
+
+**Is the login service up?** (This is the part that broke during the port change.)
+
+```bash
+ssh bj "curl -sk -o /dev/null -w 'auth: %{http_code}\n' https://10.10.10.50:3500/auth/v1/health"
+```
+
+Expect `auth: 200`.
+
+**Are all five containers running?**
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo docker compose ps"
+```
+
+Expect `app`, `auth`, `rest`, `db`, `gateway` — all `Up`, with `db` showing `healthy`.
+
+**Which version is live?**
+
+```bash
+ssh bj "grep APP_VERSION bj-erp-installer/.env"
+```
+
+**Deploy history:**
+
+```bash
+ssh bj "cat bj-erp-installer/update.log"
+```
+
+**Employee count** — should never drop unexpectedly:
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo bash -c 'set -a; . ./.env; set +a; docker compose exec -T -e PGPASSWORD=\"\$POSTGRES_PASSWORD\" db psql -tAc \"select count(*) from public.profiles\" -U supabase_admin -d postgres'"
+```
+
+**Recent app errors:**
+
+```bash
+ssh -t bj "cd bj-erp-installer && sudo docker compose logs --tail 50 app"
+```
+
+---
+
+## PART 4 — If something goes wrong
+
+### 4.1 It stopped with an error
 
 | Message contains | Meaning | Action |
 |---|---|---|
+| `set APP_ORIGIN in .env` | Server `.env` predates the port change | Do PART 0, then deploy again |
 | `cannot reach 'bj'` | VPN off | Connect the VPN, run 2.4 again |
 | `Docker is not running` | Docker Desktop closed | Open Docker Desktop, run 2.4 again |
 | `lint failed` / `unit tests failed` | Your code has errors | Fix the code, run 2.4 again |
 | `docker build failed` | Build error | Fix the code, run 2.4 again |
-| `built 'arm64'` | Wrong CPU type | Report it — do not retry blindly |
+| `built 'arm64'` | Wrong processor type | Report it — do not retry blindly |
 | `another update is already running` | A deploy is in progress | Wait 5 minutes, run 2.4 again |
-| `only 3GB free` | Server disk full | See 3.4 |
-| `the backup is empty` / `not a valid archive` | Database problem | **Stop.** See 3.5 |
-| `migration ... failed` | Bad SQL | App untouched and still running. Fix the migration |
-| `rolled back to ...` | New version was broken | App restored automatically. See 3.2 |
-| `ROWS LOST` | Data missing | **Stop immediately.** See 3.5 |
+| `only 3GB free` | Server disk full | See 4.4 |
+| `the backup is empty` / `not a valid archive` | Database problem | **Stop.** See 4.5 |
+| `migration ... failed` | Bad database change | App untouched and still running. Fix it |
+| `rolled back to ...` | New version was broken | App restored automatically. See 4.2 |
+| `ROWS LOST` | Data missing | **Stop immediately.** See 4.5 |
 
 Anything not in this table: stop and ask before running more commands.
 
-### 3.2 The deploy rolled itself back
+### 4.2 The deploy rolled itself back
 
 The app is already working again on the previous version. To see why the new one failed:
 
@@ -121,9 +263,12 @@ ssh -t bj "cd bj-erp-installer && sudo docker compose logs --tail 50 app"
 
 Fix the code, then deploy again with a new version name.
 
-### 3.3 The app is broken but the deploy said it succeeded
+Note: an automatic rollback restores the **app**, not database changes. If the failure happened
+after a database change was applied, say so when you ask for help.
 
-Roll back manually. Replace `PREVIOUS` with the version you had before:
+### 4.3 The app is broken but the deploy said it succeeded
+
+Roll back by hand. Replace `PREVIOUS` with the version you had before:
 
 ```bash
 ssh -t bj "cd bj-erp-installer && sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=PREVIOUS/' .env && sudo docker compose up -d app"
@@ -132,18 +277,16 @@ ssh -t bj "cd bj-erp-installer && sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=PRE
 Check it recovered:
 
 ```bash
-ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50/"
+ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50:3500/"
 ```
 
-Expect `app: 200`.
-
-To see which versions are available:
+To see which versions are available on the server:
 
 ```bash
 ssh bj "sudo docker images bj-erp-app --format '{{.Tag}}'"
 ```
 
-### 3.4 Server disk is full
+### 4.4 Server disk is full
 
 ```bash
 ssh -t bj "cd bj-erp-installer && sudo docker image prune -f && df -h /"
@@ -151,9 +294,9 @@ ssh -t bj "cd bj-erp-installer && sudo docker image prune -f && df -h /"
 
 Then run 2.4 again.
 
-### 3.5 Restore the database (last resort — data loss only)
+### 4.5 Restore the database (last resort — only for data loss)
 
-List the backups:
+List the backups, newest first:
 
 ```bash
 ssh bj "ls -lt bj-erp-installer/backups/"
@@ -168,42 +311,32 @@ ssh -t bj "cd bj-erp-installer && sudo docker compose exec -T db pg_restore -U s
 Verify:
 
 ```bash
-ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50/"
+ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50:3500/"
 ```
+
+### 4.6 The page loads but logging in fails
+
+Almost always an address mismatch: the browser loads the page from one address and sends the
+login to another. Check what the server thinks its address is:
+
+```bash
+ssh bj "grep -E '^APP_(HOST|PORT|ORIGIN)=' bj-erp-installer/.env"
+```
+
+`APP_ORIGIN` must be exactly what you type in the phone's browser, **including the port**. If you
+change it, apply it with `--force-recreate` (step 0.5) and hard-refresh the phone.
 
 ---
 
-## PART 4 — Checks you can run any time
+## Where things live
 
-App is up:
-
-```bash
-ssh bj "curl -sk -o /dev/null -w 'app: %{http_code}\n' https://10.10.10.50/"
-```
-
-All five containers running:
-
-```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose ps"
-```
-
-Which version is live:
-
-```bash
-ssh bj "grep APP_VERSION bj-erp-installer/.env"
-```
-
-Deploy history:
-
-```bash
-ssh bj "cat bj-erp-installer/update.log"
-```
-
-Employee count (should never drop unexpectedly):
-
-```bash
-ssh -t bj "cd bj-erp-installer && sudo bash -c 'set -a; . ./.env; set +a; docker compose exec -T -e PGPASSWORD=\"\$POSTGRES_PASSWORD\" db psql -tAc \"select count(*) from public.profiles\" -U supabase_admin -d postgres'"
-```
+| What | Where |
+|---|---|
+| App address | `https://10.10.10.50:3500` (LAN or company VPN only) |
+| Server login | `ssh bj` — the alias set up in PART 1 |
+| Server folder | `/home/behsazan/bj-erp-installer` |
+| Server settings | `bj-erp-installer/.env` on the server |
+| Database backups | `bj-erp-installer/backups/` on the server, copied to `backups/` on your Mac |
 
 ---
 
@@ -214,6 +347,8 @@ ssh -t bj "cd bj-erp-installer && sudo bash -c 'set -a; . ./.env; set +a; docker
    `docker compose down -v` · `docker volume rm bj-erp_db-data`
 3. **Never run `npm run cleanup:e2e`** while pointed at the server. It deletes test accounts.
 4. **Never commit the `backups/` folder.** It holds employee data and password hashes.
-   (It is already in `.gitignore` — leave it there.)
-5. **One deploy at a time.** Do not run `release.sh` twice at once.
-6. If a deploy fails in a way this guide does not cover, **stop** and ask.
+   (It is already ignored by git — leave it that way.)
+5. **Never put a port in `APP_HOST`.** It is the security certificate's name. The port goes in
+   `APP_PORT` and `APP_ORIGIN`.
+6. **One deploy at a time.** Do not run `release.sh` twice at once.
+7. If a deploy fails in a way this guide does not cover, **stop** and ask.
