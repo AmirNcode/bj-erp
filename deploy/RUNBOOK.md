@@ -8,7 +8,8 @@ One server, one command, no internet required. English first; خلاصه فار�
 - **4 GB RAM**, 2 CPU cores, **20 GB** free disk (grows with data)
 - **Docker Engine 24+** with the compose plugin (`docker compose version` works)
   — this is the only software to install; everything else is in the bundle
-- Ports **80** and **443** free
+- **One free TCP port** for HTTPS — 443 by default; the installer asks, so IT
+  can reserve a different one (e.g. 3500). Port 80 is not used at all.
 - A fixed **LAN IP** (or internal DNS name) employees can reach
 
 No internet access is needed on the server — all container images ship inside
@@ -42,8 +43,10 @@ logged in like any normal app.
   Downloaded → Install → then Settings → General → About → Certificate Trust
   Settings → enable full trust for it.
 
-Then open `https://<server-address>` in the phone browser and "Add to Home
-Screen" / "Install app".
+Then open the `APP_ORIGIN` from `.env` in the phone browser — the full address
+including the port when it is not 443, e.g. `https://10.10.10.50:3500` — and
+"Add to Home Screen" / "Install app". There is no http:// redirect: typing the
+bare address without `https://` and the port will not reach the app.
 
 ## Backups (do this on a schedule)
 
@@ -243,7 +246,15 @@ volume. Never add `-v`.
 ## Troubleshooting
 
 - **Site unreachable:** `docker compose ps` — all five services "running"?
-  Port 443 blocked by a firewall?
+  Is `APP_PORT` blocked by a firewall? Are you using the full `APP_ORIGIN`
+  (`https://`, and the port when it is not 443)?
+- **Login fails for everyone but the page loads:** `APP_ORIGIN` in `.env`
+  disagrees with the address the browser is on — most often the published port
+  was changed without updating it. The browser bundle calls `APP_ORIGIN`
+  verbatim, so it tries a port nothing listens on. Fix `.env`, then
+  `docker compose up -d --force-recreate app auth` — a plain `restart` is not
+  enough, because the URL is substituted into the app's files at container
+  creation.
 - **Login fails for everyone:** check `docker compose logs auth`.
 - **Phone won't install the app:** the certificate step was skipped — see
   "Trusting the certificate on phones".

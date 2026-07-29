@@ -65,6 +65,11 @@ avail_gb=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
 set -a; . ./.env; set +a
 PREVIOUS_VERSION="${APP_VERSION:-latest}"
 
+# .env files written before the HTTPS port became configurable have no
+# APP_ORIGIN. Fall back to the 443 form so the health check below still targets
+# a real listener instead of failing and triggering a bogus rollback.
+APP_ORIGIN="${APP_ORIGIN:-https://${APP_HOST}}"
+
 docker compose exec -T db pg_isready -U supabase_admin -h localhost >/dev/null 2>&1 \
   || fail "the database container is not running/healthy — fix that before deploying"
 
@@ -135,11 +140,11 @@ sed -i "s/^APP_VERSION=.*/APP_VERSION=${VERSION}/" .env
 docker compose up -d app || fail "compose up failed"
 
 # ── 7. health check ──────────────────────────────────────────────────────────
-say "Health-checking https://${APP_HOST}/ (up to $((HEALTH_RETRIES * 2))s)…"
+say "Health-checking ${APP_ORIGIN}/ (up to $((HEALTH_RETRIES * 2))s)…"
 HEALTHY=0
 for _ in $(seq 1 "$HEALTH_RETRIES"); do
-  code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "https://${APP_HOST}/" || true)
-  auth=$(curl -sk --max-time 5 "https://${APP_HOST}/auth/v1/health" || true)
+  code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${APP_ORIGIN}/" || true)
+  auth=$(curl -sk --max-time 5 "${APP_ORIGIN}/auth/v1/health" || true)
   if [ "$code" = "200" ] && printf '%s' "$auth" | grep -q GoTrue; then HEALTHY=1; break; fi
   sleep 2
 done
@@ -207,7 +212,7 @@ cat <<DONEEOF
 
 =============================================================
  Deployed ${VERSION}
-   App:      https://${APP_HOST}
+   App:      ${APP_ORIGIN}
    Backup:   ${BACKUP_FILE}
    Data:     verified — no table lost rows
    Rollback: sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=${PREVIOUS_VERSION}/' .env && \\

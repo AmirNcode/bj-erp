@@ -18,6 +18,11 @@
 	default_sni {$APP_HOST}
 }
 
+# APP_HOST is the bare hostname/IP — never include a port here. This block
+# therefore listens on 443 inside the container, which is what compose maps the
+# published port (APP_PORT) onto. Caddy ignores the port in the Host header when
+# matching, so a browser on https://HOST:3500 still lands here. Publishing the
+# app on a different port is a compose + APP_ORIGIN change, never a change here.
 https://{$APP_HOST} {
 	tls internal
 
@@ -36,10 +41,9 @@ https://{$APP_HOST} {
 	}
 }
 
-# Redirect plain HTTP to HTTPS for browsers that try http:// first.
-http://{$APP_HOST} {
-	redir https://{host}{uri} permanent
-}
+# No http:// site block: port 80 is not published (IT policy), and a redirect
+# there could not know the published HTTPS port anyway. Employees use the full
+# APP_ORIGIN, e.g. https://10.10.10.50:3500.
 
 # Internal (container-network only; port not published) — server-side calls.
 # GoTrue does no CORS of its own (Kong does it on Supabase Cloud), so the

@@ -98,6 +98,18 @@ GoTrue *does* set `Access-Control-Allow-Origin` on actual responses — don't ad
 proxy (browsers reject the duplicate). Dev/e2e point `.env.local` at `http://<mac-ip>:8080`
 (compose override in `dist/bj-erp-installer/` publishes the port; not shipped).
 
+### Self-host: the public port lives in three places, and the browser bundle is one of them
+Moving the app off 443 by editing the compose `ports:` line alone leaves the site reachable but
+**login dead**. `NEXT_PUBLIC_SUPABASE_URL` is substituted into the compiled JS by
+`deploy/docker-entrypoint.sh`, so the browser keeps calling the old origin — the failure looks
+like an auth bug and is really a port bug. `.env` now separates `APP_HOST` (bare host = TLS cert
+name + Caddy site address, never a port), `APP_PORT` (published port), and `APP_ORIGIN` (the URL
+employees type, source of every public URL). Caddy always listens on 443 *inside* the container
+and ignores the `Host` header's port when matching, so `APP_PORT` only ever changes the left half
+of the compose port mapping. Two traps: putting the port in `APP_HOST` corrupts `default_sni` and
+the certificate name; and changing `APP_ORIGIN` needs `up -d --force-recreate app`, because a
+plain `restart` reuses a container whose files were already substituted.
+
 ### e2e: one `.font-mono`/selector class is not a contract
 The new-employee success screen's temp password was scraped via `.font-mono` — adding a second
 font-mono element (code preview) silently made four specs read the wrong value. Anything e2e

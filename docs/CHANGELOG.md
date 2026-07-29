@@ -6,6 +6,30 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Configurable HTTPS port; port 80 dropped (2026-07-29)
+- **The published HTTPS port is now a first-class setting.** The client's IT reserved 443 and 80,
+  so the app had to move to 3500. Editing only the compose `ports:` line is not enough and
+  **breaks login**: `NEXT_PUBLIC_SUPABASE_URL` was derived as `https://${APP_HOST}` and is baked
+  into the browser bundle, so the page still loaded over the new port while every login request
+  went to `https://<host>` — port 443, where nothing was listening any more.
+- `.env` now carries three related values instead of one. `APP_HOST` is the **bare** host/IP (the
+  TLS certificate name and Caddy site address — never a port), `APP_PORT` is what the server
+  publishes (default `443`), and `APP_ORIGIN` is the full URL employees type. Every public URL —
+  `NEXT_PUBLIC_SUPABASE_URL`, `API_EXTERNAL_URL`, `GOTRUE_SITE_URL`, `GOTRUE_URI_ALLOW_LIST` —
+  now comes from `APP_ORIGIN`, declared with `${APP_ORIGIN:?…}` so a `.env` missing it fails
+  compose loudly instead of silently rendering empty URLs.
+- Caddy still listens on **443 inside the container** (`ports: '${APP_PORT:-443}:443'`); it
+  ignores the port in the `Host` header when matching, so the site block needs no change. The
+  Caddyfile carries a comment saying so, because "just add the port to APP_HOST" breaks
+  `default_sni` and the certificate name.
+- `install.sh` prompts for the port, derives `APP_ORIGIN`, splits a port off `APP_HOST` if one
+  was typed there, and **backfills `APP_PORT`/`APP_ORIGIN` into pre-existing `.env` files**.
+- `update.sh` health-checks `${APP_ORIGIN}/` instead of `https://${APP_HOST}/` — on a non-443
+  install the old check could never succeed and would have rolled back every good deploy.
+- **Port 80 is no longer published**, so there is no `http://` → `https://` redirect: employees
+  must use the full address including the port. Requirements list, phone-install steps, and
+  troubleshooting in `deploy/RUNBOOK.md` updated to match.
+
 ### One-command release pipeline (2026-07-26)
 - **Deploying an update is now a single command on the developer's Mac** —
   `./deploy/release.sh <version>` — replacing the manual build → `scp` → `docker load` →
