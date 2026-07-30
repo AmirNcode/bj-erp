@@ -166,8 +166,14 @@ Five plans, in this order; each ships working software on its own.
   - ☑ `work_settings.hours_per_day`; balances render as "۹ روز و ۴ ساعت"
   - ☑ Acceptance SQL for the client-server upgrade
   - ☐ **Not yet applied to the client's server** — see the plan's Deployment note
-- ☐ **Plan 2 — Accrual**: `employee_leave_policies`, lazy idempotent monthly accrual anchored to
-  Jalali month starts, annual cap, 9-day carryover with audited forfeiture, admin "Run now"
+- ☑ **Plan 2 — Accrual** ([plan](plans/2026-07-29-leave-v2-accrual.md))
+  - ☑ `employee_leave_policies` + leave-type defaults + `period_month` + the idempotency index
+  - ☑ `lib/leave/accrual.ts` pure planner (15 unit tests) mirrored by `accrue_leave` in SQL
+  - ☑ Lazy accrual on every balance read + submit; admin "Post accruals now" in Settings
+  - ☑ Policy editor on the create and edit employee forms
+  - ☑ Fixed the `created_at`-tie balance bug it exposed (`leave_ledger.seq`)
+  - ☐ **Not yet applied to the client's server**; existing staff need a reviewed one-time policy
+    backfill first — see the plan's Deployment note
 - ☐ **Plan 3 — Hourly**: `unit` enum + `start_time`/`end_time`, company work-hours window, 4h/day
   cap, time-aware overlap, separate `/request/hourly` screen
 - ☐ **Plan 4 — Replacement**: `replacement_id`, same-department searchable picker with

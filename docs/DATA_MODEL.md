@@ -107,6 +107,19 @@ Gregorian month-day); the editor UI says so.
 **reserved**) · `color` · `active bool`.
 Seed: annual (paid, ~26d, half-day yes), sick (paid), unpaid (no balance).
 
+### `employee_leave_policies`
+`id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
+`accrual_minutes_per_month int` · `annual_cap_minutes int` (nullable = uncapped) ·
+`carryover_cap_minutes int` (default 4320 = 9 days, ماده ۶۶) ·
+`accrual_start_month date` (always a `jalali_months.gregorian_start`; the setter validates it) ·
+`created_by` · `created_at` · `updated_at`. **Unique** (`employee_id`,`leave_type_id`).
+The per-employee accrual rule (2026-07-29, FR-27), defaulted from
+`leave_types.default_accrual_minutes_per_month` / `default_annual_cap_minutes` /
+`default_carryover_cap_minutes`. RLS mirrors `leave_allocations` (own · manager-of · security ·
+admin); **no client write policies** — writes go through `set_employee_leave_policy`.
+*Opening balance is deliberately NOT here*: that is an `allocation` ledger row written by
+`allocate_leave`, and two records of one fact would drift.
+
 ### `leave_allocations`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `period_start date` ·
 `period_end date` · `allocated_days numeric` · `created_by` · `created_at`.
@@ -131,6 +144,14 @@ their own row and never exposed through `team_leave_calendar` (explicit column l
 **Balance = latest `balance_after_minutes` per (employee, leave_type)**, derived not stored elsewhere.
 Cancelling an **approved future** request writes a `reversal` row (`+requested_minutes`) — FR-15.
 Index (`employee_id`,`leave_type_id`,`created_at desc`,`id desc`) backs the latest-balance lookup.
+`period_month date` (2026-07-29) marks which month an `allocation` or `carryover_forfeit` belongs
+to; NULL for every other entry. A **partial unique index** on
+(`employee_id`,`leave_type_id`,`entry_type`,`period_month`) is what makes lazy accrual safe —
+posting a month twice is impossible, not merely unlikely. Reports must read `period_month`, never
+`created_at`: a lazily-posted row is created whenever someone opens a page, possibly months later.
+`seq bigint` (2026-07-29) gives ledger rows a monotonic order. **Balance = the row with the highest
+`seq`**, never the latest `created_at`: accrual writes several months in one transaction, where
+`now()` is frozen, so `created_at` ties and the winner would be arbitrary.
 **All ledger writes are serialized per employee** via `pg_advisory_xact_lock` inside the definer
 functions (2026-07-02), so concurrent approve/allocate/cancel/adjust cannot write stale balances.
 
@@ -155,12 +176,36 @@ client cannot fabricate durations. Approval writes a `consumption` ledger row of
 (balance-affecting types can never go negative). Error messages are stable English strings mapped
 to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
 
+## Monthly accrual (server-side, FR-27)
+
+Lazy and idempotent (spec §6.2): `accrue_leave(employee, type)` posts every month between the
+policy's `accrual_start_month` and today (Tehran), and is called before every balance read plus by
+the admin's "Post accruals now". Per month, in this order:
+
+```
+1. skip if already posted                     (partial unique index + on conflict do nothing)
+2. skip if the month ended before hire_date
+3. if jalali_month = 1 AND an earlier accrual exists AND balance > carryover_cap:
+       post 'carryover_forfeit' of -(balance - cap), clamping to the cap   ← BEFORE step 5
+4. if hire_date is inside this month:
+       amount = round(rate * days_from_hire_to_month_end / days_in_month)  (calendar days)
+5. if annual_cap is set:
+       amount = min(amount, max(annual_cap - accruals_already_in_this_jalali_year, 0))
+6. post 'allocation' of +amount with period_month = the month's gregorian_start
+```
+
+The annual cap counts **accruals within the Jalali year**, not the balance — an opening allocation
+has a NULL `period_month` and must never consume the year's cap. Mirrored in
+`lib/leave/accrual.ts` (`planAccruals`, 15 unit tests); the two must stay in lockstep, and the SQL
+was verified against the same scenarios.
+
 ## Entity relationships (text ER)
 
 ```
 companies 1─* departments 1─* profiles *─1 profiles(manager)
 profiles 1─* user_roles
 profiles 1─* leave_allocations *─1 leave_types
+profiles 1─* employee_leave_policies *─1 leave_types
 profiles 1─* leave_requests   *─1 leave_types
 profiles 1─* leave_ledger     *─1 leave_types   leave_requests 1─* leave_ledger
 companies 1─* holidays        companies 1─1 work_settings

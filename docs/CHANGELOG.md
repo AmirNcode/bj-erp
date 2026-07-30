@@ -10,6 +10,28 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave v2: monthly leave accrual (2026-07-29)
+- **Leave now accrues every month instead of being a number an admin typed once.** Each employee has
+  a per-leave-type policy — days earned per month, yearly cap, carryover cap, start month —
+  pre-filled from the leave type and editable on the create and edit forms.
+- **Anchored to Jalali month starts**, with the hire month pro-rated by calendar days so an employee
+  can check the figure against a payslip by hand. Annual leave defaults to 1 day/month with a 12-day
+  year; sick leave does not accrue, because in Iran it is certified rather than earned.
+- **Carryover is capped, and the excess is forfeited visibly.** At Farvardin 1 anything above the cap
+  (default 9 days, ماده ۶۶) is written off as a `carryover_forfeit` ledger row — an audited entry,
+  never a silent reset — and it happens *before* that month's accrual is credited.
+- **Nothing is scheduled.** Missing months are posted whenever a balance is read, and by an admin
+  button in Manage → Settings that reports how many employees and rows it wrote. That choice is
+  deliberate: the client's server is LAN-only and can be powered off, so a cron job would need
+  catch-up logic anyway. A partial unique index makes double-crediting impossible rather than
+  unlikely, which is what makes posting-on-read safe.
+- The accrual **start month defaults to the current Jalali month**, never the hire date, so switching
+  accrual on cannot retroactively credit months nobody worked.
+- **Fixed a latent balance bug this exposed:** "current balance" was the latest ledger row by
+  `created_at`, but `now()` is frozen within a transaction, so the several months accrual writes at
+  once all shared a timestamp and the tie-break fell to a random uuid — a balance of 1440 could read
+  back as 960. Ledger rows now carry a monotonic `seq`, and every reader orders by it.
+
 ### Leave v2 foundations: minutes as the stored unit + Jalali calendar table (2026-07-29)
 - **Leave durations are now stored as integer minutes** instead of fractional days, across
   `leave_ledger`, `leave_requests`, and `leave_allocations`. Nothing about the request flow changes

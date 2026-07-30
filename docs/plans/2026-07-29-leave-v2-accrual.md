@@ -2,6 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-07-29).** Executed on `feat/leave-v2-hourly-accrual-replacement`. Gates at
+completion: unit **180/180** (15 new), e2e **27/27** serial, tsc + lint + build clean; three
+migrations applied to the local docker stack and proven replayable. **Not deployed to the client's
+server** — see the Deployment note.
+
+**What execution added to this plan:** a Task 3b that was not planned. Verifying the SQL against the
+TS planner exposed a latent bug in `current_leave_balance` — it ordered by `created_at`, which ties
+when one transaction writes several rows, so a 1440 balance read back as 960. Fixed with
+`leave_ledger.seq` (migration `…130007`). That is precisely why the plan asserts the same numbers on
+both sides instead of eyeballing psql output, and it is the strongest argument for keeping the pure
+planner.
+
 **Goal:** Give every employee a per-type leave policy (rate, caps, start month) and post the months they have earned — automatically, idempotently, anchored to Jalali month starts — so a balance stops being a number an admin typed once and becomes one the system maintains.
 
 **Architecture:** The accrual decision is a **pure function** (`lib/leave/accrual.ts`) that takes a policy, the Jalali months, what is already posted, and today, and returns the ledger rows to write. It is exhaustively unit-tested, and `accrue_leave` in SQL mirrors it — the same lockstep discipline `lib/leave/workingDays.ts` already has with `compute_requested_minutes`. Nothing is scheduled: missing months are posted whenever a balance is read, made safe by a partial unique index that makes double-crediting structurally impossible, plus an admin "Post accruals now" button for visibility.

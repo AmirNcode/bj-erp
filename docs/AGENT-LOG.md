@@ -78,7 +78,7 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-07-29 — Leave v2: design spec + foundations implemented (minutes unit, Jalali calendar)
+## 2026-07-29 — Leave v2: design spec + plans 1 & 2 implemented (minutes unit, Jalali calendar, monthly accrual)
 
 **Agent:** Claude Opus 5 via Claude Code
 **Branch / HEAD at start:** `main` @ `cce7b16`, tree had untracked `docs/forms/`
@@ -115,6 +115,21 @@ Implementation (plan 1, all committed):
 - Docs: DATA_MODEL (units, `jalali_months`, minutes columns, counting), CHANGELOG, TASKS, CLAUDE.md
   test counts, plus `docs/plans/2026-07-29-leave-v2-foundations-acceptance.sql`.
 
+Implementation (plan 2 — accrual, all committed):
+- **`docs/plans/2026-07-29-leave-v2-accrual.md`** — the plan, executed in full.
+- **`20260729130005_leave_policy.sql`** — `employee_leave_policies`, `leave_types.default_*`,
+  `leave_ledger.period_month`, the `carryover_forfeit` enum value, and **the partial unique index on
+  (employee, type, entry_type, period_month)** that is the entire idempotency guarantee.
+- **`20260729130006_leave_accrual_fns.sql`** — `accrue_leave` + `accrue_my_leave` /
+  `accrue_employee_leave` / `accrue_all_leave` / `set_employee_leave_policy`.
+- **`20260729130007_leave_ledger_seq.sql`** — the `seq` bug fix described below.
+- `lib/leave/accrual.ts` — the pure planner the SQL mirrors (15 unit tests).
+- `lib/actions/leave.ts` — `accrueBeforeRead` on all three balance readers + submit;
+  `setEmployeeLeavePolicy` / `getEmployeePolicies` / `runAllAccruals` / `getCurrentJalaliMonthStart`.
+- `manage/settings/AccrualRunner.tsx` (new) + policy blocks on the create and edit employee forms.
+- `tests/e2e/accrual.spec.ts` (new) — proves through the UI that running accrual twice does not
+  credit twice.
+
 **Actions outside the repo**
 
 - **Nothing was run against the client's server at `https://10.10.10.50`.** All four migrations are
@@ -140,15 +155,27 @@ Implementation (plan 1, all committed):
   rolled-back probe insert proved the expand-phase trigger; after the contract migration, zero day
   columns survive and zero functions reference them (checked via `pg_proc.prosrc`, not grep).
 - `npm run seed` succeeds against the renamed RPCs.
-- E2E: **first run 25/26** (caught the days/minutes mismatch below), **second run 24/26** (caught the
-  allocation-impl break), **final run 26/26 green** after `…130004`. Both failures were real bugs in
-  my work, not flaky tests.
+- E2E: plan 1 — **first run 25/26** (caught the days/minutes mismatch below), **second run 24/26**
+  (caught the allocation-impl break), **26/26 green** after `…130004`. Plan 2 — **27/27 green** with
+  the new `accrual.spec.ts`. Every failure along the way was a real bug in my work, not a flaky test.
 
 **State left behind**
 
 - Branch `feat/leave-v2-hourly-accrual-replacement`, committed, **not pushed, no PR**.
 - Plans 2–5 (accrual, hourly, replacement, serials) are **not written yet**. The spec is their input.
 - The local docker DB is now on minutes; the client's is not. They will diverge until deployment.
+
+**Plan 2's own bug find, worth understanding before touching balances**
+
+`current_leave_balance` (and `getMyBalance`, and `latestBalances`) defined "current balance" as the
+latest ledger row by `created_at`. `now()` is frozen for a transaction, so the moment accrual started
+posting several months at once, every row it wrote shared one `created_at` and the tie-break fell
+through to a random uuid: a true balance of 1440 read back as 960. It was **latent** before accrual —
+every ledger row used to come from its own transaction — and no existing test could have caught it.
+It surfaced only because the plan required asserting the SQL against the TS planner's numbers.
+Fix: `leave_ledger.seq` (sequence-backed, backfilled in `created_at` order) and every reader orders
+by it. **If you add a code path that writes several ledger rows in one transaction, `seq` is what
+keeps the balance readable.**
 
 **For the next agent — traps that cost real time here**
 

@@ -33,6 +33,13 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
   shipped in Phase 2; approved-future in Phase 6.)*
 
+- **FR-27** ☑ **Monthly accrual.** Each employee has a per-leave-type policy (days earned per
+  month, yearly cap, carryover cap, start month), defaulted from the leave type and editable by an
+  admin. Accrual is posted lazily and idempotently, anchored to **Jalali month starts**, with the
+  hire month pro-rated by calendar days and the excess above the carryover cap forfeited via an
+  audited ledger row at Farvardin 1. Admins can also post it for everyone from Manage → Settings.
+  *(2026-07-29; supersedes FR-8's fixed annual quota — entitlement is per employee.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.
