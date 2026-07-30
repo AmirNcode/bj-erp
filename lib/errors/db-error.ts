@@ -48,6 +48,8 @@ const RULES: Rule[] = [
   { re: /end time must be after start time/, key: 'endBeforeStart' },
   { re: /times must fall within working hours/, key: 'outsideWorkHours' },
   { re: /hourly leave exceeds the daily limit/, key: 'hourlyDailyLimit' },
+  { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
+  { re: /replacement is on leave during this period/, key: 'replacementAway' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },
   { re: /at least one working day is required/i, key: 'allWeekWeekend' },
   { re: /invalid weekend days/i, key: 'invalidWeekend' },
