@@ -598,6 +598,90 @@ port when matching, so `'3500:443'` was correct.
 - Pre-existing non-latin passwords, if any exist in the client's database, can no longer be
   typed and need an admin reset.
 
+## 2026-07-29 — Local Docker app restart
+
+**Agent:** Codex
+**Trigger:** User requested a restart of the currently running local Docker app for testing.
+
+**Actions outside the repo**
+- Restarted `bj-erp-app-1` (image `bj-erp-app:latest`).
+- Verified `https://192.168.2.48/login` returns HTTP 200 through the local Caddy gateway.
+
+**State left behind**
+- The local app container is running. No application source or configuration was changed.
+
+## 2026-07-29 — Hourly leave visibility diagnosis
+
+**Agent:** Codex
+**Trigger:** User could not see hourly leave in the restarted local deployment and asked whether it
+was implemented.
+
+**What was found**
+- Hourly leave is implemented in the current branch: the `/request/hourly` page, request form,
+  server action, SQL migrations, translations, Home/daily-request links, and unit/e2e coverage are
+  present.
+- The running `bj-erp-app:latest` image was created at `2026-07-29T15:13:29Z`; the hourly feature's
+  commits began later, at `2026-07-29T21:34:52-04:00`.
+- The running container's compiled Next.js output contains no `request/hourly` route. Restarting
+  that container therefore cannot surface the feature; the image must be rebuilt and the
+  application/database migrations redeployed.
+
+**Actions outside the repo**
+- Read Docker image/container metadata and inspected the app container's compiled route manifests.
+  No container or database state was changed during this diagnosis.
+
+**State left behind**
+- Local Docker stack remains running on the same old image. No source or deployment changes were
+  made.
+
+## 2026-07-29 — Rebuild and local deployment of leave v2
+
+**Agent:** Codex
+**Branch / HEAD at start:** `feat/leave-v2-hourly-accrual-replacement` @ `5e26e77`
+**Trigger:** User asked to rebuild the local Docker deployment, commit all pending work, and push it
+so hourly leave could be tested.
+
+**What changed**
+- `package-lock.json` — added the missing npm 10 lock entry for
+  `next-intl/node_modules/@swc/helpers@0.5.23`. The production Dockerfile uses npm 10.9.8;
+  without this entry its clean `npm ci` stopped before the Next.js build.
+- No application or database source was changed. The leave-v2 implementation was already committed
+  on this branch.
+
+**Actions outside the repo**
+- Preserved the previous image as `bj-erp-app:pre-hourly-20260729`.
+- Built `bj-erp-app:latest` from the current branch; image
+  `sha256:d1d0364d496dd5f781841d8c299a7ecefee0181e4e4066a46f5b1c7ce0ada8cf`.
+- Created and validated database backup `/private/tmp/bj-pre-leave-v2.2P7nKY` (439 KB).
+- An attempted replay of all migrations stopped on the first statement (`app_role` already exists);
+  it made no change. Exact schema probes then confirmed all leave-v2 migrations, including
+  replacement and request serials, were already present, so no migration was required.
+- Recreated only `bj-erp-app-1`, reusing the running stack's existing environment. The old app
+  container is stopped as `bj-erp-app-rollback-20260729`; database/auth/rest/gateway containers and
+  named volumes were not recreated.
+- Verified the authenticated local flow in Chrome:
+  `/home` → “درخواست مرخصی ساعتی” → `/request/hourly`; Annual and Unpaid leave were offered, and
+  changing 07:00–08:00 to 07:00–09:00 updated the preview from one to two hours. No app console
+  errors were present. The page was left open for the user.
+
+**Verification**
+- Docker production build passed, including TypeScript and the compiled
+  `/[locale]/request/hourly` route.
+- `npm run test:unit` — 34 files, 208 tests passed.
+- `npx eslint app components i18n lib tests scripts proxy.ts` — passed.
+- `npm run lint` is polluted by generated `.next` files in the separate
+  `.claude/worktrees/peaceful-williams-9c1cf9` worktree; those generated-code failures are unrelated
+  to this branch.
+- Post-deploy row counts matched pre-deploy: profiles 15, leave_requests 3, leave_ledger 27,
+  leave_types 3.
+- `https://192.168.2.48/login` returned 200; the protected hourly route redirected unauthenticated
+  requests to login as expected.
+
+**State left behind**
+- Local app is running the rebuilt `bj-erp-app:latest`; rollback image, stopped container, and
+  verified database backup are retained.
+- The hourly request page is open in Chrome for local testing.
+
 ---
 
 *Entries before 2026-07-29 were never journalled. For that history use `docs/CHANGELOG.md`
