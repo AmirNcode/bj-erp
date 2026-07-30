@@ -15,6 +15,7 @@ type Labels = {
   submit: string;
   changed: string;
   tooShort: string;
+  tooLong: string;
   mismatch: string;
   emptyCurrent: string;
   errorLabel: string;
@@ -28,11 +29,13 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const reasonMsg = (reason: 'empty_current' | 'too_short' | 'mismatch') =>
+  const reasonMsg = (reason: 'empty_current' | 'too_short' | 'too_long' | 'mismatch') =>
     reason === 'empty_current'
       ? labels.emptyCurrent
       : reason === 'too_short'
         ? labels.tooShort
+        : reason === 'too_long'
+          ? labels.tooLong
         : labels.mismatch;
 
   const onSubmit = (e: React.FormEvent) => {
@@ -90,6 +93,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          maxLength={72}
           value={current}
           onChange={(e) => setCurrent(toLatinPassword(e.target.value))}
           disabled={isPending}
@@ -106,6 +110,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          maxLength={72}
           value={next}
           onChange={(e) => setNext(toLatinPassword(e.target.value))}
           disabled={isPending}
@@ -122,6 +127,7 @@ export function ChangePasswordForm({ labels }: { labels: Labels }) {
           autoCapitalize="off"
           autoCorrect="off"
           spellCheck={false}
+          maxLength={72}
           value={confirm}
           onChange={(e) => setConfirm(toLatinPassword(e.target.value))}
           disabled={isPending}

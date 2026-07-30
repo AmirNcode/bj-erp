@@ -18,10 +18,17 @@ type Rule = {
 
 const RULES: Rule[] = [
   {
-    re: /insufficient balance: ([\d.]+) day\(s\) requested, ([\d.]+) available/,
-    key: 'insufficientBalance',
+    // The minute-contract migrations retained the legacy "day(s)" word in
+    // some SQL messages, but both numeric values are now minutes.
+    re: /insufficient balance: ([\d.]+) (?:day|minute)\(s\) requested, ([\d.]+) available/,
+    key: 'insufficientBalanceMinutes',
     params: (m) => ({ requested: m[1], available: m[2] }),
   },
+  { re: /account is inactive/i, key: 'accountInactive' },
+  { re: /employee not found/i, key: 'employeeNotFound' },
+  { re: /select between 1 and 100 employees/i, key: 'employeeSelectionLimit' },
+  { re: /invalid work hours or hourly leave cap/i, key: 'invalidHourlySettings' },
+  { re: /holiday not found/i, key: 'holidayNotFound' },
   { re: /overlapping approved leave exists/, key: 'overlapApproved' },
   { re: /overlapping leave request exists/, key: 'overlap' },
   { re: /requested days must be greater than 0/, key: 'zeroDays' },
@@ -34,6 +41,7 @@ const RULES: Rule[] = [
   { re: /request not found/, key: 'requestNotFound' },
   { re: /current password is incorrect/, key: 'wrongCurrentPassword' },
   { re: /new password must be at least 8 characters/, key: 'passwordTooShort' },
+  { re: /new password must be at most 72 ASCII characters/, key: 'passwordTooLong' },
   { re: /invalid employee code/, key: 'invalidEmployeeCode' },
   { re: /employee code already exists/, key: 'duplicateEmployeeCode' },
   { re: /duplicate key value.*profiles_employee_code/, key: 'duplicateEmployeeCode' },
@@ -42,6 +50,8 @@ const RULES: Rule[] = [
   { re: /invalid department code|departments_code_format/, key: 'invalidDepartmentCode' },
   { re: /department name is required/, key: 'departmentNameRequired' },
   { re: /cannot remove your own admin role/, key: 'cannotRemoveOwnAdmin' },
+  { re: /cannot deactivate the last active admin/, key: 'cannotDeactivateLastAdmin' },
+  { re: /employee cannot be their own manager|profiles_manager_not_self/i, key: 'managerCannotBeSelf' },
   { re: /no profile for caller/, key: 'noProfile' },
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
   { re: /this leave type cannot be taken hourly/, key: 'hourlyNotAllowed' },

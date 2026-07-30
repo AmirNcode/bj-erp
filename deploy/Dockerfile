@@ -35,9 +35,11 @@ COPY --from=builder /app/public ./public
 
 COPY deploy/docker-entrypoint.sh /docker-entrypoint.sh
 COPY deploy/gen-keys.mjs /gen-keys.mjs
-RUN chmod +x /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh \
+    && chown -R node:node /app
 
 EXPOSE 3000
 ENV HOSTNAME=0.0.0.0 PORT=3000
+USER node
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

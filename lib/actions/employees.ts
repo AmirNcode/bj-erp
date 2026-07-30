@@ -136,13 +136,6 @@ export async function updateEmployee(
     return dbErr('not permitted to update these fields');
   }
 
-  // Fetch current value for audit
-  const { data: before } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', id)
-    .single();
-
   const { data, error } = await supabase
     .from('profiles')
     .update(filtered)
@@ -151,15 +144,6 @@ export async function updateEmployee(
 
   if (error) return dbErr(error.message);
   if (!data || data.length === 0) return dbErr('not allowed to update this profile');
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: id,
-    action: 'update_employee',
-    before: before as import('@/lib/supabase/types').Json,
-    after: filtered as import('@/lib/supabase/types').Json,
-  });
 
   invalidateAppCache();
   return { ok: true };
@@ -201,28 +185,14 @@ export async function setActive(
   if (!user) return dbErr('not authenticated');
   if (!roles.includes('admin')) return dbErr('admin role required');
 
-  // Fetch current value for audit
-  const { data: beforeData } = await supabase
-    .from('profiles')
-    .select('active')
-    .eq('id', id)
-    .single();
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ active })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return dbErr(error.message);
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: id,
-    action: active ? 'activate_employee' : 'deactivate_employee',
-    before: { active: beforeData?.active ?? null } as import('@/lib/supabase/types').Json,
-    after: { active } as import('@/lib/supabase/types').Json,
-  });
+  if (!data || data.length !== 1) return dbErr('employee not found');
 
   invalidateAppCache();
   return { ok: true };
@@ -240,28 +210,14 @@ export async function setTeam(
   if (!user) return dbErr('not authenticated');
   if (!roles.includes('admin')) return dbErr('admin role required');
 
-  // Fetch current value for audit
-  const { data: beforeData } = await supabase
-    .from('profiles')
-    .select('department_id')
-    .eq('id', id)
-    .single();
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ department_id: departmentId })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return dbErr(error.message);
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: id,
-    action: 'set_team',
-    before: { department_id: beforeData?.department_id ?? null } as import('@/lib/supabase/types').Json,
-    after: { department_id: departmentId } as import('@/lib/supabase/types').Json,
-  });
+  if (!data || data.length !== 1) return dbErr('employee not found');
 
   invalidateAppCache();
   return { ok: true };
@@ -278,29 +234,16 @@ export async function setManager(
 
   if (!user) return dbErr('not authenticated');
   if (!roles.includes('admin')) return dbErr('admin role required');
+  if (managerId === id) return dbErr('an employee cannot be their own manager');
 
-  // Fetch current value for audit
-  const { data: beforeData } = await supabase
-    .from('profiles')
-    .select('manager_id')
-    .eq('id', id)
-    .single();
-
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('profiles')
     .update({ manager_id: managerId })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return dbErr(error.message);
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: id,
-    action: 'set_manager',
-    before: { manager_id: beforeData?.manager_id ?? null } as import('@/lib/supabase/types').Json,
-    after: { manager_id: managerId } as import('@/lib/supabase/types').Json,
-  });
+  if (!data || data.length !== 1) return dbErr('employee not found');
 
   invalidateAppCache();
   return { ok: true };
@@ -326,14 +269,6 @@ export async function resetPassword(
   });
 
   if (error) return dbErr(error.message);
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'profiles',
-    entity_id: id,
-    action: 'reset_password',
-    after: {} as import('@/lib/supabase/types').Json,
-  });
 
   return { ok: true, tempPassword };
 }
@@ -411,36 +346,34 @@ export async function bulkResetPasswords(
   if (!user) return dbErr('not authenticated');
   if (!roles.includes('admin')) return dbErr('admin role required');
   if (userIds.length === 0) return dbErr('no employees selected');
-  if (userIds.includes(user.id)) return dbErr('cannot bulk-reset your own password');
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length > 100) return dbErr('select between 1 and 100 employees');
+  if (uniqueIds.includes(user.id)) return dbErr('cannot bulk-reset your own password');
 
   const { data: profiles, error: readError } = await supabase
     .from('profiles')
     .select('id, full_name, employee_code')
-    .in('id', userIds);
+    .in('id', uniqueIds);
   if (readError) return dbErr(readError.message);
+  if (!profiles || profiles.length !== uniqueIds.length) return dbErr('employee not found');
 
-  const credentials: IssuedCredential[] = [];
-  for (const profile of profiles ?? []) {
-    const password = generateTempPassword();
-    const { error } = await supabase.rpc('app_set_employee_password', {
-      p_user_id: profile.id,
-      p_password: password,
-    });
-    if (error) return dbErr(`${profile.employee_code}: ${error.message}`);
+  const resets = profiles.map((profile) => ({
+    profile,
+    password: generateTempPassword(),
+  }));
+  const { error } = await supabase.rpc('app_bulk_set_employee_passwords', {
+    p_resets: resets.map(({ profile, password }) => ({
+      user_id: profile.id,
+      password,
+    })),
+  });
+  if (error) return dbErr(error.message);
 
-    await supabase.from('audit_log').insert({
-      actor_id: user.id,
-      entity: 'profiles',
-      entity_id: profile.id,
-      action: 'reset_password',
-      after: {} as import('@/lib/supabase/types').Json,
-    });
-    credentials.push({
+  const credentials: IssuedCredential[] = resets.map(({ profile, password }) => ({
       fullName: profile.full_name,
       employeeCode: profile.employee_code,
       password,
-    });
-  }
+    }));
 
   invalidateAppCache();
   return { ok: true, credentials };

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { validatePassword, toLatinPassword, MIN_PASSWORD_LENGTH } from '@/lib/auth/passwordPolicy';
+import {
+  validatePassword,
+  toLatinPassword,
+  MIN_PASSWORD_LENGTH,
+  MAX_PASSWORD_LENGTH,
+} from '@/lib/auth/passwordPolicy';
 
 describe('toLatinPassword', () => {
   it('leaves an ASCII password untouched', () => {
@@ -33,6 +38,10 @@ describe('validatePassword', () => {
   });
   it('rejects a confirm mismatch', () => {
     expect(validatePassword('old', 'longenough1', 'longenough2')).toEqual({ ok: false, reason: 'mismatch' });
+  });
+  it('rejects input bcrypt would silently truncate', () => {
+    const tooLong = 'a'.repeat(MAX_PASSWORD_LENGTH + 1);
+    expect(validatePassword('old', tooLong, tooLong)).toEqual({ ok: false, reason: 'too_long' });
   });
   it('accepts a valid change', () => {
     expect(validatePassword('old', 'longenough1', 'longenough1')).toEqual({ ok: true });

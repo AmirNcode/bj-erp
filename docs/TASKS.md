@@ -30,6 +30,11 @@ their own plan files when reached.
 > **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
 > shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in
 > `.superpowers/sdd/progress.md`.
+> **2026-07-30 security review:** active-account RLS, manager authority, audit integrity,
+> transactional password reset, hourly approval overlap, input validation, and deployment/browser
+> hardening are complete locally. Evidence: `docs/SECURITY-REVIEW-2026-07-30.md`.
+> ⊘ Release gate pending: run `npm audit` on a network-authorized machine; this environment blocked
+> sending the lockfile manifest to the external npm registry.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind

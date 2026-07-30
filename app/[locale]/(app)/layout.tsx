@@ -5,7 +5,7 @@
 
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { AppShell } from './_components/AppShell';
 
 type Props = {
@@ -21,7 +21,13 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const roles = await getCachedRoles(user.id);
+  const [roles, profile] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedProfile(user.id),
+  ]);
+  if (!profile?.active) {
+    redirect(`/${locale}/login`);
+  }
 
   const t = await getTranslations({ locale, namespace: 'nav' });
   const labels = {

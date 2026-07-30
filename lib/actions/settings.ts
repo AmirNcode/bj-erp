@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
+import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 
@@ -13,8 +14,6 @@ export type Holiday = {
   name_en: string | null;
   is_recurring: boolean;
 };
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type Ctx = {
   supabase: Awaited<ReturnType<typeof createClient>>;
@@ -96,22 +95,31 @@ export async function updateWorkSettings(
   if (!v.ok) {
     return dbErr(v.reason === 'all_week' ? 'at least one working day is required' : 'invalid weekend days');
   }
+  const hourly = validateHourlySettings(
+    input.workStart,
+    input.workEnd,
+    input.maxHourlyMinutesPerDay
+  );
+  if (!hourly.ok) return dbErr('invalid work hours or hourly leave cap');
+
   // Upsert on the company_id unique key so a missing row is created instead of
   // a silent 0-row update (the old code reported success without saving).
-  const { error } = await c.supabase
+  const { data, error } = await c.supabase
     .from('work_settings')
     .upsert(
       {
         company_id: c.companyId,
         weekend_days: v.days,
-        work_start: input.workStart,
-        work_end: input.workEnd,
-        max_hourly_minutes_per_day: input.maxHourlyMinutesPerDay,
+        work_start: hourly.workStart,
+        work_end: hourly.workEnd,
+        max_hourly_minutes_per_day: hourly.capMinutes,
         updated_by: c.userId,
       },
       { onConflict: 'company_id' }
-    );
+    )
+    .select('id');
   if (error) return dbErr(error.message);
+  if (!data || data.length !== 1) return dbErr('work settings were not saved');
   invalidateAppCache();
   return { ok: true };
 }
@@ -126,18 +134,29 @@ export async function upsertHoliday(input: {
   const c = await getCtx();
   if (!c) return dbErr('not authenticated');
   if (!c.isAdmin) return dbErr('admin role required');
-  if (!input.date || !input.nameFa) return dbErr('holiday date and farsi name are required');
-  if (!ISO_DATE_RE.test(input.date)) return dbErr('holiday date and farsi name are required');
+  const nameFa = input.nameFa.trim();
+  if (!isValidIsoDate(input.date) || !nameFa) {
+    return dbErr('holiday date and farsi name are required');
+  }
   const row = {
     holiday_date: input.date,
-    name_fa: input.nameFa.trim(),
+    name_fa: nameFa,
     name_en: input.nameEn?.trim() || null,
     is_recurring: input.isRecurring ?? false,
   };
-  const { error } = input.id
-    ? await c.supabase.from('holidays').update(row).eq('id', input.id).eq('company_id', c.companyId)
-    : await c.supabase.from('holidays').insert({ ...row, company_id: c.companyId });
+  const { data, error } = input.id
+    ? await c.supabase
+        .from('holidays')
+        .update(row)
+        .eq('id', input.id)
+        .eq('company_id', c.companyId)
+        .select('id')
+    : await c.supabase
+        .from('holidays')
+        .insert({ ...row, company_id: c.companyId })
+        .select('id');
   if (error) return dbErr(error.message);
+  if (!data || data.length !== 1) return dbErr('holiday not found');
   invalidateAppCache();
   return { ok: true };
 }
@@ -146,8 +165,14 @@ export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: fa
   const c = await getCtx();
   if (!c) return dbErr('not authenticated');
   if (!c.isAdmin) return dbErr('admin role required');
-  const { error } = await c.supabase.from('holidays').delete().eq('id', id).eq('company_id', c.companyId);
+  const { data, error } = await c.supabase
+    .from('holidays')
+    .delete()
+    .eq('id', id)
+    .eq('company_id', c.companyId)
+    .select('id');
   if (error) return dbErr(error.message);
+  if (!data || data.length !== 1) return dbErr('holiday not found');
   invalidateAppCache();
   return { ok: true };
 }

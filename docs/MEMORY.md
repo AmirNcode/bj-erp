@@ -31,6 +31,32 @@ the lessons that will still matter in six months.
 
 ## Lessons learned
 
+### Deactivation must be a database boundary, not a profile label
+`profiles.active` used to shape rosters only; Auth would still issue a session and self-row RLS
+continued serving leave data. An inactive account now sees only its own profile shell so login can
+explain the state; every business policy/view and employee-facing definer path requires
+`private.is_active(auth.uid())`. Keep both layers: login clears the session for good UX, RLS is the
+authority. Likewise, a reporting relationship is not a role — `private.is_manager_of` must require
+the active `manager` role or stale org-chart links preserve authority after demotion.
+
+### An audit trail cannot accept client-authored events
+`audit_log_insert_self` proved who inserted a row, not whether the claimed event happened. A signed-in
+user could invent action/entity/before/after values, while app actions ignored failed audit inserts.
+Runtime audit writes now happen inside guarded RPC transactions or owner-run change triggers; clients
+have no INSERT grant. Any new directly writable config table needs a trigger, and any new privileged
+writer must write its audit row in the same transaction.
+
+### bcrypt accepts only 72 bytes
+Postgres `crypt(..., gen_salt('bf'))` silently ignores input after byte 72. Passwords here are printable
+ASCII, so enforce 8–72 characters in the UI **and** every password-writing RPC; otherwise two visibly
+different long passwords can authenticate as the same value.
+
+### Server/client time formatting needs an explicit timezone too
+Pinning date logic to `Asia/Tehran` was not enough. A Client Component still server-renders first:
+`Intl.DateTimeFormat` without `timeZone` used container UTC on the server and device time in Chrome,
+causing production hydration error #418. Any server-rendered time label must specify
+`APP_TIME_ZONE`, just like date-only calculations.
+
 ### Ledger writes race without locks
 All balance writers (`allocate_leave`, `approve_leave_request`, cancel-reversal,
 `set_leave_balance`) did read-latest-balance-then-insert; concurrent writers wrote stale

@@ -28,7 +28,8 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "submit": "Sign In",
-    "invalidCredentials": "Invalid employee code or password."
+    "invalidCredentials": "Invalid employee code or password.",
+    "inactiveAccount": "This account is inactive. Contact an administrator."
   },
   "home": {
     "greeting": "Welcome, {name}",
@@ -169,6 +170,7 @@
       "submit": "Change password",
       "changed": "Password changed successfully.",
       "tooShort": "New password must be at least 8 characters.",
+      "tooLong": "New password must be no more than 72 characters.",
       "mismatch": "Password confirmation does not match.",
       "emptyCurrent": "Enter your current password."
     },
@@ -372,6 +374,12 @@
     "notAuthenticated": "You are not signed in. Please sign in again.",
     "notAllowed": "You are not allowed to perform this action.",
     "insufficientBalance": "Insufficient leave balance ({requested} day(s) requested, {available} available).",
+    "insufficientBalanceMinutes": "Insufficient leave balance ({requested} minutes requested, {available} available).",
+    "accountInactive": "This account is inactive. Contact an administrator.",
+    "employeeNotFound": "Employee not found.",
+    "employeeSelectionLimit": "Select between 1 and 100 employees.",
+    "invalidHourlySettings": "Enter valid work hours and an hourly-leave limit within that workday.",
+    "holidayNotFound": "Holiday not found.",
     "overlap": "You already have a pending or approved request overlapping these dates.",
     "overlapApproved": "Another approved leave overlaps these dates.",
     "zeroDays": "The selected range contains no working days (weekend/holiday, or invalid range).",
@@ -384,6 +392,7 @@
     "requestNotFound": "Request not found.",
     "wrongCurrentPassword": "The current password is incorrect.",
     "passwordTooShort": "The new password must be at least 8 characters.",
+    "passwordTooLong": "The new password must be no more than 72 ASCII characters.",
     "invalidEmployeeCode": "Invalid employee code (latin letters, digits, dot, dash, underscore only).",
     "duplicateEmployeeCode": "This employee code already exists.",
     "duplicateHoliday": "A holiday already exists on this date.",
@@ -391,6 +400,8 @@
     "invalidDepartmentCode": "The department code must be 2-6 latin letters or digits.",
     "departmentNameRequired": "The Farsi and English department names are required.",
     "cannotRemoveOwnAdmin": "You cannot remove the admin role from your own account.",
+    "cannotDeactivateLastAdmin": "The last active administrator cannot be deactivated.",
+    "managerCannotBeSelf": "An employee cannot be assigned as their own manager.",
     "noProfile": "Your profile could not be found. Contact the administrator.",
     "allocationInvalid": "Allocation days must be greater than 0.",
     "hourlyNotAllowed": "This leave type cannot be taken by the hour.",

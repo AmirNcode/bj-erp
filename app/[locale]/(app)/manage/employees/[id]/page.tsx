@@ -56,7 +56,12 @@ export default async function EditEmployeePage({ params }: Props) {
   // Fetch departments and potential managers
   const [{ data: departments }, { data: managers }] = await Promise.all([
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
-    supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name'),
+    supabase
+      .from('profiles')
+      .select('id, full_name, employee_code')
+      .eq('active', true)
+      .neq('id', id)
+      .order('full_name'),
   ]);
   const balancesRes = isAdmin ? await getEmployeeBalances(id) : null;
   const balances = balancesRes?.ok ? balancesRes.balances : [];

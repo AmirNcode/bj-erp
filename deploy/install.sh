@@ -42,6 +42,16 @@ normalise_host_port() {
     *:*) APP_PORT=${APP_HOST##*:}; APP_HOST=${APP_HOST%:*} ;;
   esac
   APP_PORT=${APP_PORT:-443}
+  case "$APP_HOST" in
+    ''|*[!A-Za-z0-9.-]*)
+      fail "server address must contain only letters, digits, dots, and dashes"
+      ;;
+  esac
+  case "$APP_PORT" in
+    ''|*[!0-9]*) fail "HTTPS port must be a number from 1 to 65535" ;;
+  esac
+  [ "$APP_PORT" -ge 1 ] && [ "$APP_PORT" -le 65535 ] \
+    || fail "HTTPS port must be a number from 1 to 65535"
   if [ "$APP_PORT" = "443" ]; then
     APP_ORIGIN="https://${APP_HOST}"
   else
@@ -51,6 +61,8 @@ normalise_host_port() {
 
 # ── 3. install-time inputs ───────────────────────────────────────────────────
 if [ -f .env ]; then
+  # Older/manual installs may have left this secret file too permissive.
+  chmod 600 .env
   say "Existing .env found — reusing configuration and secrets."
   # shellcheck disable=SC1091
   . ./.env

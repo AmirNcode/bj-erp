@@ -51,6 +51,29 @@ export function rangesOverlap(a: TimeRange, b: TimeRange): boolean {
   return timeToMinutes(a.start) < timeToMinutes(b.end) && timeToMinutes(a.end) > timeToMinutes(b.start);
 }
 
+export type LeavePeriod = {
+  startDate: string;
+  endDate: string;
+  unit: 'day' | 'hour';
+  startTime: string | null;
+  endTime: string | null;
+};
+
+/**
+ * The full leave-overlap predicate shared by approval warnings and SQL:
+ * disjoint dates never overlap; a daily request occupies the whole date;
+ * two hourly requests intersect only when their times genuinely intersect.
+ */
+export function leavePeriodsOverlap(a: LeavePeriod, b: LeavePeriod): boolean {
+  if (a.startDate > b.endDate || a.endDate < b.startDate) return false;
+  if (a.unit === 'day' || b.unit === 'day') return true;
+  if (!a.startTime || !a.endTime || !b.startTime || !b.endTime) return false;
+  return rangesOverlap(
+    { start: a.startTime, end: a.endTime },
+    { start: b.startTime, end: b.endTime }
+  );
+}
+
 /**
  * Selectable times across the window, inclusive of both ends — the options for the
  * from/to native selects. Empty for a reversed window.

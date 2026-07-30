@@ -773,6 +773,10 @@ export type Database = {
         Args: { p_password: string; p_user_id: string }
         Returns: undefined
       }
+      app_bulk_set_employee_passwords: {
+        Args: { p_resets: Json }
+        Returns: undefined
+      }
       app_set_user_roles: {
         Args: {
           p_roles: Database["public"]["Enums"]["app_role"][]

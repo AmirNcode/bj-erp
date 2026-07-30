@@ -10,6 +10,29 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Security and reliability review (2026-07-30)
+- **Deactivated accounts are now actually blocked.** Existing or newly issued login sessions cannot
+  read HR data or submit/cancel leave; the login screen clears the session and explains that the
+  account is inactive.
+- **Manager authority now requires both the manager role and the reporting relationship.** Removing
+  the role takes effect at the database boundary immediately, even if the org chart still lists
+  reports. Employees also cannot be assigned as their own manager.
+- **Audit history is trustworthy.** Signed-in clients can no longer invent audit events; real profile,
+  department, holiday, work-setting, company, and leave-type changes are recorded automatically in
+  the database. Role/profile creation must use the guarded, transactional RPCs.
+- **Catastrophic/lockout paths are closed:** the seeded single company cannot be deleted at runtime,
+  the last active administrator cannot be deactivated, and password resets reject missing targets,
+  weak/overlong values, and reset selected employees atomically.
+- **Hourly approval is time-aware.** Adjacent hourly requests on the same date can both be approved,
+  and the replacement warning no longer reports false conflicts for non-overlapping times.
+- **Request reliability improved:** submit stops when newly earned leave cannot be accrued; reasons,
+  holiday dates, work windows/caps, and zero-row edits are validated instead of silently accepted.
+- **Deployment/browser hardening:** app container runs non-root with no Linux capabilities; installer
+  host/port input is allow-listed and secret files forced to mode 600; CSP/HSTS/cross-origin headers
+  are enabled; the server/client “Updated” timestamp no longer causes a hydration mismatch.
+- Full evidence and the one blocked external dependency-audit check:
+  `docs/SECURITY-REVIEW-2026-07-30.md`.
+
 ### Leave v2: request serial numbers (2026-07-29)
 - **Every request now has a number** — `۱۴۰۴-۰۰۴۲` — the شماره the paper forms carry, so HR can quote a
   request on the phone, write it on a file, or reference it in an insurance claim. It appears on the

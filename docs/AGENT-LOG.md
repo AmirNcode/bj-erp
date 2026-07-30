@@ -78,6 +78,80 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-30 — Full security review, fixes, and local container redeploy
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `feat/leave-v2-hourly-accrual-replacement` @ `6c37993`
+**Trigger:** The user asked for a thorough bug/security review, fixes for every confirmed issue,
+updated project documentation, a rebuilt local Docker app, and a commit + push.
+
+**What changed**
+- `docs/SECURITY-REVIEW-2026-07-30.md` — recorded the review scope, confirmed findings by severity,
+  fixes/proof, clean checks, verification, and the blocked external registry audit.
+- `supabase/migrations/20260730120001_security_review_fixes.sql` — made inactive status a real RLS
+  and RPC boundary; required a live manager role for report authority; removed forgeable audit,
+  direct role/profile creation, company mutation, and write-like calendar-view grants; added
+  trigger-backed audits, last-admin/self-manager invariants, atomic bulk password reset with
+  bcrypt-safe limits, time-aware hourly approval, and reason-length enforcement.
+- `lib/actions/{employees,leave,profile,refresh,settings}.ts`,
+  `lib/leave/{hourly,settings-validation}.ts`, and affected forms/pages — propagated accrual and
+  zero-row failures, validated settings/dates/manager assignments, bounded refresh paths and
+  password inputs, used atomic resets, and corrected hourly replacement overlap.
+- `app/[locale]/(app)/layout.tsx` and `app/[locale]/(auth)/login/page.tsx` — fail closed for inactive
+  users and clear an inactive login session.
+- `app/[locale]/(app)/_components/PageRefreshButton.tsx` — formatted the server-rendered timestamp
+  in `Asia/Tehran`; this removed production React hydration error #418 found during browser QA.
+- `deploy/{Dockerfile,docker-compose.yml,install.sh}` and `next.config.ts` — non-root/capability-free
+  app runtime, validated installer address input, private env-file permissions, CSP/HSTS and
+  cross-origin headers, and no framework disclosure.
+- `tests/unit/*`, `eslint.config.mjs`, localized messages, Supabase types, and DB error mapping —
+  added regressions for the fixes and excluded hidden generated worktrees from lint.
+- `docs/{MEMORY,PERMISSIONS,TASKS,CHANGELOG}.md` — captured the durable security rules, current
+  permission model, remaining external audit gate, and shipped behavior.
+
+**Actions outside the repo**
+- Applied and idempotently replayed migration `20260730120001_security_review_fixes.sql` as
+  `supabase_admin` against the local `bj-erp-db-1` PostgreSQL 15 container.
+- Ran rollback-only live SQL role simulations proving inactive-user isolation, manager-role
+  removal, non-forgeable/triggered audit, atomic password reset, and adjacent hourly approvals.
+- Built `bj-erp-app:latest`, recreated only `bj-erp-app-1`, and stopped the old
+  `bj-erp-app-rollback-20260729` container after Compose unexpectedly started it.
+- Confirmed the current app container runs as `node` with `no-new-privileges` and all capabilities
+  dropped; verified the HTTPS gateway at `https://192.168.2.48`.
+- Did not touch the client's production server at `https://10.10.10.50`.
+- `npm audit` was attempted, but the environment's external-data-transfer safeguard blocked the
+  dependency manifest from being sent to the npm registry; the escalated attempt was rejected.
+- The requested push to `https://github.com/AmirNcode/bj-erp.git` was attempted after commit
+  `a697a9c`; the environment rejected it pending explicit approval of that exact destination and
+  security-review payload.
+
+**Verification**
+- `npm run test:unit` — 35 files, 217 tests passed.
+- `npm run lint` — passed with no findings.
+- `npx tsc --noEmit` — passed.
+- `npm run build` and the Docker production build — passed; 34 routes generated.
+- `git diff --check` — passed.
+- HTTPS smoke check — HTTP 200 with CSP, HSTS, COOP/CORP, permissions/referrer/content-type/frame
+  headers and no `X-Powered-By`.
+- Fresh in-app browser pass — signed-in hourly page rendered, changing 08:00–10:00 showed
+  `2 hours`, and the production console contained no application errors. Remaining warnings came
+  from the installed MetaMask Chrome extension, not this app.
+
+**State left behind**
+- All review/fix/doc changes are committed locally on `codex/code-review` for review before
+  merging. The external-transfer safeguard rejected the push pending the user's explicit approval
+  of the destination `https://github.com/AmirNcode/bj-erp.git`.
+- The original `feat/leave-v2-hourly-accrual-replacement` branch was restored to its pre-review
+  commit `6c37993`, so it does not contain this security-review change set.
+- The rebuilt current local app is running at `https://192.168.2.48/en/login`; supporting local
+  database/auth/rest/gateway containers were preserved.
+
+**For the next agent**
+- Run `npm audit` before release from a network-authorized machine and record/remediate any
+  registry-backed advisory; this is the only incomplete review gate.
+- The new migration is applied locally only. Production remains untouched and must receive it
+  through the established release runbook, not an ad-hoc database command.
+
 ## 2026-07-29 — Leave v2: design spec + ALL FIVE PLANS implemented (minutes, calendar, accrual, hourly, replacement, serials)
 
 **Agent:** Claude Opus 5 via Claude Code

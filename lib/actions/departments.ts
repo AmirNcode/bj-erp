@@ -63,14 +63,6 @@ export async function createDepartment(
   if (error) return dbErr(error.message);
   if (!data) return dbErr('not allowed to create a department');
 
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'departments',
-    entity_id: data.id,
-    action: 'create_department',
-    after: { name_fa: nameFa, name_en: nameEn, code, kind: input.kind ?? 'team' },
-  });
-
   invalidateAppCache();
   return { ok: true, id: data.id };
 }
@@ -95,12 +87,6 @@ export async function updateDepartmentCode(
   const normalized = normalizeDepartmentCode(code);
   if (!isValidDepartmentCode(normalized)) return dbErr('invalid department code');
 
-  const { data: before } = await supabase
-    .from('departments')
-    .select('code')
-    .eq('id', id)
-    .single();
-
   const { data, error } = await supabase
     .from('departments')
     .update({ code: normalized })
@@ -109,15 +95,6 @@ export async function updateDepartmentCode(
 
   if (error) return dbErr(error.message);
   if (!data || data.length === 0) return dbErr('not allowed to update this department');
-
-  await supabase.from('audit_log').insert({
-    actor_id: user.id,
-    entity: 'departments',
-    entity_id: id,
-    action: 'set_department_code',
-    before: { code: before?.code ?? null },
-    after: { code: normalized },
-  });
 
   invalidateAppCache();
   return { ok: true };

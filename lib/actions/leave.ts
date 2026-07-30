@@ -8,6 +8,7 @@ import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
+import { leavePeriodsOverlap } from '@/lib/leave/hourly';
 import { todayInAppTz } from '@/lib/appDate';
 
 type DayPart = Database['public']['Enums']['day_part'];
@@ -64,7 +65,8 @@ export async function submitRequest(
 
   // Accrue first: a worker whose newly-earned day makes this request affordable
   // must not be refused by a stale balance.
-  await accrueBeforeRead(supabase);
+  const accrualError = await accrueBeforeRead(supabase);
+  if (accrualError) return dbErr(accrualError);
 
   const { data, error } = await supabase.rpc('submit_leave_request', {
     p_leave_type_id: input.leaveTypeId,
@@ -134,7 +136,8 @@ export async function submitHourlyRequest(
   if (!user) return dbErr('not authenticated');
 
   // Same reason as the daily path: a freshly-accrued hour must be spendable.
-  await accrueBeforeRead(supabase);
+  const accrualError = await accrueBeforeRead(supabase);
+  if (accrualError) return dbErr(accrualError);
 
   const { data, error } = await supabase.rpc('submit_hourly_leave_request', {
     p_leave_type_id: input.leaveTypeId,
@@ -370,18 +373,23 @@ export async function getMyLeaveRequests(): Promise<{
  * Post any months this employee has earned before a balance is read (spec §6.4).
  *
  * Accrual WRITES, so it cannot live in a view or an RLS select — it has to be an
- * RPC called first. Failures are logged and swallowed on purpose: a slightly
- * stale balance is a much better outcome than a blank page, and the next read
- * retries anyway because the work is idempotent.
+ * RPC called first. Callers that only render a balance intentionally ignore a
+ * returned error (a stale number is better than a blank page). Submit callers
+ * propagate it, because silently continuing could reject leave that was just
+ * earned. The next attempt is safe because accrual is idempotent.
  */
 async function accrueBeforeRead(
   supabase: Awaited<ReturnType<typeof getCallerContext>>['supabase'],
   employeeId?: string
-): Promise<void> {
+): Promise<string | null> {
   const { error } = employeeId
     ? await supabase.rpc('accrue_employee_leave', { p_employee_id: employeeId })
     : await supabase.rpc('accrue_my_leave');
-  if (error) console.error('[accrual] skipped:', error.message);
+  if (error) {
+    console.error('[accrual] skipped:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
 /**
@@ -664,7 +672,7 @@ export async function getPendingApprovals(): Promise<
     const coverIds = [...new Set(withCover.map((r) => r.replacement_id as string))];
     const { data: coverLeave } = await supabase
       .from('leave_requests')
-      .select('employee_id, start_date, end_date')
+      .select('employee_id, start_date, end_date, unit, start_time, end_time')
       .in('employee_id', coverIds)
       .in('status', ['pending', 'approved']);
 
@@ -674,8 +682,22 @@ export async function getPendingApprovals(): Promise<
       req.replacement_conflict = (coverLeave ?? []).some(
         (l) =>
           l.employee_id === raw.replacement_id &&
-          l.start_date <= req.end_date &&
-          l.end_date >= req.start_date
+          leavePeriodsOverlap(
+            {
+              startDate: l.start_date,
+              endDate: l.end_date,
+              unit: l.unit,
+              startTime: l.start_time,
+              endTime: l.end_time,
+            },
+            {
+              startDate: req.start_date,
+              endDate: req.end_date,
+              unit: req.unit,
+              startTime: req.start_time,
+              endTime: req.end_time,
+            }
+          )
       );
     }
   }

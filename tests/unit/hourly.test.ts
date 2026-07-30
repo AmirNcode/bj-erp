@@ -5,6 +5,7 @@ import {
   rangeMinutes,
   isWithinWindow,
   rangesOverlap,
+  leavePeriodsOverlap,
   timeSlots,
   hourlyDayTotal,
 } from '@/lib/leave/hourly';
@@ -90,6 +91,46 @@ describe('rangesOverlap', () => {
     expect(rangesOverlap({ start: '08:00', end: '09:00' }, { start: '13:00', end: '14:00' })).toBe(
       false
     );
+  });
+});
+
+describe('leavePeriodsOverlap', () => {
+  const hourly = (startTime: string, endTime: string) => ({
+    startDate: '2026-07-30',
+    endDate: '2026-07-30',
+    unit: 'hour' as const,
+    startTime,
+    endTime,
+  });
+
+  it('allows two hourly requests on the same date when their times do not overlap', () => {
+    expect(leavePeriodsOverlap(hourly('08:00', '10:00'), hourly('10:00', '12:00'))).toBe(false);
+  });
+
+  it('detects hourly intersection and daily-vs-hourly conflict', () => {
+    expect(leavePeriodsOverlap(hourly('08:00', '10:30'), hourly('10:00', '12:00'))).toBe(true);
+    expect(
+      leavePeriodsOverlap(
+        {
+          startDate: '2026-07-30',
+          endDate: '2026-07-30',
+          unit: 'day',
+          startTime: null,
+          endTime: null,
+        },
+        hourly('10:00', '12:00')
+      )
+    ).toBe(true);
+  });
+
+  it('rejects date-disjoint periods before comparing times', () => {
+    expect(
+      leavePeriodsOverlap(hourly('08:00', '12:00'), {
+        ...hourly('08:00', '12:00'),
+        startDate: '2026-07-31',
+        endDate: '2026-07-31',
+      })
+    ).toBe(false);
   });
 });
 

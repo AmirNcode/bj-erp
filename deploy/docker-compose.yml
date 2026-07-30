@@ -101,6 +101,10 @@ services:
   app:
     image: bj-erp-app:${APP_VERSION:-latest}
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     depends_on:
       - auth
       - rest
