@@ -91,7 +91,9 @@ by `auth.uid()` and grants execute only to `authenticated`.
 (ISO weekday numbers; default `{5}` = Friday) · `hours_per_day numeric` (default 8, 2026-07-29) ·
 `updated_by` · `updated_at`. Drives working-day counting. The settings UI upserts on `company_id`.
 `hours_per_day` defines what one *day* of leave means and governs every days↔minutes render; it does
-**not** rewrite history (see "Units" below).
+**not** rewrite history (see "Units" below). `work_start`/`work_end time` (default 07:00–15:00) bound
+hourly requests, and `max_hourly_minutes_per_day int` (default 240 = 4h) caps them **per day**, summed
+across that day's own pending + approved hourly requests.
 
 ### `holidays`
 `id` · `company_id` · `holiday_date date` (Gregorian) · `name_fa` · `name_en` ·
@@ -134,8 +136,12 @@ Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
 `reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
 **decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
 their own row and never exposed through `team_leave_calendar` (explicit column list).
-*Hourly* lands in the next Leave v2 plan: nullable `start_time`/`end_time` + a `unit` enum, gated by
-`leave_types.allow_hourly`. The unit groundwork (minutes) is already in place.
+**Hourly (2026-07-29, FR-26):** `unit leave_unit` (`day|hour`, default `day`) · `start_time time` ·
+`end_time time`, both company-local and NULL for daily requests. A CHECK constraint
+(`leave_requests_unit_shape`) makes a malformed row impossible even if a function is wrong:
+`day` ⇒ no times and `start_date <= end_date`; `hour` ⇒ both times, **one** date,
+`end_time > start_time`, and `day_part = 'full'`. Gated by `leave_types.allow_hourly` (true for
+annual + unpaid, false for sick, matching the client's paper hourly form).
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
@@ -198,6 +204,21 @@ The annual cap counts **accruals within the Jalali year**, not the balance — a
 has a NULL `period_month` and must never consume the year's cap. Mirrored in
 `lib/leave/accrual.ts` (`planAccruals`, 15 unit tests); the two must stay in lockstep, and the SQL
 was verified against the same scenarios.
+
+## Overlap rule (both units)
+
+`private.submit_leave_impl` is the single writer for daily and hourly requests. Two requests conflict
+when their dates intersect **and**:
+
+```
+either side is unit='day'                         -> conflict
+both are unit='hour' and their times intersect    -> conflict   (touching ends do NOT)
+```
+
+So 08:00–10:00 and 10:00–12:00 are adjacent and both allowed — a worker with two errands in one day is
+not blocked by a boundary — while the 4h/day cap still governs the total. **Accepted limitation:** an
+am/pm half-day plus an hourly request on the same date is refused, because am/pm is stored as
+`unit='day'`. Mirrored in `lib/leave/hourly.ts` (`rangesOverlap`, 17 unit tests).
 
 ## Entity relationships (text ER)
 

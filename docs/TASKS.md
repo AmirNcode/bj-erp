@@ -174,8 +174,13 @@ Five plans, in this order; each ships working software on its own.
   - ☑ Fixed the `created_at`-tie balance bug it exposed (`leave_ledger.seq`)
   - ☐ **Not yet applied to the client's server**; existing staff need a reviewed one-time policy
     backfill first — see the plan's Deployment note
-- ☐ **Plan 3 — Hourly**: `unit` enum + `start_time`/`end_time`, company work-hours window, 4h/day
-  cap, time-aware overlap, separate `/request/hourly` screen
+- ☑ **Plan 3 — Hourly** ([plan](plans/2026-07-29-leave-v2-hourly.md))
+  - ☑ `leave_unit` + times + the CHECK that makes a malformed row impossible
+  - ☑ Work-hours window + per-day cap in `work_settings`, editable in Settings
+  - ☑ `lib/leave/hourly.ts` (17 tests) mirrored by the SQL; one writer, two wrappers
+  - ☑ `/request/hourly` screen, Home buttons, time ranges in every listing + the calendar
+  - ☐ **Not yet applied to the client's server**; `allow_hourly` flips on for annual + unpaid the
+    moment the migration runs, so leave the flags false there for a staged rollout
 - ☐ **Plan 4 — Replacement**: `replacement_id`, same-department searchable picker with
   availability, "you are covering X" on Home
 - ☐ **Plan 5 — Serials**: per-Jalali-year request numbers (`1404-0042`)

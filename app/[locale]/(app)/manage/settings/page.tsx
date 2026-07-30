@@ -41,6 +41,9 @@ export default async function SettingsPage({ params }: Props) {
   ]);
   const data = holidayData;
   const weekendDays = data.ok ? data.weekendDays : [5];
+  const workStart = data.ok ? data.workStart : '07:00';
+  const workEnd = data.ok ? data.workEnd : '15:00';
+  const hourlyCapMinutes = data.ok ? data.maxHourlyMinutesPerDay : 240;
   const holidays = data.ok ? data.holidays : [];
 
   const days = {
@@ -61,9 +64,17 @@ export default async function SettingsPage({ params }: Props) {
         <CardContent>
           <WorkSettingsForm
             initial={weekendDays}
+            initialWorkStart={workStart}
+            initialWorkEnd={workEnd}
+            initialHourlyCapMinutes={hourlyCapMinutes}
             labels={{
               weekendTitle: t('weekendTitle'),
               weekendHint: t('weekendHint'),
+              hoursTitle: t('hoursTitle'),
+              hoursHint: t('hoursHint'),
+              workStart: t('workStart'),
+              workEnd: t('workEnd'),
+              hourlyCap: t('hourlyCap'),
               save: t('save'),
               saved: t('saved'),
               errorLabel: t('error'),

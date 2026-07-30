@@ -10,6 +10,21 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave v2: hourly leave (2026-07-29)
+- **Workers can request a few hours off instead of a whole day** — مرخصی ساعتی, on its own screen that
+  mirrors the client's BJ-F 50208 form: one date, a from-time and a to-time. Available for annual and
+  unpaid leave; **not** for sick leave, matching the paper form.
+- **Times come from the company's working hours** (a new setting, default 07:00–15:00) as 30-minute
+  slots, and hourly leave is **capped per day** (default 4 hours, configurable) across all of that
+  day's requests — so the hourly form cannot be used to take a full day in pieces.
+- **Two non-overlapping errands in one day are both allowed.** The overlap rule compares times rather
+  than dates, and treats 08:00–10:00 and 10:00–12:00 as adjacent. A whole-day request still blocks
+  everything else that day. One accepted limitation, documented: a half-day plus an hourly request on
+  the same date is refused.
+- Hourly requests show their **time range** in My Requests, the approvals queue, and the team calendar
+  — a manager approving one sees ۰۹:۰۰–۱۱:۰۰ rather than a bare duration that reads like a full day.
+- Home now offers both request buttons, and each request screen links to the other.
+
 ### Leave v2: monthly leave accrual (2026-07-29)
 - **Leave now accrues every month instead of being a number an admin typed once.** Each employee has
   a per-leave-type policy — days earned per month, yearly cap, carryover cap, start month —

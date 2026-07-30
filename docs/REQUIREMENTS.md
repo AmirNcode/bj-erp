@@ -33,6 +33,12 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
   shipped in Phase 2; approved-future in Phase 6.)*
 
+- **FR-26** ☑ **Hourly leave (مرخصی ساعتی).** A worker requests hours on a single date from a separate
+  screen mirroring form BJ-F 50208: one date, a from-time and a to-time drawn from the company
+  work-hours window, capped per day (default 4h) across that day's requests, and gated by
+  `leave_types.allow_hourly` — annual and unpaid only, never sick. Overlap is time-aware, so two
+  non-overlapping errands in a day are both allowed. *(2026-07-29; supersedes FR-11's "reserves room
+  for hourly later" and the v1 spec's D7 deferral.)*
 - **FR-27** ☑ **Monthly accrual.** Each employee has a per-leave-type policy (days earned per
   month, yearly cap, carryover cap, start month), defaulted from the leave type and editable by an
   admin. Accrual is posted lazily and idempotently, anchored to **Jalali month starts**, with the

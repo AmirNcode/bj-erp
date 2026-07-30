@@ -40,7 +40,15 @@ async function getCtx(): Promise<Ctx | null> {
 }
 
 export async function getCompanyHolidays(): Promise<
-  { ok: true; holidays: Holiday[]; weekendDays: number[] } | { ok: false; error: string }
+  | {
+      ok: true;
+      holidays: Holiday[];
+      weekendDays: number[];
+      workStart: string;
+      workEnd: string;
+      maxHourlyMinutesPerDay: number;
+    }
+  | { ok: false; error: string }
 > {
   const c = await getCtx();
   if (!c) return dbErr('not authenticated');
@@ -50,16 +58,37 @@ export async function getCompanyHolidays(): Promise<
       .select('id, holiday_date, name_fa, name_en, is_recurring')
       .eq('company_id', c.companyId)
       .order('holiday_date'),
-    c.supabase.from('work_settings').select('weekend_days').eq('company_id', c.companyId).maybeSingle(),
+    c.supabase
+      .from('work_settings')
+      .select('weekend_days, work_start, work_end, max_hourly_minutes_per_day')
+      .eq('company_id', c.companyId)
+      .maybeSingle(),
   ]);
   if (he) return dbErr(he.message);
   if (we) return dbErr(we.message);
-  return { ok: true, holidays: (hols ?? []) as Holiday[], weekendDays: ws?.weekend_days ?? [5] };
+  return {
+    ok: true,
+    holidays: (hols ?? []) as Holiday[],
+    weekendDays: ws?.weekend_days ?? [5],
+    workStart: ws?.work_start ?? '07:00',
+    workEnd: ws?.work_end ?? '15:00',
+    maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
+  };
 }
 
+export type WorkSettingsInput = {
+  weekendDays: number[];
+  /** 'HH:MM', company-local. Hourly requests must fall inside this window (D8). */
+  workStart: string;
+  workEnd: string;
+  /** Per-day cap on hourly leave, in MINUTES (the form edits hours). */
+  maxHourlyMinutesPerDay: number;
+};
+
 export async function updateWorkSettings(
-  weekendDays: number[]
+  input: WorkSettingsInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  const weekendDays = input.weekendDays;
   const c = await getCtx();
   if (!c) return dbErr('not authenticated');
   if (!c.isAdmin) return dbErr('admin role required');
@@ -72,7 +101,14 @@ export async function updateWorkSettings(
   const { error } = await c.supabase
     .from('work_settings')
     .upsert(
-      { company_id: c.companyId, weekend_days: v.days, updated_by: c.userId },
+      {
+        company_id: c.companyId,
+        weekend_days: v.days,
+        work_start: input.workStart,
+        work_end: input.workEnd,
+        max_hourly_minutes_per_day: input.maxHourlyMinutesPerDay,
+        updated_by: c.userId,
+      },
       { onConflict: 'company_id' }
     );
   if (error) return dbErr(error.message);

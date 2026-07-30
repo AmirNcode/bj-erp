@@ -2,6 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-07-29).** Executed on `feat/leave-v2-hourly-accrual-replacement`. Unit
+**197/197** (17 new), e2e **29/29** serial, tsc + lint + build clean; three migrations applied to the
+local docker stack and proven replayable. **Not deployed to the client's server.**
+
+**What execution taught, beyond the plan:** the shared `WorkSettings` fallback could not live in
+`lib/actions/leave.ts` — a `'use server'` file may only export async functions, and a plain object
+breaks page-data collection. Two e2e lessons too: assert the outcome rather than a toast (sonner
+auto-dismisses), and never hardcode a balance figure, because the fixtures plus plan 2's accrual decide
+the starting number. All three are in the AGENT-LOG.
+
 **Goal:** Let a worker request مرخصی ساعتی — a few hours off on one day, capped at 4h — on its own screen mirroring the client's BJ-F 50208 paper form, consuming the same minute-denominated balance as daily leave.
 
 **Architecture:** `leave_requests` gains a `unit` enum plus `start_time`/`end_time`, with CHECK constraints so a malformed row cannot exist even if a function is wrong. The overlap rule becomes time-aware. Validation lives in SQL (a client cannot fabricate a duration), with a pure TS mirror for the live preview and for tests. Two thin public wrappers over one shared internal writer, matching the two paper forms.

@@ -78,7 +78,7 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-07-29 — Leave v2: design spec + plans 1 & 2 implemented (minutes unit, Jalali calendar, monthly accrual)
+## 2026-07-29 — Leave v2: design spec + plans 1, 2 & 3 implemented (minutes unit, Jalali calendar, accrual, hourly leave)
 
 **Agent:** Claude Opus 5 via Claude Code
 **Branch / HEAD at start:** `main` @ `cce7b16`, tree had untracked `docs/forms/`
@@ -157,13 +157,49 @@ Implementation (plan 2 — accrual, all committed):
 - `npm run seed` succeeds against the renamed RPCs.
 - E2E: plan 1 — **first run 25/26** (caught the days/minutes mismatch below), **second run 24/26**
   (caught the allocation-impl break), **26/26 green** after `…130004`. Plan 2 — **27/27 green** with
-  the new `accrual.spec.ts`. Every failure along the way was a real bug in my work, not a flaky test.
+  the new `accrual.spec.ts`. Plan 3 — **29/29 green** with `hourly.spec.ts` (2 specs). Every failure
+  along the way was a real bug in my work or my test, never a flaky suite.
 
 **State left behind**
 
 - Branch `feat/leave-v2-hourly-accrual-replacement`, committed, **not pushed, no PR**.
 - Plans 2–5 (accrual, hourly, replacement, serials) are **not written yet**. The spec is their input.
 - The local docker DB is now on minutes; the client's is not. They will diverge until deployment.
+
+Implementation (plan 3 — hourly, all committed):
+- **`docs/plans/2026-07-29-leave-v2-hourly.md`** — the plan, executed in full.
+- **`20260729130008_leave_hourly.sql`** — `leave_unit`, `leave_requests.unit/start_time/end_time`, the
+  `leave_requests_unit_shape` CHECK, `work_settings.work_start/work_end/max_hourly_minutes_per_day`,
+  and `allow_hourly` switched on for annual + unpaid (never sick).
+- **`20260729130009_leave_hourly_fns.sql`** — `compute_requested_minutes` made unit-aware, plus
+  `private.submit_leave_impl` behind `submit_leave_request` (unchanged signature) and
+  `submit_hourly_leave_request`.
+- **`20260729130010_calendar_hourly.sql`** — `team_leave_calendar` recreated with `unit`/times/minutes.
+  Still no `security_invoker`, still no `reason`/`decision_note` — verified against the live column list.
+- `lib/leave/hourly.ts` (17 tests), `lib/leave/formatTimeRange.ts`, `lib/leave/workSettings.ts`.
+- `app/[locale]/(app)/request/hourly/*` (new screen), Home buttons, time ranges in MyRequestsList /
+  ApprovalQueue, work-hours fields in `WorkSettingsForm`, `tests/e2e/hourly.spec.ts` (2 specs).
+
+**Plan 3's traps**
+
+1. **`lib/actions/leave.ts` is a `'use server'` file, so it may only export async functions.** I put a
+   shared `WORK_SETTINGS_FALLBACK` object there and the build failed page-data collection with
+   *"A 'use server' file can only export async functions, found object"*. It now lives in
+   `lib/leave/workSettings.ts`; the type-only import is erased at runtime. Types are fine to export
+   from a server file — runtime values are not.
+2. **Assert e2e outcomes, not toasts.** `getByRole('status')` for the approval toast is a race: sonner
+   auto-dismisses, and the approval had in fact succeeded. Assert that the request left the queue.
+3. **Don't hardcode a balance in e2e.** My first assertion expected 4.75 days and got 31.75, because
+   `createEmployee` grants the leave-type default, `allocate()` adds more, and plan 2's accrual adds a
+   day on top. Read the balance before the action and assert the delta.
+4. **`deploy/install.sh` applies migrations BEFORE `seed.sql`**, so a migration that backfills
+   `leave_types` columns matches zero rows on a fresh install. Both plan 2's accrual defaults and plan
+   3's `allow_hourly` were affected: a brand-new install would have had hourly silently unavailable and
+   nobody accruing. `supabase/seed.sql` now sets those columns explicitly. **Any future migration that
+   updates seeded reference rows must also set them in the seed.**
+5. The `team_leave_calendar` type in `types.ts` had been missing `requested_minutes` since plan 1 (my
+   day-column strip caught the view too, and nothing selected it). Restored while adding the hourly
+   columns — a reminder that hand-maintained types hide omissions until something selects the column.
 
 **Plan 2's own bug find, worth understanding before touching balances**
 
