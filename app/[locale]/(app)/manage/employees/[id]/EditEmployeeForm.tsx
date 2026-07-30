@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
-import { setLeaveBalance } from '@/lib/actions/leave';
+import { setLeaveBalance, setEmployeeLeavePolicy } from '@/lib/actions/leave';
+import type { LeavePolicyRow } from '@/lib/actions/leave';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
 import { daysToMinutes } from '@/lib/leave/duration';
@@ -39,6 +40,16 @@ type Props = {
   balances: BalanceItem[];
   /** Company day length: the inputs below are days, the ledger is minutes. */
   hoursPerDay: number;
+  /** Existing accrual policies; absent types fall back to the leave-type default. */
+  policies: LeavePolicyRow[];
+  typeDefaults: {
+    id: string;
+    default_accrual_minutes_per_month: number | null;
+    default_annual_cap_minutes: number | null;
+    default_carryover_cap_minutes: number;
+  }[];
+  /** Gregorian start of the current Jalali month — used for new policy rows. */
+  accrualStartMonth: string;
   locale: string;
   labels: {
     code: string;
@@ -61,6 +72,12 @@ type Props = {
     saved: string;
     managerNote?: string;
     balancesTitle: string;
+    policyTitle: string;
+    policyHint: string;
+    policyRate: string;
+    policyAnnualCap: string;
+    policyCarryCap: string;
+    policyWarn: string;
   };
 };
 
@@ -79,6 +96,9 @@ export function EditEmployeeForm({
   managers,
   balances,
   hoursPerDay,
+  policies,
+  typeDefaults,
+  accrualStartMonth,
   locale,
   labels,
 }: Props) {
@@ -96,6 +116,21 @@ export function EditEmployeeForm({
   const [targets, setTargets] = useState<Record<string, number>>(
     Object.fromEntries(balances.map((balance) => [balance.leaveTypeId, balance.balanceMinutes]))
   );
+
+  // Policy fields are day-denominated for the admin; conversion happens on save.
+  const policyDaysFor = (leaveTypeId: string) => {
+    const existing = policies.find((p) => p.leaveTypeId === leaveTypeId);
+    const fallback = typeDefaults.find((t) => t.id === leaveTypeId);
+    const perDay = hoursPerDay * 60;
+    const toDays = (m: number | null | undefined) =>
+      !m || m <= 0 ? 0 : Math.round((m / perDay) * 100) / 100;
+    return {
+      rate: toDays(existing?.accrualMinutesPerMonth ?? fallback?.default_accrual_minutes_per_month),
+      cap: toDays(existing?.annualCapMinutes ?? fallback?.default_annual_cap_minutes),
+      carry: toDays(existing?.carryoverCapMinutes ?? fallback?.default_carryover_cap_minutes),
+      startMonth: existing?.accrualStartMonth ?? accrualStartMonth,
+    };
+  };
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -145,6 +180,29 @@ export function EditEmployeeForm({
         if (!balanceResult.ok) {
           setPending(false);
           setError(balanceResult.error);
+          return;
+        }
+      }
+
+      // Accrual policy per balance-affecting type. Inputs are days; the ledger is
+      // minutes, so convert here at the boundary.
+      for (const balance of balances) {
+        const rateDays = Number(fd.get(`policy_rate_${balance.leaveTypeId}`) || 0);
+        const capDays = Number(fd.get(`policy_cap_${balance.leaveTypeId}`) || 0);
+        const carryDays = Number(fd.get(`policy_carry_${balance.leaveTypeId}`) || 0);
+
+        const policyResult = await setEmployeeLeavePolicy({
+          employeeId: employee.id,
+          leaveTypeId: balance.leaveTypeId,
+          accrualMinutesPerMonth: daysToMinutes(rateDays, hoursPerDay),
+          annualCapMinutes: capDays > 0 ? daysToMinutes(capDays, hoursPerDay) : null,
+          carryoverCapMinutes: daysToMinutes(carryDays, hoursPerDay),
+          accrualStartMonth: policyDaysFor(balance.leaveTypeId).startMonth,
+        });
+
+        if (!policyResult.ok) {
+          setPending(false);
+          setError(`${labels.policyWarn} ${policyResult.error}`);
           return;
         }
       }
@@ -331,6 +389,84 @@ export function EditEmployeeForm({
                             data-leave-type-id={balance.leaveTypeId}
                           />
                         </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {balances.length > 0 && (
+                  <div
+                    className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
+                    data-testid="policy-section"
+                  >
+                    <div>
+                      <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                      <p className="mt-1 text-sm text-muted-foreground">{labels.policyHint}</p>
+                    </div>
+                    {balances.map((balance) => {
+                      const slug = leaveTypeSlug(balance);
+                      const label =
+                        locale === 'fa'
+                          ? balance.name_fa
+                          : balance.name_en ?? balance.name_fa;
+                      const p = policyDaysFor(balance.leaveTypeId);
+                      return (
+                        <fieldset className="space-y-1.5" key={`policy-${balance.leaveTypeId}`}>
+                          <legend className="text-sm font-medium">{label}</legend>
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`policy_rate_${balance.leaveTypeId}`}
+                                className="text-xs"
+                              >
+                                {labels.policyRate}
+                              </Label>
+                              <Input
+                                id={`policy_rate_${balance.leaveTypeId}`}
+                                name={`policy_rate_${balance.leaveTypeId}`}
+                                type="number"
+                                min={0}
+                                step="0.5"
+                                defaultValue={p.rate}
+                                data-testid={`policy-rate-${slug}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`policy_cap_${balance.leaveTypeId}`}
+                                className="text-xs"
+                              >
+                                {labels.policyAnnualCap}
+                              </Label>
+                              <Input
+                                id={`policy_cap_${balance.leaveTypeId}`}
+                                name={`policy_cap_${balance.leaveTypeId}`}
+                                type="number"
+                                min={0}
+                                step="0.5"
+                                defaultValue={p.cap}
+                                data-testid={`policy-cap-${slug}`}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label
+                                htmlFor={`policy_carry_${balance.leaveTypeId}`}
+                                className="text-xs"
+                              >
+                                {labels.policyCarryCap}
+                              </Label>
+                              <Input
+                                id={`policy_carry_${balance.leaveTypeId}`}
+                                name={`policy_carry_${balance.leaveTypeId}`}
+                                type="number"
+                                min={0}
+                                step="0.5"
+                                defaultValue={p.carry}
+                                data-testid={`policy-carry-${slug}`}
+                              />
+                            </div>
+                          </div>
+                        </fieldset>
                       );
                     })}
                   </div>

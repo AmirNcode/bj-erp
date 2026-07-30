@@ -7,6 +7,7 @@ import { dbErr } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
+import { todayInAppTz } from '@/lib/appDate';
 
 type DayPart = Database['public']['Enums']['day_part'];
 
@@ -619,4 +620,109 @@ export async function getEmployeeBalances(
   }));
 
   return { ok: true, balances };
+}
+
+// ---------------------------------------------------------------------------
+// Accrual policy (admin) — spec §6.1. Inputs arrive in MINUTES; the forms convert
+// their day-denominated fields at the boundary via lib/leave/duration.ts.
+// ---------------------------------------------------------------------------
+
+export type LeavePolicyInput = {
+  employeeId: string;
+  leaveTypeId: string;
+  accrualMinutesPerMonth: number;
+  annualCapMinutes: number | null;
+  carryoverCapMinutes: number;
+  /** Gregorian YYYY-MM-DD; must be a jalali_months.gregorian_start (the RPC checks). */
+  accrualStartMonth: string;
+};
+
+export type LeavePolicyRow = {
+  leaveTypeId: string;
+  accrualMinutesPerMonth: number;
+  annualCapMinutes: number | null;
+  carryoverCapMinutes: number;
+  accrualStartMonth: string;
+};
+
+export async function setEmployeeLeavePolicy(
+  input: LeavePolicyInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { error } = await supabase.rpc('set_employee_leave_policy', {
+    p_employee_id: input.employeeId,
+    p_leave_type_id: input.leaveTypeId,
+    p_accrual_minutes_per_month: input.accrualMinutesPerMonth,
+    p_annual_cap_minutes: input.annualCapMinutes,
+    p_carryover_cap_minutes: input.carryoverCapMinutes,
+    p_accrual_start_month: input.accrualStartMonth,
+  });
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true };
+}
+
+/** Existing policies for one employee, for pre-filling the edit form. */
+export async function getEmployeePolicies(
+  employeeId: string
+): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { data, error } = await supabase
+    .from('employee_leave_policies')
+    .select(
+      'leave_type_id, accrual_minutes_per_month, annual_cap_minutes, carryover_cap_minutes, accrual_start_month'
+    )
+    .eq('employee_id', employeeId);
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    policies: (data ?? []).map((r) => ({
+      leaveTypeId: r.leave_type_id,
+      accrualMinutesPerMonth: r.accrual_minutes_per_month,
+      annualCapMinutes: r.annual_cap_minutes,
+      carryoverCapMinutes: r.carryover_cap_minutes,
+      accrualStartMonth: r.accrual_start_month,
+    })),
+  };
+}
+
+/** Admin "Post accruals now". Returns what actually happened, for the UI to show. */
+export async function runAllAccruals(): Promise<
+  { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
+> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { data, error } = await supabase.rpc('accrue_all_leave');
+  if (error) return dbErr(error.message);
+
+  const summary = (data ?? {}) as { employees?: number; rows_posted?: number };
+  invalidateAppCache();
+  return { ok: true, employees: summary.employees ?? 0, rowsPosted: summary.rows_posted ?? 0 };
+}
+
+/**
+ * The Gregorian start of the Jalali month containing today — the sensible default
+ * accrual start month, so switching accrual on never retroactively credits a year
+ * of leave (spec §6, deployment note).
+ */
+export async function getCurrentJalaliMonthStart(): Promise<string> {
+  const { supabase } = await getCallerContext();
+  const today = todayInAppTz();
+  const { data } = await supabase
+    .from('jalali_months')
+    .select('gregorian_start')
+    .lte('gregorian_start', today)
+    .gte('gregorian_end', today)
+    .maybeSingle();
+  return data?.gregorian_start ?? today;
 }

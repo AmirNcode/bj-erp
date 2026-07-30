@@ -216,6 +216,12 @@
       "saved": "Changes saved successfully.",
       "allocTitle": "Initial leave balance",
       "allocWarn": "Employee created, but setting leave balance failed:",
+      "policyTitle": "Monthly accrual policy",
+      "policyHint": "How much leave this employee earns each month. Accrual starts from the current Jalali month. Leave the yearly cap at 0 for no cap.",
+      "policyRate": "Days per month",
+      "policyAnnualCap": "Yearly cap (days)",
+      "policyCarryCap": "Carryover cap (days)",
+      "policyWarn": "Employee created, but saving the accrual policy failed:",
       "balancesTitle": "Leave balances",
       "personnelNo": "Personnel number",
       "jobTitle": "Job title",
@@ -282,6 +288,15 @@
         "title": "Department codes",
         "hint": "Latin prefix of new employees' login codes (e.g. prod-1042). Existing employees keep their codes.",
         "invalid": "Code must be 2-6 latin letters or digits."
+      },
+      "accrual": {
+        "title": "Monthly leave accrual",
+        "hint": "Accrual runs on its own whenever a balance is opened. Use this to post the current month for everyone at once and see the result.",
+        "run": "Post accruals now",
+        "resultTitle": "Accruals posted",
+        "employeesLabel": "employees",
+        "rowsLabel": "entries posted",
+        "nothingToDo": "Everything was already up to date."
       }
     },
     "import": {

@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
 import { DepartmentCodesForm } from './DepartmentCodesForm';
+import { AccrualRunner } from './AccrualRunner';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = { params: Promise<{ locale: string }> };
@@ -104,6 +105,24 @@ export default async function SettingsPage({ params }: Props) {
               save: t('save'),
               saved: t('saved'),
               invalid: t('departments.invalid'),
+              errorLabel: t('error'),
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <AccrualRunner
+            locale={locale}
+            labels={{
+              title: t('accrual.title'),
+              hint: t('accrual.hint'),
+              run: t('accrual.run'),
+              resultTitle: t('accrual.resultTitle'),
+              employeesLabel: t('accrual.employeesLabel'),
+              rowsLabel: t('accrual.rowsLabel'),
+              nothingToDo: t('accrual.nothingToDo'),
               errorLabel: t('error'),
             }}
           />

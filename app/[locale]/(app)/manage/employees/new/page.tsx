@@ -10,6 +10,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { getCurrentJalaliMonthStart } from '@/lib/actions/leave';
 import { PageHeader } from '../../../_components/PageHeader';
 import { NewEmployeeForm } from './NewEmployeeForm';
 import { FormSkeleton } from '@/components/Skeletons';
@@ -42,7 +43,9 @@ async function NewEmployeeData({ locale }: { locale: string }) {
     isAdmin
       ? supabase
           .from('leave_types')
-          .select('id, name_fa, name_en, default_annual_quota_days')
+          .select(
+            'id, name_fa, name_en, default_annual_quota_days, default_accrual_minutes_per_month, default_annual_cap_minutes, default_carryover_cap_minutes'
+          )
           .eq('active', true)
           .eq('affects_balance', true)
           .order('name_fa')
@@ -51,6 +54,9 @@ async function NewEmployeeData({ locale }: { locale: string }) {
     supabase.from('work_settings').select('hours_per_day').maybeSingle(),
   ]);
   const hoursPerDay = ws?.hours_per_day ?? 8;
+  // Default the accrual start to the CURRENT Jalali month, never earlier: switching
+  // accrual on must not retroactively credit months nobody worked (spec §6, D10).
+  const accrualStartMonth = await getCurrentJalaliMonthStart();
 
   const ownDepartment =
     (departments ?? []).find((d) => d.id === callerProfile?.department_id) ?? null;
@@ -64,6 +70,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       managers={managers ?? []}
       leaveTypes={leaveTypes ?? []}
       hoursPerDay={hoursPerDay}
+      accrualStartMonth={accrualStartMonth}
       locale={locale}
       labels={{
         personnelNo: t('employees.personnelNo'),
@@ -86,6 +93,12 @@ async function NewEmployeeData({ locale }: { locale: string }) {
         noneOption: t('employees.none'),
         allocTitle: t('employees.allocTitle'),
         allocWarn: t('employees.allocWarn'),
+        policyTitle: t('employees.policyTitle'),
+        policyHint: t('employees.policyHint'),
+        policyRate: t('employees.policyRate'),
+        policyAnnualCap: t('employees.policyAnnualCap'),
+        policyCarryCap: t('employees.policyCarryCap'),
+        policyWarn: t('employees.policyWarn'),
       }}
     />
   );
