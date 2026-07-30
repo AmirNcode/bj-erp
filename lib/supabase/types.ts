@@ -390,6 +390,7 @@ export type Database = {
           id: string
           leave_type_id: string
           reason: string | null
+          replacement_id: string | null
           requested_minutes: number
           start_date: string
           start_time: string | null
@@ -408,6 +409,7 @@ export type Database = {
           id?: string
           leave_type_id: string
           reason?: string | null
+          replacement_id?: string | null
           requested_minutes: number
           start_date: string
           start_time?: string | null
@@ -426,6 +428,7 @@ export type Database = {
           id?: string
           leave_type_id?: string
           reason?: string | null
+          replacement_id?: string | null
           requested_minutes?: number
           start_date?: string
           start_time?: string | null
@@ -778,6 +781,34 @@ export type Database = {
       current_leave_balance: {
         Args: { p_employee_id: string; p_leave_type_id: string }
         Returns: number
+      }
+      get_my_cover_conflicts: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          employee_name: string
+          end_date: string
+          end_time: string | null
+          request_id: string
+          start_date: string
+          start_time: string | null
+          unit: Database["public"]["Enums"]["leave_unit"]
+        }[]
+      }
+      get_replacement_candidates: {
+        Args: {
+          p_end: string
+          p_end_time?: string
+          p_start: string
+          p_start_time?: string
+          p_unit?: Database["public"]["Enums"]["leave_unit"]
+        }
+        Returns: {
+          employee_code: string
+          full_name: string
+          profile_id: string
+          unavailable: boolean
+          unavailable_reason: string | null
+        }[]
       }
       get_my_team_directory: {
         Args: never
