@@ -111,7 +111,8 @@ export type AllocateLeaveInput = {
   leaveTypeId: string;
   periodStart: string; // YYYY-MM-DD Gregorian
   periodEnd: string;   // YYYY-MM-DD Gregorian
-  days: number;
+  /** Minutes, the stored unit. Convert day-denominated admin input with daysToMinutes. */
+  minutes: number;
 };
 
 export type AllocateLeaveResult =
@@ -131,7 +132,7 @@ export async function allocateLeave(
     p_leave_type_id: input.leaveTypeId,
     p_period_start: input.periodStart,
     p_period_end: input.periodEnd,
-    p_days: input.days,
+    p_minutes: input.minutes,
   });
 
   if (error) {
@@ -154,7 +155,7 @@ export type SetLeaveBalanceResult =
 export async function setLeaveBalance(
   employeeId: string,
   leaveTypeId: string,
-  target: number
+  targetMinutes: number
 ): Promise<SetLeaveBalanceResult> {
   const { supabase, user, roles } = await getCallerContext();
 
@@ -164,7 +165,7 @@ export async function setLeaveBalance(
   const { error } = await supabase.rpc('set_leave_balance', {
     p_employee_id: employeeId,
     p_leave_type_id: leaveTypeId,
-    p_target: target,
+    p_target_minutes: targetMinutes,
   });
 
   if (error) return dbErr(error.message);

@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
-import { getAllEmployees, getActiveLeaveTypes } from '@/lib/actions/leave';
+import { getAllEmployees, getActiveLeaveTypes, getWorkSettings } from '@/lib/actions/leave';
 import { PageHeader } from '../../_components/PageHeader';
 import { AllocateForm } from './AllocateForm';
 
@@ -30,13 +30,16 @@ export default async function AllocationsPage({ params }: Props) {
 
   const t = await getTranslations('allocations');
 
-  const [employeesResult, leaveTypesResult] = await Promise.all([
+  const [employeesResult, leaveTypesResult, workSettingsResult] = await Promise.all([
     getAllEmployees(),
     getActiveLeaveTypes(),
+    // The form is day-denominated; the ledger stores minutes.
+    getWorkSettings(),
   ]);
 
   const employees = employeesResult.ok ? employeesResult.employees : [];
   const leaveTypes = leaveTypesResult.ok ? leaveTypesResult.types : [];
+  const hoursPerDay = workSettingsResult.ok ? workSettingsResult.settings.hoursPerDay : 8;
 
   const labels = {
     title: t('title'),
@@ -59,6 +62,7 @@ export default async function AllocationsPage({ params }: Props) {
         employees={employees}
         leaveTypes={leaveTypes}
         labels={labels}
+        hoursPerDay={hoursPerDay}
       />
     </main>
   );

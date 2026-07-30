@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createEmployee } from '@/lib/actions/employees';
 import { allocateLeave } from '@/lib/actions/leave';
+import { daysToMinutes } from '@/lib/leave/duration';
 import { currentYearPeriod } from '@/lib/leave/allocations';
 import {
   buildEmployeeCode,
@@ -35,6 +36,8 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
+  /** Company day length: the inputs are days, the ledger stores minutes. */
+  hoursPerDay: number;
   locale: string;
   labels: {
     personnelNo: string;
@@ -78,6 +81,7 @@ export function NewEmployeeForm({
   departments,
   managers,
   leaveTypes,
+  hoursPerDay,
   locale,
   labels,
 }: Props) {
@@ -141,7 +145,7 @@ export function NewEmployeeForm({
           leaveTypeId: allocation.typeId,
           periodStart: start,
           periodEnd: end,
-          days: allocation.days,
+          minutes: daysToMinutes(allocation.days, hoursPerDay),
         });
 
         if (!allocationResult.ok) {

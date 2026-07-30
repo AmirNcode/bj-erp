@@ -192,7 +192,6 @@ export type Database = {
       }
       leave_allocations: {
         Row: {
-          allocated_days: number
           allocated_minutes: number
           created_at: string
           created_by: string | null
@@ -203,7 +202,6 @@ export type Database = {
           period_start: string
         }
         Insert: {
-          allocated_days: number
           allocated_minutes: number
           created_at?: string
           created_by?: string | null
@@ -214,7 +212,6 @@ export type Database = {
           period_start: string
         }
         Update: {
-          allocated_days?: number
           allocated_minutes?: number
           created_at?: string
           created_by?: string | null
@@ -250,10 +247,8 @@ export type Database = {
       }
       leave_ledger: {
         Row: {
-          balance_after: number
           balance_after_minutes: number
           created_at: string
-          delta_days: number
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -263,10 +258,8 @@ export type Database = {
           request_id: string | null
         }
         Insert: {
-          balance_after: number
           balance_after_minutes: number
           created_at?: string
-          delta_days: number
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -276,10 +269,8 @@ export type Database = {
           request_id?: string | null
         }
         Update: {
-          balance_after?: number
           balance_after_minutes?: number
           created_at?: string
-          delta_days?: number
           delta_minutes?: number
           employee_id?: string
           entry_type?: Database["public"]["Enums"]["ledger_entry"]
@@ -331,7 +322,6 @@ export type Database = {
           id: string
           leave_type_id: string
           reason: string | null
-          requested_days: number
           requested_minutes: number
           start_date: string
           status: Database["public"]["Enums"]["leave_status"]
@@ -347,7 +337,6 @@ export type Database = {
           id?: string
           leave_type_id: string
           reason?: string | null
-          requested_days: number
           requested_minutes: number
           start_date: string
           status?: Database["public"]["Enums"]["leave_status"]
@@ -363,7 +352,6 @@ export type Database = {
           id?: string
           leave_type_id?: string
           reason?: string | null
-          requested_days?: number
           requested_minutes?: number
           start_date?: string
           status?: Database["public"]["Enums"]["leave_status"]
@@ -594,7 +582,6 @@ export type Database = {
           leave_type_id: string | null
           leave_type_name_en: string | null
           leave_type_name_fa: string | null
-          requested_days: number | null
           start_date: string | null
           status: Database["public"]["Enums"]["leave_status"] | null
         }
@@ -626,7 +613,7 @@ export type Database = {
     Functions: {
       allocate_leave: {
         Args: {
-          p_days: number
+          p_minutes: number
           p_employee_id: string
           p_leave_type_id: string
           p_period_end: string
@@ -671,7 +658,7 @@ export type Database = {
       }
       approve_leave_request: { Args: { p_id: string }; Returns: undefined }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
-      compute_requested_days: {
+      compute_requested_minutes: {
         Args: {
           p_company_id: string
           p_day_part: Database["public"]["Enums"]["day_part"]
@@ -714,7 +701,7 @@ export type Database = {
         Args: {
           p_employee_id: string
           p_leave_type_id: string
-          p_target: number
+          p_target_minutes: number
         }
         Returns: number
       }

@@ -33,7 +33,8 @@ async function NewEmployeeData({ locale }: { locale: string }) {
 
   // Admin picks dept/manager and types allocations; a manager's variant only
   // needs their own department row.
-  const [{ data: departments }, { data: managers }, { data: leaveTypes }] = await Promise.all([
+  const [{ data: departments }, { data: managers }, { data: leaveTypes }, { data: ws }] =
+    await Promise.all([
     supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
     isAdmin
       ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
@@ -46,7 +47,10 @@ async function NewEmployeeData({ locale }: { locale: string }) {
           .eq('affects_balance', true)
           .order('name_fa')
       : Promise.resolve({ data: [] }),
+    // Allocation inputs are days; the ledger stores minutes.
+    supabase.from('work_settings').select('hours_per_day').maybeSingle(),
   ]);
+  const hoursPerDay = ws?.hours_per_day ?? 8;
 
   const ownDepartment =
     (departments ?? []).find((d) => d.id === callerProfile?.department_id) ?? null;
@@ -59,6 +63,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       departments={departments ?? []}
       managers={managers ?? []}
       leaveTypes={leaveTypes ?? []}
+      hoursPerDay={hoursPerDay}
       locale={locale}
       labels={{
         personnelNo: t('employees.personnelNo'),
