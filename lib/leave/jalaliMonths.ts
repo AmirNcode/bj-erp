@@ -7,17 +7,25 @@
  * converting calendars at query time.
  */
 
-// Subpaths carry the explicit `.js` extension and DateObject goes through an
-// interop shim because this module is also imported by scripts/gen-jalali-months.mjs
-// under plain Node ESM, where react-date-object (CJS, no exports map) resolves
-// neither bare subpaths nor an unwrapped default. Bundler resolution (Next,
-// vitest) is unaffected by both. This is why it differs from lib/leave/dateConvert.ts.
+// This module has to load under BOTH bundler resolution (Next, vitest) and plain
+// Node ESM, because scripts/gen-jalali-months.mjs imports it directly. The two
+// want opposite things from react-date-object (CJS, no exports map):
+//   - extensionless subpaths resolve only under bundler resolution
+//   - `.js` subpaths resolve only under Node, and have no type declarations
+// createRequire satisfies both — CJS resolution infers the extension — at the
+// cost of the calendar/locale objects being untyped. They are opaque config
+// passed straight into DateObject, so nothing meaningful is lost.
+// (lib/leave/dateConvert.ts can use plain imports: it is app-only.)
+import { createRequire } from 'node:module';
 import DateObjectModule from 'react-date-object';
-import persian from 'react-date-object/calendars/persian.js';
-import persian_en from 'react-date-object/locales/persian_en.js';
-import gregorian from 'react-date-object/calendars/gregorian.js';
-import gregorian_en from 'react-date-object/locales/gregorian_en.js';
 
+const req = createRequire(import.meta.url);
+const persian = req('react-date-object/calendars/persian');
+const persian_en = req('react-date-object/locales/persian_en');
+const gregorian = req('react-date-object/calendars/gregorian');
+const gregorian_en = req('react-date-object/locales/gregorian_en');
+
+// Under Node ESM the CJS default arrives wrapped; under bundler resolution it does not.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DateObject = ((DateObjectModule as any).default ??
   DateObjectModule) as typeof DateObjectModule;
