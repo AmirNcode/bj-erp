@@ -7,6 +7,7 @@ import { dbErr } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
+import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import { todayInAppTz } from '@/lib/appDate';
 
 type DayPart = Database['public']['Enums']['day_part'];
@@ -46,6 +47,8 @@ export type SubmitRequestInput = {
   end: string;   // YYYY-MM-DD Gregorian
   dayPart: DayPart;
   reason?: string;
+  /** Optional cover; null/undefined is valid. */
+  replacementId?: string | null;
 };
 
 export type SubmitRequestResult =
@@ -69,6 +72,7 @@ export async function submitRequest(
     p_end: input.end,
     p_day_part: input.dayPart,
     p_reason: input.reason ?? undefined,
+    p_replacement_id: input.replacementId ?? undefined,
   });
 
   if (error) {
@@ -113,6 +117,8 @@ export async function cancelRequest(
 
 export type SubmitHourlyInput = {
   leaveTypeId: string;
+  /** Optional cover; null/undefined is valid. */
+  replacementId?: string | null;
   /** Gregorian YYYY-MM-DD — one date only. */
   date: string;
   /** 'HH:MM', company-local. */
@@ -136,12 +142,94 @@ export async function submitHourlyRequest(
     p_start_time: input.startTime,
     p_end_time: input.endTime,
     p_reason: input.reason ?? undefined,
+    p_replacement_id: input.replacementId ?? undefined,
   });
 
   if (error) return dbErr(error.message);
 
   invalidateAppCache();
   return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
+// Replacement / cover reads (spec §8)
+// ---------------------------------------------------------------------------
+
+export async function getReplacementCandidates(input: {
+  start: string;
+  end: string;
+  unit?: 'day' | 'hour';
+  startTime?: string | null;
+  endTime?: string | null;
+}): Promise<
+  { ok: true; candidates: ReplacementCandidate[] } | { ok: false; error: string }
+> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase.rpc('get_replacement_candidates', {
+    p_start: input.start,
+    p_end: input.end,
+    p_unit: input.unit ?? 'day',
+    p_start_time: input.startTime ?? undefined,
+    p_end_time: input.endTime ?? undefined,
+  });
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    candidates: (data ?? []).map((r) => ({
+      profileId: r.profile_id,
+      fullName: r.full_name,
+      employeeCode: r.employee_code,
+      unavailable: r.unavailable,
+      unavailableReason: r.unavailable_reason,
+    })),
+  };
+}
+
+export type CoverDuty = {
+  requestId: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string;
+  unit: 'day' | 'hour';
+  startTime: string | null;
+  endTime: string | null;
+};
+
+/**
+ * Requests the caller is named cover for, in a window.
+ *
+ * Two uses: the reverse-case WARNING on the request screens (spec §2.1 — being
+ * someone's cover never blocks your own leave), and the "you are covering X" card
+ * on Home (D15 — the named person should never be surprised).
+ */
+export async function getMyCoverDuties(
+  start: string,
+  end: string
+): Promise<{ ok: true; duties: CoverDuty[] } | { ok: false; error: string }> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase.rpc('get_my_cover_conflicts', {
+    p_start: start,
+    p_end: end,
+  });
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    duties: (data ?? []).map((r) => ({
+      requestId: r.request_id,
+      employeeName: r.employee_name,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      unit: r.unit,
+      startTime: r.start_time,
+      endTime: r.end_time,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

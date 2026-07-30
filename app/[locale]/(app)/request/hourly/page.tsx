@@ -30,6 +30,7 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tHourly = await getTranslations('hourly');
   const tLeave = await getTranslations('leave');
+  const tRepl = await getTranslations('replacement');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -69,6 +70,13 @@ async function HourlyRequestData({ locale }: { locale: string }) {
     validationSelectDate: t('validationSelectDate'),
     validationTimes: tHourly('validationTimes'),
     dailyLimitHint: tHourly('dailyLimitHint', { hours: maxHours }),
+    replacementTitle: tRepl('title'),
+    replacementHint: tRepl('hint'),
+    replacementSearch: tRepl('search'),
+    replacementNone: tRepl('none'),
+    replacementOnLeave: tRepl('onLeave'),
+    replacementLoading: tRepl('loading'),
+    replacementEmpty: tRepl('empty'),
     ...durationLabelsFrom(tLeave),
   };
 

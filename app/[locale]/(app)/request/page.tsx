@@ -40,6 +40,7 @@ type Props = {
 async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
+  const tRepl = await getTranslations('replacement');
   const tHourly = await getTranslations('hourly');
   // Get the authenticated user
   const user = await getCachedUser();
@@ -101,6 +102,13 @@ async function RequestPageData({ locale }: { locale: string }) {
       am: tLeave('dayPart.am'),
       pm: tLeave('dayPart.pm'),
     },
+    replacementTitle: tRepl('title'),
+    replacementHint: tRepl('hint'),
+    replacementSearch: tRepl('search'),
+    replacementNone: tRepl('none'),
+    replacementOnLeave: tRepl('onLeave'),
+    replacementLoading: tRepl('loading'),
+    replacementEmpty: tRepl('empty'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 

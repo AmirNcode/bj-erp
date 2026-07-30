@@ -838,6 +838,7 @@ export type Database = {
           p_end_time: string
           p_leave_type_id: string
           p_reason?: string
+          p_replacement_id?: string
           p_start_time: string
         }
         Returns: string
@@ -871,6 +872,7 @@ export type Database = {
           p_end: string
           p_leave_type_id: string
           p_reason?: string
+          p_replacement_id?: string
           p_start: string
         }
         Returns: string

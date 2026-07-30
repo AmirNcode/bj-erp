@@ -13,7 +13,9 @@ import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
 import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
 import { formatDuration } from '@/lib/leave/duration';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
-import { submitHourlyRequest, getMyBalance } from '@/lib/actions/leave';
+import { submitHourlyRequest, getMyBalance, getReplacementCandidates } from '@/lib/actions/leave';
+import { ReplacementPicker } from '../_components/ReplacementPicker';
+import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,6 +41,13 @@ type Labels = {
   validationSelectDate: string;
   validationTimes: string;
   dailyLimitHint: string;
+  replacementTitle: string;
+  replacementHint: string;
+  replacementSearch: string;
+  replacementNone: string;
+  replacementOnLeave: string;
+  replacementLoading: string;
+  replacementEmpty: string;
   days: string;
   hours: string;
   minutes: string;
@@ -93,6 +102,9 @@ export function HourlyRequestForm({
   const [startTime, setStartTime] = useState(slots[0] ?? '');
   const [endTime, setEndTime] = useState(slots[2] ?? slots[slots.length - 1] ?? '');
   const [reason, setReason] = useState('');
+  const [replacementId, setReplacementId] = useState('');
+  const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
+  const [candidatesFor, setCandidatesFor] = useState<string | null>(null);
   const [balanceMinutes, setBalanceMinutes] = useState<number | null>(null);
   const [balanceFor, setBalanceFor] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
@@ -125,6 +137,37 @@ export function HourlyRequestForm({
     };
   }, [selectedTypeId]);
 
+  // Availability is time-aware for hourly, so the list depends on the date AND the
+  // chosen hours. Loading is derived; state is set only in the async callback.
+  const isoDate = date ? dateObjectToGregorian(date) : '';
+  const slotKey = isoDate && durationMinutes > 0 ? `${isoDate}:${startTime}:${endTime}` : '';
+  const candidatesReady = !!slotKey && candidatesFor === slotKey;
+  const shownCandidates = candidatesReady ? candidates : [];
+  const candidatesLoading = !!slotKey && !candidatesReady;
+
+  useEffect(() => {
+    if (!slotKey) return;
+    let cancelled = false;
+    getReplacementCandidates({
+      start: isoDate,
+      end: isoDate,
+      unit: 'hour',
+      startTime,
+      endTime,
+    }).then((res) => {
+      if (cancelled) return;
+      const list = res.ok ? res.candidates : [];
+      setCandidates(list);
+      setCandidatesFor(slotKey);
+      setReplacementId((current) =>
+        current && list.some((c) => c.profileId === current && !c.unavailable) ? current : ''
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slotKey, isoDate, startTime, endTime]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -151,12 +194,14 @@ export function HourlyRequestForm({
         startTime,
         endTime,
         reason: reason || undefined,
+        replacementId: replacementId || null,
       });
 
       if (result.ok) {
         setSuccessMsg(labels.success);
         setDate(null);
         setReason('');
+        setReplacementId('');
         router.refresh();
       } else {
         setErrorMsg(result.error);
@@ -250,6 +295,23 @@ export function HourlyRequestForm({
           </div>
 
           <p className="text-sm text-muted-foreground">{labels.dailyLimitHint}</p>
+
+          {/* Replacement / جایگزین — optional, same department, availability-aware */}
+          <ReplacementPicker
+            candidates={shownCandidates}
+            loading={candidatesLoading}
+            value={replacementId}
+            onChange={setReplacementId}
+            labels={{
+              title: labels.replacementTitle,
+              hint: labels.replacementHint,
+              searchPlaceholder: labels.replacementSearch,
+              none: labels.replacementNone,
+              onLeave: labels.replacementOnLeave,
+              loading: labels.replacementLoading,
+              empty: labels.replacementEmpty,
+            }}
+          />
 
           {/* Reason */}
           <div className="space-y-1.5">
