@@ -3,8 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status: COMPLETE (2026-07-29).** Executed on `feat/leave-v2-hourly-accrual-replacement`. Unit
-**208/208** (5 new), tsc + lint + build clean; two migrations applied to the local docker stack and proven
-replayable; the e2e assertion rides on the existing replacement spec. **Not deployed to the client's
+**208/208** (5 new), e2e **30/30** serial, tsc + lint + build clean; two migrations applied to the local
+docker stack and proven replayable; the e2e assertion rides on the existing replacement spec. **Not deployed to the client's
 server — and this is the one plan with a mandatory backfill.**
 
 **Confirmed in execution:** the concurrency risk this plan flagged is real and the mitigation works. Two

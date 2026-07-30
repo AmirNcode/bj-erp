@@ -157,7 +157,7 @@ Implementation (plan 2 — accrual, all committed):
 - `npm run seed` succeeds against the renamed RPCs.
 - E2E: plan 1 — **first run 25/26** (caught the days/minutes mismatch below), **second run 24/26**
   (caught the allocation-impl break), **26/26 green** after `…130004`. Plan 2 — **27/27 green** with
-  the new `accrual.spec.ts`. Plan 3 — **29/29 green** with `hourly.spec.ts` (2 specs). Plan 4 — **30/30 green** with `replacement.spec.ts`. Every failure
+  the new `accrual.spec.ts`. Plan 3 — **29/29 green** with `hourly.spec.ts` (2 specs). Plan 4 — **30/30 green** with `replacement.spec.ts`. Plan 5 — **30/30 green** (its assertion rides on that spec). Final gates: unit **208/208**, e2e **30/30**. Every failure
   along the way was a real bug in my work or my test, never a flaky suite.
 
 **State left behind**
