@@ -131,6 +131,67 @@ export type Database = {
           },
         ]
       }
+      employee_leave_policies: {
+        Row: {
+          accrual_minutes_per_month: number
+          accrual_start_month: string
+          annual_cap_minutes: number | null
+          carryover_cap_minutes: number
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          leave_type_id: string
+          updated_at: string
+        }
+        Insert: {
+          accrual_minutes_per_month?: number
+          accrual_start_month: string
+          annual_cap_minutes?: number | null
+          carryover_cap_minutes?: number
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          leave_type_id: string
+          updated_at?: string
+        }
+        Update: {
+          accrual_minutes_per_month?: number
+          accrual_start_month?: string
+          annual_cap_minutes?: number | null
+          carryover_cap_minutes?: number
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          leave_type_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_leave_policies_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_leave_policies_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_leave_policies_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holidays: {
         Row: {
           company_id: string
@@ -255,6 +316,7 @@ export type Database = {
           id: string
           leave_type_id: string
           note: string | null
+          period_month: string | null
           request_id: string | null
         }
         Insert: {
@@ -266,6 +328,7 @@ export type Database = {
           id?: string
           leave_type_id: string
           note?: string | null
+          period_month?: string | null
           request_id?: string | null
         }
         Update: {
@@ -277,6 +340,7 @@ export type Database = {
           id?: string
           leave_type_id?: string
           note?: string | null
+          period_month?: string | null
           request_id?: string | null
         }
         Relationships: [
@@ -388,7 +452,10 @@ export type Database = {
           allow_hourly: boolean
           color: string | null
           company_id: string
+          default_accrual_minutes_per_month: number | null
+          default_annual_cap_minutes: number | null
           default_annual_quota_days: number | null
+          default_carryover_cap_minutes: number
           id: string
           is_paid: boolean
           name_en: string | null
@@ -401,7 +468,10 @@ export type Database = {
           allow_hourly?: boolean
           color?: string | null
           company_id: string
+          default_accrual_minutes_per_month?: number | null
+          default_annual_cap_minutes?: number | null
           default_annual_quota_days?: number | null
+          default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
           name_en?: string | null
@@ -414,7 +484,10 @@ export type Database = {
           allow_hourly?: boolean
           color?: string | null
           company_id?: string
+          default_accrual_minutes_per_month?: number | null
+          default_annual_cap_minutes?: number | null
           default_annual_quota_days?: number | null
+          default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
           name_en?: string | null
@@ -721,7 +794,12 @@ export type Database = {
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
-      ledger_entry: "allocation" | "consumption" | "adjustment" | "reversal"
+      ledger_entry:
+        | "allocation"
+        | "consumption"
+        | "adjustment"
+        | "reversal"
+        | "carryover_forfeit"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -853,7 +931,13 @@ export const Constants = {
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
-      ledger_entry: ["allocation", "consumption", "adjustment", "reversal"],
+      ledger_entry: [
+        "allocation",
+        "consumption",
+        "adjustment",
+        "reversal",
+        "carryover_forfeit",
+      ],
     },
   },
 } as const
