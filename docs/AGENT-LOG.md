@@ -78,7 +78,7 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-07-29 — Leave v2: design spec + plans 1, 2 & 3 implemented (minutes unit, Jalali calendar, accrual, hourly leave)
+## 2026-07-29 — Leave v2: design spec + plans 1–4 implemented (minutes, Jalali calendar, accrual, hourly, replacement)
 
 **Agent:** Claude Opus 5 via Claude Code
 **Branch / HEAD at start:** `main` @ `cce7b16`, tree had untracked `docs/forms/`
@@ -157,7 +157,7 @@ Implementation (plan 2 — accrual, all committed):
 - `npm run seed` succeeds against the renamed RPCs.
 - E2E: plan 1 — **first run 25/26** (caught the days/minutes mismatch below), **second run 24/26**
   (caught the allocation-impl break), **26/26 green** after `…130004`. Plan 2 — **27/27 green** with
-  the new `accrual.spec.ts`. Plan 3 — **29/29 green** with `hourly.spec.ts` (2 specs). Every failure
+  the new `accrual.spec.ts`. Plan 3 — **29/29 green** with `hourly.spec.ts` (2 specs). Plan 4 — **30/30 green** with `replacement.spec.ts`. Every failure
   along the way was a real bug in my work or my test, never a flaky suite.
 
 **State left behind**
@@ -179,6 +179,31 @@ Implementation (plan 3 — hourly, all committed):
 - `lib/leave/hourly.ts` (17 tests), `lib/leave/formatTimeRange.ts`, `lib/leave/workSettings.ts`.
 - `app/[locale]/(app)/request/hourly/*` (new screen), Home buttons, time ranges in MyRequestsList /
   ApprovalQueue, work-hours fields in `WorkSettingsForm`, `tests/e2e/hourly.spec.ts` (2 specs).
+
+Implementation (plan 4 — replacement, all committed):
+- **`docs/plans/2026-07-29-leave-v2-replacement.md`** — the plan, executed in full.
+- **`20260729130011_leave_replacement.sql`** — `replacement_id` (+ CHECK it is never the requester),
+  `get_replacement_candidates` (annotated, own department only, no employee argument so it cannot
+  enumerate another team), `get_my_cover_conflicts`.
+- **`20260729130012_leave_replacement_guard.sql`** — `private.replacement_is_away` as the ONE predicate;
+  `submit_leave_impl` gains `p_replacement_id`; both wrappers extended and their 5-arg variants dropped
+  so there is exactly one of each; `approve_leave_request` re-checks the cover.
+- `lib/leave/replacement.ts` (6 tests), `request/_components/ReplacementPicker.tsx` (shared by both
+  screens), cover name + clash flag on approvals, "You are covering" card on Home,
+  `tests/e2e/replacement.spec.ts`.
+
+**Plan 4's notes**
+
+1. **The searchable picker is a filter input over a native `<select>`, not shadcn `Command`.**
+   `components/ui` has no `command` primitive and adding it pulls `cmdk` through a network install this
+   machine cannot do. Native selects are also what the e2e suite drives. Deviation from spec §9, recorded
+   in the plan rather than substituted silently.
+2. **The repo lints against synchronous `setState` inside an effect.** My first candidate-fetch cleared
+   state synchronously and failed `react-hooks/set-state-in-effect`. The fix is the pattern the balance
+   effect already used: keep a `candidatesFor` key and DERIVE both the list and the loading flag.
+3. **The availability predicate must exist exactly once.** It is `private.replacement_is_away`, shared by
+   the candidate read, the submit guard and the approval re-check. If a copy drifts, the UI offers a
+   colleague the server then rejects.
 
 **Plan 3's traps**
 

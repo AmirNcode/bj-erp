@@ -136,6 +136,15 @@ Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
 `reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
 **decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
 their own row and never exposed through `team_leave_calendar` (explicit column list).
+**Replacement (2026-07-29, FR-28):** `replacement_id → profiles` (nullable), with a CHECK that it is
+never the requester. Optional. Candidates come from `get_replacement_candidates(...)` — the caller's own
+active department colleagues, **annotated** with `unavailable` + `unavailable_reason` rather than
+filtered, so a worker is told "on leave" instead of facing an unexplained gap. The predicate lives once,
+in `private.replacement_is_away`, and is shared by that read, `submit_leave_impl`, and
+`approve_leave_request` (which re-checks it, because a cover can book leave after submission).
+`get_my_cover_conflicts(...)` returns what the caller is cover for, powering the Home card and the
+reverse-case warning. **Never exposed through `team_leave_calendar`.**
+
 **Hourly (2026-07-29, FR-26):** `unit leave_unit` (`day|hour`, default `day`) · `start_time time` ·
 `end_time time`, both company-local and NULL for daily requests. A CHECK constraint
 (`leave_requests_unit_shape`) makes a malformed row impossible even if a function is wrong:
@@ -219,6 +228,15 @@ So 08:00–10:00 and 10:00–12:00 are adjacent and both allowed — a worker wi
 not blocked by a boundary — while the 4h/day cap still governs the total. **Accepted limitation:** an
 am/pm half-day plus an hourly request on the same date is refused, because am/pm is stored as
 `unit='day'`. Mirrored in `lib/leave/hourly.ts` (`rangesOverlap`, 17 unit tests).
+
+## The replacement asymmetry (intentional — do not "fix" it)
+
+Choosing a cover is **strict**: anyone with overlapping pending *or* approved leave is refused, at submit
+and again at approval. But being *named* as a cover never blocks that person's own leave request — they
+are warned, and the manager sees the clash on the approval card.
+
+A coworker's paperwork must not silently veto someone's leave rights, while a request should not name a
+cover already known to be away. Recorded in spec §2.1 and here because it reads like an inconsistency.
 
 ## Entity relationships (text ER)
 

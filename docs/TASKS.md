@@ -181,8 +181,11 @@ Five plans, in this order; each ships working software on its own.
   - ☑ `/request/hourly` screen, Home buttons, time ranges in every listing + the calendar
   - ☐ **Not yet applied to the client's server**; `allow_hourly` flips on for annual + unpaid the
     moment the migration runs, so leave the flags false there for a staged rollout
-- ☐ **Plan 4 — Replacement**: `replacement_id`, same-department searchable picker with
-  availability, "you are covering X" on Home
+- ☑ **Plan 4 — Replacement** ([plan](plans/2026-07-29-leave-v2-replacement.md))
+  - ☑ `replacement_id` + `get_replacement_candidates` (annotated, not filtered) + `get_my_cover_conflicts`
+  - ☑ One shared predicate (`private.replacement_is_away`) for the read, the submit guard, and approval
+  - ☑ Searchable picker on both screens; "you are covering" on Home; cover + clash on approvals
+  - ☐ **Not yet applied to the client's server**
 - ☐ **Plan 5 — Serials**: per-Jalali-year request numbers (`1404-0042`)
 - ☐ Deferred, documented in spec §11: signature / insurance evidence. Next step is a question for
   the client's insurer, not code

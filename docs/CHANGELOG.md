@@ -10,6 +10,20 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave v2: the replacement person (2026-07-29)
+- **Requests can now name who covers for you** — جانشین on the daily form, جایگزین on the hourly one,
+  matching the client's paper forms. Optional, searchable by name or employee code, and limited to
+  colleagues in your own department.
+- **Someone already on leave cannot be chosen.** They are still listed, marked "در مرخصی" and disabled,
+  so a worker is told why rather than wondering where a colleague went. The server refuses an unavailable
+  pick at submit, and **re-checks at approval** — a cover can book leave in between, and approving anyway
+  would quietly leave nobody covering.
+- **The named person sees "You are covering …" on their Home page.** No approval waits on them: with no
+  notification channel yet, a consent step would stall requests on an off-shift worker.
+- Deliberate asymmetry, documented: being named as someone's cover never blocks your *own* leave request.
+  You are warned and the manager sees the clash; a coworker's paperwork does not veto your leave rights.
+- The cover's name appears on your own requests and on the approvals queue, where a clash is flagged.
+
 ### Leave v2: hourly leave (2026-07-29)
 - **Workers can request a few hours off instead of a whole day** — مرخصی ساعتی, on its own screen that
   mirrors the client's BJ-F 50208 form: one date, a from-time and a to-time. Available for annual and

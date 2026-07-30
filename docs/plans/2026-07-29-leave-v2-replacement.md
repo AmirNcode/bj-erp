@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-07-29).** Executed on `feat/leave-v2-hourly-accrual-replacement`. Unit
+**203/203** (6 new), e2e **30/30** serial, tsc + lint + build clean; two migrations applied to the local
+docker stack and proven replayable. **Not deployed to the client's server.**
+
+**What execution added:** the picker is a filter input over a native `<select>` (no `command` primitive,
+`cmdk` needs a blocked network install), and the candidate fetch had to DERIVE its loading state — the
+repo lints against synchronous `setState` in an effect. Both in the AGENT-LOG.
+
 **Goal:** Let a worker name who covers for them — جانشین on the daily form, جایگزین on the hourly one — chosen from their own department, searchable, and refused if that person is themselves away.
 
 **Architecture:** One nullable `replacement_id` on `leave_requests`. A definer RPC returns the caller's department colleagues **annotated** with availability rather than filtered, so a worker who cannot find their intended cover sees *why*. The server rejects an unavailable pick at submit and re-checks at approval, exactly as the overlap guard is enforced twice. The reverse case — being named as cover and then requesting the same day — is a warning, never a block.

@@ -39,6 +39,12 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   `leave_types.allow_hourly` — annual and unpaid only, never sick. Overlap is time-aware, so two
   non-overlapping errands in a day are both allowed. *(2026-07-29; supersedes FR-11's "reserves room
   for hourly later" and the v1 spec's D7 deferral.)*
+- **FR-28** ☑ **Replacement / cover person (جانشین · جایگزین).** Optional on both request screens,
+  searchable, drawn from the requester's own department. Anyone with overlapping pending or approved
+  leave is refused at submit and re-checked at approval; unavailable colleagues are shown disabled with
+  the reason rather than hidden. The named person sees "you are covering X" on Home — no consent gate.
+  Being named as cover never blocks that person's own leave (deliberate asymmetry, spec §2.1).
+  *(2026-07-29.)*
 - **FR-27** ☑ **Monthly accrual.** Each employee has a per-leave-type policy (days earned per
   month, yearly cap, carryover cap, start month), defaulted from the leave type and editable by an
   admin. Accrual is posted lazily and idempotently, anchored to **Jalali month starts**, with the
