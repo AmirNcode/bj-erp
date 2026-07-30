@@ -732,6 +732,13 @@ export type Database = {
         }
         Returns: undefined
       }
+      accrue_all_leave: { Args: never; Returns: Json }
+      accrue_employee_leave: { Args: { p_employee_id: string }; Returns: undefined }
+      accrue_leave: {
+        Args: { p_employee_id: string; p_leave_type_id: string }
+        Returns: number
+      }
+      accrue_my_leave: { Args: never; Returns: undefined }
       approve_leave_request: { Args: { p_id: string }; Returns: undefined }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
       compute_requested_minutes: {
@@ -768,6 +775,17 @@ export type Database = {
           jalali_month: number
           jalali_year: number
         }
+      }
+      set_employee_leave_policy: {
+        Args: {
+          p_accrual_minutes_per_month: number
+          p_accrual_start_month: string
+          p_annual_cap_minutes: number | null
+          p_carryover_cap_minutes: number
+          p_employee_id: string
+          p_leave_type_id: string
+        }
+        Returns: string
       }
       reject_leave_request: {
         Args: { p_id: string; p_reason?: string }

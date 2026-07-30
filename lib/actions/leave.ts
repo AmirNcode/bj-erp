@@ -58,6 +58,10 @@ export async function submitRequest(
 
   if (!user) return dbErr('not authenticated');
 
+  // Accrue first: a worker whose newly-earned day makes this request affordable
+  // must not be refused by a stale balance.
+  await accrueBeforeRead(supabase);
+
   const { data, error } = await supabase.rpc('submit_leave_request', {
     p_leave_type_id: input.leaveTypeId,
     p_start: input.start,
@@ -222,6 +226,24 @@ export async function getMyLeaveRequests(): Promise<{
 }
 
 /**
+ * Post any months this employee has earned before a balance is read (spec §6.4).
+ *
+ * Accrual WRITES, so it cannot live in a view or an RLS select — it has to be an
+ * RPC called first. Failures are logged and swallowed on purpose: a slightly
+ * stale balance is a much better outcome than a blank page, and the next read
+ * retries anyway because the work is idempotent.
+ */
+async function accrueBeforeRead(
+  supabase: Awaited<ReturnType<typeof getCallerContext>>['supabase'],
+  employeeId?: string
+): Promise<void> {
+  const { error } = employeeId
+    ? await supabase.rpc('accrue_employee_leave', { p_employee_id: employeeId })
+    : await supabase.rpc('accrue_my_leave');
+  if (error) console.error('[accrual] skipped:', error.message);
+}
+
+/**
  * Returns the caller's current balance for a given leave_type.
  * Reads the latest leave_ledger row for (employee_id, leave_type_id).
  * Returns null if no ledger entry exists (e.g. no allocation yet).
@@ -231,6 +253,8 @@ export async function getMyBalance(
 ): Promise<{ ok: true; balanceMinutes: number | null } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
+
+  await accrueBeforeRead(supabase);
 
   const { data, error } = await supabase
     .from('leave_ledger')
@@ -528,6 +552,8 @@ export async function getMyBalances(): Promise<
   if (!user) return dbErr('not authenticated');
   if (!companyId) return dbErr('no profile for caller');
 
+  await accrueBeforeRead(supabase);
+
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
       supabase
@@ -563,6 +589,8 @@ export async function getEmployeeBalances(
   if (!user) return dbErr('not authenticated');
   if (!roles.includes('admin')) return dbErr('admin role required');
   if (!companyId) return dbErr('no profile for caller');
+
+  await accrueBeforeRead(supabase, employeeId);
 
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
