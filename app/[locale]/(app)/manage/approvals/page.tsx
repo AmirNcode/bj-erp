@@ -21,6 +21,7 @@ type Props = {
 async function ApprovalsData({ locale }: { locale: string }) {
   const t = await getTranslations('approvals');
   const tLeave = await getTranslations('leave');
+  const tRepl = await getTranslations('replacement');
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
@@ -44,6 +45,8 @@ async function ApprovalsData({ locale }: { locale: string }) {
     errorLabel: t('error'),
     approveSuccess: t('approveSuccess'),
     rejectSuccess: t('rejectSuccess'),
+    coverLabel: tRepl('coverLabel'),
+    coverConflict: tRepl('coverConflict'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
     dayPartLabels: {
       full: tLeave('dayPart.full'),

@@ -15,6 +15,7 @@ import {
   getCalendarEntries,
   getPendingApprovals,
   getWorkSettings,
+  getMyCoverDuties,
 } from '@/lib/actions/leave';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import { nowInAppTz } from '@/lib/appDate';
@@ -37,9 +38,10 @@ async function HomeBoardData({
   locale: string;
   userId: string;
 }) {
-  const [t, tLeave, roles] = await Promise.all([
+  const [t, tLeave, tRepl, roles] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
+    getTranslations('replacement'),
     getCachedRoles(userId),
   ]);
   const canApprove = roles.includes('admin') || roles.includes('manager');
@@ -68,6 +70,7 @@ async function HomeBoardData({
     directoryRes,
     approvalsRes,
     workSettingsRes,
+    coverDutiesRes,
   ] = await Promise.all([
       getCachedProfile(userId),
       getMyLeaveRequests(),
@@ -79,6 +82,8 @@ async function HomeBoardData({
       // hours needs the company day length. Joins the existing batch rather than
       // adding a serial round-trip.
       getWorkSettings(),
+      // Requests this person is the named cover for, over the same 90-day window.
+      getMyCoverDuties(rangeStart, rangeEnd),
     ]);
 
   const calendarPref = profile?.calendar_pref ?? 'jalali';
@@ -109,6 +114,8 @@ async function HomeBoardData({
     noRecent: t('noRecent'),
     noTeam: t('noTeam'),
     requestDaily: t('requestDaily'),
+    coveringTitle: tRepl('coveringTitle'),
+    coveringFor: tRepl('coveringFor'),
     requestHourly: t('requestHourly'),
     ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
     statusPending: tLeave('status.pending'),
@@ -126,6 +133,16 @@ async function HomeBoardData({
         locale={locale}
         calendarPref={calendarPref}
         hoursPerDay={workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : 8}
+        coverDuties={
+          coverDutiesRes.ok
+            ? coverDutiesRes.duties.map((d) => ({
+                requestId: d.requestId,
+                employeeName: d.employeeName,
+                startDate: d.startDate,
+                endDate: d.endDate,
+              }))
+            : []
+        }
       />
     </>
   );

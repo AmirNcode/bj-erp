@@ -36,6 +36,8 @@ type Labels = {
   errorLabel: string;
   approveSuccess: string;
   rejectSuccess: string;
+  coverLabel: string;
+  coverConflict: string;
   days: string;
   hours: string;
   minutes: string;
@@ -115,6 +117,16 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                           : labels.dayPartLabels[req.day_part]}{' '}
                         · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
+                      {req.replacement_name && (
+                        <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>
+                          {labels.coverLabel}: {req.replacement_name}
+                          {req.replacement_conflict && (
+                            <span className="ms-1 text-destructive" data-testid={`cover-conflict-${req.id}`}>
+                              ({labels.coverConflict})
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {req.reason && (
                         <div className="text-xs text-muted-foreground mt-1">
                           {labels.reason}: {req.reason}

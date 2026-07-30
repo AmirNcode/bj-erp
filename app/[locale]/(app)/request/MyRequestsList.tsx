@@ -42,6 +42,7 @@ type Labels = {
   statusRejected: string;
   statusCancelled: string;
   dayPartLabels: { full: string; am: string; pm: string };
+  coverLabel: string;
   days: string;
   hours: string;
   minutes: string;
@@ -145,6 +146,11 @@ export function MyRequestsList({
                         : labels.dayPartLabels[req.day_part]}{' '}
                       · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
+                    {req.replacement_name && (
+                      <div className="text-xs text-muted-foreground">
+                        {labels.coverLabel}: {req.replacement_name}
+                      </div>
+                    )}
                     {/* Why it was rejected — optional, set by the decider. */}
                     {req.status === 'rejected' && req.decision_note && (
                       <div

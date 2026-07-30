@@ -23,6 +23,8 @@ type Labels = {
   noTeam: string;
   requestDaily: string;
   requestHourly: string;
+  coveringTitle: string;
+  coveringFor: string;
   days: string;
   hours: string;
   minutes: string;
@@ -40,9 +42,18 @@ type Props = {
   calendarPref: string;
   /** Company day length — balances and durations are stored in minutes. */
   hoursPerDay: number;
+  /** Requests where this person is the named cover (D15: never a surprise). */
+  coverDuties: { requestId: string; employeeName: string; startDate: string; endDate: string }[];
 };
 
-export function HomeBoard({ board, labels, locale, calendarPref, hoursPerDay }: Props) {
+export function HomeBoard({
+  board,
+  labels,
+  locale,
+  calendarPref,
+  hoursPerDay,
+  coverDuties,
+}: Props) {
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
@@ -93,6 +104,25 @@ export function HomeBoard({ board, labels, locale, calendarPref, hoursPerDay }: 
             </CardContent>
           </Card>
         </Link>
+      )}
+
+      {/* Named as someone's cover — D15 surfaces it here instead of gating approval. */}
+      {coverDuties.length > 0 && (
+        <Card className="border-primary/30 bg-primary/5" data-testid="home-covering">
+          <CardHeader>
+            <CardTitle className="text-primary">{labels.coveringTitle}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm text-primary/90">
+              {coverDuties.map((duty) => (
+                <li key={duty.requestId}>
+                  {labels.coveringFor} {duty.employeeName} · {formatDate(duty.startDate)} —{' '}
+                  {formatDate(duty.endDate)}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

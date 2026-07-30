@@ -109,6 +109,7 @@ async function RequestPageData({ locale }: { locale: string }) {
     replacementOnLeave: tRepl('onLeave'),
     replacementLoading: tRepl('loading'),
     replacementEmpty: tRepl('empty'),
+    coverLabel: tRepl('coverLabel'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 

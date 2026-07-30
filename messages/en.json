@@ -113,6 +113,10 @@
     "search": "Search by name or code",
     "none": "— No replacement —",
     "onLeave": "on leave",
+    "coverLabel": "Replacement",
+    "coveringTitle": "You are covering",
+    "coveringFor": "For",
+    "coverConflict": "also on leave then",
     "loading": "Loading colleagues…",
     "empty": "No colleagues available in your department."
   },

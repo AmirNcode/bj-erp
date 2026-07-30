@@ -320,6 +320,7 @@ export type LeaveRequestWithType = {
   start_time: string | null;
   end_time: string | null;
   requested_minutes: number;
+  replacement_name: string | null;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
   /** Set by the decider on reject; the requester reads it on their own row. */
@@ -344,6 +345,7 @@ export async function getMyLeaveRequests(): Promise<{
     .from('leave_requests')
     .select(
       `id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, status, reason, decision_note, created_at,
+       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', user.id)
@@ -351,7 +353,15 @@ export async function getMyLeaveRequests(): Promise<{
 
   if (error) return dbErr(error.message);
 
-  return { ok: true, requests: (data ?? []) as unknown as LeaveRequestWithType[] };
+  type Raw = Omit<LeaveRequestWithType, 'replacement_name'> & {
+    replacement: { full_name: string } | null;
+  };
+  const requests: LeaveRequestWithType[] = ((data ?? []) as unknown as Raw[]).map((r) => ({
+    ...r,
+    replacement_name: r.replacement?.full_name ?? null,
+  }));
+
+  return { ok: true, requests };
 }
 
 /**
@@ -572,6 +582,9 @@ export type PendingApproval = {
   end_time: string | null;
   requested_minutes: number;
   reason: string | null;
+  replacement_name: string | null;
+  /** True when the named cover has leave overlapping this request (spec §2.1). */
+  replacement_conflict: boolean;
 };
 
 /**
@@ -588,7 +601,8 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, reason,
+      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, reason, replacement_id,
+       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
     )
@@ -607,6 +621,8 @@ export async function getPendingApprovals(): Promise<
     end_time: string | null;
     requested_minutes: number;
     reason: string | null;
+    replacement_id: string | null;
+    replacement: { full_name: string } | null;
     profiles: { full_name: string; manager_id: string | null } | null;
     leave_types: { name_fa: string; name_en: string | null } | null;
   };
@@ -625,12 +641,38 @@ export async function getPendingApprovals(): Promise<
     end_time: r.end_time,
     requested_minutes: r.requested_minutes,
     reason: r.reason ?? null,
+    replacement_name: r.replacement?.full_name ?? null,
+    // Filled below: a cover can book leave between submission and approval, and
+    // the manager should see that before deciding (spec §2.1). approve_leave_request
+    // also refuses it, so this is a heads-up rather than the guard.
+    replacement_conflict: false,
   }));
 
-  return {
-    ok: true,
-    requests: filterApprovable(mapped, user.id, roles.includes('admin')),
-  };
+  const scoped = filterApprovable(mapped, user.id, roles.includes('admin'));
+
+  // One round-trip for the whole queue rather than per row.
+  const withCover = ((data ?? []) as unknown as Row[]).filter((r) => r.replacement_id);
+  if (withCover.length > 0) {
+    const coverIds = [...new Set(withCover.map((r) => r.replacement_id as string))];
+    const { data: coverLeave } = await supabase
+      .from('leave_requests')
+      .select('employee_id, start_date, end_date')
+      .in('employee_id', coverIds)
+      .in('status', ['pending', 'approved']);
+
+    for (const req of scoped) {
+      const raw = withCover.find((r) => r.id === req.id);
+      if (!raw?.replacement_id) continue;
+      req.replacement_conflict = (coverLeave ?? []).some(
+        (l) =>
+          l.employee_id === raw.replacement_id &&
+          l.start_date <= req.end_date &&
+          l.end_date >= req.start_date
+      );
+    }
+  }
+
+  return { ok: true, requests: scoped };
 }
 
 // ---------------------------------------------------------------------------
