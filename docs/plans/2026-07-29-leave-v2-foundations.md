@@ -2,11 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-07-29).** All tasks executed on `feat/leave-v2-hourly-accrual-replacement`.
+Gates at completion: unit **165/165**, e2e **26/26** serial, `tsc --noEmit` + lint + build clean, all
+four migrations applied to the local docker stack and proven replayable. **Not deployed to the
+client's server** — see the Deployment note at the end. Task 5b was added during execution; the
+Self-Review section records every correction execution forced on this plan.
+
 **Goal:** Convert the leave system's stored unit from fractional days to integer minutes, and add the Jalali calendar reference table — the two foundations every later Leave v2 phase depends on, with no user-visible behaviour change beyond balances rendering as "9 روز و 4 ساعت".
 
 **Architecture:** Expand → migrate → contract, because this runs against the client's live balances. Task 3 *adds* minutes columns and keeps them in sync with the day columns via triggers (nothing breaks, no function rewritten). Task 4 switches every app read to minutes. Task 5 rewrites the `SECURITY DEFINER` functions to write minutes natively, then drops the triggers and the day columns. Every task leaves the suite green and the app deployable.
 
-**Tech Stack:** Postgres 17 (Supabase, self-hosted in production) · Next.js 16 App Router + TypeScript · Vitest (unit) · Playwright (e2e) · `react-date-object` 2.1.9 for Jalali generation (build-time only).
+**Tech Stack:** Postgres 15 (`supabase/postgres:15.8.1.085`, the image the client's stack runs — `config.toml` says 17 but that CLI stack is unused here; no PG16+ syntax) · Next.js 16 App Router + TypeScript · Vitest (unit) · Playwright (e2e) · `react-date-object` 2.1.9 for Jalali generation (build-time only).
 
 ## Global Constraints
 
@@ -1621,6 +1627,57 @@ security_invoker and still without reason or decision_note, per FR-25."
 
 ---
 
+## Task 5b: The allocation path …130003 missed (added during execution)
+
+**Files:**
+- Create: `supabase/migrations/20260729130004_leave_minutes_allocation_impl.sql`
+
+**Why this task exists.** Task 5 ported the definer functions as they stood in
+`20260702120001_hardening.sql`, which is what this plan's §5.3 reader list was built from. But
+`20260713120001_employee_onboarding.sql` had since extracted the real allocation body into
+`private.allocate_leave_impl` and pointed two large functions at it — `public.app_create_employee`
+(manager path, default quotas) and `public.app_bulk_create_employees` (CSV import). Those kept
+writing the day columns, so the moment Task 5 dropped them, **both employee-creation paths broke**:
+
+```
+column "allocated_days" of relation "leave_allocations" does not exist
+```
+
+Caught by `tests/e2e/manager-create-employee.spec.ts` and `tests/e2e/bulk-import.spec.ts`, which is
+precisely why the plan runs e2e rather than trusting the typecheck: the break was inside SQL, where
+TypeScript cannot see it.
+
+**The lesson, worth carrying into plans 2–5:** *never map SQL dependencies by grepping migrations* —
+a later migration silently redefines an earlier function, so the migration files describe history,
+not the live schema. Ask the catalog instead:
+
+```sql
+select n.nspname||'.'||p.proname, pg_get_function_arguments(p.oid)
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname in ('public','private')
+   and p.prosrc ~ '(allocated_days|delta_days|requested_days|balance_after[^_])';
+```
+
+That query returned exactly one function, which is how the fix was scoped confidently.
+
+**Design.** `private.allocate_leave_impl` becomes minutes-native and `public.allocate_leave`
+delegates to it again (Task 5 had duplicated its body inline, which was itself a regression of the
+2026-07-13 architecture). The two callers stay day-denominated — `default_annual_quota_days` and the
+CSV `annual_days`/`sick_days` columns are days by nature — and convert at the call site through a new
+`private.company_minutes_per_day(company_id)`.
+
+The two large function bodies were taken from `pg_get_functiondef` on the live database and patched
+**programmatically at the allocation call sites only**, so nothing security-critical was retyped.
+
+- [ ] **Step 1: find every function still referencing a day column** — run the catalog query above.
+      Expected after Task 5: exactly `private.allocate_leave_impl`.
+- [ ] **Step 2: write the migration** with `company_minutes_per_day`, the minutes-native impl,
+      `allocate_leave` delegating, and the two patched callers.
+- [ ] **Step 3: apply it**, then re-run the catalog query. Expected: 0 rows.
+- [ ] **Step 4: replay it** to confirm idempotency. Expected: no errors.
+- [ ] **Step 5: re-run the full e2e suite.** Expected: all 26 green.
+- [ ] **Step 6: commit.**
+
 ## Task 6: Documentation and the deployment dry-run
 
 **Files:**
@@ -1770,6 +1827,20 @@ migration". This plan splits expand and contract across `…130002` and `…1300
 migration runs against the client's live balances, and the split makes every intermediate state
 deployable and the conversion verifiable before anything is destroyed. Recorded here, in the
 migration headers, and in the AGENT-LOG entry.
+
+**Correction to Task 4's commit message (found in execution):** that commit claims it is "deployable
+on its own". That was wrong for one path. Task 4 changed `EditEmployeeForm` to send minutes while
+`set_leave_balance` still took days, so between Task 4 and Task 5 an admin saving a balance of 7 days
+would have written 7 × 480 = 3360 *days*. `tests/e2e/manage.spec.ts` caught it (expected `7`,
+received `3360`). Task 5 makes the two agree, and the branch is only ever deployed as a whole, but
+the intermediate-commit claim does not hold for the balance-set path and the Task 5 commit says so.
+
+**Discovered during execution, not planned for:** §5.3's reader list was incomplete. The typecheck
+found `EditEmployeeForm`, the `WorkSettings` fallback literals in `calendar/page.tsx` and
+`request/page.tsx`, and three literals in `calendarMonth.test.ts`; `manage/allocations/AllocateForm.tsx`
+turned up when the RPC was renamed; and `private.allocate_leave_impl` needed Task 5b. Two lessons for
+plans 2–5: build the reader list from the compiler and the catalog rather than from a grep, and keep
+e2e in the loop because the SQL-side breaks are invisible to `tsc`.
 
 **Not in this plan, by design:** accrual (§6), hourly (§7), replacement (§8), serials (§7.6). Each
 gets its own plan, in the §10.3 order. `leave_types.allow_hourly` stays `false` until the hourly

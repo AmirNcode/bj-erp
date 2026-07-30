@@ -155,8 +155,29 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☐ Follow-up (user's plan): replace the free-text field with preset reasons + dropdown,
   keeping free text as the "other" case
 
+## Leave v2 — hourly, accrual, replacement (2026-07-29) ◐
+Spec: [`docs/specs/2026-07-29-hourly-accrual-replacement-design.md`](specs/2026-07-29-hourly-accrual-replacement-design.md).
+Client feedback after reviewing the live app, plus their two paper forms in `docs/forms/`.
+Five plans, in this order; each ships working software on its own.
+
+- ☑ **Plan 1 — Foundations** ([plan](plans/2026-07-29-leave-v2-foundations.md))
+  - ☑ `jalali_months` reference table, 612 rows generated + property-tested
+  - ☑ Stored unit converted days → integer minutes (expand/backfill/contract, 3 migrations)
+  - ☑ `work_settings.hours_per_day`; balances render as "۹ روز و ۴ ساعت"
+  - ☑ Acceptance SQL for the client-server upgrade
+  - ☐ **Not yet applied to the client's server** — see the plan's Deployment note
+- ☐ **Plan 2 — Accrual**: `employee_leave_policies`, lazy idempotent monthly accrual anchored to
+  Jalali month starts, annual cap, 9-day carryover with audited forfeiture, admin "Run now"
+- ☐ **Plan 3 — Hourly**: `unit` enum + `start_time`/`end_time`, company work-hours window, 4h/day
+  cap, time-aware overlap, separate `/request/hourly` screen
+- ☐ **Plan 4 — Replacement**: `replacement_id`, same-department searchable picker with
+  availability, "you are covering X" on Home
+- ☐ **Plan 5 — Serials**: per-Jalali-year request numbers (`1404-0042`)
+- ☐ Deferred, documented in spec §11: signature / insurance evidence. Next step is a question for
+  the client's insurer, not code
+- ☐ Deferred, own spec: multi-step approval + حراست gate check (their forms carry 4 signatures)
+
 ## Backlog (post-v1, see PLAN §6)
-- ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen
 - ☐ Attendance/check-in · shift scheduling · overtime · advance/loan · payslips · announcements ·
   documents · QC / finance / procurement modules

@@ -10,6 +10,32 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave v2 foundations: minutes as the stored unit + Jalali calendar table (2026-07-29)
+- **Leave durations are now stored as integer minutes** instead of fractional days, across
+  `leave_ledger`, `leave_requests`, and `leave_allocations`. Nothing about the request flow changes
+  for a worker; what changes is that a balance can now express **"۹ روز و ۴ ساعت"** — the way HR
+  already words it on the paper daily form — which is the prerequisite for hourly leave.
+- **`work_settings.hours_per_day`** (default 8) defines what one day of leave means. Existing rows
+  were backfilled with a frozen constant of 480 minutes/day, deliberately *not* the live setting:
+  history was recorded when a day meant 8 hours, so changing the setting later cannot retroactively
+  move anyone's past balance.
+- Migrated in **three replayable steps** — `20260729130001` (calendar table), `20260729130002`
+  (add + backfill + sync triggers), `20260729130003` (functions write minutes; day columns dropped)
+  — so the conversion could be verified against real data before anything was destroyed, and every
+  intermediate state stayed deployable. `docs/plans/2026-07-29-leave-v2-foundations-acceptance.sql`
+  is the check to run against a dump of the client's database before this ships to their server.
+- **Breaking RPC changes** (all callers updated): `allocate_leave` takes `p_minutes`,
+  `set_leave_balance` takes `p_target_minutes`, `compute_requested_days` became
+  `compute_requested_minutes`, and `current_leave_balance` returns minutes. Admin-facing inputs are
+  still day-denominated and convert at the boundary through `lib/leave/duration.ts`.
+- **New `jalali_months` reference table** (1400–1450, 612 generated rows) plus `jalali_month_of()`.
+  Monthly accrual anchors on Jalali month starts, carryover fires on Farvardin 1, and request serial
+  numbers key on the Jalali year — this turns all three into joins instead of calendar arithmetic
+  inside a `SECURITY DEFINER` function. A documented exception to the never-persist-Jalali rule: it
+  is a calendar dimension, and no user row stores a Jalali value.
+- Design record: `docs/specs/2026-07-29-hourly-accrual-replacement-design.md`. Still to come in that
+  spec: monthly accrual, hourly requests, the replacement person, and request serial numbers.
+
 ### Rejection reason; employee-code field latin-only (2026-07-29)
 - **Rejecting a request can now carry a reason.** Optional free-text field (max 500 chars) in
   both reject dialogs — the approvals queue and the calendar's day-detail decide buttons.
