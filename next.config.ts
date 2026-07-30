@@ -1,6 +1,11 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
+// React's development build uses eval() for debugging features (owner stacks,
+// reconstructing callstacks). Production never does, so the allowance is scoped
+// to `next dev` and never reaches a built image.
+const isDev = process.env.NODE_ENV === 'development';
+
 const publicSupabaseOrigin = (() => {
   try {
     return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').origin;
@@ -57,7 +62,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
               "style-src 'self' 'unsafe-inline'",
-              "script-src 'self' 'unsafe-inline'",
+              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
               `connect-src 'self'${publicSupabaseOrigin ? ` ${publicSupabaseOrigin}` : ''}`,
               "worker-src 'self' blob:",
               "manifest-src 'self'",

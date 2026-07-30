@@ -78,6 +78,66 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-30 — Review of the Codex security branch; CSP dev fix; merge to the feature branch
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `codex/code-review` @ `45af68f`
+**Trigger:** The user asked for a thorough review of the Codex security fixes — confirming they do
+not regress the rest of the codebase — and a merge back into the branch they were forked from
+(`feat/leave-v2-hourly-accrual-replacement`) if the review came back clean.
+
+**What changed**
+- `next.config.ts` — scoped the new CSP's `script-src` to allow `'unsafe-eval'` **in development
+  only**. The review's CSP applies to `next dev` as well, and React's development build uses
+  `eval()` for owner stacks / callstack reconstruction, so every dev page load logged a CSP error
+  and lost those debugging features. Production output is unchanged
+  (`script-src 'self' 'unsafe-inline'`, verified in `.next/routes-manifest.json` after a build).
+
+**Verification of the Codex change set (all live checks rollback-only, local stack only)**
+- Inactive boundary: an inactive caller sees 1 profile shell and 0 rows across leave_requests,
+  companies, calendar, leave_types, leave_ledger; `submit_leave_request` raises `account is inactive`.
+- Manager authority: `is_manager_of` / `can_read_all` flip to false the moment the manager role row
+  is deleted.
+- Audit: `authenticated` INSERT on `audit_log` is revoked; the owner-run trigger wrote exactly one
+  row for a direct profile UPDATE. Triggers confirmed on profiles/departments/work_settings/
+  holidays/companies/leave_types, covering the audit inserts removed from the server actions.
+- Invariants: `profiles_manager_not_self` and the last-active-admin trigger both fire.
+- Hourly overlap: 09:00–10:00 and 10:00–11:00 on one date now both approve (the reported bug);
+  a genuinely overlapping 11:00–13:00 vs 10:00–12:00 is still refused.
+- No false failures from the new `.select('id')` zero-row guards — UPDATE/INSERT/DELETE … RETURNING
+  each returned exactly 1 row under RLS for an admin.
+- `revoke execute on set_updated_at()` does **not** break DML: PostgreSQL checks trigger-function
+  EXECUTE at CREATE TRIGGER time, and updates on trigger-bearing tables still succeed.
+- `accrue_my_leave` with zero accrual policies returns without raising, so submit's new
+  fail-on-accrual-error path cannot block employees who have no policy yet.
+- No leftover function overloads — every `create or replace` in the migration replaced in place.
+- Deployment: live container runs as uid 1000 `node`; HTTPS response carries CSP/HSTS/COOP/CORP and
+  no `X-Powered-By`; the build-time CSP placeholder is correctly rewritten by the entrypoint `sed`
+  (`connect-src 'self' https://192.168.2.48`).
+
+**Gates:** `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 35 files / 217
+tests · `npm run build` passing · **`npm run test:e2e` 30/30 passing** (the review doc did not
+record an e2e run; it was the main outstanding gate given how much RLS moved).
+
+**Actions outside the repo**
+- Read-only catalog queries and rollback-only role simulations against the local `bj-erp-db-1`
+  container. No schema or data change was committed. The client's server at `https://10.10.10.50`
+  was not touched.
+
+**State left behind**
+- `codex/code-review` merged into `feat/leave-v2-hourly-accrual-replacement` (fast-forward).
+  Neither branch is pushed.
+- Migration `20260730120001_security_review_fixes.sql` remains applied to the **local** stack only.
+
+**For the next agent**
+- Still open from the Codex review: `npm audit` from a network-authorized machine.
+- Pre-existing bug, **not** from this change set and not fixed here: `manage/employees/page.tsx`
+  calls `tr('confirmBody')` without the `{count}` argument, so next-intl throws a
+  `FORMATTING_ERROR` on every bulk-password-reset dialog render; `EmployeesTable.tsx` then does its
+  own `.replace('{count}', …)`. Pass `{ count }` to `tr` (or use `tr.raw`) to silence it.
+- The client's server is still on the pre-minutes schema; this migration is additive on top of the
+  leave-v2 set and must ship through the release runbook, not an ad-hoc DB command.
+
 ## 2026-07-30 — Full security review, fixes, and local container redeploy
 
 **Agent:** OpenAI Codex (GPT-5)
