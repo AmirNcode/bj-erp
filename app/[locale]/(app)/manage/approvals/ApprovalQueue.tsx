@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
+import { formatDuration } from '@/lib/leave/duration';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -35,6 +36,9 @@ type Labels = {
   approveSuccess: string;
   rejectSuccess: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   dayPartLabels: { full: string; am: string; pm: string };
 };
 
@@ -42,9 +46,11 @@ type Props = {
   requests: PendingApproval[];
   labels: Labels;
   locale: string;
+  /** Company day length — durations are stored in minutes. */
+  hoursPerDay: number;
 };
 
-export function ApprovalQueue({ requests, labels, locale }: Props) {
+export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
   const tc = useTranslations('common');
   const router = useRouter();
   const [localRequests, setLocalRequests] = useState(requests);
@@ -103,7 +109,8 @@ export function ApprovalQueue({ requests, labels, locale }: Props) {
                         {req.start_date} — {req.end_date}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {labels.dayPartLabels[req.day_part]} · {req.requested_days} {labels.days}
+                        {labels.dayPartLabels[req.day_part]} ·{' '}
+                        {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                       {req.reason && (
                         <div className="text-xs text-muted-foreground mt-1">

@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatDuration } from '@/lib/leave/duration';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
@@ -21,6 +22,9 @@ type Labels = {
   noRecent: string;
   noTeam: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   statusPending: string;
   statusApproved: string;
   statusRejected: string;
@@ -32,9 +36,11 @@ type Props = {
   labels: Labels;
   locale: string;
   calendarPref: string;
+  /** Company day length — balances and durations are stored in minutes. */
+  hoursPerDay: number;
 };
 
-export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
+export function HomeBoard({ board, labels, locale, calendarPref, hoursPerDay }: Props) {
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
@@ -84,11 +90,10 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
                     <span className="text-sm text-muted-foreground">
                       {locale === 'fa' ? b.name_fa : b.name_en ?? b.name_fa}
                     </span>
-                    <span className="text-2xl font-bold tabular-nums leading-none">
-                      {formatNumber(b.balance, locale)}
-                      <span className="ms-1 text-xs font-normal text-muted-foreground">
-                        {labels.days}
-                      </span>
+                    {/* formatDuration carries its own units ("۹ روز و ۴ ساعت"), so the
+                        separate unit suffix that used to follow the number is gone. */}
+                    <span className="text-xl font-bold leading-none">
+                      {formatDuration(b.balanceMinutes, hoursPerDay, locale, labels)}
                     </span>
                   </li>
                 ))}
@@ -114,7 +119,7 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatDate(r.start_date)} — {formatDate(r.end_date)} ·{' '}
-                        {formatNumber(r.requested_days, locale)} {labels.days}
+                        {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                     </div>
                     <StatusBadge

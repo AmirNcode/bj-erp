@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatDuration } from '@/lib/leave/duration';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card } from '@/components/ui/card';
@@ -41,6 +42,9 @@ type Labels = {
   statusCancelled: string;
   dayPartLabels: { full: string; am: string; pm: string };
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   from: string;
   to: string;
   rejectedReason: string;
@@ -51,9 +55,17 @@ type Props = {
   labels: Labels;
   calendarPref: string;
   locale: string;
+  /** Company day length — durations are stored in minutes. */
+  hoursPerDay: number;
 };
 
-export function MyRequestsList({ requests, labels, calendarPref, locale }: Props) {
+export function MyRequestsList({
+  requests,
+  labels,
+  calendarPref,
+  locale,
+  hoursPerDay,
+}: Props) {
   const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
@@ -128,7 +140,7 @@ export function MyRequestsList({ requests, labels, calendarPref, locale }: Props
                     {/* Day part */}
                     <div className="text-xs text-muted-foreground">
                       {labels.dayPartLabels[req.day_part]} ·{' '}
-                      {formatNumber(req.requested_days, locale)} {labels.days}
+                      {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
                     {/* Why it was rejected — optional, set by the decider. */}
                     {req.status === 'rejected' && req.decision_note && (

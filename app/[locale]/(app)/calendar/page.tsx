@@ -49,7 +49,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const loadError = result.ok ? null : result.error;
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5], holidays: [] as string[] };
+    : { weekendDays: [5], holidays: [] as string[], hoursPerDay: 8 };
   const decidableIds =
     approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
 

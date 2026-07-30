@@ -185,7 +185,7 @@ export type LeaveRequestWithType = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
-  requested_days: number;
+  requested_minutes: number;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
   /** Set by the decider on reject; the requester reads it on their own row. */
@@ -209,7 +209,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, requested_days, status, reason, decision_note, created_at,
+      `id, start_date, end_date, day_part, requested_minutes, status, reason, decision_note, created_at,
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', user.id)
@@ -227,13 +227,13 @@ export async function getMyLeaveRequests(): Promise<{
  */
 export async function getMyBalance(
   leaveTypeId: string
-): Promise<{ ok: true; balance: number | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; balanceMinutes: number | null } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
 
   const { data, error } = await supabase
     .from('leave_ledger')
-    .select('balance_after')
+    .select('balance_after_minutes')
     .eq('employee_id', user.id)
     .eq('leave_type_id', leaveTypeId)
     .order('created_at', { ascending: false })
@@ -242,7 +242,7 @@ export async function getMyBalance(
 
   if (error) return dbErr(error.message);
 
-  return { ok: true, balance: data?.balance_after ?? null };
+  return { ok: true, balanceMinutes: data?.balance_after_minutes ?? null };
 }
 
 /**
@@ -284,6 +284,8 @@ export async function getActiveLeaveTypes(): Promise<{
 export type WorkSettings = {
   weekendDays: number[];
   holidays: string[]; // YYYY-MM-DD strings
+  /** What one day of leave means, in hours. Drives every days<->minutes render. */
+  hoursPerDay: number;
 };
 
 export async function getWorkSettings(): Promise<{
@@ -297,7 +299,7 @@ export async function getWorkSettings(): Promise<{
   const [{ data: ws, error: wsError }, { data: hols, error: holsError }] = await Promise.all([
     supabase
       .from('work_settings')
-      .select('weekend_days')
+      .select('weekend_days, hours_per_day')
       .eq('company_id', companyId)
       .maybeSingle(),
     supabase
@@ -312,8 +314,9 @@ export async function getWorkSettings(): Promise<{
   return {
     ok: true,
     settings: {
-      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_days
+      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_minutes
       holidays: (hols ?? []).map((h) => h.holiday_date),
+      hoursPerDay: ws?.hours_per_day ?? 8, // matches the work_settings column default
     },
   };
 }
@@ -398,7 +401,7 @@ export type PendingApproval = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
-  requested_days: number;
+  requested_minutes: number;
   reason: string | null;
 };
 
@@ -416,7 +419,7 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, requested_days, reason,
+      `id, employee_id, start_date, end_date, day_part, requested_minutes, reason,
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
     )
@@ -430,7 +433,7 @@ export async function getPendingApprovals(): Promise<
     start_date: string;
     end_date: string;
     day_part: DayPart;
-    requested_days: number;
+    requested_minutes: number;
     reason: string | null;
     profiles: { full_name: string; manager_id: string | null } | null;
     leave_types: { name_fa: string; name_en: string | null } | null;
@@ -445,7 +448,7 @@ export async function getPendingApprovals(): Promise<
     start_date: r.start_date,
     end_date: r.end_date,
     day_part: r.day_part,
-    requested_days: r.requested_days,
+    requested_minutes: r.requested_minutes,
     reason: r.reason ?? null,
   }));
 
@@ -532,7 +535,7 @@ export async function getMyBalances(): Promise<
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after, created_at')
+        .select('leave_type_id, balance_after_minutes, created_at')
         .eq('employee_id', user.id),
     ]);
 
@@ -544,7 +547,7 @@ export async function getMyBalances(): Promise<
     leaveTypeId: t.id,
     name_fa: t.name_fa,
     name_en: t.name_en,
-    balance: byType[t.id] ?? 0,
+    balanceMinutes: byType[t.id] ?? 0,
   }));
 
   return { ok: true, balances };
@@ -569,7 +572,7 @@ export async function getEmployeeBalances(
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after, created_at')
+        .select('leave_type_id, balance_after_minutes, created_at')
         .eq('employee_id', employeeId),
     ]);
 
@@ -581,7 +584,7 @@ export async function getEmployeeBalances(
     leaveTypeId: t.id,
     name_fa: t.name_fa,
     name_en: t.name_en,
-    balance: byType[t.id] ?? 0,
+    balanceMinutes: byType[t.id] ?? 0,
   }));
 
   return { ok: true, balances };

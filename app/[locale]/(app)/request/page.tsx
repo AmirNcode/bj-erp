@@ -16,6 +16,7 @@ import {
 } from '@/lib/actions/leave';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
 function RequestPageSkeleton() {
@@ -58,7 +59,7 @@ async function RequestPageData({ locale }: { locale: string }) {
   const requests = requestsResult.ok ? requestsResult.requests : [];
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5, 6], holidays: [] as string[] };
+    : { weekendDays: [5, 6], holidays: [] as string[], hoursPerDay: 8 };
 
   const labels = {
     title: t('title'),
@@ -97,7 +98,7 @@ async function RequestPageData({ locale }: { locale: string }) {
       am: tLeave('dayPart.am'),
       pm: tLeave('dayPart.pm'),
     },
-    days: tLeave('days'),
+    ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 
   return (
@@ -116,6 +117,7 @@ async function RequestPageData({ locale }: { locale: string }) {
           labels={labels}
           calendarPref={calendarPref}
           locale={locale}
+          hoursPerDay={workSettings.hoursPerDay}
         />
       </div>
     </>

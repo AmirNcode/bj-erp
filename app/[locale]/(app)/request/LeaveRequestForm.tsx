@@ -12,6 +12,7 @@ import gregorian_fa from 'react-date-object/locales/gregorian_fa';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatDuration } from '@/lib/leave/duration';
 import { submitRequest, getMyBalance } from '@/lib/actions/leave';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,6 +37,9 @@ type Labels = {
   remainingBalanceLabel: string;
   noBalance: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   success: string;
   errorLabel: string;
   from: string;
@@ -71,7 +75,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   const [dateRange, setDateRange] = useState<DateObjectLike[]>([]);
   const [dayPart, setDayPart] = useState<DayPart>('full');
   const [reason, setReason] = useState('');
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balanceMinutes, setBalanceMinutes] = useState<number | null>(null);
   const [balanceFor, setBalanceFor] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -111,7 +115,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
 
   // Balance is fetched when the selected type changes; show it only once the
   // fetch for the currently-selected type has resolved (derived, not an effect).
-  const effectiveBalance = balanceFor === selectedTypeId ? balance : null;
+  const effectiveBalance = balanceFor === selectedTypeId ? balanceMinutes : null;
   const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
 
   // Fetch balance when the selected type changes. The only state updates happen
@@ -121,7 +125,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
     let cancelled = false;
     getMyBalance(selectedTypeId).then((res) => {
       if (cancelled) return;
-      setBalance(res.ok ? res.balance : null);
+      setBalanceMinutes(res.ok ? res.balanceMinutes : null);
       setBalanceFor(selectedTypeId);
     });
     return () => {
@@ -267,7 +271,12 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
                   {balanceLoading
                     ? '…'
                     : effectiveBalance !== null
-                      ? `${labels.remainingBalanceLabel}: ${formatNumber(effectiveBalance, locale)} ${labels.days}`
+                      ? `${labels.remainingBalanceLabel}: ${formatDuration(
+                          effectiveBalance,
+                          workSettings.hoursPerDay,
+                          locale,
+                          labels
+                        )}`
                       : labels.noBalance}
                 </div>
               )}

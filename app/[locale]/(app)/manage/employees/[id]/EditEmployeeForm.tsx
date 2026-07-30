@@ -6,6 +6,7 @@ import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/action
 import { setLeaveBalance } from '@/lib/actions/leave';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
+import { daysToMinutes } from '@/lib/leave/duration';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,8 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
+  /** Company day length: the inputs below are days, the ledger is minutes. */
+  hoursPerDay: number;
   locale: string;
   labels: {
     code: string;
@@ -75,6 +78,7 @@ export function EditEmployeeForm({
   departments,
   managers,
   balances,
+  hoursPerDay,
   locale,
   labels,
 }: Props) {
@@ -86,8 +90,11 @@ export function EditEmployeeForm({
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(
     (empRoles as Role[]).filter((r) => ALL_ROLES.includes(r))
   );
+  // Kept in MINUTES, the stored unit. The input renders days for the admin and
+  // converts on change, so a rounded display can never produce a spurious
+  // one-minute adjustment row on save.
   const [targets, setTargets] = useState<Record<string, number>>(
-    Object.fromEntries(balances.map((balance) => [balance.leaveTypeId, balance.balance]))
+    Object.fromEntries(balances.map((balance) => [balance.leaveTypeId, balance.balanceMinutes]))
   );
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -128,7 +135,7 @@ export function EditEmployeeForm({
       const changes = balanceAdjustments(
         balances.map((balance) => ({
           leaveTypeId: balance.leaveTypeId,
-          balance: balance.balance,
+          balance: balance.balanceMinutes,
         })),
         Object.entries(targets).map(([leaveTypeId, target]) => ({ leaveTypeId, target }))
       );
@@ -310,11 +317,14 @@ export function EditEmployeeForm({
                             type="number"
                             min={0}
                             step="0.5"
-                            value={targets[balance.leaveTypeId] ?? 0}
+                            value={(targets[balance.leaveTypeId] ?? 0) / (hoursPerDay * 60)}
                             onChange={(event) =>
                               setTargets((prev) => ({
                                 ...prev,
-                                [balance.leaveTypeId]: Number(event.target.value),
+                                [balance.leaveTypeId]: daysToMinutes(
+                                  Number(event.target.value),
+                                  hoursPerDay
+                                ),
                               }))
                             }
                             data-testid={`balance-days-${slug}`}

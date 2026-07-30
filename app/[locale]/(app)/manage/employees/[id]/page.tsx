@@ -7,7 +7,7 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
-import { getEmployeeBalances } from '@/lib/actions/leave';
+import { getEmployeeBalances, getWorkSettings } from '@/lib/actions/leave';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
@@ -55,6 +55,10 @@ export default async function EditEmployeePage({ params }: Props) {
   ]);
   const balancesRes = isAdmin ? await getEmployeeBalances(id) : null;
   const balances = balancesRes?.ok ? balancesRes.balances : [];
+  // Balances are stored in minutes; the editor renders and accepts days, so it
+  // needs the company's day length to convert at the boundary.
+  const workSettingsRes = isAdmin ? await getWorkSettings() : null;
+  const hoursPerDay = workSettingsRes?.ok ? workSettingsRes.settings.hoursPerDay : 8;
 
   return (
     <main className="p-6 max-w-2xl mx-auto">
@@ -71,6 +75,7 @@ export default async function EditEmployeePage({ params }: Props) {
         departments={departments ?? []}
         managers={managers ?? []}
         balances={balances}
+        hoursPerDay={hoursPerDay}
         locale={locale}
         labels={{
           code: t('employees.code'),
