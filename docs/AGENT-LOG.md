@@ -78,7 +78,7 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-07-29 — Leave v2: design spec + plans 1–4 implemented (minutes, Jalali calendar, accrual, hourly, replacement)
+## 2026-07-29 — Leave v2: design spec + ALL FIVE PLANS implemented (minutes, calendar, accrual, hourly, replacement, serials)
 
 **Agent:** Claude Opus 5 via Claude Code
 **Branch / HEAD at start:** `main` @ `cce7b16`, tree had untracked `docs/forms/`
@@ -191,6 +191,25 @@ Implementation (plan 4 — replacement, all committed):
 - `lib/leave/replacement.ts` (6 tests), `request/_components/ReplacementPicker.tsx` (shared by both
   screens), cover name + clash flag on approvals, "You are covering" card on Home,
   `tests/e2e/replacement.spec.ts`.
+
+Implementation (plan 5 — serials, all committed):
+- **`docs/plans/2026-07-29-leave-v2-serials.md`** — the plan, executed in full.
+- **`20260729130013_leave_serials.sql`** — `leave_request_serials` counter, `leave_requests.company_id`
+  (denormalised on purpose) + `serial_year`/`serial_seq` + unique index, and the **backfill**: existing
+  requests numbered in `created_at` order per Jalali year, with the counter seeded past it. The migration
+  raises rather than leaving a null if any `start_date` sits outside `jalali_months`.
+- **`20260729130014_leave_serial_alloc.sql`** — allocation inside `submit_leave_impl`, patched from
+  `pg_get_functiondef` at two points only.
+- `lib/leave/serial.ts` (5 tests) + serials rendered on requests and approvals; the e2e assertion was
+  added to the existing replacement spec rather than paying for a new browser run.
+
+**Plan 5's one real subtlety**
+
+The advisory lock in the writer is `leave:<employee_id>` — **per employee**. It does not serialise the
+serial counter across *different* employees, so `on conflict … do update … returning` is what provides
+that, by taking a row lock on the counter for the rest of the transaction. Verified with two genuinely
+parallel psql transactions from two employees: they got 4 and 5, not the same number twice. Had they
+collided, the unique index would have turned it into a failed submission for a real worker.
 
 **Plan 4's notes**
 

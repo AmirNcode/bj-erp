@@ -321,6 +321,8 @@ export type LeaveRequestWithType = {
   end_time: string | null;
   requested_minutes: number;
   replacement_name: string | null;
+  serial_year: number;
+  serial_seq: number;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
   /** Set by the decider on reject; the requester reads it on their own row. */
@@ -344,7 +346,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, status, reason, decision_note, created_at,
+      `id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, status, reason, decision_note, created_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
@@ -585,6 +587,8 @@ export type PendingApproval = {
   replacement_name: string | null;
   /** True when the named cover has leave overlapping this request (spec §2.1). */
   replacement_conflict: boolean;
+  serial_year: number;
+  serial_seq: number;
 };
 
 /**
@@ -601,7 +605,7 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, reason, replacement_id,
+      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
@@ -623,6 +627,8 @@ export async function getPendingApprovals(): Promise<
     reason: string | null;
     replacement_id: string | null;
     replacement: { full_name: string } | null;
+    serial_year: number;
+    serial_seq: number;
     profiles: { full_name: string; manager_id: string | null } | null;
     leave_types: { name_fa: string; name_en: string | null } | null;
   };
@@ -642,6 +648,8 @@ export async function getPendingApprovals(): Promise<
     requested_minutes: r.requested_minutes,
     reason: r.reason ?? null,
     replacement_name: r.replacement?.full_name ?? null,
+    serial_year: r.serial_year,
+    serial_seq: r.serial_seq,
     // Filled below: a cover can book leave between submission and approval, and
     // the manager should see that before deciding (spec §2.1). approve_leave_request
     // also refuses it, so this is a heads-up rather than the guard.

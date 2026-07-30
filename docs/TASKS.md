@@ -155,7 +155,7 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☐ Follow-up (user's plan): replace the free-text field with preset reasons + dropdown,
   keeping free text as the "other" case
 
-## Leave v2 — hourly, accrual, replacement (2026-07-29) ◐
+## Leave v2 — hourly, accrual, replacement, serials (2026-07-29) ☑ all five plans built, none deployed
 Spec: [`docs/specs/2026-07-29-hourly-accrual-replacement-design.md`](specs/2026-07-29-hourly-accrual-replacement-design.md).
 Client feedback after reviewing the live app, plus their two paper forms in `docs/forms/`.
 Five plans, in this order; each ships working software on its own.
@@ -186,7 +186,11 @@ Five plans, in this order; each ships working software on its own.
   - ☑ One shared predicate (`private.replacement_is_away`) for the read, the submit guard, and approval
   - ☑ Searchable picker on both screens; "you are covering" on Home; cover + clash on approvals
   - ☐ **Not yet applied to the client's server**
-- ☐ **Plan 5 — Serials**: per-Jalali-year request numbers (`1404-0042`)
+- ☑ **Plan 5 — Serials** ([plan](plans/2026-07-29-leave-v2-serials.md))
+  - ☑ `leave_request_serials` counter + `company_id`/`serial_year`/`serial_seq` + backfill
+  - ☑ Allocated in the writer under a counter row lock; proven across two concurrent employees
+  - ☑ `lib/leave/serial.ts` (5 tests); shown on requests and approvals
+  - ☐ **Not yet applied to the client's server** — this is the one plan with a MANDATORY backfill
 - ☐ Deferred, documented in spec §11: signature / insurance evidence. Next step is a question for
   the client's insurer, not code
 - ☐ Deferred, own spec: multi-step approval + حراست gate check (their forms carry 4 signatures)

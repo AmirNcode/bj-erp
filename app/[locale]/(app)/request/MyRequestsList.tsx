@@ -8,6 +8,7 @@ import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
+import { formatSerialLocalized } from '@/lib/leave/serial';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -145,6 +146,9 @@ export function MyRequestsList({
                         ? formatTimeRange(req.start_time, req.end_time, locale)
                         : labels.dayPartLabels[req.day_part]}{' '}
                       · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground" dir="ltr" data-testid={`serial-${req.id}`}>
+                      {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
                     </div>
                     {req.replacement_name && (
                       <div className="text-xs text-muted-foreground">

@@ -8,6 +8,7 @@ import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
+import { formatSerialLocalized } from '@/lib/leave/serial';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -116,6 +117,9 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                           ? formatTimeRange(req.start_time, req.end_time, locale)
                           : labels.dayPartLabels[req.day_part]}{' '}
                         · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
+                      </div>
+                      <div className="text-xs font-mono text-muted-foreground" dir="ltr" data-testid={`serial-${req.id}`}>
+                        {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
                       </div>
                       {req.replacement_name && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>

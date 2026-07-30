@@ -10,6 +10,15 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave v2: request serial numbers (2026-07-29)
+- **Every request now has a number** — `۱۴۰۴-۰۰۴۲` — the شماره the paper forms carry, so HR can quote a
+  request on the phone, write it on a file, or reference it in an insurance claim. It appears on the
+  employee's own requests and on approval cards.
+- Numbering is per company and per Jalali year, restarting at `۱۴۰۵-۰۰۰۱` at Nowruz, matching how they
+  file paper. **Existing requests were backfilled** in the order they were filed.
+- Gapless even when two people submit at the same moment: the counter is bumped under a row lock, which
+  the per-employee lock elsewhere in the writer does not provide.
+
 ### Leave v2: the replacement person (2026-07-29)
 - **Requests can now name who covers for you** — جانشین on the daily form, جایگزین on the hourly one,
   matching the client's paper forms. Optional, searchable by name or employee code, and limited to

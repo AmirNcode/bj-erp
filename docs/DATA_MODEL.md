@@ -136,6 +136,14 @@ Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
 `reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
 **decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
 their own row and never exposed through `team_leave_calendar` (explicit column list).
+**Serial numbers (2026-07-29, FR-29):** `company_id → companies` (denormalised deliberately — it makes
+the serial's unique index possible without a join and shortens the company-wide manager queries FR-17
+needs) · `serial_year int` · `serial_seq int`, unique (`company_id`,`serial_year`,`serial_seq`).
+Rendered as `1404-0042` by `lib/leave/serial.ts`; the database stores integers, never a display string.
+Allocated in `private.submit_leave_impl` from `leave_request_serials (company_id, jalali_year, last_seq)`
+via `on conflict … do update … returning`. That row lock is what serialises the counter — the advisory
+lock in the writer is **per employee** and does not.
+
 **Replacement (2026-07-29, FR-28):** `replacement_id → profiles` (nullable), with a CHECK that it is
 never the requester. Optional. Candidates come from `get_replacement_candidates(...)` — the caller's own
 active department colleagues, **annotated** with `unavailable` + `unavailable_reason` rather than

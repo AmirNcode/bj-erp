@@ -39,6 +39,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   `leave_types.allow_hourly` — annual and unpaid only, never sick. Overlap is time-aware, so two
   non-overlapping errands in a day are both allowed. *(2026-07-29; supersedes FR-11's "reserves room
   for hourly later" and the v1 spec's D7 deferral.)*
+- **FR-29** ☑ **Request serial numbers.** Every request carries a human-readable `1404-0042` (the
+  شماره on the client's paper forms), gapless per company and Jalali year, allocated server-side and
+  shown on the employee's own requests and on approval cards. *(2026-07-29.)*
 - **FR-28** ☑ **Replacement / cover person (جانشین · جایگزین).** Optional on both request screens,
   searchable, drawn from the requester's own department. Anyone with overlapping pending or approved
   leave is refused at submit and re-checked at approval; unavailable colleagues are shown disabled with

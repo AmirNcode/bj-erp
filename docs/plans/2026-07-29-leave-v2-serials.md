@@ -2,9 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: COMPLETE (2026-07-29).** Executed on `feat/leave-v2-hourly-accrual-replacement`. Unit
+**208/208** (5 new), tsc + lint + build clean; two migrations applied to the local docker stack and proven
+replayable; the e2e assertion rides on the existing replacement spec. **Not deployed to the client's
+server — and this is the one plan with a mandatory backfill.**
+
+**Confirmed in execution:** the concurrency risk this plan flagged is real and the mitigation works. Two
+genuinely parallel transactions from different employees got 4 and 5, not the same number twice — the
+per-employee advisory lock would not have prevented that; the counter's row lock did.
+
 **Goal:** Give every leave request the human-readable **شماره** the client's paper forms carry — `1404-0042` — so HR can quote a request on the phone, write it on a file, and reference it in an insurance claim.
 
-**Architecture:** A per-(company, Jalali year) counter table, incremented inside the existing writer under the advisory lock already held there, so numbers are gapless and concurrency-safe. Formatting lives in TS; SQL stores the two integers.
+**Architecture:** A per-(company, Jalali year) counter table, incremented inside the existing writer. Gaplessness comes from the counter's own row lock, NOT from the advisory lock already held there — that one is per employee and would not stop two different people colliding. Formatting lives in TS; SQL stores the two integers.
 
 **Tech Stack:** Postgres 15 · Next.js 16 App Router + TypeScript · Vitest · Playwright.
 

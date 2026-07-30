@@ -60,8 +60,13 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="success-msg"]')).toBeVisible({ timeout: 20_000 });
 
-  // A's own request row names the cover.
+  // A's own request row names the cover, and carries a serial number (FR-29).
   await expect(page.getByText('Cover Person').first()).toBeVisible({ timeout: 20_000 });
+  const serial = page.locator('[data-testid^="serial-"]').first();
+  await expect(serial).toBeVisible();
+  // Persian digits on screen, so assert the shape rather than the literal value —
+  // the sequence depends on how many requests the company has already filed.
+  await expect(serial).toHaveText(/^[۰-۹0-9]{4}-[۰-۹0-9]{4,}$/);
   await logout(page);
 
   // ── B sees it on Home, and books the same dates off ───────────────────────
