@@ -35,6 +35,8 @@
     "title": "صفحه اصلی",
     "manageLink": "مدیریت کارمندان",
     "balancesTitle": "مانده مرخصی من",
+    "requestDaily": "درخواست مرخصی روزانه",
+    "requestHourly": "درخواست مرخصی ساعتی",
     "recentTitle": "درخواست‌های اخیر من",
     "teamTitle": "تیم من",
     "managerLabel": "مدیر",
@@ -90,6 +92,20 @@
     "validationSelectType": "نوع مرخصی را انتخاب کنید.",
     "validationSelectDate": "بازه تاریخی را انتخاب کنید.",
     "rejectedReason": "دلیل رد درخواست"
+  },
+  "hourly": {
+    "title": "درخواست مرخصی ساعتی",
+    "navLink": "درخواست ساعتی",
+    "date": "تاریخ",
+    "fromTime": "از ساعت",
+    "toTime": "الی ساعت",
+    "submit": "ثبت درخواست ساعتی",
+    "durationLabel": "مدت",
+    "validationTimes": "ساعت پایان باید بعد از ساعت شروع باشد.",
+    "dailyLimitHint": "حداکثر {hours} ساعت در روز.",
+    "dailyLink": "به یک روز کامل نیاز دارید؟ درخواست مرخصی روزانه",
+    "hourlyLink": "به چند ساعت نیاز دارید؟ درخواست مرخصی ساعتی",
+    "unavailable": "در حال حاضر هیچ نوع مرخصی ساعتی فعال نیست. با مدیر سامانه تماس بگیرید."
   },
   "leave": {
     "status": {

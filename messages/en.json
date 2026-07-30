@@ -35,6 +35,8 @@
     "title": "Home",
     "manageLink": "Manage Employees",
     "balancesTitle": "My Balances",
+    "requestDaily": "Daily leave request",
+    "requestHourly": "Hourly leave request",
     "recentTitle": "My Recent Requests",
     "teamTitle": "My Team",
     "managerLabel": "Manager",
@@ -90,6 +92,20 @@
     "validationSelectType": "Please select a leave type.",
     "validationSelectDate": "Please select a date range.",
     "rejectedReason": "Reason for rejection"
+  },
+  "hourly": {
+    "title": "Hourly Leave Request",
+    "navLink": "Hourly request",
+    "date": "Date",
+    "fromTime": "From",
+    "toTime": "To",
+    "submit": "Submit hourly request",
+    "durationLabel": "Duration",
+    "validationTimes": "The end time must be after the start time.",
+    "dailyLimitHint": "Up to {hours} hours per day.",
+    "dailyLink": "Need a full day instead? Daily leave request",
+    "hourlyLink": "Need a few hours instead? Hourly leave request",
+    "unavailable": "No leave type is currently available hourly. Ask an administrator."
   },
   "leave": {
     "status": {

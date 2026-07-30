@@ -54,7 +54,7 @@ describe('buildCalendarMonth', () => {
       rangeEnd: '2026-06-30',
       calendarPref: 'gregorian',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8 },
+      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
 
     const june29 = month.days.find((day) => day.iso === '2026-06-29');
@@ -78,7 +78,7 @@ describe('buildCalendarMonth', () => {
       rangeEnd: '2026-07-31',
       calendarPref: 'gregorian',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8 },
+      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
 
     for (const iso of ['2026-07-10', '2026-07-11', '2026-07-12', '2026-07-13']) {
@@ -94,6 +94,9 @@ describe('nextWorkingDateAfter', () => {
         weekendDays: [5],
         holidays: ['2026-06-27'],
         hoursPerDay: 8,
+        workStart: '07:00',
+        workEnd: '15:00',
+        maxHourlyMinutesPerDay: 240,
       })
     ).toBe('2026-06-28');
   });

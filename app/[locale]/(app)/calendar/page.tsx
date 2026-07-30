@@ -10,7 +10,12 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
-import { getCalendarEntries, getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
+import {
+  getCalendarEntries,
+  getPendingApprovals,
+  getWorkSettings,
+} from '@/lib/actions/leave';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
@@ -49,7 +54,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const loadError = result.ok ? null : result.error;
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5], holidays: [] as string[], hoursPerDay: 8 };
+    : WORK_SETTINGS_FALLBACK;
   const decidableIds =
     approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
 

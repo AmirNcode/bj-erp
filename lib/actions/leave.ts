@@ -108,6 +108,43 @@ export async function cancelRequest(
 }
 
 // ---------------------------------------------------------------------------
+// submitHourlyRequest (self) — مرخصی ساعتی, the BJ-F 50208 flow.
+// ---------------------------------------------------------------------------
+
+export type SubmitHourlyInput = {
+  leaveTypeId: string;
+  /** Gregorian YYYY-MM-DD — one date only. */
+  date: string;
+  /** 'HH:MM', company-local. */
+  startTime: string;
+  endTime: string;
+  reason?: string;
+};
+
+export async function submitHourlyRequest(
+  input: SubmitHourlyInput
+): Promise<SubmitRequestResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  // Same reason as the daily path: a freshly-accrued hour must be spendable.
+  await accrueBeforeRead(supabase);
+
+  const { data, error } = await supabase.rpc('submit_hourly_leave_request', {
+    p_leave_type_id: input.leaveTypeId,
+    p_date: input.date,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_reason: input.reason ?? undefined,
+  });
+
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
 // allocateLeave (admin-only)
 // ---------------------------------------------------------------------------
 
@@ -281,6 +318,8 @@ export type LeaveType = {
   name_fa: string;
   name_en: string | null;
   allow_half_day: boolean;
+  /** Gates the hourly screen's type list; the SQL re-checks it on submit. */
+  allow_hourly: boolean;
   affects_balance: boolean;
   color: string | null;
 };
@@ -295,7 +334,7 @@ export async function getActiveLeaveTypes(): Promise<{
 
   const { data, error } = await supabase
     .from('leave_types')
-    .select('id, name_fa, name_en, allow_half_day, affects_balance, color')
+    .select('id, name_fa, name_en, allow_half_day, allow_hourly, affects_balance, color')
     .eq('company_id', companyId)
     .eq('active', true)
     .order('name_fa');
@@ -314,6 +353,11 @@ export type WorkSettings = {
   holidays: string[]; // YYYY-MM-DD strings
   /** What one day of leave means, in hours. Drives every days<->minutes render. */
   hoursPerDay: number;
+  /** Company work-hours window; hourly requests must fall inside it (D8). */
+  workStart: string;
+  workEnd: string;
+  /** Per-day cap on hourly leave, in minutes (D7). */
+  maxHourlyMinutesPerDay: number;
 };
 
 export async function getWorkSettings(): Promise<{
@@ -327,7 +371,7 @@ export async function getWorkSettings(): Promise<{
   const [{ data: ws, error: wsError }, { data: hols, error: holsError }] = await Promise.all([
     supabase
       .from('work_settings')
-      .select('weekend_days, hours_per_day')
+      .select('weekend_days, hours_per_day, work_start, work_end, max_hourly_minutes_per_day')
       .eq('company_id', companyId)
       .maybeSingle(),
     supabase
@@ -345,6 +389,9 @@ export async function getWorkSettings(): Promise<{
       weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_minutes
       holidays: (hols ?? []).map((h) => h.holiday_date),
       hoursPerDay: ws?.hours_per_day ?? 8, // matches the work_settings column default
+      workStart: ws?.work_start ?? '07:00',
+      workEnd: ws?.work_end ?? '15:00',
+      maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
     },
   };
 }

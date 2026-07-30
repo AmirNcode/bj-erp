@@ -764,7 +764,10 @@ export type Database = {
           p_company_id: string
           p_day_part: Database["public"]["Enums"]["day_part"]
           p_end: string
+          p_end_time?: string
           p_start: string
+          p_start_time?: string
+          p_unit?: Database["public"]["Enums"]["leave_unit"]
         }
         Returns: number
       }
@@ -793,6 +796,16 @@ export type Database = {
           jalali_month: number
           jalali_year: number
         }
+      }
+      submit_hourly_leave_request: {
+        Args: {
+          p_date: string
+          p_end_time: string
+          p_leave_type_id: string
+          p_reason?: string
+          p_start_time: string
+        }
+        Returns: string
       }
       set_employee_leave_policy: {
         Args: {

@@ -108,6 +108,8 @@ async function HomeBoardData({
     approvalsPending: t('approvalsPending', { count: pendingCount }),
     noRecent: t('noRecent'),
     noTeam: t('noTeam'),
+    requestDaily: t('requestDaily'),
+    requestHourly: t('requestHourly'),
     ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),

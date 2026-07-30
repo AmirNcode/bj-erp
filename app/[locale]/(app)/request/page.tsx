@@ -14,9 +14,11 @@ import {
   getMyLeaveRequests,
   getWorkSettings,
 } from '@/lib/actions/leave';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { Link } from '@/i18n/navigation';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
 function RequestPageSkeleton() {
@@ -38,6 +40,7 @@ type Props = {
 async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
+  const tHourly = await getTranslations('hourly');
   // Get the authenticated user
   const user = await getCachedUser();
 
@@ -59,7 +62,7 @@ async function RequestPageData({ locale }: { locale: string }) {
   const requests = requestsResult.ok ? requestsResult.requests : [];
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5, 6], holidays: [] as string[], hoursPerDay: 8 };
+    : WORK_SETTINGS_FALLBACK;
 
   const labels = {
     title: t('title'),
@@ -110,6 +113,12 @@ async function RequestPageData({ locale }: { locale: string }) {
         labels={labels}
         locale={locale}
       />
+
+      <p className="mt-4 text-sm">
+        <Link href="/request/hourly" className="text-primary underline" data-testid="daily-to-hourly">
+          {tHourly('hourlyLink')}
+        </Link>
+      </p>
 
       <div className="mt-10">
         <MyRequestsList

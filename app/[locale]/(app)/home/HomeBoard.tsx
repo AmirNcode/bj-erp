@@ -21,6 +21,8 @@ type Labels = {
   approvalsPending: string;
   noRecent: string;
   noTeam: string;
+  requestDaily: string;
+  requestHourly: string;
   days: string;
   hours: string;
   minutes: string;
@@ -58,6 +60,24 @@ export function HomeBoard({ board, labels, locale, calendarPref, hoursPerDay }: 
 
   return (
     <div className="space-y-4" data-testid="home-board">
+      {/* Two entry points, mirroring the client's two paper forms (D13). */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link
+          href={`/${locale}/request`}
+          data-testid="home-request-daily"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestDaily}
+        </Link>
+        <Link
+          href={`/${locale}/request/hourly`}
+          data-testid="home-request-hourly"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestHourly}
+        </Link>
+      </div>
+
       {board.showApprovals && (
         <Link
           href={`/${locale}/manage/approvals`}
