@@ -386,12 +386,15 @@ export type Database = {
           decision_note: string | null
           employee_id: string
           end_date: string
+          end_time: string | null
           id: string
           leave_type_id: string
           reason: string | null
           requested_minutes: number
           start_date: string
+          start_time: string | null
           status: Database["public"]["Enums"]["leave_status"]
+          unit: Database["public"]["Enums"]["leave_unit"]
         }
         Insert: {
           created_at?: string
@@ -401,12 +404,15 @@ export type Database = {
           decision_note?: string | null
           employee_id: string
           end_date: string
+          end_time?: string | null
           id?: string
           leave_type_id: string
           reason?: string | null
           requested_minutes: number
           start_date: string
+          start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
+          unit?: Database["public"]["Enums"]["leave_unit"]
         }
         Update: {
           created_at?: string
@@ -416,12 +422,15 @@ export type Database = {
           decision_note?: string | null
           employee_id?: string
           end_date?: string
+          end_time?: string | null
           id?: string
           leave_type_id?: string
           reason?: string | null
           requested_minutes?: number
           start_date?: string
+          start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
+          unit?: Database["public"]["Enums"]["leave_unit"]
         }
         Relationships: [
           {
@@ -607,25 +616,34 @@ export type Database = {
           company_id: string
           hours_per_day: number
           id: string
+          max_hourly_minutes_per_day: number
           updated_at: string
           updated_by: string | null
           weekend_days: number[]
+          work_end: string
+          work_start: string
         }
         Insert: {
           company_id: string
           hours_per_day?: number
           id?: string
+          max_hourly_minutes_per_day?: number
           updated_at?: string
           updated_by?: string | null
           weekend_days?: number[]
+          work_end?: string
+          work_start?: string
         }
         Update: {
           company_id?: string
           hours_per_day?: number
           id?: string
+          max_hourly_minutes_per_day?: number
           updated_at?: string
           updated_by?: string | null
           weekend_days?: number[]
+          work_end?: string
+          work_start?: string
         }
         Relationships: [
           {
@@ -814,6 +832,7 @@ export type Database = {
       app_role: "admin" | "manager" | "employee" | "security"
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
+      leave_unit: "day" | "hour"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
       ledger_entry:
         | "allocation"
@@ -951,6 +970,7 @@ export const Constants = {
       app_role: ["admin", "manager", "employee", "security"],
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
+      leave_unit: ["day", "hour"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
       ledger_entry: [
         "allocation",
