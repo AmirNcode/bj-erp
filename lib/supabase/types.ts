@@ -377,9 +377,24 @@ export type Database = {
           },
         ]
       }
+      leave_request_serials: {
+        Row: { company_id: string; jalali_year: number; last_seq: number }
+        Insert: { company_id: string; jalali_year: number; last_seq?: number }
+        Update: { company_id?: string; jalali_year?: number; last_seq?: number }
+        Relationships: [
+          {
+            foreignKeyName: "leave_request_serials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_requests: {
         Row: {
           created_at: string
+          company_id: string
           day_part: Database["public"]["Enums"]["day_part"]
           decided_at: string | null
           decided_by: string | null
@@ -392,6 +407,8 @@ export type Database = {
           reason: string | null
           replacement_id: string | null
           requested_minutes: number
+          serial_seq: number
+          serial_year: number
           start_date: string
           start_time: string | null
           status: Database["public"]["Enums"]["leave_status"]
@@ -399,6 +416,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          company_id: string
           day_part?: Database["public"]["Enums"]["day_part"]
           decided_at?: string | null
           decided_by?: string | null
@@ -411,6 +429,8 @@ export type Database = {
           reason?: string | null
           replacement_id?: string | null
           requested_minutes: number
+          serial_seq: number
+          serial_year: number
           start_date: string
           start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
@@ -428,8 +448,11 @@ export type Database = {
           id?: string
           leave_type_id?: string
           reason?: string | null
+          company_id?: string
           replacement_id?: string | null
           requested_minutes?: number
+          serial_seq?: number
+          serial_year?: number
           start_date?: string
           start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
