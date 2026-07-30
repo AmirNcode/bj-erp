@@ -142,6 +142,35 @@ The Supabase security advisor flags the SECURITY DEFINER RPCs and the reason-les
 depends on the view). Don't "fix" them; the HIBP leaked-password toggle is N/A (passwords set
 via our RPCs, not GoTrue).
 
+### Map SQL dependencies with the catalog, never by grepping migrations
+Migration files are *history*: a later one silently redefines a function an earlier one created.
+`20260713120001` moved allocation into `private.allocate_leave_impl`, so the days→minutes contract
+migration (2026-07-29) — ported from the 2026-07-02 definitions — missed it, and dropping the day
+columns broke both employee-creation paths with `column "allocated_days" ... does not exist`.
+Before changing or removing a column, ask the live schema which code touches it:
+```sql
+select n.nspname||'.'||p.proname, pg_get_function_arguments(p.oid)
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname in ('public','private') and p.prosrc ~ '<column|pattern>';
+```
+For large functions, patch `pg_get_functiondef` output programmatically rather than retyping
+security-critical bodies. And keep e2e in the loop: `tsc` cannot see inside PL/pgSQL.
+
+### `supabase gen types` needs a container image this network won't deliver
+The CLI shells out to `public.ecr.aws/supabase/postgres-meta` at runtime, so type generation fails
+here for the same reason server-side Docker builds were rejected. `lib/supabase/types.ts` was
+hand-edited on 2026-07-29 with that noted in its header; `tsc --noEmit` + `next build` are the
+substitute gate, and they do catch wrong column names because every column has a typed call site.
+The CLI is in devDependencies for machines that can reach the registry.
+
+### Local stack ≠ `supabase start`; migrations run as `supabase_admin`
+There is no CLI dev stack on :54322. The running database is the `deploy/docker-compose.yml` one
+(`bj-erp-db-1`, **Postgres 15**, port unpublished, `.env.local` → the gateway). Apply SQL with
+`docker exec -i -e PGPASSWORD=… bj-erp-db-1 psql -U supabase_admin -d postgres -f -`; as `postgres`
+you get `must be owner of table …`, and anything you create lands with the wrong owner. There is no
+`db reset`, so **every migration must be idempotent** — which `deploy/update.sh` requires anyway.
+Also: `create or replace function` cannot change a return type; drop it first.
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

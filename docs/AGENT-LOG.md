@@ -132,7 +132,8 @@ Implementation (plan 1, all committed):
 **Verification**
 
 - Unit: **165/165 green** (30 files). Measured pre-branch baseline: **147**. `docs/TASKS.md` had that
-  right; CLAUDE.md said 103 and `docs/MEMORY.md` said 130 — both stale, CLAUDE.md now corrected.
+  right; CLAUDE.md said 103 (now corrected) and a previous session's own note said 130.
+  `docs/MEMORY.md` carries no count — do not look for one there.
 - `npx tsc --noEmit`, `npm run lint`, `npm run build`: all clean.
 - SQL: acceptance query returned 0 mismatches on all four columns against real rows (27 ledger, 3
   requests, 25 allocations); replaying every migration is a no-op (`UPDATE 0`, `INSERT 0 0`); a

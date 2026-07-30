@@ -596,7 +596,7 @@ In `messages/fa.json`, the same object currently ending with `"days": "روز"`:
 - [ ] **Step 6: Verify the whole unit suite and the lint gate**
 
 Run: `npm run test:unit`
-Expected: PASS — every pre-existing test plus the new `duration` and `jalaliMonths` files. **Record the total count**; it is the baseline for the rest of this plan (CLAUDE.md says 103, `docs/MEMORY.md` says 130, a static grep says 146 — none of them has been trusted, so measure it).
+Expected: PASS — every pre-existing test plus the new `duration` and `jalaliMonths` files. **Record the total count**; it is the baseline for the rest of this plan. Measured: **165** (147 before this branch). CLAUDE.md said 103 and a static grep says 146; `docs/TASKS.md` had 147, which was right.
 
 Run: `npm run lint`
 Expected: no errors.
