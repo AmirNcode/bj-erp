@@ -237,7 +237,9 @@ export async function getMyBalance(
     .select('balance_after_minutes')
     .eq('employee_id', user.id)
     .eq('leave_type_id', leaveTypeId)
-    .order('created_at', { ascending: false })
+    // seq, not created_at: accrual writes several rows per transaction and
+    // created_at ties (migration 20260729130007).
+    .order('seq', { ascending: false })
     .limit(1)
     .maybeSingle();
 
@@ -536,7 +538,7 @@ export async function getMyBalances(): Promise<
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after_minutes, created_at')
+        .select('leave_type_id, balance_after_minutes, seq')
         .eq('employee_id', user.id),
     ]);
 
@@ -573,7 +575,7 @@ export async function getEmployeeBalances(
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after_minutes, created_at')
+        .select('leave_type_id, balance_after_minutes, seq')
         .eq('employee_id', employeeId),
     ]);
 

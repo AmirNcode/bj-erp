@@ -318,6 +318,7 @@ export type Database = {
           note: string | null
           period_month: string | null
           request_id: string | null
+          seq: number
         }
         Insert: {
           balance_after_minutes: number
@@ -330,6 +331,7 @@ export type Database = {
           note?: string | null
           period_month?: string | null
           request_id?: string | null
+          seq?: number
         }
         Update: {
           balance_after_minutes?: number
@@ -342,6 +344,7 @@ export type Database = {
           note?: string | null
           period_month?: string | null
           request_id?: string | null
+          seq?: number
         }
         Relationships: [
           {

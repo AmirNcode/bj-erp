@@ -6,6 +6,10 @@
  *
  * Balances are integer MINUTES (spec §5). Render via lib/leave/duration.ts —
  * never divide by a workday length outside that module.
+ *
+ * "Latest" is decided by `seq`, never by `created_at`: accrual posts several
+ * months in one transaction, where now() is frozen, so created_at ties and the
+ * winner would be arbitrary (migration 20260729130007).
  */
 
 export type BalanceItem = {
@@ -15,15 +19,15 @@ export type BalanceItem = {
   balanceMinutes: number;
 };
 
-/** Latest `balance_after_minutes` per leave type, from (possibly unsorted) ledger rows. */
+/** Latest `balance_after_minutes` per leave type, by `seq`, from unsorted rows. */
 export function latestBalances(
-  rows: { leave_type_id: string; balance_after_minutes: number; created_at: string }[]
+  rows: { leave_type_id: string; balance_after_minutes: number; seq: number }[]
 ): Record<string, number> {
-  const latest: Record<string, { balance: number; at: string }> = {};
+  const latest: Record<string, { balance: number; seq: number }> = {};
   for (const r of rows) {
     const prev = latest[r.leave_type_id];
-    if (!prev || r.created_at > prev.at) {
-      latest[r.leave_type_id] = { balance: r.balance_after_minutes, at: r.created_at };
+    if (!prev || r.seq > prev.seq) {
+      latest[r.leave_type_id] = { balance: r.balance_after_minutes, seq: r.seq };
     }
   }
   return Object.fromEntries(Object.entries(latest).map(([k, v]) => [k, v.balance]));
