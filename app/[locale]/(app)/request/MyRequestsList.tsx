@@ -7,6 +7,7 @@ import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -139,8 +140,10 @@ export function MyRequestsList({
                     </div>
                     {/* Day part */}
                     <div className="text-xs text-muted-foreground">
-                      {labels.dayPartLabels[req.day_part]} ·{' '}
-                      {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
+                      {req.unit === 'hour'
+                        ? formatTimeRange(req.start_time, req.end_time, locale)
+                        : labels.dayPartLabels[req.day_part]}{' '}
+                      · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
                     {/* Why it was rejected — optional, set by the decider. */}
                     {req.status === 'rejected' && req.decision_note && (

@@ -13,6 +13,9 @@ const baseEntry = {
   leave_type_name_en: 'Annual Leave',
   leave_type_color: '#2563eb',
   day_part: 'full',
+  unit: 'day',
+  start_time: null,
+  end_time: null,
   status: 'approved',
 } satisfies Omit<CalendarEntry, 'id' | 'employee_name' | 'start_date' | 'end_date'>;
 

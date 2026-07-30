@@ -228,6 +228,9 @@ export type LeaveRequestWithType = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
   requested_minutes: number;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
@@ -252,7 +255,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, requested_minutes, status, reason, decision_note, created_at,
+      `id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, status, reason, decision_note, created_at,
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', user.id)
@@ -476,6 +479,9 @@ export type PendingApproval = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
   requested_minutes: number;
   reason: string | null;
 };
@@ -494,7 +500,7 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, requested_minutes, reason,
+      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, reason,
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
     )
@@ -508,6 +514,9 @@ export async function getPendingApprovals(): Promise<
     start_date: string;
     end_date: string;
     day_part: DayPart;
+    unit: Database['public']['Enums']['leave_unit'];
+    start_time: string | null;
+    end_time: string | null;
     requested_minutes: number;
     reason: string | null;
     profiles: { full_name: string; manager_id: string | null } | null;
@@ -523,6 +532,9 @@ export async function getPendingApprovals(): Promise<
     start_date: r.start_date,
     end_date: r.end_date,
     day_part: r.day_part,
+    unit: r.unit,
+    start_time: r.start_time,
+    end_time: r.end_time,
     requested_minutes: r.requested_minutes,
     reason: r.reason ?? null,
   }));
@@ -550,6 +562,9 @@ export type CalendarEntry = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
   status: 'pending' | 'approved';
 };
 
@@ -565,7 +580,7 @@ export async function getCalendarEntries(
   const { data, error } = await supabase
     .from('team_leave_calendar')
     .select(
-      'id, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, status'
+      'id, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, unit, start_time, end_time, status'
     )
     .lte('start_date', rangeEnd)
     .gte('end_date', rangeStart)
@@ -583,6 +598,9 @@ export async function getCalendarEntries(
     start_date: r.start_date ?? '',
     end_date: r.end_date ?? '',
     day_part: (r.day_part ?? 'full') as DayPart,
+    unit: (r.unit ?? 'day') as Database['public']['Enums']['leave_unit'],
+    start_time: r.start_time ?? null,
+    end_time: r.end_time ?? null,
     status: (r.status ?? 'pending') as 'pending' | 'approved',
   }));
 

@@ -671,13 +671,17 @@ export type Database = {
           employee_id: string | null
           employee_name: string | null
           end_date: string | null
+          end_time: string | null
           id: string | null
           leave_type_color: string | null
           leave_type_id: string | null
           leave_type_name_en: string | null
           leave_type_name_fa: string | null
+          requested_minutes: number | null
           start_date: string | null
+          start_time: string | null
           status: Database["public"]["Enums"]["leave_status"] | null
+          unit: Database["public"]["Enums"]["leave_unit"] | null
         }
         Relationships: [
           {

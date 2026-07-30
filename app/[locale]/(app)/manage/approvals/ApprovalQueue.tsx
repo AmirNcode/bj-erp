@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
 import { formatDuration } from '@/lib/leave/duration';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -109,8 +110,10 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         {req.start_date} — {req.end_date}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {labels.dayPartLabels[req.day_part]} ·{' '}
-                        {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
+                        {req.unit === 'hour'
+                          ? formatTimeRange(req.start_time, req.end_time, locale)
+                          : labels.dayPartLabels[req.day_part]}{' '}
+                        · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                       {req.reason && (
                         <div className="text-xs text-muted-foreground mt-1">
