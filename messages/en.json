@@ -38,6 +38,7 @@
     "balancesTitle": "My Balances",
     "requestDaily": "Daily leave request",
     "requestHourly": "Hourly leave request",
+    "requestErrand": "Hourly errand request",
     "recentTitle": "My Recent Requests",
     "teamTitle": "My Team",
     "managerLabel": "Manager",
@@ -108,6 +109,26 @@
     "hourlyLink": "Need a few hours instead? Hourly leave request",
     "unavailable": "No leave type is currently available hourly. Ask an administrator."
   },
+  "errand": {
+    "title": "Hourly Work Errand Request",
+    "navLink": "Errand request",
+    "badge": "Errand",
+    "hint": "An errand is work — it does not reduce your leave balance.",
+    "date": "Date",
+    "fromTime": "Departure time",
+    "toTime": "Return time",
+    "location": "Errand location",
+    "locationPlaceholder": "e.g. Ahvaz labour office",
+    "description": "Errand description (optional)",
+    "submit": "Submit errand request",
+    "durationLabel": "Duration",
+    "preview": "Preview",
+    "success": "Errand request submitted.",
+    "validationSelectDate": "Pick a date.",
+    "validationTimes": "The return time must be after the departure time.",
+    "validationLocation": "Enter the errand location.",
+    "leaveLink": "Need leave instead? Leave request"
+  },
   "replacement": {
     "title": "Replacement (optional)",
     "hint": "Who covers for you. Colleagues in your department; anyone already on leave cannot be chosen.",
@@ -136,7 +157,8 @@
     "days": "days",
     "hours": "hours",
     "minutes": "minutes",
-    "and": "and"
+    "and": "and",
+    "trackingNo": "Tracking no."
   },
   "calendar": {
     "title": "Calendar",
@@ -286,6 +308,7 @@
       "createdHint": "You can now add employees to this department.",
       "addEmployee": "Add an employee",
       "backToList": "Back to employees",
+      "backToSettings": "Back to settings",
       "invalid": "Code must be 2-6 latin letters or digits.",
       "nameRequired": "Both the Farsi and English names are required.",
       "error": "Error"
@@ -321,8 +344,15 @@
       },
       "recurringHint": "Recurring holidays must still be entered for each year; day counting only treats the exact saved dates as holidays.",
       "departments": {
-        "title": "Department codes",
-        "hint": "Latin prefix of new employees' login codes (e.g. prod-1042). Existing employees keep their codes.",
+        "title": "Departments",
+        "hint": "Tap a department to see who works in it.",
+        "addNew": "Add department",
+        "empty": "No departments yet.",
+        "managersLabel": "Managers",
+        "workersLabel": "Workers",
+        "noMembers": "No one is assigned to this department.",
+        "loading": "Loading…",
+        "close": "Close",
         "invalid": "Code must be 2-6 latin letters or digits."
       },
       "accrual": {
