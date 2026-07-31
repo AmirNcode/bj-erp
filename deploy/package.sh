@@ -20,11 +20,36 @@ IMAGES=(
   "caddy:2.8.4-alpine"
 )
 
-echo "==> Building app image (bj-erp-app:${VERSION})…"
-docker build -f deploy/Dockerfile -t "bj-erp-app:${VERSION}" -t bj-erp-app:latest .
+# The client's server is amd64 and this Mac is arm64. Without an explicit
+# platform, `docker build` and `docker pull` both silently produce arm64
+# artifacts that die on the server with `exec format error` — and the bundle is
+# offline, so the mistake is only discovered on site. release.sh already guards
+# its build this way; the same guard belongs here, on the FRESH-INSTALL path.
+#
+# The pulls matter as much as the build: caddy (and others) publish multi-arch
+# manifests, so a re-pull on this Mac would swap a working amd64 image for an
+# arm64 one without saying anything.
+PLATFORM="linux/amd64"
 
-echo "==> Pulling pinned service images…"
-for img in "${IMAGES[@]}"; do docker pull "$img"; done
+verify_arch() { # image
+  local got
+  got=$(docker image inspect "$1" --format '{{.Architecture}}')
+  [ "$got" = "amd64" ] \
+    || { echo "ERROR: $1 is '${got}', the server needs amd64 — nothing was packaged." >&2; exit 1; }
+}
+
+echo "==> Building app image (bj-erp-app:${VERSION}) for ${PLATFORM} (emulated — slow)…"
+DOCKER_DEFAULT_PLATFORM="$PLATFORM" \
+  docker build -f deploy/Dockerfile -t "bj-erp-app:${VERSION}" -t bj-erp-app:latest .
+verify_arch "bj-erp-app:${VERSION}"
+
+echo "==> Pulling pinned service images for ${PLATFORM}…"
+for img in "${IMAGES[@]}"; do docker pull --platform "$PLATFORM" "$img"; done
+
+echo "==> Verifying every image is amd64 before saving…"
+verify_arch bj-erp-app:latest
+for img in "${IMAGES[@]}"; do verify_arch "$img"; done
+echo "  architecture verified: amd64 (app + ${#IMAGES[@]} service images)"
 
 echo "==> Assembling bundle…"
 rm -rf "$OUT"
