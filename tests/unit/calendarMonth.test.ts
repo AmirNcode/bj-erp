@@ -8,6 +8,7 @@ import {
 import type { CalendarEntry } from '@/lib/actions/leave';
 
 const baseEntry = {
+  kind: 'leave',
   employee_id: 'employee',
   leave_type_name_fa: 'مرخصی استحقاقی',
   leave_type_name_en: 'Annual Leave',

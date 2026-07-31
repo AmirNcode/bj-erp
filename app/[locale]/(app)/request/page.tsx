@@ -42,6 +42,7 @@ async function RequestPageData({ locale }: { locale: string }) {
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
   const tHourly = await getTranslations('hourly');
+  const tErrand = await getTranslations('errand');
   // Get the authenticated user
   const user = await getCachedUser();
 
@@ -110,6 +111,9 @@ async function RequestPageData({ locale }: { locale: string }) {
     replacementLoading: tRepl('loading'),
     replacementEmpty: tRepl('empty'),
     coverLabel: tRepl('coverLabel'),
+    trackingNo: tLeave('trackingNo'),
+    errandBadge: tErrand('badge'),
+    errandLocation: tErrand('location'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 
@@ -123,9 +127,12 @@ async function RequestPageData({ locale }: { locale: string }) {
         locale={locale}
       />
 
-      <p className="mt-4 text-sm">
+      <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <Link href="/request/hourly" className="text-primary underline" data-testid="daily-to-hourly">
           {tHourly('hourlyLink')}
+        </Link>
+        <Link href="/request/errand" className="text-primary underline" data-testid="daily-to-errand">
+          {tErrand('navLink')}
         </Link>
       </p>
 

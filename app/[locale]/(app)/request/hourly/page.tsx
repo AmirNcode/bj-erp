@@ -31,6 +31,7 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   const tHourly = await getTranslations('hourly');
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
+  const tErrand = await getTranslations('errand');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -100,9 +101,12 @@ async function HourlyRequestData({ locale }: { locale: string }) {
         labels={labels}
         locale={locale}
       />
-      <p className="mt-6 text-sm">
+      <p className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
         <Link href="/request" className="text-primary underline" data-testid="hourly-to-daily">
           {tHourly('dailyLink')}
+        </Link>
+        <Link href="/request/errand" className="text-primary underline" data-testid="hourly-to-errand">
+          {tErrand('navLink')}
         </Link>
       </p>
     </>

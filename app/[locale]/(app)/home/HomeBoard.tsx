@@ -23,6 +23,8 @@ type Labels = {
   noTeam: string;
   requestDaily: string;
   requestHourly: string;
+  requestErrand: string;
+  errandBadge: string;
   coveringTitle: string;
   coveringFor: string;
   days: string;
@@ -71,8 +73,9 @@ export function HomeBoard({
 
   return (
     <div className="space-y-4" data-testid="home-board">
-      {/* Two entry points, mirroring the client's two paper forms (D13). */}
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* One entry point per paper form: BJ-F 50208 daily + hourly (D13), and
+          BJ-F 50207 the hourly work errand (2026-07-30 spec, D4). */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <Link
           href={`/${locale}/request`}
           data-testid="home-request-daily"
@@ -86,6 +89,13 @@ export function HomeBoard({
           className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
         >
           {labels.requestHourly}
+        </Link>
+        <Link
+          href={`/${locale}/request/errand`}
+          data-testid="home-request-errand"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestErrand}
         </Link>
       </div>
 
@@ -164,8 +174,14 @@ export function HomeBoard({
                 {board.recent.map((r) => (
                   <div key={r.id} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
+                      {/* An errand has no leave type; naming it by its tag keeps
+                          the row from rendering as a bare em dash. */}
                       <div className="text-sm font-medium truncate">
-                        {r.leave_types ? localizedLeaveTypeName(r.leave_types, locale) : '—'}
+                        {r.kind === 'errand'
+                          ? `${labels.errandBadge}: ${r.errand_location ?? '—'}`
+                          : r.leave_types
+                            ? localizedLeaveTypeName(r.leave_types, locale)
+                            : '—'}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatDate(r.start_date)} — {formatDate(r.end_date)} ·{' '}

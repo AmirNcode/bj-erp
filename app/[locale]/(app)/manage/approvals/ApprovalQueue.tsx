@@ -39,6 +39,9 @@ type Labels = {
   rejectSuccess: string;
   coverLabel: string;
   coverConflict: string;
+  trackingNo: string;
+  errandBadge: string;
+  errandLocation: string;
   days: string;
   hours: string;
   minutes: string;
@@ -107,8 +110,31 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                 <CardContent className="py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm text-foreground">{req.employee_name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{typeName}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="font-semibold text-sm text-foreground truncate">
+                          {req.employee_name}
+                        </div>
+                        {/* A work errand is not time off — tag it so the manager
+                            never reads one as a leave request. */}
+                        {req.kind === 'errand' && (
+                          <span
+                            className="inline-flex shrink-0 items-center rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
+                            data-testid={`errand-badge-${req.id}`}
+                          >
+                            {labels.errandBadge}
+                          </span>
+                        )}
+                      </div>
+                      {req.kind === 'errand' ? (
+                        <div
+                          className="text-xs text-muted-foreground mt-0.5"
+                          data-testid={`errand-location-${req.id}`}
+                        >
+                          {labels.errandLocation}: {req.errand_location ?? '—'}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground mt-0.5">{typeName}</div>
+                      )}
                       <div className="text-xs text-muted-foreground">
                         {req.start_date} — {req.end_date}
                       </div>
@@ -118,8 +144,13 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                           : labels.dayPartLabels[req.day_part]}{' '}
                         · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
-                      <div className="text-xs font-mono text-muted-foreground" dir="ltr" data-testid={`serial-${req.id}`}>
-                        {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+                      {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
+                          which is the requester's personnel number (spec §5). */}
+                      <div className="text-xs text-muted-foreground" data-testid={`serial-${req.id}`}>
+                        {labels.trackingNo}:{' '}
+                        <span className="font-mono" dir="ltr">
+                          {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+                        </span>
                       </div>
                       {req.replacement_name && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>

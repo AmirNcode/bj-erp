@@ -22,6 +22,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
   const t = await getTranslations('approvals');
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
+  const tErrand = await getTranslations('errand');
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
@@ -47,6 +48,9 @@ async function ApprovalsData({ locale }: { locale: string }) {
     rejectSuccess: t('rejectSuccess'),
     coverLabel: tRepl('coverLabel'),
     coverConflict: tRepl('coverConflict'),
+    trackingNo: tLeave('trackingNo'),
+    errandBadge: tErrand('badge'),
+    errandLocation: tErrand('location'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
     dayPartLabels: {
       full: tLeave('dayPart.full'),

@@ -31,6 +31,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
   const tLeave = await getTranslations('leave');
   const tApprovals = await getTranslations('approvals');
+  const tErrand = await getTranslations('errand');
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -75,6 +76,7 @@ async function CalendarData({ locale }: { locale: string }) {
     rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
     approveSuccess: tApprovals('approveSuccess'),
     rejectSuccess: tApprovals('rejectSuccess'),
+    errandBadge: tErrand('badge'),
   };
 
   return (

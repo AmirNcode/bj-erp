@@ -51,6 +51,9 @@ type Labels = {
   from: string;
   to: string;
   rejectedReason: string;
+  trackingNo: string;
+  errandBadge: string;
+  errandLocation: string;
 };
 
 type Props = {
@@ -131,9 +134,30 @@ export function MyRequestsList({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    {/* Leave type name */}
-                    <div className="font-medium text-sm text-foreground">
-                      {req.leave_types ? localizedLeaveTypeName(req.leave_types, locale) : '—'}
+                    {/* An errand has no leave type — it is tagged instead, so a
+                        work trip never reads as time off. */}
+                    <div className="flex items-center gap-2">
+                      {req.kind === 'errand' && (
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
+                          data-testid={`errand-badge-${req.id}`}
+                        >
+                          {labels.errandBadge}
+                        </span>
+                      )}
+                      {req.kind === 'errand' ? (
+                        <div
+                          className="font-medium text-sm text-foreground truncate"
+                          data-testid={`errand-location-${req.id}`}
+                          title={req.errand_location ?? undefined}
+                        >
+                          {labels.errandLocation}: {req.errand_location ?? '—'}
+                        </div>
+                      ) : (
+                        <div className="font-medium text-sm text-foreground truncate">
+                          {req.leave_types ? localizedLeaveTypeName(req.leave_types, locale) : '—'}
+                        </div>
+                      )}
                     </div>
                     {/* Date range */}
                     <div className="text-xs text-muted-foreground mt-0.5">
@@ -147,8 +171,13 @@ export function MyRequestsList({
                         : labels.dayPartLabels[req.day_part]}{' '}
                       · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
-                    <div className="text-xs font-mono text-muted-foreground" dir="ltr" data-testid={`serial-${req.id}`}>
-                      {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+                    {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
+                        which is the requester's personnel number (spec §5). */}
+                    <div className="text-xs text-muted-foreground" data-testid={`serial-${req.id}`}>
+                      {labels.trackingNo}:{' '}
+                      <span className="font-mono" dir="ltr">
+                        {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+                      </span>
                     </div>
                     {req.replacement_name && (
                       <div className="text-xs text-muted-foreground">

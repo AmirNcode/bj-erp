@@ -38,10 +38,11 @@ async function HomeBoardData({
   locale: string;
   userId: string;
 }) {
-  const [t, tLeave, tRepl, roles] = await Promise.all([
+  const [t, tLeave, tRepl, tErrand, roles] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
     getTranslations('replacement'),
+    getTranslations('errand'),
     getCachedRoles(userId),
   ]);
   const canApprove = roles.includes('admin') || roles.includes('manager');
@@ -117,6 +118,8 @@ async function HomeBoardData({
     coveringTitle: tRepl('coveringTitle'),
     coveringFor: tRepl('coveringFor'),
     requestHourly: t('requestHourly'),
+    requestErrand: t('requestErrand'),
+    errandBadge: tErrand('badge'),
     ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),

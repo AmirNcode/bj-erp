@@ -155,6 +155,44 @@ export async function submitHourlyRequest(
 }
 
 // ---------------------------------------------------------------------------
+// submitErrandRequest (self) — ماموریت ساعتی, the BJ-F 50207 flow.
+// ---------------------------------------------------------------------------
+
+export type SubmitErrandInput = {
+  /** Gregorian YYYY-MM-DD — one date only. */
+  date: string;
+  /** 'HH:MM', company-local. */
+  startTime: string;
+  endTime: string;
+  /** محل ماموریت — required. */
+  location: string;
+  /** شرح ماموریت — optional; stored in `reason`, which is FR-25-private. */
+  description?: string;
+};
+
+export async function submitErrandRequest(
+  input: SubmitErrandInput
+): Promise<SubmitRequestResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  // No accrual pass here, unlike the two leave paths: an errand is work. It
+  // spends no balance, so there is nothing a freshly-accrued hour could unlock.
+  const { data, error } = await supabase.rpc('submit_errand_request', {
+    p_date: input.date,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_location: input.location,
+    p_description: input.description ?? undefined,
+  });
+
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
 // Replacement / cover reads (spec §8)
 // ---------------------------------------------------------------------------
 
@@ -316,6 +354,10 @@ export async function setLeaveBalance(
  */
 export type LeaveRequestWithType = {
   id: string;
+  /** 'errand' rows are work trips (BJ-F 50207), not leave — they carry no type. */
+  kind: Database['public']['Enums']['request_kind'];
+  /** محل ماموریت. Set only on errands; never exposed to teammates. */
+  errand_location: string | null;
   start_date: string;
   end_date: string;
   day_part: DayPart;
@@ -349,7 +391,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, status, reason, decision_note, created_at,
+      `id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, status, reason, decision_note, created_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
@@ -580,6 +622,10 @@ export async function rejectRequest(
 
 export type PendingApproval = {
   id: string;
+  /** 'errand' rows are work trips (BJ-F 50207) — no type, no balance effect. */
+  kind: Database['public']['Enums']['request_kind'];
+  /** محل ماموریت — the manager deciding an errand needs to see where. */
+  errand_location: string | null;
   employee_name: string;
   employee_manager_id: string | null;
   leave_type_name_fa: string;
@@ -613,7 +659,7 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id,
+      `id, employee_id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
@@ -625,6 +671,8 @@ export async function getPendingApprovals(): Promise<
 
   type Row = {
     id: string;
+    kind: Database['public']['Enums']['request_kind'];
+    errand_location: string | null;
     start_date: string;
     end_date: string;
     day_part: DayPart;
@@ -643,6 +691,8 @@ export async function getPendingApprovals(): Promise<
 
   const mapped: PendingApproval[] = ((data ?? []) as unknown as Row[]).map((r) => ({
     id: r.id,
+    kind: r.kind ?? 'leave',
+    errand_location: r.errand_location ?? null,
     employee_name: r.profiles?.full_name ?? '—',
     employee_manager_id: r.profiles?.manager_id ?? null,
     leave_type_name_fa: r.leave_types?.name_fa ?? '—',
@@ -714,6 +764,11 @@ export async function getPendingApprovals(): Promise<
 
 export type CalendarEntry = {
   id: string;
+  /**
+   * 'errand' rows are work trips. `errand_location` is deliberately NOT here:
+   * the view omits it, so teammates see that someone is out, not where (FR-25).
+   */
+  kind: Database['public']['Enums']['request_kind'];
   employee_id: string;
   employee_name: string;
   leave_type_name_fa: string;
@@ -740,7 +795,7 @@ export async function getCalendarEntries(
   const { data, error } = await supabase
     .from('team_leave_calendar')
     .select(
-      'id, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, unit, start_time, end_time, status'
+      'id, kind, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, unit, start_time, end_time, status'
     )
     .lte('start_date', rangeEnd)
     .gte('end_date', rangeStart)
@@ -750,8 +805,10 @@ export async function getCalendarEntries(
 
   const entries: CalendarEntry[] = (data ?? []).map((r) => ({
     id: r.id ?? '',
+    kind: r.kind ?? 'leave',
     employee_id: r.employee_id ?? '',
     employee_name: r.employee_name ?? '—',
+    // An errand has no leave type, so the LEFT JOIN leaves these null.
     leave_type_name_fa: r.leave_type_name_fa ?? '—',
     leave_type_name_en: r.leave_type_name_en ?? null,
     leave_type_color: r.leave_type_color ?? null,
