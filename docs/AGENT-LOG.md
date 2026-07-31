@@ -78,6 +78,64 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-31 (later) — Local container rebuilt; deploy path checked; packaging fixed for amd64
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `d26b0cb` (straight after the merge below)
+**Trigger:** User asked to rebuild the local Docker app so they could test on an iPhone, then asked
+what it would take to run this on the client's server — and told me the client's install holds **no
+real data**, so a fresh install is acceptable.
+
+**What changed**
+- `deploy/package.sh:24` — built with **no `--platform`** and pulled the four pinned service images
+  the same way. On this arm64 Mac that yields arm64 artifacts that die on the client's amd64 server
+  with `exec format error`, discovered on site because the bundle is offline. Now pins
+  `linux/amd64` for the build *and* the pulls, and refuses to package unless every image verifies
+  as amd64. `release.sh` already did this; `package.sh` is the **fresh-install** path and did not.
+  The pulls were the sharper half — `caddy:2.8.4-alpine` is multi-arch, so a re-pull silently swaps
+  a good image.
+- `deploy/RUNBOOK.md`, `docs/DEPLOY.md`, `docs/TASKS.md` — all three asserted the migrations are
+  idempotent. Measurably false; corrected with the actual numbers and the operational consequences.
+
+**Actions outside the repo**
+- **Rebuilt `bj-erp-app:latest`** from merged `main` (arm64, local only) and recreated
+  `bj-erp-app-1`. Old image tagged `bj-erp-app:pre-errand-20260731`; old container kept stopped as
+  `bj-erp-app-rollback-20260731`. `docker compose` is unusable here (`.env` is root-owned `600`, no
+  passwordless sudo), so the container was recreated with `docker run`, copying env/labels off the
+  running one — **network alias `app` is mandatory**, Caddy proxies to `app:3000`.
+- Spun a **throwaway `supabase/postgres:15.8.1.085`** and applied all 38 migrations + `seed.sql` in
+  order, as `install.sh` does. Container removed afterwards.
+- Created and dropped a scratch database `bjdeploy` to measure replay behaviour.
+- Stopped the `next dev` server left running earlier.
+
+**Verification**
+- **Fresh install works and is CORRECT, not merely error-free: 38/38 migrations + seed clean**, and
+  the end state checks out — leave-type hourly/accrual flags (the ones migrations cannot set,
+  because they run *before* the seed), 612 `jalali_months` rows, work settings, `request_kind`, the
+  **kind-keyed serial index**, and a `team_leave_calendar` leaking neither reason nor errand location.
+- **Replay against a populated DB fails 9 of 38**, listed in `docs/TASKS.md`. `update.sh` therefore
+  aborts on file #1 — safely: app not restarted, backup intact.
+- **The production container genuinely works**, not just serves HTML: ran `errand.spec.ts` and
+  `hourly.spec.ts` against `https://192.168.2.48` with a throwaway Playwright config (deleted after)
+  — **3 passed**, including submit → manager approves → leave balance untouched.
+- The new amd64 guard was tested against a real arm64 image and rejected it.
+
+**State left behind**
+- `main` @ `8b6ad86`, **not pushed**. Working tree clean.
+- Local stack runs the new arm64 image; rollback image and stopped container retained. The local DB
+  carries all 38 migrations.
+
+**For the next agent**
+- **`package.sh` had never been fixed despite the arm64 landmine being known since 2026-07-25.**
+  It is fixed now, but note the asymmetry that hid it: `release.sh` (incremental updates) guarded
+  the build, `package.sh` (fresh installs) did not, and only the latter is used for a new install.
+- The migration replay repair is **deferred, not done** — see `docs/TASKS.md`. It is not needed for
+  this release because the client has no real data and is getting a fresh install. It becomes
+  required the moment they do.
+- A fresh install **wipes their test users and departments** and regenerates the root CA, so phones
+  must re-trust it. Their install is on port **3500** — `APP_ORIGIN` must match or login breaks in
+  the way the 2026-07-29 changelog entry describes.
+
 ## 2026-07-31 — Pre-merge review of the leave-v2 branch; four real bugs found and fixed; merged to main
 
 **Agent:** Claude Opus 5 via Claude Code (two parallel review subagents, also Opus 5)
