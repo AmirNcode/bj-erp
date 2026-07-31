@@ -378,9 +378,24 @@ export type Database = {
         ]
       }
       leave_request_serials: {
-        Row: { company_id: string; jalali_year: number; last_seq: number }
-        Insert: { company_id: string; jalali_year: number; last_seq?: number }
-        Update: { company_id?: string; jalali_year?: number; last_seq?: number }
+        Row: {
+          company_id: string
+          jalali_year: number
+          kind: Database["public"]["Enums"]["request_kind"]
+          last_seq: number
+        }
+        Insert: {
+          company_id: string
+          jalali_year: number
+          kind?: Database["public"]["Enums"]["request_kind"]
+          last_seq?: number
+        }
+        Update: {
+          company_id?: string
+          jalali_year?: number
+          kind?: Database["public"]["Enums"]["request_kind"]
+          last_seq?: number
+        }
         Relationships: [
           {
             foreignKeyName: "leave_request_serials_company_id_fkey"
@@ -402,8 +417,10 @@ export type Database = {
           employee_id: string
           end_date: string
           end_time: string | null
+          errand_location: string | null
           id: string
-          leave_type_id: string
+          kind: Database["public"]["Enums"]["request_kind"]
+          leave_type_id: string | null
           reason: string | null
           replacement_id: string | null
           requested_minutes: number
@@ -424,8 +441,10 @@ export type Database = {
           employee_id: string
           end_date: string
           end_time?: string | null
+          errand_location?: string | null
           id?: string
-          leave_type_id: string
+          kind?: Database["public"]["Enums"]["request_kind"]
+          leave_type_id?: string | null
           reason?: string | null
           replacement_id?: string | null
           requested_minutes: number
@@ -445,8 +464,10 @@ export type Database = {
           employee_id?: string
           end_date?: string
           end_time?: string | null
+          errand_location?: string | null
           id?: string
-          leave_type_id?: string
+          kind?: Database["public"]["Enums"]["request_kind"]
+          leave_type_id?: string | null
           reason?: string | null
           company_id?: string
           replacement_id?: string | null
@@ -699,6 +720,7 @@ export type Database = {
           end_date: string | null
           end_time: string | null
           id: string | null
+          kind: Database["public"]["Enums"]["request_kind"] | null
           leave_type_color: string | null
           leave_type_id: string | null
           leave_type_name_en: string | null
@@ -799,6 +821,7 @@ export type Database = {
           p_day_part: Database["public"]["Enums"]["day_part"]
           p_end: string
           p_end_time?: string
+          p_kind?: Database["public"]["Enums"]["request_kind"]
           p_start: string
           p_start_time?: string
           p_unit?: Database["public"]["Enums"]["leave_unit"]
@@ -859,6 +882,16 @@ export type Database = {
           jalali_year: number
         }
       }
+      submit_errand_request: {
+        Args: {
+          p_date: string
+          p_description?: string
+          p_end_time: string
+          p_location: string
+          p_start_time: string
+        }
+        Returns: string
+      }
       submit_hourly_leave_request: {
         Args: {
           p_date: string
@@ -911,6 +944,7 @@ export type Database = {
       department_kind: "team" | "security" | "office"
       leave_unit: "day" | "hour"
       leave_status: "pending" | "approved" | "rejected" | "cancelled"
+      request_kind: "leave" | "errand"
       ledger_entry:
         | "allocation"
         | "consumption"
@@ -1049,6 +1083,7 @@ export const Constants = {
       department_kind: ["team", "security", "office"],
       leave_unit: ["day", "hour"],
       leave_status: ["pending", "approved", "rejected", "cancelled"],
+      request_kind: ["leave", "errand"],
       ledger_entry: [
         "allocation",
         "consumption",

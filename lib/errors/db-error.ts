@@ -61,6 +61,10 @@ const RULES: Rule[] = [
   { re: /end time must be after start time/, key: 'endBeforeStart' },
   { re: /times must fall within working hours/, key: 'outsideWorkHours' },
   { re: /hourly leave exceeds the daily limit/, key: 'hourlyDailyLimit' },
+  // Errand (FR-30). The form validates both client-side first, so these only
+  // surface when the DB is reached directly or the client check is bypassed.
+  { re: /errand location is required/, key: 'errandLocationRequired' },
+  { re: /errand location is too long/, key: 'errandLocationTooLong' },
   { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
   { re: /replacement is on leave during this period/, key: 'replacementAway' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },

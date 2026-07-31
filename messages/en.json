@@ -436,6 +436,8 @@
     "endBeforeStart": "The end time must be after the start time.",
     "outsideWorkHours": "The times must fall within working hours.",
     "hourlyDailyLimit": "This exceeds the daily limit for hourly leave.",
+    "errandLocationRequired": "Enter the errand location.",
+    "errandLocationTooLong": "The errand location must be no more than 200 characters.",
     "replacementNotColleague": "The replacement must be an active colleague in your own department.",
     "replacementAway": "That person is on leave during this period. Choose someone else.",
     "balanceNegative": "The target balance must be 0 or more.",

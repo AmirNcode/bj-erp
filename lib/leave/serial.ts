@@ -1,7 +1,15 @@
 import { formatNumber } from '@/lib/i18n/format';
 
 /**
- * Request serial numbers (spec §7.6) — the شماره on the client's paper forms.
+ * Request serial numbers — the app's own **شماره پیگیری / tracking number**.
+ *
+ * This is NOT the شماره printed on the client's paper forms. That earlier claim
+ * was wrong: the client clarified on 2026-07-30 that the paper شماره is simply
+ * the requester's personnel number. See
+ * docs/specs/2026-07-30-work-errand-and-login-codes-design.md §5 — the generated
+ * serial is kept because it is unique, ordered and year-scoped, but it is
+ * labelled as a tracking number so the two cannot be conflated. Leave and
+ * errands number independently, one sequence per (company, Jalali year, kind).
  *
  * Stored as two integers; formatting lives here rather than in SQL, because a
  * display string in the database is a presentation concern leaking into storage.
