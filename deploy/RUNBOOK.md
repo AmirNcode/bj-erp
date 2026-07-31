@@ -140,10 +140,29 @@ sudo docker compose up -d app
 If the release includes new migrations, copy the `*.sql` files into
 `migrations/` first and run `sudo ./install.sh` instead of `compose up`.
 
-Re-running `install.sh` is safe by design: it reuses the existing `.env`
-(secrets are **not** regenerated), reuses the existing database volume, replays
-every migration idempotently, re-applies the baseline seed as a no-op, and skips
-admin creation because the admin already exists.
+Re-running `install.sh` reuses the existing `.env` (secrets are **not**
+regenerated), reuses the existing database volume, re-applies the baseline seed
+as a no-op, and skips admin creation because the admin already exists.
+
+> **The migrations are NOT idempotent — verified 2026-07-31, not assumed.**
+> Replaying all 38 against a populated database fails **9** of them, starting at
+> file #1 (`20260623120001_core.sql`, a bare `create type public.app_role`).
+> Five were never guarded; four became unreplayable when the days→minutes
+> conversion dropped columns and the serial counter was re-keyed.
+>
+> Consequences, in order of how likely you are to hit them:
+> - **A fresh install is fine.** All 38 apply cleanly in order to an empty
+>   database, and the resulting state is correct — checked on a throwaway
+>   `supabase/postgres:15.8.1.085`, including the seeded leave-type flags that
+>   migrations cannot set because they run *before* `seed.sql`.
+> - **`update.sh` cannot deliver a schema change to an existing install.** It
+>   replays every file under `psql -v ON_ERROR_STOP=1 || fail`, so it aborts on
+>   file #1. It aborts *safely* — the app is not restarted and the verified
+>   backup is untouched — but the upgrade simply does not happen.
+> - **Re-running `install.sh` over an existing database** hits the same wall.
+>
+> Fixing this is tracked in `docs/TASKS.md`. It must be done before the first
+> incremental update once the client holds real data.
 
 ### Rollback
 
@@ -161,7 +180,7 @@ the app image.** Replacing the app image cannot affect them.
 |---|---|
 | `docker compose up -d app` (new image) | **None** — app container only |
 | `docker compose restart` / `down` / `up -d` | **None** — volume persists |
-| `sudo ./install.sh` (re-run) | **None** — migrations idempotent, secrets reused, admin skipped |
+| `sudo ./install.sh` (re-run) | **None to data** — secrets reused, admin skipped. But it **aborts on the first migration** against an existing database (see above) |
 | Applying a new migration | Adds/alters schema; existing rows preserved |
 | `docker compose down -v` | **DESTROYS the database** — never run this |
 | `docker volume rm bj-erp_db-data` | **DESTROYS the database** — never run this |

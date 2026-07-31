@@ -33,8 +33,9 @@ their own plan files when reached.
 > **2026-07-30 security review:** active-account RLS, manager authority, audit integrity,
 > transactional password reset, hourly approval overlap, input validation, and deployment/browser
 > hardening are complete locally. Evidence: `docs/SECURITY-REVIEW-2026-07-30.md`.
-> ⊘ Release gate pending: run `npm audit` on a network-authorized machine; this environment blocked
-> sending the lockfile manifest to the external npm registry.
+> ☑ Release gate closed 2026-07-31: `npm audit --omit=dev` DOES run from this Mac. Result: **3 high**,
+> all transitive through `next@16.2.9` (postcss XSS + path traversal, sharp/libvips). Pre-existing on
+> `main` — not introduced by any recent branch. Fix is a patch bump to `next@16.2.12`.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -106,8 +107,10 @@ Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
 - ☑ `deploy/setup-release.sh` — one-time SSH key + `bj` alias + connection multiplexing
 - ☑ `deploy/release.sh` — gates, amd64 cross-build + architecture verification, resumable
   ship, remote trigger, pre-deploy backup copied back to the Mac
-- ☑ `deploy/update.sh` — lock, preflight, verified backup, row-count assertions, idempotent
-  migrations, single-container cutover, health check, automatic rollback, retention
+- ☑ `deploy/update.sh` — lock, preflight, verified backup, row-count assertions, migration
+  replay, single-container cutover, health check, automatic rollback, retention.
+  **Caveat (measured 2026-07-31): the migrations are NOT idempotent**, so the replay aborts on
+  file #1 against a populated database — safely, but the upgrade does not happen. See below.
 - ☑ `RUNBOOK.md` update section rewritten; backup command corrected to `supabase_admin`
 - ☐ **Run the acceptance test** (plan Task 5): first real release, verify row counts and the
   volume timestamp are unchanged, confirm login survives, rehearse the rollback drill
@@ -235,10 +238,31 @@ Two reviewers over the 42-commit diff, plus the first e2e run on this branch tip
 - ☑ **IMPORTANT** an approved errand could never be cancelled (same-day form vs a `> today` gate)
 - ☑ Dialog close button was hardcoded English; Home cover card dropped the hourly window;
   `tr('confirmBody')` works only via a production-only fast path; 2 vacuous e2e assertions
-- ☐ **DEPLOY BLOCKER, pre-existing:** `deploy/update.sh` replays every migration under
-  `ON_ERROR_STOP=1` and dies on file #1 (`create type app_role` on a non-empty DB). It **cannot
-  deliver these migrations to the client's installed server.** Fix before scheduling the deploy;
-  `deploy/RUNBOOK.md:145,164` wrongly claims idempotency
+- ☑ **Deploy path resolved for THIS release by doing a fresh install** (2026-07-31). The client's
+  server holds no real data, so the replay bug below is sidestepped rather than fixed. Verified on a
+  throwaway `supabase/postgres:15.8.1.085`: **all 38 migrations + seed apply cleanly to an empty
+  database and the end state is correct** — leave-type hourly/accrual flags, 612 `jalali_months`
+  rows, work settings, `request_kind`, the kind-keyed serial index, and a calendar view that leaks
+  neither reason nor errand location
+- ☑ `deploy/package.sh` now builds **and pulls** for `linux/amd64` and refuses to package anything
+  that is not. It previously did neither, so the fresh-install bundle would have carried arm64
+  images that die on the client's server with `exec format error` — discovered on site, because the
+  bundle is offline. The multi-arch service images (caddy especially) were the sharper half: a
+  re-pull on an arm64 Mac swaps them silently
+- ☐ **STILL OPEN — migrations are not replay-safe. Must be fixed before the first incremental
+  update once real data exists.** Measured 2026-07-31: replaying all 38 against a populated DB
+  fails **9**, starting at file #1 (`20260623120001_core.sql:11`, bare `create type app_role`).
+  Five were never guarded (`create type`/`policy`/`trigger`/`function`); four broke when this
+  branch's days→minutes conversion dropped columns and the serial counter was re-keyed
+  (`20260623120006`, `20260624090002`, `20260729130002`, `20260729130013`).
+  - `update.sh` aborts **safely** — app not restarted, backup intact — so a failed attempt costs
+    nothing today. The hazard arrives *after* a partial fix: repair files 1–5 only and the loop gets
+    further in, and a mid-run failure leaves a **half-migrated schema**, which `update.sh` does not
+    undo. So this is all-or-nothing: verify with a full replay against a restored dump before it
+    touches their server
+  - Two routes: guard the nine (mechanical, directly provable by a replay loop), or add a
+    `schema_migrations` table so each file runs once (the durable fix every migration tool uses).
+    Recommend the guards first, tracking table after
 - ☐ `npm audit`: 3 high via `next@16.2.9` (postcss, sharp). Pre-existing on `main`; fix is a patch
   bump to `next@16.2.12`
 - ☐ Withdrawn mid-design: the bulk department-code editor. Client dropped code editing instead

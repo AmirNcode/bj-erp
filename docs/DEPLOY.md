@@ -81,7 +81,10 @@ tar xzf bj-erp-installer-<v>.tar.gz && cd bj-erp-installer && sudo ./install.sh
   self-signed internal CA; phones trust the exported `bj-root-ca.crt` once).
 - `install.sh` generates all secrets, applies every `supabase/migrations/*` + `seed.sql`,
   bootstraps the first admin (`deploy/sql/bootstrap_admin.sql`), and enables the roles-in-JWT
-  auth hook. Re-runnable (idempotent migrations, secrets preserved).
+  auth hook. Secrets are preserved on a re-run — but **the migrations are not idempotent**
+  (measured 2026-07-31: 9 of 38 fail against a populated database, starting at file #1), so a
+  re-run over an existing database aborts on the first migration. It aborts safely and changes
+  nothing. A **fresh** install applies all 38 plus the seed cleanly. See `deploy/RUNBOOK.md`.
 - The app image bakes placeholder env values; the real URL/anon key are substituted at container
   start (`deploy/docker-entrypoint.sh`). Server-side code talks to the API over the internal
   plain-HTTP gateway listener (`SUPABASE_URL`), browsers over public HTTPS.
