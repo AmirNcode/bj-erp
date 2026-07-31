@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PageHeader } from '@/app/[locale]/(app)/_components/PageHeader';
-import { PageRefreshButton } from '@/app/[locale]/(app)/_components/PageRefreshButton';
+import {
+  PageRefreshButton,
+  formatUpdatedTime,
+} from '@/app/[locale]/(app)/_components/PageRefreshButton';
 import { refreshRoute } from '@/lib/actions/refresh';
 
 const routerRefresh = vi.fn();
@@ -37,6 +40,10 @@ function renderWithIntl(ui: React.ReactElement) {
 }
 
 describe('PageRefreshButton', () => {
+  it('formats the server/client label in the company timezone', () => {
+    expect(formatUpdatedTime(new Date('2026-07-30T04:30:00.000Z'), 'en')).toBe('8:00 AM');
+  });
+
   it('invalidates the current path and refreshes the route when clicked', async () => {
     renderWithIntl(<PageRefreshButton />);
 

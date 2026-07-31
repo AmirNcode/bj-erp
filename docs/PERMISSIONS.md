@@ -12,7 +12,9 @@ only mirrors it. Every table holding employee data has policies.
 | **employee** | Standard worker. Self-service + own-team visibility. |
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar. |
 
-A user may hold multiple roles (`user_roles` table). Highest applicable permission wins.
+A user may hold multiple roles (`user_roles` table). Highest applicable permission wins. An
+inactive profile retains only read access to its own profile shell so the login flow can explain
+the disabled state; it has no business-data access and cannot use employee-facing RPCs.
 
 ## Visibility matrix (time-off)
 
@@ -26,9 +28,11 @@ A user may hold multiple roles (`user_roles` table). Highest applicable permissi
 ## SQL helpers
 
 ```sql
-has_role(uid uuid, r app_role) returns bool   -- EXISTS in user_roles
+is_active(uid uuid) returns bool              -- active profile exists
+has_role(uid uuid, r app_role) returns bool   -- active AND EXISTS in user_roles
 is_admin(uid)        := has_role(uid,'admin')
-is_manager_of(uid, target) := EXISTS profile target WHERE target.manager_id = uid
+is_manager_of(uid, target) := has_role(uid,'manager')
+                              AND same-company target.manager_id = uid
 same_team(uid, target)     := (SELECT department_id FROM profiles WHERE id=uid)
                               = (SELECT department_id FROM profiles WHERE id=target)
 can_read_all(uid)    := is_admin(uid) OR has_role(uid,'manager') OR has_role(uid,'security')
@@ -41,33 +45,43 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 ## Policy intent per table
 
 ### `profiles`
-- **SELECT**: self · `same_team` · `can_read_all`.
+- **SELECT**: self · active caller + (`same_team` · `can_read_all`). The self-only inactive row is
+  deliberate: it lets the app detect the disabled account and clear its Auth session.
 - **UPDATE**: `is_admin` (all fields) · `is_manager_of(target)` (managed subset) · self (own
   limited subset: language/calendar prefs, password handled by Auth, contact fields).
   **Column scope is enforced in the DB** by the `profiles_enforce_update_scope` BEFORE-UPDATE
   trigger (migration 0007) — RLS is row-level only, so without the trigger a manager could PATCH
   any column of a report via the anon key. Non-admins: self → `full_name`/`language_pref`/
   `calendar_pref`; manager-of-row → `full_name`/`hire_date`; `department_id`/`manager_id`/
-  `active`/`employee_code`/`company_id` are admin-only.
-- **INSERT / deactivate**: `is_admin` only.
+  `active`/`employee_code`/`company_id` are admin-only. Deactivating the last active admin is
+  rejected by a database trigger, and `manager_id = id` is prohibited by a table constraint.
+- **INSERT**: no direct client path. Admin/manager creation must use `app_create_employee`, keeping
+  Auth, profile, roles, allocations, and audit in one transaction.
 
 ### `user_roles`
 - **SELECT**: self · `can_read_all`.
-- **INSERT/UPDATE/DELETE**: `is_admin` only. (Only the admin changes roles.)
+- **INSERT/UPDATE/DELETE**: no direct client path. Admins atomically replace roles through
+  `app_set_user_roles`, which audits the change and prevents self-lockout.
 - **Teammate role labels** are surfaced read-only through the `get_my_team_directory()` SECURITY
   DEFINER fn (scoped to the caller's manager + same-department active colleagues) so the Home
   **My Team** card can show role/title context without granting employees broad `user_roles` read
   access. Granted to `authenticated`, revoked from `anon`.
 
 ### `departments`, `work_settings`, `holidays`, `leave_types`
-- **SELECT**: any authenticated company member.
+- **SELECT**: any active authenticated company member.
 - **WRITE**: `is_admin` only. The FR-24 admin editor (`/manage/settings`) writes `work_settings` /
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
   unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
   admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs
-  through `departments_insert_admin`, and Manage → Settings UPDATEs codes through
-  `departments_update_admin`. Managers reach `/manage/*` but are redirected away from the
+  through `departments_insert_admin`. Managers reach `/manage/*` but are redirected away from the
   department page — departments are company-wide config, not team data.
+- **`departments_update_admin` is intentionally unreferenced (2026-07-30).** Admin editing of
+  department codes was deactivated at the client's request. The policy and the
+  `updateDepartmentCode` action stay so the feature can return without a migration — neither is
+  dead code to be removed.
+- **Department membership** is read by the admin-only `getDepartmentMembers` server action behind
+  the Settings → Departments panel. It uses the existing `can_read_all` SELECT paths on `profiles`
+  and `user_roles`; **no new policy and no new SECURITY DEFINER function** were added for it.
 
 ### `leave_allocations`
 - **SELECT**: own · `is_manager_of` · `can_read_all`.
@@ -92,9 +106,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `audit_log`
 - **SELECT**: `is_admin`.
-- **INSERT**: `authenticated` with `WITH CHECK (actor_id = auth.uid())` — a user may only write log
-  rows attributed to themselves (server actions set `actor_id` to the acting user). No
-  `UPDATE`/`DELETE` policies — append-only.
+- **INSERT/UPDATE/DELETE**: no direct client path. Owner-run change triggers record direct
+  profile/config-table changes, and privileged RPCs append their own audit event inside the same
+  transaction. This prevents clients from inventing events and keeps audit failure from being
+  silently ignored.
 
 ## Notes
 
@@ -105,7 +120,8 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ## Privileged admin RPCs (runtime user creation)
 
-`public.app_create_employee(...)` and `public.app_set_employee_password(...)` are `SECURITY DEFINER`
+`public.app_create_employee(...)`, `public.app_set_employee_password(...)`, and
+`public.app_bulk_set_employee_passwords(jsonb)` are `SECURITY DEFINER`
 functions (search_path locked) that write to `auth.users` / `auth.identities` — work the
 `authenticated` role cannot do directly. They **self-guard** in-DB and are granted to
 `authenticated`, revoked from `anon`. Since migration `20260713120001`, `app_create_employee`
@@ -116,6 +132,9 @@ in the same transaction via `private.allocate_leave_impl`). Anyone else gets `42
 admin/manager/security roles therefore stays admin-only. `app_bulk_create_employees(jsonb)`
 (CSV import, admin-only, all-or-nothing single transaction) reuses the same
 `private.create_employee_impl`.
+Bulk password reset accepts 1–100 unique non-caller employees, validates the complete payload
+before updating anyone, enforces the bcrypt-safe 8–72 ASCII-character range, and succeeds or rolls
+back as one transaction.
 This is the chosen alternative to shipping a `service_role` secret into the app server — it keeps
 user creation in-database and **identical on self-hosted Supabase** (portability, NFR-4).
 `public.app_change_my_password(p_current, p_new)` (FR-7) follows the same pattern but **self-guards by
@@ -138,7 +157,7 @@ The Supabase security advisor flags these as exposed `SECURITY DEFINER` function
 **Accepted by design** — the in-function admin check is the intended gate. Note on the advisor's
 `auth_leaked_password_protection` item: it only affects GoTrue's own password endpoints, which this
 app does not use (passwords are set via the in-DB RPCs above), so enabling it adds nothing here;
-password strength is enforced by `lib/auth/passwordPolicy.ts` + the in-DB ≥8-char check.
+password strength is enforced by `lib/auth/passwordPolicy.ts` + in-DB 8–72-character checks.
 
 ## Concurrency & write-path validation (2026-07-02 hardening)
 
@@ -159,3 +178,12 @@ it.** Enforced: `leave_requests` SELECT is restricted to own / `is_manager_of` /
 `team_leave_calendar` SECURITY DEFINER view (scoped `own | same_team | can_read_all`, pending +
 approved) that never selects `reason`. Verified on the live DB: a same-team peer reads the view, not
 the base row, and no UI exposes another person's reason.
+
+**Extended to work errands (2026-07-30, FR-30).** An errand's `errand_location` (محل ماموریت) and
+its description — which reuses `reason` — get the same treatment: the view's explicit column list
+omits both, so teammates see that a colleague is out on an errand and nothing more. The requester,
+their manager, security and admin read the base row and see everything.
+
+The view now `LEFT JOIN`s `leave_types`. That is load-bearing, not cosmetic: an errand has a NULL
+`leave_type_id`, and the previous inner join would have silently dropped every errand from the
+calendar rather than failing visibly.

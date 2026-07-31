@@ -90,7 +90,8 @@ async function ensureAllocation(empId, leaveTypeId, days) {
     p_leave_type_id: leaveTypeId,
     p_period_start: '2026-01-01',
     p_period_end: '2026-12-31',
-    p_days: days,
+    // The ledger stores minutes; the demo world uses the 8h default day.
+    p_minutes: Math.round(days * 8 * 60),
   });
   if (error) die('allocate failed:', error);
 }

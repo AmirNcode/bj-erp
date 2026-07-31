@@ -31,6 +31,32 @@ the lessons that will still matter in six months.
 
 ## Lessons learned
 
+### Deactivation must be a database boundary, not a profile label
+`profiles.active` used to shape rosters only; Auth would still issue a session and self-row RLS
+continued serving leave data. An inactive account now sees only its own profile shell so login can
+explain the state; every business policy/view and employee-facing definer path requires
+`private.is_active(auth.uid())`. Keep both layers: login clears the session for good UX, RLS is the
+authority. Likewise, a reporting relationship is not a role — `private.is_manager_of` must require
+the active `manager` role or stale org-chart links preserve authority after demotion.
+
+### An audit trail cannot accept client-authored events
+`audit_log_insert_self` proved who inserted a row, not whether the claimed event happened. A signed-in
+user could invent action/entity/before/after values, while app actions ignored failed audit inserts.
+Runtime audit writes now happen inside guarded RPC transactions or owner-run change triggers; clients
+have no INSERT grant. Any new directly writable config table needs a trigger, and any new privileged
+writer must write its audit row in the same transaction.
+
+### bcrypt accepts only 72 bytes
+Postgres `crypt(..., gen_salt('bf'))` silently ignores input after byte 72. Passwords here are printable
+ASCII, so enforce 8–72 characters in the UI **and** every password-writing RPC; otherwise two visibly
+different long passwords can authenticate as the same value.
+
+### Server/client time formatting needs an explicit timezone too
+Pinning date logic to `Asia/Tehran` was not enough. A Client Component still server-renders first:
+`Intl.DateTimeFormat` without `timeZone` used container UTC on the server and device time in Chrome,
+causing production hydration error #418. Any server-rendered time label must specify
+`APP_TIME_ZONE`, just like date-only calculations.
+
 ### Ledger writes race without locks
 All balance writers (`allocate_leave`, `approve_leave_request`, cancel-reversal,
 `set_leave_balance`) did read-latest-balance-then-insert; concurrent writers wrote stale
@@ -141,6 +167,35 @@ The Supabase security advisor flags the SECURITY DEFINER RPCs and the reason-les
 `team_leave_calendar` definer view — all intentional and documented (FR-25 reason privacy
 depends on the view). Don't "fix" them; the HIBP leaked-password toggle is N/A (passwords set
 via our RPCs, not GoTrue).
+
+### Map SQL dependencies with the catalog, never by grepping migrations
+Migration files are *history*: a later one silently redefines a function an earlier one created.
+`20260713120001` moved allocation into `private.allocate_leave_impl`, so the days→minutes contract
+migration (2026-07-29) — ported from the 2026-07-02 definitions — missed it, and dropping the day
+columns broke both employee-creation paths with `column "allocated_days" ... does not exist`.
+Before changing or removing a column, ask the live schema which code touches it:
+```sql
+select n.nspname||'.'||p.proname, pg_get_function_arguments(p.oid)
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+ where n.nspname in ('public','private') and p.prosrc ~ '<column|pattern>';
+```
+For large functions, patch `pg_get_functiondef` output programmatically rather than retyping
+security-critical bodies. And keep e2e in the loop: `tsc` cannot see inside PL/pgSQL.
+
+### `supabase gen types` needs a container image this network won't deliver
+The CLI shells out to `public.ecr.aws/supabase/postgres-meta` at runtime, so type generation fails
+here for the same reason server-side Docker builds were rejected. `lib/supabase/types.ts` was
+hand-edited on 2026-07-29 with that noted in its header; `tsc --noEmit` + `next build` are the
+substitute gate, and they do catch wrong column names because every column has a typed call site.
+The CLI is in devDependencies for machines that can reach the registry.
+
+### Local stack ≠ `supabase start`; migrations run as `supabase_admin`
+There is no CLI dev stack on :54322. The running database is the `deploy/docker-compose.yml` one
+(`bj-erp-db-1`, **Postgres 15**, port unpublished, `.env.local` → the gateway). Apply SQL with
+`docker exec -i -e PGPASSWORD=… bj-erp-db-1 psql -U supabase_admin -d postgres -f -`; as `postgres`
+you get `must be owner of table …`, and anything you create lands with the wrong owner. There is no
+`db reset`, so **every migration must be idempotent** — which `deploy/update.sh` requires anyway.
+Also: `create or replace function` cannot change a return type; drop it first.
 
 ## Working conventions with Amir
 

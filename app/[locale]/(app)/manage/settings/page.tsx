@@ -13,7 +13,8 @@ import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
-import { DepartmentCodesForm } from './DepartmentCodesForm';
+import { DepartmentsCard } from './DepartmentsCard';
+import { AccrualRunner } from './AccrualRunner';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = { params: Promise<{ locale: string }> };
@@ -34,12 +35,16 @@ export default async function SettingsPage({ params }: Props) {
 
   const t = await getTranslations('manage.settings');
   const supabase = await createClient();
-  const [holidayData, { data: departments }] = await Promise.all([
+  const [holidayData, { data: departments, error: departmentsError }] = await Promise.all([
     getCompanyHolidays(),
-    supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
+    // Names only — the card never shows a code (spec 2026-07-30, D13).
+    supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
   ]);
   const data = holidayData;
   const weekendDays = data.ok ? data.weekendDays : [5];
+  const workStart = data.ok ? data.workStart : '07:00';
+  const workEnd = data.ok ? data.workEnd : '15:00';
+  const hourlyCapMinutes = data.ok ? data.maxHourlyMinutesPerDay : 240;
   const holidays = data.ok ? data.holidays : [];
 
   const days = {
@@ -60,9 +65,17 @@ export default async function SettingsPage({ params }: Props) {
         <CardContent>
           <WorkSettingsForm
             initial={weekendDays}
+            initialWorkStart={workStart}
+            initialWorkEnd={workEnd}
+            initialHourlyCapMinutes={hourlyCapMinutes}
             labels={{
               weekendTitle: t('weekendTitle'),
               weekendHint: t('weekendHint'),
+              hoursTitle: t('hoursTitle'),
+              hoursHint: t('hoursHint'),
+              workStart: t('workStart'),
+              workEnd: t('workEnd'),
+              hourlyCap: t('hourlyCap'),
               save: t('save'),
               saved: t('saved'),
               errorLabel: t('error'),
@@ -95,15 +108,38 @@ export default async function SettingsPage({ params }: Props) {
 
       <Card>
         <CardContent>
-          <DepartmentCodesForm
+          <DepartmentsCard
             departments={departments ?? []}
+            loadError={departmentsError?.message ?? null}
             locale={locale}
             labels={{
               title: t('departments.title'),
               hint: t('departments.hint'),
-              save: t('save'),
-              saved: t('saved'),
-              invalid: t('departments.invalid'),
+              addNew: t('departments.addNew'),
+              empty: t('departments.empty'),
+              managersLabel: t('departments.managersLabel'),
+              workersLabel: t('departments.workersLabel'),
+              noMembers: t('departments.noMembers'),
+              loading: t('departments.loading'),
+              close: t('departments.close'),
+              errorLabel: t('error'),
+            }}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <AccrualRunner
+            locale={locale}
+            labels={{
+              title: t('accrual.title'),
+              hint: t('accrual.hint'),
+              run: t('accrual.run'),
+              resultTitle: t('accrual.resultTitle'),
+              employeesLabel: t('accrual.employeesLabel'),
+              rowsLabel: t('accrual.rowsLabel'),
+              nothingToDo: t('accrual.nothingToDo'),
               errorLabel: t('error'),
             }}
           />

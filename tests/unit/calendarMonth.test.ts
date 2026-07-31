@@ -8,11 +8,15 @@ import {
 import type { CalendarEntry } from '@/lib/actions/leave';
 
 const baseEntry = {
+  kind: 'leave',
   employee_id: 'employee',
   leave_type_name_fa: 'مرخصی استحقاقی',
   leave_type_name_en: 'Annual Leave',
   leave_type_color: '#2563eb',
   day_part: 'full',
+  unit: 'day',
+  start_time: null,
+  end_time: null,
   status: 'approved',
 } satisfies Omit<CalendarEntry, 'id' | 'employee_name' | 'start_date' | 'end_date'>;
 
@@ -54,7 +58,7 @@ describe('buildCalendarMonth', () => {
       rangeEnd: '2026-06-30',
       calendarPref: 'gregorian',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [] },
+      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
 
     const june29 = month.days.find((day) => day.iso === '2026-06-29');
@@ -78,7 +82,7 @@ describe('buildCalendarMonth', () => {
       rangeEnd: '2026-07-31',
       calendarPref: 'gregorian',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [] },
+      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
 
     for (const iso of ['2026-07-10', '2026-07-11', '2026-07-12', '2026-07-13']) {
@@ -93,6 +97,10 @@ describe('nextWorkingDateAfter', () => {
       nextWorkingDateAfter('2026-06-25', {
         weekendDays: [5],
         holidays: ['2026-06-27'],
+        hoursPerDay: 8,
+        workStart: '07:00',
+        workEnd: '15:00',
+        maxHourlyMinutesPerDay: 240,
       })
     ).toBe('2026-06-28');
   });

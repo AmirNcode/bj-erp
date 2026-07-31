@@ -55,6 +55,7 @@ export default async function ProfilePage({ params }: Props) {
     submit: tp('submit'),
     changed: tp('changed'),
     tooShort: tp('tooShort'),
+    tooLong: tp('tooLong'),
     mismatch: tp('mismatch'),
     emptyCurrent: tp('emptyCurrent'),
     errorLabel: t('error'),

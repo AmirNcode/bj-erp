@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { allocateLeave } from '@/lib/actions/leave';
+import { daysToMinutes } from '@/lib/leave/duration';
 import type { EmployeeOption, LeaveType } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,12 +25,14 @@ type Labels = {
 };
 
 type Props = {
+  /** Company day length: the form takes days, the ledger stores minutes. */
+  hoursPerDay: number;
   employees: EmployeeOption[];
   leaveTypes: LeaveType[];
   labels: Labels;
 };
 
-export function AllocateForm({ employees, leaveTypes, labels }: Props) {
+export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay }: Props) {
   const [employeeId, setEmployeeId] = useState('');
   const [leaveTypeId, setLeaveTypeId] = useState('');
   const [periodStart, setPeriodStart] = useState('');
@@ -56,7 +59,7 @@ export function AllocateForm({ employees, leaveTypes, labels }: Props) {
         leaveTypeId,
         periodStart,
         periodEnd,
-        days: daysNum,
+        minutes: daysToMinutes(daysNum, hoursPerDay),
       });
 
       if (res.ok) {

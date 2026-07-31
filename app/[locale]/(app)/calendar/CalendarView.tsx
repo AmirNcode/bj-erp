@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { CalendarEntry, DecisionResult, WorkSettings } from '@/lib/actions/leave';
 import { buildCalendarMonth, formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -48,6 +49,8 @@ type Labels = {
   rejectReasonPlaceholder: string;
   approveSuccess: string;
   rejectSuccess: string;
+  /** Tag for a work errand — it has no leave type to name. */
+  errandBadge: string;
 };
 
 type Props = {
@@ -217,13 +220,33 @@ export function CalendarView({
   const selectedDay = month.days.find((day) => day.iso === selectedIso) ?? month.days[0];
 
   const fmt = (iso: string) => formatCalendarDate(iso, calendarPref, locale);
+  // An errand carries no leave type (the view LEFT JOINs), so it is named by its
+  // tag instead. محل ماموریت and شرح ماموریت are never in CalendarEntry — a
+  // teammate sees that someone is out, not where or why (FR-25).
   const typeName = (entry: CalendarEntry) =>
-    localizedLeaveTypeName(
-      { name_fa: entry.leave_type_name_fa, name_en: entry.leave_type_name_en },
-      locale
-    );
+    entry.kind === 'errand'
+      ? labels.errandBadge
+      : localizedLeaveTypeName(
+          { name_fa: entry.leave_type_name_fa, name_en: entry.leave_type_name_en },
+          locale
+        );
+  /** Errands have no type colour; the brand primary keeps them distinguishable. */
+  const entryColor = (entry: CalendarEntry) =>
+    entry.kind === 'errand' ? '#2E3C92' : entry.leave_type_color ?? '#64748b';
   const statusLabel = (entry: CalendarEntry) =>
     entry.status === 'approved' ? labels.statusApproved : labels.statusPending;
+  /**
+   * An hourly absence — hourly leave or any errand — is ONE date plus a time
+   * window. Rendering only the dates told teammates a two-hour absence was a
+   * whole day off, which is what 20260729130010 put `unit`/times on the view to
+   * prevent. This is also a decision surface: a manager approves from here.
+   */
+  const rangeLabel = (entry: CalendarEntry) =>
+    entry.unit === 'hour'
+      ? `${fmt(entry.start_date)} · ${formatTimeRange(entry.start_time, entry.end_time, locale)}`
+      : entry.start_date === entry.end_date
+        ? fmt(entry.start_date)
+        : `${fmt(entry.start_date)} — ${fmt(entry.end_date)}`;
 
   const renderList = () =>
     entries.length === 0 ? (
@@ -233,11 +256,8 @@ export function CalendarView({
     ) : (
       <div className="space-y-2">
         {entries.map((entry) => {
-          const color = entry.leave_type_color ?? '#64748b';
-          const range =
-            entry.start_date === entry.end_date
-              ? fmt(entry.start_date)
-              : `${fmt(entry.start_date)} — ${fmt(entry.end_date)}`;
+          const color = entryColor(entry);
+          const range = rangeLabel(entry);
           return (
             <Card
               key={entry.id}
@@ -251,7 +271,10 @@ export function CalendarView({
                     <div className="text-sm font-medium truncate">{entry.employee_name}</div>
                     <div className="text-xs text-muted-foreground">{range}</div>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                  <span
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
+                    data-testid={entry.kind === 'errand' ? `cal-errand-${entry.id}` : undefined}
+                  >
                     <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                     {typeName(entry)}
                   </span>
@@ -349,11 +372,8 @@ export function CalendarView({
           ) : (
             <div className="mt-3 divide-y divide-border">
               {selectedDay.entries.map((entry) => {
-                const color = entry.leave_type_color ?? '#64748b';
-                const range =
-                  entry.start_date === entry.end_date
-                    ? fmt(entry.start_date)
-                    : `${fmt(entry.start_date)} — ${fmt(entry.end_date)}`;
+                const color = entryColor(entry);
+                const range = rangeLabel(entry);
 
                 return (
                   <div key={entry.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
@@ -366,9 +386,13 @@ export function CalendarView({
                       <div className="text-xs text-muted-foreground">
                         {typeName(entry)} · {range}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {labels.returns} {fmt(entry.returnDate)}
-                      </div>
+                      {/* An hourly absence ends the same day, so "returns
+                          <next working day>" would be plainly wrong. */}
+                      {entry.unit !== 'hour' && (
+                        <div className="text-xs text-muted-foreground">
+                          {labels.returns} {fmt(entry.returnDate)}
+                        </div>
+                      )}
                       {canDecide(entry) && (
                         <div className="mt-2">
                           <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />

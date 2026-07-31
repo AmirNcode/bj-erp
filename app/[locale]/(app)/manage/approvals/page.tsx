@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getPendingApprovals } from '@/lib/actions/leave';
+import { getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
@@ -20,10 +22,20 @@ type Props = {
 async function ApprovalsData({ locale }: { locale: string }) {
   const t = await getTranslations('approvals');
   const tLeave = await getTranslations('leave');
+  const tRepl = await getTranslations('replacement');
+  const tErrand = await getTranslations('errand');
 
-  const result = await getPendingApprovals();
+  // Durations are stored in minutes; rendering them as days and hours needs the
+  // company day length.
+  const [result, workSettingsRes] = await Promise.all([
+    getPendingApprovals(),
+    getWorkSettings(),
+  ]);
   const requests = result.ok ? result.requests : [];
   const loadError = result.ok ? null : result.error;
+  const hoursPerDay = workSettingsRes.ok
+    ? workSettingsRes.settings.hoursPerDay
+    : WORK_SETTINGS_FALLBACK.hoursPerDay;
 
   const labels = {
     empty: t('empty'),
@@ -37,7 +49,12 @@ async function ApprovalsData({ locale }: { locale: string }) {
     errorLabel: t('error'),
     approveSuccess: t('approveSuccess'),
     rejectSuccess: t('rejectSuccess'),
-    days: tLeave('days'),
+    coverLabel: tRepl('coverLabel'),
+    coverConflict: tRepl('coverConflict'),
+    trackingNo: tLeave('trackingNo'),
+    errandBadge: tErrand('badge'),
+    errandLocation: tErrand('location'),
+    ...durationLabelsFrom(tLeave), // days/hours/minutes/and
     dayPartLabels: {
       full: tLeave('dayPart.full'),
       am: tLeave('dayPart.am'),
@@ -52,7 +69,12 @@ async function ApprovalsData({ locale }: { locale: string }) {
           <strong>{labels.errorLabel}:</strong> {loadError}
         </div>
       )}
-      <ApprovalQueue requests={requests} labels={labels} locale={locale} />
+      <ApprovalQueue
+        requests={requests}
+        labels={labels}
+        locale={locale}
+        hoursPerDay={hoursPerDay}
+      />
     </>
   );
 }

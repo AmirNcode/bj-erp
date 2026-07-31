@@ -89,7 +89,12 @@ async function EmployeesData({ locale }: { locale: string }) {
           regen: {
             button: tr('button'),
             confirmTitle: tr('confirmTitle'),
-            confirmBody: tr('confirmBody'),
+            // .raw() on purpose: EmployeesTable substitutes {count} itself once
+            // the admin has picked a selection. Calling tr('confirmBody') with no
+            // value only "works" via a production-only fast path in use-intl that
+            // skips compilation — under `next dev` it throws FORMATTING_ERROR and
+            // the dialog renders the dotted key path instead of a sentence.
+            confirmBody: tr.raw('confirmBody'),
             cancel: tr('cancel'),
             confirm: tr('confirm'),
           },
@@ -190,17 +195,7 @@ export default async function EmployeesPage({ params }: Props) {
                 </Link>
               </Button>
             )}
-            {/* Admin-only: a department must exist before anyone can be hired into it. */}
-            {isAdmin && (
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  href={`/${locale}/manage/departments/new`}
-                  data-testid="add-department-link"
-                >
-                  {t('departments.addNew')}
-                </Link>
-              </Button>
-            )}
+            {/* Add Department moved to Manage → Settings on 2026-07-30 (D9). */}
             <Button asChild size="sm">
               <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
             </Button>

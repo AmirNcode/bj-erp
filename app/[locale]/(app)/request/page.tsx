@@ -14,8 +14,11 @@ import {
   getMyLeaveRequests,
   getWorkSettings,
 } from '@/lib/actions/leave';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { Link } from '@/i18n/navigation';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
 function RequestPageSkeleton() {
@@ -37,6 +40,9 @@ type Props = {
 async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
+  const tRepl = await getTranslations('replacement');
+  const tHourly = await getTranslations('hourly');
+  const tErrand = await getTranslations('errand');
   // Get the authenticated user
   const user = await getCachedUser();
 
@@ -58,7 +64,7 @@ async function RequestPageData({ locale }: { locale: string }) {
   const requests = requestsResult.ok ? requestsResult.requests : [];
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5, 6], holidays: [] as string[] };
+    : WORK_SETTINGS_FALLBACK;
 
   const labels = {
     title: t('title'),
@@ -97,7 +103,18 @@ async function RequestPageData({ locale }: { locale: string }) {
       am: tLeave('dayPart.am'),
       pm: tLeave('dayPart.pm'),
     },
-    days: tLeave('days'),
+    replacementTitle: tRepl('title'),
+    replacementHint: tRepl('hint'),
+    replacementSearch: tRepl('search'),
+    replacementNone: tRepl('none'),
+    replacementOnLeave: tRepl('onLeave'),
+    replacementLoading: tRepl('loading'),
+    replacementEmpty: tRepl('empty'),
+    coverLabel: tRepl('coverLabel'),
+    trackingNo: tLeave('trackingNo'),
+    errandBadge: tErrand('badge'),
+    errandLocation: tErrand('location'),
+    ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 
   return (
@@ -110,12 +127,22 @@ async function RequestPageData({ locale }: { locale: string }) {
         locale={locale}
       />
 
+      <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <Link href="/request/hourly" className="text-primary underline" data-testid="daily-to-hourly">
+          {tHourly('hourlyLink')}
+        </Link>
+        <Link href="/request/errand" className="text-primary underline" data-testid="daily-to-errand">
+          {tErrand('navLink')}
+        </Link>
+      </p>
+
       <div className="mt-10">
         <MyRequestsList
           requests={requests}
           labels={labels}
           calendarPref={calendarPref}
           locale={locale}
+          hoursPerDay={workSettings.hoursPerDay}
         />
       </div>
     </>

@@ -26,6 +26,7 @@ describe('buildHomeBoard', () => {
       team: [
         {
           id: 'leave-1',
+          kind: 'leave',
           employee_id: 'teammate-1',
           employee_name: 'Teammate One',
           leave_type_name_fa: 'مرخصی استحقاقی',
@@ -34,6 +35,9 @@ describe('buildHomeBoard', () => {
           start_date: '2026-07-10',
           end_date: '2026-07-13',
           day_part: 'full',
+          unit: 'day',
+          start_time: null,
+          end_time: null,
           status: 'approved',
         },
       ],

@@ -10,6 +10,161 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Hourly work errand, and login codes without a department prefix (2026-07-30)
+
+Spec: [`docs/specs/2026-07-30-work-errand-and-login-codes-design.md`](specs/2026-07-30-work-errand-and-login-codes-design.md).
+Driven by a third client form and a clarification about numbering.
+
+#### Added
+- **Hourly work errand (ماموریت ساعتی), form BJ-F 50207.** A new request screen at
+  `/request/errand` for an off-site work trip on a single date: departure time, return time, محل
+  ماموریت, and an optional شرح ماموریت. An errand is **work, not leave** — it deducts nothing from
+  a balance. It is approved by the direct manager in the same queue as leave, appears on the team
+  calendar, and carries its own tracking-number sequence. Teammates see that a colleague is out;
+  the location and the description stay private to the requester, their manager, security and admin.
+- **Departments panel in Manage → Settings.** Tapping a department opens a floating panel listing
+  its people as Managers, then Workers. Closes with the X, an outside tap, or Esc.
+- **Add Department moved into Settings**, at the bottom of the Departments card, and Cancel now
+  returns there. It is gone from Manage → Employees — one home instead of two.
+
+#### Changed
+- **New login codes are the personnel number alone** (`1042`), not `prod-1042`. Everyone hired
+  before today keeps the code they have, and both shapes sign in. Nothing to re-issue.
+- **Department codes are no longer typed or edited.** They prefix nothing now, so the field is gone
+  from the create form and the code is generated behind the scenes. Admin editing is switched off at
+  the client's request and can be switched back on without a migration.
+- **The request number is now labelled شماره پیگیری / Tracking no.** The client clarified that the
+  شماره on their paper forms is the requester's personnel number — a different thing — so the app's
+  own number is named so the two cannot be confused. Leave and errands number independently.
+
+#### Fixed (pre-merge review, 2026-07-31)
+- **Errands could not be submitted at all.** The first errand of each year collided with an existing
+  leave request's number. Caught before anyone saw it.
+- **The calendar showed a two-hour absence as a whole day off**, and told teammates the person was
+  back "tomorrow". It now shows the actual hours. This affected hourly leave too, not just errands.
+- **An approved errand could not be cancelled.** A called-off trip stayed on the books and kept
+  blocking that time slot.
+- **Leave could be silently under-credited** if an administrator corrected an employee's accrual
+  start month to an earlier month — the months in between were never added.
+- The department panel's close button announced itself in English to screen readers; the "you are
+  covering X" card on Home omitted the hours.
+
+#### Notes
+- An errand may be booked on a weekend or a public holiday, unlike hourly leave. Urgent company
+  business does not respect the holiday calendar.
+- Neither change is on the client's server yet; both stack on the still-undeployed leave v2.
+- **Before this can be deployed**, the installer's migration replay must be fixed — it currently
+  stops on the first migration when run against an existing database.
+
+### Security and reliability review (2026-07-30)
+- **Deactivated accounts are now actually blocked.** Existing or newly issued login sessions cannot
+  read HR data or submit/cancel leave; the login screen clears the session and explains that the
+  account is inactive.
+- **Manager authority now requires both the manager role and the reporting relationship.** Removing
+  the role takes effect at the database boundary immediately, even if the org chart still lists
+  reports. Employees also cannot be assigned as their own manager.
+- **Audit history is trustworthy.** Signed-in clients can no longer invent audit events; real profile,
+  department, holiday, work-setting, company, and leave-type changes are recorded automatically in
+  the database. Role/profile creation must use the guarded, transactional RPCs.
+- **Catastrophic/lockout paths are closed:** the seeded single company cannot be deleted at runtime,
+  the last active administrator cannot be deactivated, and password resets reject missing targets,
+  weak/overlong values, and reset selected employees atomically.
+- **Hourly approval is time-aware.** Adjacent hourly requests on the same date can both be approved,
+  and the replacement warning no longer reports false conflicts for non-overlapping times.
+- **Request reliability improved:** submit stops when newly earned leave cannot be accrued; reasons,
+  holiday dates, work windows/caps, and zero-row edits are validated instead of silently accepted.
+- **Deployment/browser hardening:** app container runs non-root with no Linux capabilities; installer
+  host/port input is allow-listed and secret files forced to mode 600; CSP/HSTS/cross-origin headers
+  are enabled; the server/client “Updated” timestamp no longer causes a hydration mismatch.
+- Full evidence and the one blocked external dependency-audit check:
+  `docs/SECURITY-REVIEW-2026-07-30.md`.
+
+### Leave v2: request serial numbers (2026-07-29)
+- **Every request now has a number** — `۱۴۰۴-۰۰۴۲` — the شماره the paper forms carry, so HR can quote a
+  request on the phone, write it on a file, or reference it in an insurance claim. It appears on the
+  employee's own requests and on approval cards.
+- Numbering is per company and per Jalali year, restarting at `۱۴۰۵-۰۰۰۱` at Nowruz, matching how they
+  file paper. **Existing requests were backfilled** in the order they were filed.
+- Gapless even when two people submit at the same moment: the counter is bumped under a row lock, which
+  the per-employee lock elsewhere in the writer does not provide.
+
+### Leave v2: the replacement person (2026-07-29)
+- **Requests can now name who covers for you** — جانشین on the daily form, جایگزین on the hourly one,
+  matching the client's paper forms. Optional, searchable by name or employee code, and limited to
+  colleagues in your own department.
+- **Someone already on leave cannot be chosen.** They are still listed, marked "در مرخصی" and disabled,
+  so a worker is told why rather than wondering where a colleague went. The server refuses an unavailable
+  pick at submit, and **re-checks at approval** — a cover can book leave in between, and approving anyway
+  would quietly leave nobody covering.
+- **The named person sees "You are covering …" on their Home page.** No approval waits on them: with no
+  notification channel yet, a consent step would stall requests on an off-shift worker.
+- Deliberate asymmetry, documented: being named as someone's cover never blocks your *own* leave request.
+  You are warned and the manager sees the clash; a coworker's paperwork does not veto your leave rights.
+- The cover's name appears on your own requests and on the approvals queue, where a clash is flagged.
+
+### Leave v2: hourly leave (2026-07-29)
+- **Workers can request a few hours off instead of a whole day** — مرخصی ساعتی, on its own screen that
+  mirrors the client's BJ-F 50208 form: one date, a from-time and a to-time. Available for annual and
+  unpaid leave; **not** for sick leave, matching the paper form.
+- **Times come from the company's working hours** (a new setting, default 07:00–15:00) as 30-minute
+  slots, and hourly leave is **capped per day** (default 4 hours, configurable) across all of that
+  day's requests — so the hourly form cannot be used to take a full day in pieces.
+- **Two non-overlapping errands in one day are both allowed.** The overlap rule compares times rather
+  than dates, and treats 08:00–10:00 and 10:00–12:00 as adjacent. A whole-day request still blocks
+  everything else that day. One accepted limitation, documented: a half-day plus an hourly request on
+  the same date is refused.
+- Hourly requests show their **time range** in My Requests, the approvals queue, and the team calendar
+  — a manager approving one sees ۰۹:۰۰–۱۱:۰۰ rather than a bare duration that reads like a full day.
+- Home now offers both request buttons, and each request screen links to the other.
+
+### Leave v2: monthly leave accrual (2026-07-29)
+- **Leave now accrues every month instead of being a number an admin typed once.** Each employee has
+  a per-leave-type policy — days earned per month, yearly cap, carryover cap, start month —
+  pre-filled from the leave type and editable on the create and edit forms.
+- **Anchored to Jalali month starts**, with the hire month pro-rated by calendar days so an employee
+  can check the figure against a payslip by hand. Annual leave defaults to 1 day/month with a 12-day
+  year; sick leave does not accrue, because in Iran it is certified rather than earned.
+- **Carryover is capped, and the excess is forfeited visibly.** At Farvardin 1 anything above the cap
+  (default 9 days, ماده ۶۶) is written off as a `carryover_forfeit` ledger row — an audited entry,
+  never a silent reset — and it happens *before* that month's accrual is credited.
+- **Nothing is scheduled.** Missing months are posted whenever a balance is read, and by an admin
+  button in Manage → Settings that reports how many employees and rows it wrote. That choice is
+  deliberate: the client's server is LAN-only and can be powered off, so a cron job would need
+  catch-up logic anyway. A partial unique index makes double-crediting impossible rather than
+  unlikely, which is what makes posting-on-read safe.
+- The accrual **start month defaults to the current Jalali month**, never the hire date, so switching
+  accrual on cannot retroactively credit months nobody worked.
+- **Fixed a latent balance bug this exposed:** "current balance" was the latest ledger row by
+  `created_at`, but `now()` is frozen within a transaction, so the several months accrual writes at
+  once all shared a timestamp and the tie-break fell to a random uuid — a balance of 1440 could read
+  back as 960. Ledger rows now carry a monotonic `seq`, and every reader orders by it.
+
+### Leave v2 foundations: minutes as the stored unit + Jalali calendar table (2026-07-29)
+- **Leave durations are now stored as integer minutes** instead of fractional days, across
+  `leave_ledger`, `leave_requests`, and `leave_allocations`. Nothing about the request flow changes
+  for a worker; what changes is that a balance can now express **"۹ روز و ۴ ساعت"** — the way HR
+  already words it on the paper daily form — which is the prerequisite for hourly leave.
+- **`work_settings.hours_per_day`** (default 8) defines what one day of leave means. Existing rows
+  were backfilled with a frozen constant of 480 minutes/day, deliberately *not* the live setting:
+  history was recorded when a day meant 8 hours, so changing the setting later cannot retroactively
+  move anyone's past balance.
+- Migrated in **three replayable steps** — `20260729130001` (calendar table), `20260729130002`
+  (add + backfill + sync triggers), `20260729130003` (functions write minutes; day columns dropped)
+  — so the conversion could be verified against real data before anything was destroyed, and every
+  intermediate state stayed deployable. `docs/plans/2026-07-29-leave-v2-foundations-acceptance.sql`
+  is the check to run against a dump of the client's database before this ships to their server.
+- **Breaking RPC changes** (all callers updated): `allocate_leave` takes `p_minutes`,
+  `set_leave_balance` takes `p_target_minutes`, `compute_requested_days` became
+  `compute_requested_minutes`, and `current_leave_balance` returns minutes. Admin-facing inputs are
+  still day-denominated and convert at the boundary through `lib/leave/duration.ts`.
+- **New `jalali_months` reference table** (1400–1450, 612 generated rows) plus `jalali_month_of()`.
+  Monthly accrual anchors on Jalali month starts, carryover fires on Farvardin 1, and request serial
+  numbers key on the Jalali year — this turns all three into joins instead of calendar arithmetic
+  inside a `SECURITY DEFINER` function. A documented exception to the never-persist-Jalali rule: it
+  is a calendar dimension, and no user row stores a Jalali value.
+- Design record: `docs/specs/2026-07-29-hourly-accrual-replacement-design.md`. Still to come in that
+  spec: monthly accrual, hourly requests, the replacement person, and request serial numbers.
+
 ### Rejection reason; employee-code field latin-only (2026-07-29)
 - **Rejecting a request can now carry a reason.** Optional free-text field (max 500 chars) in
   both reject dialogs — the approvals queue and the calendar's day-detail decide buttons.

@@ -31,9 +31,11 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const { error: authError } = await signInWithCode(code, password);
+      const { error: authError, inactive } = await signInWithCode(code, password);
       if (authError) {
         setError(t('invalidCredentials'));
+      } else if (inactive) {
+        setError(t('inactiveAccount'));
       } else {
         router.push(`/${locale}/home`);
       }
@@ -75,6 +77,7 @@ export default function LoginPage() {
                   autoCapitalize="off"
                   autoCorrect="off"
                   spellCheck={false}
+                  maxLength={64}
                   dir="ltr"
                   lang="en"
                   placeholder={t('codePlaceholder')}
@@ -96,6 +99,7 @@ export default function LoginPage() {
                     autoCapitalize="off"
                     autoCorrect="off"
                     spellCheck={false}
+                    maxLength={72}
                     dir="ltr"
                     lang="en"
                     className="pe-10"

@@ -7,6 +7,9 @@ import { dbErr } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import { filterApprovable } from '@/lib/leave/approvals';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
+import type { ReplacementCandidate } from '@/lib/leave/replacement';
+import { leavePeriodsOverlap } from '@/lib/leave/hourly';
+import { todayInAppTz } from '@/lib/appDate';
 
 type DayPart = Database['public']['Enums']['day_part'];
 
@@ -45,6 +48,8 @@ export type SubmitRequestInput = {
   end: string;   // YYYY-MM-DD Gregorian
   dayPart: DayPart;
   reason?: string;
+  /** Optional cover; null/undefined is valid. */
+  replacementId?: string | null;
 };
 
 export type SubmitRequestResult =
@@ -58,12 +63,18 @@ export async function submitRequest(
 
   if (!user) return dbErr('not authenticated');
 
+  // Accrue first: a worker whose newly-earned day makes this request affordable
+  // must not be refused by a stale balance.
+  const accrualError = await accrueBeforeRead(supabase);
+  if (accrualError) return dbErr(accrualError);
+
   const { data, error } = await supabase.rpc('submit_leave_request', {
     p_leave_type_id: input.leaveTypeId,
     p_start: input.start,
     p_end: input.end,
     p_day_part: input.dayPart,
     p_reason: input.reason ?? undefined,
+    p_replacement_id: input.replacementId ?? undefined,
   });
 
   if (error) {
@@ -103,6 +114,166 @@ export async function cancelRequest(
 }
 
 // ---------------------------------------------------------------------------
+// submitHourlyRequest (self) — مرخصی ساعتی, the BJ-F 50208 flow.
+// ---------------------------------------------------------------------------
+
+export type SubmitHourlyInput = {
+  leaveTypeId: string;
+  /** Optional cover; null/undefined is valid. */
+  replacementId?: string | null;
+  /** Gregorian YYYY-MM-DD — one date only. */
+  date: string;
+  /** 'HH:MM', company-local. */
+  startTime: string;
+  endTime: string;
+  reason?: string;
+};
+
+export async function submitHourlyRequest(
+  input: SubmitHourlyInput
+): Promise<SubmitRequestResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  // Same reason as the daily path: a freshly-accrued hour must be spendable.
+  const accrualError = await accrueBeforeRead(supabase);
+  if (accrualError) return dbErr(accrualError);
+
+  const { data, error } = await supabase.rpc('submit_hourly_leave_request', {
+    p_leave_type_id: input.leaveTypeId,
+    p_date: input.date,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_reason: input.reason ?? undefined,
+    p_replacement_id: input.replacementId ?? undefined,
+  });
+
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
+// submitErrandRequest (self) — ماموریت ساعتی, the BJ-F 50207 flow.
+// ---------------------------------------------------------------------------
+
+export type SubmitErrandInput = {
+  /** Gregorian YYYY-MM-DD — one date only. */
+  date: string;
+  /** 'HH:MM', company-local. */
+  startTime: string;
+  endTime: string;
+  /** محل ماموریت — required. */
+  location: string;
+  /** شرح ماموریت — optional; stored in `reason`, which is FR-25-private. */
+  description?: string;
+};
+
+export async function submitErrandRequest(
+  input: SubmitErrandInput
+): Promise<SubmitRequestResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  // No accrual pass here, unlike the two leave paths: an errand is work. It
+  // spends no balance, so there is nothing a freshly-accrued hour could unlock.
+  const { data, error } = await supabase.rpc('submit_errand_request', {
+    p_date: input.date,
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_location: input.location,
+    p_description: input.description ?? undefined,
+  });
+
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
+// Replacement / cover reads (spec §8)
+// ---------------------------------------------------------------------------
+
+export async function getReplacementCandidates(input: {
+  start: string;
+  end: string;
+  unit?: 'day' | 'hour';
+  startTime?: string | null;
+  endTime?: string | null;
+}): Promise<
+  { ok: true; candidates: ReplacementCandidate[] } | { ok: false; error: string }
+> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase.rpc('get_replacement_candidates', {
+    p_start: input.start,
+    p_end: input.end,
+    p_unit: input.unit ?? 'day',
+    p_start_time: input.startTime ?? undefined,
+    p_end_time: input.endTime ?? undefined,
+  });
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    candidates: (data ?? []).map((r) => ({
+      profileId: r.profile_id,
+      fullName: r.full_name,
+      employeeCode: r.employee_code,
+      unavailable: r.unavailable,
+      unavailableReason: r.unavailable_reason,
+    })),
+  };
+}
+
+export type CoverDuty = {
+  requestId: string;
+  employeeName: string;
+  startDate: string;
+  endDate: string;
+  unit: 'day' | 'hour';
+  startTime: string | null;
+  endTime: string | null;
+};
+
+/**
+ * Requests the caller is named cover for, in a window.
+ *
+ * Two uses: the reverse-case WARNING on the request screens (spec §2.1 — being
+ * someone's cover never blocks your own leave), and the "you are covering X" card
+ * on Home (D15 — the named person should never be surprised).
+ */
+export async function getMyCoverDuties(
+  start: string,
+  end: string
+): Promise<{ ok: true; duties: CoverDuty[] } | { ok: false; error: string }> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase.rpc('get_my_cover_conflicts', {
+    p_start: start,
+    p_end: end,
+  });
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    duties: (data ?? []).map((r) => ({
+      requestId: r.request_id,
+      employeeName: r.employee_name,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      unit: r.unit,
+      startTime: r.start_time,
+      endTime: r.end_time,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // allocateLeave (admin-only)
 // ---------------------------------------------------------------------------
 
@@ -111,7 +282,8 @@ export type AllocateLeaveInput = {
   leaveTypeId: string;
   periodStart: string; // YYYY-MM-DD Gregorian
   periodEnd: string;   // YYYY-MM-DD Gregorian
-  days: number;
+  /** Minutes, the stored unit. Convert day-denominated admin input with daysToMinutes. */
+  minutes: number;
 };
 
 export type AllocateLeaveResult =
@@ -131,7 +303,7 @@ export async function allocateLeave(
     p_leave_type_id: input.leaveTypeId,
     p_period_start: input.periodStart,
     p_period_end: input.periodEnd,
-    p_days: input.days,
+    p_minutes: input.minutes,
   });
 
   if (error) {
@@ -154,7 +326,7 @@ export type SetLeaveBalanceResult =
 export async function setLeaveBalance(
   employeeId: string,
   leaveTypeId: string,
-  target: number
+  targetMinutes: number
 ): Promise<SetLeaveBalanceResult> {
   const { supabase, user, roles } = await getCallerContext();
 
@@ -164,7 +336,7 @@ export async function setLeaveBalance(
   const { error } = await supabase.rpc('set_leave_balance', {
     p_employee_id: employeeId,
     p_leave_type_id: leaveTypeId,
-    p_target: target,
+    p_target_minutes: targetMinutes,
   });
 
   if (error) return dbErr(error.message);
@@ -182,10 +354,20 @@ export async function setLeaveBalance(
  */
 export type LeaveRequestWithType = {
   id: string;
+  /** 'errand' rows are work trips (BJ-F 50207), not leave — they carry no type. */
+  kind: Database['public']['Enums']['request_kind'];
+  /** محل ماموریت. Set only on errands; never exposed to teammates. */
+  errand_location: string | null;
   start_date: string;
   end_date: string;
   day_part: DayPart;
-  requested_days: number;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
+  requested_minutes: number;
+  replacement_name: string | null;
+  serial_year: number;
+  serial_seq: number;
   status: Database['public']['Enums']['leave_status'];
   reason: string | null;
   /** Set by the decider on reject; the requester reads it on their own row. */
@@ -209,7 +391,8 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, start_date, end_date, day_part, requested_days, status, reason, decision_note, created_at,
+      `id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, status, reason, decision_note, created_at,
+       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', user.id)
@@ -217,7 +400,38 @@ export async function getMyLeaveRequests(): Promise<{
 
   if (error) return dbErr(error.message);
 
-  return { ok: true, requests: (data ?? []) as unknown as LeaveRequestWithType[] };
+  type Raw = Omit<LeaveRequestWithType, 'replacement_name'> & {
+    replacement: { full_name: string } | null;
+  };
+  const requests: LeaveRequestWithType[] = ((data ?? []) as unknown as Raw[]).map((r) => ({
+    ...r,
+    replacement_name: r.replacement?.full_name ?? null,
+  }));
+
+  return { ok: true, requests };
+}
+
+/**
+ * Post any months this employee has earned before a balance is read (spec §6.4).
+ *
+ * Accrual WRITES, so it cannot live in a view or an RLS select — it has to be an
+ * RPC called first. Callers that only render a balance intentionally ignore a
+ * returned error (a stale number is better than a blank page). Submit callers
+ * propagate it, because silently continuing could reject leave that was just
+ * earned. The next attempt is safe because accrual is idempotent.
+ */
+async function accrueBeforeRead(
+  supabase: Awaited<ReturnType<typeof getCallerContext>>['supabase'],
+  employeeId?: string
+): Promise<string | null> {
+  const { error } = employeeId
+    ? await supabase.rpc('accrue_employee_leave', { p_employee_id: employeeId })
+    : await supabase.rpc('accrue_my_leave');
+  if (error) {
+    console.error('[accrual] skipped:', error.message);
+    return error.message;
+  }
+  return null;
 }
 
 /**
@@ -227,22 +441,26 @@ export async function getMyLeaveRequests(): Promise<{
  */
 export async function getMyBalance(
   leaveTypeId: string
-): Promise<{ ok: true; balance: number | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; balanceMinutes: number | null } | { ok: false; error: string }> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
 
+  await accrueBeforeRead(supabase);
+
   const { data, error } = await supabase
     .from('leave_ledger')
-    .select('balance_after')
+    .select('balance_after_minutes')
     .eq('employee_id', user.id)
     .eq('leave_type_id', leaveTypeId)
-    .order('created_at', { ascending: false })
+    // seq, not created_at: accrual writes several rows per transaction and
+    // created_at ties (migration 20260729130007).
+    .order('seq', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) return dbErr(error.message);
 
-  return { ok: true, balance: data?.balance_after ?? null };
+  return { ok: true, balanceMinutes: data?.balance_after_minutes ?? null };
 }
 
 /**
@@ -253,6 +471,8 @@ export type LeaveType = {
   name_fa: string;
   name_en: string | null;
   allow_half_day: boolean;
+  /** Gates the hourly screen's type list; the SQL re-checks it on submit. */
+  allow_hourly: boolean;
   affects_balance: boolean;
   color: string | null;
 };
@@ -267,7 +487,7 @@ export async function getActiveLeaveTypes(): Promise<{
 
   const { data, error } = await supabase
     .from('leave_types')
-    .select('id, name_fa, name_en, allow_half_day, affects_balance, color')
+    .select('id, name_fa, name_en, allow_half_day, allow_hourly, affects_balance, color')
     .eq('company_id', companyId)
     .eq('active', true)
     .order('name_fa');
@@ -284,6 +504,13 @@ export async function getActiveLeaveTypes(): Promise<{
 export type WorkSettings = {
   weekendDays: number[];
   holidays: string[]; // YYYY-MM-DD strings
+  /** What one day of leave means, in hours. Drives every days<->minutes render. */
+  hoursPerDay: number;
+  /** Company work-hours window; hourly requests must fall inside it (D8). */
+  workStart: string;
+  workEnd: string;
+  /** Per-day cap on hourly leave, in minutes (D7). */
+  maxHourlyMinutesPerDay: number;
 };
 
 export async function getWorkSettings(): Promise<{
@@ -297,7 +524,7 @@ export async function getWorkSettings(): Promise<{
   const [{ data: ws, error: wsError }, { data: hols, error: holsError }] = await Promise.all([
     supabase
       .from('work_settings')
-      .select('weekend_days')
+      .select('weekend_days, hours_per_day, work_start, work_end, max_hourly_minutes_per_day')
       .eq('company_id', companyId)
       .maybeSingle(),
     supabase
@@ -312,8 +539,12 @@ export async function getWorkSettings(): Promise<{
   return {
     ok: true,
     settings: {
-      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_days
+      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_minutes
       holidays: (hols ?? []).map((h) => h.holiday_date),
+      hoursPerDay: ws?.hours_per_day ?? 8, // matches the work_settings column default
+      workStart: ws?.work_start ?? '07:00',
+      workEnd: ws?.work_end ?? '15:00',
+      maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
     },
   };
 }
@@ -391,6 +622,10 @@ export async function rejectRequest(
 
 export type PendingApproval = {
   id: string;
+  /** 'errand' rows are work trips (BJ-F 50207) — no type, no balance effect. */
+  kind: Database['public']['Enums']['request_kind'];
+  /** محل ماموریت — the manager deciding an errand needs to see where. */
+  errand_location: string | null;
   employee_name: string;
   employee_manager_id: string | null;
   leave_type_name_fa: string;
@@ -398,8 +633,16 @@ export type PendingApproval = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
-  requested_days: number;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
+  requested_minutes: number;
   reason: string | null;
+  replacement_name: string | null;
+  /** True when the named cover has leave overlapping this request (spec §2.1). */
+  replacement_conflict: boolean;
+  serial_year: number;
+  serial_seq: number;
 };
 
 /**
@@ -416,7 +659,8 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, start_date, end_date, day_part, requested_days, reason,
+      `id, employee_id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id,
+       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
     )
@@ -427,17 +671,28 @@ export async function getPendingApprovals(): Promise<
 
   type Row = {
     id: string;
+    kind: Database['public']['Enums']['request_kind'];
+    errand_location: string | null;
     start_date: string;
     end_date: string;
     day_part: DayPart;
-    requested_days: number;
+    unit: Database['public']['Enums']['leave_unit'];
+    start_time: string | null;
+    end_time: string | null;
+    requested_minutes: number;
     reason: string | null;
+    replacement_id: string | null;
+    replacement: { full_name: string } | null;
+    serial_year: number;
+    serial_seq: number;
     profiles: { full_name: string; manager_id: string | null } | null;
     leave_types: { name_fa: string; name_en: string | null } | null;
   };
 
   const mapped: PendingApproval[] = ((data ?? []) as unknown as Row[]).map((r) => ({
     id: r.id,
+    kind: r.kind ?? 'leave',
+    errand_location: r.errand_location ?? null,
     employee_name: r.profiles?.full_name ?? '—',
     employee_manager_id: r.profiles?.manager_id ?? null,
     leave_type_name_fa: r.leave_types?.name_fa ?? '—',
@@ -445,14 +700,59 @@ export async function getPendingApprovals(): Promise<
     start_date: r.start_date,
     end_date: r.end_date,
     day_part: r.day_part,
-    requested_days: r.requested_days,
+    unit: r.unit,
+    start_time: r.start_time,
+    end_time: r.end_time,
+    requested_minutes: r.requested_minutes,
     reason: r.reason ?? null,
+    replacement_name: r.replacement?.full_name ?? null,
+    serial_year: r.serial_year,
+    serial_seq: r.serial_seq,
+    // Filled below: a cover can book leave between submission and approval, and
+    // the manager should see that before deciding (spec §2.1). approve_leave_request
+    // also refuses it, so this is a heads-up rather than the guard.
+    replacement_conflict: false,
   }));
 
-  return {
-    ok: true,
-    requests: filterApprovable(mapped, user.id, roles.includes('admin')),
-  };
+  const scoped = filterApprovable(mapped, user.id, roles.includes('admin'));
+
+  // One round-trip for the whole queue rather than per row.
+  const withCover = ((data ?? []) as unknown as Row[]).filter((r) => r.replacement_id);
+  if (withCover.length > 0) {
+    const coverIds = [...new Set(withCover.map((r) => r.replacement_id as string))];
+    const { data: coverLeave } = await supabase
+      .from('leave_requests')
+      .select('employee_id, start_date, end_date, unit, start_time, end_time')
+      .in('employee_id', coverIds)
+      .in('status', ['pending', 'approved']);
+
+    for (const req of scoped) {
+      const raw = withCover.find((r) => r.id === req.id);
+      if (!raw?.replacement_id) continue;
+      req.replacement_conflict = (coverLeave ?? []).some(
+        (l) =>
+          l.employee_id === raw.replacement_id &&
+          leavePeriodsOverlap(
+            {
+              startDate: l.start_date,
+              endDate: l.end_date,
+              unit: l.unit,
+              startTime: l.start_time,
+              endTime: l.end_time,
+            },
+            {
+              startDate: req.start_date,
+              endDate: req.end_date,
+              unit: req.unit,
+              startTime: req.start_time,
+              endTime: req.end_time,
+            }
+          )
+      );
+    }
+  }
+
+  return { ok: true, requests: scoped };
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +764,11 @@ export async function getPendingApprovals(): Promise<
 
 export type CalendarEntry = {
   id: string;
+  /**
+   * 'errand' rows are work trips. `errand_location` is deliberately NOT here:
+   * the view omits it, so teammates see that someone is out, not where (FR-25).
+   */
+  kind: Database['public']['Enums']['request_kind'];
   employee_id: string;
   employee_name: string;
   leave_type_name_fa: string;
@@ -472,6 +777,9 @@ export type CalendarEntry = {
   start_date: string;
   end_date: string;
   day_part: DayPart;
+  unit: Database['public']['Enums']['leave_unit'];
+  start_time: string | null;
+  end_time: string | null;
   status: 'pending' | 'approved';
 };
 
@@ -487,7 +795,7 @@ export async function getCalendarEntries(
   const { data, error } = await supabase
     .from('team_leave_calendar')
     .select(
-      'id, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, status'
+      'id, kind, employee_id, employee_name, leave_type_name_fa, leave_type_name_en, leave_type_color, start_date, end_date, day_part, unit, start_time, end_time, status'
     )
     .lte('start_date', rangeEnd)
     .gte('end_date', rangeStart)
@@ -497,14 +805,19 @@ export async function getCalendarEntries(
 
   const entries: CalendarEntry[] = (data ?? []).map((r) => ({
     id: r.id ?? '',
+    kind: r.kind ?? 'leave',
     employee_id: r.employee_id ?? '',
     employee_name: r.employee_name ?? '—',
+    // An errand has no leave type, so the LEFT JOIN leaves these null.
     leave_type_name_fa: r.leave_type_name_fa ?? '—',
     leave_type_name_en: r.leave_type_name_en ?? null,
     leave_type_color: r.leave_type_color ?? null,
     start_date: r.start_date ?? '',
     end_date: r.end_date ?? '',
     day_part: (r.day_part ?? 'full') as DayPart,
+    unit: (r.unit ?? 'day') as Database['public']['Enums']['leave_unit'],
+    start_time: r.start_time ?? null,
+    end_time: r.end_time ?? null,
     status: (r.status ?? 'pending') as 'pending' | 'approved',
   }));
 
@@ -522,6 +835,8 @@ export async function getMyBalances(): Promise<
   if (!user) return dbErr('not authenticated');
   if (!companyId) return dbErr('no profile for caller');
 
+  await accrueBeforeRead(supabase);
+
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
       supabase
@@ -532,7 +847,7 @@ export async function getMyBalances(): Promise<
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after, created_at')
+        .select('leave_type_id, balance_after_minutes, seq')
         .eq('employee_id', user.id),
     ]);
 
@@ -544,7 +859,7 @@ export async function getMyBalances(): Promise<
     leaveTypeId: t.id,
     name_fa: t.name_fa,
     name_en: t.name_en,
-    balance: byType[t.id] ?? 0,
+    balanceMinutes: byType[t.id] ?? 0,
   }));
 
   return { ok: true, balances };
@@ -558,6 +873,8 @@ export async function getEmployeeBalances(
   if (!roles.includes('admin')) return dbErr('admin role required');
   if (!companyId) return dbErr('no profile for caller');
 
+  await accrueBeforeRead(supabase, employeeId);
+
   const [{ data: types, error: typesError }, { data: ledger, error: ledgerError }] =
     await Promise.all([
       supabase
@@ -569,7 +886,7 @@ export async function getEmployeeBalances(
         .order('name_fa'),
       supabase
         .from('leave_ledger')
-        .select('leave_type_id, balance_after, created_at')
+        .select('leave_type_id, balance_after_minutes, seq')
         .eq('employee_id', employeeId),
     ]);
 
@@ -581,8 +898,113 @@ export async function getEmployeeBalances(
     leaveTypeId: t.id,
     name_fa: t.name_fa,
     name_en: t.name_en,
-    balance: byType[t.id] ?? 0,
+    balanceMinutes: byType[t.id] ?? 0,
   }));
 
   return { ok: true, balances };
+}
+
+// ---------------------------------------------------------------------------
+// Accrual policy (admin) — spec §6.1. Inputs arrive in MINUTES; the forms convert
+// their day-denominated fields at the boundary via lib/leave/duration.ts.
+// ---------------------------------------------------------------------------
+
+export type LeavePolicyInput = {
+  employeeId: string;
+  leaveTypeId: string;
+  accrualMinutesPerMonth: number;
+  annualCapMinutes: number | null;
+  carryoverCapMinutes: number;
+  /** Gregorian YYYY-MM-DD; must be a jalali_months.gregorian_start (the RPC checks). */
+  accrualStartMonth: string;
+};
+
+export type LeavePolicyRow = {
+  leaveTypeId: string;
+  accrualMinutesPerMonth: number;
+  annualCapMinutes: number | null;
+  carryoverCapMinutes: number;
+  accrualStartMonth: string;
+};
+
+export async function setEmployeeLeavePolicy(
+  input: LeavePolicyInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { error } = await supabase.rpc('set_employee_leave_policy', {
+    p_employee_id: input.employeeId,
+    p_leave_type_id: input.leaveTypeId,
+    p_accrual_minutes_per_month: input.accrualMinutesPerMonth,
+    p_annual_cap_minutes: input.annualCapMinutes,
+    p_carryover_cap_minutes: input.carryoverCapMinutes,
+    p_accrual_start_month: input.accrualStartMonth,
+  });
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true };
+}
+
+/** Existing policies for one employee, for pre-filling the edit form. */
+export async function getEmployeePolicies(
+  employeeId: string
+): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { data, error } = await supabase
+    .from('employee_leave_policies')
+    .select(
+      'leave_type_id, accrual_minutes_per_month, annual_cap_minutes, carryover_cap_minutes, accrual_start_month'
+    )
+    .eq('employee_id', employeeId);
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    policies: (data ?? []).map((r) => ({
+      leaveTypeId: r.leave_type_id,
+      accrualMinutesPerMonth: r.accrual_minutes_per_month,
+      annualCapMinutes: r.annual_cap_minutes,
+      carryoverCapMinutes: r.carryover_cap_minutes,
+      accrualStartMonth: r.accrual_start_month,
+    })),
+  };
+}
+
+/** Admin "Post accruals now". Returns what actually happened, for the UI to show. */
+export async function runAllAccruals(): Promise<
+  { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
+> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.includes('admin')) return dbErr('admin role required');
+
+  const { data, error } = await supabase.rpc('accrue_all_leave');
+  if (error) return dbErr(error.message);
+
+  const summary = (data ?? {}) as { employees?: number; rows_posted?: number };
+  invalidateAppCache();
+  return { ok: true, employees: summary.employees ?? 0, rowsPosted: summary.rows_posted ?? 0 };
+}
+
+/**
+ * The Gregorian start of the Jalali month containing today — the sensible default
+ * accrual start month, so switching accrual on never retroactively credits a year
+ * of leave (spec §6, deployment note).
+ */
+export async function getCurrentJalaliMonthStart(): Promise<string> {
+  const { supabase } = await getCallerContext();
+  const today = todayInAppTz();
+  const { data } = await supabase
+    .from('jalali_months')
+    .select('gregorian_start')
+    .lte('gregorian_start', today)
+    .gte('gregorian_end', today)
+    .maybeSingle();
+  return data?.gregorian_start ?? today;
 }

@@ -6,7 +6,10 @@ import { toast } from 'sonner';
 import { cancelRequest } from '@/lib/actions/leave';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatDuration } from '@/lib/leave/duration';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
+import { formatSerialLocalized } from '@/lib/leave/serial';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card } from '@/components/ui/card';
@@ -40,10 +43,17 @@ type Labels = {
   statusRejected: string;
   statusCancelled: string;
   dayPartLabels: { full: string; am: string; pm: string };
+  coverLabel: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   from: string;
   to: string;
   rejectedReason: string;
+  trackingNo: string;
+  errandBadge: string;
+  errandLocation: string;
 };
 
 type Props = {
@@ -51,9 +61,17 @@ type Props = {
   labels: Labels;
   calendarPref: string;
   locale: string;
+  /** Company day length — durations are stored in minutes. */
+  hoursPerDay: number;
 };
 
-export function MyRequestsList({ requests, labels, calendarPref, locale }: Props) {
+export function MyRequestsList({
+  requests,
+  labels,
+  calendarPref,
+  locale,
+  hoursPerDay,
+}: Props) {
   const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
@@ -116,9 +134,30 @@ export function MyRequestsList({ requests, labels, calendarPref, locale }: Props
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    {/* Leave type name */}
-                    <div className="font-medium text-sm text-foreground">
-                      {req.leave_types ? localizedLeaveTypeName(req.leave_types, locale) : '—'}
+                    {/* An errand has no leave type — it is tagged instead, so a
+                        work trip never reads as time off. */}
+                    <div className="flex items-center gap-2">
+                      {req.kind === 'errand' && (
+                        <span
+                          className="inline-flex shrink-0 items-center rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
+                          data-testid={`errand-badge-${req.id}`}
+                        >
+                          {labels.errandBadge}
+                        </span>
+                      )}
+                      {req.kind === 'errand' ? (
+                        <div
+                          className="font-medium text-sm text-foreground truncate"
+                          data-testid={`errand-location-${req.id}`}
+                          title={req.errand_location ?? undefined}
+                        >
+                          {labels.errandLocation}: {req.errand_location ?? '—'}
+                        </div>
+                      ) : (
+                        <div className="font-medium text-sm text-foreground truncate">
+                          {req.leave_types ? localizedLeaveTypeName(req.leave_types, locale) : '—'}
+                        </div>
+                      )}
                     </div>
                     {/* Date range */}
                     <div className="text-xs text-muted-foreground mt-0.5">
@@ -127,9 +166,26 @@ export function MyRequestsList({ requests, labels, calendarPref, locale }: Props
                     </div>
                     {/* Day part */}
                     <div className="text-xs text-muted-foreground">
-                      {labels.dayPartLabels[req.day_part]} ·{' '}
-                      {formatNumber(req.requested_days, locale)} {labels.days}
+                      {req.unit === 'hour'
+                        ? formatTimeRange(req.start_time, req.end_time, locale)
+                        : labels.dayPartLabels[req.day_part]}{' '}
+                      · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
+                    {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
+                        which is the requester's personnel number (spec §5). */}
+                    <div className="text-xs text-muted-foreground">
+                      {labels.trackingNo}:{' '}
+                      {/* testid marks the VALUE, not the label — a caller reading
+                          `serial-*` wants the number, not the chrome around it. */}
+                      <span className="font-mono" dir="ltr" data-testid={`serial-${req.id}`}>
+                        {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+                      </span>
+                    </div>
+                    {req.replacement_name && (
+                      <div className="text-xs text-muted-foreground">
+                        {labels.coverLabel}: {req.replacement_name}
+                      </div>
+                    )}
                     {/* Why it was rejected — optional, set by the decider. */}
                     {req.status === 'rejected' && req.decision_note && (
                       <div

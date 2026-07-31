@@ -14,10 +14,14 @@ import {
   getMyBalances,
   getCalendarEntries,
   getPendingApprovals,
+  getWorkSettings,
+  getMyCoverDuties,
 } from '@/lib/actions/leave';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import { nowInAppTz } from '@/lib/appDate';
 import { buildHomeBoard } from '@/lib/home/board';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { HomeBoard } from './HomeBoard';
 import { PageHeader } from '../_components/PageHeader';
 import { BoardSkeleton } from '@/components/Skeletons';
@@ -35,9 +39,11 @@ async function HomeBoardData({
   locale: string;
   userId: string;
 }) {
-  const [t, tLeave, roles] = await Promise.all([
+  const [t, tLeave, tRepl, tErrand, roles] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
+    getTranslations('replacement'),
+    getTranslations('errand'),
     getCachedRoles(userId),
   ]);
   const canApprove = roles.includes('admin') || roles.includes('manager');
@@ -58,14 +64,28 @@ async function HomeBoardData({
 
   // One parallel burst — the profile and (for approvers) the pending list used
   // to run as extra serial round-trips after this batch.
-  const [profile, requestsRes, balancesRes, calendarRes, directoryRes, approvalsRes] =
-    await Promise.all([
+  const [
+    profile,
+    requestsRes,
+    balancesRes,
+    calendarRes,
+    directoryRes,
+    approvalsRes,
+    workSettingsRes,
+    coverDutiesRes,
+  ] = await Promise.all([
       getCachedProfile(userId),
       getMyLeaveRequests(),
       getMyBalances(),
       getCalendarEntries(rangeStart, rangeEnd),
       getMyTeamDirectory(),
       canApprove ? getPendingApprovals() : Promise.resolve(null),
+      // Balances and durations are stored in minutes; rendering them as days and
+      // hours needs the company day length. Joins the existing batch rather than
+      // adding a serial round-trip.
+      getWorkSettings(),
+      // Requests this person is the named cover for, over the same 90-day window.
+      getMyCoverDuties(rangeStart, rangeEnd),
     ]);
 
   const calendarPref = profile?.calendar_pref ?? 'jalali';
@@ -95,7 +115,13 @@ async function HomeBoardData({
     approvalsPending: t('approvalsPending', { count: pendingCount }),
     noRecent: t('noRecent'),
     noTeam: t('noTeam'),
-    days: tLeave('days'),
+    requestDaily: t('requestDaily'),
+    coveringTitle: tRepl('coveringTitle'),
+    coveringFor: tRepl('coveringFor'),
+    requestHourly: t('requestHourly'),
+    requestErrand: t('requestErrand'),
+    errandBadge: tErrand('badge'),
+    ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
     statusRejected: tLeave('status.rejected'),
@@ -105,7 +131,28 @@ async function HomeBoardData({
   return (
     <>
       <PageHeader title={t('greeting', { name: fullName })} />
-      <HomeBoard board={board} labels={labels} locale={locale} calendarPref={calendarPref} />
+      <HomeBoard
+        board={board}
+        labels={labels}
+        locale={locale}
+        calendarPref={calendarPref}
+        hoursPerDay={
+          workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay
+        }
+        coverDuties={
+          coverDutiesRes.ok
+            ? coverDutiesRes.duties.map((d) => ({
+                requestId: d.requestId,
+                employeeName: d.employeeName,
+                startDate: d.startDate,
+                endDate: d.endDate,
+                unit: d.unit,
+                startTime: d.startTime,
+                endTime: d.endTime,
+              }))
+            : []
+        }
+      />
     </>
   );
 }

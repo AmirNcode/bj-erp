@@ -67,7 +67,7 @@ async function createEmployee(
   }
 
   const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
-  expect(code).toMatch(/^[a-z0-9]{2,6}-999[0-9]{7}$/);
+  expect(code).toMatch(/^999[0-9]{7}$/);
 
   await page.click('button[type="submit"]');
 

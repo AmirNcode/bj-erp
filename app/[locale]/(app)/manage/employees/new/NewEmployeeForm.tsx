@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createEmployee } from '@/lib/actions/employees';
-import { allocateLeave } from '@/lib/actions/leave';
+import { allocateLeave, setEmployeeLeavePolicy } from '@/lib/actions/leave';
+import { daysToMinutes } from '@/lib/leave/duration';
 import { currentYearPeriod } from '@/lib/leave/allocations';
 import {
   buildEmployeeCode,
@@ -16,13 +17,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
 
-type Department = { id: string; name_fa: string; name_en: string; code: string };
+type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
 type InitialLeaveType = {
   id: string;
   name_fa: string;
   name_en: string | null;
   default_annual_quota_days: number | null;
+  default_accrual_minutes_per_month: number | null;
+  default_annual_cap_minutes: number | null;
+  default_carryover_cap_minutes: number;
 };
 
 const ROLES = ['admin', 'manager', 'employee', 'security'] as const;
@@ -35,6 +39,10 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
+  /** Company day length: the inputs are days, the ledger stores minutes. */
+  hoursPerDay: number;
+  /** Gregorian start of the current Jalali month — the accrual start default. */
+  accrualStartMonth: string;
   locale: string;
   labels: {
     personnelNo: string;
@@ -57,6 +65,12 @@ type Props = {
     noneOption: string;
     allocTitle: string;
     allocWarn: string;
+    policyTitle: string;
+    policyHint: string;
+    policyRate: string;
+    policyAnnualCap: string;
+    policyCarryCap: string;
+    policyWarn: string;
   };
 };
 
@@ -71,6 +85,15 @@ function defaultDaysFor(type: InitialLeaveType) {
   return type.default_annual_quota_days ?? 0;
 }
 
+/**
+ * Minutes -> the days figure the policy inputs show. 0 means "no cap" for the
+ * annual field, which setEmployeeLeavePolicy turns back into null.
+ */
+function minutesToDaysInput(minutes: number | null, hoursPerDay: number): number {
+  if (!minutes || minutes <= 0) return 0;
+  return Math.round((minutes / (hoursPerDay * 60)) * 100) / 100;
+}
+
 export function NewEmployeeForm({
   isAdmin,
   ownDepartment,
@@ -78,6 +101,8 @@ export function NewEmployeeForm({
   departments,
   managers,
   leaveTypes,
+  hoursPerDay,
+  accrualStartMonth,
   locale,
   labels,
 }: Props) {
@@ -85,26 +110,25 @@ export function NewEmployeeForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allocationError, setAllocationError] = useState<string | null>(null);
+  const [policyError, setPolicyError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(['employee']);
   const [personnelNo, setPersonnelNo] = useState('');
   // Admin picks a department; manager is locked to their own.
   const [deptId, setDeptId] = useState(isAdmin ? '' : ownDepartment?.id ?? '');
 
-  const selectedDept = isAdmin
-    ? departments.find((d) => d.id === deptId) ?? null
-    : ownDepartment;
-
+  // Since 20260730130002 the login code is the personnel number alone — the
+  // department no longer feeds it, so the preview does not wait for one.
   const normalizedPno = normalizePersonnelNo(personnelNo);
-  const codePreview =
-    selectedDept && isValidPersonnelNo(normalizedPno)
-      ? buildEmployeeCode(selectedDept.code, normalizedPno)
-      : '—';
+  const codePreview = isValidPersonnelNo(normalizedPno)
+    ? buildEmployeeCode(normalizedPno)
+    : '—';
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setAllocationError(null);
+    setPolicyError(null);
     setPending(true);
 
     const fd = new FormData(e.currentTarget);
@@ -141,11 +165,36 @@ export function NewEmployeeForm({
           leaveTypeId: allocation.typeId,
           periodStart: start,
           periodEnd: end,
-          days: allocation.days,
+          minutes: daysToMinutes(allocation.days, hoursPerDay),
         });
 
         if (!allocationResult.ok) {
           setAllocationError(`${labels.allocWarn} ${allocationResult.error}`);
+          break;
+        }
+      }
+    }
+
+    // Accrual policy per balance-affecting type. Separate from the opening
+    // allocation above: that is a one-off starting position, this is the rule that
+    // keeps adding to it every month.
+    if (isAdmin) {
+      for (const type of leaveTypes) {
+        const rateDays = Number(fd.get(`policy_rate_${type.id}`) || 0);
+        const capDays = Number(fd.get(`policy_cap_${type.id}`) || 0);
+        const carryDays = Number(fd.get(`policy_carry_${type.id}`) || 0);
+
+        const policyResult = await setEmployeeLeavePolicy({
+          employeeId: result.userId,
+          leaveTypeId: type.id,
+          accrualMinutesPerMonth: daysToMinutes(rateDays, hoursPerDay),
+          annualCapMinutes: capDays > 0 ? daysToMinutes(capDays, hoursPerDay) : null,
+          carryoverCapMinutes: daysToMinutes(carryDays, hoursPerDay),
+          accrualStartMonth,
+        });
+
+        if (!policyResult.ok) {
+          setPolicyError(`${labels.policyWarn} ${policyResult.error}`);
           break;
         }
       }
@@ -344,6 +393,85 @@ export function NewEmployeeForm({
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {isAdmin && leaveTypes.length > 0 && (
+            <div
+              className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
+              data-testid="policy-section"
+            >
+              <div>
+                <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                <p className="mt-1 text-sm text-muted-foreground">{labels.policyHint}</p>
+              </div>
+              {leaveTypes.map((type) => {
+                const slug = leaveTypeSlug(type);
+                const label = locale === 'fa' ? type.name_fa : type.name_en ?? type.name_fa;
+                return (
+                  <fieldset className="space-y-1.5" key={`policy-${type.id}`}>
+                    <legend className="text-sm font-medium">{label}</legend>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <Label htmlFor={`policy_rate_${type.id}`} className="text-xs">
+                          {labels.policyRate}
+                        </Label>
+                        <Input
+                          id={`policy_rate_${type.id}`}
+                          name={`policy_rate_${type.id}`}
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          defaultValue={minutesToDaysInput(
+                            type.default_accrual_minutes_per_month,
+                            hoursPerDay
+                          )}
+                          data-testid={`policy-rate-${slug}`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`policy_cap_${type.id}`} className="text-xs">
+                          {labels.policyAnnualCap}
+                        </Label>
+                        <Input
+                          id={`policy_cap_${type.id}`}
+                          name={`policy_cap_${type.id}`}
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          defaultValue={minutesToDaysInput(
+                            type.default_annual_cap_minutes,
+                            hoursPerDay
+                          )}
+                          data-testid={`policy-cap-${slug}`}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor={`policy_carry_${type.id}`} className="text-xs">
+                          {labels.policyCarryCap}
+                        </Label>
+                        <Input
+                          id={`policy_carry_${type.id}`}
+                          name={`policy_carry_${type.id}`}
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          defaultValue={minutesToDaysInput(
+                            type.default_carryover_cap_minutes,
+                            hoursPerDay
+                          )}
+                          data-testid={`policy-carry-${slug}`}
+                        />
+                      </div>
+                    </div>
+                  </fieldset>
+                );
+              })}
+              {policyError && (
+                <p role="alert" className="text-sm text-destructive" data-testid="policy-error">
+                  {policyError}
+                </p>
+              )}
             </div>
           )}
 

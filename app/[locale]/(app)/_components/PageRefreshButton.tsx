@@ -5,11 +5,15 @@ import { RefreshCw } from 'lucide-react';
 import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from 'next/navigation';
 import { refreshRoute } from '@/lib/actions/refresh';
+import { APP_TIME_ZONE } from '@/lib/appDate';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-function formatTime(date: Date, locale: string) {
+export function formatUpdatedTime(date: Date, locale: string) {
   return new Intl.DateTimeFormat(locale === 'fa' ? 'fa-IR' : 'en-US', {
+    // Server rendering happens in the container's UTC timezone while the
+    // browser uses the device timezone. Pinning both prevents hydration drift.
+    timeZone: APP_TIME_ZONE,
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
@@ -29,7 +33,7 @@ export function PageRefreshButton({ initialUpdatedAt }: Props) {
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const updatedLabel = useMemo(
-    () => t('updated', { time: formatTime(updatedAt, locale) }),
+    () => t('updated', { time: formatUpdatedTime(updatedAt, locale) }),
     [locale, t, updatedAt]
   );
 

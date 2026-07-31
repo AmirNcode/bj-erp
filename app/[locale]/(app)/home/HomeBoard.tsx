@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatDuration } from '@/lib/leave/duration';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
@@ -20,7 +22,16 @@ type Labels = {
   approvalsPending: string;
   noRecent: string;
   noTeam: string;
+  requestDaily: string;
+  requestHourly: string;
+  requestErrand: string;
+  errandBadge: string;
+  coveringTitle: string;
+  coveringFor: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   statusPending: string;
   statusApproved: string;
   statusRejected: string;
@@ -32,9 +43,28 @@ type Props = {
   labels: Labels;
   locale: string;
   calendarPref: string;
+  /** Company day length — balances and durations are stored in minutes. */
+  hoursPerDay: number;
+  /** Requests where this person is the named cover (D15: never a surprise). */
+  coverDuties: {
+    requestId: string;
+    employeeName: string;
+    startDate: string;
+    endDate: string;
+    unit: 'day' | 'hour';
+    startTime: string | null;
+    endTime: string | null;
+  }[];
 };
 
-export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
+export function HomeBoard({
+  board,
+  labels,
+  locale,
+  calendarPref,
+  hoursPerDay,
+  coverDuties,
+}: Props) {
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
@@ -52,6 +82,32 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
 
   return (
     <div className="space-y-4" data-testid="home-board">
+      {/* One entry point per paper form: BJ-F 50208 daily + hourly (D13), and
+          BJ-F 50207 the hourly work errand (2026-07-30 spec, D4). */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Link
+          href={`/${locale}/request`}
+          data-testid="home-request-daily"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestDaily}
+        </Link>
+        <Link
+          href={`/${locale}/request/hourly`}
+          data-testid="home-request-hourly"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestHourly}
+        </Link>
+        <Link
+          href={`/${locale}/request/errand`}
+          data-testid="home-request-errand"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestErrand}
+        </Link>
+      </div>
+
       {board.showApprovals && (
         <Link
           href={`/${locale}/manage/approvals`}
@@ -69,6 +125,31 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
         </Link>
       )}
 
+      {/* Named as someone's cover — D15 surfaces it here instead of gating approval. */}
+      {coverDuties.length > 0 && (
+        <Card className="border-primary/30 bg-primary/5" data-testid="home-covering">
+          <CardHeader>
+            <CardTitle className="text-primary">{labels.coveringTitle}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1 text-sm text-primary/90">
+              {/* An hourly cover is one date plus a window — rendering the same
+                  date twice with no hours read as a full day off. */}
+              {coverDuties.map((duty) => (
+                <li key={duty.requestId}>
+                  {labels.coveringFor} {duty.employeeName} ·{' '}
+                  {duty.unit === 'hour'
+                    ? `${formatDate(duty.startDate)} · ${formatTimeRange(duty.startTime, duty.endTime, locale)}`
+                    : duty.startDate === duty.endDate
+                      ? formatDate(duty.startDate)
+                      : `${formatDate(duty.startDate)} — ${formatDate(duty.endDate)}`}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -84,11 +165,10 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
                     <span className="text-sm text-muted-foreground">
                       {locale === 'fa' ? b.name_fa : b.name_en ?? b.name_fa}
                     </span>
-                    <span className="text-2xl font-bold tabular-nums leading-none">
-                      {formatNumber(b.balance, locale)}
-                      <span className="ms-1 text-xs font-normal text-muted-foreground">
-                        {labels.days}
-                      </span>
+                    {/* formatDuration carries its own units ("۹ روز و ۴ ساعت"), so the
+                        separate unit suffix that used to follow the number is gone. */}
+                    <span className="text-xl font-bold leading-none">
+                      {formatDuration(b.balanceMinutes, hoursPerDay, locale, labels)}
                     </span>
                   </li>
                 ))}
@@ -109,12 +189,18 @@ export function HomeBoard({ board, labels, locale, calendarPref }: Props) {
                 {board.recent.map((r) => (
                   <div key={r.id} className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
+                      {/* An errand has no leave type; naming it by its tag keeps
+                          the row from rendering as a bare em dash. */}
                       <div className="text-sm font-medium truncate">
-                        {r.leave_types ? localizedLeaveTypeName(r.leave_types, locale) : '—'}
+                        {r.kind === 'errand'
+                          ? `${labels.errandBadge}: ${r.errand_location ?? '—'}`
+                          : r.leave_types
+                            ? localizedLeaveTypeName(r.leave_types, locale)
+                            : '—'}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatDate(r.start_date)} — {formatDate(r.end_date)} ·{' '}
-                        {formatNumber(r.requested_days, locale)} {labels.days}
+                        {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                     </div>
                     <StatusBadge

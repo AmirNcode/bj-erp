@@ -10,7 +10,12 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
-import { getCalendarEntries, getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
+import {
+  getCalendarEntries,
+  getPendingApprovals,
+  getWorkSettings,
+} from '@/lib/actions/leave';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
@@ -26,6 +31,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
   const tLeave = await getTranslations('leave');
   const tApprovals = await getTranslations('approvals');
+  const tErrand = await getTranslations('errand');
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -49,7 +55,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const loadError = result.ok ? null : result.error;
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
-    : { weekendDays: [5], holidays: [] as string[] };
+    : WORK_SETTINGS_FALLBACK;
   const decidableIds =
     approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
 
@@ -70,6 +76,7 @@ async function CalendarData({ locale }: { locale: string }) {
     rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
     approveSuccess: tApprovals('approveSuccess'),
     rejectSuccess: tApprovals('rejectSuccess'),
+    errandBadge: tErrand('badge'),
   };
 
   return (

@@ -3,11 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createDepartment } from '@/lib/actions/departments';
-import {
-  isValidDepartmentCode,
-  normalizeDepartmentCode,
-  suggestDepartmentCode,
-} from '@/lib/departments/code';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -16,7 +11,7 @@ import { nativeSelectClass } from '@/lib/native-select';
 
 type Kind = 'team' | 'office' | 'security';
 
-type ExistingDepartment = { id: string; name_fa: string; name_en: string; code: string };
+type ExistingDepartment = { id: string; name_fa: string; name_en: string };
 
 type Props = {
   existing: ExistingDepartment[];
@@ -24,8 +19,6 @@ type Props = {
   labels: {
     nameFa: string;
     nameEn: string;
-    code: string;
-    codeHint: string;
     kind: string;
     kindTeam: string;
     kindOffice: string;
@@ -36,38 +29,25 @@ type Props = {
     createdTitle: string;
     createdHint: string;
     addEmployee: string;
-    backToList: string;
-    invalid: string;
+    backToSettings: string;
     nameRequired: string;
     errorLabel: string;
   };
 };
 
 /**
- * Admin-only department creator. The code is the latin prefix of every login
- * code issued in this department, so it is previewed live and validated here
- * before the round-trip (the DB constraint + unique index remain the truth).
+ * Admin-only department creator. There is no code field: since 20260730130002
+ * the code prefixes nothing, so `createDepartment` derives it from the English
+ * name and the admin never sees it (spec 2026-07-30 §6.1 / D12, D13).
  */
 export function NewDepartmentForm({ existing, locale, labels }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ nameFa: string; nameEn: string; code: string } | null>(
-    null
-  );
+  const [created, setCreated] = useState<{ nameFa: string; nameEn: string } | null>(null);
 
   const [nameFa, setNameFa] = useState('');
   const [nameEn, setNameEn] = useState('');
-  const [code, setCode] = useState('');
-  // Once the admin edits the code by hand, stop overwriting it from the name.
-  const [codeTouched, setCodeTouched] = useState(false);
-
-  const normalizedCode = normalizeDepartmentCode(code);
-
-  function handleNameEn(value: string) {
-    setNameEn(value);
-    if (!codeTouched) setCode(suggestDepartmentCode(value));
-  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -79,17 +59,12 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
       setError(labels.nameRequired);
       return;
     }
-    if (!isValidDepartmentCode(normalizedCode)) {
-      setError(labels.invalid);
-      return;
-    }
 
     setPending(true);
     const fd = new FormData(e.currentTarget);
     const result = await createDepartment({
       name_fa: fa,
       name_en: en,
-      code: normalizedCode,
       kind: (fd.get('kind') as Kind) || 'team',
     });
     setPending(false);
@@ -98,7 +73,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
       setError(result.error);
       return;
     }
-    setCreated({ nameFa: fa, nameEn: en, code: normalizedCode });
+    setCreated({ nameFa: fa, nameEn: en });
   }
 
   if (created) {
@@ -106,12 +81,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
       <Card className="border-2 border-success/30 bg-success-foreground">
         <CardContent className="space-y-4 pt-6" data-testid="dept-created">
           <h2 className="text-lg font-semibold text-success">{labels.createdTitle}</h2>
-          <p className="text-base">
-            {locale === 'fa' ? created.nameFa : created.nameEn}{' '}
-            <span className="font-mono text-sm text-muted-foreground" dir="ltr">
-              ({created.code})
-            </span>
-          </p>
+          <p className="text-base">{locale === 'fa' ? created.nameFa : created.nameEn}</p>
           <p className="text-sm text-success">{labels.createdHint}</p>
           <div className="flex flex-wrap gap-3 pt-2">
             <Button asChild>
@@ -120,7 +90,9 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
               </a>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/${locale}/manage/employees`}>{labels.backToList}</a>
+              <a href={`/${locale}/manage/settings`} data-testid="dept-back-to-settings">
+                {labels.backToSettings}
+              </a>
             </Button>
           </div>
         </CardContent>
@@ -164,30 +136,8 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
                 required
                 dir="ltr"
                 value={nameEn}
-                onChange={(e) => handleNameEn(e.target.value)}
+                onChange={(e) => setNameEn(e.target.value)}
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="code">{labels.code}</Label>
-              {/* Becomes the login-code prefix — latin/digits only, LTR even in fa. */}
-              <Input
-                id="code"
-                name="code"
-                data-testid="dept-code"
-                required
-                dir="ltr"
-                autoCapitalize="off"
-                autoCorrect="off"
-                maxLength={6}
-                className="font-mono"
-                value={code}
-                onChange={(e) => {
-                  setCodeTouched(true);
-                  setCode(e.target.value);
-                }}
-              />
-              <p className="text-sm text-muted-foreground">{labels.codeHint}</p>
             </div>
 
             {/* Native <select> — must stay native for Playwright selectOption e2e */}
@@ -207,7 +157,8 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(`/${locale}/manage/employees`)}
+                data-testid="dept-cancel"
+                onClick={() => router.push(`/${locale}/manage/settings`)}
               >
                 {labels.cancel}
               </Button>
@@ -216,18 +167,15 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
         </CardContent>
       </Card>
 
-      {/* Codes are unique per company — showing the taken ones avoids a round-trip. */}
+      {/* Names only — a code that prefixes nothing is noise here too (D13). */}
       {existing.length > 0 && (
         <Card>
           <CardContent className="space-y-2">
             <h2 className="text-base font-semibold">{labels.existingTitle}</h2>
             <ul className="space-y-1" data-testid="dept-existing">
               {existing.map((d) => (
-                <li key={d.id} className="flex items-center justify-between gap-3 text-sm">
-                  <span>{locale === 'fa' ? d.name_fa : d.name_en}</span>
-                  <span className="font-mono text-muted-foreground" dir="ltr">
-                    {d.code}
-                  </span>
+                <li key={d.id} className="text-sm">
+                  {locale === 'fa' ? d.name_fa : d.name_en}
                 </li>
               ))}
             </ul>

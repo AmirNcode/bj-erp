@@ -58,11 +58,14 @@ describe('isValidPersonnelNo', () => {
 });
 
 describe('buildEmployeeCode', () => {
-  it('joins department code and personnel number with a dash', () => {
-    expect(buildEmployeeCode('prod', '1042')).toBe('prod-1042');
+  // Since 20260730130002 the code IS the personnel number — no department
+  // prefix. Old accounts keep prod-1042; only new ones are bare.
+  it('is the personnel number alone', () => {
+    expect(buildEmployeeCode('1042')).toBe('1042');
+    expect(buildEmployeeCode('7')).toBe('7');
   });
 
-  it('mirrors the DB: lowercases the department code', () => {
-    expect(buildEmployeeCode('PROD', '7')).toBe('prod-7');
+  it('mirrors the SQL btrim', () => {
+    expect(buildEmployeeCode(' 1042 ')).toBe('1042');
   });
 });

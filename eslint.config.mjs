@@ -12,6 +12,14 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local agent worktrees contain their own generated .next trees. Without
+    // this, `npm run lint` recursively lints compiled third-party output.
+    ".claude/**",
+    ".codex/**",
+    ".superpowers/**",
+    "coverage/**",
+    "dist/**",
+    "backups/**",
   ]),
 ]);
 

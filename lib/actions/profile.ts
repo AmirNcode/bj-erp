@@ -32,8 +32,13 @@ export async function updateMyPrefs(input: {
     return dbErr('not permitted to update these fields');
   }
 
-  const { error } = await supabase.from('profiles').update(patch).eq('id', user.id);
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(patch)
+    .eq('id', user.id)
+    .select('id');
   if (error) return dbErr(error.message);
+  if (!data || data.length !== 1) return dbErr('profile was not updated');
   // Prefs (calendar/language) change how every page renders — drop all of it.
   invalidateAppCache();
   return { ok: true };

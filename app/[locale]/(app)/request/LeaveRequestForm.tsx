@@ -12,7 +12,10 @@ import gregorian_fa from 'react-date-object/locales/gregorian_fa';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
-import { submitRequest, getMyBalance } from '@/lib/actions/leave';
+import { formatDuration } from '@/lib/leave/duration';
+import { submitRequest, getMyBalance, getReplacementCandidates } from '@/lib/actions/leave';
+import { ReplacementPicker } from './_components/ReplacementPicker';
+import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,12 +39,22 @@ type Labels = {
   remainingBalanceLabel: string;
   noBalance: string;
   days: string;
+  hours: string;
+  minutes: string;
+  and: string;
   success: string;
   errorLabel: string;
   from: string;
   to: string;
   validationSelectType: string;
   validationSelectDate: string;
+  replacementTitle: string;
+  replacementHint: string;
+  replacementSearch: string;
+  replacementNone: string;
+  replacementOnLeave: string;
+  replacementLoading: string;
+  replacementEmpty: string;
 };
 
 type Props = {
@@ -71,7 +84,12 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   const [dateRange, setDateRange] = useState<DateObjectLike[]>([]);
   const [dayPart, setDayPart] = useState<DayPart>('full');
   const [reason, setReason] = useState('');
-  const [balance, setBalance] = useState<number | null>(null);
+  const [replacementId, setReplacementId] = useState('');
+  const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
+  // Which range the current list was fetched for; loading is DERIVED from it, the
+  // same way the balance effect avoids setting state synchronously.
+  const [candidatesFor, setCandidatesFor] = useState<string | null>(null);
+  const [balanceMinutes, setBalanceMinutes] = useState<number | null>(null);
   const [balanceFor, setBalanceFor] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -111,7 +129,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
 
   // Balance is fetched when the selected type changes; show it only once the
   // fetch for the currently-selected type has resolved (derived, not an effect).
-  const effectiveBalance = balanceFor === selectedTypeId ? balance : null;
+  const effectiveBalance = balanceFor === selectedTypeId ? balanceMinutes : null;
   const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
 
   // Fetch balance when the selected type changes. The only state updates happen
@@ -121,13 +139,39 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
     let cancelled = false;
     getMyBalance(selectedTypeId).then((res) => {
       if (cancelled) return;
-      setBalance(res.ok ? res.balance : null);
+      setBalanceMinutes(res.ok ? res.balanceMinutes : null);
       setBalanceFor(selectedTypeId);
     });
     return () => {
       cancelled = true;
     };
   }, [selectedTypeId]);
+
+  // Availability depends on the chosen dates, so the list is re-fetched whenever
+  // they change, and a pick that is no longer valid is dropped. State is only set
+  // inside the async callback — never synchronously in the effect.
+  const rangeKey = previewStart && previewEnd ? `${previewStart}:${previewEnd}` : '';
+  const candidatesReady = !!rangeKey && candidatesFor === rangeKey;
+  const shownCandidates = candidatesReady ? candidates : [];
+  const candidatesLoading = !!rangeKey && !candidatesReady;
+
+  useEffect(() => {
+    if (!rangeKey) return;
+    let cancelled = false;
+    const [start, end] = rangeKey.split(':');
+    getReplacementCandidates({ start, end, unit: 'day' }).then((res) => {
+      if (cancelled) return;
+      const list = res.ok ? res.candidates : [];
+      setCandidates(list);
+      setCandidatesFor(rangeKey);
+      setReplacementId((current) =>
+        current && list.some((c) => c.profileId === current && !c.unavailable) ? current : ''
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeKey]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,12 +196,14 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
         end,
         dayPart: effectiveDayPart,
         reason: reason || undefined,
+        replacementId: replacementId || null,
       });
 
       if (result.ok) {
         setSuccessMsg(labels.success);
         setDateRange([]);
         setReason('');
+        setReplacementId('');
         setDayPart('full');
         // Refresh server data without a full page reload
         router.refresh();
@@ -239,6 +285,23 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             </div>
           )}
 
+          {/* Replacement / جانشین — optional, same department, availability-aware */}
+          <ReplacementPicker
+            candidates={shownCandidates}
+            loading={candidatesLoading}
+            value={replacementId}
+            onChange={setReplacementId}
+            labels={{
+              title: labels.replacementTitle,
+              hint: labels.replacementHint,
+              searchPlaceholder: labels.replacementSearch,
+              none: labels.replacementNone,
+              onLeave: labels.replacementOnLeave,
+              loading: labels.replacementLoading,
+              empty: labels.replacementEmpty,
+            }}
+          />
+
           {/* Reason */}
           <div className="space-y-1.5">
             <Label htmlFor="reason">{labels.reason}</Label>
@@ -267,7 +330,12 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
                   {balanceLoading
                     ? '…'
                     : effectiveBalance !== null
-                      ? `${labels.remainingBalanceLabel}: ${formatNumber(effectiveBalance, locale)} ${labels.days}`
+                      ? `${labels.remainingBalanceLabel}: ${formatDuration(
+                          effectiveBalance,
+                          workSettings.hoursPerDay,
+                          locale,
+                          labels
+                        )}`
                       : labels.noBalance}
                 </div>
               )}

@@ -1,7 +1,9 @@
 /**
  * Employee-code helpers — the client-side mirror of the in-DB formula in
- * private.create_employee_impl (migration 20260713120001):
- *   employee_code = departments.code || '-' || personnel_no
+ * private.create_employee_impl (migration 20260730130002):
+ *   employee_code = personnel_no
+ * Before 2026-07-30 it was `departments.code || '-' || personnel_no`; accounts
+ * created then were not migrated, so `prod-1042` and `1042` both log in.
  * The database is the source of truth; these exist for live previews and
  * fast localized validation only. Keep the regexes identical to the SQL.
  */
@@ -38,7 +40,12 @@ export function toLatinCode(value: string): string {
   return toAsciiDigits(value).replace(/[^\x21-\x7E]/g, '');
 }
 
-/** Mirrors the in-DB composition; department codes are stored lowercase. */
-export function buildEmployeeCode(deptCode: string, personnelNo: string): string {
-  return `${deptCode.toLowerCase()}-${personnelNo}`;
+/**
+ * Mirrors the in-DB composition: the login code IS the personnel number.
+ * Trimmed the way `btrim(coalesce(p_personnel_no, ''))` trims it in SQL.
+ * Kept as a named function rather than inlined so the one place the formula
+ * lives on the client stays greppable if codes ever gain a prefix again.
+ */
+export function buildEmployeeCode(personnelNo: string): string {
+  return personnelNo.trim();
 }

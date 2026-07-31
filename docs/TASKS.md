@@ -30,6 +30,11 @@ their own plan files when reached.
 > **Deploy = runbook (`docs/DEPLOY.md`), not executed.** **Next: PLAN §6 backlog** (attendance,
 > shifts, …) + demo deploy. Specs/plans in `docs/specs/` + `docs/plans/`; history in
 > `.superpowers/sdd/progress.md`.
+> **2026-07-30 security review:** active-account RLS, manager authority, audit integrity,
+> transactional password reset, hourly approval overlap, input validation, and deployment/browser
+> hardening are complete locally. Evidence: `docs/SECURITY-REVIEW-2026-07-30.md`.
+> ⊘ Release gate pending: run `npm audit` on a network-authorized machine; this environment blocked
+> sending the lockfile manifest to the external npm registry.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -155,8 +160,92 @@ Spec `docs/specs/2026-07-13-employee-onboarding-design.md` · plan `docs/plans/2
 - ☐ Follow-up (user's plan): replace the free-text field with preset reasons + dropdown,
   keeping free text as the "other" case
 
+## Leave v2 — hourly, accrual, replacement, serials (2026-07-29) ☑ all five plans built, none deployed
+Spec: [`docs/specs/2026-07-29-hourly-accrual-replacement-design.md`](specs/2026-07-29-hourly-accrual-replacement-design.md).
+Client feedback after reviewing the live app, plus their two paper forms in `docs/forms/`.
+Five plans, in this order; each ships working software on its own.
+
+- ☑ **Plan 1 — Foundations** ([plan](plans/2026-07-29-leave-v2-foundations.md))
+  - ☑ `jalali_months` reference table, 612 rows generated + property-tested
+  - ☑ Stored unit converted days → integer minutes (expand/backfill/contract, 3 migrations)
+  - ☑ `work_settings.hours_per_day`; balances render as "۹ روز و ۴ ساعت"
+  - ☑ Acceptance SQL for the client-server upgrade
+  - ☐ **Not yet applied to the client's server** — see the plan's Deployment note
+- ☑ **Plan 2 — Accrual** ([plan](plans/2026-07-29-leave-v2-accrual.md))
+  - ☑ `employee_leave_policies` + leave-type defaults + `period_month` + the idempotency index
+  - ☑ `lib/leave/accrual.ts` pure planner (15 unit tests) mirrored by `accrue_leave` in SQL
+  - ☑ Lazy accrual on every balance read + submit; admin "Post accruals now" in Settings
+  - ☑ Policy editor on the create and edit employee forms
+  - ☑ Fixed the `created_at`-tie balance bug it exposed (`leave_ledger.seq`)
+  - ☐ **Not yet applied to the client's server**; existing staff need a reviewed one-time policy
+    backfill first — see the plan's Deployment note
+- ☑ **Plan 3 — Hourly** ([plan](plans/2026-07-29-leave-v2-hourly.md))
+  - ☑ `leave_unit` + times + the CHECK that makes a malformed row impossible
+  - ☑ Work-hours window + per-day cap in `work_settings`, editable in Settings
+  - ☑ `lib/leave/hourly.ts` (17 tests) mirrored by the SQL; one writer, two wrappers
+  - ☑ `/request/hourly` screen, Home buttons, time ranges in every listing + the calendar
+  - ☐ **Not yet applied to the client's server**; `allow_hourly` flips on for annual + unpaid the
+    moment the migration runs, so leave the flags false there for a staged rollout
+- ☑ **Plan 4 — Replacement** ([plan](plans/2026-07-29-leave-v2-replacement.md))
+  - ☑ `replacement_id` + `get_replacement_candidates` (annotated, not filtered) + `get_my_cover_conflicts`
+  - ☑ One shared predicate (`private.replacement_is_away`) for the read, the submit guard, and approval
+  - ☑ Searchable picker on both screens; "you are covering" on Home; cover + clash on approvals
+  - ☐ **Not yet applied to the client's server**
+- ☑ **Plan 5 — Serials** ([plan](plans/2026-07-29-leave-v2-serials.md))
+  - ☑ `leave_request_serials` counter + `company_id`/`serial_year`/`serial_seq` + backfill
+  - ☑ Allocated in the writer under a counter row lock; proven across two concurrent employees
+  - ☑ `lib/leave/serial.ts` (5 tests); shown on requests and approvals
+  - ☐ **Not yet applied to the client's server** — this is the one plan with a MANDATORY backfill
+- ☐ Deferred, documented in spec §11: signature / insurance evidence. Next step is a question for
+  the client's insurer, not code
+- ☐ Deferred, own spec: multi-step approval + حراست gate check (their forms carry 4 signatures)
+
+## Work errand + login codes (2026-07-30) ☑ built, not deployed
+Spec: [`docs/specs/2026-07-30-work-errand-and-login-codes-design.md`](specs/2026-07-30-work-errand-and-login-codes-design.md).
+Third client form (BJ-F 50207) plus a clarification that the paper شماره is the personnel number.
+
+- ☑ **Errand (FR-30)** — `request_kind` discriminator + `errand_location` on `leave_requests`,
+  `leave_type_id` nullable (migration `20260730130001`)
+  - ☑ Nulling the type is what keeps errands out of the ledger; approve/cancel needed no change
+  - ☑ `submit_errand_request` wrapper on the shared writer; overlap with leave works for free
+  - ☑ Own tracking-number sequence — counter re-keyed on `kind`
+  - ☑ `/request/errand`, Home button, tagged in listings/approvals/calendar
+  - ☑ `team_leave_calendar` → LEFT JOIN (an inner join would have dropped every errand)
+  - ☑ `lib/leave/errand.ts` (16 unit tests) + e2e; migration executed against a throwaway PG cluster
+- ☑ **Login codes (FR-31)** — `employee_code = personnel_no` (migration `20260730130002`)
+  - ☑ No backfill; `prod-1042` and `1042` both log in, permanently
+  - ☑ e2e reap pattern widened — bare codes would otherwise accumulate on the client's DB
+  - ☑ Six e2e specs repaired
+- ☑ **Departments card** — names only, member panel, Add Department moved in from Employees
+  - ☑ Codes auto-generated; editing deactivated (`updateDepartmentCode` + its RLS policy kept)
+  - ☑ e2e helper puts its `zz` token in the name so `cleanup-e2e.mjs` still reaps test departments
+- ☑ Gates: unit **239/239**, tsc + eslint + build green, each of the 5 commits verified green alone
+- ☑ **e2e run 2026-07-31 — 32 passed / 1 skipped serial.** It found two bugs nothing else could:
+  the serial-index collision below, and the calendar misreporting hourly absences
+- ☐ **Not applied to the client's server**, and it stacks on all of leave v2, which is also unapplied
+
+## Pre-merge review (2026-07-31) ☑ merged to `main`
+Two reviewers over the 42-commit diff, plus the first e2e run on this branch tip.
+
+- ☑ **CRITICAL** `leave_requests_serial_uniq` had no `kind`, so **every first errand of a year
+  failed** — the whole BJ-F 50207 feature was non-functional. Reproduced on a copy of live data
+- ☑ **CRITICAL** the calendar rendered a 2-hour absence as a full day and printed "returns
+  tomorrow" — on a surface where managers approve. Hit hourly leave too, not just errands
+- ☑ **IMPORTANT** `accrue_leave` silently lost months when an admin backdated `accrual_start_month`
+- ☑ **IMPORTANT** an approved errand could never be cancelled (same-day form vs a `> today` gate)
+- ☑ Dialog close button was hardcoded English; Home cover card dropped the hourly window;
+  `tr('confirmBody')` works only via a production-only fast path; 2 vacuous e2e assertions
+- ☐ **DEPLOY BLOCKER, pre-existing:** `deploy/update.sh` replays every migration under
+  `ON_ERROR_STOP=1` and dies on file #1 (`create type app_role` on a non-empty DB). It **cannot
+  deliver these migrations to the client's installed server.** Fix before scheduling the deploy;
+  `deploy/RUNBOOK.md:145,164` wrongly claims idempotency
+- ☐ `npm audit`: 3 high via `next@16.2.9` (postcss, sharp). Pre-existing on `main`; fix is a patch
+  bump to `next@16.2.12`
+- ☐ Withdrawn mid-design: the bulk department-code editor. Client dropped code editing instead
+- ☐ Open: `login.codePlaceholder` still reads `prod-1042` — right for every existing account, wrong
+  for every new hire. Left alone because changing it is the mixed-format hint D14 ruled out
+
 ## Backlog (post-v1, see PLAN §6)
-- ☐ Hourly leave (مرخصی ساعتی) — schema reserved
 - ☐ Notifications (push/SMS/email) once a channel is chosen
 - ☐ Attendance/check-in · shift scheduling · overtime · advance/loan · payslips · announcements ·
   documents · QC / finance / procurement modules
