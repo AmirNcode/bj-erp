@@ -173,9 +173,11 @@ export function MyRequestsList({
                     </div>
                     {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
                         which is the requester's personnel number (spec §5). */}
-                    <div className="text-xs text-muted-foreground" data-testid={`serial-${req.id}`}>
+                    <div className="text-xs text-muted-foreground">
                       {labels.trackingNo}:{' '}
-                      <span className="font-mono" dir="ltr">
+                      {/* testid marks the VALUE, not the label — a caller reading
+                          `serial-*` wants the number, not the chrome around it. */}
+                      <span className="font-mono" dir="ltr" data-testid={`serial-${req.id}`}>
                         {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
                       </span>
                     </div>

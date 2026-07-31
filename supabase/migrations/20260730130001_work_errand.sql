@@ -100,6 +100,15 @@ begin
   end if;
 end $$;
 
+--    The counter is per-kind, so the UNIQUE INDEX ON leave_requests must be too.
+--    Without this the first errand of a year draws seq=1 from its own counter and
+--    collides with the leave request that already holds seq=1 — every first errand
+--    per Jalali year fails on leave_requests_serial_uniq. Caught by e2e; it is
+--    invisible to any test whose schema lacks this index.
+drop index if exists public.leave_requests_serial_uniq;
+create unique index if not exists leave_requests_serial_uniq
+  on public.leave_requests (company_id, kind, serial_year, serial_seq);
+
 -- ---------------------------------------------------------------------------
 -- 4. compute_requested_minutes — now kind-aware.
 --

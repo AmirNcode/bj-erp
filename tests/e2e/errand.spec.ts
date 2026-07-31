@@ -107,7 +107,11 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   });
   await expect(page.locator('[data-testid^="errand-location-"]').first()).toContainText(LOCATION);
   // Only one request exists for this fresh employee, so this is that errand's.
-  await expect(page.locator('[data-testid^="serial-"]').first()).toContainText('شماره پیگیری');
+  // `serial-*` marks the VALUE; assert its shape, and the label separately.
+  await expect(page.locator('[data-testid^="serial-"]').first()).toHaveText(
+    /^[۰-۹0-9]{4}-[۰-۹0-9]{4,}$/
+  );
+  await expect(page.getByText('شماره پیگیری').first()).toBeVisible();
   await expect(page.getByText('۰۹:۰۰–۱۱:۰۰')).toBeVisible({ timeout: 20_000 });
   await logout(page);
 
