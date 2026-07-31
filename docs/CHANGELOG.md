@@ -37,10 +37,24 @@ Driven by a third client form and a clarification about numbering.
   شماره on their paper forms is the requester's personnel number — a different thing — so the app's
   own number is named so the two cannot be confused. Leave and errands number independently.
 
+#### Fixed (pre-merge review, 2026-07-31)
+- **Errands could not be submitted at all.** The first errand of each year collided with an existing
+  leave request's number. Caught before anyone saw it.
+- **The calendar showed a two-hour absence as a whole day off**, and told teammates the person was
+  back "tomorrow". It now shows the actual hours. This affected hourly leave too, not just errands.
+- **An approved errand could not be cancelled.** A called-off trip stayed on the books and kept
+  blocking that time slot.
+- **Leave could be silently under-credited** if an administrator corrected an employee's accrual
+  start month to an earlier month — the months in between were never added.
+- The department panel's close button announced itself in English to screen readers; the "you are
+  covering X" card on Home omitted the hours.
+
 #### Notes
 - An errand may be booked on a weekend or a public holiday, unlike hourly leave. Urgent company
   business does not respect the holiday calendar.
 - Neither change is on the client's server yet; both stack on the still-undeployed leave v2.
+- **Before this can be deployed**, the installer's migration replay must be fixed — it currently
+  stops on the first migration when run against an existing database.
 
 ### Security and reliability review (2026-07-30)
 - **Deactivated accounts are now actually blocked.** Existing or newly issued login sessions cannot

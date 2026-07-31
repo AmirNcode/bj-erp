@@ -220,9 +220,27 @@ Third client form (BJ-F 50207) plus a clarification that the paper شماره is
   - ☑ Codes auto-generated; editing deactivated (`updateDepartmentCode` + its RLS policy kept)
   - ☑ e2e helper puts its `zz` token in the name so `cleanup-e2e.mjs` still reaps test departments
 - ☑ Gates: unit **239/239**, tsc + eslint + build green, each of the 5 commits verified green alone
-- ☐ **e2e not run** — needs a reachable Supabase; `errand.spec.ts` and the rewritten
-  `department.spec.ts` are unexecuted
+- ☑ **e2e run 2026-07-31 — 32 passed / 1 skipped serial.** It found two bugs nothing else could:
+  the serial-index collision below, and the calendar misreporting hourly absences
 - ☐ **Not applied to the client's server**, and it stacks on all of leave v2, which is also unapplied
+
+## Pre-merge review (2026-07-31) ☑ merged to `main`
+Two reviewers over the 42-commit diff, plus the first e2e run on this branch tip.
+
+- ☑ **CRITICAL** `leave_requests_serial_uniq` had no `kind`, so **every first errand of a year
+  failed** — the whole BJ-F 50207 feature was non-functional. Reproduced on a copy of live data
+- ☑ **CRITICAL** the calendar rendered a 2-hour absence as a full day and printed "returns
+  tomorrow" — on a surface where managers approve. Hit hourly leave too, not just errands
+- ☑ **IMPORTANT** `accrue_leave` silently lost months when an admin backdated `accrual_start_month`
+- ☑ **IMPORTANT** an approved errand could never be cancelled (same-day form vs a `> today` gate)
+- ☑ Dialog close button was hardcoded English; Home cover card dropped the hourly window;
+  `tr('confirmBody')` works only via a production-only fast path; 2 vacuous e2e assertions
+- ☐ **DEPLOY BLOCKER, pre-existing:** `deploy/update.sh` replays every migration under
+  `ON_ERROR_STOP=1` and dies on file #1 (`create type app_role` on a non-empty DB). It **cannot
+  deliver these migrations to the client's installed server.** Fix before scheduling the deploy;
+  `deploy/RUNBOOK.md:145,164` wrongly claims idempotency
+- ☐ `npm audit`: 3 high via `next@16.2.9` (postcss, sharp). Pre-existing on `main`; fix is a patch
+  bump to `next@16.2.12`
 - ☐ Withdrawn mid-design: the bulk department-code editor. Client dropped code editing instead
 - ☐ Open: `login.codePlaceholder` still reads `prod-1042` — right for every existing account, wrong
   for every new hire. Left alone because changing it is the mixed-format hint D14 ruled out

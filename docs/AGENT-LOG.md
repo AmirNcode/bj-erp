@@ -78,6 +78,98 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-31 — Pre-merge review of the leave-v2 branch; four real bugs found and fixed; merged to main
+
+**Agent:** Claude Opus 5 via Claude Code (two parallel review subagents, also Opus 5)
+**Branch / HEAD at start:** `feat/leave-v2-hourly-accrual-replacement` @ `ba0e859`
+**Trigger:** User asked what was left on the branch, and if nothing, to do a full review and
+debugging pass and merge to `main` if it was safe. The client is testing the app but not yet
+using it for real requests.
+
+**What was actually left (the honest answer to the question)**
+1. **`npm run test:e2e` had never been run on this branch tip.** This is what found two of the
+   four bugs below.
+2. **Neither of the two newest migrations had been applied anywhere real** —
+   `20260730130001` had only been run against a *stub* schema on a throwaway cluster, and
+   `20260730130002` had never been executed at all.
+3. `npm audit` had never been run.
+
+**Bugs found and fixed** (commits `1aa36dc`, `cb9f2c0`)
+
+- **CRITICAL — every first errand of a Jalali year would have failed.** `20260730130001` re-keyed
+  the serial *counter* to `(company_id, jalali_year, kind)` but left the unique index on
+  `leave_requests` as `(company_id, serial_year, serial_seq)`, with no `kind`. The first errand
+  draws seq=1 and collides with the leave request already holding seq=1:
+  `duplicate key value violates unique constraint "leave_requests_serial_uniq"`. Found by e2e and
+  independently reproduced by a reviewer on a `pg_dump` copy of the live DB. **The whole BJ-F 50207
+  feature was non-functional.** It escaped because the earlier "validated against a real Postgres"
+  check used a stub schema that never had this index — *a stub missing the constraint you are about
+  to violate does not test it.*
+- **CRITICAL — the calendar misreported hourly absences.** `CalendarView` never rendered
+  `start_time`/`end_time`, although `20260729130010` exists solely to expose them, and it printed
+  "returns \<next working day\>" unconditionally. A 09:00–11:00 absence displayed to teammates and
+  managers as a full day off returning tomorrow, on a surface where managers approve. Affected
+  shipped hourly leave as well as every errand.
+- **IMPORTANT — `accrue_leave` silently under-credited.** Its hot-path short-circuit returns as
+  soon as the current month is posted, so an admin moving `accrual_start_month` *backwards* lost
+  every newly-in-range month with no error, unrepairable by "Post accruals now". Reproduced as four
+  lost months. Fixed in `20260731120001`.
+- **IMPORTANT — an approved errand could never be cancelled.** `cancel_leave_request` allows
+  cancelling an approved request only while `start_date > today`; an errand is a same-day form, so
+  that is the normal case. Fixed in `20260731120001`.
+- Plus: the dialog close button's only accessible name was a hardcoded English "Close" (this branch
+  was its first consumer, so it would have shipped the first untranslated string in a Farsi-first
+  app); the Home cover card dropped the hourly window; `tr('confirmBody')` omits its `{count}` and
+  only works via a production-only fast path in `use-intl`; two vacuous e2e assertions; a failed
+  departments read rendering as an empty list.
+
+**Actions outside the repo**
+- **Applied `20260730130001` and `20260730130002` to the LOCAL Docker stack** (`bj-erp-db-1`), after
+  a `pg_dump` backup (1.1 MB, in the session scratchpad). Then applied `20260731120001`. All three
+  re-run cleanly (idempotency proven by a second pass). **Nothing was done to the client's server.**
+- Restarted `bj-erp-rest-1` once while mis-diagnosing a PostgREST 404 (see below). No data change.
+- Verified against the live DB rather than migration text: `pg_get_viewdef` on
+  `team_leave_calendar` leaks none of `reason`/`decision_note`/`errand_location` and uses a LEFT
+  JOIN; exactly one signature exists of each touched function; `approve_leave_request` is
+  time-aware. `accrue_leave` was patched from the installed `pg_proc.prosrc` and diffed before and
+  after to prove only the intended two changes landed.
+
+**Verification**
+- `npm run test:e2e` (serial): **32 passed, 1 skipped** — run twice, before and after the fixes.
+  Teardown reaped 26 users and 1 department, proving the widened reap regex and the `zz`-in-the-name
+  trick both work in practice.
+- `npm run test:unit` **239/239**, `npx tsc --noEmit` clean, `npx eslint …` clean, `npm run build`
+  clean. fa/en key trees identical.
+- `npm audit --omit=dev`: **3 high**, all transitive via `next@16.2.9` (postcss XSS/path-traversal,
+  sharp/libvips). **Pre-existing on `main`** — the only dependency change on this branch is the
+  `supabase` CLI in devDependencies. Fix is a patch bump to `next@16.2.12`.
+
+**State left behind**
+- Branch merged to `main` with a `--no-ff` merge commit. **NOT pushed** — `origin/main` is
+  unchanged and no PR was opened.
+- The local Docker DB now carries all three new migrations. The app container still runs the old
+  image; rebuild before testing the errand screen there.
+
+**For the next agent**
+- **The migration replay loop is broken, and it is the client's deploy path.** `deploy/update.sh`
+  and `install.sh` replay *every* `migrations/*.sql` under `psql -v ON_ERROR_STOP=1` with `|| fail`.
+  `20260623120001_core.sql:11` is a bare `create type public.app_role …`, which fails on any
+  non-empty database — so the loop dies on file #1 and **cannot deliver these 18 migrations to the
+  client's already-installed server.** Confirmed pre-existing (the 2026-07-29 entry hit the same
+  wall). This branch additionally makes `20260729130002`, `20260729130013`,
+  `20260624090002` and `20260623120006` unreplayable, because later migrations drop the columns and
+  change the return type they reference. **Resolve this before scheduling the deploy**;
+  `deploy/RUNBOOK.md:145,164` still claims the migrations are idempotent, which is not true.
+- A same-day *leave* request still cannot be cancelled once approved. That is deliberate and
+  unchanged; only errands were widened.
+- `login.codePlaceholder` still reads `prod-1042`. Correct for every account that exists today,
+  wrong for every new hire; left alone because D14 ruled out a mixed-format hint.
+- I briefly mis-diagnosed a PostgREST **404** on `submit_errand_request` as a stale schema cache.
+  It was not: PostgREST 404s when the caller's role lacks EXECUTE, and I had probed as `anon` while
+  the function is granted to `authenticated`. The Supabase image ships `pgrst_ddl_watch` /
+  `pgrst_drop_watch` event triggers, so the schema cache reloads itself after DDL and `update.sh`
+  is right not to restart `rest`. Do not "fix" that.
+
 ## 2026-07-30 — Hourly work errand (BJ-F 50207); login codes lose the department prefix; Departments card
 
 **Agent:** Claude Opus 5 via Claude Code (two parallel subagents, also Opus 5)
