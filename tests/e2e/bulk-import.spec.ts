@@ -75,7 +75,8 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
 
   const creds = await readCredentials(page);
   expect(creds.size).toBe(3);
-  const empCode = `prod-${empPno1}`;
+  // Since 20260730130002 the generated login code is the personnel number.
+  const empCode = empPno1;
   const empPw = creds.get(empCode) ?? '';
   expect(empPw.length).toBeGreaterThan(6);
 
@@ -103,7 +104,7 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   await page.goto('/manage/employees');
   await page.locator(`[data-testid="emp-check-${empCode}"]`).check();
-  await page.locator(`[data-testid="emp-check-prod-${mgrPno}"]`).check();
+  await page.locator(`[data-testid="emp-check-${mgrPno}"]`).check();
   await page.locator('[data-testid="regen-passwords"]').click();
   await page.locator('[data-testid="regen-confirm"]').click();
 

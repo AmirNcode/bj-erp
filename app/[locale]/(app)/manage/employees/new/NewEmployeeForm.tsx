@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
 
-type Department = { id: string; name_fa: string; name_en: string; code: string };
+type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
 type InitialLeaveType = {
   id: string;
@@ -117,15 +117,12 @@ export function NewEmployeeForm({
   // Admin picks a department; manager is locked to their own.
   const [deptId, setDeptId] = useState(isAdmin ? '' : ownDepartment?.id ?? '');
 
-  const selectedDept = isAdmin
-    ? departments.find((d) => d.id === deptId) ?? null
-    : ownDepartment;
-
+  // Since 20260730130002 the login code is the personnel number alone — the
+  // department no longer feeds it, so the preview does not wait for one.
   const normalizedPno = normalizePersonnelNo(personnelNo);
-  const codePreview =
-    selectedDept && isValidPersonnelNo(normalizedPno)
-      ? buildEmployeeCode(selectedDept.code, normalizedPno)
-      : '—';
+  const codePreview = isValidPersonnelNo(normalizedPno)
+    ? buildEmployeeCode(normalizedPno)
+    : '—';
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

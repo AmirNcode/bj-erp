@@ -15,7 +15,9 @@ values ('00000000-0000-0000-0000-0000000000c0', 'BJ Manufacturing')
 on conflict (id) do nothing;
 
 -- Departments: 3 teams + Security (fixed ids; matches the demo).
--- `code` is the latin prefix of generated employee codes (e.g. prod-1042).
+-- `code` used to be the latin prefix of generated employee codes (prod-1042).
+-- Since 20260730130002 it prefixes nothing and no human types it; the column
+-- stays NOT NULL + unique, so these fixed values are still supplied here.
 insert into public.departments (id, company_id, name_fa, name_en, kind, code) values
   ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c0', 'خط تولید الف',      'Production Line A', 'team',     'prod'),
   ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000c0', 'کنترل کیفیت',        'Quality Control',   'team',     'qc'),

@@ -57,10 +57,10 @@ describe('suggestDepartmentCode', () => {
   });
 });
 
-describe('new department code feeds the employee code', () => {
-  it('composes the login code the DB will generate', () => {
+describe('department code no longer feeds the employee code', () => {
+  it('stays a valid department code while the login code is the bare number', () => {
     const code = normalizeDepartmentCode(' FIN ');
     expect(isValidDepartmentCode(code)).toBe(true);
-    expect(buildEmployeeCode(code, '1042')).toBe('fin-1042');
+    expect(buildEmployeeCode('1042')).toBe('1042');
   });
 });

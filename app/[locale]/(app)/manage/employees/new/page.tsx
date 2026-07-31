@@ -36,7 +36,8 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   // needs their own department row.
   const [{ data: departments }, { data: managers }, { data: leaveTypes }, { data: ws }] =
     await Promise.all([
-    supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
+    // No `code`: the login code is the personnel number alone (20260730130002).
+    supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
     isAdmin
       ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
       : Promise.resolve({ data: [] }),
