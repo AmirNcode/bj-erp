@@ -21,6 +21,7 @@ import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import { nowInAppTz } from '@/lib/appDate';
 import { buildHomeBoard } from '@/lib/home/board';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { HomeBoard } from './HomeBoard';
 import { PageHeader } from '../_components/PageHeader';
 import { BoardSkeleton } from '@/components/Skeletons';
@@ -135,7 +136,9 @@ async function HomeBoardData({
         labels={labels}
         locale={locale}
         calendarPref={calendarPref}
-        hoursPerDay={workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : 8}
+        hoursPerDay={
+          workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay
+        }
         coverDuties={
           coverDutiesRes.ok
             ? coverDutiesRes.duties.map((d) => ({
@@ -143,6 +146,9 @@ async function HomeBoardData({
                 employeeName: d.employeeName,
                 startDate: d.startDate,
                 endDate: d.endDate,
+                unit: d.unit,
+                startTime: d.startTime,
+                endTime: d.endTime,
               }))
             : []
         }

@@ -65,6 +65,10 @@ const RULES: Rule[] = [
   // surface when the DB is reached directly or the client check is bypassed.
   { re: /errand location is required/, key: 'errandLocationRequired' },
   { re: /errand location is too long/, key: 'errandLocationTooLong' },
+  // Should be unreachable — the serial index is keyed by kind since
+  // 20260730130001. Mapped anyway: when it DID fire, the worker saw only the
+  // generic "unexpected error" and had nothing to report.
+  { re: /duplicate key value.*leave_requests_serial_uniq/, key: 'serialCollision' },
   { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
   { re: /replacement is on leave during this period/, key: 'replacementAway' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },

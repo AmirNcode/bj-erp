@@ -177,8 +177,12 @@ test('the Departments card opens a members dialog and closes three ways', async 
   // Seeded "Production Line A" — has both a manager and workers.
   const row = page.locator('[data-testid="dept-row-production-line-a"]');
   await expect(row).toBeVisible();
-  // Codes are hidden here now; the row shows the name only.
-  await expect(row).not.toContainText('prod');
+  // D13: codes are hidden here now, so the row is the Farsi name plus the
+  // chevron and nothing else. Asserting `not.toContainText('prod')` would be
+  // vacuous — the suite runs in fa, so the row renders name_fa and a latin
+  // code could never appear whether or not it was suppressed.
+  await expect(row).toContainText('خط تولید');
+  await expect(row).not.toContainText(/[a-z]{2,6}/);
 
   const dialog = page.locator('[data-testid="dept-members-dialog"]');
 
@@ -188,7 +192,11 @@ test('the Departments card opens a members dialog and closes three ways', async 
   const members = dialog.locator('[data-testid="dept-members-list"]');
   await expect(members).toBeVisible({ timeout: 10_000 });
   const groupTitles = await members.locator('h3').allTextContents();
+  // D10 is an ORDERING decision — Managers before Workers — so assert the order,
+  // not merely that some group rendered.
   expect(groupTitles.length).toBeGreaterThan(0);
+  expect(groupTitles[0]).toBe('مدیران');
+  if (groupTitles.length > 1) expect(groupTitles[1]).toBe('کارکنان');
   await expect(members.locator('li').first()).toBeVisible();
 
   // ── closes via the built-in X (top-4 end-4: top-left in RTL fa) ──────────

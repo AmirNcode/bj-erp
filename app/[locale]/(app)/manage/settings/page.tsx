@@ -35,7 +35,7 @@ export default async function SettingsPage({ params }: Props) {
 
   const t = await getTranslations('manage.settings');
   const supabase = await createClient();
-  const [holidayData, { data: departments }] = await Promise.all([
+  const [holidayData, { data: departments, error: departmentsError }] = await Promise.all([
     getCompanyHolidays(),
     // Names only — the card never shows a code (spec 2026-07-30, D13).
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
@@ -110,6 +110,7 @@ export default async function SettingsPage({ params }: Props) {
         <CardContent>
           <DepartmentsCard
             departments={departments ?? []}
+            loadError={departmentsError?.message ?? null}
             locale={locale}
             labels={{
               title: t('departments.title'),
@@ -120,6 +121,7 @@ export default async function SettingsPage({ params }: Props) {
               workersLabel: t('departments.workersLabel'),
               noMembers: t('departments.noMembers'),
               loading: t('departments.loading'),
+              close: t('departments.close'),
               errorLabel: t('error'),
             }}
           />

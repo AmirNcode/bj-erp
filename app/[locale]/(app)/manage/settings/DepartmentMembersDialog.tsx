@@ -19,6 +19,7 @@ type Props = {
     workersLabel: string;
     noMembers: string;
     loading: string;
+    close: string;
     errorLabel: string;
   };
 };
@@ -87,7 +88,11 @@ export function DepartmentMembersDialog({ department, onClose, labels }: Props) 
   return (
     <Dialog open={department !== null} onOpenChange={(open) => !open && onClose()}>
       {/* No description to announce — opt out rather than invent copy. */}
-      <DialogContent aria-describedby={undefined} data-testid="dept-members-dialog">
+      <DialogContent
+        aria-describedby={undefined}
+        closeLabel={labels.close}
+        data-testid="dept-members-dialog"
+      >
         <DialogHeader>
           <DialogTitle>{department?.name ?? ''}</DialogTitle>
         </DialogHeader>

@@ -9,6 +9,8 @@ type Department = { id: string; name_fa: string; name_en: string };
 
 type Props = {
   departments: Department[];
+  /** Non-null when the read FAILED — distinct from "there are none". */
+  loadError?: string | null;
   locale: string;
   labels: {
     title: string;
@@ -19,6 +21,7 @@ type Props = {
     workersLabel: string;
     noMembers: string;
     loading: string;
+    close: string;
     errorLabel: string;
   };
 };
@@ -35,7 +38,7 @@ function slug(nameEn: string): string {
  * opens the members panel; *Add Department* lives here now, not on the
  * Employees page (D9).
  */
-export function DepartmentsCard({ departments, locale, labels }: Props) {
+export function DepartmentsCard({ departments, loadError = null, locale, labels }: Props) {
   const [open, setOpen] = useState<DialogDepartment | null>(null);
 
   return (
@@ -45,7 +48,13 @@ export function DepartmentsCard({ departments, locale, labels }: Props) {
         <p className="text-sm text-muted-foreground mt-1">{labels.hint}</p>
       </div>
 
-      {departments.length === 0 ? (
+      {loadError ? (
+        /* A failed read must not render as an empty list — an admin would
+           reasonably conclude the departments had been deleted. */
+        <p role="alert" className="text-sm text-destructive" data-testid="dept-list-error">
+          {labels.errorLabel}: {loadError}
+        </p>
+      ) : departments.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="dept-list-empty">
           {labels.empty}
         </p>
@@ -86,6 +95,7 @@ export function DepartmentsCard({ departments, locale, labels }: Props) {
           workersLabel: labels.workersLabel,
           noMembers: labels.noMembers,
           loading: labels.loading,
+          close: labels.close,
           errorLabel: labels.errorLabel,
         }}
       />

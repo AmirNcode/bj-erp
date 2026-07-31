@@ -11,6 +11,7 @@ import { getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
@@ -32,7 +33,9 @@ async function ApprovalsData({ locale }: { locale: string }) {
   ]);
   const requests = result.ok ? result.requests : [];
   const loadError = result.ok ? null : result.error;
-  const hoursPerDay = workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : 8;
+  const hoursPerDay = workSettingsRes.ok
+    ? workSettingsRes.settings.hoursPerDay
+    : WORK_SETTINGS_FALLBACK.hoursPerDay;
 
   const labels = {
     empty: t('empty'),

@@ -3,6 +3,7 @@ import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { formatDuration } from '@/lib/leave/duration';
+import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
@@ -45,7 +46,15 @@ type Props = {
   /** Company day length — balances and durations are stored in minutes. */
   hoursPerDay: number;
   /** Requests where this person is the named cover (D15: never a surprise). */
-  coverDuties: { requestId: string; employeeName: string; startDate: string; endDate: string }[];
+  coverDuties: {
+    requestId: string;
+    employeeName: string;
+    startDate: string;
+    endDate: string;
+    unit: 'day' | 'hour';
+    startTime: string | null;
+    endTime: string | null;
+  }[];
 };
 
 export function HomeBoard({
@@ -124,10 +133,16 @@ export function HomeBoard({
           </CardHeader>
           <CardContent>
             <ul className="space-y-1 text-sm text-primary/90">
+              {/* An hourly cover is one date plus a window — rendering the same
+                  date twice with no hours read as a full day off. */}
               {coverDuties.map((duty) => (
                 <li key={duty.requestId}>
-                  {labels.coveringFor} {duty.employeeName} · {formatDate(duty.startDate)} —{' '}
-                  {formatDate(duty.endDate)}
+                  {labels.coveringFor} {duty.employeeName} ·{' '}
+                  {duty.unit === 'hour'
+                    ? `${formatDate(duty.startDate)} · ${formatTimeRange(duty.startTime, duty.endTime, locale)}`
+                    : duty.startDate === duty.endDate
+                      ? formatDate(duty.startDate)
+                      : `${formatDate(duty.startDate)} — ${formatDate(duty.endDate)}`}
                 </li>
               ))}
             </ul>

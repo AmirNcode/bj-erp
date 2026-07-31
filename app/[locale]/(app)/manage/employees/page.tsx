@@ -89,7 +89,12 @@ async function EmployeesData({ locale }: { locale: string }) {
           regen: {
             button: tr('button'),
             confirmTitle: tr('confirmTitle'),
-            confirmBody: tr('confirmBody'),
+            // .raw() on purpose: EmployeesTable substitutes {count} itself once
+            // the admin has picked a selection. Calling tr('confirmBody') with no
+            // value only "works" via a production-only fast path in use-intl that
+            // skips compilation — under `next dev` it throws FORMATTING_ERROR and
+            // the dialog renders the dotted key path instead of a sentence.
+            confirmBody: tr.raw('confirmBody'),
             cancel: tr('cancel'),
             confirm: tr('confirm'),
           },
