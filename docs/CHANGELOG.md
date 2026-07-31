@@ -10,6 +10,38 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Hourly work errand, and login codes without a department prefix (2026-07-30)
+
+Spec: [`docs/specs/2026-07-30-work-errand-and-login-codes-design.md`](specs/2026-07-30-work-errand-and-login-codes-design.md).
+Driven by a third client form and a clarification about numbering.
+
+#### Added
+- **Hourly work errand (ماموریت ساعتی), form BJ-F 50207.** A new request screen at
+  `/request/errand` for an off-site work trip on a single date: departure time, return time, محل
+  ماموریت, and an optional شرح ماموریت. An errand is **work, not leave** — it deducts nothing from
+  a balance. It is approved by the direct manager in the same queue as leave, appears on the team
+  calendar, and carries its own tracking-number sequence. Teammates see that a colleague is out;
+  the location and the description stay private to the requester, their manager, security and admin.
+- **Departments panel in Manage → Settings.** Tapping a department opens a floating panel listing
+  its people as Managers, then Workers. Closes with the X, an outside tap, or Esc.
+- **Add Department moved into Settings**, at the bottom of the Departments card, and Cancel now
+  returns there. It is gone from Manage → Employees — one home instead of two.
+
+#### Changed
+- **New login codes are the personnel number alone** (`1042`), not `prod-1042`. Everyone hired
+  before today keeps the code they have, and both shapes sign in. Nothing to re-issue.
+- **Department codes are no longer typed or edited.** They prefix nothing now, so the field is gone
+  from the create form and the code is generated behind the scenes. Admin editing is switched off at
+  the client's request and can be switched back on without a migration.
+- **The request number is now labelled شماره پیگیری / Tracking no.** The client clarified that the
+  شماره on their paper forms is the requester's personnel number — a different thing — so the app's
+  own number is named so the two cannot be confused. Leave and errands number independently.
+
+#### Notes
+- An errand may be booked on a weekend or a public holiday, unlike hourly leave. Urgent company
+  business does not respect the holiday calendar.
+- Neither change is on the client's server yet; both stack on the still-undeployed leave v2.
+
 ### Security and reliability review (2026-07-30)
 - **Deactivated accounts are now actually blocked.** Existing or newly issued login sessions cannot
   read HR data or submit/cancel leave; the login screen clears the session and explains that the

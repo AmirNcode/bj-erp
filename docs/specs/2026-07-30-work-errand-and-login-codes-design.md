@@ -128,20 +128,23 @@ non-working day, which the writer turns into a rejection. For `kind = 'errand'` 
 skipped and the pure time difference returned — urgent company business does not respect the
 holiday calendar. This is a deliberate divergence from hourly leave, where the gate is correct.
 
-### 4.1 A pre-existing bug this work forces us to fix
+### 4.1 A bug this design expected to fix, and did not need to
 
-`approve_leave_request` re-checks overlap with **dates only**:
+**Withdrawn during implementation — no such bug exists.** The design asserted that
+`approve_leave_request` re-checked overlap with dates only, while `submit_leave_impl` checked dates
+and times, so two hourly requests on one date would pass submission and fail approval.
 
-```sql
-where employee_id = v_emp and id <> p_id and status = 'approved'
-  and start_date <= v_end and end_date >= v_start
-```
+That reading came from the **superseded** function body in `20260729130012_leave_replacement_guard.sql`.
+The live definition is in `20260730120001_security_review_fixes.sql:804-819`, under a section
+titled "Hourly-aware approval overlap", and already carries
+`r.unit = 'day' or v_unit = 'day' or (r.start_time < v_et and r.end_time > v_st)` — the submit rule
+exactly, modulo the deliberate `status = 'approved'` vs `in ('pending','approved')` difference that
+distinguishes an approval re-check from a submission check.
 
-while `submit_leave_impl` checks dates **and times**. Two hourly requests on one date therefore
-pass submission and fail approval today — already wrong for hourly leave, and constant once
-errands exist, since an errand and an hourly leave on the same day is an ordinary combination.
-The approval check is brought in line with the submit rule. Recorded here because it is a
-behaviour change to already-shipped hourly leave, not only to new code.
+`approve_leave_request` is therefore **not touched** by the errand migration. Re-emitting an
+identical body would only create an opportunity for drift. Recorded rather than deleted because
+"we checked, and the older body in the migration history is not the one that runs" is the useful
+fact for the next reader.
 
 ## 5. Serial numbers, and what شماره actually means
 

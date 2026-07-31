@@ -78,6 +78,96 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-07-30 — Hourly work errand (BJ-F 50207); login codes lose the department prefix; Departments card
+
+**Agent:** Claude Opus 5 via Claude Code (two parallel subagents, also Opus 5)
+**Branch / HEAD at start:** `feat/leave-v2-hourly-accrual-replacement` @ `1a9589c`
+**Trigger:** User supplied a third client form (`docs/forms/hourly_work_errand_form.jpeg`) to build
+into the app, asked to rework the admin Departments settings card, and — mid-design — relayed a
+client clarification that the شماره on all three paper forms is the requester's personnel number,
+which turned into a request to drop the department prefix from login codes.
+
+**What changed**
+
+Five commits, `e703555` → `ad69a8f`. Each was verified green *in isolation* (see Verification).
+
+- `docs/specs/2026-07-30-work-errand-and-login-codes-design.md` — new frozen spec, 15 numbered
+  user decisions (D1–D15). Read this before touching any of the below.
+- `supabase/migrations/20260730130001_work_errand.sql` — `request_kind` enum; `kind` +
+  `errand_location` on `leave_requests`; `leave_type_id` made nullable;
+  `leave_requests_kind_shape` CHECK; `leave_request_serials` PK re-keyed to
+  `(company_id, jalali_year, kind)`; `compute_requested_minutes` and
+  `private.submit_leave_impl` made kind-aware; new `public.submit_errand_request` wrapper;
+  `team_leave_calendar` recreated with a **LEFT JOIN** and a `kind` column.
+- `supabase/migrations/20260730130002_employee_code_no_prefix.sql` —
+  `private.create_employee_impl` now sets `employee_code := personnel_no`; `app_cleanup_e2e_users`
+  reaps `^999[0-9]{7}$` in addition to the legacy prefixed patterns.
+- `lib/leave/errand.ts` (new, 16 unit tests), `lib/actions/leave.ts` (`submitErrandRequest` +
+  `kind`/`errand_location` threaded through the three read paths), `lib/supabase/types.ts`
+  (hand-edited, as always), `lib/leave/serial.ts:4` (header corrected — it claimed the serial was
+  the paper form's شماره, which the client says it is not).
+- `app/[locale]/(app)/request/errand/` (new screen), plus errand tagging in `MyRequestsList`,
+  `ApprovalQueue`, `CalendarView`, `HomeBoard`, and the tracking-number label in the two places
+  the serial renders.
+- `app/[locale]/(app)/manage/settings/DepartmentsCard.tsx` + `DepartmentMembersDialog.tsx` (new),
+  replacing the deleted `DepartmentCodesForm.tsx`; `getDepartmentMembers` in
+  `lib/actions/departments.ts`; `createDepartment` now auto-generates the code and retries on
+  `23505`; Add Department removed from `manage/employees/page.tsx:193`.
+- `messages/{fa,en}.json` — new `errand` namespace, `home.requestErrand`, `leave.trackingNo`,
+  reworked `manage.settings.departments`, two new `dbErrors` keys; removed
+  `manage.departments.code` / `codeHint`.
+- Docs: `REQUIREMENTS.md` (FR-30, FR-31, FR-29 corrected), `DATA_MODEL.md`, `PERMISSIONS.md`,
+  `CHANGELOG.md`, `TASKS.md`.
+
+**Actions outside the repo**
+- None against the client's server. Nothing was deployed and no live database was touched.
+- One subagent stood up a **throwaway local PostgreSQL 17 cluster** with a stub of the Supabase
+  schema to execute `20260730130001` end to end (serial independence, overlap refusal, the Friday
+  case, CHECK enforcement, view column list, re-run idempotency). The cluster was deleted
+  afterwards.
+
+**Verification**
+- `npx tsc --noEmit` — clean. `npm run test:unit` — **36 files, 239 tests passed**.
+  `npx eslint app components i18n lib tests scripts proxy.ts` — clean. `npm run build` — succeeded,
+  `/[locale]/request/errand` present in the route manifest.
+- `npm run lint` was **not** used: it is still polluted by generated files in the stale
+  `.claude/worktrees/peaceful-williams-9c1cf9` worktree (same as the 2026-07-29 entry).
+- **Each of the four code commits was checked out into a temporary worktree and independently
+  typechecked and unit-tested.** The first attempt at the commit split failed this check twice —
+  `tests/unit/department-code.test.ts` and the two calendar/home fixtures had been filed under the
+  wrong commit — so the commits were rebuilt from `e703555` with the assignment corrected. All four
+  now pass alone.
+- **`npm run test:e2e` was NOT run** — it needs a reachable Supabase and a dev server, neither
+  available in this session. `tests/e2e/errand.spec.ts` and the rewritten `department.spec.ts` have
+  never been executed.
+
+**State left behind**
+- Five commits on `feat/leave-v2-hourly-accrual-replacement`, **not pushed**, no PR. Working tree
+  clean.
+- Nothing applied to the client's server. Both migrations stack on leave v2, which is itself still
+  unapplied there, and the ordering matters: leave v2's serial migration must run before
+  `20260730130001` re-keys the counter.
+
+**For the next agent**
+- **A correction to my own earlier reasoning, recorded because it is an easy trap.** I asserted
+  that `approve_leave_request` had a live date-only overlap bug and wrote it into the spec as work
+  to do. It does not. The date-only body is the **superseded** one in
+  `20260729130012_leave_replacement_guard.sql`; the live definition is
+  `20260730120001_security_review_fixes.sql:804-819` and is already time-aware. Two bodies for this
+  function exist in the migration history — grep for the latest, not the first.
+- `updateDepartmentCode` and the `departments_update_admin` RLS policy are **intentionally
+  unreferenced**. Do not delete them as dead code; the client plans to revisit department codes.
+- `login.codePlaceholder` still reads `prod-1042` in both locales. Correct for every account that
+  exists today, wrong for every future hire. Left alone deliberately — D14 ruled out a
+  login-screen hint about the two code formats. Raise it with the user rather than silently fixing.
+- `scripts/cleanup-e2e.mjs` reaps throwaway departments by `code like 'zz%'`, but admins no longer
+  choose a code. The e2e helper now puts its `zz####` token at the **start of the English name**,
+  which is what the generator reads. If you change how codes are generated, that reap breaks
+  silently on the client's own database.
+- Four i18n keys are now unused but deliberately kept: `manage.departments.invalid`,
+  `manage.departments.backToList`, `manage.settings.departments.invalid`,
+  `manage.settings.departments.close`.
+
 ## 2026-07-30 — Review of the Codex security branch; CSP dev fix; merge to the feature branch
 
 **Agent:** Claude Opus 5 via Claude Code

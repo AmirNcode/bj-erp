@@ -27,6 +27,8 @@ app_role        : 'admin' | 'manager' | 'employee' | 'security'
 department_kind : 'team' | 'security' | 'office'        -- extensible
 leave_status    : 'pending' | 'approved' | 'rejected' | 'cancelled'
 day_part        : 'full' | 'am' | 'pm'                  -- hourly added later
+leave_unit      : 'day' | 'hour'                        -- 2026-07-29
+request_kind    : 'leave' | 'errand'                    -- 2026-07-30, FR-30
 ledger_entry    : 'allocation' | 'consumption' | 'adjustment' | 'reversal'
 ```
 
@@ -54,22 +56,44 @@ beats a hand-rolled conversion algorithm inside a `SECURITY DEFINER` function do
 
 ### `departments`
 `id` · `company_id → companies` · `name_fa` · `name_en` · `kind department_kind` ·
-`manager_id → profiles` (nullable) · `code` (latin `^[a-z0-9]{2,6}$`, unique per company;
-admin-editable in Manage → Settings) · `created_at`.
+`manager_id → profiles` (nullable) · `code` (latin `^[a-z0-9]{2,6}$`, unique per company) ·
+`created_at`.
 The 3 teams (`kind='team'`) + Security (`kind='security'`) are seeded; admins add more from
-Manage → Employees → **Add Department** (`/manage/departments/new`). `code` is the prefix of
-generated employee codes (`prod-1042`); changing it affects only future accounts. `kind` is
-descriptive — no app logic reads it, new departments default to `team`.
+Manage → **Settings → Departments → افزودن واحد** (`/manage/departments/new`; the button moved off
+the Employees page on 2026-07-30). `kind` is descriptive — no app logic reads it, new departments
+default to `team`.
+
+**`code` is vestigial since 2026-07-30 (FR-31).** It used to prefix generated employee codes
+(`prod-1042`); nothing reads it now. It is kept `NOT NULL` and unique so the feature can return
+without a migration, but it is **auto-generated** from the English name (first 4 latin characters,
+`dep` as a fallback, a numeric suffix on collision) and has no form field. Admin editing is
+deactivated: `updateDepartmentCode` and the `departments_update_admin` policy are deliberately in
+place and unreferenced. Do not "clean up" either as dead code — the client intends to revisit this.
 
 ### `profiles`
-`id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; since
-2026-07-13 **generated in-DB** as `departments.code || '-' || personnel_no`, never typed) ·
+`id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; **generated
+in-DB**, never typed) ·
 `personnel_no` (client HR number, `^[0-9]{1,10}$`, unique per company, nullable for pre-existing
 users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
 `language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali|gregorian`, default `jalali`) ·
 `active bool` · `created_at`.
 *Note*: no email required. National ID intentionally omitted unless a later requirement forces it.
+
+**`employee_code` formula changed on 2026-07-30 (FR-31).** It is now **`personnel_no` alone**;
+before that it was `departments.code || '-' || personnel_no`. Accounts created earlier were **not
+migrated** — `prod-1042` and `1042` both log in, and the mixed state is permanent and intentional.
+The synthetic auth email follows the code (`1042@bj-app.internal`).
+
+Two consequences worth knowing before touching this:
+- **`employee_code` uniqueness is global, not per company.** The prefix used to keep `prod-1042` and
+  `acme-1042` apart; bare personnel numbers collide. Irrelevant at one company, a real constraint on
+  the multi-tenant plan in `PLAN.md` — a second tenant needs a per-company unique index plus a
+  company-aware login lookup, or its own prefix scheme.
+- **The e2e reap pattern matches two shapes.** Test accounts use the reserved `999#######` personnel
+  range; the cleanup function matches both the legacy `^[a-z0-9]{2,6}-999[0-9]{7}$` and the current
+  `^999[0-9]{7}$`. Dropping either leaves test rows behind on the client's own database, which is
+  where e2e runs.
 
 ### `user_roles`
 `id` · `user_id → profiles` · `role app_role` · unique(`user_id`,`role`).
@@ -136,13 +160,19 @@ Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
 `reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
 **decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
 their own row and never exposed through `team_leave_calendar` (explicit column list).
-**Serial numbers (2026-07-29, FR-29):** `company_id → companies` (denormalised deliberately — it makes
+**Tracking numbers (2026-07-29, FR-29):** `company_id → companies` (denormalised deliberately — it makes
 the serial's unique index possible without a join and shortens the company-wide manager queries FR-17
 needs) · `serial_year int` · `serial_seq int`, unique (`company_id`,`serial_year`,`serial_seq`).
 Rendered as `1404-0042` by `lib/leave/serial.ts`; the database stores integers, never a display string.
-Allocated in `private.submit_leave_impl` from `leave_request_serials (company_id, jalali_year, last_seq)`
-via `on conflict … do update … returning`. That row lock is what serialises the counter — the advisory
-lock in the writer is **per employee** and does not.
+Allocated in `private.submit_leave_impl` from
+`leave_request_serials (company_id, jalali_year, kind, last_seq)` via `on conflict … do update …
+returning`. That row lock is what serialises the counter — the advisory lock in the writer is
+**per employee** and does not. Since 2026-07-30 the counter is keyed on `kind` as well, so leave and
+errands number independently, matching the client's separate paper form books (BJ-F 50208 vs 50207).
+
+**This is not the شماره on the paper forms.** The client clarified on 2026-07-30 that the paper
+شماره is the requester's personnel number. The generated value is kept and shown as
+**شماره پیگیری / Tracking no.** so nobody conflates the two.
 
 **Replacement (2026-07-29, FR-28):** `replacement_id → profiles` (nullable), with a CHECK that it is
 never the requester. Optional. Candidates come from `get_replacement_candidates(...)` — the caller's own
@@ -159,6 +189,28 @@ reverse-case warning. **Never exposed through `team_leave_calendar`.**
 `day` ⇒ no times and `start_date <= end_date`; `hour` ⇒ both times, **one** date,
 `end_time > start_time`, and `day_part = 'full'`. Gated by `leave_types.allow_hourly` (true for
 annual + unpaid, false for sick, matching the client's paper hourly form).
+
+**Work errand (2026-07-30, FR-30):** `kind request_kind` (default `leave`) · `errand_location text`,
+and **`leave_type_id` is nullable**. An errand is form BJ-F 50207 — a paid off-site work trip, not
+leave. A second CHECK (`leave_requests_kind_shape`) pairs with the one above:
+`leave` ⇒ a type and no location; `errand` ⇒ **no type**, a non-blank location ≤200 chars, and
+`unit = 'hour'` (which chains into the shape rule, forcing one date and both times).
+
+**Nulling `leave_type_id` is the mechanism, not a shortcut.** `approve_leave_request` and
+`cancel_leave_request` both gate their ledger writes on `affects_balance` read from the type; with a
+NULL type that read returns no row and the write is skipped. An errand is therefore structurally
+incapable of consuming leave, even from a future writer that forgets it exists. Neither function
+needed changing.
+
+`شرح ماموریت` reuses **`reason`** rather than adding a column: it is the requester's own free text,
+needs exactly the FR-25 privacy `reason` already has, and is already absent from
+`team_leave_calendar`'s explicit column list. `errand_location` is likewise never exposed there —
+teammates see that someone is out, not where.
+
+Errands are **not** bound by the work-hours window, **not** counted against
+`max_hourly_minutes_per_day`, and name **no** replacement. They **may fall on a weekend or holiday**:
+`compute_requested_minutes` skips its working-day gate for `kind='errand'` and returns the raw time
+difference, because urgent company business does not respect the holiday calendar.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
@@ -236,6 +288,16 @@ So 08:00–10:00 and 10:00–12:00 are adjacent and both allowed — a worker wi
 not blocked by a boundary — while the 4h/day cap still governs the total. **Accepted limitation:** an
 am/pm half-day plus an hourly request on the same date is refused, because am/pm is stored as
 `unit='day'`. Mirrored in `lib/leave/hourly.ts` (`rangesOverlap`, 17 unit tests).
+
+**Errands need no special case here.** They are `unit='hour'`, so the same rule already makes an
+errand conflict with an overlapping leave in both directions and leaves adjacent slots free — which
+is exactly FR-30's requirement.
+
+**Checked 2026-07-30, no change needed:** `approve_leave_request`'s overlap re-check is already
+time-aware and mirrors the submit rule. The date-only version that appears in
+`20260729130012_leave_replacement_guard.sql` is **superseded** — the live body is
+`20260730120001_security_review_fixes.sql:804-819`. Grep carefully before concluding this function
+is wrong; the migration history contains two bodies and only the later one runs.
 
 ## The replacement asymmetry (intentional — do not "fix" it)
 

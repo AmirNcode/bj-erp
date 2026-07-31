@@ -39,9 +39,13 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   `leave_types.allow_hourly` — annual and unpaid only, never sick. Overlap is time-aware, so two
   non-overlapping errands in a day are both allowed. *(2026-07-29; supersedes FR-11's "reserves room
   for hourly later" and the v1 spec's D7 deferral.)*
-- **FR-29** ☑ **Request serial numbers.** Every request carries a human-readable `1404-0042` (the
-  شماره on the client's paper forms), gapless per company and Jalali year, allocated server-side and
-  shown on the employee's own requests and on approval cards. *(2026-07-29.)*
+- **FR-29** ☑ **Request tracking numbers.** Every request carries a human-readable `1404-0042`,
+  gapless per company, Jalali year **and request kind**, allocated server-side and shown on the
+  employee's own requests and on approval cards. *(2026-07-29; relabelled 2026-07-30.)*
+  Originally described as "the شماره on the client's paper forms" — **that reading was wrong.** The
+  client has since clarified that the paper شماره is the requester's personnel number. The generated
+  value is kept because it is genuinely useful, but it is labelled **شماره پیگیری / Tracking no.** so
+  the two cannot be confused. Leave and errands number independently, matching the separate form books.
 - **FR-28** ☑ **Replacement / cover person (جانشین · جایگزین).** Optional on both request screens,
   searchable, drawn from the requester's own department. Anyone with overlapping pending or approved
   leave is refused at submit and re-checked at approval; unavailable colleagues are shown disabled with
@@ -54,6 +58,19 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   hire month pro-rated by calendar days and the excess above the carryover cap forfeited via an
   audited ledger row at Farvardin 1. Admins can also post it for everyone from Manage → Settings.
   *(2026-07-29; supersedes FR-8's fixed annual quota — entitlement is per employee.)*
+- **FR-30** ☑ **Hourly work errand (ماموریت ساعتی).** A worker requests an off-site work trip on a
+  single date from a separate screen mirroring form BJ-F 50207: departure time, return time,
+  **محل ماموریت** (required) and an optional **شرح ماموریت**. An errand is **work, not leave** — it
+  deducts no balance, needs no leave type, is not bound by the work-hours window, is not capped by the
+  hourly daily limit, and names no replacement. It is approved by the direct manager in the same queue
+  as leave, carries its own tracking-number sequence, and **conflicts with overlapping leave in both
+  directions** — you cannot be on leave and on an errand at once. Teammates see it on the calendar but
+  never see the location or the description. *(2026-07-30.)*
+- **FR-31** ☑ **Login codes without a department prefix.** New employee codes are the personnel
+  number alone (`1042`), not `departments.code || '-' || personnel_no`. Accounts created before
+  2026-07-30 keep their prefixed codes and both forms log in; there is no backfill. `departments.code`
+  survives as an auto-generated, unread column, and admin editing of it is deactivated pending the
+  client's decision. *(2026-07-30; supersedes the code formula in the 2026-07-13 onboarding spec.)*
 
 ## Functional — Visibility (see also PERMISSIONS.md)
 

@@ -73,9 +73,15 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
   unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
   admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs
-  through `departments_insert_admin`, and Manage → Settings UPDATEs codes through
-  `departments_update_admin`. Managers reach `/manage/*` but are redirected away from the
+  through `departments_insert_admin`. Managers reach `/manage/*` but are redirected away from the
   department page — departments are company-wide config, not team data.
+- **`departments_update_admin` is intentionally unreferenced (2026-07-30).** Admin editing of
+  department codes was deactivated at the client's request. The policy and the
+  `updateDepartmentCode` action stay so the feature can return without a migration — neither is
+  dead code to be removed.
+- **Department membership** is read by the admin-only `getDepartmentMembers` server action behind
+  the Settings → Departments panel. It uses the existing `can_read_all` SELECT paths on `profiles`
+  and `user_roles`; **no new policy and no new SECURITY DEFINER function** were added for it.
 
 ### `leave_allocations`
 - **SELECT**: own · `is_manager_of` · `can_read_all`.
@@ -172,3 +178,12 @@ it.** Enforced: `leave_requests` SELECT is restricted to own / `is_manager_of` /
 `team_leave_calendar` SECURITY DEFINER view (scoped `own | same_team | can_read_all`, pending +
 approved) that never selects `reason`. Verified on the live DB: a same-team peer reads the view, not
 the base row, and no UI exposes another person's reason.
+
+**Extended to work errands (2026-07-30, FR-30).** An errand's `errand_location` (محل ماموریت) and
+its description — which reuses `reason` — get the same treatment: the view's explicit column list
+omits both, so teammates see that a colleague is out on an errand and nothing more. The requester,
+their manager, security and admin read the base row and see everything.
+
+The view now `LEFT JOIN`s `leave_types`. That is load-bearing, not cosmetic: an errand has a NULL
+`leave_type_id`, and the previous inner join would have silently dropped every errand from the
+calendar rather than failing visibly.

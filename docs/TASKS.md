@@ -200,6 +200,33 @@ Five plans, in this order; each ships working software on its own.
   the client's insurer, not code
 - ☐ Deferred, own spec: multi-step approval + حراست gate check (their forms carry 4 signatures)
 
+## Work errand + login codes (2026-07-30) ☑ built, not deployed
+Spec: [`docs/specs/2026-07-30-work-errand-and-login-codes-design.md`](specs/2026-07-30-work-errand-and-login-codes-design.md).
+Third client form (BJ-F 50207) plus a clarification that the paper شماره is the personnel number.
+
+- ☑ **Errand (FR-30)** — `request_kind` discriminator + `errand_location` on `leave_requests`,
+  `leave_type_id` nullable (migration `20260730130001`)
+  - ☑ Nulling the type is what keeps errands out of the ledger; approve/cancel needed no change
+  - ☑ `submit_errand_request` wrapper on the shared writer; overlap with leave works for free
+  - ☑ Own tracking-number sequence — counter re-keyed on `kind`
+  - ☑ `/request/errand`, Home button, tagged in listings/approvals/calendar
+  - ☑ `team_leave_calendar` → LEFT JOIN (an inner join would have dropped every errand)
+  - ☑ `lib/leave/errand.ts` (16 unit tests) + e2e; migration executed against a throwaway PG cluster
+- ☑ **Login codes (FR-31)** — `employee_code = personnel_no` (migration `20260730130002`)
+  - ☑ No backfill; `prod-1042` and `1042` both log in, permanently
+  - ☑ e2e reap pattern widened — bare codes would otherwise accumulate on the client's DB
+  - ☑ Six e2e specs repaired
+- ☑ **Departments card** — names only, member panel, Add Department moved in from Employees
+  - ☑ Codes auto-generated; editing deactivated (`updateDepartmentCode` + its RLS policy kept)
+  - ☑ e2e helper puts its `zz` token in the name so `cleanup-e2e.mjs` still reaps test departments
+- ☑ Gates: unit **239/239**, tsc + eslint + build green, each of the 5 commits verified green alone
+- ☐ **e2e not run** — needs a reachable Supabase; `errand.spec.ts` and the rewritten
+  `department.spec.ts` are unexecuted
+- ☐ **Not applied to the client's server**, and it stacks on all of leave v2, which is also unapplied
+- ☐ Withdrawn mid-design: the bulk department-code editor. Client dropped code editing instead
+- ☐ Open: `login.codePlaceholder` still reads `prod-1042` — right for every existing account, wrong
+  for every new hire. Left alone because changing it is the mixed-format hint D14 ruled out
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Notifications (push/SMS/email) once a channel is chosen
 - ☐ Attendance/check-in · shift scheduling · overtime · advance/loan · payslips · announcements ·
