@@ -56,7 +56,8 @@ export type CreateEmployeeInput = {
 
 /**
  * Creates a new employee auth account + profile + roles in one RPC transaction.
- * The employee code is composed in-DB (department code + personnel number).
+ * The employee code is composed in-DB — since 20260730130002 it is the
+ * personnel number alone, with no department prefix.
  * Admins create freely; managers are scoped in-DB to their own department and
  * team with the employee role only — the fast-path check here just mirrors it.
  * Returns the temp password so the creator can hand it to the worker.

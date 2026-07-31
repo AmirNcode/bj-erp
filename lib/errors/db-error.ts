@@ -47,6 +47,9 @@ const RULES: Rule[] = [
   { re: /duplicate key value.*profiles_employee_code/, key: 'duplicateEmployeeCode' },
   { re: /duplicate key value.*holidays_company_date/, key: 'duplicateHoliday' },
   { re: /duplicate key value.*departments_company_code_key/, key: 'duplicateDepartmentCode' },
+  // createDepartment auto-generates the code and retries a bounded number of
+  // times; exhausting them means every candidate was taken.
+  { re: /could not generate a unique department code/, key: 'duplicateDepartmentCode' },
   { re: /invalid department code|departments_code_format/, key: 'invalidDepartmentCode' },
   { re: /department name is required/, key: 'departmentNameRequired' },
   { re: /cannot remove your own admin role/, key: 'cannotRemoveOwnAdmin' },

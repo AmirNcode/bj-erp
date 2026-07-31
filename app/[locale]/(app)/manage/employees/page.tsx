@@ -190,17 +190,7 @@ export default async function EmployeesPage({ params }: Props) {
                 </Link>
               </Button>
             )}
-            {/* Admin-only: a department must exist before anyone can be hired into it. */}
-            {isAdmin && (
-              <Button variant="outline" size="sm" asChild>
-                <Link
-                  href={`/${locale}/manage/departments/new`}
-                  data-testid="add-department-link"
-                >
-                  {t('departments.addNew')}
-                </Link>
-              </Button>
-            )}
+            {/* Add Department moved to Manage → Settings on 2026-07-30 (D9). */}
             <Button asChild size="sm">
               <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
             </Button>

@@ -295,8 +295,6 @@
       "newTitle": "Add New Department",
       "nameFa": "Name (Farsi)",
       "nameEn": "Name (English)",
-      "code": "Department code",
-      "codeHint": "Latin prefix of login codes issued in this department — e.g. prod gives prod-1042. 2 to 6 latin letters or digits.",
       "kind": "Type",
       "kindTeam": "Production / team",
       "kindOffice": "Office",

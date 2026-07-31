@@ -13,7 +13,7 @@ import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
-import { DepartmentCodesForm } from './DepartmentCodesForm';
+import { DepartmentsCard } from './DepartmentsCard';
 import { AccrualRunner } from './AccrualRunner';
 import { createClient } from '@/lib/supabase/server';
 
@@ -37,7 +37,8 @@ export default async function SettingsPage({ params }: Props) {
   const supabase = await createClient();
   const [holidayData, { data: departments }] = await Promise.all([
     getCompanyHolidays(),
-    supabase.from('departments').select('id, name_fa, name_en, code').order('name_fa'),
+    // Names only — the card never shows a code (spec 2026-07-30, D13).
+    supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
   ]);
   const data = holidayData;
   const weekendDays = data.ok ? data.weekendDays : [5];
@@ -107,15 +108,18 @@ export default async function SettingsPage({ params }: Props) {
 
       <Card>
         <CardContent>
-          <DepartmentCodesForm
+          <DepartmentsCard
             departments={departments ?? []}
             locale={locale}
             labels={{
               title: t('departments.title'),
               hint: t('departments.hint'),
-              save: t('save'),
-              saved: t('saved'),
-              invalid: t('departments.invalid'),
+              addNew: t('departments.addNew'),
+              empty: t('departments.empty'),
+              managersLabel: t('departments.managersLabel'),
+              workersLabel: t('departments.workersLabel'),
+              noMembers: t('departments.noMembers'),
+              loading: t('departments.loading'),
               errorLabel: t('error'),
             }}
           />
