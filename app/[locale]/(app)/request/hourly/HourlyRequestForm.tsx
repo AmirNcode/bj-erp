@@ -2,14 +2,9 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { LazyDatePicker } from '../LazyDatePicker';
-import persian from 'react-date-object/calendars/persian';
-import persian_fa from 'react-date-object/locales/persian_fa';
-import persian_en from 'react-date-object/locales/persian_en';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
-import gregorian_fa from 'react-date-object/locales/gregorian_fa';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
 import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
 import { formatDuration } from '@/lib/leave/duration';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
@@ -43,8 +38,8 @@ type Labels = {
   dailyLimitHint: string;
   replacementTitle: string;
   replacementHint: string;
-  replacementSearch: string;
-  replacementNone: string;
+  replacementSelect: string;
+  replacementNoReplacement: string;
   replacementOnLeave: string;
   replacementLoading: string;
   replacementEmpty: string;
@@ -81,16 +76,10 @@ export function HourlyRequestForm({
   locale,
 }: Props) {
   const router = useRouter();
-  const isJalali = calendarPref === 'jalali';
-  const isRtl = locale === 'fa';
-  const calendar = isJalali ? persian : gregorian;
-  const calLocale = isJalali
-    ? isRtl
-      ? persian_fa
-      : persian_en
-    : isRtl
-      ? gregorian_fa
-      : gregorian_en;
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
+    calendarPref,
+    locale
+  );
 
   const slots = timeSlots(
     { start: workSettings.workStart, end: workSettings.workEnd },
@@ -103,6 +92,7 @@ export function HourlyRequestForm({
   const [endTime, setEndTime] = useState(slots[2] ?? slots[slots.length - 1] ?? '');
   const [reason, setReason] = useState('');
   const [replacementId, setReplacementId] = useState('');
+  const [noReplacement, setNoReplacement] = useState(false);
   const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
   const [candidatesFor, setCandidatesFor] = useState<string | null>(null);
   const [balanceMinutes, setBalanceMinutes] = useState<number | null>(null);
@@ -202,6 +192,7 @@ export function HourlyRequestForm({
         setDate(null);
         setReason('');
         setReplacementId('');
+        setNoReplacement(false);
         router.refresh();
       } else {
         setErrorMsg(result.error);
@@ -248,7 +239,7 @@ export function HourlyRequestForm({
                 onChange={(d: DateObjectLike) => setDate(d ?? null)}
                 calendar={calendar}
                 locale={calLocale}
-                calendarPosition={isRtl ? 'bottom-right' : 'bottom-left'}
+                calendarPosition={calendarPosition}
                 inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 containerClassName="rmdp-container w-full"
                 format="YYYY/MM/DD"
@@ -302,11 +293,13 @@ export function HourlyRequestForm({
             loading={candidatesLoading}
             value={replacementId}
             onChange={setReplacementId}
+            noReplacement={noReplacement}
+            onNoReplacementChange={setNoReplacement}
             labels={{
               title: labels.replacementTitle,
               hint: labels.replacementHint,
-              searchPlaceholder: labels.replacementSearch,
-              none: labels.replacementNone,
+              select: labels.replacementSelect,
+              noReplacement: labels.replacementNoReplacement,
               onLeave: labels.replacementOnLeave,
               loading: labels.replacementLoading,
               empty: labels.replacementEmpty,

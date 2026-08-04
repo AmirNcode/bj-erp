@@ -7,6 +7,7 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
+import { RequestCancelButton } from '../request/_components/RequestCancelButton';
 
 type Labels = {
   balancesTitle: string;
@@ -187,7 +188,11 @@ export function HomeBoard({
             ) : (
               <div className="space-y-3">
                 {board.recent.map((r) => (
-                  <div key={r.id} className="flex items-center justify-between gap-3">
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-3"
+                    data-testid={`home-recent-request-${r.id}`}
+                  >
                     <div className="min-w-0">
                       {/* An errand has no leave type; naming it by its tag keeps
                           the row from rendering as a bare em dash. */}
@@ -203,10 +208,19 @@ export function HomeBoard({
                         {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                     </div>
-                    <StatusBadge
-                      status={r.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
-                      labels={statusLabels}
-                    />
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <span data-testid={`home-status-${r.id}`}>
+                        <StatusBadge
+                          status={r.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
+                          labels={statusLabels}
+                        />
+                      </span>
+                      <RequestCancelButton
+                        requestId={r.id}
+                        status={r.status}
+                        startDate={r.start_date}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -72,6 +72,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       leaveTypes={leaveTypes ?? []}
       hoursPerDay={hoursPerDay}
       accrualStartMonth={accrualStartMonth}
+      calendarPref={callerProfile?.calendar_pref ?? 'jalali'}
       locale={locale}
       labels={{
         personnelNo: t('employees.personnelNo'),

@@ -10,6 +10,21 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Header, request, and employee-form UI polish (2026-08-04)
+
+- **The Updated control now has one permanent home in the app header.** It no longer repeats above
+  every page title; it sits immediately before the profile control in English and immediately after
+  it visually in Farsi/RTL.
+- **Recent requests can be cancelled directly from Home.** The Home card and My Requests now share
+  the same eligibility rule, confirmation dialog, server action, success/error feedback, and refresh
+  behavior for pending and approved-future requests.
+- **Replacement selection is dropdown-only.** The broken name/code search and its filtering code are
+  gone. The empty prompt is now “Select a replacement”, and an explicit “No Replacement” checkbox
+  clears, disables, and greys the dropdown.
+- **Add Employee now respects the saved calendar preference.** Its hire-date picker uses the same
+  Persian/Gregorian configuration as request forms, stores the selected date as Gregorian at the
+  action boundary, and defaults to the Persian calendar whenever the preference is missing or unknown.
+
 ### Hourly work errand, and login codes without a department prefix (2026-07-30)
 
 Spec: [`docs/specs/2026-07-30-work-errand-and-login-codes-design.md`](specs/2026-07-30-work-errand-and-login-codes-design.md).

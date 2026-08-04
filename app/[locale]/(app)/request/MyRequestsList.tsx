@@ -1,42 +1,19 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
-import { useTranslations } from 'next-intl';
-import { toast } from 'sonner';
-import { cancelRequest } from '@/lib/actions/leave';
+import { useState, useEffect } from 'react';
 import type { LeaveRequestWithType } from '@/lib/actions/leave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
-import { isCancellable } from '@/lib/leave/cancellable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card } from '@/components/ui/card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
-import { Button } from '@/components/ui/button';
-
-// Client "today" (YYYY-MM-DD); the SQL re-checks against current_date on cancel.
-// Computed per call (not module scope) so a tab left open overnight stays correct.
-const today = () => new Date().toISOString().slice(0, 10);
+import { RequestCancelButton } from './_components/RequestCancelButton';
 
 type Labels = {
   myRequests: string;
   noRequests: string;
-  cancel: string;
-  cancelConfirm?: string;
-  cancelApprovedConfirm?: string;
-  cancelSuccess: string;
   errorLabel: string;
   statusPending: string;
   statusApproved: string;
@@ -72,10 +49,8 @@ export function MyRequestsList({
   locale,
   hoursPerDay,
 }: Props) {
-  const tc = useTranslations('common');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
-  const [isPending, startTransition] = useTransition();
 
   // Sync localRequests when the server re-renders with fresh data (e.g. after
   // router.refresh() surfaces a newly-submitted request). This server→local
@@ -84,22 +59,6 @@ export function MyRequestsList({
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional prop→state sync
     setLocalRequests(requests);
   }, [requests]);
-
-  const handleCancel = (id: string) => {
-    setErrorMsg('');
-    startTransition(async () => {
-      const res = await cancelRequest(id);
-      if (res.ok) {
-        setLocalRequests((prev) =>
-          prev.map((r) => (r.id === id ? { ...r, status: 'cancelled' } : r))
-        );
-        toast.success(labels.cancelSuccess);
-      } else {
-        setErrorMsg(res.error);
-        toast.error(res.error);
-      }
-    });
-  };
 
   const statusLabels = {
     pending: labels.statusPending,
@@ -123,9 +82,6 @@ export function MyRequestsList({
       ) : (
         <div className="space-y-3">
           {localRequests.map((req) => {
-            const cancelPrompt =
-              req.status === 'approved' ? labels.cancelApprovedConfirm : labels.cancelConfirm;
-
             return (
               <Card
                 key={req.id}
@@ -207,40 +163,19 @@ export function MyRequestsList({
                       />
                     </span>
 
-                    {/* Cancel — pending, or an approved leave that hasn't started */}
-                    {isCancellable(req.status, req.start_date, today()) && (
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isPending}
-                            className="text-destructive h-auto px-2 py-0.5 text-xs"
-                            data-testid={`cancel-btn-${req.id}`}
-                          >
-                            {labels.cancel}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent size="sm">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{labels.cancel}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {cancelPrompt}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-                            <AlertDialogAction
-                              variant="destructive"
-                              onClick={() => handleCancel(req.id)}
-                              data-testid={`cancel-confirm-${req.id}`}
-                            >
-                              {labels.cancel}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    )}
+                    <RequestCancelButton
+                      requestId={req.id}
+                      status={req.status}
+                      startDate={req.start_date}
+                      onCancelled={() =>
+                        setLocalRequests((prev) =>
+                          prev.map((item) =>
+                            item.id === req.id ? { ...item, status: 'cancelled' } : item
+                          )
+                        )
+                      }
+                      onError={setErrorMsg}
+                    />
                   </div>
                 </div>
               </Card>

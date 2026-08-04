@@ -2,15 +2,10 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { LazyDatePicker } from './LazyDatePicker';
-import persian from 'react-date-object/calendars/persian';
-import persian_fa from 'react-date-object/locales/persian_fa';
-import persian_en from 'react-date-object/locales/persian_en';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
-import gregorian_fa from 'react-date-object/locales/gregorian_fa';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { formatDuration } from '@/lib/leave/duration';
 import { submitRequest, getMyBalance, getReplacementCandidates } from '@/lib/actions/leave';
@@ -50,8 +45,8 @@ type Labels = {
   validationSelectDate: string;
   replacementTitle: string;
   replacementHint: string;
-  replacementSearch: string;
-  replacementNone: string;
+  replacementSelect: string;
+  replacementNoReplacement: string;
   replacementOnLeave: string;
   replacementLoading: string;
   replacementEmpty: string;
@@ -73,18 +68,17 @@ const selectClassName =
 
 export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, labels, locale }: Props) {
   const router = useRouter();
-  const isJalali = calendarPref === 'jalali';
-  const isRtl = locale === 'fa';
-  const calendar = isJalali ? persian : gregorian;
-  const calLocale = isJalali
-    ? (isRtl ? persian_fa : persian_en)
-    : (isRtl ? gregorian_fa : gregorian_en);
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
+    calendarPref,
+    locale
+  );
 
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [dateRange, setDateRange] = useState<DateObjectLike[]>([]);
   const [dayPart, setDayPart] = useState<DayPart>('full');
   const [reason, setReason] = useState('');
   const [replacementId, setReplacementId] = useState('');
+  const [noReplacement, setNoReplacement] = useState(false);
   const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
   // Which range the current list was fetched for; loading is DERIVED from it, the
   // same way the balance effect avoids setting state synchronously.
@@ -204,6 +198,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
         setDateRange([]);
         setReason('');
         setReplacementId('');
+        setNoReplacement(false);
         setDayPart('full');
         // Refresh server data without a full page reload
         router.refresh();
@@ -259,7 +254,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
                 }}
                 calendar={calendar}
                 locale={calLocale}
-                calendarPosition={isRtl ? 'bottom-right' : 'bottom-left'}
+                calendarPosition={calendarPosition}
                 inputClass={`w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50`}
                 containerClassName="rmdp-container w-full"
                 format="YYYY/MM/DD"
@@ -291,11 +286,13 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             loading={candidatesLoading}
             value={replacementId}
             onChange={setReplacementId}
+            noReplacement={noReplacement}
+            onNoReplacementChange={setNoReplacement}
             labels={{
               title: labels.replacementTitle,
               hint: labels.replacementHint,
-              searchPlaceholder: labels.replacementSearch,
-              none: labels.replacementNone,
+              select: labels.replacementSelect,
+              noReplacement: labels.replacementNoReplacement,
               onLeave: labels.replacementOnLeave,
               loading: labels.replacementLoading,
               empty: labels.replacementEmpty,

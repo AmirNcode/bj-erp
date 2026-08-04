@@ -93,6 +93,18 @@ their own plan files when reached.
   the title
 - ☑ App-shell tab prefetching plus a per-page update pill for manual data refresh / last-loaded time
 
+## Header, request, and employee-form UI polish (2026-08-04) ✅
+
+- ☑ Move the Updated control from individual page headers into the shared app header, with physical
+  placement before Profile in English and after Profile in Farsi/RTL
+- ☑ Add the existing request-cancellation flow to Home → My Recent Requests through one shared control
+- ☑ Remove replacement search/filter code; use a dropdown prompt plus a disabling No Replacement checkbox
+- ☑ Replace Add Employee's native Gregorian hire-date input with the preference-aware picker; missing or
+  unknown preferences default to Jalali
+- ☑ Gates: TypeScript + lint clean, **38 unit files / 242 tests** passed, production build clean;
+  targeted replacement/leave e2e was attempted but the local Supabase endpoint at
+  `192.168.2.48:8080` was unavailable (`ECONNREFUSED` before login)
+
 ## Self-host installer (2026-07-03) ✅
 - ☑ `deploy/` package: Docker Compose stack (Supabase Postgres + GoTrue + PostgREST + app +
   Caddy HTTPS gateway w/ internal CA), `install.sh` (secrets, migrations, seed, first admin,

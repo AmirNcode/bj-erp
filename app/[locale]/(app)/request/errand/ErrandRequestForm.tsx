@@ -2,14 +2,9 @@
 
 import { useState, useCallback, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { LazyDatePicker } from '../LazyDatePicker';
-import persian from 'react-date-object/calendars/persian';
-import persian_fa from 'react-date-object/locales/persian_fa';
-import persian_en from 'react-date-object/locales/persian_en';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
-import gregorian_fa from 'react-date-object/locales/gregorian_fa';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
 import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { timeSlots, timeToMinutes } from '@/lib/leave/hourly';
 import { errandMinutes, isValidErrandLocation, MAX_ERRAND_LOCATION_LENGTH } from '@/lib/leave/errand';
 import { formatDuration } from '@/lib/leave/duration';
@@ -83,16 +78,10 @@ function slotIndexAtOrAfter(time: string): number {
  */
 export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }: Props) {
   const router = useRouter();
-  const isJalali = calendarPref === 'jalali';
-  const isRtl = locale === 'fa';
-  const calendar = isJalali ? persian : gregorian;
-  const calLocale = isJalali
-    ? isRtl
-      ? persian_fa
-      : persian_en
-    : isRtl
-      ? gregorian_fa
-      : gregorian_en;
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
+    calendarPref,
+    locale
+  );
 
   const defaultFrom = slotIndexAtOrAfter(workSettings.workStart);
 
@@ -179,7 +168,7 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
                 onChange={(d: DateObjectLike) => setDate(d ?? null)}
                 calendar={calendar}
                 locale={calLocale}
-                calendarPosition={isRtl ? 'bottom-right' : 'bottom-left'}
+                calendarPosition={calendarPosition}
                 inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 containerClassName="rmdp-container w-full"
                 format="YYYY/MM/DD"

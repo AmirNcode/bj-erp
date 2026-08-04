@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PageHeader } from '@/app/[locale]/(app)/_components/PageHeader';
@@ -57,12 +58,27 @@ describe('PageRefreshButton', () => {
 });
 
 describe('PageHeader', () => {
-  it('renders the update pill before the page title', () => {
+  it('renders the page title without another update pill', () => {
     renderWithIntl(<PageHeader title="Welcome, Amir" />);
 
-    const button = screen.getByTestId('page-refresh-button');
-    const heading = screen.getByRole('heading', { name: 'Welcome, Amir' });
+    expect(screen.getByRole('heading', { name: 'Welcome, Amir' })).toBeTruthy();
+    expect(screen.queryByTestId('page-refresh-button')).toBeNull();
+  });
+});
 
-    expect(button.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+describe('AppShell refresh placement', () => {
+  const source = readFileSync(
+    'app/[locale]/(app)/_components/AppShell.tsx',
+    'utf8'
+  );
+
+  it('renders the only header refresh control immediately before the profile link', () => {
+    const refreshIndex = source.indexOf('<PageRefreshButton');
+    const profileIndex = source.indexOf('data-testid="nav-profile"');
+
+    expect(refreshIndex).toBeGreaterThan(0);
+    expect(refreshIndex).toBeLessThan(profileIndex);
+    expect(source.match(/<PageRefreshButton/g)).toHaveLength(1);
+    expect(source).toContain("dir={locale === 'fa' ? 'rtl' : 'ltr'}");
   });
 });

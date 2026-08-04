@@ -6,6 +6,8 @@ import { createEmployee } from '@/lib/actions/employees';
 import { allocateLeave, setEmployeeLeavePolicy } from '@/lib/actions/leave';
 import { daysToMinutes } from '@/lib/leave/duration';
 import { currentYearPeriod } from '@/lib/leave/allocations';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
 import {
   buildEmployeeCode,
   isValidPersonnelNo,
@@ -16,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -32,6 +35,11 @@ type InitialLeaveType = {
 const ROLES = ['admin', 'manager', 'employee', 'security'] as const;
 type Role = (typeof ROLES)[number];
 
+// react-multi-date-picker returns a DateObject; keeping this loose matches the
+// existing request forms while conversion stays type-checked at the boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DateObjectLike = any;
+
 type Props = {
   isAdmin: boolean;
   ownDepartment: Department | null;
@@ -43,6 +51,7 @@ type Props = {
   hoursPerDay: number;
   /** Gregorian start of the current Jalali month — the accrual start default. */
   accrualStartMonth: string;
+  calendarPref: string;
   locale: string;
   labels: {
     personnelNo: string;
@@ -103,6 +112,7 @@ export function NewEmployeeForm({
   leaveTypes,
   hoursPerDay,
   accrualStartMonth,
+  calendarPref,
   locale,
   labels,
 }: Props) {
@@ -114,6 +124,7 @@ export function NewEmployeeForm({
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(['employee']);
   const [personnelNo, setPersonnelNo] = useState('');
+  const [hireDate, setHireDate] = useState<DateObjectLike | null>(null);
   // Admin picks a department; manager is locked to their own.
   const [deptId, setDeptId] = useState(isAdmin ? '' : ownDepartment?.id ?? '');
 
@@ -123,6 +134,8 @@ export function NewEmployeeForm({
   const codePreview = isValidPersonnelNo(normalizedPno)
     ? buildEmployeeCode(normalizedPno)
     : '—';
+  const { isJalali, isRtl, calendar, calLocale, calendarPosition } =
+    calendarPickerConfig(calendarPref, locale);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -148,7 +161,7 @@ export function NewEmployeeForm({
       department_id: isAdmin ? (fd.get('department_id') as string) || undefined : undefined,
       manager_id: isAdmin ? (fd.get('manager_id') as string) || undefined : undefined,
       roles: isAdmin ? selectedRoles : undefined,
-      hire_date: (fd.get('hire_date') as string) || undefined,
+      hire_date: hireDate ? dateObjectToGregorian(hireDate) : undefined,
     });
 
     if (!result.ok) {
@@ -366,7 +379,27 @@ export function NewEmployeeForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="hire_date">{labels.hireDate}</Label>
-            <Input id="hire_date" name="hire_date" type="date" />
+            <div
+              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+              className="w-full"
+              data-testid="hire-date-picker"
+              data-calendar={isJalali ? 'jalali' : 'gregorian'}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.preventDefault();
+              }}
+            >
+              <LazyDatePicker
+                id="hire_date"
+                value={hireDate}
+                onChange={(date: DateObjectLike) => setHireDate(date ?? null)}
+                calendar={calendar}
+                locale={calLocale}
+                calendarPosition={calendarPosition}
+                inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                containerClassName="rmdp-container w-full"
+                format="YYYY/MM/DD"
+              />
+            </div>
           </div>
 
           {isAdmin && leaveTypes.length > 0 && (

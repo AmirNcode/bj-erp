@@ -51,6 +51,16 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
   await expect(picker.locator('option', { hasText: 'Cover Person' })).toBeAttached({
     timeout: 20_000,
   });
+  await expect(page.locator('[data-testid="replacement-search"]')).toHaveCount(0);
+  await expect(picker.locator('option').first()).toContainText('انتخاب جانشین');
+
+  // "No Replacement" is explicit and disables the dropdown until unchecked.
+  const noReplacement = page.locator('[data-testid="replacement-none"]');
+  await noReplacement.check();
+  await expect(picker).toBeDisabled();
+  await noReplacement.uncheck();
+  await expect(picker).toBeEnabled();
+
   // selectOption's label must be an exact string, so read the option's value.
   const bValue = await picker
     .locator('option')

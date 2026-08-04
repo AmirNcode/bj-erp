@@ -225,21 +225,28 @@ test.describe('Leave request + allocation flow', () => {
     const rowText = await requestRows.first().textContent();
     expect(rowText).toMatch(/[2۲]/);
 
-    // ── 9. Cancel the request ─────────────────────────────────────────────
-    const cancelBtn = page.locator('[data-testid^="cancel-btn-"]').first();
+    // ── 9. Cancel the request from Home → My Recent Requests ──────────────
+    await page.goto('/home');
+    const homeRow = page.locator('[data-testid^="home-recent-request-"]').first();
+    await expect(homeRow).toBeVisible({ timeout: 10_000 });
+    const cancelBtn = homeRow.locator('[data-testid^="cancel-btn-"]');
     await expect(cancelBtn).toBeVisible({ timeout: 5_000 });
     await cancelBtn.click();
-    // Click the AlertDialog confirm button (replaces native confirm() dialog)
     const confirmBtn = page.locator('[data-testid^="cancel-confirm-"]').first();
     await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
     await confirmBtn.click();
 
-    // Status should change to cancelled
-    const cancelledBadge = page.locator('[data-testid^="status-badge-"]').filter({ hasText: /cancel|لغو/i });
-    await expect(cancelledBadge.first()).toBeVisible({ timeout: 10_000 });
+    // The shared control refreshes the Home board after the cancellation.
+    await expect(homeRow.locator('[data-testid^="home-status-"]')).toContainText(
+      /cancel|لغو/i,
+      { timeout: 10_000 }
+    );
 
     // ── 10. Submit an over-balance request (very long range) ──────────────
-    await typeSelect.selectOption({ value: foundLtValue });
+    await page.goto('/request');
+    const typeSelectAfterCancel = page.locator('#leave_type_id');
+    await expect(typeSelectAfterCancel).toBeVisible({ timeout: 10_000 });
+    await typeSelectAfterCancel.selectOption({ value: foundLtValue });
 
     // Pick a very long range — e.g. 200 days — to exceed the 26-day balance
     const farFutureStart = getNextMonday();

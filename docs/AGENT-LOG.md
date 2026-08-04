@@ -78,6 +78,101 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-04 — Header refresh, Home cancellation, replacement picker, and hire calendar
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `94ee09e` (tree already had the earlier orientation entry in
+`docs/AGENT-LOG.md` plus untracked `deploy/bj-root-ca.crt`, `deploy/migrations/`, and
+`deploy/sql/seed.sql`; the deployment files are not mine and were not touched)
+**Trigger:** The user requested four UI/UX changes: one header-level Updated control, cancellation
+from Home recent requests, a simpler replacement selector, and a preference-aware Persian-default
+hire-date calendar.
+
+**What changed**
+- `app/[locale]/(app)/_components/{AppShell,PageHeader}.tsx` — moved the refresh control into the
+  shared sticky header and used explicit LTR/RTL direction so its physical position relative to the
+  profile button matches the language. Page headers now render only title/action content.
+- `app/[locale]/(app)/request/_components/RequestCancelButton.tsx`, `MyRequestsList.tsx`, and
+  `home/HomeBoard.tsx` — extracted the existing cancellation behavior and reused it on Home, including
+  eligibility, confirmation, server action, toast feedback, and refresh.
+- `app/[locale]/(app)/request/_components/ReplacementPicker.tsx`, both leave request forms,
+  `lib/leave/replacement.ts`, and `messages/{en,fa}.json` — deleted search state/filtering, changed the
+  empty dropdown prompt, and added the controlled No Replacement checkbox that clears/disables it.
+- `components/LazyDatePicker.tsx`, `lib/leave/calendarPicker.ts`, the three request forms, and
+  `manage/employees/new/{page,NewEmployeeForm}.tsx` — centralized picker configuration, made any
+  missing/unknown preference Jalali, and converted the displayed hire date to Gregorian ISO before
+  calling the employee action. The old route-local lazy picker was removed.
+- `tests/unit/{page-refresh-button,calendar-picker,replacement-picker,request-cancel-button}*` and
+  `tests/e2e/{leave,replacement}.spec.ts` — added regression coverage and updated the browser flows for
+  Home cancellation and dropdown-only replacement selection. Removed the obsolete filter unit test.
+- `docs/{CHANGELOG,TASKS,AGENT-LOG}.md` — recorded the completed UI work and honest gate status.
+- Followed the project-required Context7 workflow for `react-multi-date-picker` / `react-date-object`
+  current controlled-value, calendar/locale, and conversion APIs before changing the picker wiring.
+
+**Actions outside the repo**
+- None. No client server, database, deployment, container, or external data was changed. The targeted
+  Playwright attempt started its local web server, but authentication and cleanup could not reach the
+  configured local Supabase endpoint, so no test rows were created or changed.
+
+**Verification**
+- `npx tsc --noEmit` — clean.
+- `npm run lint` — clean.
+- `npm run test:unit` — **38 files, 242 tests passed**.
+- `npm run build` — first sandboxed run failed because Turbopack was denied permission to bind a local
+  port while processing CSS (`Operation not permitted (os error 1)`); approved retry outside the
+  sandbox succeeded, compiling and generating all 36 static pages.
+- `git diff --check` — clean. English/Farsi message-key parity script — **385 keys match**.
+- `npx playwright test tests/e2e/replacement.spec.ts tests/e2e/leave.spec.ts --workers=1` — attempted
+  outside the sandbox; both specs were blocked before the changed flows because
+  `192.168.2.48:8080` returned `ECONNREFUSED` during login, and cleanup hit the same unavailable
+  endpoint. This is an environment failure, not a UI assertion failure.
+
+**State left behind**
+- All feature, test, and documentation changes are uncommitted on `main`; no commit was requested.
+- The pre-existing untracked deployment certificate/migration/seed paths listed above remain untouched.
+
+**For the next agent**
+- The shared header group deliberately renders refresh before profile in the DOM and applies
+  `dir="ltr"`/`dir="rtl"`; changing either part can reverse the requested physical placement.
+- Replacement remains optional at the server boundary: the checkbox is an explicit UI choice that
+  submits the existing null/empty replacement value, so no database or RPC change was needed.
+- Rerun the two targeted Playwright specs when the local Supabase stack at `192.168.2.48:8080` is back.
+
+## 2026-08-04 — UI/UX codebase orientation before the next change request
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `94ee09e` (tree already had untracked
+`deploy/bj-root-ca.crt`, `deploy/migrations/`, and `deploy/sql/seed.sql`; none are mine)
+**Trigger:** The user asked for a codebase review focused on UI/UX and will provide the desired
+changes after the agent is ready.
+
+**What changed**
+- `docs/AGENT-LOG.md` — recorded this read-only orientation session as required by the project
+  working agreement. No application, styling, test, translation, or deployment file was changed.
+
+**Actions outside the repo**
+- None. No server, database, container, deployment, browser, or external service was touched.
+
+**Verification**
+- No test suite was run because this session made no code or configuration changes.
+- Read the required onboarding chain (`CLAUDE.md`, `docs/AGENT-LOG.md`, `PLAN`, `REQUIREMENTS`,
+  `DATA_MODEL`, `PERMISSIONS`, the current spec, `TASKS`, and `CHANGELOG`), then inspected the
+  frontend shell, theme tokens, shared primitives, route composition, primary screens, responsive
+  tests, RTL/i18n constraints, and current git state.
+
+**State left behind**
+- `main` remains at `94ee09e`; only this journal entry is newly modified by this session.
+- The pre-existing untracked deployment files listed above were left untouched.
+
+**For the next agent**
+- The app is Farsi-first/RTL, light-only, mobile-first, and uses a shared shadcn-style component
+  layer. Preserve fa/en message parity, logical RTL utilities, existing `data-testid` contracts,
+  role/RLS behavior, and the mobile-bottom-nav/desktop-side-rail split when implementing the user's
+  requested UI changes.
+- The three request routes share `RequestTypeTabs`. Its seamless tab/card treatment depends on the
+  strip's `-mb-px` + `z-10`, the active tab's `border-b-card`, and each form/fallback using
+  `rounded-t-none`.
+
 ## 2026-08-04 — Request-type tab strip on the three request screens
 
 **Agent:** Claude Opus 5 via Claude Code

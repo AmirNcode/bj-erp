@@ -135,8 +135,8 @@
   "replacement": {
     "title": "Replacement (optional)",
     "hint": "Who covers for you. Colleagues in your department; anyone already on leave cannot be chosen.",
-    "search": "Search by name or code",
-    "none": "— No replacement —",
+    "select": "Select a replacement",
+    "noReplacement": "No Replacement",
     "onLeave": "on leave",
     "coverLabel": "Replacement",
     "coveringTitle": "You are covering",
