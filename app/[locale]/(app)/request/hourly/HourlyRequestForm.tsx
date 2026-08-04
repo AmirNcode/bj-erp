@@ -210,7 +210,7 @@ export function HourlyRequestForm({
   };
 
   return (
-    <Card>
+    <Card className="rounded-t-none">
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5" data-testid="hourly-form">
           {/* Leave type — only types the admin enabled for hourly */}

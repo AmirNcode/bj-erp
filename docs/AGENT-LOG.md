@@ -78,6 +78,140 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-04 — Request-type tab strip on the three request screens
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `f4977f0` (tree already dirty: `docs/AGENT-LOG.md`,
+`docs/MEMORY.md`, untracked `deploy/docker-compose.local.yml` — none of those are mine)
+**Trigger:** The request type could only be picked from the home board. The user asked for a
+type selector inside the request screens themselves — not a dropdown, styled as tabs that blend
+into the form — with the home-board buttons kept and the bottom link row removed.
+
+**What changed**
+- `app/[locale]/(app)/request/_components/RequestTypeTabs.tsx` — new server component. Three
+  `Link`s (daily → `/request`, hourly → `/request/hourly`, errand → `/request/errand`). Because
+  each type is its own route (D13), these are links, not client tab state. The active tab gets
+  `border-b-card` so its bottom border matches the card fill, and the strip is `-mb-px z-10`, so
+  the tab paints over the card's top border and the seam disappears.
+- `app/[locale]/(app)/request/page.tsx`, `.../hourly/page.tsx`, `.../errand/page.tsx` — strip
+  rendered in the page shell (outside `Suspense`, so it is up immediately and does not shift when
+  the data resolves); the bottom `<p>` cross-link rows are gone. Dropped the now-unused `Link`
+  imports, `tHourly` in `request/page.tsx`, and `tErrand` in `hourly/page.tsx`.
+- `.../LeaveRequestForm.tsx:217`, `.../hourly/HourlyRequestForm.tsx:213`,
+  `.../errand/ErrandRequestForm.tsx:155` — `<Card className="rounded-t-none">`, so the strip owns
+  the top corners. Same on the `hourly-unavailable` `<p>`, which replaces the card on that branch.
+- `components/Skeletons.tsx` — `CardSkeleton`/`FormSkeleton` take an optional `className`; the
+  three request pages pass `rounded-t-none` so the Suspense fallback lines up under the strip.
+- `messages/{fa,en}.json` — added `request.tabs.{label,daily,hourly,errand}`. Deleted the five
+  keys the removed link row used and nothing else reads: `hourly.dailyLink`, `hourly.hourlyLink`,
+  `errand.leaveLink`. (`hourly.navLink` and `errand.navLink` are also unreferenced now, but they
+  predate this change, so I left them.)
+- `.claude/launch.json` — new, so the preview tool can start `npm run dev`. Untracked directory;
+  not part of the feature.
+
+**Actions outside the repo**
+- None. No server, no database, no deploy.
+
+**Verification**
+- `npx tsc --noEmit` — clean. `npm run lint` — clean.
+- `npm run test:unit` — 36 files, 239 tests passed.
+- `npm run build` — succeeded; all three request routes compiled.
+- Confirmed Tailwind actually emits the utilities the blend depends on, in
+  `.next/static/chunks/41u9vsylrl8ca.css`: `.border-b-card{border-bottom-color:var(--card)}`,
+  `.border-b-border`, `.rounded-t-lg`, `.rounded-t-none`.
+- Visual check was done on a **static replica**, not the live app: I could not log in (entering
+  credentials is out of bounds for me), so I served an HTML page with the real built CSS and the
+  exact class strings. Confirmed at desktop and at 375px, RTL: the active tab merges into the
+  card with no seam, inactive tabs read as tabs, and the Farsi labels fit on mobile. **The strip
+  has not been seen inside the authenticated app.**
+- No e2e run. `tests/e2e` never referenced the removed `daily-to-hourly` / `hourly-to-daily` /
+  `daily-to-errand` / `hourly-to-errand` / `errand-to-daily` testids, so nothing there should
+  break — but that is a grep, not a run.
+
+**State left behind**
+- All changes uncommitted on `main`, per the commit-only-when-asked rule.
+- `npm run dev` left running on port 3000 by the preview tool.
+
+**For the next agent**
+- The blend is a three-part contract: strip is `-mb-px` + `z-10`, active tab is `border-b-card`,
+  card is `rounded-t-none`. Break any one and a 1px seam or a double border appears.
+- New testids for e2e: `request-type-tabs`, `request-tab-daily|hourly|errand`.
+- Each screen still shows its own `<h1>`/`PageHeader` above the strip, so the title and the active
+  tab say much the same thing. Left as-is — the user did not ask for the titles to go.
+
+## 2026-08-03 — Local Docker stack un-wedged: emulated Caddy broke TLS; restarted from `deploy/`
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `f4977f0` (clean tree)
+**Trigger:** User asked to check the app is running properly in Docker, restart it if needed, and
+to be given the local URL plus database credentials for ad-hoc SQL.
+
+**What changed**
+- `deploy/.env` (gitignored, new) — local-testing config, secrets copied out of the already-running
+  containers so the existing `bj-erp_db-data` volume keeps working: `POSTGRES_PASSWORD`,
+  `JWT_SECRET`, `ANON_KEY` (all unchanged), `APP_HOST=192.168.2.48`, `APP_PORT=8443`,
+  `APP_ORIGIN=https://192.168.2.48:8443`. No `SERVICE_ROLE_KEY` — nothing in the compose file
+  consumes it.
+- `deploy/docker-compose.local.yml` (new, untracked) — local-only overlay publishing Postgres on
+  `127.0.0.1:5433`. Must never reach the client's server; it is not referenced by `package.sh`.
+
+**Actions outside the repo**
+- Found the stack running from `dist/bj-erp-installer/` (a **2026-07-23** package) whose `.env` and
+  `docker-compose.override.yml` no longer exist on disk, so that project directory was unusable for
+  `docker compose`. Containers were up but **no port was actually bound on the host**: `curl` to
+  `https://192.168.2.48/` and `https://localhost/` returned exit 7, and `nc -z 127.0.0.1 443/80/8080`
+  was refused, even though `HostConfig.PortBindings` listed 80/443/8080. A throwaway
+  `docker run -d -p 18080:80 caddy` bound fine, so Docker Desktop itself was healthy.
+- Recreated the whole stack from `deploy/` instead: `docker compose -f docker-compose.yml -f
+  docker-compose.local.yml up -d --force-recreate`. Project name is pinned (`name: bj-erp`), so the
+  db volume was reused — no data loss. Ports then bound, but TLS failed:
+  `LibreSSL/3.3.6: error:06FFF064:digital envelope routines:CRYPTO_internal:bad decrypt` right after
+  Server Hello, and Caddy's own `:8080` listener timed out from inside the container while
+  `app:3000`, `rest:3000` and `auth:9999` all answered normally over the docker network.
+- **Root cause: `caddy:2.8.4-alpine` was the amd64 image running under emulation on this arm64 Mac,
+  and its TLS stack is broken there.** `docker pull --platform linux/arm64 caddy:2.8.4-alpine`
+  (registry was reachable — the user's VPN was up) + `up -d --force-recreate gateway` fixed it
+  immediately. The other three services (`supabase/postgres`, `gotrue`, `postgrest`) are still amd64
+  under emulation and work fine; only Caddy is affected. `bj-erp-app:latest` is arm64 (built locally
+  2026-07-31).
+- Stopped the two idle `bj-erp-app-rollback-*` containers. Note `bj-erp-app-rollback-20260729`
+  carries the compose `service=app` label, so every `docker compose up` starts it again; it is inert
+  (the gateway proxies to the `app` alias) but noisy. `docker rm -f bj-erp-app-rollback-20260729`
+  removes it without touching the rollback *image*.
+
+**Verification**
+- `https://192.168.2.48:8443/` → 307 → `https://192.168.2.48:8443/login` 200, title
+  `سامانه منابع انسانی`.
+- `GET /auth/v1/health` → 200, `{"version":"v2.170.0","name":"GoTrue",…}`.
+- Real login: `POST /auth/v1/token?grant_type=password` with `admin@bj-app.internal` /
+  `Admin!2026` returned an `access_token` carrying `"app_roles":["admin"]` — the custom access
+  token hook is working.
+- `GET /rest/v1/leave_types` through the gateway reached PostgREST (returned a PostgREST column
+  error for a column I guessed wrong, i.e. the route and JWT path are fine).
+- Schema is the **post-leave-v2** one: `jalali_months`, `leave_request_serials`,
+  `employee_leave_policies` all present; 14 public tables. Row counts: 15 profiles,
+  5 leave_requests. There is no `supabase_migrations` schema in this database, so applied
+  migrations cannot be enumerated — the schema shape is the only evidence.
+- Postgres reachable from the host on `127.0.0.1:5433` (`nc -z` succeeded). `psql` is **not
+  installed on the Mac**; queries were run with `docker exec … psql` inside `bj-erp-db-1`.
+
+**State left behind**
+- Stack up and serving at **https://192.168.2.48:8443** (self-signed Caddy internal CA — browsers
+  warn; `https://localhost:8443` also answers but the cert names only the IP).
+- Nothing committed. `deploy/.env` is gitignored; `deploy/docker-compose.local.yml` is untracked.
+- `dist/bj-erp-installer/` is still the stale 2026-07-23 package with a missing `.env`; nothing was
+  repaired there.
+
+**For the next agent**
+- **Do not run this stack's gateway from an amd64 Caddy image on an arm64 Mac.** It starts, logs
+  cleanly, and then fails every TLS handshake with `bad decrypt`. The packaged installer is
+  deliberately amd64 for the client's server (`package.sh`), so local testing needs the arm64 pull.
+- The earlier note that "`docker compose` is unusable here (`.env` is root-owned `600`)" applied to
+  `dist/bj-erp-installer/`, not to `deploy/`. With `deploy/.env` present, plain compose works.
+- The `APP_PORT=8443` / `APP_ORIGIN=https://192.168.2.48:8443` pair must stay in sync — the origin
+  is baked into the browser bundle at container start, so changing it needs
+  `up -d --force-recreate app`, not a restart.
+
 ## 2026-07-31 (later) — Local container rebuilt; deploy path checked; packaging fixed for amd64
 
 **Agent:** Claude Opus 5 via Claude Code

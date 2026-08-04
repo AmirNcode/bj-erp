@@ -19,8 +19,8 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { HourlyRequestForm } from './HourlyRequestForm';
 import { PageHeader } from '../../_components/PageHeader';
+import { RequestTypeTabs } from '../_components/RequestTypeTabs';
 import { FormSkeleton } from '@/components/Skeletons';
-import { Link } from '@/i18n/navigation';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -31,7 +31,6 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   const tHourly = await getTranslations('hourly');
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
-  const tErrand = await getTranslations('errand');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -84,7 +83,7 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   if (leaveTypes.length === 0) {
     return (
       <p
-        className="rounded-lg border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground"
+        className="rounded-xl rounded-t-none border border-border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground"
         data-testid="hourly-unavailable"
       >
         {tHourly('unavailable')}
@@ -93,23 +92,13 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   }
 
   return (
-    <>
-      <HourlyRequestForm
-        leaveTypes={leaveTypes}
-        workSettings={workSettings}
-        calendarPref={calendarPref}
-        labels={labels}
-        locale={locale}
-      />
-      <p className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <Link href="/request" className="text-primary underline" data-testid="hourly-to-daily">
-          {tHourly('dailyLink')}
-        </Link>
-        <Link href="/request/errand" className="text-primary underline" data-testid="hourly-to-errand">
-          {tErrand('navLink')}
-        </Link>
-      </p>
-    </>
+    <HourlyRequestForm
+      leaveTypes={leaveTypes}
+      workSettings={workSettings}
+      calendarPref={calendarPref}
+      labels={labels}
+      locale={locale}
+    />
   );
 }
 
@@ -122,7 +111,8 @@ export default async function HourlyRequestPage({ params }: Props) {
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <PageHeader title={t('title')} />
-      <Suspense fallback={<FormSkeleton />}>
+      <RequestTypeTabs active="hourly" />
+      <Suspense fallback={<FormSkeleton className="rounded-t-none" />}>
         <HourlyRequestData locale={locale} />
       </Suspense>
     </main>

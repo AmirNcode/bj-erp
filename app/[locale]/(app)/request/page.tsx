@@ -18,13 +18,13 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { Link } from '@/i18n/navigation';
+import { RequestTypeTabs } from './_components/RequestTypeTabs';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
 function RequestPageSkeleton() {
   return (
     <>
-      <FormSkeleton />
+      <FormSkeleton className="rounded-t-none" />
       <div className="mt-10">
         <ListSkeleton count={2} />
       </div>
@@ -41,7 +41,6 @@ async function RequestPageData({ locale }: { locale: string }) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
-  const tHourly = await getTranslations('hourly');
   const tErrand = await getTranslations('errand');
   // Get the authenticated user
   const user = await getCachedUser();
@@ -127,15 +126,6 @@ async function RequestPageData({ locale }: { locale: string }) {
         locale={locale}
       />
 
-      <p className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        <Link href="/request/hourly" className="text-primary underline" data-testid="daily-to-hourly">
-          {tHourly('hourlyLink')}
-        </Link>
-        <Link href="/request/errand" className="text-primary underline" data-testid="daily-to-errand">
-          {tErrand('navLink')}
-        </Link>
-      </p>
-
       <div className="mt-10">
         <MyRequestsList
           requests={requests}
@@ -159,6 +149,7 @@ export default async function RequestPage({ params }: Props) {
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <RequestTypeTabs active="daily" />
       <Suspense fallback={<RequestPageSkeleton />}>
         <RequestPageData locale={locale} />
       </Suspense>

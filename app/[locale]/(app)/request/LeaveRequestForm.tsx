@@ -214,7 +214,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   };
 
   return (
-    <Card>
+    <Card className="rounded-t-none">
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Leave type */}

@@ -17,8 +17,8 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { ErrandRequestForm } from './ErrandRequestForm';
 import { PageHeader } from '../../_components/PageHeader';
+import { RequestTypeTabs } from '../_components/RequestTypeTabs';
 import { FormSkeleton } from '@/components/Skeletons';
-import { Link } from '@/i18n/navigation';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -58,19 +58,12 @@ async function ErrandRequestData({ locale }: { locale: string }) {
   };
 
   return (
-    <>
-      <ErrandRequestForm
-        workSettings={workSettings}
-        calendarPref={calendarPref}
-        labels={labels}
-        locale={locale}
-      />
-      <p className="mt-6 text-sm">
-        <Link href="/request" className="text-primary underline" data-testid="errand-to-daily">
-          {tErrand('leaveLink')}
-        </Link>
-      </p>
-    </>
+    <ErrandRequestForm
+      workSettings={workSettings}
+      calendarPref={calendarPref}
+      labels={labels}
+      locale={locale}
+    />
   );
 }
 
@@ -83,7 +76,8 @@ export default async function ErrandRequestPage({ params }: Props) {
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <PageHeader title={t('title')} />
-      <Suspense fallback={<FormSkeleton />}>
+      <RequestTypeTabs active="errand" />
+      <Suspense fallback={<FormSkeleton className="rounded-t-none" />}>
         <ErrandRequestData locale={locale} />
       </Suspense>
     </main>

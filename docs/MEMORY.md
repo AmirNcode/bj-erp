@@ -126,6 +126,16 @@ GoTrue *does* set `Access-Control-Allow-Origin` on actual responses — don't ad
 proxy (browsers reject the duplicate). Dev/e2e point `.env.local` at `http://<mac-ip>:8080`
 (compose override in `dist/bj-erp-installer/` publishes the port; not shipped).
 
+### The gateway must be a native-arch Caddy locally — emulated amd64 breaks TLS silently
+`package.sh`/`release.sh` deliberately pin `linux/amd64` for the client's server, so an arm64 Mac
+that runs those same images gets an emulated Caddy. It starts, logs "serving initial configuration",
+and then fails **every** TLS handshake — `curl` reports
+`error:06FFF064:digital envelope routines:CRYPTO_internal:bad decrypt` right after Server Hello, and
+Caddy's own plain-HTTP `:8080` listener times out, while `app:3000`/`rest:3000`/`auth:9999` all
+answer normally over the docker network. Nothing in the Caddy log says anything is wrong. Fix:
+`docker pull --platform linux/arm64 caddy:2.8.4-alpine` + `up -d --force-recreate gateway`. Postgres,
+GoTrue and PostgREST are fine emulated; only the TLS terminator is affected. First seen 2026-08-03.
+
 ### Self-host: the public port lives in three places, and the browser bundle is one of them
 Moving the app off 443 by editing the compose `ports:` line alone leaves the site reachable but
 **login dead**. `NEXT_PUBLIC_SUPABASE_URL` is substituted into the compiled JS by

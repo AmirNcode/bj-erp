@@ -66,6 +66,12 @@
   "request": {
     "title": "Request Leave",
     "navLink": "Request Leave",
+    "tabs": {
+      "label": "Request type",
+      "daily": "Daily leave",
+      "hourly": "Hourly leave",
+      "errand": "Errand"
+    },
     "leaveType": "Leave Type",
     "selectType": "— Select Leave Type —",
     "dateRange": "Date Range",
@@ -105,8 +111,6 @@
     "durationLabel": "Duration",
     "validationTimes": "The end time must be after the start time.",
     "dailyLimitHint": "Up to {hours} hours per day.",
-    "dailyLink": "Need a full day instead? Daily leave request",
-    "hourlyLink": "Need a few hours instead? Hourly leave request",
     "unavailable": "No leave type is currently available hourly. Ask an administrator."
   },
   "errand": {
@@ -126,8 +130,7 @@
     "success": "Errand request submitted.",
     "validationSelectDate": "Pick a date.",
     "validationTimes": "The return time must be after the departure time.",
-    "validationLocation": "Enter the errand location.",
-    "leaveLink": "Need leave instead? Leave request"
+    "validationLocation": "Enter the errand location."
   },
   "replacement": {
     "title": "Replacement (optional)",

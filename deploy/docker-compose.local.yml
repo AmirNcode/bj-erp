@@ -1,0 +1,7 @@
+# Local-testing-only overlay. NOT part of the packaged installer — never ship it
+# to the client's server (it exposes Postgres). Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+services:
+  db:
+    ports:
+      - '127.0.0.1:5433:5432'

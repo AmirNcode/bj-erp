@@ -152,7 +152,7 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
   };
 
   return (
-    <Card>
+    <Card className="rounded-t-none">
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-5" data-testid="errand-form">
           {/* An errand is work — say so before anything is filled in. */}
