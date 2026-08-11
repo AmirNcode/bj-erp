@@ -78,6 +78,51 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-11 — Git landing completion for the reviewed August release
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `codex/code-review` @ `d4f474e`
+**Trigger:** Completion of the reviewed release-preparation session recorded in the next entry.
+
+**What changed**
+
+- Staged all 114 reviewed paths only after the cached diff passed whitespace, artifact-name,
+  private-key, and token-signature checks. Created `d4f474e` (`feat: add signed leave flows and
+  guarded deployment`) and pushed `codex/code-review` to `origin` without rewriting history.
+- GitHub reported no evaluated rules for `main` and no classic branch protection. Fast-forwarded
+  local `main` from `4e6b6bf` to `d4f474e` and pushed the same commit to `origin/main`; no pull
+  request or protection bypass was needed.
+- `docs/AGENT-LOG.md` — added this documentation-only completion record. This follow-up commit is
+  fast-forwarded to both the retained review branch and `main` so their final source/documentation
+  content remains identical.
+
+**Actions outside the repo**
+
+- A stale zero-byte `.git/index.lock` dated 2026-08-09 initially blocked staging. Process and file
+  checks proved no Git/GitHub process owned it; the file was moved, not deleted, to
+  `/private/tmp/bj-index.lock.stale-20260809` before staging resumed.
+- Pushed Git refs to GitHub. The client server was not contacted: no SSH, transfer, database change,
+  deployment, Safe Update, or production container operation occurred.
+
+**Verification**
+
+- Immediately before the release commit, `main...origin/main` was `0 0`; the remote review branch
+  did not exist; the linked Claude worktree/branch remained unchanged.
+- The release commit was created from a clean cached diff, its review-branch push succeeded, and the
+  first `main` fast-forward/push succeeded. The final documentation-only synchronization repeats
+  `git diff --check` and verifies identical local/remote refs and an empty porcelain status.
+
+**State left behind**
+
+- The intended final state is clean `main`, with `main`, `origin/main`, `codex/code-review`, and
+  `origin/codex/code-review` all pointing to this documentation follow-up commit. Exact final hashes
+  are reported to the user after the synchronization is verified.
+
+**For the next agent**
+
+- The repository is ready for the guarded client Safe Update once the operator chooses to begin it.
+  This session deliberately stopped before any client contact or deployment action.
+
 ## 2026-08-11 — Reviewed and prepared the pending August release for production
 
 **Agent:** OpenAI Codex (GPT-5)
