@@ -10,6 +10,10 @@ import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
+import {
+  RequestSignatureViewer,
+  type SignatureLabels,
+} from './_components/RequestSignature';
 
 type Labels = {
   myRequests: string;
@@ -31,12 +35,14 @@ type Labels = {
   trackingNo: string;
   errandBadge: string;
   errandLocation: string;
+  unpaidTimeOffLabel: string;
+  requesterSignature: SignatureLabels;
+  approverSignature: SignatureLabels;
 };
 
 type Props = {
   requests: LeaveRequestWithType[];
   labels: Labels;
-  calendarPref: string;
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
@@ -45,7 +51,6 @@ type Props = {
 export function MyRequestsList({
   requests,
   labels,
-  calendarPref,
   locale,
   hoursPerDay,
 }: Props) {
@@ -117,8 +122,8 @@ export function MyRequestsList({
                     </div>
                     {/* Date range */}
                     <div className="text-xs text-muted-foreground mt-0.5">
-                      {labels.from} {formatCalendarDate(req.start_date, calendarPref, locale)}{' '}
-                      {labels.to} {formatCalendarDate(req.end_date, calendarPref, locale)}
+                      {labels.from} {formatCalendarDate(req.start_date, locale)}{' '}
+                      {labels.to} {formatCalendarDate(req.end_date, locale)}
                     </div>
                     {/* Day part */}
                     <div className="text-xs text-muted-foreground">
@@ -127,6 +132,15 @@ export function MyRequestsList({
                         : labels.dayPartLabels[req.day_part]}{' '}
                       · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
+                    {req.unpaid_minutes > 0 && (
+                      <div
+                        className="text-xs font-medium text-destructive"
+                        data-testid={`request-unpaid-${req.id}`}
+                      >
+                        {labels.unpaidTimeOffLabel}:{' '}
+                        {formatDuration(req.unpaid_minutes, hoursPerDay, locale, labels)}
+                      </div>
+                    )}
                     {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
                         which is the requester's personnel number (spec §5). */}
                     <div className="text-xs text-muted-foreground">
@@ -152,6 +166,19 @@ export function MyRequestsList({
                         {req.decision_note}
                       </div>
                     )}
+                    <RequestSignatureViewer
+                      requestId={req.id}
+                      consentAt={req.signature_consent_at}
+                      labels={labels.requesterSignature}
+                      locale={locale}
+                    />
+                    <RequestSignatureViewer
+                      requestId={req.id}
+                      consentAt={req.approver_signature_consent_at}
+                      labels={labels.approverSignature}
+                      locale={locale}
+                      kind="approver"
+                    />
                   </div>
 
                   <div className="flex flex-col items-end gap-2 shrink-0">

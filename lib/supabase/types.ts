@@ -408,6 +408,8 @@ export type Database = {
       }
       leave_requests: {
         Row: {
+          approver_signature_consent_at: string | null
+          approver_signature_data: string | null
           created_at: string
           company_id: string
           day_part: Database["public"]["Enums"]["day_part"]
@@ -424,14 +426,19 @@ export type Database = {
           reason: string | null
           replacement_id: string | null
           requested_minutes: number
+          unpaid_minutes: number
           serial_seq: number
           serial_year: number
+          signature_consent_at: string | null
+          signature_data: string | null
           start_date: string
           start_time: string | null
           status: Database["public"]["Enums"]["leave_status"]
           unit: Database["public"]["Enums"]["leave_unit"]
         }
         Insert: {
+          approver_signature_consent_at?: string | null
+          approver_signature_data?: string | null
           created_at?: string
           company_id: string
           day_part?: Database["public"]["Enums"]["day_part"]
@@ -448,14 +455,19 @@ export type Database = {
           reason?: string | null
           replacement_id?: string | null
           requested_minutes: number
+          unpaid_minutes?: number
           serial_seq: number
           serial_year: number
+          signature_consent_at?: string | null
+          signature_data?: string | null
           start_date: string
           start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
           unit?: Database["public"]["Enums"]["leave_unit"]
         }
         Update: {
+          approver_signature_consent_at?: string | null
+          approver_signature_data?: string | null
           created_at?: string
           day_part?: Database["public"]["Enums"]["day_part"]
           decided_at?: string | null
@@ -472,8 +484,11 @@ export type Database = {
           company_id?: string
           replacement_id?: string | null
           requested_minutes?: number
+          unpaid_minutes?: number
           serial_seq?: number
           serial_year?: number
+          signature_consent_at?: string | null
+          signature_data?: string | null
           start_date?: string
           start_time?: string | null
           status?: Database["public"]["Enums"]["leave_status"]
@@ -813,7 +828,14 @@ export type Database = {
         Returns: number
       }
       accrue_my_leave: { Args: never; Returns: undefined }
-      approve_leave_request: { Args: { p_id: string }; Returns: undefined }
+      approve_leave_request: {
+        Args: {
+          p_id: string
+          p_signature_authorized: boolean
+          p_signature_data: string
+        }
+        Returns: undefined
+      }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
       compute_requested_minutes: {
         Args: {
@@ -888,7 +910,20 @@ export type Database = {
           p_description?: string
           p_end_time: string
           p_location: string
+          p_signature_authorized: boolean
+          p_signature_data: string
           p_start_time: string
+        }
+        Returns: string
+      }
+      submit_daily_errand_request: {
+        Args: {
+          p_description?: string
+          p_end: string
+          p_location: string
+          p_signature_authorized: boolean
+          p_signature_data: string
+          p_start: string
         }
         Returns: string
       }
@@ -899,6 +934,8 @@ export type Database = {
           p_leave_type_id: string
           p_reason?: string
           p_replacement_id?: string
+          p_signature_authorized: boolean
+          p_signature_data: string
           p_start_time: string
         }
         Returns: string
@@ -933,6 +970,8 @@ export type Database = {
           p_leave_type_id: string
           p_reason?: string
           p_replacement_id?: string
+          p_signature_authorized: boolean
+          p_signature_data: string
           p_start: string
         }
         Returns: string

@@ -10,6 +10,7 @@ import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import { leavePeriodsOverlap } from '@/lib/leave/hourly';
 import { todayInAppTz } from '@/lib/appDate';
+import { isValidSignatureData } from '@/lib/leave/signature';
 
 type DayPart = Database['public']['Enums']['day_part'];
 
@@ -50,6 +51,8 @@ export type SubmitRequestInput = {
   reason?: string;
   /** Optional cover; null/undefined is valid. */
   replacementId?: string | null;
+  signatureData: string;
+  signatureAuthorized: boolean;
 };
 
 export type SubmitRequestResult =
@@ -62,6 +65,9 @@ export async function submitRequest(
   const { supabase, user } = await getCallerContext();
 
   if (!user) return dbErr('not authenticated');
+  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
+  if (!input.signatureData) return dbErr('signature is required');
+  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
 
   // Accrue first: a worker whose newly-earned day makes this request affordable
   // must not be refused by a stale balance.
@@ -75,6 +81,8 @@ export async function submitRequest(
     p_day_part: input.dayPart,
     p_reason: input.reason ?? undefined,
     p_replacement_id: input.replacementId ?? undefined,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
   });
 
   if (error) {
@@ -127,6 +135,8 @@ export type SubmitHourlyInput = {
   startTime: string;
   endTime: string;
   reason?: string;
+  signatureData: string;
+  signatureAuthorized: boolean;
 };
 
 export async function submitHourlyRequest(
@@ -134,6 +144,9 @@ export async function submitHourlyRequest(
 ): Promise<SubmitRequestResult> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
+  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
+  if (!input.signatureData) return dbErr('signature is required');
+  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
 
   // Same reason as the daily path: a freshly-accrued hour must be spendable.
   const accrualError = await accrueBeforeRead(supabase);
@@ -146,6 +159,8 @@ export async function submitHourlyRequest(
     p_end_time: input.endTime,
     p_reason: input.reason ?? undefined,
     p_replacement_id: input.replacementId ?? undefined,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
   });
 
   if (error) return dbErr(error.message);
@@ -168,6 +183,8 @@ export type SubmitErrandInput = {
   location: string;
   /** شرح ماموریت — optional; stored in `reason`, which is FR-25-private. */
   description?: string;
+  signatureData: string;
+  signatureAuthorized: boolean;
 };
 
 export async function submitErrandRequest(
@@ -175,6 +192,9 @@ export async function submitErrandRequest(
 ): Promise<SubmitRequestResult> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
+  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
+  if (!input.signatureData) return dbErr('signature is required');
+  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
 
   // No accrual pass here, unlike the two leave paths: an errand is work. It
   // spends no balance, so there is nothing a freshly-accrued hour could unlock.
@@ -184,6 +204,48 @@ export async function submitErrandRequest(
     p_end_time: input.endTime,
     p_location: input.location,
     p_description: input.description ?? undefined,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
+  });
+
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, requestId: data as string };
+}
+
+// ---------------------------------------------------------------------------
+// submitDailyErrandRequest (self) — full-day work errand / travel range.
+// ---------------------------------------------------------------------------
+
+export type SubmitDailyErrandInput = {
+  /** Gregorian YYYY-MM-DD values; the UI displays Persian dates. */
+  start: string;
+  end: string;
+  /** محل ماموریت — required. */
+  location: string;
+  /** شرح ماموریت — optional and FR-25-private. */
+  description?: string;
+  signatureData: string;
+  signatureAuthorized: boolean;
+};
+
+export async function submitDailyErrandRequest(
+  input: SubmitDailyErrandInput
+): Promise<SubmitRequestResult> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
+  if (!input.signatureData) return dbErr('signature is required');
+  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+
+  const { data, error } = await supabase.rpc('submit_daily_errand_request', {
+    p_start: input.start,
+    p_end: input.end,
+    p_location: input.location,
+    p_description: input.description ?? undefined,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
   });
 
   if (error) return dbErr(error.message);
@@ -365,6 +427,8 @@ export type LeaveRequestWithType = {
   start_time: string | null;
   end_time: string | null;
   requested_minutes: number;
+  /** Portion not covered by paid leave; finalized when approved. */
+  unpaid_minutes: number;
   replacement_name: string | null;
   serial_year: number;
   serial_seq: number;
@@ -372,6 +436,10 @@ export type LeaveRequestWithType = {
   reason: string | null;
   /** Set by the decider on reject; the requester reads it on their own row. */
   decision_note: string | null;
+  /** Database-recorded proof that this request carries a requester signature. */
+  signature_consent_at: string | null;
+  /** Database-recorded proof that an authorized approver signed the approval. */
+  approver_signature_consent_at: string | null;
   created_at: string;
   leave_types: {
     id: string;
@@ -391,7 +459,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, status, reason, decision_note, created_at,
+      `id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, unpaid_minutes, serial_year, serial_seq, status, reason, decision_note, signature_consent_at, approver_signature_consent_at, created_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
@@ -474,6 +542,7 @@ export type LeaveType = {
   /** Gates the hourly screen's type list; the SQL re-checks it on submit. */
   allow_hourly: boolean;
   affects_balance: boolean;
+  is_paid: boolean;
   color: string | null;
 };
 
@@ -487,7 +556,7 @@ export async function getActiveLeaveTypes(): Promise<{
 
   const { data, error } = await supabase
     .from('leave_types')
-    .select('id, name_fa, name_en, allow_half_day, allow_hourly, affects_balance, color')
+    .select('id, name_fa, name_en, allow_half_day, allow_hourly, affects_balance, is_paid, color')
     .eq('company_id', companyId)
     .eq('active', true)
     .order('name_fa');
@@ -583,15 +652,30 @@ export async function getAllEmployees(): Promise<{
 
 export type DecisionResult = { ok: true } | { ok: false; error: string };
 
+export type ApproveRequestInput = {
+  signatureData: string;
+  signatureAuthorized: boolean;
+};
+
 /**
  * Approve a pending request. The SQL fn enforces is_manager_of(employee)||admin,
  * flips the status atomically, and debits the ledger for balance-affecting types.
  */
-export async function approveRequest(requestId: string): Promise<DecisionResult> {
+export async function approveRequest(
+  requestId: string,
+  input: ApproveRequestInput
+): Promise<DecisionResult> {
   const { supabase, user } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
+  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
+  if (!input.signatureData) return dbErr('signature is required');
+  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
 
-  const { error } = await supabase.rpc('approve_leave_request', { p_id: requestId });
+  const { error } = await supabase.rpc('approve_leave_request', {
+    p_id: requestId,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
+  });
   if (error) return dbErr(error.message);
   invalidateAppCache();
   return { ok: true };
@@ -643,6 +727,7 @@ export type PendingApproval = {
   replacement_conflict: boolean;
   serial_year: number;
   serial_seq: number;
+  signature_consent_at: string | null;
 };
 
 /**
@@ -659,7 +744,7 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id,
+      `id, employee_id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id, signature_consent_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        profiles!leave_requests_employee_id_fkey(full_name, manager_id),
        leave_types(name_fa, name_en)`
@@ -685,6 +770,7 @@ export async function getPendingApprovals(): Promise<
     replacement: { full_name: string } | null;
     serial_year: number;
     serial_seq: number;
+    signature_consent_at: string | null;
     profiles: { full_name: string; manager_id: string | null } | null;
     leave_types: { name_fa: string; name_en: string | null } | null;
   };
@@ -708,6 +794,7 @@ export async function getPendingApprovals(): Promise<
     replacement_name: r.replacement?.full_name ?? null,
     serial_year: r.serial_year,
     serial_seq: r.serial_seq,
+    signature_consent_at: r.signature_consent_at ?? null,
     // Filled below: a cover can book leave between submission and approval, and
     // the manager should see that before deciding (spec §2.1). approve_leave_request
     // also refuses it, so this is a heads-up rather than the guard.
@@ -753,6 +840,111 @@ export async function getPendingApprovals(): Promise<
   }
 
   return { ok: true, requests: scoped };
+}
+
+// ---------------------------------------------------------------------------
+// Requester signature — private base-row data, fetched only on demand.
+// ---------------------------------------------------------------------------
+
+export async function getRequestSignature(requestId: string): Promise<
+  | { ok: true; signatureData: string; consentAt: string }
+  | { ok: false; error: string }
+> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select('signature_data, signature_consent_at')
+    .eq('id', requestId)
+    .maybeSingle();
+
+  if (error) return dbErr(error.message);
+  if (
+    !data?.signature_consent_at ||
+    !isValidSignatureData(data.signature_data)
+  ) {
+    return dbErr('request signature not found');
+  }
+
+  return {
+    ok: true,
+    signatureData: data.signature_data,
+    consentAt: data.signature_consent_at,
+  };
+}
+
+/** Private approver evidence, with the same base-row RLS boundary as the request signature. */
+export async function getApproverSignature(requestId: string): Promise<
+  | { ok: true; signatureData: string; consentAt: string }
+  | { ok: false; error: string }
+> {
+  const { supabase, user } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select('approver_signature_data, approver_signature_consent_at')
+    .eq('id', requestId)
+    .maybeSingle();
+
+  if (error) return dbErr(error.message);
+  if (
+    !data?.approver_signature_consent_at ||
+    !isValidSignatureData(data.approver_signature_data)
+  ) {
+    return dbErr('request signature not found');
+  }
+
+  return {
+    ok: true,
+    signatureData: data.approver_signature_data,
+    consentAt: data.approver_signature_consent_at,
+  };
+}
+
+export type VisibleSignatureConsent = {
+  requestId: string;
+  requesterConsentAt: string | null;
+  approverConsentAt: string | null;
+};
+
+/**
+ * Tiny calendar metadata query. RLS returns direct reports for managers and all
+ * rows for security/admin; the PNG itself remains lazy and is never serialized
+ * with the calendar page.
+ */
+export async function getVisibleSignatureConsents(
+  rangeStart: string,
+  rangeEnd: string
+): Promise<
+  | { ok: true; signatures: VisibleSignatureConsent[] }
+  | { ok: false; error: string }
+> {
+  const { supabase, user, roles } = await getCallerContext();
+  if (!user) return dbErr('not authenticated');
+  if (!roles.some((role) => ['admin', 'manager', 'security'].includes(role))) {
+    return { ok: true, signatures: [] };
+  }
+
+  const { data, error } = await supabase
+    .from('leave_requests')
+    .select('id, signature_consent_at, approver_signature_consent_at')
+    .lte('start_date', rangeEnd)
+    .gte('end_date', rangeStart)
+    .in('status', ['pending', 'approved'])
+    .not('signature_consent_at', 'is', null);
+
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    signatures: (data ?? []).map((row) => ({
+      requestId: row.id,
+      requesterConsentAt: row.signature_consent_at,
+      approverConsentAt: row.approver_signature_consent_at,
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

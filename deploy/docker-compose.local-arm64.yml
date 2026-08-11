@@ -1,0 +1,31 @@
+# Native Apple-Silicon development overlay.
+#
+# Use this only on an ARM64 Mac, together with the production-shaped base file:
+#   docker compose -f deploy/docker-compose.yml \
+#     -f deploy/docker-compose.local-arm64.yml up -d
+#
+# The dedicated local tags are intentional. deploy/package.sh and
+# deploy/release.sh build/pull linux/amd64 artifacts for the client's server;
+# those operations must never replace the images used by this local stack.
+services:
+  db:
+    image: supabase/postgres:15.8.1.085-local-arm64
+    platform: linux/arm64
+    ports:
+      - '127.0.0.1:5433:5432'
+
+  auth:
+    image: supabase/gotrue:v2.170.0-local-arm64
+    platform: linux/arm64
+
+  rest:
+    image: postgrest/postgrest:v12.2.3-local-arm64
+    platform: linux/arm64
+
+  app:
+    image: bj-erp-app:local-arm64
+    platform: linux/arm64
+
+  gateway:
+    image: caddy:2.8.4-alpine-local-arm64
+    platform: linux/arm64

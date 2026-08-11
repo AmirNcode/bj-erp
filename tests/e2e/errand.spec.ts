@@ -6,8 +6,11 @@ import {
   logout,
   createEmployee,
   allocate,
+  fillDailyErrandDateRange,
   fillPicker,
   jalali2DayRange,
+  signApproval,
+  signRequest,
 } from './_helpers';
 
 /**
@@ -97,6 +100,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   await page.selectOption('[data-testid="errand-to"]', '11:00');
   await page.fill('[data-testid="errand-location"]', LOCATION);
   await page.fill('[data-testid="errand-description"]', DESCRIPTION);
+  await signRequest(page, 'errand');
   await page.click('[data-testid="errand-submit"]');
   await expect(page.locator('[data-testid="errand-success"]')).toBeVisible({ timeout: 20_000 });
 
@@ -126,6 +130,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   await expect(page.locator('[data-testid^="errand-location-"]').first()).toContainText(LOCATION);
 
   await approve.first().click();
+  await signApproval(page);
   await page.locator('[data-testid^="approve-confirm-"]').first().click();
 
   // Assert the OUTCOME, not the toast: sonner auto-dismisses, so waiting on it
@@ -137,4 +142,57 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const after = await openEmployee();
   expect(after).toBeCloseTo(before, 2);
+});
+
+test('daily work errand: date range submission and signed manager approval', async ({ page }) => {
+  test.setTimeout(300_000);
+
+  await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+  const { code: mgrCode, password: mgrPw } = await createEmployee(page, {
+    name: 'Daily Errand Manager',
+    roles: ['manager'],
+  });
+  const { code, password } = await createEmployee(page, {
+    name: 'Daily Errand Probe',
+    roles: ['employee'],
+  });
+  await setManager(page, code, mgrCode);
+  await logout(page);
+
+  await login(page, code, password);
+  await page.goto('/request');
+  await expect(page.locator('[data-testid="request-tab-dailyErrand"]')).toContainText(
+    /Daily Work Errands|ماموریت روزانه/
+  );
+  await expect(page.locator('[data-testid="request-tab-errand"]')).toContainText(
+    /Hourly Work Errand|ماموریت ساعتی/
+  );
+  await page.locator('[data-testid="request-tab-dailyErrand"]').click();
+  await expect(page).toHaveURL(/\/request\/daily-errand$/);
+  await expect(page.locator('[data-testid="daily-errand-form"]')).toBeVisible();
+
+  await fillDailyErrandDateRange(page, jalali2DayRange(14));
+  await page.fill('[data-testid="daily-errand-location"]', 'Tehran head office');
+  await page.fill('[data-testid="daily-errand-description"]', 'Supplier planning meeting');
+  await expect(page.locator('[data-testid="daily-errand-preview"]')).toContainText(/[2۲]/);
+  await signRequest(page, 'daily-errand');
+  await page.click('[data-testid="daily-errand-submit"]');
+  await expect(page.locator('[data-testid="daily-errand-success"]')).toBeVisible({
+    timeout: 20_000,
+  });
+
+  await page.goto('/request');
+  const row = page.locator('[data-testid^="request-row-"]').first();
+  await expect(row).toContainText('Tehran head office');
+  await expect(row).toContainText(/[2۲]/);
+  await logout(page);
+
+  await login(page, mgrCode, mgrPw);
+  await page.goto('/manage/approvals');
+  const approval = page.locator('[data-testid^="approval-row-"]').first();
+  await expect(approval).toContainText('Tehran head office', { timeout: 20_000 });
+  await approval.locator('[data-testid^="approve-btn-"]').click();
+  await signApproval(page);
+  await page.locator('[data-testid^="approve-confirm-"]').first().click();
+  await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 20_000 });
 });

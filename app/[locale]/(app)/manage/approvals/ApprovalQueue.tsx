@@ -8,11 +8,17 @@ import { approveRequest, rejectRequest } from '@/lib/actions/leave';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  RequestSignatureFields,
+  RequestSignatureViewer,
+  type SignatureLabels,
+} from '../../request/_components/RequestSignature';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +53,8 @@ type Labels = {
   minutes: string;
   and: string;
   dayPartLabels: { full: string; am: string; pm: string };
+  requesterSignature: SignatureLabels;
+  approverSignature: SignatureLabels;
 };
 
 type Props = {
@@ -56,6 +64,81 @@ type Props = {
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
 };
+
+function ApproveDialog({
+  id,
+  labels,
+  disabled,
+  onApprove,
+}: {
+  id: string;
+  labels: Labels;
+  disabled: boolean;
+  onApprove: (signatureData: string, signatureAuthorized: boolean) => void;
+}) {
+  const tc = useTranslations('common');
+  const [signatureData, setSignatureData] = useState('');
+  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
+  const [validationError, setValidationError] = useState('');
+
+  return (
+    <AlertDialog
+      onOpenChange={(open) => {
+        if (open) {
+          setSignatureData('');
+          setSignatureAuthorized(false);
+          setValidationError('');
+        }
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button size="sm" disabled={disabled} data-testid={`approve-btn-${id}`}>
+          {labels.approve}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent size="default">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
+          <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <RequestSignatureFields
+          idPrefix={`approval-${id}`}
+          value={signatureData}
+          onChange={setSignatureData}
+          authorized={signatureAuthorized}
+          onAuthorizedChange={setSignatureAuthorized}
+          labels={labels.approverSignature}
+        />
+        {validationError && (
+          <p className="text-sm text-destructive" role="alert">
+            {validationError}
+          </p>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(event) => {
+              if (!signatureData) {
+                event.preventDefault();
+                setValidationError(labels.approverSignature.validationSignature);
+                return;
+              }
+              if (!signatureAuthorized) {
+                event.preventDefault();
+                setValidationError(labels.approverSignature.validationAuthorization);
+                return;
+              }
+              onApprove(signatureData, signatureAuthorized);
+            }}
+            data-testid={`approve-confirm-${id}`}
+          >
+            {labels.approve}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
   const tc = useTranslations('common');
@@ -136,7 +219,8 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         <div className="text-xs text-muted-foreground mt-0.5">{typeName}</div>
                       )}
                       <div className="text-xs text-muted-foreground">
-                        {req.start_date} — {req.end_date}
+                        {formatCalendarDate(req.start_date, locale)} —{' '}
+                        {formatCalendarDate(req.end_date, locale)}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {req.unit === 'hour'
@@ -169,38 +253,25 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                           {labels.reason}: {req.reason}
                         </div>
                       )}
+                      <RequestSignatureViewer
+                        requestId={req.id}
+                        consentAt={req.signature_consent_at}
+                        labels={labels.requesterSignature}
+                        locale={locale}
+                      />
                     </div>
 
                     <div className="flex flex-col items-end gap-2 shrink-0">
-                      {/* Approve */}
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            disabled={isPending}
-                            data-testid={`approve-btn-${req.id}`}
-                          >
-                            {labels.approve}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent size="sm">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {labels.approveConfirm}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => decide(req.id, labels.approveSuccess, approveRequest)}
-                              data-testid={`approve-confirm-${req.id}`}
-                            >
-                              {labels.approve}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <ApproveDialog
+                        id={req.id}
+                        labels={labels}
+                        disabled={isPending}
+                        onApprove={(signatureData, signatureAuthorized) =>
+                          decide(req.id, labels.approveSuccess, (id) =>
+                            approveRequest(id, { signatureData, signatureAuthorized })
+                          )
+                        }
+                      />
 
                       {/* Reject */}
                       <AlertDialog>

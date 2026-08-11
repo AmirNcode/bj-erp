@@ -13,6 +13,17 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import {
+  dateObjectToGregorian,
+  gregorianToPersianDateObject,
+} from '@/lib/leave/dateConvert';
+
+// react-multi-date-picker returns a DateObject. Conversion is type-checked at
+// the storage boundary while this keeps the component API compatible.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DateObjectLike = any;
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -25,7 +36,6 @@ type Profile = {
   hire_date: string | null;
   active: boolean;
   language_pref: string;
-  calendar_pref: string;
 };
 
 const ALL_ROLES = ['admin', 'manager', 'employee', 'security'] as const;
@@ -110,6 +120,10 @@ export function EditEmployeeForm({
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(
     (empRoles as Role[]).filter((r) => ALL_ROLES.includes(r))
   );
+  const [hireDate, setHireDate] = useState<DateObjectLike | null>(() =>
+    employee.hire_date ? gregorianToPersianDateObject(employee.hire_date, locale) : null
+  );
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
   // Kept in MINUTES, the stored unit. The input renders days for the admin and
   // converts on change, so a rounded display can never produce a spurious
   // one-minute adjustment row on save.
@@ -143,7 +157,7 @@ export function EditEmployeeForm({
     // Update basic fields
     const result = await updateEmployee(employee.id, {
       full_name: (fd.get('full_name') as string).trim(),
-      hire_date: (fd.get('hire_date') as string) || null,
+      hire_date: hireDate ? dateObjectToGregorian(hireDate) : null,
       ...(isAdmin
         ? {
             department_id: (fd.get('department_id') as string) || null,
@@ -292,12 +306,27 @@ export function EditEmployeeForm({
 
             <div className="space-y-1.5">
               <Label htmlFor="hire_date">{labels.hireDate}</Label>
-              <Input
-                id="hire_date"
-                name="hire_date"
-                type="date"
-                defaultValue={employee.hire_date ?? ''}
-              />
+              <div
+                style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+                className="w-full"
+                data-testid="hire-date-picker"
+                data-calendar="jalali"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') event.preventDefault();
+                }}
+              >
+                <LazyDatePicker
+                  id="hire_date"
+                  value={hireDate}
+                  onChange={(date: DateObjectLike) => setHireDate(date ?? null)}
+                  calendar={calendar}
+                  locale={calLocale}
+                  calendarPosition={calendarPosition}
+                  inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  containerClassName="rmdp-container w-full"
+                  format="YYYY/MM/DD"
+                />
+              </div>
             </div>
 
             {isAdmin && (

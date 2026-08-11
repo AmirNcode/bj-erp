@@ -8,6 +8,8 @@ import {
   allocate,
   fillPicker,
   jalali2DayRange,
+  signApproval,
+  signRequest,
 } from './_helpers';
 
 /**
@@ -46,6 +48,7 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
     await fillPicker(page, day);
     await page.selectOption('[data-testid="hourly-from"]', from);
     await page.selectOption('[data-testid="hourly-to"]', to);
+    await signRequest(page, 'hourly');
     await page.click('[data-testid="hourly-submit"]');
   };
 
@@ -90,6 +93,7 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
 
   const approve = page.locator('[data-testid^="approve-btn-"]').first();
   await approve.click();
+  await signApproval(page);
   await page.locator('[data-testid^="approve-confirm-"]').first().click();
 
   // Assert the OUTCOME, not the toast: sonner auto-dismisses, so waiting on it is

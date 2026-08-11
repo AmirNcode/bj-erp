@@ -1,5 +1,9 @@
 # DEPLOY — Demo (Vercel) & Production (self-host)
 
+For local Docker and the offline client server, start with
+[`docs/DEPLOY-ASSISTANT.md`](DEPLOY-ASSISTANT.md) and `./deploy/bj-deploy`. It is the guarded,
+resumable path for restart, app-only redeploy, database-preserving update, and fresh installation.
+
 How to deploy the HR / Time-Off app. The **demo** runs on Vercel + Supabase Cloud; **production**
 runs on the company's own servers (self-hosted Supabase + Next.js). The same code targets both —
 only environment variables change (NFR-4).
@@ -55,14 +59,14 @@ Password for all seeded users: **`Demo!2026`** (admin: `Admin!2026`).
 | Code | Name | Role |
 |---|---|---|
 | `admin` | (owner) | admin |
-| `m-prod` | Reza Karimi | manager (Production Line A) |
-| `m-qc` | Maryam Hosseini | manager (Quality Control) |
-| `m-maint` | Mehdi Sadeghi | manager (Maintenance) |
-| `e-prod-1` / `e-prod-2` | Ali Rezaei / Hossein Ahmadi | employee (Production Line A) |
-| `e-qc-1` / `e-qc-2` | Zahra Mohammadi / Fatemeh Akbari | employee (Quality Control) |
-| `e-maint-1` / `e-maint-2` | Hassan Jafari / Saeed Bagheri | employee (Maintenance) |
-| `s-sup` | Naser Ebrahimi | security (supervisor) |
-| `g-01` / `g-02` | Kazem Moradi / Javad Rostami | security (guard) |
+| `1001` | Reza Karimi | manager (Production Line A) |
+| `1002` | Maryam Hosseini | manager (Quality Control) |
+| `1003` | Mehdi Sadeghi | manager (Maintenance) |
+| `2001` / `2002` | Ali Rezaei / Hossein Ahmadi | employee (Production Line A) |
+| `2101` / `2102` | Zahra Mohammadi / Fatemeh Akbari | employee (Quality Control) |
+| `2201` / `2202` | Hassan Jafari / Saeed Bagheri | employee (Maintenance) |
+| `1004` | Naser Ebrahimi | security (supervisor) |
+| `3001` / `3002` | Kazem Moradi / Javad Rostami | security (guard) |
 
 ## Production (self-host) — the installer package
 
@@ -81,14 +85,18 @@ tar xzf bj-erp-installer-<v>.tar.gz && cd bj-erp-installer && sudo ./install.sh
   self-signed internal CA; phones trust the exported `bj-root-ca.crt` once).
 - `install.sh` generates all secrets, applies every `supabase/migrations/*` + `seed.sql`,
   bootstraps the first admin (`deploy/sql/bootstrap_admin.sql`), and enables the roles-in-JWT
-  auth hook. Secrets are preserved on a re-run — but **the migrations are not idempotent**
-  (measured 2026-07-31: 9 of 38 fail against a populated database, starting at file #1), so a
-  re-run over an existing database aborts on the first migration. It aborts safely and changes
-  nothing. A **fresh** install applies all 38 plus the seed cleanly. See `deploy/RUNBOOK.md`.
+  auth hook. Secrets are preserved on a re-run. The private migration ledger adopts the verified
+  original 38-file baseline, checks immutable file hashes, and applies only pending migrations;
+  each file and ledger row commit atomically. Unknown partial histories stop instead of replaying
+  unsafe historical SQL. A **fresh** install applies every file plus the seed. See
+  `deploy/RUNBOOK.md`.
 - The app image bakes placeholder env values; the real URL/anon key are substituted at container
   start (`deploy/docker-entrypoint.sh`). Server-side code talks to the API over the internal
   plain-HTTP gateway listener (`SUPABASE_URL`), browsers over public HTTPS.
 - Ops (backup/restore/update/logs), requirements, and the phone-certificate step live in
   [`deploy/RUNBOOK.md`](../deploy/RUNBOOK.md) (English + Farsi).
+- For developer-machine testing against an existing local Docker database, use
+  [`docs/LOCAL_REDEPLOY.md`](LOCAL_REDEPLOY.md). It backs up and validates the database, applies only
+  new migrations, and recreates only the app container without deleting the existing data volume.
 - After install: create employees, enter the official Iranian holidays via `/manage/settings`,
   allocate balances. Company/departments/leave types come from `seed.sql`.

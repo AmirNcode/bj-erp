@@ -6,37 +6,21 @@ import { updateMyPrefs } from '@/lib/actions/profile';
 import { nativeSelectClass } from '@/lib/native-select';
 
 type Labels = {
-  calendar: string;
   language: string;
-  jalali: string;
-  gregorian: string;
   langFa: string;
   langEn: string;
-  saved: string;
-  errorLabel: string;
 };
 
 type Props = {
-  current: { calendarPref: string; languagePref: string };
+  current: { languagePref: string };
   labels: Labels;
 };
 
 export function SettingsForm({ current, labels }: Props) {
   const router = useRouter();
   const pathname = usePathname();
-  const [calendar, setCalendar] = useState(current.calendarPref);
   const [language, setLanguage] = useState(current.languagePref);
-  const [msg, setMsg] = useState('');
   const [isPending, startTransition] = useTransition();
-
-  const onCalendar = (val: string) => {
-    setCalendar(val);
-    setMsg('');
-    startTransition(async () => {
-      const res = await updateMyPrefs({ calendarPref: val as 'jalali' | 'gregorian' });
-      setMsg(res.ok ? labels.saved : res.error);
-    });
-  };
 
   const onLanguage = (val: string) => {
     setLanguage(val);
@@ -49,29 +33,6 @@ export function SettingsForm({ current, labels }: Props) {
 
   return (
     <div className="space-y-5">
-      {msg && (
-        <p role="status" className="rounded-lg bg-success-foreground border border-success/20 px-4 py-2 text-sm text-success">
-          {msg}
-        </p>
-      )}
-
-      <div>
-        <label htmlFor="settings-calendar" className="block text-sm font-medium mb-1">
-          {labels.calendar}
-        </label>
-        <select
-          id="settings-calendar"
-          data-testid="settings-calendar"
-          value={calendar}
-          onChange={(e) => onCalendar(e.target.value)}
-          disabled={isPending}
-          className={nativeSelectClass}
-        >
-          <option value="jalali">{labels.jalali}</option>
-          <option value="gregorian">{labels.gregorian}</option>
-        </select>
-      </div>
-
       <div>
         <label htmlFor="settings-language" className="block text-sm font-medium mb-1">
           {labels.language}

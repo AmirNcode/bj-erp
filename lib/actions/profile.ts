@@ -9,22 +9,17 @@ import { dbErr } from '@/lib/errors/db-error';
 export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
 
 /**
- * Self-update the caller's UI preferences. Only `calendar_pref` / `language_pref`
- * are written — both are within the self-update column subset allowed by the
- * profiles RLS policy + the profiles_enforce_update_scope trigger (migration 0007).
+ * Self-update the caller's language preference. Persian is the only calendar,
+ * so `calendar_pref` is deliberately no longer accepted by the application.
  */
 export async function updateMyPrefs(input: {
-  calendarPref?: 'jalali' | 'gregorian';
   languagePref?: 'fa' | 'en';
 }): Promise<UpdatePrefsResult> {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) return dbErr('not authenticated');
 
-  const patch: { calendar_pref?: string; language_pref?: string } = {};
-  if (input.calendarPref === 'jalali' || input.calendarPref === 'gregorian') {
-    patch.calendar_pref = input.calendarPref;
-  }
+  const patch: { language_pref?: string } = {};
   if (input.languagePref === 'fa' || input.languagePref === 'en') {
     patch.language_pref = input.languagePref;
   }
@@ -39,7 +34,7 @@ export async function updateMyPrefs(input: {
     .select('id');
   if (error) return dbErr(error.message);
   if (!data || data.length !== 1) return dbErr('profile was not updated');
-  // Prefs (calendar/language) change how every page renders — drop all of it.
+  // Language changes how every page renders — drop all cached app data.
   invalidateAppCache();
   return { ok: true };
 }

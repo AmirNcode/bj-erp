@@ -10,6 +10,103 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Guided local and production deployment assistant (2026-08-06)
+
+- Added `./deploy/bj-deploy`, an interactive and command-line assistant for local ARM64 and client
+  AMD64 doctor/status/logs, restart, app-only redeploy, safe update, fresh database, factory reset,
+  and reconnecting to interrupted production monitoring.
+- Production work now builds on the Mac, verifies AMD64, transfers checksummed offline artifacts by
+  SSH/rsync, and runs as a detached server job. A dropped Mac terminal or SSH session no longer kills
+  the server operation; the printed run ID can be resumed.
+- Destructive production resets cannot start until a custom-format database backup passes
+  `pg_restore -l`, is downloaded to the Mac, and matches the server SHA-256. Exact project-labeled
+  volumes and a run-specific typed phrase guard deletion; database reset preserves the Caddy CA,
+  while factory reset explicitly replaces it.
+- Added private immutable migration tracking (`bj_deploy.schema_migrations`) by filename/checksum,
+  including a verified adoption path for the original 38-migration client baseline. Interrupted
+  adoption of known later migrations now resumes only after complete schema fingerprints prove the
+  SQL is already installed, preventing an existing function from being replayed. App-only deploys
+  are refused when the source/database migration manifests differ.
+- Hardened deployment resume behavior: every new migration and ledger row now commit atomically,
+  detached runs use immutable per-run migration/seed inputs, and the server re-verifies the source
+  manifest before app, update, or reset mutations. Installed manifests and reset backups remain
+  privately readable by the SSH transfer owner.
+- Added `/api/health` so deployment health no longer mistakes Next's normal HTTP 307 locale redirect
+  for failure. Checks independently prove database, app, Auth, and image architecture from the
+  target machine.
+- Added dedicated `*-client-amd64` service tags/Compose overlay alongside the native ARM64 local
+  overlay, removed secrets from deployment command arguments, made first-admin creation reliable
+  after a DB wipe, and documented the complete workflow in `docs/DEPLOY-ASSISTANT.md`.
+- Server host/user/port overrides now also select the matching SSH destination unless an explicit
+  `BJ_SSH_DEST` alias is supplied, so diagnostics and the actual connection cannot silently diverge.
+- The local demo/E2E seeder now calls the current employee-creation RPC and uses numeric personnel
+  numbers (`1001`–`3002`) as login codes, matching the database rule introduced in July.
+- No client server was contacted or modified while implementing this assistant. Its live production
+  execution remains an explicit operator action after these changes are committed on `main`.
+
+### Daily work errands and paid-leave overage (2026-08-05)
+
+- Requests now has four localized forms. **Daily Work Errands** accepts separate Persian-calendar
+  Start/End dates, a required location, optional description, requester signature, and consent; the
+  former Errands tab is now labelled **Hourly Work Errand**.
+- Daily errands are company work rather than leave: they may include weekends/holidays, use the
+  existing errand approval/tracking/privacy behavior, and never debit a leave balance.
+- Paid daily and hourly leave previews now show **Requesting**, the projected **Remaining Balance**,
+  and conditional **Unpaid Time Off**. Durations use configured minutes, with 8 hours per day as the
+  default, so day/hour remainders stay exact.
+- A paid request may exceed the available balance. Signed approval recomputes the split under the
+  existing ledger lock, debits only available paid minutes, leaves the paid balance at zero, and
+  records the excess in `leave_requests.unpaid_minutes`. Cancelling restores only the amount that
+  was actually debited.
+- The migration was exercised and applied only to the preserved native-ARM64 local database. The
+  client's AMD64 production server was not contacted or changed.
+
+### Native ARM64 local Docker workflow (2026-08-05)
+
+- Local Apple-Silicon testing now uses `deploy/docker-compose.local-arm64.yml`, which pins every
+  service to `linux/arm64` and uses dedicated `*-local-arm64` tags. This prevents an AMD64 image
+  loaded by the client packaging workflow from being emulated by the local stack.
+- `deploy/prepare-local-arm64.sh` pulls the ARM64 variants of the existing pinned Postgres, GoTrue,
+  PostgREST, and Caddy versions, builds the app for ARM64, and verifies every architecture without
+  touching containers or volumes.
+- The production path is unchanged: `deploy/package.sh` and `deploy/release.sh` continue to build
+  and verify `linux/amd64` artifacts for the client's Linux server.
+- The local stack was converted by recreating containers against the existing `bj-erp_db-data`
+  volume after a verified backup. All eight business-table counts matched before and after, and the
+  app and Auth health endpoints returned 200.
+
+### Signed approvals and Persian-only calendars (2026-08-05)
+
+- **Approvals now carry the manager/admin's own signature.** Approving from either the queue or the
+  team calendar opens the same mouse/touch signature pad used by requesters and requires an explicit
+  digital-signature authorization checkbox. Rejecting a request remains unsigned.
+- The signed approval RPC commits the decision, approver identity, signature, database consent
+  timestamp, balance consumption, and audit event atomically. The former unsigned approval RPC is
+  removed, including for admin overrides. Historical approved rows remain valid without evidence.
+- Cancelling a signed, not-yet-started approval preserves both requester and approver evidence while
+  reversing only its paid ledger portion; the signature-shape constraint permits that retained proof.
+- Authorized users can open requester and approver signatures separately; teammate calendar reads
+  receive neither image nor consent metadata.
+- **The application is now Persian-calendar only.** Gregorian was removed from Profile settings and
+  all request, employee, holiday, allocation, home, approval, and calendar surfaces display or pick
+  Jalali dates. Stored PostgreSQL dates remain Gregorian ISO at the database boundary. Existing
+  profile preferences are normalized to `jalali` and constrained against future drift.
+
+### Daily date fields and requester signatures (2026-08-05)
+
+- **Daily leave now has separate Start date and End date fields.** Both use the Persian calendar,
+  End date cannot precede Start date, and the hourly leave and errand
+  forms remain single-date.
+- **Every new request now requires a fresh drawn signature and explicit authorization.** The shared
+  canvas works with a mouse, stylus, or touch; includes Clear; and resets after a successful daily,
+  hourly, or errand submission.
+- **Signature evidence is permanent and private.** Postgres stores a bounded PNG and records the
+  consent time itself in the same transaction as request creation. The requester, direct manager,
+  security, and admin can open it on demand; request lists never carry the image, and teammates'
+  calendar view exposes neither the image nor its metadata.
+- Historical requests remain valid without signatures. This implements the requester's evidence
+  only; the separate multi-step manager/security/HR paper-form signature workflow remains deferred.
+
 ### Header, request, and employee-form UI polish (2026-08-04)
 
 - **The Updated control now has one permanent home in the app header.** It no longer repeats above

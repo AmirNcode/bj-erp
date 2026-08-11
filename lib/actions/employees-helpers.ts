@@ -19,7 +19,6 @@ export function allowedProfileFields(isAdmin: boolean): string[] {
       'hire_date',
       'active',
       'language_pref',
-      'calendar_pref',
     ];
   }
   return ['full_name', 'hire_date'];

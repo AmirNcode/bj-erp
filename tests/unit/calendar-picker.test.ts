@@ -3,37 +3,26 @@ import { describe, expect, it } from 'vitest';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import persian_en from 'react-date-object/locales/persian_en';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 
 describe('calendarPickerConfig', () => {
-  it('defaults missing preferences to a Persian calendar and Farsi locale', () => {
-    const config = calendarPickerConfig(undefined, 'fa');
+  it('uses a Persian calendar and Farsi locale for the Farsi interface', () => {
+    const config = calendarPickerConfig('fa');
 
-    expect(config.isJalali).toBe(true);
     expect(config.calendar).toBe(persian);
     expect(config.calLocale).toBe(persian_fa);
     expect(config.calendarPosition).toBe('bottom-right');
   });
 
   it('keeps the Persian calendar when the interface language is English', () => {
-    const config = calendarPickerConfig('jalali', 'en');
+    const config = calendarPickerConfig('en');
 
     expect(config.calendar).toBe(persian);
     expect(config.calLocale).toBe(persian_en);
     expect(config.calendarPosition).toBe('bottom-left');
   });
 
-  it('uses Gregorian only when the saved preference explicitly requests it', () => {
-    const config = calendarPickerConfig('gregorian', 'en');
-
-    expect(config.isJalali).toBe(false);
-    expect(config.calendar).toBe(gregorian);
-    expect(config.calLocale).toBe(gregorian_en);
-  });
-
-  it('wires the employee hire-date picker to the saved preference with a Jalali default', () => {
+  it('wires the employee hire-date picker permanently to Jalali', () => {
     const pageSource = readFileSync(
       'app/[locale]/(app)/manage/employees/new/page.tsx',
       'utf8'
@@ -43,8 +32,9 @@ describe('calendarPickerConfig', () => {
       'utf8'
     );
 
-    expect(pageSource).toContain("calendarPref={callerProfile?.calendar_pref ?? 'jalali'}");
+    expect(pageSource).not.toContain('calendarPref');
     expect(formSource).toContain('data-testid="hire-date-picker"');
+    expect(formSource).toContain('data-calendar="jalali"');
     expect(formSource).toContain('dateObjectToGregorian(hireDate)');
   });
 });

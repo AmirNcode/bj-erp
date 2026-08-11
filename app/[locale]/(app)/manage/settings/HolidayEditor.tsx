@@ -4,11 +4,9 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
-import persian from 'react-date-object/calendars/persian';
-import persian_fa from 'react-date-object/locales/persian_fa';
-import gregorian from 'react-date-object/calendars/gregorian';
-import gregorian_en from 'react-date-object/locales/gregorian_en';
-import { dateObjectToGregorian, gregorianToJalali } from '@/lib/leave/dateConvert';
+import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { upsertHoliday, deleteHoliday, getCompanyHolidays, type Holiday } from '@/lib/actions/settings';
 import { Button } from '@/components/ui/button';
 import {
@@ -42,15 +40,15 @@ type DateObjectLike = any;
 
 export function HolidayEditor({
   initial,
-  calendarPref,
+  locale,
   labels,
 }: {
   initial: Holiday[];
-  calendarPref: string;
+  locale: string;
   labels: Labels;
 }) {
   const tc = useTranslations('common');
-  const isJalali = calendarPref === 'jalali';
+  const { calendar, calLocale } = calendarPickerConfig(locale);
   const [holidays, setHolidays] = useState<Holiday[]>(initial);
   const [picked, setPicked] = useState<DateObjectLike | null>(null);
   const [nameFa, setNameFa] = useState('');
@@ -59,7 +57,7 @@ export function HolidayEditor({
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const show = (d: string) => (isJalali ? gregorianToJalali(d) : d);
+  const show = (d: string) => formatCalendarDate(d, locale);
 
   const onAdd = () => {
     setErrMsg('');
@@ -117,8 +115,8 @@ export function HolidayEditor({
           <DatePicker
             value={picked}
             onChange={setPicked}
-            calendar={isJalali ? persian : gregorian}
-            locale={isJalali ? persian_fa : gregorian_en}
+            calendar={calendar}
+            locale={calLocale}
             inputClass="border border-input rounded-lg px-3 py-2 text-sm w-full bg-background"
           />
         </div>

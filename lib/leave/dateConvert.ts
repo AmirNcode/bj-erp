@@ -9,6 +9,7 @@ import gregorian from 'react-date-object/calendars/gregorian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
 import persian from 'react-date-object/calendars/persian';
 import persian_fa from 'react-date-object/locales/persian_fa';
+import persian_en from 'react-date-object/locales/persian_en';
 
 type DateObjectLike = {
   convert(calendar: unknown, locale: unknown): DateObjectLike;
@@ -29,6 +30,16 @@ export function gregorianToJalali(iso: string): string {
   if (!y || !m || !d) return iso;
   const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day: d });
   return obj.convert(persian, persian_fa).format('YYYY/MM/DD');
+}
+
+/** Convert stored Gregorian ISO into a Persian DateObject for controlled pickers. */
+export function gregorianToPersianDateObject(iso: string, locale: string): DateObject | null {
+  const [year, month, day] = iso.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new DateObject({ calendar: gregorian, locale: gregorian_en, year, month, day }).convert(
+    persian,
+    locale === 'fa' ? persian_fa : persian_en
+  );
 }
 
 /**

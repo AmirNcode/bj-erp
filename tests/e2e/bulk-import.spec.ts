@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { ADMIN_CODE, ADMIN_PASSWORD, login, logout, nextTestPersonnelNo } from './_helpers';
+import {
+  ADMIN_CODE,
+  ADMIN_PASSWORD,
+  login,
+  logout,
+  nextTestPersonnelNo,
+  SEEDED_MANAGER_CODE,
+  SEEDED_PASSWORD,
+} from './_helpers';
 import { templateHeader } from '../../lib/csv/import-rows';
 
 /**
@@ -95,7 +103,7 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
 
   // ── manager cannot reach the import page ─────────────────────────────────
   await logout(page);
-  await login(page, 'm-prod', 'Demo!2026');
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
   await page.goto('/manage/employees/import');
   await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10_000 });
 

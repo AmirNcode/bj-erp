@@ -27,14 +27,9 @@ export default async function ProfilePage({ params }: Props) {
   const profile = await getCachedProfile(user.id);
 
   const formLabels = {
-    calendar: t('calendar'),
     language: t('language'),
-    jalali: t('jalali'),
-    gregorian: t('gregorian'),
     langFa: t('langFa'),
     langEn: t('langEn'),
-    saved: t('saved'),
-    errorLabel: t('error'),
   };
 
   const tl = await getTranslations('profile.logoutConfirm');
@@ -87,7 +82,6 @@ export default async function ProfilePage({ params }: Props) {
         <CardContent className="pt-4">
           <SettingsForm
             current={{
-              calendarPref: profile?.calendar_pref ?? 'jalali',
               languagePref: profile?.language_pref ?? 'fa',
             }}
             labels={formLabels}

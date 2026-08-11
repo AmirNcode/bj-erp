@@ -46,4 +46,7 @@ dist/
 # Pre-deploy database dumps fetched from the server (employee PII).
 backups/
 
+# Deployment assistant run state and manifests (may contain private metadata).
+.bj-deploy/
+
 .bruin.yml

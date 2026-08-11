@@ -26,9 +26,16 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   reserves room for **hourly** leave later without migration.
 - **FR-12** ☑ **Working-day count** excludes configured **weekend** days and **holidays**;
   half-day = 0.5. Computed **server-side**.
-- **FR-13** ☑ Request shows **remaining balance** before submit; blocks/ warns if insufficient.
+- **FR-13** ☑ Paid-leave forms show the **requested duration**, **projected remaining paid
+  balance**, and any **unpaid excess** before submit. A request may exceed the available paid
+  balance: approval atomically consumes only the available paid minutes, leaves that balance at
+  zero, and records the rest as unpaid time. Durations use the configured workday, default 8 hours.
+  *(Extended 2026-08-05.)*
 - **FR-14** ☑ **Approval**: the employee's **direct manager** approves/rejects; **admin can
-  override** any decision. Ledger updates on approval.
+  override** any decision. Approval requires the deciding manager/admin to draw a fresh digital
+  signature and explicitly authorize its use; rejection requires neither. The signature, consent
+  timestamp, decision, audit event, and ledger update are committed atomically. *(Extended
+  2026-08-05.)*
 - **FR-15** ☑ Employee can **cancel** a pending request, and an **approved future** request
   (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
   shipped in Phase 2; approved-future in Phase 6.)*
@@ -71,6 +78,18 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   2026-07-30 keep their prefixed codes and both forms log in; there is no backfill. `departments.code`
   survives as an auto-generated, unread column, and admin editing of it is deactivated pending the
   client's decision. *(2026-07-30; supersedes the code formula in the 2026-07-13 onboarding spec.)*
+- **FR-32** ☑ **Explicit daily dates and requester signature.** Daily leave uses separate
+  **Start date** and **End date** calendar fields; hourly leave and hourly errands remain
+  single-date. Every new daily leave, hourly leave, daily errand, and hourly errand request requires
+  a freshly drawn mouse/touch signature and an unchecked-by-default authorization checkbox. The
+  database permanently stores the bounded PNG and records its own consent timestamp. The requester,
+  direct manager, security, and admin may open it; teammates cannot. *(2026-08-05.)*
+- **FR-33** ☑ **Daily work errand (ماموریت روزانه).** A worker requests an inclusive off-site work
+  trip with separate Persian-calendar **Start date** and **End date** fields, a required location,
+  and an optional description. It is work rather than leave: it has no leave type, replacement, or
+  balance effect; may include weekends/holidays; uses the existing errand tracking sequence; and
+  follows the same signed request and signed manager/admin approval flow as hourly work errands.
+  Any overlapping leave or errand conflicts in both directions. *(2026-08-05.)*
 
 ## Functional — Visibility (see also PERMISSIONS.md)
 
@@ -93,9 +112,10 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
   Supports both agenda/list and month-grid views; month cells show per-day off counts, visible names
   with overflow, and selected-day return-to-work details.
-- **FR-23** ☑ **Settings**: switch calendar **Persian ⇄ Gregorian**; switch language **Farsi ⇄
-  English**. Persisted per user; leave/request/calendar labels and numeric displays follow the
-  selected language (user names are not translated).
+- **FR-23** ☑ **Settings**: switch language **Farsi ⇄ English**. The Persian (Jalali) calendar is
+  the only calendar used by every picker and date display; it is no longer configurable. Calendar
+  labels/digits follow the selected language, while user names are not translated. *(Calendar
+  preference removed 2026-08-05.)*
 - **FR-24** ☑ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
   **holiday list** (add/edit/delete) at `/manage/settings`. Editor shipped in Phase 6; the
   authoritative Iranian 1404–1405 dates are entered in-app (placeholder seed retained).
@@ -121,6 +141,6 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 
 ## Out of scope (v1)
 
-Hourly leave · push/SMS/email notifications · payroll calculation · attendance/check-in · shift
+Push/SMS/email notifications · payroll calculation · attendance/check-in · shift
 scheduling · performance · recruitment · the non-HR modules (QC/finance/procurement). All are on
 the roadmap (PLAN §6) and the schema is designed not to block them.

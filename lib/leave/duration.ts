@@ -19,6 +19,31 @@ export type DurationParts = {
   minutes: number;
 };
 
+export type LeaveBalanceProjection = {
+  requestingMinutes: number;
+  remainingMinutes: number;
+  unpaidMinutes: number;
+};
+
+/**
+ * Projects one paid-leave request against the current balance without allowing
+ * paid leave to become negative. The database repeats this calculation under
+ * its employee ledger lock when the request is approved.
+ */
+export function projectLeaveBalance(
+  requestedMinutes: number,
+  currentBalanceMinutes: number
+): LeaveBalanceProjection {
+  const requestingMinutes = Math.max(Math.round(requestedMinutes), 0);
+  const availableMinutes = Math.max(Math.round(currentBalanceMinutes), 0);
+
+  return {
+    requestingMinutes,
+    remainingMinutes: Math.max(availableMinutes - requestingMinutes, 0),
+    unpaidMinutes: Math.max(requestingMinutes - availableMinutes, 0),
+  };
+}
+
 /**
  * Splits a minute total into days/hours/minutes for display.
  * A negative total (a ledger debit) keeps its sign on each component and splits

@@ -111,9 +111,26 @@ their own plan files when reached.
   CA export), `package.sh` (offline bundle, all images saved), `RUNBOOK.md` (en + fa)
 - ☑ App support: `output: 'standalone'`, runtime `SUPABASE_URL` override for server-side calls,
   entrypoint placeholder substitution for baked `NEXT_PUBLIC_*` values
+- ☑ Architecture-separated local workflow: dedicated `linux/arm64` tags + Compose overlay on
+  Apple Silicon, while production package/release remains explicitly `linux/amd64`; conversion
+  reuses and verifies the existing `bj-erp_db-data` volume
 
 ## Production deploy + release pipeline (2026-07-26)
 Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
+
+### Guided deployment assistant (2026-08-06)
+
+- ☑ One interactive/non-interactive `deploy/bj-deploy` entry point for local ARM64 and client AMD64
+- ☑ Read-only doctor/status/logs; restart, app-only, safe update, database reset, and factory reset
+- ☑ Target-specific Compose overlays/tags with runtime architecture verification for all services
+- ☑ Private immutable migration ledger + known 38-migration legacy adoption + app-only manifest gate
+- ☑ Verified off-server backup and exact labeled-volume/typed-phrase guards before production reset
+- ☑ Detached, locked remote jobs with atomic status/log files and `resume <run-id>` after SSH loss
+- ☑ Stable `/api/health` plus separate database/Auth checks executed on the target network
+- ☑ Passwordless-SSH setup, Mac/phone local routing, recovery, and full command reference in
+  `docs/DEPLOY-ASSISTANT.md`; cold-start design/plan preserved under `docs/specs/` and `docs/plans/`
+- ☐ First live client execution — deliberately not run during implementation; deploy only from a
+  clean committed `main` after operator review
 - ☑ **Live on the client's Ubuntu server** at `https://10.10.10.50` (LAN-only by design;
   off-site staff reach it over the company's existing corporate VPN)
 - ☑ `deploy/setup-release.sh` — one-time SSH key + `bj` alias + connection multiplexing
@@ -211,8 +228,35 @@ Five plans, in this order; each ships working software on its own.
   - ☑ Allocated in the writer under a counter row lock; proven across two concurrent employees
   - ☑ `lib/leave/serial.ts` (5 tests); shown on requests and approvals
   - ☐ **Not yet applied to the client's server** — this is the one plan with a MANDATORY backfill
-- ☐ Deferred, documented in spec §11: signature / insurance evidence. Next step is a question for
-  the client's insurer, not code
+- ☑ **Requester signatures + consent (FR-32)**
+  ([spec](specs/2026-08-05-request-signatures-and-daily-date-fields-design.md))
+  - ☑ Required fresh mouse/touch PNG and authorization checkbox on daily, hourly, and errand forms
+  - ☑ Database-generated consent timestamp; immutable evidence retained with every request status
+  - ☑ Lazy RLS-protected viewer for requester, direct manager, security, and admin; absent from the
+    teammate calendar view
+- ☑ **Daily date UX (FR-32)** — separate preference-aware Start date / End date pickers; hourly and
+  hourly-errand forms remain single-date
+- ☑ **Signed approvals + Persian-only calendar (FR-14 / FR-23)**
+  ([spec](specs/2026-08-05-approval-signatures-persian-only-calendar-design.md))
+  - ☑ Direct-manager and admin approvals require a fresh signature and explicit authorization;
+    rejection remains unsigned
+  - ☑ Requester, direct manager, security, and admin can lazily view requester and approver evidence
+  - ☑ Remove the Gregorian preference UI and force every picker/date display to Persian/Jalali
+  - ☑ Retain `profiles.calendar_pref` only for schema compatibility and constrain it to `jalali`
+- ☑ **Daily work errands + paid-leave overage (FR-13 / FR-33)**
+  ([spec](specs/2026-08-05-daily-work-errands-and-pto-overage-design.md))
+  - ☑ Four localized request tabs: Daily leave, Hourly leave, Daily Work Errands, and renamed
+    Hourly Work Errand; daily errands use separate Persian Start/End dates
+  - ☑ Daily errands reuse `kind='errand'`, `unit='day'`, the errand serial/privacy model, signed
+    request/approval flow, and never affect a leave balance
+  - ☑ Paid daily/hourly previews show Requesting, projected Remaining Balance, and conditional
+    Unpaid Time Off using configured minutes (8 hours/day by default)
+  - ☑ `leave_requests.unpaid_minutes`; approval recomputes the split under the employee lock,
+    consumes only the paid portion, and cancellation restores only that paid portion
+  - ☑ Migration `20260806014310_daily_work_errands_pto_overage.sql` applied to the preserved local
+    ARM64 database after backup and rollback dry run; **not applied to the client's AMD64 server**
+  - ☑ Gates: lint, TypeScript, production build, **254 unit tests**, and focused request e2e
+    (**3 passed**) on the native ARM64 stack
 - ☐ Deferred, own spec: multi-step approval + حراست gate check (their forms carry 4 signatures)
 
 ## Work errand + login codes (2026-07-30) ☑ built, not deployed

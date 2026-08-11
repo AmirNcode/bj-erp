@@ -1,0 +1,22 @@
+# Production/client overlay. Always use with docker-compose.yml on the client's
+# AMD64 Linux server. Dedicated service tags keep Mac-local ARM64 images
+# isolated from artifacts pulled while building an offline client bundle.
+services:
+  db:
+    image: supabase/postgres:15.8.1.085-client-amd64
+    platform: linux/amd64
+
+  auth:
+    image: supabase/gotrue:v2.170.0-client-amd64
+    platform: linux/amd64
+
+  rest:
+    image: postgrest/postgrest:v12.2.3-client-amd64
+    platform: linux/amd64
+
+  app:
+    platform: linux/amd64
+
+  gateway:
+    image: caddy:2.8.4-alpine-client-amd64
+    platform: linux/amd64

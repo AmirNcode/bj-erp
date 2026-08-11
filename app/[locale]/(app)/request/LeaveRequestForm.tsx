@@ -1,15 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { LazyDatePicker } from '@/components/LazyDatePicker';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
-import { formatDuration } from '@/lib/leave/duration';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
+import {
+  daysToMinutes,
+  formatDuration,
+  projectLeaveBalance,
+} from '@/lib/leave/duration';
 import { submitRequest, getMyBalance, getReplacementCandidates } from '@/lib/actions/leave';
 import { ReplacementPicker } from './_components/ReplacementPicker';
+import {
+  RequestSignatureFields,
+  type SignatureLabels,
+} from './_components/RequestSignature';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
@@ -23,6 +31,8 @@ type Labels = {
   leaveType: string;
   selectType: string;
   dateRange: string;
+  startDate: string;
+  endDate: string;
   dayPart: string;
   dayPartFull: string;
   dayPartAm: string;
@@ -31,7 +41,9 @@ type Labels = {
   submit: string;
   preview: string;
   workingDaysLabel: string;
+  requestingLabel: string;
   remainingBalanceLabel: string;
+  unpaidTimeOffLabel: string;
   noBalance: string;
   days: string;
   hours: string;
@@ -50,12 +62,12 @@ type Labels = {
   replacementOnLeave: string;
   replacementLoading: string;
   replacementEmpty: string;
+  signature: SignatureLabels;
 };
 
 type Props = {
   leaveTypes: LeaveType[];
   workSettings: WorkSettings;
-  calendarPref: string; // 'jalali' | 'gregorian'
   labels: Labels;
   locale: string;
 };
@@ -66,19 +78,19 @@ type DateObjectLike = any;
 const selectClassName =
   'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
 
-export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, labels, locale }: Props) {
+export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: Props) {
   const router = useRouter();
-  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
-    calendarPref,
-    locale
-  );
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   const [selectedTypeId, setSelectedTypeId] = useState('');
-  const [dateRange, setDateRange] = useState<DateObjectLike[]>([]);
+  const [startDate, setStartDate] = useState<DateObjectLike | null>(null);
+  const [endDate, setEndDate] = useState<DateObjectLike | null>(null);
   const [dayPart, setDayPart] = useState<DayPart>('full');
   const [reason, setReason] = useState('');
   const [replacementId, setReplacementId] = useState('');
   const [noReplacement, setNoReplacement] = useState(false);
+  const [signatureData, setSignatureData] = useState('');
+  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
   const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
   // Which range the current list was fetched for; loading is DERIVED from it, the
   // same way the balance effect avoids setting state synchronously.
@@ -91,15 +103,8 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
 
   const selectedType = leaveTypes.find((t) => t.id === selectedTypeId);
 
-  // Compute Gregorian start/end strings from DateObject range
-  const getGregorianRange = useCallback(() => {
-    if (dateRange.length < 2) return { start: '', end: '' };
-    const start = dateObjectToGregorian(dateRange[0]);
-    const end = dateObjectToGregorian(dateRange[1]);
-    return { start, end };
-  }, [dateRange]);
-
-  const { start: previewStart, end: previewEnd } = getGregorianRange();
+  const previewStart = startDate ? dateObjectToGregorian(startDate) : '';
+  const previewEnd = endDate ? dateObjectToGregorian(endDate) : '';
 
   // Half-day is only offered for a single eligible day; otherwise the day part
   // is treated as a full day. Derived during render — no effect needed.
@@ -113,18 +118,26 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
   // Working-days preview is a pure function of the range, work settings, and the
   // effective day part — derive it rather than storing it via an effect.
   const workingDaysCount =
-    dateRange.length < 2 || !previewStart || !previewEnd
+    !previewStart || !previewEnd
       ? null
       : countWorkingDays(previewStart, previewEnd, {
           weekendDays: workSettings.weekendDays,
           holidays: workSettings.holidays,
           dayPart: effectiveDayPart,
         });
+  const requestedMinutes =
+    workingDaysCount === null
+      ? null
+      : daysToMinutes(workingDaysCount, workSettings.hoursPerDay);
 
   // Balance is fetched when the selected type changes; show it only once the
   // fetch for the currently-selected type has resolved (derived, not an effect).
   const effectiveBalance = balanceFor === selectedTypeId ? balanceMinutes : null;
   const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
+  const balanceProjection =
+    requestedMinutes !== null && effectiveBalance !== null
+      ? projectLeaveBalance(requestedMinutes, effectiveBalance)
+      : null;
 
   // Fetch balance when the selected type changes. The only state updates happen
   // in the async callback, so this effect does not set state synchronously.
@@ -176,29 +189,40 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
       setErrorMsg(labels.validationSelectType);
       return;
     }
-    if (dateRange.length < 2) {
+    if (!previewStart || !previewEnd) {
       setErrorMsg(labels.validationSelectDate);
       return;
     }
-
-    const { start, end } = getGregorianRange();
+    if (!signatureData) {
+      setErrorMsg(labels.signature.validationSignature);
+      return;
+    }
+    if (!signatureAuthorized) {
+      setErrorMsg(labels.signature.validationAuthorization);
+      return;
+    }
 
     startTransition(async () => {
       const result = await submitRequest({
         leaveTypeId: selectedTypeId,
-        start,
-        end,
+        start: previewStart,
+        end: previewEnd,
         dayPart: effectiveDayPart,
         reason: reason || undefined,
         replacementId: replacementId || null,
+        signatureData,
+        signatureAuthorized,
       });
 
       if (result.ok) {
         setSuccessMsg(labels.success);
-        setDateRange([]);
+        setStartDate(null);
+        setEndDate(null);
         setReason('');
         setReplacementId('');
         setNoReplacement(false);
+        setSignatureData('');
+        setSignatureAuthorized(false);
         setDayPart('full');
         // Refresh server data without a full page reload
         router.refresh();
@@ -230,38 +254,74 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             </select>
           </div>
 
-          {/* Date range picker */}
-          <div className="space-y-1.5">
-            <Label>{labels.dateRange}</Label>
-            <div
-              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
-              className="w-full"
-              onKeyDown={(e) => {
-                // Enter inside the picker input commits the date (handled by the
-                // picker itself) — it must not ALSO submit the whole form.
-                if (e.key === 'Enter') e.preventDefault();
-              }}
-            >
-              <LazyDatePicker
-                range
-                value={dateRange}
-                onChange={(dates: DateObjectLike) => {
-                  if (Array.isArray(dates)) {
-                    setDateRange(dates);
-                  } else {
-                    setDateRange([]);
-                  }
-                }}
-                calendar={calendar}
-                locale={calLocale}
-                calendarPosition={calendarPosition}
-                inputClass={`w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50`}
-                containerClassName="rmdp-container w-full"
-                format="YYYY/MM/DD"
-                dateSeparator=" — "
-              />
+          {/* Separate dates make the range explicit and match the client's form. */}
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">{labels.dateRange}</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5" data-testid="daily-start-date">
+                <Label htmlFor="daily_start_date">{labels.startDate}</Label>
+                <div
+                  style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.preventDefault();
+                  }}
+                >
+                  <LazyDatePicker
+                    id="daily_start_date"
+                    value={startDate}
+                    onChange={(date: DateObjectLike) => {
+                      const next = date ?? null;
+                      setStartDate(next);
+                      if (
+                        !next ||
+                        (endDate &&
+                          dateObjectToGregorian(next) > dateObjectToGregorian(endDate))
+                      ) {
+                        setEndDate(null);
+                      }
+                    }}
+                    calendar={calendar}
+                    locale={calLocale}
+                    calendarPosition={calendarPosition}
+                    inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    containerClassName="rmdp-container w-full"
+                    format="YYYY/MM/DD"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5" data-testid="daily-end-date">
+                <Label htmlFor="daily_end_date">{labels.endDate}</Label>
+                <div
+                  style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.preventDefault();
+                  }}
+                >
+                  <LazyDatePicker
+                    id="daily_end_date"
+                    value={endDate}
+                    onChange={(date: DateObjectLike) => {
+                      const next = date ?? null;
+                      setEndDate(
+                        next &&
+                          startDate &&
+                          dateObjectToGregorian(next) < dateObjectToGregorian(startDate)
+                          ? null
+                          : next
+                      );
+                    }}
+                    minDate={startDate ?? undefined}
+                    calendar={calendar}
+                    locale={calLocale}
+                    calendarPosition={calendarPosition}
+                    inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    containerClassName="rmdp-container w-full"
+                    format="YYYY/MM/DD"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
+          </fieldset>
 
           {/* Day part — only shown when single day + allow_half_day */}
           {showHalfDay && (
@@ -312,29 +372,58 @@ export function LeaveRequestForm({ leaveTypes, workSettings, calendarPref, label
             />
           </div>
 
+          <RequestSignatureFields
+            idPrefix="daily"
+            value={signatureData}
+            onChange={setSignatureData}
+            authorized={signatureAuthorized}
+            onAuthorizedChange={setSignatureAuthorized}
+            labels={labels.signature}
+          />
+
           {/* Live preview */}
-          {workingDaysCount !== null && (
+          {requestedMinutes !== null && (
             <div
               className="rounded-lg bg-secondary px-4 py-3 text-sm space-y-1"
               data-testid="leave-preview"
             >
               <div data-testid="working-days-count">
-                {labels.preview}: {labels.workingDaysLabel}{' '}
-                <strong>{formatNumber(workingDaysCount, locale)}</strong>
+                {labels.requestingLabel}:{' '}
+                <strong>
+                  {formatDuration(
+                    requestedMinutes,
+                    workSettings.hoursPerDay,
+                    locale,
+                    labels
+                  )}
+                </strong>
               </div>
-              {selectedType?.affects_balance && (
-                <div data-testid="balance-display">
-                  {balanceLoading
-                    ? '…'
-                    : effectiveBalance !== null
-                      ? `${labels.remainingBalanceLabel}: ${formatDuration(
-                          effectiveBalance,
-                          workSettings.hoursPerDay,
-                          locale,
-                          labels
-                        )}`
-                      : labels.noBalance}
-                </div>
+              {selectedType?.is_paid && selectedType.affects_balance && (
+                <>
+                  <div data-testid="balance-display">
+                    {balanceLoading
+                      ? '…'
+                      : balanceProjection
+                        ? `${labels.remainingBalanceLabel}: ${formatDuration(
+                            balanceProjection.remainingMinutes,
+                            workSettings.hoursPerDay,
+                            locale,
+                            labels
+                          )}`
+                        : labels.noBalance}
+                  </div>
+                  {balanceProjection && balanceProjection.unpaidMinutes > 0 && (
+                    <div className="font-medium text-destructive" data-testid="unpaid-display">
+                      {labels.unpaidTimeOffLabel}:{' '}
+                      {formatDuration(
+                        balanceProjection.unpaidMinutes,
+                        workSettings.hoursPerDay,
+                        locale,
+                        labels
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

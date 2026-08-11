@@ -13,6 +13,10 @@ const gregorian_en = require('react-date-object/locales/gregorian_en');
 
 export const ADMIN_CODE = 'admin';
 export const ADMIN_PASSWORD = 'Admin!2026';
+export const SEEDED_MANAGER_CODE = '1001';
+export const SEEDED_EMPLOYEE_CODE = '2001';
+export const SEEDED_SECURITY_CODE = '1004';
+export const SEEDED_PASSWORD = 'Demo!2026';
 
 const SEEDED_WEEKEND_ISO = [5]; // Friday = ISO 5
 // Keep dynamic 2-day request ranges stable even while admin-settings.spec
@@ -42,6 +46,10 @@ function toJalaliStr(d: Date): string {
   const [y, m, day] = toGregorianParts(d);
   const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day });
   return obj.convert(persian, persian_en).format('YYYY/MM/DD');
+}
+
+export function jalaliRangeFromGregorian(start: Date, end: Date): string {
+  return `${toJalaliStr(start)} — ${toJalaliStr(end)}`;
 }
 
 /**
@@ -214,19 +222,99 @@ export async function createEmployee(
   return { code, password };
 }
 
-/**
- * Fill the react-multi-date-picker range input. The form overrides `inputClass`,
- * dropping the default `rmdp-input` class, so fall back to `.rmdp-container input`.
- */
-export async function fillPicker(page: Page, value: string) {
-  const primary = page.locator('input.rmdp-input').first();
-  const fallback = page.locator('.rmdp-container input').first();
+/** Fill a single react-multi-date-picker input (hourly leave or errand). */
+export async function fillPicker(page: Page, value: string, selector?: string) {
+  const scope = selector ? page.locator(selector) : page;
+  const primary = scope.locator('input.rmdp-input').first();
+  const fallback = scope.locator('.rmdp-container input').first();
   const input = (await primary.isVisible().catch(() => false)) ? primary : fallback;
   await input.click();
   await input.fill(value);
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
   await page.locator('h1').click();
+}
+
+/** Fill the daily form's separate start and end Persian-calendar inputs. */
+export async function fillDailyDateRange(page: Page, value: string) {
+  const [start, end] = value.split(/\s+—\s+/);
+  expect(start).toBeTruthy();
+  expect(end).toBeTruthy();
+
+  for (const [testId, date] of [
+    ['daily-start-date', start],
+    ['daily-end-date', end],
+  ] as const) {
+    const input = page.locator(`[data-testid="${testId}"] input`);
+    await input.click();
+    await input.fill(date);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.locator('h1').click();
+  }
+}
+
+/** Fill the daily work errand form's separate Persian start/end inputs. */
+export async function fillDailyErrandDateRange(page: Page, value: string) {
+  const [start, end] = value.split(/\s+—\s+/);
+  expect(start).toBeTruthy();
+  expect(end).toBeTruthy();
+
+  for (const [testId, date] of [
+    ['daily-errand-start-date', start],
+    ['daily-errand-end-date', end],
+  ] as const) {
+    const input = page.locator(`[data-testid="${testId}"] input`);
+    await input.click();
+    await input.fill(date);
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await page.locator('h1').click();
+  }
+}
+
+/** Draw enough pointer movement to produce a PNG and authorize its use. */
+export async function signRequest(
+  page: Page,
+  prefix: 'daily' | 'hourly' | 'errand' | 'daily-errand'
+) {
+  await drawAndAuthorizeSignature(page, `[data-testid="${prefix}-signature-canvas"]`, prefix);
+}
+
+/** Sign the currently-open approval dialog on the queue or calendar surface. */
+export async function signApproval(page: Page, surface: 'queue' | 'calendar' = 'queue') {
+  const prefix = surface === 'calendar' ? 'cal-approval-' : 'approval-';
+  await drawAndAuthorizeSignature(
+    page,
+    `[data-testid^="${prefix}"][data-testid$="-signature-canvas"]`,
+    prefix
+  );
+}
+
+async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, prefix: string) {
+  const canvas = page.locator(canvasSelector).first();
+  await expect(canvas).toBeVisible();
+  // The signature sits below the fold on desktop. Mouse coordinates outside
+  // the viewport do not dispatch pointer events to the canvas.
+  await canvas.scrollIntoViewIfNeeded();
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.35, { steps: 5 });
+  await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.65, { steps: 5 });
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.4, { steps: 5 });
+  await page.mouse.up();
+
+  await expect(
+    page.locator(`[data-testid^="${prefix}"][data-testid$="-signature-clear"]`).first()
+  ).toBeEnabled();
+  await page
+    .locator(`[data-testid^="${prefix}"][data-testid$="-signature-authorized"]`)
+    .first()
+    .check();
 }
 
 /** Allocate `days` of the first balance-affecting leave type to an employee. Returns the type value. */
@@ -272,8 +360,12 @@ export async function allocate(page: Page, employeeCodeSubstring: string, days: 
   await ltSelect.selectOption({ value: ltValue });
 
   const year = new Date().getFullYear();
-  await page.fill('#alloc_period_start', `${year}-01-01`);
-  await page.fill('#alloc_period_end', `${year}-12-31`);
+  const [periodStart, periodEnd] = jalaliRangeFromGregorian(
+    new Date(Date.UTC(year, 0, 1)),
+    new Date(Date.UTC(year, 11, 31))
+  ).split(/\s+—\s+/);
+  await fillPicker(page, periodStart, '[data-testid="allocation-start-date-picker"]');
+  await fillPicker(page, periodEnd, '[data-testid="allocation-end-date-picker"]');
   await page.fill('[data-testid="alloc-days-input"]', String(days));
   await page.click('[data-testid="alloc-submit"]');
   await expect(page.locator('[data-testid="alloc-success"]')).toBeVisible({ timeout: 15_000 });
@@ -288,9 +380,10 @@ export async function submitLeave(
   await page.goto('/request');
   await expect(page).toHaveURL(/\/request$/);
   await page.locator('#leave_type_id').selectOption({ value: opts.leaveTypeValue });
-  await fillPicker(page, opts.range ?? jalali2DayRange());
+  await fillDailyDateRange(page, opts.range ?? jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
   if (opts.reason) await page.fill('#reason', opts.reason);
+  await signRequest(page, 'daily');
   await page.click('button[type="submit"]');
   await page.waitForTimeout(1500); // server action + revalidate
 }

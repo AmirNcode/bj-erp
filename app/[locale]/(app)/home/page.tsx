@@ -88,7 +88,6 @@ async function HomeBoardData({
       getMyCoverDuties(rangeStart, rangeEnd),
     ]);
 
-  const calendarPref = profile?.calendar_pref ?? 'jalali';
   const fullName = profile?.full_name ?? '';
   const pendingCount = approvalsRes?.ok ? approvalsRes.requests.length : 0;
 
@@ -135,7 +134,6 @@ async function HomeBoardData({
         board={board}
         labels={labels}
         locale={locale}
-        calendarPref={calendarPref}
         hoursPerDay={
           workSettingsRes.ok ? workSettingsRes.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay
         }

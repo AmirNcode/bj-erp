@@ -6,8 +6,9 @@ import {
   logout,
   createEmployee,
   allocate,
-  fillPicker,
+  fillDailyDateRange,
   jalali2DayRange,
+  signRequest,
 } from './_helpers';
 
 /**
@@ -44,7 +45,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
   await expect(page.locator('[data-testid="replacement-picker"]')).toBeVisible({ timeout: 20_000 });
 
   await page.selectOption('#leave_type_id', { index: 1 });
-  await fillPicker(page, range);
+  await fillDailyDateRange(page, range);
 
   // The candidate list loads once the dates are known.
   const picker = page.locator('[data-testid="replacement-select"]');
@@ -67,6 +68,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
     .filter({ hasText: 'Cover Person' })
     .getAttribute('value');
   await picker.selectOption(bValue!);
+  await signRequest(page, 'daily');
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="success-msg"]')).toBeVisible({ timeout: 20_000 });
 
@@ -86,7 +88,8 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
 
   await page.goto('/request');
   await page.selectOption('#leave_type_id', { index: 1 });
-  await fillPicker(page, range);
+  await fillDailyDateRange(page, range);
+  await signRequest(page, 'daily');
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="success-msg"]')).toBeVisible({ timeout: 20_000 });
   await logout(page);
@@ -95,7 +98,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
   await login(page, a.code, a.password);
   await page.goto('/request');
   await page.selectOption('#leave_type_id', { index: 1 });
-  await fillPicker(page, firstDay + ' — ' + firstDay);
+  await fillDailyDateRange(page, firstDay + ' — ' + firstDay);
 
   const bOption = page
     .locator('[data-testid="replacement-select"] option')

@@ -126,15 +126,42 @@ GoTrue *does* set `Access-Control-Allow-Origin` on actual responses — don't ad
 proxy (browsers reject the duplicate). Dev/e2e point `.env.local` at `http://<mac-ip>:8080`
 (compose override in `dist/bj-erp-installer/` publishes the port; not shipped).
 
-### The gateway must be a native-arch Caddy locally — emulated amd64 breaks TLS silently
+### Every local service must be native ARM64; production packaging stays AMD64
 `package.sh`/`release.sh` deliberately pin `linux/amd64` for the client's server, so an arm64 Mac
-that runs those same images gets an emulated Caddy. It starts, logs "serving initial configuration",
-and then fails **every** TLS handshake — `curl` reports
+that runs those same tags can inherit emulated images. Caddy proved the failure visibly: it starts,
+logs "serving initial configuration", and then fails **every** TLS handshake — `curl` reports
 `error:06FFF064:digital envelope routines:CRYPTO_internal:bad decrypt` right after Server Hello, and
 Caddy's own plain-HTTP `:8080` listener times out, while `app:3000`/`rest:3000`/`auth:9999` all
 answer normally over the docker network. Nothing in the Caddy log says anything is wrong. Fix:
-`docker pull --platform linux/arm64 caddy:2.8.4-alpine` + `up -d --force-recreate gateway`. Postgres,
-GoTrue and PostgREST are fine emulated; only the TLS terminator is affected. First seen 2026-08-03.
+use `deploy/prepare-local-arm64.sh` plus `deploy/docker-compose.local-arm64.yml`. The overlay gives
+all five services dedicated local tags and `platform: linux/arm64`; never use the production-only
+canonical tags for local Compose. Recreating containers with that overlay preserves the named
+`bj-erp_db-data` volume. Never use `down -v` or remove the volume. First seen 2026-08-03; policy
+strengthened to prohibit all local emulation on 2026-08-05.
+
+### Deployment target, migration state, and health must be machine contracts
+Human memory was doing too much: remembering the Compose overlay, deciding whether SQL was pending,
+and treating `/` as a health endpoint. `deploy/bj-deploy` now owns those contracts. Every local
+command supplies the ARM64 overlay; every client command supplies the dedicated AMD64 overlay.
+Migration filenames and SHA-256 values live in private `bj_deploy.schema_migrations` plus an
+installed manifest, so app-only deploy is a comparison rather than a guess. The legacy client schema
+is recognizable at the known 38-migration baseline. If ledger adoption is interrupted after that
+baseline, known later migrations may be recorded only when a **complete catalog fingerprint** proves
+their columns, constraints, function signatures/bodies, and obsolete-overload removal are all
+installed; a single sentinel column is not enough. Unknown partial histories stop. Every new
+migration and its ledger insert must share one PostgreSQL transaction; otherwise a process death in
+between can replay non-idempotent SQL. Detached jobs must use checksummed, run-scoped migration and
+seed inputs and re-verify them before mutation, never mutable shared staging paths. Keep catalog
+queries on stdin and do not combine a heredoc with `-c`, which requires its own argument.
+Health is `/api/health` + Auth + DB from the target network, because `/` normally redirects 307 and
+the Mac cannot reach the client's private `10.10.10.50` route.
+
+For destructive resets, an on-server dump is not enough: validate it with `pg_restore -l`, copy it
+off the server, verify the checksum on the Mac, then ask for an operation-specific phrase. The
+detached remote run ID is the recovery handle if SSH drops. Database reset and factory reset are not
+synonyms—the former preserves the Caddy CA; the latter replaces it and requires phones to trust a
+new certificate. Ordinary app releases never silently adopt upstream Supabase infrastructure
+changes; service versions remain pinned until a separate reviewed upgrade.
 
 ### Self-host: the public port lives in three places, and the browser bundle is one of them
 Moving the app off 443 by editing the compose `ports:` line alone leaves the site reachable but

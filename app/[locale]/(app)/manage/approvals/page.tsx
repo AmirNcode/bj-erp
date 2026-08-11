@@ -11,6 +11,7 @@ import { getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
 
@@ -24,6 +25,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
   const tErrand = await getTranslations('errand');
+  const tSignature = await getTranslations('signature');
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
@@ -54,6 +56,8 @@ async function ApprovalsData({ locale }: { locale: string }) {
     trackingNo: tLeave('trackingNo'),
     errandBadge: tErrand('badge'),
     errandLocation: tErrand('location'),
+    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
     dayPartLabels: {
       full: tLeave('dayPart.full'),

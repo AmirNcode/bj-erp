@@ -35,6 +35,20 @@ if (!URL || !ANON) {
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
 const DEMO_PW = 'Demo!2026';
+const CODE = {
+  prodManager: '1001',
+  qcManager: '1002',
+  maintenanceManager: '1003',
+  securitySupervisor: '1004',
+  prodEmployee1: '2001',
+  prodEmployee2: '2002',
+  qcEmployee1: '2101',
+  qcEmployee2: '2102',
+  maintenanceEmployee1: '2201',
+  maintenanceEmployee2: '2202',
+  guard1: '3001',
+  guard2: '3002',
+};
 const COMPANY = '00000000-0000-0000-0000-0000000000c0';
 const DEPT = {
   prodA: '00000000-0000-0000-0000-0000000000d1',
@@ -62,7 +76,9 @@ async function ensureUser(code, fullName, deptId, roles, managerId) {
 
   const { data, error } = await supa.rpc('app_create_employee', {
     p_company_id: COMPANY,
-    p_employee_code: code,
+    // Since 20260730130002 the personnel number is the login code; the former
+    // p_employee_code RPC argument no longer exists.
+    p_personnel_no: code,
     p_full_name: fullName,
     p_password: DEMO_PW,
     p_department_id: deptId,
@@ -117,20 +133,20 @@ async function main() {
   // Managers first (so reports can link p_manager_id).
   console.log('seeding users…');
   const ids = {};
-  ids['m-prod'] = await ensureUser('m-prod', 'Reza Karimi', DEPT.prodA, ['manager', 'employee'], null);
-  ids['m-qc'] = await ensureUser('m-qc', 'Maryam Hosseini', DEPT.qc, ['manager', 'employee'], null);
-  ids['m-maint'] = await ensureUser('m-maint', 'Mehdi Sadeghi', DEPT.maint, ['manager', 'employee'], null);
-  ids['s-sup'] = await ensureUser('s-sup', 'Naser Ebrahimi', DEPT.sec, ['security'], null);
+  ids[CODE.prodManager] = await ensureUser(CODE.prodManager, 'Reza Karimi', DEPT.prodA, ['manager', 'employee'], null);
+  ids[CODE.qcManager] = await ensureUser(CODE.qcManager, 'Maryam Hosseini', DEPT.qc, ['manager', 'employee'], null);
+  ids[CODE.maintenanceManager] = await ensureUser(CODE.maintenanceManager, 'Mehdi Sadeghi', DEPT.maint, ['manager', 'employee'], null);
+  ids[CODE.securitySupervisor] = await ensureUser(CODE.securitySupervisor, 'Naser Ebrahimi', DEPT.sec, ['security'], null);
 
   const reports = [
-    ['e-prod-1', 'Ali Rezaei', DEPT.prodA, ['employee'], ids['m-prod']],
-    ['e-prod-2', 'Hossein Ahmadi', DEPT.prodA, ['employee'], ids['m-prod']],
-    ['e-qc-1', 'Zahra Mohammadi', DEPT.qc, ['employee'], ids['m-qc']],
-    ['e-qc-2', 'Fatemeh Akbari', DEPT.qc, ['employee'], ids['m-qc']],
-    ['e-maint-1', 'Hassan Jafari', DEPT.maint, ['employee'], ids['m-maint']],
-    ['e-maint-2', 'Saeed Bagheri', DEPT.maint, ['employee'], ids['m-maint']],
-    ['g-01', 'Kazem Moradi', DEPT.sec, ['security'], ids['s-sup']],
-    ['g-02', 'Javad Rostami', DEPT.sec, ['security'], ids['s-sup']],
+    [CODE.prodEmployee1, 'Ali Rezaei', DEPT.prodA, ['employee'], ids[CODE.prodManager]],
+    [CODE.prodEmployee2, 'Hossein Ahmadi', DEPT.prodA, ['employee'], ids[CODE.prodManager]],
+    [CODE.qcEmployee1, 'Zahra Mohammadi', DEPT.qc, ['employee'], ids[CODE.qcManager]],
+    [CODE.qcEmployee2, 'Fatemeh Akbari', DEPT.qc, ['employee'], ids[CODE.qcManager]],
+    [CODE.maintenanceEmployee1, 'Hassan Jafari', DEPT.maint, ['employee'], ids[CODE.maintenanceManager]],
+    [CODE.maintenanceEmployee2, 'Saeed Bagheri', DEPT.maint, ['employee'], ids[CODE.maintenanceManager]],
+    [CODE.guard1, 'Kazem Moradi', DEPT.sec, ['security'], ids[CODE.securitySupervisor]],
+    [CODE.guard2, 'Javad Rostami', DEPT.sec, ['security'], ids[CODE.securitySupervisor]],
   ];
   for (const r of reports) ids[r[0]] = await ensureUser(...r);
 
@@ -143,10 +159,10 @@ async function main() {
 
   // Team department managers.
   for (const [deptId, mgr] of [
-    [DEPT.prodA, ids['m-prod']],
-    [DEPT.qc, ids['m-qc']],
-    [DEPT.maint, ids['m-maint']],
-    [DEPT.sec, ids['s-sup']],
+    [DEPT.prodA, ids[CODE.prodManager]],
+    [DEPT.qc, ids[CODE.qcManager]],
+    [DEPT.maint, ids[CODE.maintenanceManager]],
+    [DEPT.sec, ids[CODE.securitySupervisor]],
   ]) {
     const { error } = await supa.from('departments').update({ manager_id: mgr }).eq('id', deptId);
     if (error) die('dept manager update failed:', error);

@@ -16,6 +16,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { nativeSelectClass } from '@/lib/native-select';
+import {
+  RequestSignatureFields,
+  type SignatureLabels,
+} from '../_components/RequestSignature';
 
 type Labels = {
   date: string;
@@ -33,6 +37,7 @@ type Labels = {
   validationSelectDate: string;
   validationTimes: string;
   validationLocation: string;
+  signature: SignatureLabels;
   days: string;
   hours: string;
   minutes: string;
@@ -42,7 +47,6 @@ type Labels = {
 type Props = {
   /** Only for hoursPerDay (duration rendering) and a sensible default time. */
   workSettings: WorkSettings;
-  calendarPref: string;
   labels: Labels;
   locale: string;
 };
@@ -76,12 +80,9 @@ function slotIndexAtOrAfter(time: string): number {
  * suite drives native selects with selectOption (a repo rule), and on a
  * factory-floor phone a fixed slot list beats a free-text time field.
  */
-export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }: Props) {
+export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
   const router = useRouter();
-  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
-    calendarPref,
-    locale
-  );
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   const defaultFrom = slotIndexAtOrAfter(workSettings.workStart);
 
@@ -92,6 +93,8 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
   );
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [signatureData, setSignatureData] = useState('');
+  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -118,6 +121,14 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
       setErrorMsg(labels.validationLocation);
       return;
     }
+    if (!signatureData) {
+      setErrorMsg(labels.signature.validationSignature);
+      return;
+    }
+    if (!signatureAuthorized) {
+      setErrorMsg(labels.signature.validationAuthorization);
+      return;
+    }
 
     startTransition(async () => {
       const result = await submitErrandRequest({
@@ -126,6 +137,8 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
         endTime,
         location: location.trim(),
         description: description || undefined,
+        signatureData,
+        signatureAuthorized,
       });
 
       if (result.ok) {
@@ -133,6 +146,8 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
         setDate(null);
         setLocation('');
         setDescription('');
+        setSignatureData('');
+        setSignatureAuthorized(false);
         router.refresh();
       } else {
         setErrorMsg(result.error);
@@ -241,6 +256,15 @@ export function ErrandRequestForm({ workSettings, calendarPref, labels, locale }
               data-testid="errand-description"
             />
           </div>
+
+          <RequestSignatureFields
+            idPrefix="errand"
+            value={signatureData}
+            onChange={setSignatureData}
+            authorized={signatureAuthorized}
+            onAuthorizedChange={setSignatureAuthorized}
+            labels={labels.signature}
+          />
 
           {/* Live preview — duration only. There is no balance to show. */}
           {durationMinutes > 0 && (

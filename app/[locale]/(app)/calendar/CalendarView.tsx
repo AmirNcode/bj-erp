@@ -11,7 +11,12 @@ import { useTranslations } from 'next-intl';
 import { CalendarDays, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave';
-import type { CalendarEntry, DecisionResult, WorkSettings } from '@/lib/actions/leave';
+import type {
+  CalendarEntry,
+  DecisionResult,
+  VisibleSignatureConsent,
+  WorkSettings,
+} from '@/lib/actions/leave';
 import { buildCalendarMonth, formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
@@ -31,6 +36,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  RequestSignatureFields,
+  RequestSignatureViewer,
+  type SignatureLabels,
+} from '../request/_components/RequestSignature';
 
 type Labels = {
   empty: string;
@@ -51,12 +61,13 @@ type Labels = {
   rejectSuccess: string;
   /** Tag for a work errand — it has no leave type to name. */
   errandBadge: string;
+  requesterSignature: SignatureLabels;
+  approverSignature: SignatureLabels;
 };
 
 type Props = {
   entries: CalendarEntry[];
   locale: string;
-  calendarPref: string; // 'jalali' | 'gregorian'
   rangeStart: string;
   rangeEnd: string;
   monthLabel: string;
@@ -64,6 +75,8 @@ type Props = {
   labels: Labels;
   /** Pending request ids the viewer may decide (admin: all; manager: own reports). */
   decidableIds?: string[];
+  /** Signature metadata already scoped by base-table RLS; images remain lazy. */
+  signatureConsents?: VisibleSignatureConsent[];
   /** Today (company timezone) as YYYY-MM-DD, to highlight the current day tile. */
   todayIso?: string;
 };
@@ -92,23 +105,61 @@ function DecideButtons({
   const tc = useTranslations('common');
   // Optional rejection note, local to this entry's dialog.
   const [rejectNote, setRejectNote] = useState('');
+  const [signatureData, setSignatureData] = useState('');
+  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
+  const [signatureError, setSignatureError] = useState('');
   return (
     <div className="flex items-center gap-2">
-      <AlertDialog>
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (open) {
+            setSignatureData('');
+            setSignatureAuthorized(false);
+            setSignatureError('');
+          }
+        }}
+      >
         <AlertDialogTrigger asChild>
           <Button size="sm" disabled={disabled} data-testid={`cal-approve-btn-${id}`}>
             {labels.approve}
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent size="sm">
+        <AlertDialogContent size="default">
           <AlertDialogHeader>
             <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
             <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
           </AlertDialogHeader>
+          <RequestSignatureFields
+            idPrefix={`cal-approval-${id}`}
+            value={signatureData}
+            onChange={setSignatureData}
+            authorized={signatureAuthorized}
+            onAuthorizedChange={setSignatureAuthorized}
+            labels={labels.approverSignature}
+          />
+          {signatureError && (
+            <p className="text-sm text-destructive" role="alert">
+              {signatureError}
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => onDecide(id, labels.approveSuccess, approveRequest)}
+              onClick={(event) => {
+                if (!signatureData) {
+                  event.preventDefault();
+                  setSignatureError(labels.approverSignature.validationSignature);
+                  return;
+                }
+                if (!signatureAuthorized) {
+                  event.preventDefault();
+                  setSignatureError(labels.approverSignature.validationAuthorization);
+                  return;
+                }
+                onDecide(id, labels.approveSuccess, (requestId) =>
+                  approveRequest(requestId, { signatureData, signatureAuthorized })
+                );
+              }}
               data-testid={`cal-approve-confirm-${id}`}
             >
               {labels.approve}
@@ -163,13 +214,13 @@ function DecideButtons({
 export function CalendarView({
   entries,
   locale,
-  calendarPref,
   rangeStart,
   rangeEnd,
   monthLabel,
   workSettings,
   labels,
   decidableIds,
+  signatureConsents,
   todayIso,
 }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
@@ -179,6 +230,10 @@ export function CalendarView({
   // then re-fetches the entries so the status text/row catches up.
   const [decidedIds, setDecidedIds] = useState<ReadonlySet<string>>(new Set());
   const decidableSet = useMemo(() => new Set(decidableIds ?? []), [decidableIds]);
+  const signatureConsentById = useMemo(
+    () => new Map((signatureConsents ?? []).map((item) => [item.requestId, item])),
+    [signatureConsents]
+  );
   const canDecide = (entry: CalendarEntry) =>
     entry.status === 'pending' && decidableSet.has(entry.id) && !decidedIds.has(entry.id);
 
@@ -204,11 +259,10 @@ export function CalendarView({
         entries,
         rangeStart,
         rangeEnd,
-        calendarPref,
         locale,
         workSettings,
       }),
-    [calendarPref, entries, locale, rangeEnd, rangeStart, workSettings]
+    [entries, locale, rangeEnd, rangeStart, workSettings]
   );
   // Default selection: today (when it falls in the displayed month), else the
   // first day with time-off, else the month start.
@@ -219,7 +273,7 @@ export function CalendarView({
   const [selectedIso, setSelectedIso] = useState(todayInMonth ?? firstBusyDay);
   const selectedDay = month.days.find((day) => day.iso === selectedIso) ?? month.days[0];
 
-  const fmt = (iso: string) => formatCalendarDate(iso, calendarPref, locale);
+  const fmt = (iso: string) => formatCalendarDate(iso, locale);
   // An errand carries no leave type (the view LEFT JOINs), so it is named by its
   // tag instead. محل ماموریت and شرح ماموریت are never in CalendarEntry — a
   // teammate sees that someone is out, not where or why (FR-25).
@@ -292,6 +346,19 @@ export function CalendarView({
                     <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
                   </div>
                 )}
+                <RequestSignatureViewer
+                  requestId={entry.id}
+                  consentAt={signatureConsentById.get(entry.id)?.requesterConsentAt ?? null}
+                  labels={labels.requesterSignature}
+                  locale={locale}
+                />
+                <RequestSignatureViewer
+                  requestId={entry.id}
+                  consentAt={signatureConsentById.get(entry.id)?.approverConsentAt ?? null}
+                  labels={labels.approverSignature}
+                  locale={locale}
+                  kind="approver"
+                />
               </CardContent>
             </Card>
           );
@@ -398,6 +465,19 @@ export function CalendarView({
                           <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
                         </div>
                       )}
+                      <RequestSignatureViewer
+                        requestId={entry.id}
+                        consentAt={signatureConsentById.get(entry.id)?.requesterConsentAt ?? null}
+                        labels={labels.requesterSignature}
+                        locale={locale}
+                      />
+                      <RequestSignatureViewer
+                        requestId={entry.id}
+                        consentAt={signatureConsentById.get(entry.id)?.approverConsentAt ?? null}
+                        labels={labels.approverSignature}
+                        locale={locale}
+                        kind="approver"
+                      />
                     </div>
                     <span
                       className={cn(

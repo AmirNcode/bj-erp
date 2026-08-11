@@ -10,6 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { nativeSelectClass } from '@/lib/native-select';
+import { LazyDatePicker } from '@/components/LazyDatePicker';
+import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DateObjectLike = any;
 
 type Labels = {
   employee: string;
@@ -30,13 +36,15 @@ type Props = {
   employees: EmployeeOption[];
   leaveTypes: LeaveType[];
   labels: Labels;
+  locale: string;
 };
 
-export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay }: Props) {
+export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay, locale }: Props) {
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
   const [employeeId, setEmployeeId] = useState('');
   const [leaveTypeId, setLeaveTypeId] = useState('');
-  const [periodStart, setPeriodStart] = useState('');
-  const [periodEnd, setPeriodEnd] = useState('');
+  const [periodStartDate, setPeriodStartDate] = useState<DateObjectLike | null>(null);
+  const [periodEndDate, setPeriodEndDate] = useState<DateObjectLike | null>(null);
   const [days, setDays] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -47,6 +55,8 @@ export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay }: Pro
     setErrorMsg('');
     setSuccessMsg('');
 
+    const periodStart = periodStartDate ? dateObjectToGregorian(periodStartDate) : '';
+    const periodEnd = periodEndDate ? dateObjectToGregorian(periodEndDate) : '';
     const daysNum = parseFloat(days);
     if (!employeeId || !leaveTypeId || !periodStart || !periodEnd || !daysNum) {
       setErrorMsg('All fields are required.');
@@ -67,8 +77,8 @@ export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay }: Pro
         toast.success(labels.success);
         setEmployeeId('');
         setLeaveTypeId('');
-        setPeriodStart('');
-        setPeriodEnd('');
+        setPeriodStartDate(null);
+        setPeriodEndDate(null);
         setDays('');
       } else {
         setErrorMsg(res.error);
@@ -117,26 +127,58 @@ export function AllocateForm({ employees, leaveTypes, labels, hoursPerDay }: Pro
             </select>
           </div>
 
-          {/* Period start — native date input preserved for Playwright fill e2e */}
+          {/* Allocation dates are displayed in the Persian calendar and stored as Gregorian ISO. */}
           <div className="space-y-1.5">
             <Label htmlFor="alloc_period_start">{labels.periodStart}</Label>
-            <Input
-              id="alloc_period_start"
-              type="date"
-              value={periodStart}
-              onChange={(e) => setPeriodStart(e.target.value)}
-            />
+            <div
+              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+              data-calendar="jalali"
+              data-testid="allocation-start-date-picker"
+            >
+              <LazyDatePicker
+                id="alloc_period_start"
+                value={periodStartDate}
+                onChange={(date: DateObjectLike) => {
+                  const next = date ?? null;
+                  setPeriodStartDate(next);
+                  if (
+                    !next ||
+                    (periodEndDate &&
+                      dateObjectToGregorian(next) > dateObjectToGregorian(periodEndDate))
+                  ) {
+                    setPeriodEndDate(null);
+                  }
+                }}
+                calendar={calendar}
+                locale={calLocale}
+                calendarPosition={calendarPosition}
+                format="YYYY/MM/DD"
+                inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                containerClassName="rmdp-container w-full"
+              />
+            </div>
           </div>
 
-          {/* Period end — native date input preserved for Playwright fill e2e */}
           <div className="space-y-1.5">
             <Label htmlFor="alloc_period_end">{labels.periodEnd}</Label>
-            <Input
-              id="alloc_period_end"
-              type="date"
-              value={periodEnd}
-              onChange={(e) => setPeriodEnd(e.target.value)}
-            />
+            <div
+              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
+              data-calendar="jalali"
+              data-testid="allocation-end-date-picker"
+            >
+              <LazyDatePicker
+                id="alloc_period_end"
+                value={periodEndDate}
+                minDate={periodStartDate ?? undefined}
+                onChange={(date: DateObjectLike) => setPeriodEndDate(date ?? null)}
+                calendar={calendar}
+                locale={calLocale}
+                calendarPosition={calendarPosition}
+                format="YYYY/MM/DD"
+                inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs"
+                containerClassName="rmdp-container w-full"
+              />
+            </div>
           </div>
 
           {/* Days */}

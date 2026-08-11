@@ -76,7 +76,8 @@ in-DB**, never typed) ·
 `personnel_no` (client HR number, `^[0-9]{1,10}$`, unique per company, nullable for pre-existing
 users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
-`language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali|gregorian`, default `jalali`) ·
+`language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali` only, default `jalali`; retained
+as a compatibility column while the UI has no calendar setting) ·
 `active bool` · `created_at`.
 *Note*: no email required. National ID intentionally omitted unless a later requirement forces it.
 
@@ -154,12 +155,42 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 ### `leave_requests`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `start_date date` ·
 `end_date date` · `day_part day_part` · `requested_minutes int` (computed, see below) ·
+`unpaid_minutes int` (default 0, constrained to `0..requested_minutes`) ·
 `status leave_status` (default `pending`) · `reason text` · `decided_by → profiles` (nullable) ·
-`decided_at` · `decision_note text` (nullable, ≤500 chars) · `created_at`.
+`decided_at` · `decision_note text` (nullable, ≤500 chars) · `signature_data text` (nullable for
+historical rows) · `signature_consent_at timestamptz` (nullable for historical rows) ·
+`approver_signature_data text` (nullable for historical approvals) ·
+`approver_signature_consent_at timestamptz` (nullable for historical approvals) · `created_at`.
 Indexes on (`employee_id`,`status`) and (`start_date`,`end_date`).
 `reason` is the **requester's** and is FR-25-private from peers; `decision_note` is the
 **decider's** — the optional "why" recorded on reject (2026-07-29), readable by the employee on
 their own row and never exposed through `team_leave_calendar` (explicit column list).
+
+**Requester signature (2026-08-05, FR-32):** every new daily leave, hourly leave, daily errand, and
+hourly errand wrapper requires a bounded PNG data URL plus explicit authorization.
+`private.attach_request_signature`
+sets the image and database-generated `signature_consent_at = now()` in the same transaction as the
+request insert. `leave_requests_signature_shape` requires both columns to be NULL (historical rows)
+or both present, and bounds/validates the PNG shape. There is no later signature update path:
+approval, rejection, and cancellation preserve the evidence. List/calendar reads carry only the
+timestamp; the image is fetched from the RLS-protected base row on demand and is absent from
+`team_leave_calendar`.
+
+**Approver signature (2026-08-05, FR-14):** the signed, three-argument
+`approve_leave_request` requires the deciding direct manager or admin to provide a fresh bounded PNG
+and explicit authorization. The RPC sets the approval status, `decided_by`, `decided_at`, approver
+signature, database-generated consent timestamp, ledger consumption, and audit event in one
+transaction. `leave_requests_approver_signature_shape` permits unsigned historical rows but requires
+both evidence fields on every newly signed approval. Rejection stays unsigned. The image is fetched
+on demand under the same base-row RLS rules as the requester's signature and is never added to
+`team_leave_calendar` or the audit JSON.
+
+**Paid/unpaid split (2026-08-05, FR-13):** `unpaid_minutes` is estimated at submission and
+recomputed authoritatively by `approve_leave_request` while holding the employee's ledger advisory
+lock. For a balance-affecting paid type, paid minutes are
+`min(requested_minutes, max(current_balance, 0))`; the request stores the remainder as unpaid and
+only the paid portion is written to the ledger. Selecting the unpaid leave type records the whole
+request as unpaid. Existing rows default to zero, preserving their historical behavior.
 **Tracking numbers (2026-07-29, FR-29):** `company_id → companies` (denormalised deliberately — it makes
 the serial's unique index possible without a join and shortens the company-wide manager queries FR-17
 needs) · `serial_year int` · `serial_seq int`, unique (`company_id`,`serial_year`,`serial_seq`).
@@ -190,17 +221,17 @@ reverse-case warning. **Never exposed through `team_leave_calendar`.**
 `end_time > start_time`, and `day_part = 'full'`. Gated by `leave_types.allow_hourly` (true for
 annual + unpaid, false for sick, matching the client's paper hourly form).
 
-**Work errand (2026-07-30, FR-30):** `kind request_kind` (default `leave`) · `errand_location text`,
-and **`leave_type_id` is nullable**. An errand is form BJ-F 50207 — a paid off-site work trip, not
-leave. A second CHECK (`leave_requests_kind_shape`) pairs with the one above:
-`leave` ⇒ a type and no location; `errand` ⇒ **no type**, a non-blank location ≤200 chars, and
-`unit = 'hour'` (which chains into the shape rule, forcing one date and both times).
+**Work errand (2026-07-30, extended 2026-08-05; FR-30/FR-33):** `kind request_kind` (default
+`leave`) · `errand_location text`, and **`leave_type_id` is nullable**. An errand is a paid off-site
+work trip, not leave. A second CHECK (`leave_requests_kind_shape`) pairs with the unit rule:
+`leave` ⇒ a type and no location; `errand` ⇒ **no type or replacement** and a non-blank location
+≤200 chars. Hourly errands use `unit='hour'` (one date and both times); daily errands use
+`unit='day'` (an inclusive date range, full day part, and no times).
 
 **Nulling `leave_type_id` is the mechanism, not a shortcut.** `approve_leave_request` and
 `cancel_leave_request` both gate their ledger writes on `affects_balance` read from the type; with a
 NULL type that read returns no row and the write is skipped. An errand is therefore structurally
-incapable of consuming leave, even from a future writer that forgets it exists. Neither function
-needed changing.
+incapable of consuming leave.
 
 `شرح ماموریت` reuses **`reason`** rather than adding a column: it is the requester's own free text,
 needs exactly the FR-25 privacy `reason` already has, and is already absent from
@@ -208,16 +239,18 @@ needs exactly the FR-25 privacy `reason` already has, and is already absent from
 teammates see that someone is out, not where.
 
 Errands are **not** bound by the work-hours window, **not** counted against
-`max_hourly_minutes_per_day`, and name **no** replacement. They **may fall on a weekend or holiday**:
-`compute_requested_minutes` skips its working-day gate for `kind='errand'` and returns the raw time
-difference, because urgent company business does not respect the holiday calendar.
+`max_hourly_minutes_per_day`, and name **no** replacement. They **may fall on a weekend or holiday**.
+For `kind='errand'`, `compute_requested_minutes` returns the raw time difference for an hourly
+errand, or inclusive calendar days × configured `hours_per_day` for a daily errand.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`
 (+ for allocation, − for consumption) · `balance_after_minutes int` · `note` · `created_at`.
 **Balance = latest `balance_after_minutes` per (employee, leave_type)**, derived not stored elsewhere.
-Cancelling an **approved future** request writes a `reversal` row (`+requested_minutes`) — FR-15.
+Cancelling an **approved future** request writes a `reversal` row for only the paid portion
+(`requested_minutes - unpaid_minutes`) — FR-13/FR-15. Historical requests default to zero unpaid
+minutes and therefore retain the former full reversal.
 Index (`employee_id`,`leave_type_id`,`created_at desc`,`id desc`) backs the latest-balance lookup.
 `period_month date` (2026-07-29) marks which month an `allocation` or `carryover_forfeit` belongs
 to; NULL for every other entry. A **partial unique index** on
@@ -241,15 +274,16 @@ requested_minutes(start, end, day_part, weekend_days, holidays, hours_per_day):
     return round(count * hours_per_day * 60)
 ```
 Implemented as `compute_requested_minutes` (Postgres, callable only by the definer write-fns) so the
-client cannot fabricate durations. Approval writes a `consumption` ledger row of
-`-requested_minutes` and sets `balance_after_minutes`. The TS mirror is
+client cannot fabricate durations. Approval writes a `consumption` ledger row for only the paid
+portion and sets `balance_after_minutes`; it never takes a paid balance below zero. The TS mirror is
 `countWorkingMinutes` in `lib/leave/workingDays.ts` and must stay in lockstep.
 
 **Submit/approve rules (2026-07-02 hardening):** `submit_leave_request` rejects ranges longer than
 366 days and ranges overlapping the employee's own pending/approved requests;
-`approve_leave_request` re-checks overlap against approved requests and re-checks the balance
-(balance-affecting types can never go negative). Error messages are stable English strings mapped
-to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
+`approve_leave_request` re-checks overlap against approved requests and finalizes the paid/unpaid
+split under the ledger lock. Balance-affecting types can never go negative; an excess is recorded in
+`leave_requests.unpaid_minutes` rather than rejected. Error messages are stable English strings
+mapped to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
 
 ## Monthly accrual (server-side, FR-27)
 
@@ -289,9 +323,10 @@ not blocked by a boundary — while the 4h/day cap still governs the total. **Ac
 am/pm half-day plus an hourly request on the same date is refused, because am/pm is stored as
 `unit='day'`. Mirrored in `lib/leave/hourly.ts` (`rangesOverlap`, 17 unit tests).
 
-**Errands need no special case here.** They are `unit='hour'`, so the same rule already makes an
-errand conflict with an overlapping leave in both directions and leaves adjacent slots free — which
-is exactly FR-30's requirement.
+**Errands reuse the same rule.** Hourly errands are `unit='hour'`, so adjacent slots remain free.
+Daily errands are `unit='day'`, so they occupy each whole date in their range and conflict with any
+intersecting daily or hourly leave/errand. This satisfies FR-30 and FR-33 without a second overlap
+algorithm.
 
 **Checked 2026-07-30, no change needed:** `approve_leave_request`'s overlap re-check is already
 time-aware and mirrors the submit rule. The date-only version that appears in

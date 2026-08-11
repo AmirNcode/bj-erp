@@ -6,10 +6,14 @@ import { LazyDatePicker } from '@/components/LazyDatePicker';
 import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
-import { formatDuration } from '@/lib/leave/duration';
+import { formatDuration, projectLeaveBalance } from '@/lib/leave/duration';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { submitHourlyRequest, getMyBalance, getReplacementCandidates } from '@/lib/actions/leave';
 import { ReplacementPicker } from '../_components/ReplacementPicker';
+import {
+  RequestSignatureFields,
+  type SignatureLabels,
+} from '../_components/RequestSignature';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,7 +32,9 @@ type Labels = {
   submit: string;
   preview: string;
   durationLabel: string;
+  requestingLabel: string;
   remainingBalanceLabel: string;
+  unpaidTimeOffLabel: string;
   noBalance: string;
   success: string;
   errorLabel: string;
@@ -43,6 +49,7 @@ type Labels = {
   replacementOnLeave: string;
   replacementLoading: string;
   replacementEmpty: string;
+  signature: SignatureLabels;
   days: string;
   hours: string;
   minutes: string;
@@ -53,7 +60,6 @@ type Props = {
   /** Already filtered to types with allow_hourly — the SQL re-checks anyway. */
   leaveTypes: LeaveType[];
   workSettings: WorkSettings;
-  calendarPref: string;
   labels: Labels;
   locale: string;
 };
@@ -71,15 +77,11 @@ type DateObjectLike = any;
 export function HourlyRequestForm({
   leaveTypes,
   workSettings,
-  calendarPref,
   labels,
   locale,
 }: Props) {
   const router = useRouter();
-  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(
-    calendarPref,
-    locale
-  );
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   const slots = timeSlots(
     { start: workSettings.workStart, end: workSettings.workEnd },
@@ -93,6 +95,8 @@ export function HourlyRequestForm({
   const [reason, setReason] = useState('');
   const [replacementId, setReplacementId] = useState('');
   const [noReplacement, setNoReplacement] = useState(false);
+  const [signatureData, setSignatureData] = useState('');
+  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
   const [candidates, setCandidates] = useState<ReplacementCandidate[]>([]);
   const [candidatesFor, setCandidatesFor] = useState<string | null>(null);
   const [balanceMinutes, setBalanceMinutes] = useState<number | null>(null);
@@ -113,6 +117,10 @@ export function HourlyRequestForm({
 
   const effectiveBalance = balanceFor === selectedTypeId ? balanceMinutes : null;
   const balanceLoading = !!selectedTypeId && balanceFor !== selectedTypeId;
+  const balanceProjection =
+    durationMinutes > 0 && effectiveBalance !== null
+      ? projectLeaveBalance(durationMinutes, effectiveBalance)
+      : null;
 
   useEffect(() => {
     if (!selectedTypeId) return;
@@ -176,6 +184,14 @@ export function HourlyRequestForm({
       setErrorMsg(labels.validationTimes);
       return;
     }
+    if (!signatureData) {
+      setErrorMsg(labels.signature.validationSignature);
+      return;
+    }
+    if (!signatureAuthorized) {
+      setErrorMsg(labels.signature.validationAuthorization);
+      return;
+    }
 
     startTransition(async () => {
       const result = await submitHourlyRequest({
@@ -185,6 +201,8 @@ export function HourlyRequestForm({
         endTime,
         reason: reason || undefined,
         replacementId: replacementId || null,
+        signatureData,
+        signatureAuthorized,
       });
 
       if (result.ok) {
@@ -193,6 +211,8 @@ export function HourlyRequestForm({
         setReason('');
         setReplacementId('');
         setNoReplacement(false);
+        setSignatureData('');
+        setSignatureAuthorized(false);
         router.refresh();
       } else {
         setErrorMsg(result.error);
@@ -319,6 +339,15 @@ export function HourlyRequestForm({
             />
           </div>
 
+          <RequestSignatureFields
+            idPrefix="hourly"
+            value={signatureData}
+            onChange={setSignatureData}
+            authorized={signatureAuthorized}
+            onAuthorizedChange={setSignatureAuthorized}
+            labels={labels.signature}
+          />
+
           {/* Live preview — duration and balance, both in days-and-hours */}
           {durationMinutes > 0 && (
             <div
@@ -326,24 +355,40 @@ export function HourlyRequestForm({
               data-testid="hourly-preview"
             >
               <div data-testid="hourly-duration">
-                {labels.preview}: {labels.durationLabel}{' '}
+                {labels.requestingLabel}:{' '}
                 <strong>
                   {formatDuration(durationMinutes, workSettings.hoursPerDay, locale, labels)}
                 </strong>
               </div>
-              {selectedType?.affects_balance && (
-                <div data-testid="hourly-balance">
-                  {balanceLoading
-                    ? '…'
-                    : effectiveBalance !== null
-                      ? `${labels.remainingBalanceLabel}: ${formatDuration(
-                          effectiveBalance,
-                          workSettings.hoursPerDay,
-                          locale,
-                          labels
-                        )}`
-                      : labels.noBalance}
-                </div>
+              {selectedType?.is_paid && selectedType.affects_balance && (
+                <>
+                  <div data-testid="hourly-balance">
+                    {balanceLoading
+                      ? '…'
+                      : balanceProjection
+                        ? `${labels.remainingBalanceLabel}: ${formatDuration(
+                            balanceProjection.remainingMinutes,
+                            workSettings.hoursPerDay,
+                            locale,
+                            labels
+                          )}`
+                        : labels.noBalance}
+                  </div>
+                  {balanceProjection && balanceProjection.unpaidMinutes > 0 && (
+                    <div
+                      className="font-medium text-destructive"
+                      data-testid="hourly-unpaid"
+                    >
+                      {labels.unpaidTimeOffLabel}:{' '}
+                      {formatDuration(
+                        balanceProjection.unpaidMinutes,
+                        workSettings.hoursPerDay,
+                        locale,
+                        labels
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

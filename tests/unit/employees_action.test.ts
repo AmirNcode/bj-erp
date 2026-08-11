@@ -15,7 +15,6 @@ describe('allowedProfileFields', () => {
       'hire_date',
       'active',
       'language_pref',
-      'calendar_pref',
     ]);
   });
 

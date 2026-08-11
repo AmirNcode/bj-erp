@@ -15,10 +15,20 @@
 #   7. exports the HTTPS root certificate for phones to trust
 #
 # Re-runnable: an existing installation (existing .env + database volume) is
-# reused, migrations are replayed idempotently, secrets are NOT regenerated.
+# reused, only pending immutable migrations run, secrets are NOT regenerated.
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# shellcheck source=lib/common.sh
+. ./lib/common.sh
+# shellcheck source=lib/migrations.sh
+. ./lib/migrations.sh
+# shellcheck source=lib/health.sh
+. ./lib/health.sh
+
+BJ_DEPLOY_TARGET="${BJ_DEPLOY_TARGET:-client}"
+bj_compose_init "$PWD" "$BJ_DEPLOY_TARGET"
 
 say()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 fail() { printf '\n\033[1;31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -60,7 +70,7 @@ normalise_host_port() {
 }
 
 # ── 3. install-time inputs ───────────────────────────────────────────────────
-if [ -f .env ]; then
+if [ -f .env ] && [ "${BJ_FORCE_NEW_CONFIG:-0}" != 1 ]; then
   # Older/manual installs may have left this secret file too permissive.
   chmod 600 .env
   say "Existing .env found — reusing configuration and secrets."
@@ -72,31 +82,49 @@ if [ -f .env ]; then
   if ! grep -q '^APP_ORIGIN=' .env; then
     normalise_host_port
     say "Adding APP_PORT/APP_ORIGIN to .env (published on ${APP_PORT})…"
-    sed -i "s|^APP_HOST=.*|APP_HOST=${APP_HOST}|" .env
-    printf 'APP_PORT=%s\nAPP_ORIGIN=%s\n' "$APP_PORT" "$APP_ORIGIN" >> .env
+    bj_env_set .env APP_HOST "$APP_HOST"
+    bj_env_set .env APP_PORT "$APP_PORT"
+    bj_env_set .env APP_ORIGIN "$APP_ORIGIN"
   fi
 else
   DEFAULT_HOST=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
-  read -r -p "Server address employees will use (IP or internal domain) [${DEFAULT_HOST:-required}]: " APP_HOST
-  APP_HOST=${APP_HOST:-$DEFAULT_HOST}
+  if [ -n "${BJ_APP_HOST:-}" ]; then
+    APP_HOST="$BJ_APP_HOST"
+  else
+    read -r -p "Server address employees will use (IP or internal domain) [${DEFAULT_HOST:-required}]: " APP_HOST
+    APP_HOST=${APP_HOST:-$DEFAULT_HOST}
+  fi
   [ -n "$APP_HOST" ] || fail "a server address is required"
 
-  read -r -p "HTTPS port to publish [443]: " APP_PORT
-  APP_PORT=${APP_PORT:-443}
+  if [ -n "${BJ_APP_PORT:-}" ]; then
+    APP_PORT="$BJ_APP_PORT"
+  else
+    read -r -p "HTTPS port to publish [443]: " APP_PORT
+    APP_PORT=${APP_PORT:-443}
+  fi
   normalise_host_port
 
-  while :; do
-    read -r -s -p "Password for the first admin account (min 8 chars): " ADMIN_PASSWORD; echo
-    [ "${#ADMIN_PASSWORD}" -ge 8 ] && break
-    echo "Too short — try again."
-  done
+  if [ -n "${BJ_ADMIN_PASSWORD_FILE:-}" ]; then
+    [ -f "$BJ_ADMIN_PASSWORD_FILE" ] || fail "admin password file not found"
+    IFS= read -r ADMIN_PASSWORD < "$BJ_ADMIN_PASSWORD_FILE"
+  else
+    while :; do
+      read -r -s -p "Password for the first admin account (min 8 chars): " ADMIN_PASSWORD; echo
+      [ "${#ADMIN_PASSWORD}" -ge 8 ] && break
+      echo "Too short — try again."
+    done
+  fi
+  [ "${#ADMIN_PASSWORD}" -ge 8 ] || fail "admin password must be at least 8 characters"
 
   say "Generating secrets…"
   POSTGRES_PASSWORD=$(openssl rand -hex 24)
   JWT_SECRET=$(openssl rand -hex 32)
 
   # Sign the API keys inside the app image (node is guaranteed there).
-  KEYS_JSON=$(docker run --rm --entrypoint node bj-erp-app:latest /gen-keys.mjs "$JWT_SECRET")
+  if [ "$BJ_DEPLOY_TARGET" = local ]; then KEY_IMAGE="bj-erp-app:local-arm64"; else KEY_IMAGE="bj-erp-app:latest"; fi
+  export BJ_JWT_SECRET="$JWT_SECRET"
+  KEYS_JSON=$(docker run --rm -e BJ_JWT_SECRET --entrypoint node "$KEY_IMAGE" /gen-keys.mjs)
+  unset BJ_JWT_SECRET
   ANON_KEY=$(printf '%s' "$KEYS_JSON" | sed -n 's/.*"anon":"\([^"]*\)".*/\1/p')
   SERVICE_ROLE_KEY=$(printf '%s' "$KEYS_JSON" | sed -n 's/.*"service_role":"\([^"]*\)".*/\1/p')
   [ -n "$ANON_KEY" ] || fail "failed to generate API keys"
@@ -121,48 +149,70 @@ fi
 # psql inside the db container as the image's superuser (supabase_admin).
 # The image requires password auth even on the local socket — pass it along.
 pgexec() {
-  docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+  bj_compose_with_db_password db \
     psql -v ON_ERROR_STOP=1 -U supabase_admin -d postgres "$@"
 }
 
 # ── 4. database up + auth schema ─────────────────────────────────────────────
 say "Starting the database…"
-docker compose up -d db
-until docker compose exec -T db pg_isready -U supabase_admin -h localhost >/dev/null 2>&1; do sleep 2; done
+bj_compose up -d db
+until bj_compose exec -T db pg_isready -U supabase_admin -h localhost -d postgres >/dev/null 2>&1; do sleep 2; done
 
 say "Starting the auth service (creates/updates its own schema)…"
-docker compose up -d auth
+bj_compose up -d auth
 for i in $(seq 1 60); do
   if pgexec -tAc \
       "select 1 from information_schema.tables where table_schema='auth' and table_name='users'" \
       2>/dev/null | grep -q 1; then break; fi
-  [ "$i" = 60 ] && fail "auth service did not initialise its schema — check: docker compose logs auth"
+  [ "$i" = 60 ] && fail "auth service did not initialise its schema — run ./remote-job.sh stack-logs as root"
   sleep 2
 done
 
 # ── 5. app schema: migrations + baseline seed ────────────────────────────────
-say "Applying database migrations…"
-for f in migrations/*.sql; do
-  echo "  - $(basename "$f")"
-  pgexec -f "/bj/migrations/$(basename "$f")" >/dev/null
-done
+say "Applying pending database migrations…"
+MIGRATIONS_DIR="${BJ_MIGRATIONS_DIR:-$PWD/migrations}"
+SEED_FILE="${BJ_SEED_FILE:-$PWD/sql/seed.sql}"
+bj_apply_migrations "$MIGRATIONS_DIR" "${APP_VERSION:-latest}"
 
 say "Applying baseline configuration (company, departments, leave types)…"
-pgexec -f /bj/seed.sql >/dev/null
+pgexec < "$SEED_FILE" >/dev/null
 
 # ── 6. first admin + full stack ──────────────────────────────────────────────
-if [ -n "${ADMIN_PASSWORD:-}" ]; then
+ADMIN_EXISTS=$(pgexec -tAc "select exists(select 1 from auth.users where email='admin@bj-app.internal')" | tr -d '[:space:]')
+if [ "$ADMIN_EXISTS" != t ] && [ -z "${ADMIN_PASSWORD:-}" ]; then
+  if [ -n "${BJ_ADMIN_PASSWORD_FILE:-}" ]; then
+    [ -f "$BJ_ADMIN_PASSWORD_FILE" ] || fail "admin password file not found"
+    IFS= read -r ADMIN_PASSWORD < "$BJ_ADMIN_PASSWORD_FILE"
+  elif [ -t 0 ]; then
+    while :; do
+      read -r -s -p "Database has no admin. Password for the first admin (min 8 chars): " ADMIN_PASSWORD; echo
+      [ "${#ADMIN_PASSWORD}" -ge 8 ] && break
+      echo "Too short — try again."
+    done
+  else
+    fail "database has no admin; set BJ_ADMIN_PASSWORD_FILE to a protected password file"
+  fi
+fi
+if [ "$ADMIN_EXISTS" != t ]; then
   say "Creating the first admin account (login code: admin)…"
-  pgexec -v admin_password="$ADMIN_PASSWORD" -f /bj/bootstrap_admin.sql
+  export BJ_ADMIN_PASSWORD="$ADMIN_PASSWORD"
+  export PGPASSWORD="$POSTGRES_PASSWORD"
+  bj_compose exec -T -e PGPASSWORD -e BJ_ADMIN_PASSWORD db \
+    psql -v ON_ERROR_STOP=1 -U supabase_admin -d postgres -f /bj/bootstrap_admin.sql
+  unset PGPASSWORD BJ_ADMIN_PASSWORD ADMIN_PASSWORD
 fi
 
 say "Starting the application…"
-docker compose up -d
+bj_compose up -d
+
+say "Checking database, application, and Auth health…"
+bj_wait_for_stack 60
+bj_verify_running_architecture "$([ "$BJ_DEPLOY_TARGET" = local ] && printf arm64 || printf amd64)"
 
 # ── 7. HTTPS root certificate for phones ─────────────────────────────────────
 say "Exporting the HTTPS root certificate…"
 for i in $(seq 1 30); do
-  if docker compose exec -T gateway cat /data/caddy/pki/authorities/local/root.crt \
+  if bj_compose exec -T gateway cat /data/caddy/pki/authorities/local/root.crt \
        > bj-root-ca.crt 2>/dev/null && [ -s bj-root-ca.crt ]; then break; fi
   sleep 2
 done

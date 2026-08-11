@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
+import { getCachedUser } from '@/lib/auth/context';
 import {
   getActiveLeaveTypes,
   getMyLeaveRequests,
@@ -18,6 +18,7 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { RequestTypeTabs } from './_components/RequestTypeTabs';
 import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
 
@@ -42,15 +43,11 @@ async function RequestPageData({ locale }: { locale: string }) {
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
   const tErrand = await getTranslations('errand');
+  const tSignature = await getTranslations('signature');
   // Get the authenticated user
   const user = await getCachedUser();
 
   if (!user) return null;
-
-  // Fetch calendar preference from profile
-  const profile = await getCachedProfile(user.id);
-
-  const calendarPref = profile?.calendar_pref ?? 'jalali';
 
   // Fetch everything in parallel
   const [leaveTypesResult, requestsResult, workSettingsResult] = await Promise.all([
@@ -70,6 +67,8 @@ async function RequestPageData({ locale }: { locale: string }) {
     leaveType: t('leaveType'),
     selectType: t('selectType'),
     dateRange: t('dateRange'),
+    startDate: t('startDate'),
+    endDate: t('endDate'),
     dayPart: t('dayPart'),
     dayPartFull: t('dayPartFull'),
     dayPartAm: t('dayPartAm'),
@@ -78,7 +77,9 @@ async function RequestPageData({ locale }: { locale: string }) {
     submit: t('submit'),
     preview: t('preview'),
     workingDaysLabel: t('workingDaysLabel'),
+    requestingLabel: t('requestingLabel'),
     remainingBalanceLabel: t('remainingBalanceLabel'),
+    unpaidTimeOffLabel: t('unpaidTimeOffLabel'),
     noBalance: t('noBalance'),
     success: t('success'),
     errorLabel: t('error'),
@@ -113,6 +114,9 @@ async function RequestPageData({ locale }: { locale: string }) {
     trackingNo: tLeave('trackingNo'),
     errandBadge: tErrand('badge'),
     errandLocation: tErrand('location'),
+    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
+    signature: signatureLabelsFrom(tSignature),
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
   };
 
@@ -121,7 +125,6 @@ async function RequestPageData({ locale }: { locale: string }) {
       <LeaveRequestForm
         leaveTypes={leaveTypes}
         workSettings={workSettings}
-        calendarPref={calendarPref}
         labels={labels}
         locale={locale}
       />
@@ -130,7 +133,6 @@ async function RequestPageData({ locale }: { locale: string }) {
         <MyRequestsList
           requests={requests}
           labels={labels}
-          calendarPref={calendarPref}
           locale={locale}
           hoursPerDay={workSettings.hoursPerDay}
         />

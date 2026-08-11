@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getCompanyHolidays } from '@/lib/actions/settings';
 import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,10 +26,7 @@ export default async function SettingsPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
 
-  const [roles, profile] = await Promise.all([
-    getCachedRoles(user.id),
-    getCachedProfile(user.id),
-  ]);
+  const roles = await getCachedRoles(user.id);
   const isAdmin = roles.includes('admin');
   if (!isAdmin) redirect(`/${locale}/home`);
 
@@ -89,7 +86,7 @@ export default async function SettingsPage({ params }: Props) {
         <CardContent>
           <HolidayEditor
             initial={holidays}
-            calendarPref={profile?.calendar_pref ?? 'jalali'}
+            locale={locale}
             labels={{
               holidaysTitle: t('holidaysTitle'),
               addHoliday: t('addHoliday'),

@@ -1,0 +1,687 @@
+#!/usr/bin/env bash
+# BJ ERP deployment assistant. Run from any directory:
+#
+#   ./deploy/bj-deploy                 interactive menu
+#   ./deploy/bj-deploy doctor local
+#   ./deploy/bj-deploy update client
+#   ./deploy/bj-deploy resume RUN_ID
+#   ./deploy/bj-deploy --dry-run reset-db client
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+cd "$REPO_ROOT"
+
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/migrations.sh
+. "$SCRIPT_DIR/lib/migrations.sh"
+# shellcheck source=lib/health.sh
+. "$SCRIPT_DIR/lib/health.sh"
+
+readonly STATE_ROOT="$REPO_ROOT/.bj-deploy"
+readonly LOCAL_STATE="$STATE_ROOT/local"
+readonly BACKUP_ROOT="$REPO_ROOT/backups/deploy-assistant"
+
+readonly DEFAULT_SERVER_HOST=5.201.190.184
+readonly DEFAULT_SERVER_PORT=2222
+readonly DEFAULT_SERVER_USER=behsazan
+BJ_SERVER_HOST="${BJ_SERVER_HOST:-$DEFAULT_SERVER_HOST}"
+BJ_SERVER_PORT="${BJ_SERVER_PORT:-$DEFAULT_SERVER_PORT}"
+BJ_SERVER_USER="${BJ_SERVER_USER:-$DEFAULT_SERVER_USER}"
+BJ_REMOTE_DIR="${BJ_REMOTE_DIR:-/home/behsazan/bj-erp-installer}"
+if [ -z "${BJ_SSH_DEST+x}" ]; then
+  if [ "$BJ_SERVER_HOST" = "$DEFAULT_SERVER_HOST" ] \
+     && [ "$BJ_SERVER_PORT" = "$DEFAULT_SERVER_PORT" ] \
+     && [ "$BJ_SERVER_USER" = "$DEFAULT_SERVER_USER" ]; then
+    BJ_SSH_DEST=bj
+  else
+    BJ_SSH_DEST="${BJ_SERVER_USER}@${BJ_SERVER_HOST}"
+  fi
+fi
+DRY_RUN=0
+
+usage() {
+  cat <<'EOF'
+Usage:
+  ./deploy/bj-deploy
+  ./deploy/bj-deploy [--dry-run] doctor|status|logs|restart|app|update|reset-db|factory-reset local|client
+  ./deploy/bj-deploy resume RUN_ID
+
+Data effects:
+  restart        Restart the existing containers; no build or database change.
+  app            Rebuild/redeploy only the app; refused if migrations changed.
+  update         Verified DB backup, pending migrations, app deploy, health check.
+  reset-db       Verified backup, erase DB, new secrets/admin; preserve HTTPS CA.
+  factory-reset  Same, and also replace the HTTPS CA/certificate.
+EOF
+}
+
+validate_remote_settings() {
+  bj_validate_host "$BJ_SERVER_HOST"
+  bj_validate_port "$BJ_SERVER_PORT"
+  case "$BJ_SERVER_USER" in ''|*[!A-Za-z0-9._-]*) bj_fail "invalid SSH user"; return 1 ;; esac
+  case "$BJ_SSH_DEST" in ''|*[!A-Za-z0-9@._-]*) bj_fail "invalid SSH destination/alias"; return 1 ;; esac
+  case "$BJ_REMOTE_DIR" in
+    /*) ;;
+    *) bj_fail "remote directory must be an absolute path"; return 1 ;;
+  esac
+  case "$BJ_REMOTE_DIR" in *[!A-Za-z0-9_./-]*) bj_fail "remote directory contains unsafe characters"; return 1 ;; esac
+}
+
+client_key_guard() {
+  if ! ssh -p "$BJ_SERVER_PORT" -o BatchMode=yes -o ConnectTimeout=10 "$BJ_SSH_DEST" true 2>/dev/null; then
+    bj_fail "passwordless SSH is required so transfers/reconnects can resume. Run ./deploy/setup-release.sh once."
+    return 1
+  fi
+}
+
+remote_command() {
+  ssh -p "$BJ_SERVER_PORT" -o ConnectTimeout=12 "$BJ_SSH_DEST" "$1"
+}
+
+remote_tty() {
+  ssh -tt -p "$BJ_SERVER_PORT" -o ConnectTimeout=12 "$BJ_SSH_DEST" "$1"
+}
+
+remote_rsync() {
+  rsync -aP --partial -e "ssh -p $BJ_SERVER_PORT" "$@"
+}
+
+remote_base_command() {
+  printf "cd '%s' && %s" "$BJ_REMOTE_DIR" "$1"
+}
+
+remote_job() {
+  remote_command "$(remote_base_command "./remote-job.sh $*")"
+}
+
+remote_job_tty() {
+  remote_tty "$(remote_base_command "sudo ./remote-job.sh $*")"
+}
+
+git_release_guard() {
+  local branch
+  branch=$(git branch --show-current)
+  [ "$branch" = main ] || { bj_fail "client releases must be built from main (currently $branch)"; return 1; }
+  [ -z "$(git status --porcelain)" ] \
+    || { bj_fail "client releases require a clean working tree; commit or stash changes first"; return 1; }
+}
+
+release_version() {
+  printf '%s-%s\n' "$(date -u +%Y%m%d-%H%M%S)" "$(git rev-parse --short HEAD)"
+}
+
+create_manifest() {
+  local run_dir="$1" run_id="$2" action="$3" version="$4" target="$5"
+  mkdir -p "$run_dir"
+  chmod 700 "$run_dir"
+  bj_write_migration_manifest "$REPO_ROOT/supabase/migrations" "$run_dir/source-migrations.sha256"
+  {
+    printf 'RUN_ID=%s\n' "$run_id"
+    printf 'ACTION=%s\n' "$action"
+    printf 'VERSION=%s\n' "$version"
+    printf 'TARGET=%s\n' "$target"
+    printf 'GIT_SHA=%s\n' "$(git rev-parse HEAD)"
+    printf 'GIT_BRANCH=%s\n' "$(git branch --show-current)"
+    printf 'CREATED_AT=%s\n' "$(date -u +%FT%TZ)"
+  } > "$run_dir/manifest.env"
+  chmod 600 "$run_dir/manifest.env" "$run_dir/source-migrations.sha256"
+}
+
+run_source_gates() {
+  if [ "${BJ_SKIP_TESTS:-0}" = 1 ]; then
+    bj_warn "BJ_SKIP_TESTS=1: lint and unit tests skipped"
+    return 0
+  fi
+  bj_say "Source gates: lint and unit tests"
+  npm run lint
+  npm run test:unit
+}
+
+build_client_app() {
+  local version="$1" archive="$REPO_ROOT/dist/bj-erp-app-${version}.tar.gz" arch
+  mkdir -p "$REPO_ROOT/dist"
+  bj_say "Building application for the client's AMD64 server"
+  docker build --platform linux/amd64 -f deploy/Dockerfile -t "bj-erp-app:${version}" .
+  arch=$(docker image inspect "bj-erp-app:${version}" --format '{{.Architecture}}')
+  bj_require_arch "$arch" amd64 "built app image"
+  docker save "bj-erp-app:${version}" | gzip -1 > "$archive"
+  [ "$(bj_file_size "$archive")" -gt 0 ] || { bj_fail "app archive is empty"; return 1; }
+  bj_hash_file "$archive" > "${archive}.sha256"
+  CLIENT_ARCHIVE="$archive"
+  export CLIENT_ARCHIVE
+}
+
+stage_remote_runtime() {
+  local run_id="$1" action="$2" run_dir="$3" remote_run
+  validate_remote_settings
+  remote_command "mkdir -p '$BJ_REMOTE_DIR/lib' '$BJ_REMOTE_DIR/migrations' '$BJ_REMOTE_DIR/sql' '$BJ_REMOTE_DIR/caddy'"
+  remote_rsync "$SCRIPT_DIR/remote-job.sh" "$SCRIPT_DIR/update.sh" \
+    "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/docker-compose.client-amd64.yml" \
+    "${BJ_SSH_DEST}:${BJ_REMOTE_DIR}/"
+  remote_rsync "$SCRIPT_DIR/lib/" "${BJ_SSH_DEST}:${BJ_REMOTE_DIR}/lib/"
+  remote_job "init $run_id $action" >/dev/null
+  remote_run="$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id"
+  remote_command "mkdir -p '$remote_run/migrations'"
+  # Database inputs are immutable per run. A second staging process may update
+  # the shared installer, but cannot change a prepared run underneath a worker.
+  remote_rsync --delete "$REPO_ROOT/supabase/migrations/" \
+    "${BJ_SSH_DEST}:${remote_run}/migrations/"
+  remote_rsync --inplace "$REPO_ROOT/supabase/seed.sql" \
+    "${BJ_SSH_DEST}:${remote_run}/seed.sql"
+  remote_rsync "$run_dir/manifest.env" "$run_dir/source-migrations.sha256" \
+    "${BJ_SSH_DEST}:${remote_run}/"
+}
+
+monitor_remote_run() {
+  local run_id="$1" terminal_kind="${2:-success}" status previous='' failures=0 line_count=0 new_count
+  printf 'Run ID: %s\nIf this terminal closes, resume with: ./deploy/bj-deploy resume %s\n' "$run_id" "$run_id"
+  while :; do
+    if status=$(remote_job "status $run_id" 2>/dev/null); then
+      failures=0
+      status=$(printf '%s' "$status" | tail -n 1 | tr -d '\r')
+      if [ "$status" != "$previous" ]; then
+        printf '[%s] %s\n' "$(date '+%H:%M:%S')" "$status"
+        previous="$status"
+      fi
+      new_count=$(remote_command "$(remote_base_command "test -f '.bj-deploy/runs/$run_id/job.log' && wc -l < '.bj-deploy/runs/$run_id/job.log' || echo 0")" 2>/dev/null | tr -d '[:space:]' || true)
+      case "$new_count" in ''|*[!0-9]*) new_count=$line_count ;; esac
+      if [ "$new_count" -gt "$line_count" ]; then
+        remote_command "$(remote_base_command "sed -n '$((line_count + 1)),${new_count}p' '.bj-deploy/runs/$run_id/job.log'")" || true
+        line_count=$new_count
+      fi
+      case "$status" in
+        SUCCEEDED) [ "$terminal_kind" = success ] && return 0 ;;
+        BACKUP_READY|NO_DATABASE) [ "$terminal_kind" = backup ] && return 0 ;;
+        FAILED:*) bj_fail "remote job failed ($status). View: ./deploy/bj-deploy logs client $run_id"; return 1 ;;
+      esac
+    else
+      failures=$((failures + 1))
+      [ "$failures" -eq 1 ] && bj_warn "SSH monitoring interrupted; the server job is still independent"
+      if [ "$failures" -ge 20 ]; then
+        bj_fail "could not reconnect; later run: ./deploy/bj-deploy resume $run_id"
+        return 75
+      fi
+    fi
+    sleep 3
+  done
+}
+
+fetch_remote_backup() {
+  local run_id="$1" directory="$BACKUP_ROOT/client/$run_id" path expected file actual
+  path=$(remote_command "$(remote_base_command "sed -n '1p' '.bj-deploy/runs/$run_id/backup.path'")" | tr -d '\r')
+  expected=$(remote_command "$(remote_base_command "sed -n '1p' '.bj-deploy/runs/$run_id/backup.sha256'")" | tr -d '[:space:]')
+  if [ -z "$path" ]; then
+    printf 'No existing database was present, so no backup was needed.\n'
+    return 2
+  fi
+  case "$path" in
+    "$BJ_REMOTE_DIR"/backups/*) ;;
+    *) bj_fail "server returned an unexpected backup path: $path"; return 1 ;;
+  esac
+  case "$expected" in *[!0-9a-f]*|'') bj_fail "server returned an invalid backup checksum"; return 1 ;; esac
+  mkdir -p "$directory"; chmod 700 "$directory"
+  remote_rsync "${BJ_SSH_DEST}:${path}" "$directory/"
+  file="$directory/$(basename "$path")"
+  actual=$(bj_hash_file "$file")
+  [ "$actual" = "$expected" ] || { bj_fail "downloaded backup checksum mismatch"; return 1; }
+  chmod 600 "$file"
+  printf 'Verified off-server backup: %s\n' "$file"
+  printf '%s\n' "$expected" > "$directory/backup.sha256"
+  FETCHED_BACKUP_SHA="$expected"
+  export FETCHED_BACKUP_SHA
+}
+
+stage_client_app_release() {
+  local action="$1" run_id="$2" version="$3" run_dir="$4" archive remote_run
+  build_client_app "$version"
+  archive="$CLIENT_ARCHIVE"
+  stage_remote_runtime "$run_id" "$action" "$run_dir"
+  remote_run="$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id"
+  remote_rsync "$archive" "${archive}.sha256" "${BJ_SSH_DEST}:${BJ_REMOTE_DIR}/"
+  remote_command "cd '$BJ_REMOTE_DIR' && expected=\$(sed 's/[[:space:]].*//' '$(basename "$archive").sha256') && actual=\$(sha256sum '$(basename "$archive")' | awk '{print \$1}') && test \"\$expected\" = \"\$actual\""
+  remote_rsync "$run_dir/manifest.env" "$run_dir/source-migrations.sha256" \
+    "${BJ_SSH_DEST}:${remote_run}/"
+}
+
+client_doctor() {
+  validate_remote_settings
+  bj_say "Client connection and server preflight"
+  printf 'SSH: %s@%s:%s\nInstall directory: %s\nApp: https://10.10.10.50:3500\n' \
+    "$BJ_SERVER_USER" "$BJ_SERVER_HOST" "$BJ_SERVER_PORT" "$BJ_REMOTE_DIR"
+  remote_command "printf 'host=%s user=%s arch=%s\\n' \"\$(hostname)\" \"\$(whoami)\" \"\$(uname -m)\"; command -v docker; docker compose version; command -v rsync; command -v flock; command -v curl; df -h '$BJ_REMOTE_DIR' 2>/dev/null || df -h /home"
+  arch=$(remote_command "uname -m" | tr -d '[:space:]')
+  bj_require_arch "$arch" amd64 "client server"
+  if remote_command "test -x '$BJ_REMOTE_DIR/remote-job.sh'"; then
+    remote_tty "$(remote_base_command "sudo ./remote-job.sh stack-status")"
+  else
+    bj_warn "Deployment assistant is not installed remotely yet; the next deploy will install it."
+  fi
+  printf 'Automated app health runs on the server; the Mac does not need client VPN.\n'
+}
+
+client_read_only() {
+  local action="$1" run_id="${2:-}"
+  validate_remote_settings
+  case "$action" in
+    status)
+      if [ -n "$run_id" ]; then remote_job "status $run_id"; else remote_tty "$(remote_base_command "sudo ./remote-job.sh stack-status")"; fi
+      ;;
+    logs)
+      if [ -n "$run_id" ]; then remote_job "logs $run_id 200"; else remote_tty "$(remote_base_command "sudo ./remote-job.sh stack-logs 200")"; fi
+      ;;
+  esac
+}
+
+client_restart() {
+  local run_id version run_dir
+  run_id=$(bj_make_run_id); version=current; run_dir="$STATE_ROOT/runs/$run_id"
+  create_manifest "$run_dir" "$run_id" restart "$version" client
+  [ "$DRY_RUN" = 0 ] || { printf 'DRY RUN: stage runtime and restart the existing client stack; database unchanged.\n'; return; }
+  client_key_guard
+  stage_remote_runtime "$run_id" restart "$run_dir"
+  remote_job_tty "start $run_id restart $version"
+  monitor_remote_run "$run_id"
+}
+
+client_app_or_update() {
+  local action="$1" run_id version run_dir remote_manifest
+  git_release_guard
+  docker info >/dev/null 2>&1 || { bj_fail "Docker Desktop is not running"; return 1; }
+  version=$(release_version); run_id=$(bj_make_run_id); run_dir="$STATE_ROOT/runs/$run_id"
+  create_manifest "$run_dir" "$run_id" "$action" "$version" client
+  if [ "$DRY_RUN" = 1 ]; then
+    printf 'DRY RUN: verify migration manifest, build AMD64 app %s, checksum, resumably transfer, run detached %s, verify remotely.\n' "$version" "$action"
+    return 0
+  fi
+  client_key_guard
+  if [ "$action" = app ]; then
+    remote_manifest=$(remote_command "cat '$BJ_REMOTE_DIR/.bj-deploy/installed-migrations.sha256'" 2>/dev/null || true)
+    [ -n "$remote_manifest" ] \
+      || { bj_fail "client has no trusted migration manifest; run a safe update first"; return 1; }
+    printf '%s\n' "$remote_manifest" > "$run_dir/remote-migrations.sha256"
+    cmp -s "$run_dir/source-migrations.sha256" "$run_dir/remote-migrations.sha256" \
+      || { bj_fail "database migrations changed; app-only is unsafe. Choose update."; return 1; }
+  fi
+  run_source_gates
+  stage_client_app_release "$action" "$run_id" "$version" "$run_dir"
+  remote_job_tty "start $run_id $action $version"
+  monitor_remote_run "$run_id"
+  if [ "$action" = update ]; then
+    fetch_remote_backup "$run_id" || [ "$?" = 2 ]
+  fi
+  printf 'Client deployment succeeded: https://10.10.10.50:3500\n'
+  printf 'Use the phone VPN for the final browser test until the subdomain is configured.\n'
+}
+
+stage_full_bundle() {
+  local run_id="$1" version="$2" run_dir="$3" archive checksum upload remote_run
+  "$SCRIPT_DIR/package.sh" "$version"
+  archive="$REPO_ROOT/dist/bj-erp-installer-${version}.tar.gz"
+  checksum=$(bj_hash_file "$archive")
+  upload="$BJ_REMOTE_DIR/.bj-deploy/uploads/$run_id"
+  remote_command "mkdir -p '$upload'"
+  remote_rsync "$archive" "${archive}.sha256" "${BJ_SSH_DEST}:${upload}/"
+  remote_command "cd '$upload' && test \"\$(sha256sum '$(basename "$archive")' | awk '{print \$1}')\" = '$checksum' && mkdir -p unpack && tar -xzf '$(basename "$archive")' -C unpack && rsync -a unpack/bj-erp-installer/ '$BJ_REMOTE_DIR/'"
+  remote_job "init $run_id reset" >/dev/null
+  remote_run="$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id"
+  remote_command "mkdir -p '$remote_run/migrations'"
+  remote_rsync --delete "$REPO_ROOT/supabase/migrations/" \
+    "${BJ_SSH_DEST}:${remote_run}/migrations/"
+  remote_rsync --inplace "$REPO_ROOT/supabase/seed.sql" \
+    "${BJ_SSH_DEST}:${remote_run}/seed.sql"
+  remote_rsync "$run_dir/manifest.env" "$run_dir/source-migrations.sha256" \
+    "${BJ_SSH_DEST}:${remote_run}/"
+}
+
+client_reset() {
+  local action="$1" run_id version run_dir status phrase
+  git_release_guard
+  docker info >/dev/null 2>&1 || { bj_fail "Docker Desktop is not running"; return 1; }
+  version=$(release_version); run_id=$(bj_make_run_id); run_dir="$STATE_ROOT/runs/$run_id"
+  create_manifest "$run_dir" "$run_id" "$action" "$version" client
+  if [ "$DRY_RUN" = 1 ]; then
+    printf 'DRY RUN: build full AMD64 offline bundle, back up and download DB, then %s after typed confirmation.\n' "$action"
+    return 0
+  fi
+  client_key_guard
+  run_source_gates
+  stage_full_bundle "$run_id" "$version" "$run_dir"
+  remote_job_tty "start $run_id backup $version"
+  monitor_remote_run "$run_id" backup
+  status=$(remote_job "status $run_id" | tail -n 1 | tr -d '\r')
+  if [ "$status" = BACKUP_READY ]; then
+    fetch_remote_backup "$run_id"
+    remote_job_tty "authorize-backup $run_id $FETCHED_BACKUP_SHA"
+  fi
+  phrase="WIPE CLIENT DATABASE $run_id"
+  [ "$action" = factory-reset ] && phrase="FACTORY RESET CLIENT $run_id"
+  printf '\nTarget: %s:%s\nApp: https://10.10.10.50:3500\n' "$BJ_SERVER_HOST" "$BJ_SERVER_PORT"
+  [ "$action" = factory-reset ] \
+    && printf 'This erases the database AND replaces the HTTPS certificate authority.\n' \
+    || printf 'This erases the database but preserves the HTTPS certificate authority.\n'
+  bj_confirm_phrase "$phrase"
+  remote_job_tty "start-reset $run_id $action $version"
+  monitor_remote_run "$run_id"
+  mkdir -p "$run_dir/evidence"
+  remote_rsync "${BJ_SSH_DEST}:${BJ_REMOTE_DIR}/bj-root-ca.crt" "$run_dir/evidence/" || bj_warn "Could not fetch the root certificate"
+  printf 'Fresh client installation succeeded: https://10.10.10.50:3500\n'
+}
+
+local_setup() {
+  bj_require_command docker
+  docker info >/dev/null 2>&1 || { bj_fail "Docker Desktop is not running"; return 1; }
+  daemon_arch=$(docker info --format '{{.Architecture}}')
+  bj_require_arch "$daemon_arch" arm64 "local Docker daemon"
+  bj_compose_init "$SCRIPT_DIR" local
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a; . "$SCRIPT_DIR/.env"; set +a
+  fi
+}
+
+pgexec() {
+  bj_compose_with_db_password db \
+    psql -v ON_ERROR_STOP=1 -U supabase_admin -d postgres "$@"
+}
+
+local_doctor() {
+  local_setup
+  bj_say "Local ARM64 preflight"
+  printf 'Compose files:\n  %s\n  %s\n' "$SCRIPT_DIR/docker-compose.yml" "$SCRIPT_DIR/docker-compose.local-arm64.yml"
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    bj_compose config --quiet
+    bj_compose ps
+  else
+    APP_HOST=localhost APP_PORT=3500 APP_ORIGIN=https://localhost:3500 \
+      POSTGRES_PASSWORD=placeholder JWT_SECRET=placeholder ANON_KEY=placeholder \
+      docker compose --project-name "$BJ_PROJECT_NAME" --project-directory "$SCRIPT_DIR" \
+        -f "$SCRIPT_DIR/docker-compose.yml" -f "$SCRIPT_DIR/docker-compose.local-arm64.yml" \
+        config --quiet
+    bj_warn "Local .env does not exist yet. Compose syntax is valid; use reset-db for a first install."
+    return 0
+  fi
+  if [ -n "$(bj_compose ps -q app 2>/dev/null || true)" ]; then
+    bj_verify_running_architecture arm64
+    bj_wait_for_stack 5
+    printf 'Local stack is healthy: %s\n' "${APP_ORIGIN:-https://localhost:3500}"
+  else
+    bj_warn "Local stack is not installed/running yet. Use reset-db for a fresh test installation."
+  fi
+}
+
+local_backup() {
+  local run_id="$1" directory="$BACKUP_ROOT/local/$run_id" file
+  [ -n "$(bj_compose ps -q db 2>/dev/null || true)" ] || return 2
+  bj_compose exec -T db pg_isready -U supabase_admin -h localhost -d postgres >/dev/null || return 2
+  mkdir -p "$directory"; chmod 700 "$directory"
+  file="$directory/postgres.dump"
+  bj_compose_with_db_password db \
+    pg_dump -U supabase_admin -d postgres -Fc > "$file"
+  [ -s "$file" ] || { bj_fail "local backup is empty"; return 1; }
+  bj_compose exec -T db pg_restore -l < "$file" >/dev/null
+  bj_hash_file "$file" > "$directory/postgres.dump.sha256"
+  chmod 600 "$file" "$directory/postgres.dump.sha256"
+  printf 'Verified local backup: %s\n' "$file"
+}
+
+record_local_state() {
+  local action="$1" version="$2"
+  mkdir -p "$LOCAL_STATE"; chmod 700 "$LOCAL_STATE"
+  bj_write_migration_manifest "$REPO_ROOT/supabase/migrations" "$LOCAL_STATE/installed-migrations.sha256"
+  {
+    printf 'ACTION=%s\nVERSION=%s\nGIT_SHA=%s\nINSTALLED_AT=%s\n' \
+      "$action" "$version" "$(git rev-parse HEAD)" "$(date -u +%FT%TZ)"
+  } > "$LOCAL_STATE/installed-manifest.env"
+  chmod 600 "$LOCAL_STATE"/*
+}
+
+local_restart() {
+  local_setup
+  [ "$DRY_RUN" = 0 ] || { printf 'DRY RUN: restart all local containers; database unchanged.\n'; return; }
+  bj_compose restart
+  bj_wait_for_stack 60
+  bj_verify_running_architecture arm64
+  printf 'Local stack restarted: %s\n' "${APP_ORIGIN:-https://localhost:3500}"
+}
+
+local_app() {
+  local_setup
+  [ -f "$LOCAL_STATE/installed-migrations.sha256" ] \
+    || { bj_fail "no trusted local migration manifest; run local update first"; return 1; }
+  temporary="$LOCAL_STATE/source-migrations.$$.sha256"
+  bj_write_migration_manifest "$REPO_ROOT/supabase/migrations" "$temporary"
+  cmp -s "$temporary" "$LOCAL_STATE/installed-migrations.sha256" \
+    || { rm -f "$temporary"; bj_fail "migrations changed; choose local update"; return 1; }
+  rm -f "$temporary"
+  [ -z "$(git status --porcelain)" ] || bj_warn "Local build includes uncommitted work"
+  [ "$DRY_RUN" = 0 ] || { printf 'DRY RUN: build native ARM64 app and recreate only app; database unchanged.\n'; return; }
+  docker build --platform linux/arm64 -f deploy/Dockerfile -t bj-erp-app:local-arm64 .
+  bj_require_arch "$(docker image inspect bj-erp-app:local-arm64 --format '{{.Architecture}}')" arm64 "local app image"
+  bj_compose up -d --no-deps --force-recreate app
+  bj_wait_for_stack 45
+  bj_verify_running_architecture arm64
+  record_local_state app local-arm64
+  printf 'Local app redeployed: %s\n' "${APP_ORIGIN:-https://localhost:3500}"
+}
+
+local_update() {
+  local run_id version
+  local_setup
+  [ -f "$SCRIPT_DIR/.env" ] || { bj_fail "local installation is missing .env; choose reset-db"; return 1; }
+  run_id=$(bj_make_run_id); version="local-$(date -u +%Y%m%d-%H%M%S)"
+  [ -z "$(git status --porcelain)" ] || bj_warn "Local update includes uncommitted work"
+  [ "$DRY_RUN" = 0 ] || { printf 'DRY RUN: back up local DB, apply pending migrations, build ARM64 app, verify.\n'; return; }
+  local_backup "$run_id"
+  bj_say "Applying pending local migrations"
+  bj_apply_migrations "$REPO_ROOT/supabase/migrations" "$version"
+  pgexec < "$REPO_ROOT/supabase/seed.sql" >/dev/null
+  docker build --platform linux/arm64 -f deploy/Dockerfile -t bj-erp-app:local-arm64 .
+  bj_require_arch "$(docker image inspect bj-erp-app:local-arm64 --format '{{.Architecture}}')" arm64 "local app image"
+  bj_compose up -d --no-deps --force-recreate app
+  bj_wait_for_stack 45
+  bj_verify_running_architecture arm64
+  record_local_state update "$version"
+  printf 'Local update succeeded: %s\n' "${APP_ORIGIN:-https://localhost:3500}"
+}
+
+local_lan_ip() {
+  ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
+}
+
+choose_local_route() {
+  local choice lan
+  printf 'Access mode:\n  1) This Mac only (localhost)\n  2) This Mac and phone on the same Wi-Fi\nChoice [1]: '
+  read -r choice; choice=${choice:-1}
+  case "$choice" in
+    1) RESET_HOST=localhost ;;
+    2)
+      lan=$(local_lan_ip)
+      read -r -p "Mac LAN IP [${lan:-required}]: " RESET_HOST
+      RESET_HOST=${RESET_HOST:-$lan}
+      bj_validate_host "$RESET_HOST"
+      ;;
+    *) bj_fail "invalid access choice"; return 1 ;;
+  esac
+  RESET_PORT=3500
+}
+
+local_validate_volume() {
+  local volume="$1" project
+  docker volume inspect "$volume" >/dev/null 2>&1 || return 1
+  project=$(docker volume inspect "$volume" --format '{{ index .Labels "com.docker.compose.project" }}')
+  [ "$project" = "$BJ_PROJECT_NAME" ] \
+    || { bj_fail "refusing volume $volume labeled for project '$project'"; return 2; }
+}
+
+local_remove_volume() {
+  local volume="$1"
+  if local_validate_volume "$volume"; then docker volume rm "$volume"; else [ "$?" = 1 ] || return 1; fi
+}
+
+local_reset() {
+  local action="$1" run_id password confirm secret_file phrase
+  local_setup
+  run_id=$(bj_make_run_id)
+  [ "$DRY_RUN" = 0 ] || { printf 'DRY RUN: prepare ARM64 images, verify backup, then %s exact local volumes.\n' "$action"; return; }
+  choose_local_route
+  "$SCRIPT_DIR/prepare-local-arm64.sh"
+  local_backup "$run_id" || [ "$?" = 2 ]
+  phrase="WIPE LOCAL DATABASE $run_id"
+  [ "$action" = factory-reset ] && phrase="FACTORY RESET LOCAL $run_id"
+  bj_confirm_phrase "$phrase"
+  while :; do
+    read -r -s -p "New local admin password (8-72 printable Latin characters): " password; echo
+    if printf '%s' "$password" | LC_ALL=C grep -Eq '^[ -~]{8,72}$'; then break; fi
+  done
+  read -r -s -p "Re-enter the password: " confirm; echo
+  [ "$password" = "$confirm" ] || { bj_fail "passwords do not match"; return 1; }
+  mkdir -p "$LOCAL_STATE"; chmod 700 "$LOCAL_STATE"
+  secret_file="$LOCAL_STATE/admin-password.$$.tmp"
+  umask 077; printf '%s\n' "$password" > "$secret_file"; unset password confirm
+  trap 'rm -f "$secret_file"' EXIT INT TERM
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    bj_compose down --remove-orphans
+  else
+    bj_say "No previous local .env/stack configuration found; preparing a first install"
+  fi
+  local_remove_volume "${BJ_PROJECT_NAME}_db-data"
+  if [ "$action" = factory-reset ]; then
+    local_remove_volume "${BJ_PROJECT_NAME}_caddy-data"
+    local_remove_volume "${BJ_PROJECT_NAME}_caddy-config"
+  fi
+  if [ -f "$SCRIPT_DIR/.env" ]; then
+    mv "$SCRIPT_DIR/.env" "$LOCAL_STATE/pre-reset-${run_id}.env"
+    chmod 600 "$LOCAL_STATE/pre-reset-${run_id}.env"
+  fi
+  BJ_DEPLOY_TARGET=local BJ_FORCE_NEW_CONFIG=1 BJ_APP_HOST="$RESET_HOST" BJ_APP_PORT="$RESET_PORT" \
+    BJ_ADMIN_PASSWORD_FILE="$secret_file" \
+    BJ_MIGRATIONS_DIR="$REPO_ROOT/supabase/migrations" BJ_SEED_FILE="$REPO_ROOT/supabase/seed.sql" \
+    "$SCRIPT_DIR/install.sh"
+  rm -f "$secret_file"; trap - EXIT INT TERM
+  record_local_state "$action" local-arm64
+  printf 'Fresh local installation succeeded: https://%s:%s\n' "$RESET_HOST" "$RESET_PORT"
+}
+
+local_read_only() {
+  local action="$1"
+  local_setup
+  case "$action" in
+    status) bj_compose ps ;;
+    logs) bj_compose logs --tail 200 app auth rest gateway db ;;
+  esac
+}
+
+resume_client() {
+  local run_id="$1" status action version phrase local_manifest
+  bj_validate_run_id "$run_id"
+  validate_remote_settings
+  status=$(remote_job "status $run_id" 2>/dev/null || true)
+  local_manifest="$STATE_ROOT/runs/$run_id/manifest.env"
+  if [ -f "$local_manifest" ]; then
+    action=$(bj_env_value ACTION "$local_manifest")
+    version=$(bj_env_value VERSION "$local_manifest")
+  else
+    action=''; version=''
+  fi
+  case "$status" in
+    BACKUP_READY)
+      monitor_remote_run "$run_id" backup
+      fetch_remote_backup "$run_id"
+      remote_job_tty "authorize-backup $run_id $FETCHED_BACKUP_SHA"
+      status=BACKUP_VERIFIED
+      ;;
+  esac
+  case "$status" in
+    BACKUP_VERIFIED|NO_DATABASE)
+      [ -f "$local_manifest" ] || { bj_fail "local run manifest is missing; inspect remote logs before continuing"; return 1; }
+      case "$action" in reset-db|factory-reset) ;; *) bj_fail "run is not a reset"; return 1 ;; esac
+      phrase="WIPE CLIENT DATABASE $run_id"
+      [ "$action" = factory-reset ] && phrase="FACTORY RESET CLIENT $run_id"
+      bj_confirm_phrase "$phrase"
+      remote_job_tty "start-reset $run_id $action $version"
+      monitor_remote_run "$run_id"
+      ;;
+    RESET_READY)
+      [ -n "$action" ] && [ -n "$version" ] || { bj_fail "local run manifest is missing"; return 1; }
+      remote_job_tty "start $run_id $action $version"
+      monitor_remote_run "$run_id"
+      resume_client "$run_id"
+      ;;
+    PREPARED)
+      [ -n "$action" ] && [ -n "$version" ] || { bj_fail "local run manifest is missing"; return 1; }
+      case "$action" in
+        update|app|restart)
+          bj_warn "The run was staged but not started; starting it now."
+          remote_job_tty "start $run_id $action $version"
+          monitor_remote_run "$run_id"
+          resume_client "$run_id"
+          ;;
+        *) bj_fail "reset preparation did not reach a resumable backup/password state"; return 1 ;;
+      esac
+      ;;
+    SUCCEEDED)
+      remote_job "logs $run_id 120"
+      if remote_command "test -s '$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id/backup.path'" 2>/dev/null; then
+        fetch_remote_backup "$run_id" || true
+      fi
+      if [ "$action" = reset-db ] || [ "$action" = factory-reset ]; then
+        mkdir -p "$STATE_ROOT/runs/$run_id/evidence"
+        remote_rsync "${BJ_SSH_DEST}:${BJ_REMOTE_DIR}/bj-root-ca.crt" "$STATE_ROOT/runs/$run_id/evidence/" \
+          || bj_warn "Could not fetch the root certificate"
+      fi
+      ;;
+    FAILED:*) remote_job "logs $run_id 200"; return 1 ;;
+    RUNNING)
+      monitor_remote_run "$run_id"
+      resume_client "$run_id"
+      ;;
+    *) bj_fail "unknown run status '$status'"; return 1 ;;
+  esac
+}
+
+interactive_menu() {
+  local target_choice action_choice target action
+  printf '\nBJ ERP deployment assistant\n\nTarget:\n  1) Local Mac (ARM64)\n  2) Client server (AMD64 over SSH)\nChoice: '
+  read -r target_choice
+  case "$target_choice" in 1) target=local ;; 2) target=client ;; *) bj_fail "invalid target"; return 1 ;; esac
+  printf '\nAction:\n  1) Doctor (read-only checks)\n  2) Status\n  3) Logs\n  4) Restart current containers\n  5) App-only rebuild/redeploy\n  6) Safe update (backup + migrations + app)\n  7) Fresh database (keeps HTTPS CA)\n  8) Factory reset (new HTTPS CA)\nChoice: '
+  read -r action_choice
+  case "$action_choice" in
+    1) action=doctor ;; 2) action=status ;; 3) action=logs ;; 4) action=restart ;;
+    5) action=app ;; 6) action=update ;; 7) action=reset-db ;; 8) action=factory-reset ;;
+    *) bj_fail "invalid action"; return 1 ;;
+  esac
+  dispatch "$action" "$target"
+}
+
+dispatch() {
+  local action="$1" target="$2" run_id="${3:-}"
+  case "$target:$action" in
+    local:doctor) local_doctor ;;
+    local:status|local:logs) local_read_only "$action" ;;
+    local:restart) local_restart ;;
+    local:app) local_app ;;
+    local:update) local_update ;;
+    local:reset-db|local:factory-reset) local_reset "$action" ;;
+    client:doctor) client_doctor ;;
+    client:status|client:logs) client_read_only "$action" "$run_id" ;;
+    client:restart) client_restart ;;
+    client:app|client:update) client_app_or_update "$action" ;;
+    client:reset-db|client:factory-reset) client_reset "$action" ;;
+    *) bj_fail "unsupported action/target: $action $target"; usage; return 2 ;;
+  esac
+}
+
+if [ "${1:-}" = --dry-run ]; then DRY_RUN=1; shift; fi
+case "${1:-}" in
+  '') interactive_menu ;;
+  help|-h|--help) usage ;;
+  resume) [ -n "${2:-}" ] || { usage; exit 2; }; resume_client "$2" ;;
+  doctor|status|logs|restart|app|update|reset-db|factory-reset)
+    action="$1"; target="${2:-}"
+    case "$target" in local|client) ;; *) usage; exit 2 ;; esac
+    dispatch "$action" "$target" "${3:-}"
+    ;;
+  *) usage; exit 2 ;;
+esac

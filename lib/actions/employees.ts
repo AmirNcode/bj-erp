@@ -51,7 +51,6 @@ export type CreateEmployeeInput = {
   roles?: AppRole[];
   hire_date?: string;
   language_pref?: string;
-  calendar_pref?: string;
 };
 
 /**
@@ -91,7 +90,6 @@ export async function createEmployee(
     ...(input.roles?.length ? { p_roles: input.roles } : {}),
     ...(input.hire_date ? { p_hire_date: input.hire_date } : {}),
     ...(input.language_pref ? { p_language_pref: input.language_pref } : {}),
-    ...(input.calendar_pref ? { p_calendar_pref: input.calendar_pref } : {}),
     ...(input.job_title ? { p_job_title: input.job_title } : {}),
   });
 
@@ -110,7 +108,6 @@ export type UpdateEmployeeFields = Partial<{
   hire_date: string | null;
   active: boolean;
   language_pref: string;
-  calendar_pref: string;
 }>;
 
 /**

@@ -2,12 +2,9 @@ import DateObject from 'react-date-object';
 import gregorian from 'react-date-object/calendars/gregorian';
 import persian from 'react-date-object/calendars/persian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
-import gregorian_fa from 'react-date-object/locales/gregorian_fa';
 import persian_en from 'react-date-object/locales/persian_en';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import type { CalendarEntry, WorkSettings } from '@/lib/actions/leave';
-
-export type CalendarPref = 'jalali' | 'gregorian' | string;
 
 export type CalendarDayEntry = CalendarEntry & {
   returnDate: string;
@@ -31,28 +28,16 @@ export type CalendarMonth = {
 
 const MS_PER_DAY = 86_400_000;
 
-function normalizedCalendarPref(calendarPref: CalendarPref): 'jalali' | 'gregorian' {
-  return calendarPref === 'gregorian' ? 'gregorian' : 'jalali';
-}
-
 function normalizedLocale(locale: string): 'fa' | 'en' {
   return locale === 'fa' ? 'fa' : 'en';
 }
 
-function displayConfig(calendarPref: CalendarPref, locale: string) {
-  const pref = normalizedCalendarPref(calendarPref);
+function displayConfig(locale: string) {
   const lang = normalizedLocale(locale);
 
-  if (pref === 'jalali') {
-    return {
-      calendar: persian,
-      locale: lang === 'fa' ? persian_fa : persian_en,
-    };
-  }
-
   return {
-    calendar: gregorian,
-    locale: lang === 'fa' ? gregorian_fa : gregorian_en,
+    calendar: persian,
+    locale: lang === 'fa' ? persian_fa : persian_en,
   };
 }
 
@@ -102,19 +87,17 @@ export function nextWorkingDateAfter(iso: string, workSettings: WorkSettings): s
 
 export function formatCalendarDate(
   iso: string,
-  calendarPref: CalendarPref,
   locale: string,
   format = 'YYYY/MM/DD'
 ): string {
   const date = fromIso(iso);
   if (!date) return iso;
 
-  const config = displayConfig(calendarPref, locale);
+  const config = displayConfig(locale);
   return date.convert(config.calendar, config.locale).format(format);
 }
 
 export function currentCalendarMonthRange(
-  calendarPref: CalendarPref,
   now = new Date(),
   locale = 'en'
 ): { rangeStart: string; rangeEnd: string; monthLabel: string } {
@@ -129,7 +112,7 @@ export function currentCalendarMonthRange(
     return { rangeStart: todayIso, rangeEnd: todayIso, monthLabel: todayIso };
   }
 
-  const config = displayConfig(calendarPref, locale);
+  const config = displayConfig(locale);
   const displayToday = today.convert(config.calendar, config.locale);
   const start = new DateObject({
     calendar: config.calendar,
@@ -180,7 +163,6 @@ export function buildCalendarMonth({
   entries,
   rangeStart,
   rangeEnd,
-  calendarPref,
   locale,
   workSettings,
   maxVisibleNames = 2,
@@ -188,12 +170,11 @@ export function buildCalendarMonth({
   entries: CalendarEntry[];
   rangeStart: string;
   rangeEnd: string;
-  calendarPref: CalendarPref;
   locale: string;
   workSettings: WorkSettings;
   maxVisibleNames?: number;
 }): CalendarMonth {
-  const weekStartsOn = normalizedCalendarPref(calendarPref) === 'jalali' ? 6 : 1;
+  const weekStartsOn = 6;
   const leadDays = (isoWeekday(rangeStart) - weekStartsOn + 7) % 7;
   const gridStart = addDays(rangeStart, -leadDays);
   const cellCount = Math.ceil((daysBetween(gridStart, rangeEnd) + 1) / 7) * 7;
@@ -217,8 +198,8 @@ export function buildCalendarMonth({
     return {
       iso,
       inMonth,
-      dayLabel: formatCalendarDate(iso, calendarPref, locale, 'D'),
-      ariaLabel: formatCalendarDate(iso, calendarPref, locale, 'MMMM D, YYYY'),
+      dayLabel: formatCalendarDate(iso, locale, 'D'),
+      ariaLabel: formatCalendarDate(iso, locale, 'MMMM D, YYYY'),
       entries: dayEntries,
       count: dayEntries.length,
       visibleNames: dayEntries.slice(0, maxVisibleNames).map((entry) => entry.employee_name),

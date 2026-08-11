@@ -43,7 +43,6 @@ type Props = {
   board: HomeBoardData;
   labels: Labels;
   locale: string;
-  calendarPref: string;
   /** Company day length — balances and durations are stored in minutes. */
   hoursPerDay: number;
   /** Requests where this person is the named cover (D15: never a surprise). */
@@ -62,7 +61,6 @@ export function HomeBoard({
   board,
   labels,
   locale,
-  calendarPref,
   hoursPerDay,
   coverDuties,
 }: Props) {
@@ -75,7 +73,7 @@ export function HomeBoard({
   const manager = board.directory.find((member) => member.relation === 'manager');
   const teammates = board.directory.filter((member) => member.relation === 'teammate');
 
-  const formatDate = (date: string) => formatCalendarDate(date, calendarPref, locale);
+  const formatDate = (date: string) => formatCalendarDate(date, locale);
   const titleFor = (member: HomeBoardData['directory'][number]) =>
     locale === 'fa'
       ? member.departmentNameFa ?? member.departmentNameEn ?? '—'
@@ -247,7 +245,6 @@ export function HomeBoard({
                       title={titleFor(manager)}
                       labels={labels}
                       locale={locale}
-                      calendarPref={calendarPref}
                     />
                   </section>
                 )}
@@ -267,7 +264,6 @@ export function HomeBoard({
                           title={titleFor(member)}
                           labels={labels}
                           locale={locale}
-                          calendarPref={calendarPref}
                         />
                       ))}
                     </div>
@@ -287,13 +283,11 @@ function TeamMemberRow({
   title,
   labels,
   locale,
-  calendarPref,
 }: {
   member: HomeBoardData['directory'][number];
   title: string;
   labels: Labels;
   locale: string;
-  calendarPref: string;
 }) {
   const roleText = member.roles.length > 0 ? member.roles.join(', ') : '—';
 
@@ -338,9 +332,9 @@ function TeamMemberRow({
                       style={{ backgroundColor: color }}
                     />
                     <span className="text-muted-foreground">
-                      {formatCalendarDate(leave.start_date, calendarPref, locale)}
+                      {formatCalendarDate(leave.start_date, locale)}
                       {leave.start_date !== leave.end_date
-                        ? ` — ${formatCalendarDate(leave.end_date, calendarPref, locale)}`
+                        ? ` — ${formatCalendarDate(leave.end_date, locale)}`
                         : ''}{' '}
                       · {typeName}
                     </span>

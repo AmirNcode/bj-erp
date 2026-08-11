@@ -51,7 +51,6 @@ type Props = {
   hoursPerDay: number;
   /** Gregorian start of the current Jalali month — the accrual start default. */
   accrualStartMonth: string;
-  calendarPref: string;
   locale: string;
   labels: {
     personnelNo: string;
@@ -112,7 +111,6 @@ export function NewEmployeeForm({
   leaveTypes,
   hoursPerDay,
   accrualStartMonth,
-  calendarPref,
   locale,
   labels,
 }: Props) {
@@ -134,8 +132,7 @@ export function NewEmployeeForm({
   const codePreview = isValidPersonnelNo(normalizedPno)
     ? buildEmployeeCode(normalizedPno)
     : '—';
-  const { isJalali, isRtl, calendar, calLocale, calendarPosition } =
-    calendarPickerConfig(calendarPref, locale);
+  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -383,7 +380,7 @@ export function NewEmployeeForm({
               style={{ direction: isRtl ? 'rtl' : 'ltr' }}
               className="w-full"
               data-testid="hire-date-picker"
-              data-calendar={isJalali ? 'jalali' : 'gregorian'}
+              data-calendar="jalali"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.preventDefault();
               }}

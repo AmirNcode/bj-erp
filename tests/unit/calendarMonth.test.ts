@@ -37,8 +37,8 @@ function entry(
 }
 
 describe('currentCalendarMonthRange', () => {
-  it('uses the active Jalali month when calendar preference is Jalali', () => {
-    expect(currentCalendarMonthRange('jalali', new Date(Date.UTC(2026, 5, 30)))).toEqual({
+  it('uses the active Jalali month', () => {
+    expect(currentCalendarMonthRange(new Date(Date.UTC(2026, 5, 30)))).toEqual({
       rangeStart: '2026-06-22',
       rangeEnd: '2026-07-22',
       monthLabel: 'Tir 1405',
@@ -56,7 +56,6 @@ describe('buildCalendarMonth', () => {
       ],
       rangeStart: '2026-06-01',
       rangeEnd: '2026-06-30',
-      calendarPref: 'gregorian',
       locale: 'en',
       workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
@@ -80,7 +79,6 @@ describe('buildCalendarMonth', () => {
       entries: [entry('1', 'Ava', '2026-07-10', '2026-07-13')],
       rangeStart: '2026-07-01',
       rangeEnd: '2026-07-31',
-      calendarPref: 'gregorian',
       locale: 'en',
       workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
     });
@@ -108,10 +106,10 @@ describe('nextWorkingDateAfter', () => {
 
 describe('formatCalendarDate', () => {
   it('uses English digits when locale is English, even for Jalali dates', () => {
-    expect(formatCalendarDate('2026-06-30', 'jalali', 'en')).toBe('1405/04/09');
+    expect(formatCalendarDate('2026-06-30', 'en')).toBe('1405/04/09');
   });
 
   it('uses Persian digits when locale is Persian', () => {
-    expect(formatCalendarDate('2026-06-30', 'jalali', 'fa')).toBe('۱۴۰۵/۰۴/۰۹');
+    expect(formatCalendarDate('2026-06-30', 'fa')).toBe('۱۴۰۵/۰۴/۰۹');
   });
 });

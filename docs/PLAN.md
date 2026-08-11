@@ -29,13 +29,15 @@ implementation. **HR / time-off is module #1.**
 In: auth (admin-issued credentials, PWA persistent session) · org model (company, departments/
 teams, employees, manager hierarchy) · roles (admin/manager/employee/security) · admin console
 (employee CRUD, assign roles/teams/managers) · manager edits + approvals for direct reports ·
-leave types + yearly allocations + balance ledger · time-off request (full/half day) on a
-Persian **or** Gregorian calendar · weekend/holiday-aware working-day counting · approval flow ·
+leave types + yearly allocations + balance ledger · daily/hourly leave and daily/hourly work-errand
+requests on the Persian calendar · weekend/holiday-aware leave counting · paid/unpaid overage split ·
+signed requester and approver evidence · approval flow ·
 **home-page status board** (the notification surrogate) · visibility-scoped calendar views ·
-Farsi/English + Persian/Gregorian toggles · RLS enforcing visibility · seed data (3 teams +
+Farsi/English language toggle · RLS enforcing visibility · seed data (3 teams +
 Security dept) · documentation.
 
-Out (designed-for, deferred): hourly leave, push/email notifications, and every item in §6.
+Out (designed-for, deferred): multi-step security/HR approval, push/email notifications, and every
+item in §6.
 
 ## 4. Architecture overview
 

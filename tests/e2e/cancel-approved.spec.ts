@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
-  ADMIN_CODE, ADMIN_PASSWORD, login, logout, createEmployee, allocate, submitLeave,
+  ADMIN_CODE, ADMIN_PASSWORD, login, logout, createEmployee, allocate, submitLeave, signApproval,
 } from './_helpers';
 
 // FR-15: an employee cancels their own APPROVED future leave; the row flips to
@@ -37,6 +37,7 @@ test('employee cancels an approved future leave', async ({ page }) => {
   // Confirm the approve AlertDialog
   const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
   await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+  await signApproval(page);
   await approveConfirm.click();
   await expect(approvalRow).toHaveCount(0, { timeout: 10_000 }); // removed optimistically
   await logout(page);

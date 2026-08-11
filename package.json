@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:unit": "vitest run",
+    "test:deploy": "bash tests/deploy/deploy-assistant.test.sh",
     "test:e2e": "playwright test",
     "seed": "node scripts/seed-demo.mjs",
     "cleanup:e2e": "node scripts/cleanup-e2e.mjs"

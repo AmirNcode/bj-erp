@@ -1,5 +1,10 @@
 # DEPLOY GUIDE — shipping a new version to the client's server
 
+> Prefer the interactive `./deploy/bj-deploy` assistant in
+> [DEPLOY-ASSISTANT.md](DEPLOY-ASSISTANT.md). It wraps this pipeline with architecture isolation,
+> migration checksums, verified off-server reset backups, and reconnectable server jobs. This guide
+> remains useful background and manual recovery detail.
+
 Open this file every time you want to put an update on the client's server. Follow it top to
 bottom.
 
@@ -26,9 +31,10 @@ values. Older `.env` files only have `APP_HOST`, and the deploy will stop with:
 set APP_ORIGIN in .env — re-run ./install.sh once
 ```
 
-### 0.1 Connect the company VPN
+### 0.1 Verify public SSH access
 
-Nothing below works without it.
+The Mac does not need the client VPN; it reaches the public SSH endpoint directly. The phone still
+needs the VPN to open the private application URL.
 
 ### 0.2 Look at what the server currently has
 
@@ -72,7 +78,7 @@ ssh -t bj "cd bj-erp-installer && sudo sed -i 's|^APP_HOST=.*|APP_HOST=10.10.10.
 ### 0.5 Apply it
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose up -d --force-recreate app"
+ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml up -d --force-recreate app"
 ```
 
 `--force-recreate` matters. A plain restart reuses a container that already has the old address
@@ -93,7 +99,7 @@ cache the old page aggressively. On an installed app icon, remove it and re-add 
 
 ## PART 1 — One-time setup for deploying (do this once, ever)
 
-### 1.1 Connect the company VPN
+### 1.1 Confirm the public server address is reachable
 
 ### 1.2 Run the setup script
 
@@ -110,13 +116,13 @@ connecting. It creates a shortcut named `bj` so later commands do not ask for a 
 ssh -o BatchMode=yes bj 'echo OK'
 ```
 
-Expect `OK`, with no password prompt. If it fails, check the VPN and run 1.2 again.
+Expect `OK`, with no password prompt. If it fails, verify the public host/port and run 1.2 again.
 
 ---
 
 ## PART 2 — Deploying a new version (every time)
 
-### 2.1 Connect the company VPN
+### 2.1 Start from a clean, synchronized `main`
 
 ### 2.2 Save your changes to the repository
 
@@ -132,8 +138,8 @@ git commit -m "describe what changed"
 git push origin main
 ```
 
-You *can* deploy with unsaved changes — the script warns and asks — but then nothing on the
-server matches any saved version, and you cannot get back to it later. Commit first.
+The guarded assistant refuses any other branch or any modified/untracked file. Commit and push the
+reviewed work first; never bypass, weaken, or remove that safety check.
 
 ### 2.3 Start Docker Desktop
 
@@ -148,13 +154,13 @@ docker info > /dev/null 2>&1 && echo "Docker ready"
 Pick a version name. Use today's date:
 
 ```bash
-./deploy/release.sh 2026-08-14
+./deploy/bj-deploy update client
 ```
 
 What happens, in order:
 
-1. It checks Docker, the VPN connection, and your code (spelling/type checks and the unit
-   tests). Anything wrong stops it here, before the slow part.
+1. It checks clean `main`, Docker, public SSH, and your code (lint and unit tests). Anything wrong
+   stops it here, before the slow part.
 2. It builds the app for the server's processor type. **This takes 5–15 minutes.**
 3. It asks for the **server's** password once, for administrator rights on the server.
 4. It uploads (~300 MB), backs up the database, applies any database changes, swaps in the new
@@ -201,7 +207,7 @@ Expect `auth: 200`.
 **Are all five containers running?**
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose ps"
+ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml ps"
 ```
 
 Expect `app`, `auth`, `rest`, `db`, `gateway` — all `Up`, with `db` showing `healthy`.
@@ -221,13 +227,13 @@ ssh bj "cat bj-erp-installer/update.log"
 **Employee count** — should never drop unexpectedly:
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo bash -c 'set -a; . ./.env; set +a; docker compose exec -T -e PGPASSWORD=\"\$POSTGRES_PASSWORD\" db psql -tAc \"select count(*) from public.profiles\" -U supabase_admin -d postgres'"
+ssh -t bj "cd bj-erp-installer && sudo bash -c 'set -a; . ./.env; set +a; PGPASSWORD=\"\$POSTGRES_PASSWORD\"; export PGPASSWORD; docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml exec -T -e PGPASSWORD db psql -tAc \"select count(*) from public.profiles\" -U supabase_admin -d postgres'"
 ```
 
 **Recent app errors:**
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose logs --tail 50 app"
+ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml logs --tail 50 app"
 ```
 
 ---
@@ -239,7 +245,7 @@ ssh -t bj "cd bj-erp-installer && sudo docker compose logs --tail 50 app"
 | Message contains | Meaning | Action |
 |---|---|---|
 | `set APP_ORIGIN in .env` | Server `.env` predates the port change | Do PART 0, then deploy again |
-| `cannot reach 'bj'` | VPN off | Connect the VPN, run 2.4 again |
+| `cannot reach 'bj'` | Public SSH/key setup failed | Verify the public host/port and run setup again |
 | `Docker is not running` | Docker Desktop closed | Open Docker Desktop, run 2.4 again |
 | `lint failed` / `unit tests failed` | Your code has errors | Fix the code, run 2.4 again |
 | `docker build failed` | Build error | Fix the code, run 2.4 again |
@@ -258,7 +264,7 @@ Anything not in this table: stop and ask before running more commands.
 The app is already working again on the previous version. To see why the new one failed:
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose logs --tail 50 app"
+ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml logs --tail 50 app"
 ```
 
 Fix the code, then deploy again with a new version name.
@@ -271,7 +277,7 @@ after a database change was applied, say so when you ask for help.
 Roll back by hand. Replace `PREVIOUS` with the version you had before:
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=PREVIOUS/' .env && sudo docker compose up -d app"
+ssh -t bj "cd bj-erp-installer && sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=PREVIOUS/' .env && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml up -d app"
 ```
 
 Check it recovered:
@@ -305,7 +311,7 @@ ssh bj "ls -lt bj-erp-installer/backups/"
 Restore one. Replace `FILENAME` with the file you picked:
 
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker compose exec -T db pg_restore -U supabase_admin -d postgres --clean --if-exists < backups/FILENAME"
+ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml exec -T db pg_restore -U supabase_admin -d postgres --clean --if-exists < backups/FILENAME"
 ```
 
 Verify:
@@ -350,5 +356,5 @@ change it, apply it with `--force-recreate` (step 0.5) and hard-refresh the phon
    (It is already ignored by git — leave it that way.)
 5. **Never put a port in `APP_HOST`.** It is the security certificate's name. The port goes in
    `APP_PORT` and `APP_ORIGIN`.
-6. **One deploy at a time.** Do not run `release.sh` twice at once.
+6. **One deploy at a time.** Do not start two `bj-deploy` update/reset operations at once.
 7. If a deploy fails in a way this guide does not cover, **stop** and ask.

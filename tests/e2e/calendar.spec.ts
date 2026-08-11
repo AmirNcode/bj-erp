@@ -7,6 +7,7 @@ import {
   createEmployee,
   allocate,
   submitLeave,
+  signApproval,
   jalaliCurrentMonthRange,
 } from './_helpers';
 
@@ -41,6 +42,8 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await expect(
       page.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
     ).toBeVisible({ timeout: 10_000 });
+    // Teammates receive neither the private image nor its consent metadata.
+    await expect(page.locator('[data-testid^="signature-viewer-"]')).toHaveCount(0);
 
     // The month toggle highlights days with time-off, shows a count, and the
     // selected-day detail lists who is off plus their return date.
@@ -95,9 +98,16 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
       .filter({ hasText: requesterName })
       .first();
     await expect(entryCard).toBeVisible({ timeout: 10_000 });
+    const adminSignature = entryCard.locator('[data-testid^="signature-viewer-"]');
+    await expect(adminSignature).toBeVisible();
+    await adminSignature.getByRole('button').click();
+    await expect(adminSignature.locator('[data-testid^="signature-preview-"]')).toBeVisible({
+      timeout: 10_000,
+    });
     await entryCard.locator('[data-testid^="cal-approve-btn-"]').click();
     const confirmBtn = page.locator('[data-testid^="cal-approve-confirm-"]').first();
     await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
+    await signApproval(page, 'calendar');
     await confirmBtn.click();
     // Buttons disappear once decided; entry stays (now approved).
     await expect(entryCard.locator('[data-testid^="cal-approve-btn-"]')).toHaveCount(0, {

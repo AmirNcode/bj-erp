@@ -6,12 +6,13 @@
 -- directly. This mirrors app_create_employee's insert exactly (auth.users +
 -- auth.identities + profile + role) so GoTrue accepts the password login.
 --
--- Run via install.sh:
---   psql -v admin_password='…' -f bootstrap_admin.sql
--- (psql vars don't reach inside DO bodies — bridged via set_config.)
+-- Run via install.sh. The password arrives in the short-lived psql process
+-- environment, not a command argument or log; \getenv copies it into a psql
+-- variable. (psql vars do not reach DO bodies — bridged via set_config.)
 -- Idempotent: no-op when the admin user already exists.
 -- =============================================================================
 
+\getenv admin_password BJ_ADMIN_PASSWORD
 -- \gset swallows the SELECT output — the password must not echo to the terminal.
 select set_config('bj.admin_password', :'admin_password', false) as _pw_set \gset
 

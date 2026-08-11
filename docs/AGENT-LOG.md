@@ -78,6 +78,917 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-11 — Reviewed and prepared the pending August release for production
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` (= `origin/main`)
+**Trigger:** The user authorized a complete review, validation, commit, and push of all intended
+pending work, with production `main` left clean for the deployment assistant and no client deploy.
+
+**What changed**
+
+- Inventoried the repository before staging: 74 modified and 35 untracked paths (109 total), no
+  staged or deleted paths. Confirmed `main` matched `origin/main`, created `codex/code-review` from
+  that base without disturbing the working tree, and retained the linked
+  `claude/peaceful-williams-9c1cf9` worktree and its branch.
+- Reviewed the application, three August migrations, deployment assistant, ARM64/AMD64 overlays,
+  tests, documentation, and branding. The pending paths contained no secrets, `.env` files,
+  private keys, database dumps, deployment archives, Docker image archives, or temporary output.
+  `.gitignore` now keeps deployment run state and manifests under `.bj-deploy/` out of Git.
+- `deploy/lib/migrations.sh` — made each migration and ledger row one PostgreSQL transaction and
+  strengthened the three known-August-migration adoption fingerprints to verify their complete
+  catalog shape, security, grants, and relevant function bodies.
+- `deploy/{bj-deploy,remote-job.sh,update.sh,install.sh}` — isolated migrations and seed data inside
+  each immutable run, reverified the manifest before remote mutation, preserved transfer-owner
+  access to backups/manifests, corrected custom SSH host/user/port resolution, and consistently
+  selected the production AMD64 overlay for restore/rollback guidance.
+- `deploy/release.sh` — replaced the superseded direct transfer path with a compatibility wrapper
+  that delegates to the guarded deployment assistant. The clean-`main` safety check in
+  `deploy/bj-deploy` remains intact and was neither bypassed nor weakened.
+- `supabase/migrations/20260805185628_approval_signatures_persian_only.sql` — corrected the approver
+  signature constraint so cancelling an approved future request preserves the signed evidence.
+  Added regression coverage and strengthened the adoption fingerprint for this shape.
+- `scripts/seed-demo.mjs`, E2E fixtures, `README.md`, and `docs/DEPLOY.md` — updated the obsolete RPC
+  argument and legacy alphanumeric demo logins to current numeric personnel-number login codes.
+- `lib/leave/signature.ts` — aligned signature validation with the database minimum length and
+  removed a dead constant reported by the final lint run.
+- Deployment guides, durable memory, data/permission/requirements/task documentation, and the
+  changelog now describe atomic ledger/resume behavior, immutable run inputs, correct ARM64-local
+  versus AMD64-client commands, and the reviewed feature set.
+
+**Actions outside the repo**
+
+- Fetched Git refs from `origin`; no history was rewritten and no branch was deleted.
+- Used only the existing local ARM64 Docker test environment. The local database received the
+  corrected pending approval-signature constraint/checksum and the numeric demo fixtures needed by
+  Playwright. E2E teardown removed its temporary test users and department.
+- The client server was not contacted. No client SSH connection, file transfer, database change,
+  deployment bundle transfer, Safe Update, or production container operation occurred.
+
+**Verification**
+
+- Shell syntax: every `deploy/*.sh`, `deploy/bj-deploy`, `deploy/lib/*.sh`, and
+  `tests/deploy/*.sh` file passed `/bin/bash -n`.
+- `npm run lint` — passed with no errors or warnings. `npx tsc --noEmit` — passed.
+- `npm run test:unit` — 40 files and 254 tests passed.
+- `npm run test:deploy` — all 11 deployment-assistant cases passed, including atomic migration
+  rollback/resume and immutable run-source/ownership regressions.
+- `npm run build` — Next.js 16.2.9 production build passed and generated 40 pages, including
+  `/request/daily-errand`, `/api/health`, the Apple icon, and the PWA manifest.
+- `npx playwright test` against the local HTTPS stack — 33 passed and one intentionally skipped
+  legacy department-code-editing case. An earlier run exposed the signed-cancellation constraint
+  and stale demo seeder; both were fixed, their targeted tests passed, and then the entire suite
+  passed.
+- Local Docker doctor passed with five native ARM64 services and a healthy database/app. A local
+  Compose render of the client overlay selected only the dedicated AMD64 service images plus the
+  app image; it did not start or modify containers.
+- All three hardened August migration fingerprints returned true against the local test database.
+  English/Farsi key parity passed for 415 messages. All 50 Markdown files had valid local links;
+  icon formats/dimensions were verified; `git diff --check` passed.
+
+**State left behind**
+
+- At the time this entry was written, the reviewed work was still on `codex/code-review`, ready for
+  staging and landing. The final commit/push/merge hashes are recorded in the completion entry that
+  follows this one in Git history.
+
+**For the next agent**
+
+- Do not weaken the clean-tree or clean-`main` production gate. The next production action is the
+  guarded client Safe Update only after confirming local `main` and `origin/main` remain identical.
+- Do not replay or edit historical migrations already recorded by a deployed ledger. The three
+  August files were still pending for the client during this review, which is why correcting the
+  constraint before their first production application was safe.
+
+## 2026-08-11 — Production release blocked by intentional clean-tree guard
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf`
+**Trigger:** The user selected Client server → Safe update in `./deploy/bj-deploy` and reported
+`client releases require a clean working tree; commit or stash changes first`.
+
+**What changed**
+
+- `docs/AGENT-LOG.md` only — recorded the diagnosis. No deployment or application code changed.
+
+**Actions outside the repo**
+
+- None. The client server was not contacted and no package, SSH transfer, backup, database change,
+  container change, commit, or push was made.
+
+**Verification**
+
+- Confirmed `deploy/bj-deploy:92-98` deliberately requires production packages to be built from a
+  clean `main` worktree so the package can be tied to a reproducible commit.
+- `git status --short` shows roughly 108 pending paths containing the August features, three
+  migrations, deployment assistant, documentation, tests, and branding. `HEAD` remains `4e6b6bf`.
+- `git diff --check` passed. Full tests were not rerun because this turn diagnosed the release gate
+  and did not authorize committing or deploying the pending work.
+
+**State left behind**
+
+- The source remains uncommitted on `main`; nothing was staged, committed, pushed, packaged, or
+  deployed. The production guard will continue to stop until the intended changes are reviewed and
+  committed (or deliberately discarded/stashed).
+
+**For the next agent**
+
+- Do not bypass or remove the clean-tree guard. If the user wants the pending August version in
+  production, validate it, commit it, push/merge it to `main`, and rerun **Safe update**. Stashing
+  would package the old `4e6b6bf` version and omit the new migrations/features.
+
+## 2026-08-07 — Deploy-readiness check; brand favicon and PWA icons replace the stock placeholders
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `4e6b6bf` (= `origin/main`), worktree dirty with 103 paths
+**Trigger:** User asked whether the project is ready to deploy, asked me to verify some Supabase
+commands they had run, and asked for the logo + favicon from `assets/` to be wired in and shown
+running locally — explicitly **not** pushed.
+
+**What changed**
+
+- `app/favicon.ico` — replaced. The previous file (Jun 25, sha `2b8ad2d3…`) was the **stock
+  Next.js/Vercel black-triangle favicon**; I rendered it to PNG and looked at it before
+  overwriting. Now a multi-size ICO (16/32/48/64/128/256) of a BJ monogram.
+- `app/apple-icon.png` — new, 180px.
+- `public/icons/icon-{192,512}.png` — replaced. The previous files were **blank royal-blue
+  squares** with no mark on them (verified by rendering). Now the unpadded monogram.
+- `public/icons/icon-maskable-{192,512}.png` — new; same monogram inset ~10% for the Android
+  maskable safe zone.
+- `app/manifest.ts` — icon list now declares `purpose: 'any'` (unpadded) and `purpose: 'maskable'`
+  (inset) separately. First attempt used `purpose: 'any maskable'`, which the web-app-manifest
+  spec allows but Next's `MetadataRoute.Manifest` types as a single enum — `tsc` rejected it with
+  TS2820. Split into four entries.
+- No application logic, migration, deploy script, or route was touched.
+
+**Icon provenance — read this before "fixing" it**
+
+- `assets/` is **not new** (dated Jun 30) and contains **no favicon**: only `bj-logo.png` and the
+  Rubik font family. The user believed they had supplied a favicon; there is no such file.
+- `assets/bj-logo.png` is **byte-identical** to `public/bj-logo.png` (sha `bc5abaf9…`), which was
+  already rendered by `AppShell.tsx:20` and `login/page.tsx:53`. The logo needed no work.
+- The logo is a 1181×591 wordmark. Letterboxed into a square favicon it is an illegible smudge at
+  16px — I rendered both candidates at 16/32/64 and showed the user the comparison. Hence the
+  monogram: `#2E3C92` field, white "BJ" in Rubik Bold (`assets/Rubik/static/Rubik-Bold.ttf`).
+- Generator kept at
+  `/private/tmp/claude-501/-Users-amir-Workspace-bj/e412a95b-…/scratchpad/mkicons.py`. That is a
+  scratch path and **will not survive**; re-derive from `public/bj-logo.png` if the icons need
+  regenerating.
+
+**Actions outside the repo**
+
+- No client server contact, no SSH, no database write, no deploy. `https://10.10.10.50/api/health`
+  is unreachable from here (no corporate VPN) — expected.
+- Killed a stale orphaned `next-server` (PID 87316) left listening on port 3000 by my previous
+  session; it was serving 404s because `npm run build` had replaced its dev output. Restarted
+  `npm run dev` via the preview tool.
+- Read-only Supabase CLI checks: `supabase projects list` (authenticated) and a local
+  `docker exec … psql` count of `bj_deploy.schema_migrations`. No write.
+
+**Verification**
+
+- `npx tsc --noEmit` — clean (after the TS2820 fix above). `npm run lint` — clean.
+- `npm run test:unit` — 40 files, 254 tests passed.
+- `npm run test:deploy` — 9/9 deployment-assistant tests passed.
+- `npm run build` — succeeded, 39 pages, all four request routes including
+  `/[locale]/request/daily-errand`. **Note this build predates the icon changes**; `tsc` and
+  `lint` were re-run after them, a full `build` was not.
+- Dev server: `/favicon.ico` 200 (14685B, `image/x-icon`), `/apple-icon.png` 200,
+  all four `/icons/*` 200, `/manifest.webmanifest` 200 with the four-entry icon array. Next
+  emits `<link rel="icon" sizes="256x256">` and `<link rel="apple-touch-icon" sizes="180x180">`.
+- **Not run: Playwright e2e.** Not run at all this session — no claim either way about it.
+- Local stack: five containers up, `bj-erp-db-1` healthy, `https://192.168.2.48:3500/api/health`
+  → 200, `bj_deploy.schema_migrations` holds 41 rows matching the 41 files in
+  `supabase/migrations/`.
+
+**State left behind**
+
+- Nothing committed, staged, or pushed. `HEAD` is still `4e6b6bf` and equals `origin/main`; the
+  worktree now carries ~108 uncommitted paths.
+- `npm run dev` running on port 3000.
+
+**For the next agent**
+
+- **This repo is not deployable as it stands, and the reason is not a bug.** Roughly two weeks of
+  feature work — signatures, daily errands, PTO overage, the deployment assistant, three
+  migrations — exists only as uncommitted working-tree changes. `deploy/bj-deploy` refuses a
+  production build from dirty or non-`main` source by design, so the first step is a reviewed
+  `git diff` and a commit, not a deploy command.
+- The client server is still on the pre-August schema and has never been touched by the
+  assistant. Its first run must be a reviewed Safe update, per
+  `docs/DEPLOY-ASSISTANT.md`.
+- If the favicon is ever regenerated, keep it a monogram or another compact mark. The full
+  wordmark does not survive 16px; that was measured, not assumed.
+
+## 2026-08-06 — Safe-update migration adoption recovery and local deployment
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf`, with the uncommitted deployment-assistant and
+application work described in the preceding entry
+**Trigger:** The user's first local **Safe update** stopped while replaying an already-installed SQL
+migration with `function "approve_leave_request" already exists`; the user supplied the full run
+output and asked for the deployment failure to be handled.
+
+**What changed**
+
+- `deploy/lib/migrations.sh` — made first-run migration-ledger adoption resumable. The immutable
+  legacy baseline still covers migrations 1–38, while missing known migrations 39–41 are now adopted
+  only after each migration's complete catalog fingerprint proves its columns, constraints,
+  functions, function bodies, and removal of obsolete overloads are already installed. An interrupted
+  adoption can therefore resume without replaying installed DDL or trusting a single-column guess.
+- `deploy/lib/migrations.sh` — corrected the fingerprint queries to read SQL from stdin without
+  supplying psql's `-c` option; `-c` requires an inline command argument and caused the second safe
+  update attempt to stop with `psql: option requires an argument -- 'c'` before migration or app
+  cutover.
+- `tests/deploy/deploy-assistant.test.sh` — added regression coverage for interrupted legacy
+  adoption, complete known-migration recording, apply-once behavior, and the psql stdin/`-c`
+  incompatibility.
+- `docs/{MEMORY,CHANGELOG}.md` — documented the durable migration-adoption rule and the recovery fix.
+
+**Actions outside the repo**
+
+- No client-server SSH connection, transfer, command, database operation, or deployment was made.
+- Queried only the local Docker PostgreSQL catalogs and proved that migrations 39, 40, and 41 were
+  already fully installed while the new ledger initially recorded only 1–39. No business row was
+  changed by that diagnosis.
+- Ran `./deploy/bj-deploy update local`. Each of the three attempts made and verified a custom-format
+  backup before proceeding:
+  `backups/deploy-assistant/local/20260806T222756Z-b629cc/postgres.dump`,
+  `20260806T223126Z-ff5aad/postgres.dump`, and
+  `20260806T223235Z-1ac0af/postgres.dump`. The first two stopped safely before app cutover; the final
+  run adopted ledger records 40–41, skipped all already-applied SQL, rebuilt the application natively
+  for ARM64, and recreated only `bj-erp-app-1`. Database/Auth/PostgREST/Caddy containers and database
+  data were preserved.
+
+**Verification**
+
+- `/bin/bash -n deploy/lib/migrations.sh tests/deploy/deploy-assistant.test.sh` — passed.
+- `npm run test:deploy` — all deployment-assistant tests passed, including both new regressions.
+- Production Docker build inside the successful Safe update — Next.js 16.2.9 compile, TypeScript,
+  and all 39 generated pages passed; `/api/health` was present.
+- Final local checks: `bj_deploy.schema_migrations` contains exactly 41 entries; the installed
+  manifest contains 41 lines; the final three migration filenames are recorded; and
+  `https://192.168.2.48:3500/api/health` returned HTTP 200 with `{"status":"ok"}`.
+- Docker image inspection reported `arm64` for app, database, Auth, PostgREST, and Caddy. Compose
+  reports all five services running and PostgreSQL healthy. `git diff --check` passed before the
+  documentation update and is repeated at session end.
+
+**State left behind**
+
+- The corrected app is running locally at `https://192.168.2.48:3500`; the test database and Caddy CA
+  were preserved. The three verified backups remain on the Mac.
+- All source and documentation changes remain uncommitted on the already-dirty `main` worktree.
+  Nothing was staged, committed, or pushed. The client server remains untouched.
+
+**For the next agent**
+
+- Do not replace the complete catalog fingerprints with a single sentinel column. Adoption is a
+  narrow recovery path for these three known migrations; unknown missing history must still stop.
+- With psql, a heredoc/stdin query must not use `-c` without an argument. Keep SQL out of argv when it
+  contains values or secrets, and preserve the deployment harness regression.
+
+## 2026-08-06 — Interactive deployment assistant implementation
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf`, with substantial pre-existing uncommitted feature,
+native-ARM64 deployment, and documentation work from the preceding sessions
+**Trigger:** After the design discussion, the user approved implementation of one guided program for
+local ARM64 and client AMD64 restart/redeploy/update/fresh-install workflows, including resumable SSH
+jobs, and required enough documentation for another agent to rebuild or recover it without any chat
+context.
+
+**What changed**
+
+- `docs/specs/2026-08-06-interactive-deployment-assistant-design.md` and
+  `docs/plans/2026-08-06-interactive-deployment-assistant.md` — complete cold-start design and
+  implementation/recovery map: topology, action/data matrix, architecture and Git gates, backup and
+  secret boundaries, migration contract, remote state machine, reset order, failures, acceptance
+  criteria, and exact file inventory.
+- `deploy/bj-deploy` — new macOS-Bash-3.2-compatible interactive/CLI entry point. Implements local
+  and client doctor/status/logs, restart, manifest-gated app-only rebuild, safe update, database
+  reset, factory reset, dry-run, and `resume <run-id>`. Client defaults are SSH alias `bj` backed by
+  `behsazan@5.201.190.184:2222`, remote directory
+  `/home/behsazan/bj-erp-installer`, and app `https://10.10.10.50:3500`.
+- `deploy/remote-job.sh` — server-side detached worker with atomic status/log files, a global `flock`,
+  idempotent run IDs, independent backup phase, Mac-checksum authorization gate, restart/app/update/
+  reset workers, protected reset-password handoff, and reconnect states including `BACKUP_READY`,
+  `BACKUP_VERIFIED`, `RESET_READY`, `RUNNING`, `SUCCEEDED`, and `FAILED:<code>`.
+- `deploy/lib/{common,migrations,health}.sh` — shared target-safe Compose wrapper, validation/hashing/
+  atomic-env helpers, password-safe container execution, immutable private migration ledger, known
+  legacy-baseline adoption, source manifest generation, stable app/Auth/DB health checks, and running
+  image architecture verification.
+- `deploy/docker-compose.client-amd64.yml` — dedicated pinned `*-client-amd64` service tags and
+  explicit AMD64 platforms. Integrated the preceding session's untracked local ARM64 overlay and
+  preparation script; local and production paths now always supply their correct overlays.
+- `deploy/install.sh`, `update.sh`, `package.sh`, and SQL/key helpers — use the target wrapper,
+  pending-only migrations, `/api/health`, force-recreated app cutover, reliable admin creation after
+  a DB wipe, password files/environment names instead of secrets in argv, dedicated AMD64 bundle
+  tags, SHA-256 sidecars, macOS metadata-free tar creation, and inclusion of the controller/worker/
+  libraries in the offline installer.
+- `app/api/health/route.ts` — public no-store liveness contract returning `{status:"ok"}` outside the
+  locale/session proxy. This replaces the broken assumption that `/` must return 200; Next normally
+  redirects the root with 307.
+- `tests/deploy/deploy-assistant.test.sh` and `npm run test:deploy` — Bash fixture coverage for
+  architecture/identifier rejection, atomic `.env` edits and permissions, sorted migration hashes,
+  apply-once/changed-history ledger behavior, remote run-ID idempotence, and health contract.
+- `docs/DEPLOY-ASSISTANT.md` — simple operator guide covering one-time SSH setup, every action/data
+  effect, local phone access, production packaging, reset guards, resume, backup privacy, migrations,
+  network behavior, overrides, troubleshooting, and verification. Added pointers from the older
+  runbooks and updated `MEMORY`, `TASKS`, and `CHANGELOG`.
+- `deploy/setup-release.sh` and `release.sh` — corrected the outdated laptop-VPN requirement. The
+  Mac uses public SSH directly; only phone/browser access to the private app route uses VPN.
+
+**Actions outside the repo**
+
+- No SSH connection, rsync transfer, command, file change, Docker operation, database operation, or
+  health request was made against the client's server. No client VPN was used.
+- Ran read-only local Docker inspection with approved access. Docker daemon reported `aarch64`; both
+  local/client Compose overlay combinations rendered; the five currently running local images are
+  all `linux/arm64`/`linux/arm64/v8`. No local container was restarted/recreated and no volume was
+  modified.
+- Ran one read-only query through the existing local PostgreSQL 15 container to prove psql
+  `\getenv` and safely quoted `:'variable'` work with an inherited environment-variable name. It
+  returned only the harmless literal `safe_value`; no SQL write ran and no secret was printed.
+- Consulted current Docker Compose documentation through Context7 (multiple `-f` overlays,
+  recreation, `--wait`, project/volume behavior), current PostgreSQL psql documentation for
+  `\getenv`, current Supabase self-host/restore documentation, and current Supabase breaking-change
+  notices. The PG15→PG17 and gateway transitions reinforce that ordinary releases must keep this
+  project's tested infrastructure versions pinned.
+
+**Verification**
+
+- `npm run test:deploy` — passed all deployment fixture checks; also passed explicitly under the
+  Mac's `/bin/bash` 3.2.57.
+- `bash -n` under Bash 3.2 — clean for the controller, worker, install/update/package/release/setup,
+  ARM64 preparation, all three libraries, and the deployment test harness.
+- Both target Compose configurations rendered with `config --quiet`; read-only image inspection
+  verified every existing local service is native ARM64.
+- `npm run lint` — passed. `npm run test:unit` — 40 files / 254 tests passed.
+- `npm run build` — first attempt hit the known sandbox-only Turbopack worker-port denial; approved
+  retry outside the sandbox passed compile, TypeScript, 39 static pages, and emitted `/api/health`.
+- Dummy-secret key-generation contract passed without putting the secret in argv. PostgreSQL 15
+  environment-variable/quoting contract passed read-only. `git diff --check` passed.
+- ShellCheck was not installed, so it could not be run. The complete AMD64 multi-GB offline package,
+  destructive local reset, and any production SSH execution were deliberately not run during
+  implementation; the production command itself retains architecture/checksum/test gates.
+
+**State left behind**
+
+- Implementation and documentation are complete but remain uncommitted on the already-dirty `main`
+  worktree. Nothing was staged, committed, pushed, deployed, or migrated by this session.
+- The existing local stack remains running exactly as found on native ARM64 images and its existing
+  database/volumes. Its current app image predates the new `/api/health`; the endpoint becomes active
+  after the user chooses a local app/update deployment.
+- The client server remains untouched. Its first assistant-driven operation should be a reviewed
+  Safe update or Fresh database only after all intended source changes are committed on clean
+  `main`. App only intentionally refuses until an installed migration manifest exists.
+
+**For the next agent**
+
+- Start with `docs/DEPLOY-ASSISTANT.md`, then the dated design and plan. Do not infer missing behavior
+  from this chat; those three files contain the complete contract and recovery sequence.
+- Preserve all pre-existing feature changes in this dirty worktree. Do not test a destructive action
+  against the local or client project without fresh explicit authorization.
+- Before the first live client run, review `git diff`, commit the intended source on `main`, run
+  `./deploy/setup-release.sh`, then `./deploy/bj-deploy doctor client`. The assistant will refuse a
+  production build from dirty/non-main source.
+- A first client Safe update adopts the verified 38-migration legacy baseline and applies the three
+  current August migrations. A first local Safe update detects those already-applied columns and
+  records them without replaying non-idempotent history.
+- If SSH drops, use the printed `./deploy/bj-deploy resume <run-id>`. Never manually start a second
+  job or bypass `BACKUP_VERIFIED`; inspect `status`/`logs` and the run manifest first.
+
+## 2026-08-06 — Clarify direct-SSH deployment without a laptop VPN
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the preceding sessions' uncommitted feature,
+deployment-design, native-ARM64, and documentation work
+**Trigger:** The user clarified that the Mac can reach the client's public SSH endpoint directly,
+while only the phone uses VPN to reach the private application URL, and asked whether the proposed
+tool will also execute installation remotely rather than merely upload an archive.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded the clarified deployment connectivity model. No script,
+  configuration, application code, migration, or running environment was changed.
+
+**Actions outside the repo**
+- None. No SSH connection, file transfer, client-server command, Docker command, or database action
+  was run.
+
+**Verification**
+- Re-read `deploy/setup-release.sh` and `deploy/release.sh`. The existing routine-release pipeline
+  already uploads with rsync and then uses `ssh -t` to execute `sudo update.sh` remotely, so the
+  interactive deployment assistant can extend the same pattern to full installation and resets.
+- Confirmed the VPN wording in both scripts is an outdated assumption for this user's topology. The
+  deployment prerequisite should be successful direct SSH to `5.201.190.184:2222`, not a VPN.
+- Confirmed the app's `10.10.10.50:3500` address and the public SSH endpoint are separate network
+  paths. Because the Mac cannot reach the private app address, post-deploy HTTP/Auth checks should
+  run on the client server over SSH and return their results to the Mac; the phone VPN remains only
+  for the final human browser test.
+- Consulted current OpenSSH documentation for remote command execution, forced TTY allocation, and
+  authenticated file transfer. No tests were run because this was a design clarification only.
+
+**State left behind**
+- The intended tool remains design-only. It will perform upload plus remote execution in one Mac-side
+  command; the user will not need to open a separate SSH session.
+- This journal entry remains uncommitted with the existing changes on `main`; nothing was staged,
+  committed, or pushed.
+
+**For the next agent**
+- Remove the VPN prerequisite/messages from the future Mac-side deployment flow and replace them
+  with direct SSH preflight. Do not change the app URL: employees/testers still reach
+  `https://10.10.10.50:3500` through the client's LAN/VPN.
+- Use SSH key authentication or a multiplexed authenticated connection for transfers, allocate a TTY
+  for sudo/admin-password prompts, never pass passwords in command arguments, and execute remote
+  health checks from the server before reporting success.
+
+## 2026-08-06 — Interactive deployment assistant design review
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the preceding sessions' uncommitted feature,
+native-ARM64 deployment, local-runbook, and documentation work
+**Trigger:** The user proposed replacing manual terminal-command sequences with one interactive
+script covering local ARM64 and client AMD64 restarts, app redeploys, database-preserving updates,
+offline SSH delivery, and destructive fresh installations, and requested brainstorming before code.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded this design-only review. No deployment script, Compose file,
+  application source, migration, or operator documentation was implemented or modified.
+
+**Actions outside the repo**
+- None. No Docker container, image, volume, database, SSH configuration, client server, or remote
+  file was touched.
+
+**Verification**
+- Read the existing deployment implementation and active design records: `deploy/install.sh`,
+  `package.sh`, `prepare-local-arm64.sh`, `release.sh`, `setup-release.sh`, `update.sh`, all Compose
+  variants, `docs/LOCAL_REDEPLOY.md`, and the 2026-07-25/26 deployment plans.
+- Confirmed most low-level building blocks already exist: interactive offline install, AMD64 package
+  creation, resumable SSH/rsync release delivery, verified pre-update backup, app rollback, and
+  dedicated native ARM64 tags/Compose overlay.
+- Identified design blockers to fix before adding a menu: `update.sh` expects exactly HTTP 200 from
+  `/` without following the app's normal redirect; wiping only the DB volume while retaining `.env`
+  makes `install.sh` reuse configuration and skip the first-admin prompt; every update currently
+  replays every migration rather than using an immutable migration ledger; and AMD64 packaging uses
+  canonical service tags, so a forgotten local overlay can reintroduce emulation on Apple Silicon.
+- Checked current Docker Compose documentation for multiple-file overlays, `--wait`, and targeted
+  recreation, plus current Supabase self-hosting/update guidance and breaking-change notices. The
+  upstream PG15-to-PG17 and Kong-to-Envoy changes reinforce keeping this project's service versions
+  pinned and treating infrastructure upgrades as a separate reviewed operation.
+- No tests were run because the user explicitly requested design discussion before implementation.
+
+**State left behind**
+- Brainstorm/design only; no deployment assistant exists yet and no workflow was executed.
+- This journal entry remains uncommitted with the existing work on `main`; nothing was staged,
+  committed, or pushed.
+
+**For the next agent**
+- If the user approves the design, write a reviewed spec/plan before implementation. Prefer one
+  interactive Mac-side entry point that dispatches to small local/remote operations, with both menu
+  and non-interactive subcommands, rather than one monolithic destructive script.
+- Preserve these proposed safety defaults: detect and verify architecture instead of trusting a
+  menu choice; clean `main` for client releases; dry-run/doctor first; verified off-machine backup
+  before any wipe; versioned/checksummed staging; explicit typed destructive confirmation; exact
+  compose project/volume validation; no secrets in arguments/logs; and a distinct factory reset from
+  a database reset that preserves the Caddy CA.
+- Before wrapping the existing scripts, repair the health-check contract and fresh-admin path, then
+  add deployment manifests/migration checksums so an app-only choice can be proven safe rather than
+  guessed from filenames.
+
+## 2026-08-05 — Daily work errands and paid-leave overage
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the preceding sessions' uncommitted FR-32,
+signed-approval, Persian-only-calendar, and native-ARM64 deployment work
+**Trigger:** Add a separate daily work-errand form, rename the existing errand tab to Hourly Work
+Errand, and show/project paid leave with any excess recorded as unpaid using 8 hours per day.
+
+**What changed**
+- `app/[locale]/(app)/request/daily-errand/{page.tsx,DailyErrandRequestForm.tsx}` and
+  `RequestTypeTabs.tsx` — added the fourth signed daily-errand form with Persian Start/End dates,
+  required location, optional description, localized four-tab navigation, and a mobile-scrollable
+  tab row; renamed the existing errand tab to Hourly Work Errand.
+- `lib/leave/dailyErrand.ts`, `lib/actions/leave.ts`, `messages/{en,fa}.json`, request pages, and
+  request lists — wired the daily-errand RPC and labels through the UI and show stored unpaid time on
+  pending/approved requests.
+- `lib/leave/duration.ts`, daily/hourly leave forms, and unit tests — added exact minute-based
+  projections for Requesting, non-negative Remaining Balance, and conditional Unpaid Time Off.
+- `supabase/migrations/20260806014310_daily_work_errands_pto_overage.sql` — added constrained
+  `unpaid_minutes`, daily errand shape/counting/submission, authoritative paid/unpaid splitting on
+  signed approval, paid-only ledger consumption, and paid-only cancellation reversal. Public RPCs
+  remain authenticated-only SECURITY DEFINER functions with empty search paths.
+- `tests/e2e/{_helpers.ts,errand.spec.ts,leave.spec.ts}` and unit tests — cover daily errand signed
+  submission/approval and the exact 4-days-versus-3-days-4-hours overage flow.
+- Requirements, data model, permissions, tasks, changelog, design, and implementation plan —
+  documented FR-13/FR-33 and the preserved-data local rollout.
+
+**Actions outside the repo**
+- Backed up the preserved local database to
+  `/private/tmp/bj-pre-daily-errand-pto-20260805/postgres.dump` (368302 bytes) before migration.
+- A first rollback dry run as `postgres` stopped before DDL because that role did not own
+  `leave_requests`; a second passwordless `supabase_admin` attempt failed authentication. Using the
+  database container's configured `supabase_admin` password, the entire migration then parsed inside
+  `BEGIN`/`ROLLBACK`, after which it was applied once successfully.
+- Built `bj-erp-app:local-arm64` with
+  `docker build --platform linux/arm64 -f deploy/Dockerfile ...` and recreated only the app using
+  `deploy/docker-compose.yml` plus `deploy/docker-compose.local-arm64.yml`, `--no-deps`, and
+  `--pull never`. Database container ID
+  `e48c7930e3038510a10a7c83b26a6070b56721bb7cb0dc05ff0cf1949b029a07` did not change. The
+  `bj-erp_db-data` volume was neither removed nor recreated. No production/client command ran.
+- The in-app browser could not pass local Caddy's private certificate
+  (`ERR_CERT_AUTHORITY_INVALID`), so UI verification used the project's explicitly local Playwright
+  configuration with `ignoreHTTPSErrors`; the in-app browser session was then finalized.
+
+**Verification**
+- `jq empty messages/en.json messages/fa.json`, `npm run lint -- --max-warnings=0`, and
+  `npx tsc --noEmit` — passed.
+- `npm run test:unit` — 40 files / 254 tests passed. An earlier attempt with Vitest's unsupported
+  `--runInBand` flag failed at option parsing; no test ran in that attempt.
+- `npm run build` — passed after rerunning outside the filesystem sandbox because Turbopack's worker
+  port was denied there; the output includes `/[locale]/request/daily-errand`.
+- Focused native-stack e2e (`errand.spec.ts` + `leave.spec.ts`, one worker) — 3 passed in 23s,
+  including signed daily-errand approval and an over-balance signed approval with unpaid remainder;
+  cleanup removed all five throwaway users. A second mobile leave run passed in 8.9s and removed its
+  one throwaway user.
+- Read-only browser checks on both request routes found the correct headings/tabs, no framework
+  overlay, and no console issues. Visual captures:
+  `/private/tmp/bj-daily-errand-desktop.png` and `/private/tmp/bj-pto-overage-mobile.png`.
+- Pre-migration business counts were profiles 5, roles 6, requests 3, ledger 10, holidays 0,
+  departments 5, leave types 3, companies 1; migration checks confirmed the new column,
+  constraints, function security/ACL, and no count changes. The final post-e2e audit returned those
+  same counts, all five running images inspected as `linux/arm64` (`/v8` where reported), the
+  preserved volume creation time remained `2026-08-04T19:54:09Z`, and the daily-errand route
+  returned HTTP 200 through the local gateway.
+
+**State left behind**
+- Work remains uncommitted on `main` together with the preceding sessions' changes.
+- The local stack is running with native ARM64 service images and the original `bj-erp_db-data`
+  volume. Migration `20260806014310` is applied locally. The client's AMD64 production environment
+  was not contacted and does not have this migration.
+
+**For the next agent**
+- Always use both Compose files for local commands. Do not run `down -v`, delete
+  `bj-erp_db-data`, or use the AMD64 production packaging path for Apple-Silicon testing.
+- Production deployment is a separate AMD64 operation and must include the new migration; it was
+  deliberately not attempted here.
+
+## 2026-08-05 — Signed approvals, Persian-only dates, and native ARM64 local Docker separation
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the preceding sessions' uncommitted FR-32 and
+local-redeploy work
+**Trigger:** Require manager/admin signatures on approval, remove Gregorian calendars everywhere,
+then correct the local Docker deployment so Apple Silicon runs no AMD64-emulated service while
+preserving the existing database.
+
+**What changed**
+- `supabase/migrations/20260805185628_approval_signatures_persian_only.sql` — added nullable
+  historical approver-signature evidence, replaced the unsigned approval RPC with a signed
+  three-argument RPC, kept decision/ledger/audit/evidence atomic, normalized profile calendar
+  preferences to `jalali`, and constrained future values to Jalali.
+- `lib/actions/leave.ts`, generated Supabase types, request signature components, approvals queue,
+  and calendar — approval now requires a fresh mouse/touch signature plus explicit authorization;
+  rejection remains unsigned; authorized viewers fetch requester and approver images lazily.
+- Profile settings and all request, employee, holiday, allocation, home, approval, and calendar
+  surfaces — removed the Gregorian selector/branching and use Persian pickers/display formatting.
+  Stored database dates remain ISO Gregorian at the persistence boundary.
+- `deploy/docker-compose.local-arm64.yml` — new Apple-Silicon-only overlay with dedicated local
+  image tags and explicit `platform: linux/arm64` for Postgres, GoTrue, PostgREST, app, and Caddy.
+- `deploy/prepare-local-arm64.sh` — pulls the ARM64 manifests of the existing pinned service
+  versions, builds `bj-erp-app:local-arm64`, verifies every image architecture, and deliberately
+  does not touch containers or volumes.
+- `docs/LOCAL_REDEPLOY.md`, `docs/MEMORY.md`, `docs/CHANGELOG.md`, `docs/TASKS.md`, requirements,
+  data model, permissions, and the new approval-signature design/plan — documented the signed
+  approval/Persian-only contract and separated ARM64 local commands from AMD64 client releases.
+- `playwright.config.ts` and e2e helpers — external local-stack URL support, private-CA handling in
+  the isolated test process, ARM-local cleanup routing, Persian allocation pickers, and reliable
+  below-the-fold signature drawing.
+
+**Actions outside the repo**
+- Initially rebuilt/recreated the app and applied the new migration while the four previously
+  loaded service images were still AMD64. The user correctly stopped further testing and required
+  native ARM64 for all local services. No production/client server action was taken.
+- Audited Docker Desktop (`aarch64`) and all running images. Before correction: app was ARM64;
+  Postgres, GoTrue, PostgREST, and Caddy were AMD64. Docker manifests confirmed every pinned tag
+  publishes an ARM64 variant.
+- Applied only `20260805185628_approval_signatures_persian_only.sql` after a verified backup at
+  `/private/tmp/bj-pre-approval-signatures.pCTmtl/postgres.dump`; reloaded PostgREST and verified
+  the signed function, grants, constraint, columns, calendar normalization, and unchanged counts.
+- Before the architecture cutover, created and validated a fresh 365,625-byte backup at
+  `/private/tmp/bj-pre-arm64-switch.KjmAs5/postgres.dump`. Recorded `bj-erp_db-data` creation time
+  `2026-08-04T19:54:09Z` and all business counts.
+- Prepared dedicated ARM64 images, then ran Compose with the base + ARM64 overlay and `--pull never
+  --force-recreate`. This recreated containers only. No `down -v`, `volume rm`, database restore,
+  or client-server command was run.
+
+**Verification**
+- `npx tsc --noEmit`: passed. `npm run lint -- --max-warnings=0`: passed.
+- `npm run test:unit`: 39 files / 248 tests passed.
+- `npm run build`: passed outside the sandbox after the first attempt hit a sandbox-only Turbopack
+  worker-port denial. The ARM64 Docker build also completed successfully.
+- External-stack Playwright: approval flow passed end-to-end (requester evidence, signed manager
+  approval, separate approver viewer, rejection without approver evidence, balance debit); settings
+  flow passed (no Gregorian option, language switch). Six throwaway accounts were cleaned. A final
+  calendar-only run was interrupted by the user before execution completed; no test process or
+  throwaway account remained.
+- Current `docker compose ... images`: all five services are `linux/arm64` or `linux/arm64/v8`.
+  PostgREST logs its database connection as `aarch64-unknown-linux-gnu`.
+- The DB container mounts the same `bj-erp_db-data` volume with the same creation timestamp and
+  mountpoint. Counts before/after are identical: profiles 3, roles 4, requests 3, ledger 5,
+  holidays 0, departments 5, leave types 3, companies 1. All four requester/approver signature
+  columns remain present.
+- `https://192.168.2.48:3500/en/login` returned 200 and `/auth/v1/health` returned 200 after the
+  native Caddy cutover. App/Auth/PostgREST logs show normal startup and schema loading.
+
+**State left behind**
+- Local stack is running entirely on native ARM64 images via the dedicated local overlay, against
+  the preserved database volume and current signed-approval schema.
+- Production remains explicitly AMD64 through the unchanged `deploy/package.sh` and
+  `deploy/release.sh`; neither the client server nor its data was contacted.
+- Work remains uncommitted on `main`, alongside the earlier uncommitted UI/FR-32 work. The user's
+  existing untracked `deploy/docker-compose.local.yml` was preserved; new instructions use
+  `deploy/docker-compose.local-arm64.yml` instead.
+
+**For the next agent**
+- For local Docker commands on this Mac, always combine `deploy/docker-compose.yml` with
+  `deploy/docker-compose.local-arm64.yml`. Never use production canonical image tags locally.
+- Running `package.sh` intentionally loads AMD64 canonical tags on the Mac, but the dedicated
+  `*-local-arm64` tags remain isolated. Re-run `prepare-local-arm64.sh` only if those local tags
+  were pruned.
+- Never use `docker compose down -v`, remove `bj-erp_db-data`, or replay all historical migrations
+  against this populated database.
+
+## 2026-08-05 — Verify LAN-IP deployment despite macOS curl TLS failure
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the preceding sessions' uncommitted FR-32,
+redeploy-documentation, and diagnostic journal changes
+**Trigger:** After recreating the local stack for `192.168.2.48`, the user reported that the Step 2
+curl check returned `app: 000` instead of 200.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded the read-only runtime diagnosis. No source, `.env`, Compose,
+  certificate, container, volume, or database setting was changed.
+
+**Actions outside the repo**
+- Inspected `docker compose ps --all` and current logs after the user's full force-recreation. All
+  five services are up, Postgres is healthy, Caddy publishes `0.0.0.0:3500->443`, the app reports
+  ready, and Caddy successfully issued an internal certificate for `192.168.2.48`.
+- Confirmed the Mac has a listener on TCP 3500. The system curl connects but fails during TLS with
+  LibreSSL `CRYPTO_internal:bad decrypt`, producing curl exit 35 / HTTP code 000.
+- Tested TLS 1.2 and 1.3 independently with OpenSSL; both handshakes succeeded. Sent an HTTP/1.1
+  request through the successful TLS connection and received the expected 307 redirect to
+  `/fa/login` with the correct IP-based CSP and alternate links.
+- Repeated the complete request with Node's TLS verification disabled for this one diagnostic; it
+  followed the redirect and printed `app: 200`.
+
+**Verification**
+- `.env` contains the intended values: `APP_HOST=192.168.2.48`, `APP_PORT=3500`, and
+  `APP_ORIGIN=https://192.168.2.48:3500`.
+- Caddy's certificate store now contains both the old `localhost` leaf and a new
+  `192.168.2.48` leaf; Caddy logged `certificate obtained successfully` for the IP.
+- The endpoint is reachable and the app returns 200. The failed curl result is specific to the
+  Mac's LibreSSL curl path, not an application or container readiness failure.
+- The recreate output also truthfully reports that the current `db`, `rest`, `auth`, and `gateway`
+  images are `linux/amd64` on the `linux/arm64/v8` Mac. That warning did not stop the services, but
+  native-image cleanup remains separate work if the user's no-emulation goal still applies.
+
+**State left behind**
+- The IP-configured local stack remains running and ready for phone certificate installation/testing.
+- No runtime mutation was made during diagnosis. This journal entry remains uncommitted with the
+  existing work on `main`; nothing was staged, committed, or pushed.
+
+**For the next agent**
+- Do not treat curl `000` as a failed app in this exact state; inspect curl's error text. Node and
+  OpenSSL independently proved the gateway and app work.
+- The phone must install and fully trust Caddy's exported root CA before Safari/Chrome will accept
+  the IP certificate. If the phone then times out rather than showing a certificate error, check
+  Wi-Fi client isolation, VPN, and macOS firewall.
+- If eliminating emulation is still required, replace/re-pull the four AMD64 service images for
+  arm64 and verify each image's architecture before recreating; do not conflate that with this
+  already-proven endpoint response.
+
+## 2026-08-05 — Diagnose local phone access over the Mac LAN address
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the uncommitted FR-32 implementation and local
+redeploy documentation from the preceding sessions
+**Trigger:** The user can open the Docker deployment at `https://localhost:3500` on the Mac but
+cannot open it from a phone at the Mac's `192.168.2.48` address.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded the read-only network/configuration diagnosis required by the
+  project working agreement. No application or deployment configuration was changed.
+
+**Actions outside the repo**
+- Inspected the local Docker stack. The gateway publishes `0.0.0.0:3500->443/tcp` and
+  `[::]:3500->443/tcp`, so Docker is already listening on all Mac interfaces rather than only on
+  loopback.
+- Tested both `https://localhost:3500/` and `https://192.168.2.48:3500/` from the Mac with TLS
+  verification deliberately disabled; both followed redirects to HTTP 200.
+- Inspected the certificate served without SNI, matching the raw-IP browser path. Its only subject
+  alternative name is `DNS:localhost`. A first probe that explicitly sent the IP as SNI returned no
+  certificate; it made no change.
+- Consulted current Docker Compose and Supabase self-hosting documentation. Both confirm that public
+  URL environment changes require container recreation, not a plain restart.
+
+**Verification**
+- `deploy/.env` currently has `APP_HOST=localhost`, `APP_PORT=3500`, and
+  `APP_ORIGIN=https://localhost:3500`, proving the browser bundle, Auth service, and TLS site are
+  configured for the Mac-only name.
+- `docker compose ps` reported all five services up and the database healthy.
+- `curl -skL` returned final HTTP 200 through both hostnames from the Mac; the remaining phone-side
+  requirements are a matching IP certificate/public URL, trust of the local root CA, and an
+  unisolated shared Wi-Fi path.
+- `ipconfig getifaddr en0` failed in the restricted process with
+  `ipconfig_server_port failed (os/kern) unknown error code (44c)`; the provided IP was independently
+  usable in the successful curl and TLS probes.
+
+**State left behind**
+- Running containers, volumes, database, `.env`, and certificate are unchanged. The app remains
+  configured for `localhost` until the user applies the supplied phone-testing steps.
+- This journal entry joins the already-uncommitted work on `main`; nothing was staged, committed, or
+  pushed in this session.
+
+**For the next agent**
+- For phone testing, change all three public settings together to the LAN IP and port, recreate the
+  stack so the app/Auth/Caddy receive them, export Caddy's root CA, and install/trust it on the phone.
+  Do not run `docker compose down --volumes`; no data wipe is needed.
+- If the Mac still returns 200 through the LAN IP but the phone cannot connect after those changes,
+  check same/guest Wi-Fi client isolation, VPNs, and the macOS firewall before changing Docker.
+
+## 2026-08-05 — Repair local signature schema and document data-preserving redeploys
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the uncommitted FR-32 implementation from the
+preceding session
+**Trigger:** After the schema-mismatch diagnosis, the user authorized the local fix and requested a
+plain-English local app/database redeploy guide that preserves the existing database.
+
+**What changed**
+- `supabase/migrations/20260805171924_request_signatures.sql` — added an explicit
+  `NOTIFY pgrst, 'reload schema'` after the column/RPC DDL so self-hosted PostgREST discovers the new
+  RPC signatures without waiting for another lifecycle event.
+- `docs/LOCAL_REDEPLOY.md` — added the complete developer-machine procedure: preflight, row-count
+  snapshot, private `pg_dump`, archive validation, rollback image tag, Docker build, one-by-one new
+  migration application over stdin, PostgREST reload, app-only recreation, health/schema/data checks,
+  browser smoke test, frontend-only shortcut, and safe failure handling. Every executable step states
+  its expected result and the guide explicitly forbids volume-deleting commands and bulk historical
+  migration replay.
+- `docs/DEPLOY.md` — linked the new local redeploy runbook from the self-host deployment section.
+
+**Actions outside the repo**
+- Created and validated the pre-migration custom-format database archive
+  `/private/tmp/bj-pre-request-signatures.b08VQq` (318,209 bytes, 620 archive entries; PostgreSQL 15.8).
+- Recorded pre-migration data counts: `profiles=3`, `user_roles=4`, `leave_requests=1`,
+  `leave_ledger=5`, `holidays=0`, `departments=5`, `leave_types=3`, `companies=1`.
+- Applied only `supabase/migrations/20260805171924_request_signatures.sql` to the persistent local
+  `postgres` database with `psql -v ON_ERROR_STOP=1`. It completed with `ALTER TABLE`, `COMMENT`,
+  `CREATE FUNCTION`, `DROP FUNCTION`, `REVOKE`, `GRANT`, and `NOTIFY` operation tags and no error.
+- PostgREST received the notification and logged `Schema cache loaded` with 27 functions. No Docker
+  service or volume was stopped, deleted, or recreated; the user's already-rebuilt app container
+  remained running.
+- Two initial read-only row-count commands failed before execution due shell/SQL quoting errors
+  (`syntax error at or near "chr"`, then `trailing junk after numeric literal`). The corrected query
+  succeeded. These failed attempts made no database change.
+
+**Verification**
+- Post-migration information-schema query returned nullable `signature_data text` and nullable
+  `signature_consent_at timestamp with time zone`.
+- Function-catalog query returned exactly the new argument lists for `submit_leave_request`,
+  `submit_hourly_leave_request`, and `submit_errand_request`; `authenticated` has execute permission
+  and `anon` does not for all three.
+- Every post-migration business-table count exactly matched the pre-migration snapshot above.
+- Local gateway checks: `/en/login` returned HTTP 200, `/en/request` returned the expected anonymous
+  redirect HTTP 307, and `/auth/v1/health` returned GoTrue v2.170.0 health JSON.
+- `npm run test:unit` — 39 files, 247 tests passed.
+- `git diff --check` — clean before this journal entry; final whitespace check repeated afterward.
+- No business request was submitted during verification, so the user can retry the failed request
+  without a second test request affecting balances or approval queues.
+
+**State left behind**
+- The local stack is running the user's new app image against the now-current signature schema and
+  refreshed PostgREST cache. Existing data and container ages are preserved; the verified backup is
+  retained in `/private/tmp`.
+- All FR-32 source changes, the new runbook, and this journal update remain uncommitted on `main`.
+
+**For the next agent**
+- Ask the user to retry the signed request. If it still fails, inspect only logs newer than the retry;
+  the earlier missing-column/PGRST202 entries describe the now-fixed pre-migration state.
+- Do not replay all historical migrations on this populated local database. Follow
+  `docs/LOCAL_REDEPLOY.md` and apply only migrations not yet deployed, oldest first.
+
+## 2026-08-05 — Local Docker request submission diagnosis
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` with the uncommitted FR-32 implementation from the
+preceding session
+**Trigger:** The user redeployed the local Docker app and reported the generic error when submitting
+a signed daily leave request.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded this diagnosis. No application, migration, or deployment code
+  was changed because the user reported the failure but did not yet authorize changing the running
+  database.
+
+**Actions outside the repo**
+- Read local `docker compose` service status and the last ten minutes of `app`, `rest`, and `db` logs.
+  The app container is the new image (created four minutes before inspection), while database/Auth/
+  PostgREST containers and the persistent volume are 22 hours old.
+- Logs prove the mismatch: `column leave_requests.signature_consent_at does not exist` and PostgREST
+  `Could not find the function public.submit_leave_request(... p_signature_authorized,
+  p_signature_data ...) in the schema cache`.
+- Confirmed `deploy/migrations/` does not contain
+  `20260805171924_request_signatures.sql`; the source migration exists only under
+  `supabase/migrations/`. Recreating only `app` therefore updated frontend/server code but could not
+  update the persistent database schema.
+- Consulted current Supabase/PostgREST troubleshooting docs: after applying function/column DDL, use
+  `NOTIFY pgrst, 'reload schema'` when an explicit schema-cache refresh is needed.
+
+**Verification**
+- Diagnosis is backed by both Next server logs and the exact failed SQL statements in Postgres logs.
+- No test submission or write query was run. No migration was applied and no container was restarted.
+- Unrelated existing log noise remains: the DB health probe connects without `-d postgres`, causing
+  repeated harmless `database "supabase_admin" does not exist` FATAL entries while Compose still
+  reports the database healthy.
+
+**State left behind**
+- Running local stack unchanged. Leave submission will continue failing until the FR-32 migration is
+  applied to the persistent database and PostgREST sees the new schema.
+
+**For the next agent**
+- With user authorization, take/verify a backup, apply only
+  `supabase/migrations/20260805171924_request_signatures.sql` to the local `postgres` database, reload
+  PostgREST's schema cache, verify both columns and all three new RPC signatures, then submit a test
+  request. Do not replay every historical migration against this populated database.
+
+## 2026-08-05 — Separate daily dates and permanent requester signatures
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `4e6b6bf` (clean tree)
+**Trigger:** The client asked for separate Start/End fields on daily leave and a required fresh
+mouse/touch signature plus explicit digital-signature authorization on every request.
+
+**What changed**
+- `docs/specs/2026-08-05-request-signatures-and-daily-date-fields-design.md` and matching plan —
+  froze the clarified scope: daily only gets two dates; daily/hourly/errand all require fresh ink and
+  consent; this is requester evidence, not the deferred four-party paper workflow.
+- `app/[locale]/(app)/request/LeaveRequestForm.tsx` — replaced the range picker with separate
+  preference-aware start/end pickers, constrained End by Start, retained Gregorian conversion at the
+  UI boundary, and preserved preview/balance/replacement behavior.
+- `request/_components/RequestSignature.tsx`, `lib/leave/{signature,signatureLabels}.ts`, all three
+  request forms/pages, and `messages/{en,fa}.json` — added one pointer-event canvas for mouse, stylus,
+  and touch, Clear, a required localized authorization checkbox, reset behavior, bounded PNG
+  validation, and a lazy protected viewer.
+- `supabase/migrations/20260805171924_request_signatures.sql`, `lib/actions/leave.ts`, generated DB
+  types, and DB-error mappings — added nullable historical signature/consent columns, a shape CHECK,
+  database-generated `now()` consent, and mandatory signature parameters on all three public request
+  writers. Signature attachment and request insertion are one transaction; no unsigned overload
+  remains exposed.
+- Requester history, the direct-manager approval queue, and manager/security/admin calendar surfaces
+  now carry only consent metadata and fetch the PNG on explicit open. Existing strict base-row RLS is
+  the read boundary; `team_leave_calendar` remains an explicit signature-free view.
+- `tests/unit/request-signature.test.tsx` and existing e2e flows — covered validation, pointer capture,
+  lazy image loading, two-vs-one date fields, SQL enforcement, mouse drawing/consent, authorized
+  viewers, and the teammate metadata/image absence assertion.
+- Updated `docs/{REQUIREMENTS,DATA_MODEL,PERMISSIONS,TASKS,CHANGELOG}.md` for FR-32 and corrected the
+  stale permissions summary that still described the pre-FR-25 broad base-row read policy.
+- Required current-doc checks were done through Context7 for `react-multi-date-picker` controlled
+  fields and `minDate`, and through the Supabase documentation search for RLS/schema decisions.
+
+**Actions outside the repo**
+- None. No client server, database, deployment, Docker service, or external record was changed.
+- `supabase status` was retried with the required permission after its sandboxed telemetry write
+  failed; it reported `No such container: supabase_db_bj`, so the migration was not applied anywhere.
+- A temporary local Next dev server was started for browser verification and stopped afterward.
+  The authenticated `https://localhost:3500` tab was the older Docker image, while the changed
+  `http://localhost:3000` build had no valid session and its configured backend
+  `192.168.2.48:8080` returned `ECONNREFUSED`. No form was submitted and no test data was written.
+
+**Verification**
+- `npx tsc --noEmit` — clean.
+- `npm run lint` — clean.
+- `npm run test:unit` — **39 files, 247 tests passed** (new signature suite: 5/5).
+- `npm run build` — sandboxed run failed at Turbopack CSS processing because internal port binding
+  was denied; approved retry outside the sandbox compiled successfully, ran TypeScript, and generated
+  all 36 static pages.
+- `git diff --check` — clean. English/Farsi message parity — **402 keys each, no missing keys**.
+- In-app/Chrome browser verification — browser connection and route rendering worked, but the changed
+  authenticated pages were blocked by the split old-container/new-dev environment described above.
+  The target e2e flows were updated but not run against a database because the configured endpoint is
+  unavailable. A first message-parity shell one-liner also failed because zsh expanded a JavaScript
+  template literal; the quote-safe retry produced the clean 402/402 result above.
+
+**State left behind**
+- Uncommitted changes on `main`; nothing staged, committed, pushed, deployed, or migrated.
+- Feature code, migration, types, tests, translations, and docs are complete. Authenticated rendered
+  behavior and live SQL execution still need a reachable up-to-date local/client stack.
+
+**For the next agent**
+- Apply `20260805171924_request_signatures.sql` before deploying the matching frontend; otherwise the
+  new RPC argument contracts will not exist. Then run the updated e2e suite serially and exercise one
+  mouse and one real touch signature. Do not add signature columns to `team_leave_calendar`.
+
 ## 2026-08-04 — Header refresh, Home cancellation, replacement picker, and hire calendar
 
 **Agent:** OpenAI Codex (GPT-5)
@@ -1290,3 +2201,15 @@ so hourly leave could be tested.
 *Entries before 2026-07-29 were never journalled. For that history use `docs/CHANGELOG.md`
 (what shipped), `docs/MEMORY.md` (lessons), `.superpowers/sdd/progress.md` (task-level build
 ledger), and `git log`.*
+
+## 2026-08-11 — Local Git branch cleanup
+
+**Agent:** Codex
+**Trigger:** User requested cleanup to leave only the main branch where safe.
+
+**What changed**
+- Deleted fully merged local branches `codex/code-review` (at `1a9589c`) and
+  `feat/leave-v2-hourly-accrual-replacement` (at `79e1362`). Both commits are reachable from
+  `main`.
+- Retained `claude/peaceful-williams-9c1cf9`: it is checked out by a linked worktree with
+  uncommitted changes.

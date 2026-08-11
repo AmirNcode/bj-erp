@@ -5,16 +5,16 @@
 // stack's shared JWT secret (HS256). install.sh runs this inside the app
 // image (node is guaranteed there) so the target server needs no extra tools:
 //
-//   docker run --rm --entrypoint node bj-erp-app /gen-keys.mjs "$JWT_SECRET"
+//   docker run --rm -e BJ_JWT_SECRET --entrypoint node bj-erp-app /gen-keys.mjs
 //
 // Prints JSON: {"anon":"…","service_role":"…"}
 // =============================================================================
 
 import { createHmac } from 'node:crypto';
 
-const secret = process.argv[2];
+const secret = process.env.BJ_JWT_SECRET ?? process.argv[2];
 if (!secret || secret.length < 32) {
-  console.error('usage: node gen-keys.mjs <jwt-secret (min 32 chars)>');
+  console.error('set BJ_JWT_SECRET to at least 32 characters');
   process.exit(1);
 }
 

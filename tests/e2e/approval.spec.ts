@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { jalali2DayRange, nextTestPersonnelNo } from './_helpers';
+import {
+  fillDailyDateRange,
+  fillPicker,
+  jalaliRangeFromGregorian,
+  jalali2DayRange,
+  nextTestPersonnelNo,
+  signApproval,
+  signRequest,
+} from './_helpers';
 
 const ADMIN_CODE = 'admin';
 const ADMIN_PASSWORD = 'Admin!2026';
@@ -147,28 +155,16 @@ async function allocate(page: Page, employeeCodeSubstring: string, days: number)
   await ltSelect.selectOption({ value: ltValue });
 
   const year = new Date().getFullYear();
-  await page.fill('#alloc_period_start', `${year}-01-01`);
-  await page.fill('#alloc_period_end', `${year}-12-31`);
+  const [periodStart, periodEnd] = jalaliRangeFromGregorian(
+    new Date(Date.UTC(year, 0, 1)),
+    new Date(Date.UTC(year, 11, 31))
+  ).split(/\s+—\s+/);
+  await fillPicker(page, periodStart, '[data-testid="allocation-start-date-picker"]');
+  await fillPicker(page, periodEnd, '[data-testid="allocation-end-date-picker"]');
   await page.fill('[data-testid="alloc-days-input"]', String(days));
   await page.click('[data-testid="alloc-submit"]');
   await expect(page.locator('[data-testid="alloc-success"]')).toBeVisible({ timeout: 15_000 });
   return ltValue;
-}
-
-/**
- * Fill the react-multi-date-picker range input. The form overrides `inputClass`,
- * which drops the default `rmdp-input` class, so prefer it but fall back to the
- * (always-present) `.rmdp-container input` — same approach as leave.spec.ts.
- */
-async function fillPicker(page: Page, value: string) {
-  const primary = page.locator('input.rmdp-input').first();
-  const fallback = page.locator('.rmdp-container input').first();
-  const input = (await primary.isVisible().catch(() => false)) ? primary : fallback;
-  await input.click();
-  await input.fill(value);
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  await page.locator('h1').click();
 }
 
 /** Submit a fresh 2-working-day request for the given leave type (Persian picker). */
@@ -179,9 +175,10 @@ async function submitTwoDayRequest(page: Page, leaveTypeValue: string, offsetDay
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
   await typeSelect.selectOption({ value: leaveTypeValue });
 
-  await fillPicker(page, jalali2DayRange(offsetDays));
+  await fillDailyDateRange(page, jalali2DayRange(offsetDays));
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
 
+  await signRequest(page, 'daily');
   await page.click('button[type="submit"]');
   await page.waitForTimeout(1500); // server action + revalidate
 }
@@ -217,10 +214,20 @@ test.describe('Approval flow', () => {
     await expect(approveButtons.first()).toBeVisible({ timeout: 10_000 });
     await expect(approveButtons).toHaveCount(2); // exactly this report's two requests
 
+    // Signature pixels are lazy: the queue carries only consent metadata until
+    // this authorized direct manager explicitly opens one.
+    const managerSignature = page.locator('[data-testid^="signature-viewer-"]').first();
+    await expect(managerSignature).toBeVisible();
+    await managerSignature.getByRole('button').click();
+    await expect(managerSignature.locator('[data-testid^="signature-preview-"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
     await approveButtons.first().click();
     // Confirm the approve AlertDialog
     const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
     await expect(approveConfirm).toBeVisible({ timeout: 5_000 });
+    await signApproval(page);
     await approveConfirm.click();
     await expect(approveButtons).toHaveCount(1); // approved row removed optimistically
 
@@ -247,11 +254,26 @@ test.describe('Approval flow', () => {
       { timeout: 10_000 }
     );
 
+    // Rejection does not discard the requester's signed evidence.
+    const requesterSignature = page.locator('[data-testid^="signature-viewer-"]').first();
+    await requesterSignature.getByRole('button').click();
+    await expect(requesterSignature.locator('[data-testid^="signature-preview-"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    // The approved row also exposes the approver's separate signed evidence.
+    const approverSignature = page.locator('[data-testid^="approver-signature-viewer-"]').first();
+    await expect(approverSignature).toBeVisible();
+    await approverSignature.getByRole('button').click();
+    await expect(
+      approverSignature.locator('[data-testid^="approver-signature-preview-"]')
+    ).toBeVisible({ timeout: 10_000 });
+
     // 5. Balance debited by the approved request (tolerant, like leave.spec.ts):
     //    re-pick the range to surface the balance; assert 24 if it propagated.
     const typeSelect = page.locator('#leave_type_id');
     await typeSelect.selectOption({ value: ltValue });
-    await fillPicker(page, jalali2DayRange());
+    await fillDailyDateRange(page, jalali2DayRange());
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
     const balText = await page.locator('[data-testid="balance-display"]').textContent();
     expect(balText).toBeTruthy();

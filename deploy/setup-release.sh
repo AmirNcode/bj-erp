@@ -9,7 +9,8 @@
 # without a single SSH password prompt.
 #
 # You will be asked for the SERVER's login password once (by ssh-copy-id) —
-# that is the last time. Run this with the company VPN connected.
+# that is the last time. The Mac reaches the public SSH endpoint directly;
+# the client VPN is only needed on a phone/browser for the private app URL.
 #
 # Safe to re-run: existing key and config block are reused, not duplicated.
 # =============================================================================
@@ -58,7 +59,7 @@ if ssh -o BatchMode=yes -o ConnectTimeout=10 bj true 2>/dev/null; then
   echo "  key already works — skipping"
 else
   ssh-copy-id -i "${KEY}.pub" -p "$SERVER_PORT" "${SERVER_USER}@${SERVER_HOST}" \
-    || fail "ssh-copy-id failed — is the company VPN connected?"
+    || fail "ssh-copy-id failed — verify the public host/port and server password"
 fi
 
 say "4/4  Verifying"

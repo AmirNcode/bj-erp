@@ -2,7 +2,7 @@
 # =============================================================================
 # deploy/update.sh — apply a shipped release to this server.
 #
-# Runs ON THE SERVER. Shipped and invoked automatically by deploy/release.sh
+# Runs ON THE SERVER. Shipped and invoked automatically by deploy/bj-deploy
 # from the developer's machine; you normally never run it by hand.
 #
 #   sudo ./update.sh <version>
@@ -14,9 +14,9 @@
 #     nowhere.
 #   * A backup is taken FIRST and proven restorable (`pg_restore -l`) before
 #     anything changes. An empty or invalid dump aborts the deploy.
-#   * All SQL is fed to psql over STDIN, never via the container's bind mounts:
-#     ./sql/seed.sql is a single-FILE mount, and replacing that file gives it a
-#     new inode while the mount keeps serving the OLD content.
+#   * Migration and seed paths are explicit per run, rather than relying on the
+#     database container's bind mounts. This avoids stale single-file mounts and
+#     prevents another staged release from changing a running job's SQL inputs.
 #   * Row counts of every data table are recorded before and after. If any
 #     count decreased, the deploy fails loudly with the restore command.
 #   * Only the APP_VERSION line of .env is ever rewritten — secrets are never
@@ -28,8 +28,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# shellcheck source=lib/common.sh
+. ./lib/common.sh
+# shellcheck source=lib/migrations.sh
+. ./lib/migrations.sh
+# shellcheck source=lib/health.sh
+. ./lib/health.sh
+bj_compose_init "$PWD" "${BJ_DEPLOY_TARGET:-client}"
+
 VERSION="${1:?usage: sudo ./update.sh <version>}"
 IMAGE_TGZ="bj-erp-app-${VERSION}.tar.gz"
+MIGRATIONS_DIR="${BJ_MIGRATIONS_DIR:-$PWD/migrations}"
+SEED_FILE="${BJ_SEED_FILE:-$PWD/sql/seed.sql}"
 BACKUP_DIR=./backups
 LOG_FILE=./update.log
 HEALTH_RETRIES=45          # x2s = 90s. A new image's first boot runs the
@@ -54,9 +64,9 @@ flock -n 9 || fail "another update is already running on this server"
 [[ "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] \
   || fail "invalid version '${VERSION}' — letters, digits, dot, dash, underscore only"
 [ -f .env ]         || fail ".env not found — run this from the installer directory"
-[ -f "$IMAGE_TGZ" ] || fail "${IMAGE_TGZ} not found — did release.sh finish shipping?"
-[ -d migrations ]   || fail "migrations/ not found"
-[ -f sql/seed.sql ] || fail "sql/seed.sql not found"
+[ -f "$IMAGE_TGZ" ] || fail "${IMAGE_TGZ} not found — did bj-deploy finish staging?"
+[ -d "$MIGRATIONS_DIR" ] || fail "migration directory not found: $MIGRATIONS_DIR"
+[ -f "$SEED_FILE" ]      || fail "seed file not found: $SEED_FILE"
 
 avail_gb=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
 [ "${avail_gb:-0}" -ge "$MIN_FREE_GB" ] \
@@ -70,7 +80,7 @@ PREVIOUS_VERSION="${APP_VERSION:-latest}"
 # a real listener instead of failing and triggering a bogus rollback.
 APP_ORIGIN="${APP_ORIGIN:-https://${APP_HOST}}"
 
-docker compose exec -T db pg_isready -U supabase_admin -h localhost >/dev/null 2>&1 \
+bj_compose exec -T db pg_isready -U supabase_admin -h localhost -d postgres >/dev/null 2>&1 \
   || fail "the database container is not running/healthy — fix that before deploying"
 
 say "Updating ${PREVIOUS_VERSION} -> ${VERSION}"
@@ -78,7 +88,7 @@ say "Updating ${PREVIOUS_VERSION} -> ${VERSION}"
 # psql inside the db container as the image's superuser. The image requires
 # password auth even over the local socket.
 pgexec() {
-  docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+  bj_compose_with_db_password db \
     psql -v ON_ERROR_STOP=1 -U supabase_admin -d postgres "$@"
 }
 
@@ -86,7 +96,7 @@ pgexec() {
 snapshot() {
   local t n
   for t in $DATA_TABLES; do
-    n=$(docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+    n=$(bj_compose_with_db_password db \
           psql -tAc "select count(*) from public.${t}" -U supabase_admin -d postgres 2>/dev/null \
         | tr -d '[:space:]')
     echo "${t}:${n:-ERR}"
@@ -99,16 +109,24 @@ mkdir -p "$BACKUP_DIR"; chmod 700 "$BACKUP_DIR"
 [ -n "${SUDO_USER:-}" ] && chown "$SUDO_USER" "$BACKUP_DIR" 2>/dev/null || true
 
 BACKUP_FILE="${BACKUP_DIR}/pre-${VERSION}-$(date +%F-%H%M%S).dump"
-docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
+bj_compose_with_db_password db \
   pg_dump -U supabase_admin -d postgres -Fc > "$BACKUP_FILE" || fail "pg_dump failed"
 [ -s "$BACKUP_FILE" ] || fail "the backup is empty — refusing to deploy"
-docker compose exec -T db pg_restore -l < "$BACKUP_FILE" >/dev/null 2>&1 \
+bj_compose exec -T db pg_restore -l < "$BACKUP_FILE" >/dev/null 2>&1 \
   || fail "the backup is not a valid archive — refusing to deploy"
 
 # The dump holds every employee record and password hash — keep it private,
-# but readable by the SSH user so release.sh can copy it off the server.
+# but readable by the SSH user so bj-deploy can copy it off the server.
 chmod 600 "$BACKUP_FILE"
 [ -n "${SUDO_USER:-}" ] && chown "$SUDO_USER" "$BACKUP_FILE" 2>/dev/null || true
+if [ -n "${BJ_RUN_DIR:-}" ] && [ -d "$BJ_RUN_DIR" ]; then
+  printf '%s\n' "$BACKUP_FILE" > "$BJ_RUN_DIR/backup.path"
+  bj_hash_file "$BACKUP_FILE" > "$BJ_RUN_DIR/backup.sha256"
+  chmod 600 "$BJ_RUN_DIR/backup.path" "$BJ_RUN_DIR/backup.sha256"
+  [ -n "${SUDO_USER:-}" ] \
+    && chown "$SUDO_USER" "$BJ_RUN_DIR/backup.path" "$BJ_RUN_DIR/backup.sha256" 2>/dev/null \
+    || true
+fi
 say "Backup OK: ${BACKUP_FILE} ($(du -h "$BACKUP_FILE" | cut -f1))"
 
 # ── 3. row counts BEFORE ─────────────────────────────────────────────────────
@@ -124,42 +142,32 @@ arch=$(docker image inspect "bj-erp-app:${VERSION}" --format '{{.Architecture}}'
 [ "$arch" = "amd64" ] \
   || fail "image bj-erp-app:${VERSION} is '${arch}' — this server needs amd64. Nothing was changed."
 
-# ── 5. migrations — idempotent replay, fed over STDIN ────────────────────────
-say "Applying migrations…"
-for f in migrations/*.sql; do
-  base=$(basename "$f")
-  pgexec < "$f" >/dev/null \
-    || fail "migration ${base} failed — the app was NOT restarted and is still on ${PREVIOUS_VERSION}. Restore: ${BACKUP_FILE}"
-done
-pgexec < sql/seed.sql >/dev/null \
+# ── 5. migrations — pending immutable files, atomically ledgered ─────────────
+say "Applying pending migrations…"
+bj_apply_migrations "$MIGRATIONS_DIR" "$VERSION" \
+  || fail "migration failed — the app was NOT restarted and is still on ${PREVIOUS_VERSION}. Restore: ${BACKUP_FILE}"
+pgexec < "$SEED_FILE" >/dev/null \
   || fail "seed.sql failed — the app was NOT restarted. Restore: ${BACKUP_FILE}"
 
 # ── 6. cutover — recreates ONLY the app container ────────────────────────────
 say "Switching the app container to ${VERSION}…"
 sed -i "s/^APP_VERSION=.*/APP_VERSION=${VERSION}/" .env
-docker compose up -d app || fail "compose up failed"
+bj_compose up -d --no-deps --force-recreate app || fail "compose up failed"
 
 # ── 7. health check ──────────────────────────────────────────────────────────
-say "Health-checking ${APP_ORIGIN}/ (up to $((HEALTH_RETRIES * 2))s)…"
-HEALTHY=0
-for _ in $(seq 1 "$HEALTH_RETRIES"); do
-  code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 "${APP_ORIGIN}/" || true)
-  auth=$(curl -sk --max-time 5 "${APP_ORIGIN}/auth/v1/health" || true)
-  if [ "$code" = "200" ] && printf '%s' "$auth" | grep -q GoTrue; then HEALTHY=1; break; fi
-  sleep 2
-done
-
-if [ "$HEALTHY" != 1 ]; then
+say "Health-checking the database, app endpoint, and Auth service…"
+if ! bj_wait_for_stack "$HEALTH_RETRIES" || ! bj_verify_running_architecture amd64; then
   warn "UNHEALTHY — rolling back to ${PREVIOUS_VERSION}"
   sed -i "s/^APP_VERSION=.*/APP_VERSION=${PREVIOUS_VERSION}/" .env
-  docker compose up -d app || true
+  bj_compose up -d --no-deps --force-recreate app || true
   echo "$(date -u +%FT%TZ) ROLLBACK ${VERSION} -> ${PREVIOUS_VERSION} backup=${BACKUP_FILE}" >> "$LOG_FILE"
   cat <<WARNEOF
 
 !! The IMAGE was rolled back. Any migrations applied above are NOT undone.
 !! If the previous version cannot run against the new schema, restore the dump:
 !!   cd $(pwd)
-!!   sudo docker compose exec -T db pg_restore -U supabase_admin -d postgres \\
+!!   sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \\
+!!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
 WARNEOF
   fail "deploy failed; rolled back to ${PREVIOUS_VERSION}"
@@ -187,7 +195,8 @@ if [ "$LOST" != 0 ]; then
 !! DATA LOSS DETECTED. The app is running ${VERSION} but rows are missing.
 !! Restore immediately:
 !!   cd $(pwd)
-!!   sudo docker compose exec -T db pg_restore -U supabase_admin -d postgres \\
+!!   sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \\
+!!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
 LOSTEOF
   fail "row counts decreased — restore ${BACKUP_FILE}"
@@ -216,6 +225,7 @@ cat <<DONEEOF
    Backup:   ${BACKUP_FILE}
    Data:     verified — no table lost rows
    Rollback: sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=${PREVIOUS_VERSION}/' .env && \\
-             sudo docker compose up -d app
+             sudo docker compose -f docker-compose.yml \\
+               -f docker-compose.client-amd64.yml up -d app
 =============================================================
 DONEEOF

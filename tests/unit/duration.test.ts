@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { minutesToDaysHours, formatDuration, daysToMinutes } from '@/lib/leave/duration';
+import {
+  minutesToDaysHours,
+  formatDuration,
+  daysToMinutes,
+  projectLeaveBalance,
+} from '@/lib/leave/duration';
 
 const EN = { days: 'days', hours: 'hours', minutes: 'minutes', and: 'and' };
 
@@ -63,5 +68,32 @@ describe('daysToMinutes', () => {
   it('rounds to a whole minute', () => {
     // 1/7 of an 8h day = 68.57 min -> 69.
     expect(daysToMinutes(1 / 7, 8)).toBe(69);
+  });
+});
+
+describe('projectLeaveBalance', () => {
+  it('subtracts a request from the current paid balance', () => {
+    expect(projectLeaveBalance(4 * 480, 20 * 480 + 240)).toEqual({
+      requestingMinutes: 1920,
+      remainingMinutes: 16 * 480 + 240,
+      unpaidMinutes: 0,
+    });
+  });
+
+  it('splits an over-balance request at eight hours per day', () => {
+    // Requesting 4 days (32h) from 3 days + 4h (28h) leaves 4h unpaid.
+    expect(projectLeaveBalance(4 * 480, 3 * 480 + 240)).toEqual({
+      requestingMinutes: 1920,
+      remainingMinutes: 0,
+      unpaidMinutes: 240,
+    });
+  });
+
+  it('never projects a negative paid balance', () => {
+    expect(projectLeaveBalance(60, -120)).toEqual({
+      requestingMinutes: 60,
+      remainingMinutes: 0,
+      unpaidMinutes: 60,
+    });
   });
 });

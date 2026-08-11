@@ -1,5 +1,9 @@
 # BJ ERP — Self-Host Runbook / راهنمای نصب و نگهداری
 
+> **Preferred path:** run `./deploy/bj-deploy` on the Mac. It guides local ARM64 and client AMD64
+> work, verifies/downloads reset backups, and resumes dropped SSH sessions. See
+> `docs/DEPLOY-ASSISTANT.md`. Commands below remain the manual break-glass reference.
+
 One server, one command, no internet required. English first; خلاصه فارسی در انتها.
 
 ## Requirements (give this list to IT)
@@ -61,15 +65,18 @@ auth even over the local socket — hence the `.env` sourcing:
 ```bash
 cd bj-erp-installer
 sudo bash -c 'set -a; . ./.env; set +a
-  docker compose exec -T -e PGPASSWORD="$POSTGRES_PASSWORD" db \
-    pg_dump -U supabase_admin -d postgres -Fc' > backup-$(date +%F).dump
+  PGPASSWORD="$POSTGRES_PASSWORD"; export PGPASSWORD
+  docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \
+    exec -T -e PGPASSWORD db pg_dump -U supabase_admin -d postgres -Fc' \
+  > backup-$(date +%F).dump
 ```
 
 **Always verify a dump before trusting it** — a failed dump leaves a file that
 looks fine but restores nothing:
 
 ```bash
-sudo docker compose exec -T db pg_restore -l < backup-$(date +%F).dump | head
+sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \
+  exec -T db pg_restore -l < backup-$(date +%F).dump | head
 ```
 
 Expect a table-of-contents listing (`profiles`, `leave_requests`, …). An empty
@@ -82,7 +89,8 @@ Copy the dump files off the server. Also back up the `.env` file **once**
 
 ```bash
 cd bj-erp-installer
-sudo docker compose exec -T db pg_restore -U supabase_admin -d postgres \
+sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \
+  exec -T db pg_restore -U supabase_admin -d postgres \
   --clean --if-exists < backup-YYYY-MM-DD.dump
 ```
 
@@ -97,21 +105,22 @@ database, its volume, and the four service images stay exactly as they are.
 
 Releases are built on the developer's Mac and pushed to the server — the server
 needs no internet, no git, and no build toolchain, exactly like the original
-installer. One command, with the company VPN connected:
+installer. Public SSH does not require the client VPN. From clean `main`, run:
 
 ```bash
-./deploy/release.sh 2026-08-14
+./deploy/bj-deploy update client
 ```
 
-`deploy/release.sh` (Mac) runs lint + unit tests, cross-builds the image for
-**linux/amd64** and verifies the architecture, compresses it, ships it with
-resumable `rsync`, then triggers `deploy/update.sh` on the server.
+`deploy/bj-deploy` (Mac) requires a clean `main`, runs source gates, cross-builds
+the image for **linux/amd64**, verifies it, checksums and transfers run-scoped
+artifacts with resumable `rsync`, then starts a detached server job.
 
 `deploy/update.sh` (server, re-shipped with every release) takes a lock, checks
 disk and database health, takes a **verified** `pg_dump` backup, records row
-counts, loads the image, replays migrations, swaps only the `app` container,
+counts, loads the image, applies only pending atomically ledgered migrations,
+swaps only the `app` container,
 health-checks for 90s, **re-checks row counts**, and **rolls back automatically**
-if the app does not come up. `release.sh` then copies the backup to the Mac.
+if the app does not come up. The assistant then verifies a backup copy on the Mac.
 
 One-time setup on a new machine (SSH key + `bj` host alias):
 
@@ -134,41 +143,29 @@ scp -P 2222 dist/bj-erp-app.tar <user>@<server>:~/bj-erp-installer/
 cd bj-erp-installer
 sudo docker load -i bj-erp-app.tar
 sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=manual/' .env
-sudo docker compose up -d app
+sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml up -d app
 ```
 
-If the release includes new migrations, copy the `*.sql` files into
-`migrations/` first and run `sudo ./install.sh` instead of `compose up`.
+Do not use the manual image fallback for a release that includes migrations;
+return to `./deploy/bj-deploy update client` so manifest, ledger, and backup gates run.
 
 Re-running `install.sh` reuses the existing `.env` (secrets are **not**
 regenerated), reuses the existing database volume, re-applies the baseline seed
 as a no-op, and skips admin creation because the admin already exists.
 
-> **The migrations are NOT idempotent — verified 2026-07-31, not assumed.**
-> Replaying all 38 against a populated database fails **9** of them, starting at
-> file #1 (`20260623120001_core.sql`, a bare `create type public.app_role`).
-> Five were never guarded; four became unreplayable when the days→minutes
-> conversion dropped columns and the serial counter was re-keyed.
->
-> Consequences, in order of how likely you are to hit them:
-> - **A fresh install is fine.** All 38 apply cleanly in order to an empty
->   database, and the resulting state is correct — checked on a throwaway
->   `supabase/postgres:15.8.1.085`, including the seeded leave-type flags that
->   migrations cannot set because they run *before* `seed.sql`.
-> - **`update.sh` cannot deliver a schema change to an existing install.** It
->   replays every file under `psql -v ON_ERROR_STOP=1 || fail`, so it aborts on
->   file #1. It aborts *safely* — the app is not restarted and the verified
->   backup is untouched — but the upgrade simply does not happen.
-> - **Re-running `install.sh` over an existing database** hits the same wall.
->
-> Fixing this is tracked in `docs/TASKS.md`. It must be done before the first
-> incremental update once the client holds real data.
+> **Historical migrations are not idempotent and are never replayed blindly.**
+> The private `bj_deploy.schema_migrations` ledger adopts only the verified
+> original 38-migration baseline and fully fingerprinted known August additions.
+> It then checks immutable hashes and applies only missing files. Each file and
+> ledger row share one transaction, so interruption rolls both back. An unknown
+> or partial legacy schema stops for reconciliation instead of guessing.
 
 ### Rollback
 
 `docker load` keeps the previous image if it was tagged with a version. Tag
 before each update (`bj-erp-app:2026-07-25`), then roll back by setting
-`APP_VERSION` in `.env` to that tag and running `docker compose up -d app`.
+`APP_VERSION` in `.env` to that tag and running Compose with both
+`docker-compose.yml` and `docker-compose.client-amd64.yml`.
 
 ## Data safety — what an update does NOT touch
 
@@ -180,7 +177,7 @@ the app image.** Replacing the app image cannot affect them.
 |---|---|
 | `docker compose up -d app` (new image) | **None** — app container only |
 | `docker compose restart` / `down` / `up -d` | **None** — volume persists |
-| `sudo ./install.sh` (re-run) | **None to data** — secrets reused, admin skipped. But it **aborts on the first migration** against an existing database (see above) |
+| `sudo ./install.sh` (re-run) | Secrets reused and admin skipped; ledger applies only verified pending migrations |
 | Applying a new migration | Adds/alters schema; existing rows preserved |
 | `docker compose down -v` | **DESTROYS the database** — never run this |
 | `docker volume rm bj-erp_db-data` | **DESTROYS the database** — never run this |
@@ -238,10 +235,10 @@ tree — the server would silently roll back to whatever is on `main`.
 
 | Task | Command (from `bj-erp-installer/`) |
 |---|---|
-| Status | `sudo docker compose ps` |
-| Logs (app / auth / db) | `sudo docker compose logs -f app` (or `auth`, `db`, `rest`, `gateway`) |
-| Restart everything | `sudo docker compose restart` |
-| Stop / start | `sudo docker compose down` / `sudo docker compose up -d` |
+| Status | `sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml ps` |
+| Logs (app / auth / db) | `sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml logs -f app` (or `auth`, `db`, `rest`, `gateway`) |
+| Restart everything | `sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml restart` |
+| Stop / start | Use `./deploy/bj-deploy restart client`; manual start must include both Compose files |
 
 `install.sh` runs as root, so `.env` is owned by root with mode `600` (it holds
 every secret). Docker Compose reads `.env` even just to show status, so these
@@ -264,20 +261,20 @@ volume. Never add `-v`.
 
 ## Troubleshooting
 
-- **Site unreachable:** `docker compose ps` — all five services "running"?
+- **Site unreachable:** use `./deploy/bj-deploy status client` — are all five services running?
   Is `APP_PORT` blocked by a firewall? Are you using the full `APP_ORIGIN`
   (`https://`, and the port when it is not 443)?
 - **Login fails for everyone but the page loads:** `APP_ORIGIN` in `.env`
   disagrees with the address the browser is on — most often the published port
   was changed without updating it. The browser bundle calls `APP_ORIGIN`
   verbatim, so it tries a port nothing listens on. Fix `.env`, then
-  `docker compose up -d --force-recreate app auth` — a plain `restart` is not
+  Compose with both client files and `up -d --force-recreate app auth` — a plain `restart` is not
   enough, because the URL is substituted into the app's files at container
   creation.
-- **Login fails for everyone:** check `docker compose logs auth`.
+- **Login fails for everyone:** use `./deploy/bj-deploy logs client` and inspect Auth.
 - **Phone won't install the app:** the certificate step was skipped — see
   "Trusting the certificate on phones".
-- **`install.sh` fails at migrations:** run `docker compose logs db`; the
+- **`install.sh` fails at migrations:** use `./deploy/bj-deploy logs client`; the
   failing SQL file is printed by the installer.
 
 ---
@@ -298,15 +295,15 @@ volume. Never add `-v`.
 امن نگه دارید. فایل `.env` را هم یک‌بار پشتیبان بگیرید.
 
 **به‌روزرسانی:** نسخهٔ جدید با یک دستور از کامپیوتر توسعه‌دهنده ارسال و نصب
-می‌شود (`./deploy/release.sh`). پیش از هر به‌روزرسانی، به‌صورت خودکار از
+می‌شود (`./deploy/bj-deploy update client`). پیش از هر به‌روزرسانی، به‌صورت خودکار از
 دیتابیس backup گرفته و صحت آن بررسی می‌شود؛ سپس تعداد رکوردهای هر جدول قبل و
 بعد مقایسه می‌شود و اگر داده‌ای کم شده باشد، عملیات با هشدار متوقف می‌شود. اگر
 نسخهٔ جدید بالا نیاید، سیستم خودش به نسخهٔ قبلی برمی‌گردد (rollback).
 
 فقط image برنامه عوض می‌شود، نه دیتابیس. اطلاعات کارمندان، مرخصی‌ها، مانده‌ها و
 رمزها در volume دیتابیس (`bj-erp_db-data`) ذخیره شده و با به‌روزرسانی برنامه
-**پاک نمی‌شوند**. اجرای دوبارهٔ `install.sh` هم بی‌خطر است (migration ها
-idempotent هستند و secret ها دوباره ساخته نمی‌شوند).
+**پاک نمی‌شوند**. اجرای دوبارهٔ `install.sh` فقط migration های ثبت‌نشده و
+تأییدشده را اجرا می‌کند و secret ها دوباره ساخته نمی‌شوند.
 
 **هشدار:** دستورهای `docker compose down -v` و `docker volume rm bj-erp_db-data`
 کل دیتابیس را **حذف می‌کنند**. هرگز اجرا نکنید. قبل از هر به‌روزرسانی که

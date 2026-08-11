@@ -12,13 +12,9 @@ test('profile settings persist, language switches locale, logout clears session'
   await login(page, code, password);
 
   await page.goto('/profile');
-  await expect(page.locator('[data-testid="settings-calendar"]')).toBeVisible({ timeout: 10_000 });
-
-  // Calendar pref persists across a reload.
-  await page.locator('[data-testid="settings-calendar"]').selectOption('gregorian');
-  await page.waitForTimeout(1200);
-  await page.reload();
-  await expect(page.locator('[data-testid="settings-calendar"]')).toHaveValue('gregorian');
+  // Persian is the only calendar; the old preference selector is gone.
+  await expect(page.locator('[data-testid="settings-calendar"]')).toHaveCount(0);
+  await expect(page.getByText(/Gregorian|میلادی/)).toHaveCount(0);
 
   // Language -> English: URL gains the /en prefix; <html> flips to en/ltr.
   await page.locator('[data-testid="settings-language"]').selectOption('en');

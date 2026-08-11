@@ -112,7 +112,7 @@ Apply `supabase/migrations/*` (schema, RLS, functions) and `supabase/seed.sql` (
 then `npm run seed` for the demo org. Full runbook for the Vercel demo and self-hosted production
 is in **[docs/DEPLOY.md](docs/DEPLOY.md)**.
 
-**Demo login:** `admin` / `Admin!2026`. Seeded role accounts (`m-prod`, `e-prod-1`, `s-sup`, …) use
+**Demo login:** `admin` / `Admin!2026`. Seeded role accounts (`1001`, `2001`, `1004`, …) use
 `Demo!2026` — full roster in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## 📁 Project structure

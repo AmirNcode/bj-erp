@@ -9,10 +9,11 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import {
   getCalendarEntries,
   getPendingApprovals,
+  getVisibleSignatureConsents,
   getWorkSettings,
 } from '@/lib/actions/leave';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -21,6 +22,7 @@ import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
 import { PageHeader } from '../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -32,24 +34,27 @@ async function CalendarData({ locale }: { locale: string }) {
   const tLeave = await getTranslations('leave');
   const tApprovals = await getTranslations('approvals');
   const tErrand = await getTranslations('errand');
+  const tSignature = await getTranslations('signature');
   const user = await getCachedUser();
   if (!user) return null;
 
-  const profile = await getCachedProfile(user.id);
-  const calendarPref = profile?.calendar_pref ?? 'jalali';
   const roles = await getCachedRoles(user.id);
   const canApprove = roles.includes('admin') || roles.includes('manager');
+  const canReviewSignatures = canApprove || roles.includes('security');
 
   // "This month" in the company timezone, not the server's (Vercel = UTC).
-  const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(calendarPref, nowInAppTz(), locale);
+  const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(nowInAppTz(), locale);
 
-  const [result, workSettingsResult, approvalsResult] = await Promise.all([
+  const [result, workSettingsResult, approvalsResult, signaturesResult] = await Promise.all([
     getCalendarEntries(rangeStart, rangeEnd),
     getWorkSettings(),
     // Pending requests the viewer may decide (admin: all; manager: own reports)
     // — powers the approve/reject buttons on calendar cards. The SQL fn
     // re-checks permission on write, so this is display scoping only.
     canApprove ? getPendingApprovals() : Promise.resolve(null),
+    canReviewSignatures
+      ? getVisibleSignatureConsents(rangeStart, rangeEnd)
+      : Promise.resolve(null),
   ]);
   const entries = result.ok ? result.entries : [];
   const loadError = result.ok ? null : result.error;
@@ -58,6 +63,8 @@ async function CalendarData({ locale }: { locale: string }) {
     : WORK_SETTINGS_FALLBACK;
   const decidableIds =
     approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
+  const signatureConsents =
+    signaturesResult && signaturesResult.ok ? signaturesResult.signatures : [];
 
   const labels = {
     empty: t('empty'),
@@ -77,6 +84,8 @@ async function CalendarData({ locale }: { locale: string }) {
     approveSuccess: tApprovals('approveSuccess'),
     rejectSuccess: tApprovals('rejectSuccess'),
     errandBadge: tErrand('badge'),
+    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
   };
 
   return (
@@ -89,13 +98,13 @@ async function CalendarData({ locale }: { locale: string }) {
       <CalendarView
         entries={entries}
         locale={locale}
-        calendarPref={calendarPref}
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
         monthLabel={monthLabel}
         workSettings={workSettings}
         labels={labels}
         decidableIds={decidableIds}
+        signatureConsents={signatureConsents}
         todayIso={todayInAppTz()}
       />
     </>

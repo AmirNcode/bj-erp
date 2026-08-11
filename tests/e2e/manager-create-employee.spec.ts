@@ -1,9 +1,15 @@
 import { test, expect } from '@playwright/test';
-import { login, logout, nextTestPersonnelNo } from './_helpers';
+import {
+  login,
+  logout,
+  nextTestPersonnelNo,
+  SEEDED_MANAGER_CODE,
+  SEEDED_PASSWORD,
+} from './_helpers';
 
 /**
  * FR: manager-scoped employee creation (spec 2026-07-13).
- * A manager (m-prod, Production Line A) creates an employee from the Manage
+ * A seeded Production Line A manager creates an employee from the Manage
  * tab: department and direct manager are locked to their own, no role or
  * allocation inputs, code generated as the bare <personnel_no>, default leave
  * quotas applied in-DB. The new employee can log in immediately.
@@ -12,7 +18,7 @@ test('manager creates an employee scoped to their own team', async ({ page }) =>
   test.setTimeout(120_000);
   const pno = nextTestPersonnelNo();
 
-  await login(page, 'm-prod', 'Demo!2026');
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
   await page.goto('/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
@@ -44,7 +50,7 @@ test('manager creates an employee scoped to their own team', async ({ page }) =>
 
   // The new employee shows up on the manager's team page.
   await logout(page);
-  await login(page, 'm-prod', 'Demo!2026');
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
   await page.goto('/team');
   await expect(page.getByText(pno).first()).toBeVisible({ timeout: 10_000 });
 });

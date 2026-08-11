@@ -63,6 +63,7 @@ export default async function AllocationsPage({ params }: Props) {
         leaveTypes={leaveTypes}
         labels={labels}
         hoursPerDay={hoursPerDay}
+        locale={locale}
       />
     </main>
   );

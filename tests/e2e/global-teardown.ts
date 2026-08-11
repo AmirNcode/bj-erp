@@ -14,6 +14,15 @@ export default function globalTeardown() {
     const out = execFileSync('node', ['scripts/cleanup-e2e.mjs'], {
       encoding: 'utf8',
       timeout: 60_000,
+      env: process.env.E2E_BASE_URL
+        ? {
+            ...process.env,
+            NEXT_PUBLIC_SUPABASE_URL: process.env.E2E_BASE_URL,
+            // The local self-host gateway uses Caddy's private CA. Limit the
+            // trust override to this cleanup subprocess and explicit URL.
+            NODE_TLS_REJECT_UNAUTHORIZED: '0',
+          }
+        : process.env,
     });
     if (out.trim()) console.log(out.trim());
   } catch (err) {
