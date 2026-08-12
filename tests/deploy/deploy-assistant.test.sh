@@ -50,12 +50,13 @@ fi
 pass "migration manifest is sorted and checksummed"
 
 # Exercise the ledger algorithm without Docker/Postgres. The fake pgexec keeps
-# the same filename/checksum state that the private bj_deploy table would keep.
+# the same filename/checksum state that the private bj_deploy table would keep,
+# and accepts migration SQL only through container-visible standard input.
 FAKE_LEDGER="$TMP/fake-ledger"
 FAKE_APPLIED="$TMP/fake-applied"
 : > "$FAKE_LEDGER"; : > "$FAKE_APPLIED"
 pgexec() {
-  local args="$*" input='' filename='' checksum='' migration_file='' assignment
+  local args="$*" input='' filename='' checksum='' migration_file='' ledger_command='' assignment
   case "$args" in
     *"select count(*) from bj_deploy.schema_migrations"*) wc -l < "$FAKE_LEDGER"; return ;;
     *"to_regclass('public.profiles')"*) printf 'f\n'; return ;;
@@ -72,12 +73,19 @@ pgexec() {
           shift 2
           ;;
         -f) migration_file="${2:-}"; shift 2 ;;
+        -c) ledger_command="${2:-}"; shift 2 ;;
         *) shift ;;
       esac
     done
-    [ -f "$migration_file" ] || return 1
+    [ "$migration_file" = - ] || return 1
+    case "$ledger_command" in
+      *"insert into bj_deploy.schema_migrations"*) ;;
+      *) return 1 ;;
+    esac
+    input=$(cat)
+    [ -n "$input" ] || return 1
     [ "${FAKE_ATOMIC_FAIL:-0}" = 0 ] || return 1
-    cat "$migration_file" >> "$FAKE_APPLIED"
+    printf '%s\n' "$input" >> "$FAKE_APPLIED"
     printf '%s|%s\n' "$filename" "$checksum" >> "$FAKE_LEDGER"
     return
   fi
@@ -118,7 +126,7 @@ assert_eq "$(wc -l < "$FAKE_LEDGER" | tr -d ' ')" "$before_ledger"
 assert_eq "$(wc -c < "$FAKE_APPLIED" | tr -d ' ')" "$before_applied"
 bj_apply_migrations "$TMP/migrations" test-release >/dev/null
 assert_eq "$(wc -l < "$FAKE_LEDGER" | tr -d ' ')" 3
-pass "migration SQL and ledger row are atomic, resumable, and checksum protected"
+pass "container-stdin migration SQL and ledger row are atomic, resumable, and checksum protected"
 
 (
   mkdir -p "$TMP/known-installed"

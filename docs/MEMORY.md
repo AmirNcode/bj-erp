@@ -152,7 +152,10 @@ installed; a single sentinel column is not enough. Unknown partial histories sto
 migration and its ledger insert must share one PostgreSQL transaction; otherwise a process death in
 between can replay non-idempotent SQL. Detached jobs must use checksummed, run-scoped migration and
 seed inputs and re-verify them before mutation, never mutable shared staging paths. Keep catalog
-queries on stdin and do not combine a heredoc with `-c`, which requires its own argument.
+queries on stdin and do not combine a heredoc with `-c`, which requires its own argument. The
+run-scoped paths live on the Docker host, but `psql` runs inside the DB container: execute migration
+content with `-f -` plus stdin, then the ledger `-c`, under one `--single-transaction`; never pass a
+host migration path to containerized `psql`.
 Health is `/api/health` + Auth + DB from the target network, because `/` normally redirects 307 and
 the Mac cannot reach the client's private `10.10.10.50` route.
 

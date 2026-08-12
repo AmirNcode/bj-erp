@@ -31,6 +31,10 @@ pending a tagged release; semantic versioning starts at the first tag.
   detached runs use immutable per-run migration/seed inputs, and the server re-verifies the source
   manifest before app, update, or reset mutations. Installed manifests and reset backups remain
   privately readable by the SSH transfer owner.
+- Fixed the container boundary in that migration path: the verified run-scoped SQL is now streamed
+  to `psql` inside the database container instead of being passed as a server-host filename that the
+  container cannot open. Regression coverage requires container-visible stdin while preserving the
+  single transaction shared by each migration and its ledger row.
 - Added `/api/health` so deployment health no longer mistakes Next's normal HTTP 307 locale redirect
   for failure. Checks independently prove database, app, Auth, and image architecture from the
   target machine.

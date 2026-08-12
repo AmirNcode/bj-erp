@@ -196,7 +196,9 @@ Private table `bj_deploy.schema_migrations` records every filename and SHA-256. 
 whose contents changed stops deployment. A new migration and its ledger record commit in one
 PostgreSQL transaction, so a dropped process cannot leave applied SQL unrecorded. Each detached run
 uses its own checksummed migration directory and seed file; later staging cannot change its inputs.
-Never edit a shipped migration; add another one.
+The run directory exists on the server host, while `psql` runs inside the database container, so the
+runner feeds each verified file through `psql -f -` standard input; it never passes the host path
+into the container. Never edit a shipped migration; add another one.
 
 The original client bundle installed migrations 1–38 through
 `20260731120001_post_review_fixes.sql` with no ledger. The assistant verifies that known final schema
