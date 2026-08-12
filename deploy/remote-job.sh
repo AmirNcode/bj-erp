@@ -251,7 +251,7 @@ perform_restart() {
 }
 
 run_worker() {
-  local run_id="$1" action="$2" version="$3" directory rc=0 terminal=SUCCEEDED
+  local run_id="$1" action="$2" version="$3" directory rc=0 terminal=SUCCEEDED had_errexit=0
   directory=$(run_dir "$run_id")
   ensure_run_dir "$directory"
   exec 9>"$STATE_ROOT/mutation.lock"
@@ -264,25 +264,29 @@ run_worker() {
   printf 'RUN_ID=%s\nACTION=%s\nVERSION=%s\nSTARTED_AT=%s\n' \
     "$run_id" "$action" "$version" "$(date -u +%FT%TZ)"
 
-  case "$action" in
-    backup)
-      perform_backup "$directory" "$run_id" || rc=$?
-      terminal=$(read_status "$directory")
-      ;;
-    update)
-      perform_update "$directory" "$version" || rc=$?
-      ;;
-    app)
-      perform_app "$directory" "$version" || rc=$?
-      ;;
-    restart)
-      perform_restart || rc=$?
-      ;;
-    reset-db|factory-reset)
-      perform_reset "$directory" "$action" "$version" || rc=$?
-      ;;
-    *) bj_fail "unsupported worker action: $action"; rc=2 ;;
-  esac
+  # A function invoked on the left side of `||` inherits Bash's ignored
+  # errexit context. The former `perform_update ... || rc=$?` therefore let a
+  # failed update.sh continue into record_installed_state and return success.
+  # Run the action in an isolated shell where `set -e` is genuinely active,
+  # while keeping this controller alive long enough to persist FAILED:<code>.
+  case $- in *e*) had_errexit=1 ;; esac
+  set +e
+  (
+    set -e
+    case "$action" in
+      backup) perform_backup "$directory" "$run_id" ;;
+      update) perform_update "$directory" "$version" ;;
+      app) perform_app "$directory" "$version" ;;
+      restart) perform_restart ;;
+      reset-db|factory-reset) perform_reset "$directory" "$action" "$version" ;;
+      *) bj_fail "unsupported worker action: $action" || true; exit 2 ;;
+    esac
+  )
+  rc=$?
+  [ "$had_errexit" -eq 0 ] || set -e
+  if [ "$rc" -eq 0 ] && [ "$action" = backup ]; then
+    terminal=$(read_status "$directory")
+  fi
 
   rm -f "$directory/admin-password"
   if [ "$rc" -eq 0 ]; then

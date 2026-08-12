@@ -251,7 +251,7 @@ ssh -t bj "cd bj-erp-installer && sudo docker compose -f docker-compose.yml -f d
 | `docker build failed` | Build error | Fix the code, run 2.4 again |
 | `built 'arm64'` | Wrong processor type | Report it — do not retry blindly |
 | `another update is already running` | A deploy is in progress | Wait 5 minutes, run 2.4 again |
-| `only 3GB free` | Server disk full | See 4.4 |
+| `only ... GiB free` | Server below the 5 GiB release minimum | See 4.4 |
 | `the backup is empty` / `not a valid archive` | Database problem | **Stop.** See 4.5 |
 | `migration ... failed` | Bad database change | App untouched and still running. Fix it |
 | `rolled back to ...` | New version was broken | App restored automatically. See 4.2 |
@@ -294,11 +294,20 @@ ssh bj "sudo docker images bj-erp-app --format '{{.Tag}}'"
 
 ### 4.4 Server disk is full
 
+The assistant checks this over SSH before lint, build, or transfer. Inspect first; never prune
+volumes because `bj-erp_db-data` is the production database.
+
 ```bash
-ssh -t bj "cd bj-erp-installer && sudo docker image prune -f && df -h /"
+ssh bj
+df -h /
+sudo docker system df -v
+sudo du -xhd2 /home/behsazan 2>/dev/null | sort -h | tail -40
 ```
 
-Then run 2.4 again.
+Remove only reviewed obsolete installer archives/backups or unreferenced images. Do not run
+`docker system prune --volumes`, `docker volume prune`, `docker compose down -v`, database reset,
+or factory reset merely to free space. Confirm at least 5 GiB available with `df -h /`, then start
+a **new** Safe Update; a terminal failed run is not resumable.
 
 ### 4.5 Restore the database (last resort — only for data loss)
 

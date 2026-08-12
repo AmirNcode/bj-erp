@@ -122,15 +122,20 @@ and writes the manifest. App only is available afterward when SQL has not change
 
 The assistant:
 
-1. checks clean `main` and runs lint/unit tests;
-2. builds and verifies an AMD64 app image on the Mac;
-3. checksums and transfers artifacts with partial-file retention;
-4. starts a detached job on the server;
-5. creates and validates a PostgreSQL custom-format backup;
-6. verifies the run-scoped migration manifest, then applies only pending immutable migrations;
-7. recreates only the app container;
-8. checks the database, `/api/health`, Auth, and image architecture from the server;
-9. downloads and checksum-verifies the backup on the Mac.
+1. checks clean `main`, SSH, and at least 5 GiB free on the server;
+2. runs lint/unit tests;
+3. builds and verifies an AMD64 app image on the Mac;
+4. checksums and transfers artifacts with partial-file retention;
+5. starts a detached job on the server;
+6. creates and validates a PostgreSQL custom-format backup;
+7. verifies the run-scoped migration manifest, then applies only pending immutable migrations;
+8. recreates only the app container;
+9. checks the database, `/api/health`, Auth, and image architecture from the server;
+10. downloads and checksum-verifies the backup on the Mac.
+
+A Safe Update cannot report success without non-empty backup path/checksum metadata. Any worker
+command failure becomes `FAILED:<exit-code>` and installed-state manifests are written only after
+the complete action succeeds.
 
 The app stays at `https://10.10.10.50:3500`. Use the phone VPN for the final browser test.
 
@@ -240,6 +245,10 @@ contract.
 **A run is `FAILED:<number>`.** Use `./deploy/bj-deploy logs client <run-id>`. The final phase says
 whether artifact, backup, migration, app health, or architecture failed. An unhealthy new image is
 rolled back; forward SQL is not automatically reversed.
+
+Do not resume a terminal `FAILED:<number>` run. Correct the cause and start a new Safe Update so it
+gets a new immutable run directory and version. A disk-space failure occurs before backup,
+migrations, image loading, or app cutover.
 
 **Restore is needed.** Restore is intentionally not a menu item because it discards later writes.
 Identify the exact backup/run, have another administrator review it, then follow the recovery section

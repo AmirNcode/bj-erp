@@ -187,6 +187,47 @@ pass "remote run initialization is idempotent only while prepared"
 )
 pass "run-scoped migrations are verified and installed manifests remain owner-readable"
 
+# Reproduce the production incident where update.sh failed its disk preflight,
+# but Bash suppressed errexit because perform_update was called before `||`.
+# A failed child must become FAILED:<code> and must not record installed state.
+(
+  cd "$TMP/remote"
+  failure_state="$TMP/failure-state"
+  run="$failure_state/runs/run-update-failure"
+  mkdir -p "$run/migrations"
+  printf 'select 1;\n' > "$run/migrations/20260101_first.sql"
+  bj_write_migration_manifest "$run/migrations" "$run/source-migrations.sha256"
+  printf 'RUN_ID=run-update-failure\n' > "$run/manifest.env"
+  printf '#!/usr/bin/env bash\nexit 23\n' > ./update.sh
+  chmod +x ./update.sh
+  BJ_REMOTE_JOB_LIBRARY_ONLY=1 BJ_STATE_ROOT="$failure_state" BJ_REMOTE_OWNER="$(id -un)" \
+    . ./remote-job.sh
+  # macOS has no native flock; lock behavior is independently required by the
+  # client doctor, while this fixture exercises post-lock worker status logic.
+  flock() { return 0; }
+  set +e
+  run_worker run-update-failure update test-release > "$TMP/update-failure.log" 2>&1
+  rc=$?
+  set -e
+  assert_eq "$rc" 23
+  assert_eq "$(read_status "$run")" FAILED:23
+  [ ! -e "$failure_state/installed-manifest.env" ] \
+    || fail "failed update recorded an installed manifest"
+  [ ! -e "$failure_state/installed-migrations.sha256" ] \
+    || fail "failed update recorded installed migrations"
+  grep -q 'RESULT=FAILED:23' "$TMP/update-failure.log" \
+    || fail "failed update log omitted its terminal failure"
+)
+pass "remote update failures cannot become SUCCEEDED or record installed state"
+
+preflight_line=$(grep -n '^[[:space:]]*client_release_preflight$' "$ROOT/deploy/bj-deploy" | head -1 | cut -d: -f1)
+source_gates_line=$(grep -n '^[[:space:]]*run_source_gates$' "$ROOT/deploy/bj-deploy" | head -1 | cut -d: -f1)
+[ -n "$preflight_line" ] && [ -n "$source_gates_line" ] && [ "$preflight_line" -lt "$source_gates_line" ] \
+  || fail "client disk preflight does not run before local source gates/build"
+grep -q 'remote update has no verified backup metadata' "$ROOT/deploy/bj-deploy" \
+  || fail "an update can still treat missing backup metadata as no database"
+pass "client disk and backup gates fail before expensive or misleading success paths"
+
 grep -q 'BJ_MIGRATIONS_DIR="$directory/migrations"' "$ROOT/deploy/remote-job.sh" \
   || fail "remote workers do not use run-scoped migrations"
 grep -q 'chown "$owner" backups' "$ROOT/deploy/remote-job.sh" \

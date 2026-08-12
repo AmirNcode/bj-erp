@@ -78,6 +78,68 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-12 — Safe Update false-success and late disk-preflight hotfix
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `3e71818` (= `origin/main`), hotfix branch
+`codex/deploy-preflight-hotfix`
+**Trigger:** The user's first client Safe Update stopped for low disk after a four-hour transfer but
+was incorrectly reported as successful; after reviewed cleanup left 6.9 GiB free, the user asked
+what to do next while preserving the test database and login credentials.
+
+**What changed**
+
+- `deploy/remote-job.sh` — runs each mutating worker action in an isolated shell with active
+  `errexit`, captures the real child exit code in the controller, and writes `FAILED:<code>`.
+  This closes the Bash context bug where `perform_update ... || rc=$?` disabled `set -e` inside the
+  function, allowing failed `update.sh` to continue into `record_installed_state` and return zero.
+- `deploy/bj-deploy` — checks the client's exact available KiB over SSH before source tests, AMD64
+  build, or transfer; requires 5 GiB. A successful update now requires non-empty remote backup path
+  and checksum metadata, including on resume, instead of treating missing files as “no database.”
+- `deploy/update.sh` — repeats the 5 GiB server preflight using exact KiB rather than rounded
+  `df -BG` output and reports the measured GiB.
+- `tests/deploy/deploy-assistant.test.sh` — reproduces a child update exiting 23 and proves the run
+  becomes `FAILED:23`, logs the failure, and writes no installed-state files. Also guards the early
+  disk-check ordering and mandatory backup metadata contract.
+- `docs/{DEPLOY-ASSISTANT,DEPLOY-GUIDE,MEMORY,CHANGELOG}.md` — documented failure semantics, disk
+  diagnosis, safe cleanup boundaries, non-resumable terminal failures, and the durable Bash trap.
+
+**Actions outside the repo**
+
+- The user ran the deployment before this hotfix. SSH setup, lint, 254 unit tests, AMD64 build, and
+  transfer succeeded. Remote run `20260811T180522Z-519c4f` then stopped with only about 2.2 GiB
+  usable disk space, before backup, image loading, migrations, database writes, or app cutover.
+  The old worker falsely wrote `SUCCEEDED` and installed manifests; those claims do not represent
+  deployed state and that run must never be resumed.
+- At the user's direction, the user removed only the duplicate old installer, already-imported
+  offline image archives, and failed release upload. Reported free space increased to 6.9 GiB;
+  all five containers remained running and healthy, and `bj-erp_db-data` remained mounted at
+  `/var/lib/docker/volumes/bj-erp_db-data/_data` (about 44 MiB).
+- This agent did not connect to the client server, run SSH, transfer files, change its database, or
+  operate its containers during the hotfix.
+
+**Verification**
+
+- `/bin/bash -n` passed for every deployment/test shell script.
+- `npm run test:deploy` passed all 13 cases, including the exact false-success regression.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run test:unit` passed; unit result was 40 files and
+  254 tests.
+- `npm run build` passed with Next.js 16.2.9 and generated 40 pages. Both the local ARM64 and client
+  AMD64 Compose overlays rendered successfully with `config --quiet` without starting containers.
+- All 50 Markdown files passed the local-link check; `git diff --check` passed.
+
+**State left behind**
+
+- The verified hotfix is on `codex/deploy-preflight-hotfix`, ready for its reviewed commit and
+  fast-forward into `main`. Final refs are reported to the user after synchronization.
+
+**For the next agent**
+
+- Never resume `20260811T180522Z-519c4f`; it is a falsely terminal run from the old worker. Start a
+  new `./deploy/bj-deploy update client` only from the final clean `main`. The new run overwrites the
+  incorrect installed manifests only after a real successful update and preserves the existing
+  database volume, users, credentials, Caddy state, and `.env` secrets.
+
 ## 2026-08-11 — Git landing completion for the reviewed August release
 
 **Agent:** OpenAI Codex (GPT-5)

@@ -156,6 +156,14 @@ queries on stdin and do not combine a heredoc with `-c`, which requires its own 
 Health is `/api/health` + Auth + DB from the target network, because `/` normally redirects 307 and
 the Mac cannot reach the client's private `10.10.10.50` route.
 
+Detached worker status must come from the child action's real exit code. Bash disables `set -e`
+inside a function invoked on the left of `||`; this once allowed a failed `update.sh` disk preflight
+to continue into `record_installed_state` and end as `SUCCEEDED`. Run mutating actions in an
+isolated shell with active errexit, persist `FAILED:<code>` in the controller, and never write an
+installed manifest or announce update success without the mandatory backup path/checksum. Check
+remote free space before the expensive local AMD64 build and transfer, then repeat the check on the
+server immediately before mutation.
+
 For destructive resets, an on-server dump is not enough: validate it with `pg_restore -l`, copy it
 off the server, verify the checksum on the Mac, then ask for an operation-specific phrase. The
 detached remote run ID is the recovery handle if SSH drops. Database reset and factory reset are not

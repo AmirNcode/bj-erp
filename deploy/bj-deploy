@@ -22,6 +22,7 @@ cd "$REPO_ROOT"
 readonly STATE_ROOT="$REPO_ROOT/.bj-deploy"
 readonly LOCAL_STATE="$STATE_ROOT/local"
 readonly BACKUP_ROOT="$REPO_ROOT/backups/deploy-assistant"
+readonly CLIENT_MIN_FREE_GB=5
 
 readonly DEFAULT_SERVER_HOST=5.201.190.184
 readonly DEFAULT_SERVER_PORT=2222
@@ -74,6 +75,25 @@ client_key_guard() {
     bj_fail "passwordless SSH is required so transfers/reconnects can resume. Run ./deploy/setup-release.sh once."
     return 1
   fi
+}
+
+client_release_preflight() {
+  local available_kb required_kb available_gib
+  validate_remote_settings
+  available_kb=$(
+    remote_command "df -Pk '$BJ_REMOTE_DIR' | awk 'NR == 2 { print \$4 }'" \
+      | tr -d '[:space:]'
+  ) || { bj_fail "could not read free disk space on the client server"; return 1; }
+  case "$available_kb" in
+    ''|*[!0-9]*) bj_fail "client server returned invalid free-space data"; return 1 ;;
+  esac
+  required_kb=$((CLIENT_MIN_FREE_GB * 1024 * 1024))
+  available_gib=$(awk -v kib="$available_kb" 'BEGIN { printf "%.1f", kib / 1048576 }')
+  printf 'Client free disk: %s GiB (minimum %s GiB)\n' "$available_gib" "$CLIENT_MIN_FREE_GB"
+  [ "$available_kb" -ge "$required_kb" ] || {
+    bj_fail "client server has only ${available_gib} GiB free; ${CLIENT_MIN_FREE_GB} GiB is required before build and transfer"
+    return 1
+  }
 }
 
 remote_command() {
@@ -210,12 +230,11 @@ monitor_remote_run() {
 
 fetch_remote_backup() {
   local run_id="$1" directory="$BACKUP_ROOT/client/$run_id" path expected file actual
-  path=$(remote_command "$(remote_base_command "sed -n '1p' '.bj-deploy/runs/$run_id/backup.path'")" | tr -d '\r')
-  expected=$(remote_command "$(remote_base_command "sed -n '1p' '.bj-deploy/runs/$run_id/backup.sha256'")" | tr -d '[:space:]')
-  if [ -z "$path" ]; then
-    printf 'No existing database was present, so no backup was needed.\n'
-    return 2
-  fi
+  remote_command "$(remote_base_command "test -s '.bj-deploy/runs/$run_id/backup.path' && test -s '.bj-deploy/runs/$run_id/backup.sha256'")" \
+    >/dev/null 2>&1 \
+    || { bj_fail "remote update has no verified backup metadata; success cannot be trusted"; return 1; }
+  path=$(remote_command "$(remote_base_command "cat '.bj-deploy/runs/$run_id/backup.path'")" | tr -d '\r')
+  expected=$(remote_command "$(remote_base_command "cat '.bj-deploy/runs/$run_id/backup.sha256'")" | tr -d '[:space:]')
   case "$path" in
     "$BJ_REMOTE_DIR"/backups/*) ;;
     *) bj_fail "server returned an unexpected backup path: $path"; return 1 ;;
@@ -296,6 +315,7 @@ client_app_or_update() {
     return 0
   fi
   client_key_guard
+  client_release_preflight
   if [ "$action" = app ]; then
     remote_manifest=$(remote_command "cat '$BJ_REMOTE_DIR/.bj-deploy/installed-migrations.sha256'" 2>/dev/null || true)
     [ -n "$remote_manifest" ] \
@@ -309,7 +329,7 @@ client_app_or_update() {
   remote_job_tty "start $run_id $action $version"
   monitor_remote_run "$run_id"
   if [ "$action" = update ]; then
-    fetch_remote_backup "$run_id" || [ "$?" = 2 ]
+    fetch_remote_backup "$run_id" || return 1
   fi
   printf 'Client deployment succeeded: https://10.10.10.50:3500\n'
   printf 'Use the phone VPN for the final browser test until the subdomain is configured.\n'
@@ -622,8 +642,10 @@ resume_client() {
       ;;
     SUCCEEDED)
       remote_job "logs $run_id 120"
-      if remote_command "test -s '$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id/backup.path'" 2>/dev/null; then
-        fetch_remote_backup "$run_id" || true
+      if [ "$action" = update ]; then
+        fetch_remote_backup "$run_id" || return 1
+      elif remote_command "test -s '$BJ_REMOTE_DIR/.bj-deploy/runs/$run_id/backup.path'" 2>/dev/null; then
+        fetch_remote_backup "$run_id" || return 1
       fi
       if [ "$action" = reset-db ] || [ "$action" = factory-reset ]; then
         mkdir -p "$STATE_ROOT/runs/$run_id/evidence"

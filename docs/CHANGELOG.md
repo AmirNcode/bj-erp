@@ -39,6 +39,10 @@ pending a tagged release; semantic versioning starts at the first tag.
   after a DB wipe, and documented the complete workflow in `docs/DEPLOY-ASSISTANT.md`.
 - Server host/user/port overrides now also select the matching SSH destination unless an explicit
   `BJ_SSH_DEST` alias is supplied, so diagnostics and the actual connection cannot silently diverge.
+- Fixed a detached-worker error path that could label a failed server preflight `SUCCEEDED` and
+  write installed-state metadata. Worker failures now persist their real exit code, Safe Update
+  success requires verified backup metadata, and server disk space is checked before the lengthy
+  local AMD64 build and transfer as well as immediately before server mutation.
 - The local demo/E2E seeder now calls the current employee-creation RPC and uses numeric personnel
   numbers (`1001`–`3002`) as login codes, matching the database rule introduced in July.
 - No client server was contacted or modified while implementing this assistant. Its live production

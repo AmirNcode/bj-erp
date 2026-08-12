@@ -68,9 +68,13 @@ flock -n 9 || fail "another update is already running on this server"
 [ -d "$MIGRATIONS_DIR" ] || fail "migration directory not found: $MIGRATIONS_DIR"
 [ -f "$SEED_FILE" ]      || fail "seed file not found: $SEED_FILE"
 
-avail_gb=$(df -BG --output=avail . | tail -1 | tr -dc '0-9')
-[ "${avail_gb:-0}" -ge "$MIN_FREE_GB" ] \
-  || fail "only ${avail_gb}GB free — need ${MIN_FREE_GB}GB. Remove old images/backups first."
+avail_kb=$(df -Pk . | awk 'NR == 2 { print $4 }')
+case "$avail_kb" in ''|*[!0-9]*) fail "could not read available server disk space" ;; esac
+required_kb=$((MIN_FREE_GB * 1024 * 1024))
+if [ "$avail_kb" -lt "$required_kb" ]; then
+  avail_gib=$(awk -v kib="$avail_kb" 'BEGIN { printf "%.1f", kib / 1048576 }')
+  fail "only ${avail_gib} GiB free — need ${MIN_FREE_GB} GiB. Remove old images/backups first."
+fi
 
 set -a; . ./.env; set +a
 PREVIOUS_VERSION="${APP_VERSION:-latest}"
