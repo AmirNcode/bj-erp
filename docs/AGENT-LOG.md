@@ -78,6 +78,76 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-12 — Container-safe migration runner after the resumed client update
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `d941970` (= `origin/main`), hotfix branch
+`codex/migration-stdin-hotfix`
+**Trigger:** The user resumed staged client run `20260812T052250Z-291168`; it reached the first
+pending August migration and failed because containerized `psql` could not open the server-host
+run-directory path.
+
+**What changed**
+
+- `deploy/lib/migrations.sh` — changed atomic migration execution from `psql -f <host-path>` to
+  `psql -f - < <host-path>`. The verified run-scoped SQL now crosses the Docker boundary through
+  stdin, while the migration and its ledger `-c` remain inside one `--single-transaction` call.
+- `tests/deploy/deploy-assistant.test.sh` — the fake containerized `pgexec` now rejects host file
+  paths, requires non-empty migration SQL on stdin, and requires the ledger insert in the same
+  invocation. Existing checksum, resume, and simulated-rollback assertions remain active.
+- `docs/{CHANGELOG,DEPLOY-ASSISTANT,MEMORY}.md` — documented the container namespace boundary and
+  durable `-f -`/stdin rule.
+
+**Actions outside the repo**
+
+- The user, not this agent, ran `./deploy/bj-deploy resume 20260812T052250Z-291168` against the
+  client. The corrected worker created and validated
+  `./backups/pre-20260812-052250-d941970-2026-08-12-183332.dump` (312 KiB), recorded pre-update row
+  counts, loaded but did not start `bj-erp-app:20260812-052250-d941970`, and bootstrapped the private
+  ledger with the verified 38-migration legacy baseline. The first August migration never executed
+  and was not recorded; the old `latest` app remained running. The worker ended truthfully as
+  `FAILED:1`. No restore is indicated.
+- This agent did **not** SSH to the client, transfer files, modify its database, or operate its
+  containers. Failed run `20260812T052250Z-291168` remains terminal and must not be resumed again.
+- Local only: proved the exact `psql --single-transaction -f - -c ...` transport with read-only
+  `SELECT 41` / `SELECT 42` against `bj-erp-db-1`. For current-build E2E, the guarded local Safe
+  Update created verified backup
+  `backups/deploy-assistant/local/20260812T152344Z-e8aeaf/postgres.dump`, skipped all 41 matching
+  ledger migrations, ran the idempotent seed, built native ARM64 image
+  `sha256:373e31bd987cc7c4e89063516efdea586a972706a25128978c93b7786d5e8f25`, and recreated only
+  `bj-erp-app-1`.
+  The local database/auth/rest/gateway containers and database volume were preserved.
+
+**Verification**
+
+- `/bin/bash -n` passed for every deployment/test shell script; `npm run test:deploy` passed all
+  13 cases, including the new container-stdin assertion; `git diff --check` passed.
+- `npm run lint` and `npx tsc --noEmit` passed; `npm run test:unit` passed 40 files / 254 tests.
+- `npm run build` passed with Next.js 16.2.9 and generated 40 pages. An initial sandboxed attempt
+  was correctly treated as failed because Turbopack could not bind its internal worker port; the
+  authorized rerun completed successfully.
+- The first dev-server E2E attempt was stopped after two login timeouts because `.env.local`
+  targets unpublished local gateway port 8080 (`ECONNREFUSED`), not because of product code. A
+  production-shaped local Docker run against the stale August 6 image produced 31 pass / 2 fail /
+  1 skip. After the guarded current-source ARM64 rebuild, the full serial Playwright suite passed:
+  **33 passed, 1 intentionally skipped**. Teardown deleted all 28 throwaway users and one test
+  department.
+
+**State left behind**
+
+- Focused hotfix commit `504b368` is on `codex/migration-stdin-hotfix`. This log is the follow-up
+  documentation commit; both commits are intended to be pushed on the retained hotfix branch,
+  fast-forwarded into `main`, and pushed without rewriting history.
+- Local test stack is healthy on the rebuilt ARM64 app with its existing data. Client production
+  is still on `latest`; its 38-row migration ledger is now established, but none of the three
+  August migrations or the new app was deployed by the failed run.
+
+**For the next agent**
+
+- Do not resume `20260812T052250Z-291168`. Once final clean `main` is synchronized, begin a **new**
+  `./deploy/bj-deploy update client`; the clean-tree, disk, backup, migration, architecture, and
+  health guards must remain intact.
+
 ## 2026-08-12 — Safe Update false-success and late disk-preflight hotfix
 
 **Agent:** OpenAI Codex (GPT-5)
