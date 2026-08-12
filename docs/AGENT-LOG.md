@@ -130,8 +130,10 @@ what to do next while preserving the test database and login credentials.
 
 **State left behind**
 
-- The verified hotfix is on `codex/deploy-preflight-hotfix`, ready for its reviewed commit and
-  fast-forward into `main`. Final refs are reported to the user after synchronization.
+- Hotfix commit `af0f4a7` was pushed to `origin/codex/deploy-preflight-hotfix`, fast-forwarded into
+  `main`, and pushed to `origin/main` without rewriting history. This documentation-only completion
+  update is also synchronized to both retained branches before handoff. Local `main` is clean and
+  the next Safe Update will stage the corrected worker before starting a new remote run.
 
 **For the next agent**
 
