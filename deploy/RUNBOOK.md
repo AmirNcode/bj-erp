@@ -122,6 +122,17 @@ swaps only the `app` container,
 health-checks for 90s, **re-checks row counts**, and **rolls back automatically**
 if the app does not come up. The assistant then verifies a backup copy on the Mac.
 
+A terminal failed update is never resumed in place. If its large app archive is
+still present and checksum-valid on both machines, and migration/seed inputs are
+unchanged, create a new guarded run without uploading it again:
+
+```bash
+./deploy/bj-deploy retry-uploaded FAILED_RUN_ID
+```
+
+This still takes a new backup and runs the normal migration, cutover, health,
+architecture, row-count, and off-server backup checks.
+
 One-time setup on a new machine (SSH key + `bj` host alias):
 
 ```bash

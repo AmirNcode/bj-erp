@@ -110,6 +110,17 @@ bj_env_set() {
   mv -f "$temporary" "$file"
 }
 
+bj_set_app_version() {
+  # Docker Compose gives an exported shell variable precedence over values in
+  # .env. Update both sources together so a long-running deployment shell
+  # cannot recreate the app with the stale tag it loaded during preflight.
+  local file="$1" version="$2"
+  bj_validate_version "$version" || return 1
+  bj_env_set "$file" APP_VERSION "$version" || return 1
+  APP_VERSION="$version"
+  export APP_VERSION
+}
+
 bj_confirm_phrase() {
   local expected="$1" answer
   printf 'Type exactly: %s\n> ' "$expected" >&2

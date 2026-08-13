@@ -129,9 +129,11 @@ Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
 - ☑ Stable `/api/health` plus separate database/Auth checks executed on the target network
 - ☑ Passwordless-SSH setup, Mac/phone local routing, recovery, and full command reference in
   `docs/DEPLOY-ASSISTANT.md`; cold-start design/plan preserved under `docs/specs/` and `docs/plans/`
-- ◐ First live client execution — attempted 2026-08-12/13 from clean `main`; backup, image load, and
-  legacy-ledger skips succeeded, then the first August migration rolled back with its ledger insert
-  before app cutover. The corrected runner must complete a new run before this becomes ☑.
+- ◐ First live client execution — latest attempt `20260813T004921Z-b987f2` created a verified backup,
+  preserved row counts, and atomically applied/recorded all three August migrations. Cutover then
+  recreated stale exported `APP_VERSION=latest`, so the old image failed the new `/api/health`
+  contract and was rolled back to itself; the new image never ran. The corrected controller can
+  retry the verified uploaded artifact in a new run before this becomes ☑.
 - ☑ **Live on the client's Ubuntu server** at `https://10.10.10.50` (LAN-only by design;
   off-site staff reach it over the company's existing corporate VPN)
 - ☑ `deploy/setup-release.sh` — one-time SSH key + `bj` alias + connection multiplexing

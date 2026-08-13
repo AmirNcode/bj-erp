@@ -182,6 +182,17 @@ Then open `https://10.10.10.50:3500` on your phone and log in.
 
 **Done.**
 
+If a run fails after the archive was fully uploaded and the deployment code has since been fixed,
+the assistant can safely reuse that exact checksum-verified upload while creating a new run:
+
+```bash
+./deploy/bj-deploy retry-uploaded FAILED_RUN_ID
+```
+
+It refuses an active/successful run, changed migrations or seed data, and any local/server checksum
+mismatch. It still takes a fresh backup and runs all migration, health, architecture, and row-count
+checks. Do not use `resume` for a terminal `FAILED` run.
+
 ---
 
 ## PART 3 — Checking everything is running correctly

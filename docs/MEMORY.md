@@ -160,6 +160,14 @@ argument. Never pass a host migration path to containerized `psql`.
 Health is `/api/health` + Auth + DB from the target network, because `/` normally redirects 307 and
 the Mac cannot reach the client's private `10.10.10.50` route.
 
+Docker Compose gives exported shell variables precedence over values read from `.env`. A deployment
+shell that sourced `APP_VERSION=latest`, edited only the file, and then ran Compose recreated
+`bj-erp-app:latest` while claiming to cut over to the release tag. Always update the persisted value
+and exported `APP_VERSION` together (`bj_set_app_version`) for both cutover and rollback, and assert
+the selected tag in deployment tests. A terminal failed run stays immutable; `retry-uploaded`
+creates a new run and may reuse the large artifact only after matching local/server SHA-256 plus
+unchanged migration and seed inputs.
+
 Detached worker status must come from the child action's real exit code. Bash disables `set -e`
 inside a function invoked on the left of `||`; this once allowed a failed `update.sh` disk preflight
 to continue into `record_installed_state` and end as `SUCCEEDED`. Run mutating actions in an

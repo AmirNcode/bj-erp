@@ -137,6 +137,21 @@ A Safe Update cannot report success without non-empty backup path/checksum metad
 command failure becomes `FAILED:<exit-code>` and installed-state manifests are written only after
 the complete action succeeds.
 
+If an update reaches the server with a verified app archive but then ends `FAILED:<code>`, fix and
+commit the controller issue first. When the artifact, migration manifest, and seed are still exactly
+the failed run's inputs, this starts a **new** guarded update without rebuilding or uploading the
+large archive again:
+
+```bash
+./deploy/bj-deploy retry-uploaded FAILED_RUN_ID
+```
+
+The command requires clean `main`, the local and server SHA-256 to agree, the old remote run to be
+terminal `FAILED`, and at least 5 GiB free. It stages current controller scripts and a new immutable
+run directory, takes another verified backup, then runs the normal migration, cutover, architecture,
+health, row-count, and backup-download checks. It refuses changed SQL/seed or a missing artifact;
+use a normal Safe Update then.
+
 The app stays at `https://10.10.10.50:3500`. Use the phone VPN for the final browser test.
 
 App only skips the DB backup/migrations. It runs only when source migration filenames/checksums
@@ -249,9 +264,10 @@ contract.
 whether artifact, backup, migration, app health, or architecture failed. An unhealthy new image is
 rolled back; forward SQL is not automatically reversed.
 
-Do not resume a terminal `FAILED:<number>` run. Correct the cause and start a new Safe Update so it
-gets a new immutable run directory and version. A disk-space failure occurs before backup,
-migrations, image loading, or app cutover.
+Do not resume a terminal `FAILED:<number>` run. Correct the cause and start a new Safe Update, or use
+`retry-uploaded <failed-run-id>` when its unchanged checksum-verified artifact is still present.
+Both paths create a new immutable run ID. A disk-space failure occurs before backup, migrations,
+image loading, or app cutover.
 
 **Restore is needed.** Restore is intentionally not a menu item because it discards later writes.
 Identify the exact backup/run, have another administrator review it, then follow the recovery section

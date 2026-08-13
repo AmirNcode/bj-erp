@@ -48,11 +48,13 @@ Usage:
   ./deploy/bj-deploy
   ./deploy/bj-deploy [--dry-run] doctor|status|logs|restart|app|update|reset-db|factory-reset local|client
   ./deploy/bj-deploy resume RUN_ID
+  ./deploy/bj-deploy retry-uploaded FAILED_RUN_ID
 
 Data effects:
   restart        Restart the existing containers; no build or database change.
   app            Rebuild/redeploy only the app; refused if migrations changed.
   update         Verified DB backup, pending migrations, app deploy, health check.
+  retry-uploaded Start a new guarded update using a failed run's verified uploaded app artifact.
   reset-db       Verified backup, erase DB, new secrets/admin; preserve HTTPS CA.
   factory-reset  Same, and also replace the HTTPS CA/certificate.
 EOF
@@ -333,6 +335,99 @@ client_app_or_update() {
   fi
   printf 'Client deployment succeeded: https://10.10.10.50:3500\n'
   printf 'Use the phone VPN for the final browser test until the subdomain is configured.\n'
+}
+
+retry_uploaded_client_update() {
+  local failed_run="$1" failed_dir manifest action target version source_sha source_branch
+  local archive archive_name expected actual current_manifest remote_status run_id run_dir
+  bj_validate_run_id "$failed_run" || return 1
+  git_release_guard
+
+  failed_dir="$STATE_ROOT/runs/$failed_run"
+  manifest="$failed_dir/manifest.env"
+  [ -f "$manifest" ] \
+    || { bj_fail "local manifest is missing for failed run $failed_run"; return 1; }
+  [ -f "$failed_dir/source-migrations.sha256" ] \
+    || { bj_fail "local migration manifest is missing for failed run $failed_run"; return 1; }
+
+  action=$(bj_env_value ACTION "$manifest")
+  target=$(bj_env_value TARGET "$manifest")
+  version=$(bj_env_value VERSION "$manifest")
+  source_sha=$(bj_env_value GIT_SHA "$manifest")
+  source_branch=$(bj_env_value GIT_BRANCH "$manifest")
+  [ "$action" = update ] && [ "$target" = client ] \
+    || { bj_fail "retry-uploaded accepts only a failed client update run"; return 1; }
+  bj_validate_version "$version" || return 1
+  git cat-file -e "${source_sha}^{commit}" 2>/dev/null \
+    || { bj_fail "source commit for failed run is unavailable: $source_sha"; return 1; }
+
+  archive="$REPO_ROOT/dist/bj-erp-app-${version}.tar.gz"
+  archive_name=$(basename "$archive")
+  [ -s "$archive" ] && [ -s "${archive}.sha256" ] \
+    || { bj_fail "verified local app artifact for $failed_run is unavailable; run a normal update"; return 1; }
+  expected=$(tr -d '[:space:]' < "${archive}.sha256")
+  case "$expected" in ''|*[!0-9a-f]*) bj_fail "local app artifact checksum is invalid"; return 1 ;; esac
+  [ "${#expected}" -eq 64 ] \
+    || { bj_fail "local app artifact checksum has the wrong length"; return 1; }
+  actual=$(bj_hash_file "$archive")
+  [ "$actual" = "$expected" ] \
+    || { bj_fail "local app artifact checksum mismatch"; return 1; }
+
+  mkdir -p "$STATE_ROOT"
+  current_manifest=$(mktemp "$STATE_ROOT/retry-migrations.XXXXXX")
+  bj_write_migration_manifest "$REPO_ROOT/supabase/migrations" "$current_manifest"
+  if ! cmp -s "$failed_dir/source-migrations.sha256" "$current_manifest"; then
+    rm -f "$current_manifest"
+    bj_fail "migration inputs changed since $failed_run; run a normal update"
+    return 1
+  fi
+  rm -f "$current_manifest"
+  git show "${source_sha}:supabase/seed.sql" | cmp -s - "$REPO_ROOT/supabase/seed.sql" \
+    || { bj_fail "seed input changed since $failed_run; run a normal update"; return 1; }
+
+  if [ "$DRY_RUN" = 1 ]; then
+    printf 'DRY RUN: create a new update run reusing verified uploaded artifact %s from failed run %s; no build or app upload.\n' \
+      "$archive_name" "$failed_run"
+    return 0
+  fi
+
+  client_key_guard
+  remote_status=$(remote_job "status $failed_run" 2>/dev/null || true)
+  remote_status=$(printf '%s' "$remote_status" | tail -n 1 | tr -d '\r')
+  case "$remote_status" in
+    FAILED:*) ;;
+    *) bj_fail "remote run $failed_run is '$remote_status', not terminal FAILED"; return 1 ;;
+  esac
+  client_release_preflight
+  remote_command "cd '$BJ_REMOTE_DIR' && test -s '$archive_name' && test -s '${archive_name}.sha256' && remote_expected=\$(tr -d '[:space:]' < '${archive_name}.sha256') && remote_actual=\$(sha256sum '$archive_name' | awk '{print \$1}') && test \"\$remote_expected\" = '$expected' && test \"\$remote_actual\" = '$expected'" \
+    || { bj_fail "the failed run's verified server artifact is unavailable; run a normal update"; return 1; }
+  run_source_gates
+
+  run_id=$(bj_make_run_id)
+  run_dir="$STATE_ROOT/runs/$run_id"
+  mkdir -p "$run_dir"
+  cp "$failed_dir/source-migrations.sha256" "$run_dir/source-migrations.sha256"
+  {
+    printf 'RUN_ID=%s\n' "$run_id"
+    printf 'ACTION=update\n'
+    printf 'VERSION=%s\n' "$version"
+    printf 'TARGET=client\n'
+    printf 'GIT_SHA=%s\n' "$source_sha"
+    printf 'GIT_BRANCH=%s\n' "$source_branch"
+    printf 'RETRY_OF=%s\n' "$failed_run"
+    printf 'CONTROLLER_GIT_SHA=%s\n' "$(git rev-parse HEAD)"
+    printf 'CREATED_AT=%s\n' "$(date -u +%FT%TZ)"
+  } > "$run_dir/manifest.env"
+  chmod 600 "$run_dir/manifest.env" "$run_dir/source-migrations.sha256"
+
+  stage_remote_runtime "$run_id" update "$run_dir"
+  remote_command "cd '$BJ_REMOTE_DIR' && test -s '$archive_name' && test -s '${archive_name}.sha256' && remote_expected=\$(tr -d '[:space:]' < '${archive_name}.sha256') && remote_actual=\$(sha256sum '$archive_name' | awk '{print \$1}') && test \"\$remote_expected\" = '$expected' && test \"\$remote_actual\" = '$expected'" \
+    || { bj_fail "server artifact changed during retry staging; nothing was started"; return 1; }
+  remote_job_tty "start $run_id update $version"
+  monitor_remote_run "$run_id"
+  fetch_remote_backup "$run_id" || return 1
+  printf 'Client deployment succeeded using the existing verified upload: https://10.10.10.50:3500\n'
+  printf 'New run ID: %s (retry of %s)\n' "$run_id" "$failed_run"
 }
 
 stage_full_bundle() {
@@ -700,6 +795,7 @@ case "${1:-}" in
   '') interactive_menu ;;
   help|-h|--help) usage ;;
   resume) [ -n "${2:-}" ] || { usage; exit 2; }; resume_client "$2" ;;
+  retry-uploaded) [ -n "${2:-}" ] || { usage; exit 2; }; retry_uploaded_client_update "$2" ;;
   doctor|status|logs|restart|app|update|reset-db|factory-reset)
     action="$1"; target="${2:-}"
     case "$target" in local|client) ;; *) usage; exit 2 ;; esac

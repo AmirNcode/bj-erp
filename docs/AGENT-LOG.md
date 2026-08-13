@@ -78,6 +78,76 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-12 — Correct app-tag cutover and reuse the verified failed-run upload
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `codex/code-review` @ `11373fe` (= `main` and both origin refs)
+**Trigger:** The user supplied client run `20260813T004921Z-b987f2`, which applied all pending
+migrations but failed health checks and rolled its app image back.
+
+**What changed**
+
+- `deploy/lib/common.sh` — added `bj_set_app_version`, which atomically updates `APP_VERSION` in
+  `.env` and exports the same value in the running shell. Docker Compose gives exported variables
+  precedence over `.env`; changing only the file cannot select a new image after preflight sourced
+  and exported the old tag.
+- `deploy/update.sh` — cutover and rollback both use `bj_set_app_version`, and the existing tag is
+  validated before mutation. The failed client log said it was switching to
+  `20260813-004921-11373fe` but `docker compose ps` showed `bj-erp-app:latest`: the stale exported
+  value caused Compose to recreate the old image, whose August 5 build predates `/api/health`.
+- `deploy/bj-deploy` — added `retry-uploaded FAILED_RUN_ID`. It accepts only a local client-update
+  manifest whose remote status is terminal `FAILED:*`; verifies the local archive and checksum,
+  requires the server archive/checksum to match, requires unchanged migration and seed inputs, and
+  creates a **new** immutable run with current controller scripts. It does not build or transfer the
+  large app archive. The retry still runs the 5 GiB preflight, source gates, new verified backup,
+  migration/seed pass, app cutover, architecture/health/row-count checks, and off-server backup copy.
+- `tests/deploy/deploy-assistant.test.sh` — added regression coverage for file/exported-variable
+  precedence and an isolated retry dry run that proves no build/upload and refuses changed seed
+  input. The suite now has 15 named deployment cases.
+- `docs/{CHANGELOG,DEPLOY-ASSISTANT,DEPLOY-GUIDE,MEMORY,TASKS}.md` and `deploy/RUNBOOK.md` — recorded
+  the failure semantics, Compose precedence rule, and guarded no-reupload recovery command.
+
+**Actions outside the repo**
+
+- The user, not this agent, ran client update `20260813T004921Z-b987f2`. It created verified server
+  backup `./backups/pre-20260813-004921-11373fe-2026-08-13-043136.dump` (316 KiB); recorded pre-run
+  counts `profiles:3`, `user_roles:6`, `leave_requests:1`, `leave_ledger:7`, `holidays:0`,
+  `departments:5`, `leave_types:3`, `companies:1`; loaded the AMD64 release image; and atomically
+  applied/recorded all three August migrations. It then recreated `bj-erp-app:latest`, not the new
+  tag, failed the health contract, and recreated `latest` again as rollback. Result was `FAILED:1`.
+  The new image never ran. Forward migrations remain applied; no post-run row-count phase or local
+  backup download occurred because health failed first.
+- This agent attempted one read-only SSH health probe, but the permission gate rejected it before a
+  process or connection was created because the original no-client-contact boundary remains active.
+  No SSH, server read, transfer, database change, container operation, restore, or deployment was
+  performed by this agent.
+
+**Verification**
+
+- `/bin/bash -n` passed for every deployment and deployment-test shell script.
+- `npm run test:deploy` passed all 15 named cases; `git diff --check` passed. Both ARM64-local and
+  AMD64-client Compose overlays passed `docker compose ... config --quiet`.
+- `npm run lint` and `npx tsc --noEmit` passed. `npm run test:unit` passed 40 files / 254 tests.
+- `npm run build` passed with Next.js 16.2.9 and generated 40 pages including `/api/health`.
+- Playwright was not rerun because no application, migration SQL, database contract, or browser
+  behavior changed; the full current-source suite passed earlier on 2026-08-12.
+
+**State left behind**
+
+- The hotfix is committed and pushed through retained `codex/code-review`, then fast-forwarded into
+  clean synchronized `main` without rewriting history. Exact commit is reported in the handoff.
+- Failed run `20260813T004921Z-b987f2` remains terminal and immutable. Its verified 102 MiB artifact
+  remains locally and is expected remotely because cleanup occurs only after success; use
+  `retry-uploaded`, which revalidates both copies before starting anything.
+
+**For the next agent**
+
+- From final clean `main`, run
+  `./deploy/bj-deploy retry-uploaded 20260813T004921Z-b987f2`. It creates and prints a new run ID;
+  if monitoring disconnects after start, resume that **new** ID. Do not resume the failed ID and do
+  not restore the pre-run dump unless the currently rolled-back app is demonstrably incompatible
+  with the forward schema.
+
 ## 2026-08-12 — Atomic ledger-input hotfix after the first client migration attempt
 
 **Agent:** OpenAI Codex (GPT-5)

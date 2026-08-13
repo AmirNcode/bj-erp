@@ -78,6 +78,8 @@ fi
 
 set -a; . ./.env; set +a
 PREVIOUS_VERSION="${APP_VERSION:-latest}"
+bj_validate_version "$PREVIOUS_VERSION" \
+  || fail "existing APP_VERSION is invalid: ${PREVIOUS_VERSION}"
 
 # .env files written before the HTTPS port became configurable have no
 # APP_ORIGIN. Fall back to the 443 form so the health check below still targets
@@ -155,14 +157,21 @@ pgexec < "$SEED_FILE" >/dev/null \
 
 # ── 6. cutover — recreates ONLY the app container ────────────────────────────
 say "Switching the app container to ${VERSION}…"
-sed -i "s/^APP_VERSION=.*/APP_VERSION=${VERSION}/" .env
+bj_set_app_version .env "$VERSION" \
+  || fail "could not select app image version ${VERSION}"
 bj_compose up -d --no-deps --force-recreate app || fail "compose up failed"
 
 # ── 7. health check ──────────────────────────────────────────────────────────
 say "Health-checking the database, app endpoint, and Auth service…"
 if ! bj_wait_for_stack "$HEALTH_RETRIES" || ! bj_verify_running_architecture amd64; then
   warn "UNHEALTHY — rolling back to ${PREVIOUS_VERSION}"
-  sed -i "s/^APP_VERSION=.*/APP_VERSION=${PREVIOUS_VERSION}/" .env
+  if ! bj_set_app_version .env "$PREVIOUS_VERSION"; then
+    # Persisting the rollback tag failed, but do not let the still-exported new
+    # value make this immediate recovery recreate the unhealthy image again.
+    APP_VERSION="$PREVIOUS_VERSION"
+    export APP_VERSION
+    warn "could not persist APP_VERSION=${PREVIOUS_VERSION} in .env; rollback is temporary"
+  fi
   bj_compose up -d --no-deps --force-recreate app || true
   echo "$(date -u +%FT%TZ) ROLLBACK ${VERSION} -> ${PREVIOUS_VERSION} backup=${BACKUP_FILE}" >> "$LOG_FILE"
   cat <<WARNEOF

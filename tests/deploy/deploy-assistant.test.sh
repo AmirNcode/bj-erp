@@ -36,6 +36,24 @@ assert_eq "$(bj_env_value ADDED "$ENV_FILE")" value
 assert_eq "$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE")" 600
 pass "atomic environment updates preserve unrelated values and permissions"
 
+# Compose prioritizes an exported shell variable over the .env file. The
+# server update process sources .env before cutover, so changing only the file
+# would silently recreate the old image tag.
+APP_VERSION_FILE="$TMP/app-version.env"
+printf 'KEEP=original\nAPP_VERSION=latest\n' > "$APP_VERSION_FILE"
+export APP_VERSION=latest
+bj_set_app_version "$APP_VERSION_FILE" release-20260813
+assert_eq "$(bj_env_value KEEP "$APP_VERSION_FILE")" original
+assert_eq "$(bj_env_value APP_VERSION "$APP_VERSION_FILE")" release-20260813
+assert_eq "$APP_VERSION" release-20260813
+assert_eq "$(sh -c 'printf %s "$APP_VERSION"')" release-20260813
+unset APP_VERSION
+grep -q 'bj_set_app_version .env "$VERSION"' "$ROOT/deploy/update.sh" \
+  || fail "update cutover does not refresh exported APP_VERSION"
+grep -q 'bj_set_app_version .env "$PREVIOUS_VERSION"' "$ROOT/deploy/update.sh" \
+  || fail "update rollback does not refresh exported APP_VERSION"
+pass "app cutover and rollback synchronize file and exported image version"
+
 mkdir -p "$TMP/migrations"
 printf 'select 2;\n' > "$TMP/migrations/20260202_second.sql"
 printf 'select 1;\n' > "$TMP/migrations/20260101_first.sql"
@@ -197,6 +215,66 @@ pass "remote run initialization is idempotent only while prepared"
   assert_eq "$(stat -f '%Lp' "$TMP/state/installed-migrations.sha256" 2>/dev/null || stat -c '%a' "$TMP/state/installed-migrations.sha256")" 600
 )
 pass "run-scoped migrations are verified and installed manifests remain owner-readable"
+
+# A terminal failed update may reuse its already-uploaded, checksum-verified
+# app archive, but only as a brand-new run and only while migration + seed
+# inputs still match the original artifact. Exercise the local dry-run path in
+# an isolated fake repository so no SSH, Docker, or production state is used.
+RETRY_REPO="$TMP/retry-repo"
+mkdir -p \
+  "$RETRY_REPO/deploy/lib" \
+  "$RETRY_REPO/supabase/migrations" \
+  "$RETRY_REPO/dist" \
+  "$RETRY_REPO/.bj-deploy/runs/run-failed" \
+  "$TMP/fake-bin"
+cp "$ROOT/deploy/bj-deploy" "$RETRY_REPO/deploy/"
+cp "$ROOT/deploy/lib/"*.sh "$RETRY_REPO/deploy/lib/"
+chmod +x "$RETRY_REPO/deploy/bj-deploy"
+printf 'select 1;\n' > "$RETRY_REPO/supabase/migrations/20260101_first.sql"
+printf 'select 1;\n' > "$RETRY_REPO/supabase/seed.sql"
+cp "$RETRY_REPO/supabase/seed.sql" "$TMP/original-seed.sql"
+bj_write_migration_manifest \
+  "$RETRY_REPO/supabase/migrations" \
+  "$RETRY_REPO/.bj-deploy/runs/run-failed/source-migrations.sha256"
+cat > "$RETRY_REPO/.bj-deploy/runs/run-failed/manifest.env" <<'EOF'
+RUN_ID=run-failed
+ACTION=update
+VERSION=release-existing
+TARGET=client
+GIT_SHA=source-commit
+GIT_BRANCH=main
+EOF
+printf 'verified existing archive\n' > "$RETRY_REPO/dist/bj-erp-app-release-existing.tar.gz"
+bj_hash_file "$RETRY_REPO/dist/bj-erp-app-release-existing.tar.gz" \
+  > "$RETRY_REPO/dist/bj-erp-app-release-existing.tar.gz.sha256"
+cat > "$TMP/fake-bin/git" <<'EOF'
+#!/bin/sh
+case "$1:$2" in
+  branch:--show-current) printf 'main\n' ;;
+  status:--porcelain) ;;
+  cat-file:-e) ;;
+  show:*) cat "$FAKE_SOURCE_SEED" ;;
+  rev-parse:HEAD) printf 'controller-commit\n' ;;
+  *) printf 'unexpected fake git call: %s\n' "$*" >&2; exit 1 ;;
+esac
+EOF
+chmod +x "$TMP/fake-bin/git"
+retry_output=$(
+  cd "$RETRY_REPO"
+  PATH="$TMP/fake-bin:$PATH" FAKE_SOURCE_SEED="$RETRY_REPO/supabase/seed.sql" \
+    ./deploy/bj-deploy --dry-run retry-uploaded run-failed
+)
+printf '%s\n' "$retry_output" | grep -q 'no build or app upload' \
+  || fail "retry-uploaded dry run did not preserve the existing artifact"
+printf 'select 2;\n' > "$RETRY_REPO/supabase/seed.sql"
+if (
+  cd "$RETRY_REPO"
+  PATH="$TMP/fake-bin:$PATH" FAKE_SOURCE_SEED="$TMP/original-seed.sql" \
+    ./deploy/bj-deploy --dry-run retry-uploaded run-failed >/dev/null 2>&1
+); then
+  fail "retry-uploaded accepted changed seed input"
+fi
+pass "failed update retry reuses only an unchanged verified uploaded artifact in a new run"
 
 # Reproduce the production incident where update.sh failed its disk preflight,
 # but Bash suppressed errexit because perform_update was called before `||`.

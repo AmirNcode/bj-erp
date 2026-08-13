@@ -39,6 +39,13 @@ pending a tagged release; semantic versioning starts at the first tag.
   `:'filename'`/checksum/release placeholders when the ledger insert was supplied through `-c`.
   Migration SQL and its ledger insert now travel through one `-f -` stdin stream inside the same
   `--single-transaction`; a regression test rejects the broken split stdin/`-c` form.
+- Fixed the subsequent cutover failure: `update.sh` changed `APP_VERSION` in `.env` after it had
+  already exported the old value, and Compose correctly gave that stale shell value precedence.
+  Cutover and rollback now update the file and exported environment together, so the requested image
+  tag is the one recreated and health-checked.
+- Added `retry-uploaded FAILED_RUN_ID` for this bounded recovery case. It never reopens a terminal
+  run: it creates a new guarded update, accepts only an unchanged migration/seed set and matching
+  local/server artifact checksums, takes a new verified backup, and reuses the existing large upload.
 - Added `/api/health` so deployment health no longer mistakes Next's normal HTTP 307 locale redirect
   for failure. Checks independently prove database, app, Auth, and image architecture from the
   target machine.
