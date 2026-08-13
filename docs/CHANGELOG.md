@@ -35,6 +35,10 @@ pending a tagged release; semantic versioning starts at the first tag.
   to `psql` inside the database container instead of being passed as a server-host filename that the
   container cannot open. Regression coverage requires container-visible stdin while preserving the
   single transaction shared by each migration and its ledger row.
+- Fixed the follow-on ledger failure exposed by the first client run: `psql` did not interpolate the
+  `:'filename'`/checksum/release placeholders when the ledger insert was supplied through `-c`.
+  Migration SQL and its ledger insert now travel through one `-f -` stdin stream inside the same
+  `--single-transaction`; a regression test rejects the broken split stdin/`-c` form.
 - Added `/api/health` so deployment health no longer mistakes Next's normal HTTP 307 locale redirect
   for failure. Checks independently prove database, app, Auth, and image architecture from the
   target machine.

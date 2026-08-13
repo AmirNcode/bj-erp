@@ -66,17 +66,25 @@ SQL
 }
 
 bj_apply_and_record_migration() {
-  local file="$1" filename="$2" checksum="$3" release="$4"
+  local file="$1" filename="$2" checksum="$3" release="$4" pipeline_status
   # Keep each migration and its ledger row in one PostgreSQL transaction. If
   # either the SQL file or the ledger insert fails, psql rolls both back and a
   # reconnect can safely resume at the same filename. psql runs inside the DB
-  # container, so stream the host-side run-scoped file through stdin instead
-  # of passing a host path that does not exist in the container.
-  pgexec --single-transaction \
+  # container, so stream the host-side run-scoped file and ledger statement
+  # together through stdin. Do not pass the ledger statement with -c: psql
+  # does not interpolate :'variable' references in that command path.
+  {
+    cat "$file" &&
+      printf '\n' &&
+      cat <<'SQL'
+insert into bj_deploy.schema_migrations(filename, checksum_sha256, release_version)
+values (:'filename', :'checksum', :'release');
+SQL
+  } | pgexec --single-transaction \
     -v filename="$filename" -v checksum="$checksum" -v release="$release" \
-    -f - \
-    -c "insert into bj_deploy.schema_migrations(filename, checksum_sha256, release_version) values (:'filename', :'checksum', :'release');" \
-    < "$file" >/dev/null
+    -f - >/dev/null
+  pipeline_status=("${PIPESTATUS[@]}")
+  [ "${pipeline_status[0]}" -eq 0 ] && [ "${pipeline_status[1]}" -eq 0 ]
 }
 
 bj_bootstrap_legacy_ledger() {

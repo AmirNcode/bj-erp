@@ -78,6 +78,67 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-12 — Atomic ledger-input hotfix after the first client migration attempt
+
+**Agent:** OpenAI Codex (GPT-5)
+**Branch / HEAD at start:** `main` @ `e73ef4b` (= `origin/main`), hotfix branch
+`codex/migration-ledger-atomic-hotfix`
+**Trigger:** The user resumed client run `20260812T155950Z-ee1c94`; its upload completed, but the
+first pending August migration failed while recording the migration ledger.
+
+**What changed**
+
+- `deploy/lib/migrations.sh` — kept the verified host-side migration and ledger row in one
+  `--single-transaction`, but moved the variable-bearing ledger `INSERT` out of a separate `psql -c`
+  argument and appended it to the same `-f -` stdin stream as the migration. PostgreSQL received the
+  literal `:'filename'` token through the old `-c` path; stdin is processed by psql and expands the
+  safely quoted `-v` values before sending SQL to PostgreSQL.
+- `tests/deploy/deploy-assistant.test.sh` — the migration harness now rejects any `-c` argument,
+  requires both migration SQL and ledger SQL in the one stdin stream, and retains the existing
+  checksum, simulated-rollback, and resume assertions.
+- `docs/{CHANGELOG,DEPLOY-ASSISTANT,MEMORY,TASKS}.md` — documented the corrected psql transport and
+  recorded that the first live acceptance run remains incomplete.
+
+**Actions outside the repo**
+
+- The user, not this agent, completed and checksum-verified the 102 MiB release upload, then resumed
+  client run `20260812T155950Z-ee1c94`. The worker created and validated
+  `./backups/pre-20260812-155950-e73ef4b-2026-08-13-040218.dump` (316 KiB), preserved row counts
+  (`profiles:3`, `user_roles:6`, `leave_requests:1`, `leave_ledger:7`, `holidays:0`,
+  `departments:5`, `leave_types:3`, `companies:1`), loaded the new tagged image without starting it,
+  and skipped the 38 recorded baseline migrations. The first August migration and ledger insert
+  were wrapped by `--single-transaction`; the ledger syntax error caused rollback, status
+  `FAILED:1`, and no app restart. The existing `latest` app remained running. No restore is indicated.
+- This agent did **not** SSH to the client, transfer a bundle, modify its database, or operate its
+  containers. Local only: an isolated temporary-table query against `bj-erp-db-1` proved psql
+  interpolates the filename/checksum/release values when the combined input is read via `-f -`.
+
+**Verification**
+
+- `/bin/bash -n` passed for every deployment and deployment-test shell script.
+- `npm run test:deploy` passed all 13 cases, including the new single-stdin/no-`-c` regression;
+  `npm run lint` and `npx tsc --noEmit` passed.
+- `npm run test:unit` passed 40 files / 254 tests. `npm run build` passed with Next.js 16.2.9 and
+  generated 40 pages. The first sandboxed build was blocked only because Turbopack could not bind
+  its internal worker port; the permitted rerun completed successfully.
+- Playwright was not rerun: no application, migration SQL, image contents, or browser behavior
+  changed. The full current-source suite had passed earlier the same day before this shell-only fix.
+- `git diff --check` passed.
+
+**State left behind**
+
+- The focused fix and documentation are committed on the local hotfix branch, then the retained
+  review branch `codex/code-review` and `main` are fast-forwarded to that commit and pushed without
+  rewriting published history.
+- Client run `20260812T155950Z-ee1c94` is terminal and must not be resumed. The existing client app
+  and test database remain available; a new update from the corrected clean `main` is required.
+
+**For the next agent**
+
+- Start a new `./deploy/bj-deploy update client`; do not reuse the failed run ID. The new run will
+  take another verified backup, skip the 38 baseline rows, atomically apply/record the three August
+  migrations, and cut over only after all health checks pass.
+
 ## 2026-08-12 — Container-safe migration runner after the resumed client update
 
 **Agent:** OpenAI Codex (GPT-5)

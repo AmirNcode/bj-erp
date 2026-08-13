@@ -56,7 +56,7 @@ FAKE_LEDGER="$TMP/fake-ledger"
 FAKE_APPLIED="$TMP/fake-applied"
 : > "$FAKE_LEDGER"; : > "$FAKE_APPLIED"
 pgexec() {
-  local args="$*" input='' filename='' checksum='' migration_file='' ledger_command='' assignment
+  local args="$*" input='' filename='' checksum='' migration_file='' assignment
   case "$args" in
     *"select count(*) from bj_deploy.schema_migrations"*) wc -l < "$FAKE_LEDGER"; return ;;
     *"to_regclass('public.profiles')"*) printf 'f\n'; return ;;
@@ -73,17 +73,20 @@ pgexec() {
           shift 2
           ;;
         -f) migration_file="${2:-}"; shift 2 ;;
-        -c) ledger_command="${2:-}"; shift 2 ;;
+        -c) return 1 ;;
         *) shift ;;
       esac
     done
     [ "$migration_file" = - ] || return 1
-    case "$ledger_command" in
+    input=$(cat)
+    case "$input" in
       *"insert into bj_deploy.schema_migrations"*) ;;
       *) return 1 ;;
     esac
-    input=$(cat)
-    [ -n "$input" ] || return 1
+    case "$input" in
+      *"select "*) ;;
+      *) return 1 ;;
+    esac
     [ "${FAKE_ATOMIC_FAIL:-0}" = 0 ] || return 1
     printf '%s\n' "$input" >> "$FAKE_APPLIED"
     printf '%s|%s\n' "$filename" "$checksum" >> "$FAKE_LEDGER"
@@ -126,7 +129,7 @@ assert_eq "$(wc -l < "$FAKE_LEDGER" | tr -d ' ')" "$before_ledger"
 assert_eq "$(wc -c < "$FAKE_APPLIED" | tr -d ' ')" "$before_applied"
 bj_apply_migrations "$TMP/migrations" test-release >/dev/null
 assert_eq "$(wc -l < "$FAKE_LEDGER" | tr -d ' ')" 3
-pass "container-stdin migration SQL and ledger row are atomic, resumable, and checksum protected"
+pass "single-stdin migration SQL and ledger row are atomic, resumable, and checksum protected"
 
 (
   mkdir -p "$TMP/known-installed"
