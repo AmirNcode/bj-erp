@@ -40,7 +40,10 @@ VERSION="${1:?usage: sudo ./update.sh <version>}"
 IMAGE_TGZ="bj-erp-app-${VERSION}.tar.gz"
 MIGRATIONS_DIR="${BJ_MIGRATIONS_DIR:-$PWD/migrations}"
 SEED_FILE="${BJ_SEED_FILE:-$PWD/sql/seed.sql}"
-BACKUP_DIR=./backups
+# Absolute: the path recorded in $BJ_RUN_DIR/backup.path is consumed by the
+# controller's rsync on the Mac, which would otherwise resolve a relative path
+# against the SSH user's home instead of this installer directory.
+BACKUP_DIR="$PWD/backups"
 LOG_FILE=./update.log
 HEALTH_RETRIES=45          # x2s = 90s. A new image's first boot runs the
                            # placeholder find+sed pass over /app (~30s+).

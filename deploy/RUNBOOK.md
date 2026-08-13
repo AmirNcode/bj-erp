@@ -133,6 +133,14 @@ unchanged, create a new guarded run without uploading it again:
 This still takes a new backup and runs the normal migration, cutover, health,
 architecture, row-count, and off-server backup checks.
 
+If the server finished but the Mac did not record the backup copy, resume the
+**succeeded** run. That only re-reads the log and downloads the verified dump —
+no worker, migration, or container operation runs:
+
+```bash
+./deploy/bj-deploy resume RUN_ID
+```
+
 One-time setup on a new machine (SSH key + `bj` host alias):
 
 ```bash

@@ -231,16 +231,15 @@ monitor_remote_run() {
 }
 
 fetch_remote_backup() {
-  local run_id="$1" directory="$BACKUP_ROOT/client/$run_id" path expected file actual
+  local run_id="$1" directory="$BACKUP_ROOT/client/$run_id" recorded path expected file actual
   remote_command "$(remote_base_command "test -s '.bj-deploy/runs/$run_id/backup.path' && test -s '.bj-deploy/runs/$run_id/backup.sha256'")" \
     >/dev/null 2>&1 \
     || { bj_fail "remote update has no verified backup metadata; success cannot be trusted"; return 1; }
-  path=$(remote_command "$(remote_base_command "cat '.bj-deploy/runs/$run_id/backup.path'")" | tr -d '\r')
+  recorded=$(remote_command "$(remote_base_command "cat '.bj-deploy/runs/$run_id/backup.path'")" | tr -d '\r')
   expected=$(remote_command "$(remote_base_command "cat '.bj-deploy/runs/$run_id/backup.sha256'")" | tr -d '[:space:]')
-  case "$path" in
-    "$BJ_REMOTE_DIR"/backups/*) ;;
-    *) bj_fail "server returned an unexpected backup path: $path"; return 1 ;;
-  esac
+  # Runs made before update.sh recorded an absolute path stored the installer
+  # directory-relative form; both resolve to the same guarded location.
+  path=$(bj_resolve_remote_backup_path "$BJ_REMOTE_DIR" "$recorded") || return 1
   case "$expected" in *[!0-9a-f]*|'') bj_fail "server returned an invalid backup checksum"; return 1 ;; esac
   mkdir -p "$directory"; chmod 700 "$directory"
   remote_rsync "${BJ_SSH_DEST}:${path}" "$directory/"

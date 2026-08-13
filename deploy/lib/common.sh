@@ -38,6 +38,40 @@ bj_validate_port() {
     || { bj_fail "port must be from 1 to 65535"; return 1; }
 }
 
+bj_resolve_remote_backup_path() {
+  # Maps the backup path a server recorded for a run onto the exact absolute
+  # path the controller is willing to download, or refuses it.
+  #
+  #   bj_resolve_remote_backup_path /home/user/installer ./backups/pre-x.dump
+  #     -> /home/user/installer/backups/pre-x.dump
+  #
+  # update.sh runs with the installer directory as its working directory, so
+  # older runs recorded a directory-relative path. rsync would resolve that
+  # against the SSH user's home instead, and the file name reaches a remote
+  # shell, so the name is reduced to a single safe component: no traversal, no
+  # nesting, no leading dash, no shell metacharacter, no absolute path outside
+  # the run's own backup directory.
+  local remote_dir="${1:-}" recorded="${2:-}" name
+  case "$remote_dir" in
+    /*) ;;
+    *) bj_fail "remote directory must be an absolute path"; return 1 ;;
+  esac
+  remote_dir="${remote_dir%/}"
+  case "$recorded" in
+    "$remote_dir"/backups/*) name="${recorded#"$remote_dir"/backups/}" ;;
+    ./backups/*)             name="${recorded#./backups/}" ;;
+    backups/*)               name="${recorded#backups/}" ;;
+    *) bj_fail "server returned an unexpected backup path: $recorded"; return 1 ;;
+  esac
+  case "$name" in
+    ''|.|..|-*|*/*|*[!A-Za-z0-9._-]*)
+      bj_fail "server returned an unsafe backup file name: $recorded"; return 1 ;;
+  esac
+  [ "${#name}" -le 200 ] \
+    || { bj_fail "server returned an over-long backup file name"; return 1; }
+  printf '%s/backups/%s\n' "$remote_dir" "$name"
+}
+
 bj_hash_file() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'

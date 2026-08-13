@@ -323,6 +323,133 @@ grep -q 'chown "$owner" backups' "$ROOT/deploy/remote-job.sh" \
   || fail "reset backup directory is not readable by the transfer owner"
 pass "remote workers isolate SQL inputs and preserve backup transfer access"
 
+# A successful client update recorded its backup with an installer-relative
+# path, which the controller refused after the deploy had already succeeded.
+# The path is normalized onto the configured remote backup directory, and the
+# file name is still reduced to one safe component before it reaches rsync and
+# the remote shell.
+REMOTE_DIR=/opt/fake-installer
+RECORDED_RELATIVE='./backups/pre-20260813-004921-11373fe-2026-08-13-053754.dump'
+assert_eq \
+  "$(bj_resolve_remote_backup_path "$REMOTE_DIR" "$RECORDED_RELATIVE")" \
+  "$REMOTE_DIR/backups/pre-20260813-004921-11373fe-2026-08-13-053754.dump"
+assert_eq \
+  "$(bj_resolve_remote_backup_path "$REMOTE_DIR" "backups/pre-release.dump")" \
+  "$REMOTE_DIR/backups/pre-release.dump"
+assert_eq \
+  "$(bj_resolve_remote_backup_path "$REMOTE_DIR" "$REMOTE_DIR/backups/pre-reset-run-1.dump")" \
+  "$REMOTE_DIR/backups/pre-reset-run-1.dump"
+assert_eq \
+  "$(bj_resolve_remote_backup_path "$REMOTE_DIR/" "$REMOTE_DIR/backups/pre-release.dump")" \
+  "$REMOTE_DIR/backups/pre-release.dump"
+for unsafe in \
+  '' \
+  '.' \
+  './backups' \
+  './backups/' \
+  './backups/.' \
+  './backups/..' \
+  './backups/../../etc/passwd' \
+  './backups/../secrets.dump' \
+  './backups/nested/pre-release.dump' \
+  './backups/pre release.dump' \
+  './backups/pre;rm -rf ~.dump' \
+  './backups/$(id).dump' \
+  './backups/`id`.dump' \
+  './backups/-e.dump' \
+  '/etc/passwd' \
+  '/opt/other/backups/pre-release.dump' \
+  '../backups/pre-release.dump' \
+  'backups' \
+  'pre-release.dump'
+do
+  if bj_resolve_remote_backup_path "$REMOTE_DIR" "$unsafe" >/dev/null 2>&1; then
+    fail "unsafe backup path was accepted: '$unsafe'"
+  fi
+done
+if bj_resolve_remote_backup_path 'relative/installer' './backups/pre-release.dump' >/dev/null 2>&1; then
+  fail "a relative remote directory was accepted as a backup root"
+fi
+grep -q 'BACKUP_DIR="$PWD/backups"' "$ROOT/deploy/update.sh" \
+  || fail "update.sh no longer records a canonical absolute backup path"
+grep -q 'bj_resolve_remote_backup_path "$BJ_REMOTE_DIR"' "$ROOT/deploy/bj-deploy" \
+  || fail "the controller no longer resolves the recorded backup path"
+pass "recorded backup paths normalize onto the remote backup directory and reject everything else"
+
+# Resuming an already SUCCEEDED update must only collect the missing evidence:
+# it may read status/logs and download the verified backup, and must not start
+# a worker, rerun migrations, or touch containers. Exercised against fake ssh
+# and rsync so no client server is contacted.
+RESUME_REPO="$TMP/resume-repo"
+RESUME_RUN=20260813T020320Z-901150
+RESUME_DUMP=pre-20260813-004921-11373fe-2026-08-13-053754.dump
+SERVER_ROOT="$TMP/fake-server"
+mkdir -p \
+  "$RESUME_REPO/deploy/lib" \
+  "$RESUME_REPO/.bj-deploy/runs/$RESUME_RUN" \
+  "$SERVER_ROOT$REMOTE_DIR/backups" \
+  "$TMP/resume-bin"
+cp "$ROOT/deploy/bj-deploy" "$RESUME_REPO/deploy/"
+cp "$ROOT/deploy/lib/"*.sh "$RESUME_REPO/deploy/lib/"
+chmod +x "$RESUME_REPO/deploy/bj-deploy"
+cat > "$RESUME_REPO/.bj-deploy/runs/$RESUME_RUN/manifest.env" <<EOF
+RUN_ID=$RESUME_RUN
+ACTION=update
+VERSION=release-existing
+TARGET=client
+EOF
+printf 'verified server dump\n' > "$SERVER_ROOT$REMOTE_DIR/backups/$RESUME_DUMP"
+printf '%s\n' "$RECORDED_RELATIVE" > "$TMP/fake-backup-path"
+bj_hash_file "$SERVER_ROOT$REMOTE_DIR/backups/$RESUME_DUMP" > "$TMP/fake-backup-sha"
+cat > "$TMP/resume-bin/ssh" <<'EOF'
+#!/bin/sh
+cmd=''
+while [ "$#" -gt 0 ]; do cmd="$1"; shift; done
+printf '%s\n' "$cmd" >> "$FAKE_SSH_LOG"
+case "$cmd" in
+  *"remote-job.sh status"*) printf 'SUCCEEDED\n' ;;
+  *"remote-job.sh logs"*)   printf 'RESULT=SUCCEEDED\n' ;;
+  *"test -s '.bj-deploy/runs/"*) exit 0 ;;
+  *"cat '.bj-deploy/runs/"*"/backup.path'")   cat "$FAKE_BACKUP_PATH" ;;
+  *"cat '.bj-deploy/runs/"*"/backup.sha256'") cat "$FAKE_BACKUP_SHA" ;;
+  *) printf 'unexpected fake ssh command: %s\n' "$cmd" >&2; exit 1 ;;
+esac
+EOF
+cat > "$TMP/resume-bin/rsync" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >> "$FAKE_RSYNC_LOG"
+source='' destination=''
+while [ "$#" -gt 0 ]; do source="$destination"; destination="$1"; shift; done
+case "$source" in
+  bj:/*) ;;
+  *) printf 'unexpected fake rsync source: %s\n' "$source" >&2; exit 1 ;;
+esac
+cp "$FAKE_SERVER_ROOT${source#bj:}" "$destination"
+EOF
+chmod +x "$TMP/resume-bin/ssh" "$TMP/resume-bin/rsync"
+: > "$TMP/resume-ssh.log"; : > "$TMP/resume-rsync.log"
+(
+  cd "$RESUME_REPO"
+  PATH="$TMP/resume-bin:$PATH" BJ_REMOTE_DIR="$REMOTE_DIR" \
+    FAKE_SSH_LOG="$TMP/resume-ssh.log" FAKE_RSYNC_LOG="$TMP/resume-rsync.log" \
+    FAKE_BACKUP_PATH="$TMP/fake-backup-path" FAKE_BACKUP_SHA="$TMP/fake-backup-sha" \
+    FAKE_SERVER_ROOT="$SERVER_ROOT" \
+    ./deploy/bj-deploy resume "$RESUME_RUN" > "$TMP/resume.log" 2>&1
+) || fail "resuming a succeeded update could not collect its backup: $(cat "$TMP/resume.log")"
+FETCHED="$RESUME_REPO/backups/deploy-assistant/client/$RESUME_RUN/$RESUME_DUMP"
+cmp -s "$FETCHED" "$SERVER_ROOT$REMOTE_DIR/backups/$RESUME_DUMP" \
+  || fail "the resumed run did not download the verified server backup"
+assert_eq "$(cat "$RESUME_REPO/backups/deploy-assistant/client/$RESUME_RUN/backup.sha256")" \
+  "$(cat "$TMP/fake-backup-sha")"
+assert_eq "$(stat -f '%Lp' "$FETCHED" 2>/dev/null || stat -c '%a' "$FETCHED")" 600
+assert_eq "$(wc -l < "$TMP/resume-rsync.log" | tr -d ' ')" 1
+grep -q "bj:$REMOTE_DIR/backups/$RESUME_DUMP" "$TMP/resume-rsync.log" \
+  || fail "the backup was not fetched from the absolute remote backup directory"
+if grep -Eq 'remote-job\.sh (start|start-reset|__run)|update\.sh|docker|pg_restore' "$TMP/resume-ssh.log"; then
+  fail "resuming a succeeded run performed a deployment or database operation"
+fi
+pass "a succeeded update resumes into backup evidence only, from a relative recorded path"
+
 grep -q "status: 'ok'" "$ROOT/app/api/health/route.ts" \
   || fail "health route does not expose the expected contract"
 grep -q "Cache-Control.*no-store" "$ROOT/app/api/health/route.ts" \

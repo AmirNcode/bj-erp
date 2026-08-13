@@ -190,6 +190,11 @@ If a reset stopped at `BACKUP_READY`, resume downloads/verifies the backup, asks
 and admin password, then continues the same run. The same run ID cannot execute twice. A global
 server lock rejects overlapping mutating jobs.
 
+Resuming a run the server already marked `SUCCEEDED` collects the missing evidence only: it prints
+the last 120 log lines and downloads the verified backup (plus the root certificate after a reset).
+It never starts a worker, applies migrations, or recreates containers — so it is the correct command
+when the deploy itself finished but the local record did not.
+
 ## Backups and private state
 
 Mac backup copies:
@@ -201,6 +206,12 @@ backups/deploy-assistant/client/<run-id>/
 
 Mac run metadata is under ignored `.bj-deploy/`; server state is under
 `/home/behsazan/bj-erp-installer/.bj-deploy/`.
+
+The server records the dump it took in `.bj-deploy/runs/<run-id>/backup.path` as an absolute path
+under `<installer-dir>/backups/`. The Mac accepts that form and the older installer-relative
+`./backups/<name>` form, resolving both against the configured `BJ_REMOTE_DIR`; the file name must
+be a single component of `A-Za-z0-9._-`, so traversal, nesting, a leading dash, a shell
+metacharacter, or any path outside that one directory is refused and nothing is downloaded.
 
 Backups contain employee records and password hashes. Files are mode `600`, directories mode `700`,
 and both roots are Git-ignored. Move them only to approved encrypted storage.

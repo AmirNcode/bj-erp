@@ -43,6 +43,14 @@ pending a tagged release; semantic versioning starts at the first tag.
   already exported the old value, and Compose correctly gave that stale shell value precedence.
   Cutover and rollback now update the file and exported environment together, so the requested image
   tag is the one recreated and health-checked.
+- Fixed the last step of that same client update: the server records the dump it took relative to
+  the installer directory, but the Mac accepted only the absolute form, so a completed, health- and
+  row-count-verified deployment ended with `server returned an unexpected backup path`. `update.sh`
+  now records a canonical absolute path, and the controller resolves either form against the
+  configured remote directory before downloading. The check was tightened rather than relaxed: the
+  file name must be a single `A-Za-z0-9._-` component, so traversal, nesting, a leading dash, shell
+  metacharacters, and any location outside that one backup directory are refused. Resuming a run the
+  server already marked `SUCCEEDED` now reliably collects only the missing backup evidence.
 - Added `retry-uploaded FAILED_RUN_ID` for this bounded recovery case. It never reopens a terminal
   run: it creates a new guarded update, accepts only an unchanged migration/seed set and matching
   local/server artifact checksums, takes a new verified backup, and reuses the existing large upload.

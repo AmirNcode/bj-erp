@@ -78,6 +78,85 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-13 — Backup-path contract fix after the client update actually succeeded
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `fdc71ab` (= `origin/main`, `codex/code-review`,
+`origin/codex/code-review`), clean tree
+**Trigger:** `./deploy/bj-deploy retry-uploaded 20260813T004921Z-b987f2` created run
+`20260813T020320Z-901150`, which **succeeded** on the server — image switched, app/db/auth health
+passed, all 41 migrations already applied, row counts identical before and after — and then the Mac
+controller exited with
+`ERROR: server returned an unexpected backup path: ./backups/pre-20260813-004921-11373fe-2026-08-13-053754.dump`.
+
+**What was found**
+
+- `deploy/update.sh:43` set `BACKUP_DIR=./backups` and wrote that directory-relative
+  `BACKUP_FILE` verbatim into `$BJ_RUN_DIR/backup.path` (`deploy/update.sh:129`).
+- `fetch_remote_backup()` in `deploy/bj-deploy:240` accepted only `"$BJ_REMOTE_DIR"/backups/*`, so it
+  refused the server's own legitimate record after the deployment had already completed.
+- The relative form is not merely cosmetic: `remote_rsync "${BJ_SSH_DEST}:${path}"` resolves a
+  relative remote path against the SSH user's **home**, not the installer directory, so a plain
+  widening of the pattern would have fetched from the wrong place.
+- `remote-job.sh:97` (`perform_backup`, the reset path) already recorded `$PWD/backups/...`, which is
+  why only the update path was affected.
+
+**What changed**
+
+- `deploy/lib/common.sh` — added `bj_resolve_remote_backup_path REMOTE_DIR RECORDED_PATH`. It accepts
+  `<remote_dir>/backups/<name>`, `./backups/<name>`, and `backups/<name>`, and prints the single
+  canonical absolute path. `<name>` must be one path component of `A-Za-z0-9._-`, so `''`, `.`, `..`,
+  nesting, leading `-`, spaces, `;`, `$(…)`, backticks, over-long names, arbitrary absolute paths,
+  and any other remote directory are refused. A relative `REMOTE_DIR` is refused too.
+- `deploy/bj-deploy:233` — `fetch_remote_backup()` resolves the recorded value through that helper
+  before rsync. The validation is strictly tighter than the old prefix glob, which passed any bytes
+  after `backups/` straight into a remote shell.
+- `deploy/update.sh:43` — `BACKUP_DIR="$PWD/backups"` (the script already `cd`s to the installer
+  directory), so future runs record a canonical absolute path.
+- `tests/deploy/deploy-assistant.test.sh` — two new named cases (17 total). One is a 19-entry
+  accept/reject matrix over the resolver, including the exact path from this incident, plus contract
+  greps on both scripts. The other builds a fake repo with fake `ssh`/`rsync` on `PATH` and runs
+  `./deploy/bj-deploy resume` against a `SUCCEEDED` update whose `backup.path` holds the relative
+  form: it asserts the dump is fetched from the absolute remote location, the checksum and `600`
+  mode are recorded, rsync ran exactly once, and the ssh transcript contains no
+  `remote-job.sh start`/`__run`, `update.sh`, `docker`, or `pg_restore`.
+- `docs/{CHANGELOG,DEPLOY-ASSISTANT}.md` and `deploy/RUNBOOK.md` — documented the backup-path
+  contract and that resuming a `SUCCEEDED` run collects evidence only.
+
+**Actions outside the repo**
+
+- **None.** No SSH, no read-only probe, no transfer, no database or container operation, no restore,
+  no migration, no deployment. The failure was reproduced entirely locally against fake `ssh`/`rsync`.
+
+**Verification**
+
+- Mutation check: a fake repo running `git show HEAD:deploy/bj-deploy` + `HEAD:deploy/lib/*.sh`
+  against the same fixtures reproduced the incident error verbatim
+  (`ERROR: server returned an unexpected backup path: ./backups/pre-x.dump`); the fixed controller
+  downloads and verifies the same dump. The new test is a genuine regression test, not a tautology.
+- `/bin/bash -n` passed for every deployment and deployment-test shell script.
+- `npm run test:deploy` — all 17 named cases passed. `git diff --check` passed.
+- `npm run lint`, `npx tsc --noEmit` passed. `npm run test:unit` — 40 files / 254 tests passed.
+- `npm run build` passed (exit 0), 40 pages including `/api/health`.
+- Playwright not rerun: no application, migration SQL, database contract, or browser behavior changed.
+
+**State left behind**
+
+- Client run `20260813T020320Z-901150` remains `SUCCEEDED` on the server and is **not** to be
+  redeployed. Its verified dump
+  `<installer>/backups/pre-20260813-004921-11373fe-2026-08-13-053754.dump` is still only on the
+  server; the local copy under `backups/deploy-assistant/client/<run-id>/` is still missing.
+- The client is running `20260813-004921-11373fe` with all 41 migrations applied.
+
+**For the next agent**
+
+- To finish the local record, run `./deploy/bj-deploy resume 20260813T020320Z-901150`. Read from the
+  implementation: the local manifest has `ACTION=update`, so the `SUCCEEDED` branch
+  (`deploy/bj-deploy:738`) prints the last 120 log lines and calls `fetch_remote_backup` — nothing
+  else. It does not start a worker, run migrations, or touch containers.
+- Do not resume `20260811T180522Z-519c4f`, `20260812T052250Z-291168`, `20260812T155950Z-ee1c94`, or
+  `20260813T004921Z-b987f2`; all are terminal.
+
 ## 2026-08-12 — Correct app-tag cutover and reuse the verified failed-run upload
 
 **Agent:** OpenAI Codex (GPT-5)
