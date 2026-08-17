@@ -139,13 +139,26 @@ Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
 - ☑ `deploy/setup-release.sh` — one-time SSH key + `bj` alias + connection multiplexing
 - ☑ `deploy/release.sh` — gates, amd64 cross-build + architecture verification, resumable
   ship, remote trigger, pre-deploy backup copied back to the Mac
-- ☑ `deploy/update.sh` — lock, preflight, verified backup, row-count assertions, migration
-  replay, single-container cutover, health check, automatic rollback, retention.
-  **Caveat (measured 2026-07-31): the migrations are NOT idempotent**, so the replay aborts on
-  file #1 against a populated database — safely, but the upgrade does not happen. See below.
+- ☑ `deploy/update.sh` — lock, preflight, verified backup, row-count assertions, pending-only
+  ledgered migrations, single-container cutover, health check, automatic rollback, retention
+- ☑ **Migration replay resolved (2026-08-13).** The 2026-07-31 caveat — historical migrations
+  are not idempotent, so a blind replay aborted on file #1 (`20260623120001_core.sql:11`,
+  bare `create type public.app_role`) against a populated database — no longer applies. Every
+  path (`install.sh:175`, `update.sh:156`, `bj-deploy:591`) goes through `bj_apply_migrations`,
+  which consults the `bj_deploy.schema_migrations` ledger and skips applied files by checksum.
+  Each migration and its ledger row share one `--single-transaction`, so a mid-run failure
+  rolls back that file only and leaves earlier ones recorded and resumable — the old
+  all-or-nothing repair risk is gone. Proven live on the client: 41 consecutive skips.
 - ☑ `RUNBOOK.md` update section rewritten; backup command corrected to `supabase_admin`
-- ☐ **Run the acceptance test** (plan Task 5): first real release, verify row counts and the
-  volume timestamp are unchanged, confirm login survives, rehearse the rollback drill
+- ☑ **Acceptance test run (2026-08-13)**, run `20260813T020320Z-901150`: row counts identical
+  before and after (profiles 3, user_roles 6, leave_requests 1, leave_ledger 7, holidays 0,
+  departments 5, leave_types 3, companies 1), app/db/auth health green, pre-deploy dump taken,
+  `pg_restore -l`-proven, and copied off-server
+- ☐ Rehearse the rollback drill (the one part of plan Task 5 still unexercised). Cheapest now,
+  while the client database holds only throwaway test data
+- ☐ **Client server disk headroom** — 6.0 GiB free of 29 GiB (79% used, measured 2026-08-13)
+  against the assistant's 5 GiB preflight gate. One or two more release cycles and
+  `client_release_preflight` will start refusing. Prune old images/backups on the server
 - ☐ Scheduled off-server backups between releases (cron `pg_dump` + periodic pull)
 - ☐ Enter the real 1404–1405 Iranian holidays via `/manage/settings`; import the client's
   employee roster (CSV)

@@ -25,6 +25,7 @@ type Labels = {
   noTeam: string;
   requestDaily: string;
   requestHourly: string;
+  requestDailyErrand: string;
   requestErrand: string;
   errandBadge: string;
   coveringTitle: string;
@@ -81,9 +82,11 @@ export function HomeBoard({
 
   return (
     <div className="space-y-4" data-testid="home-board">
-      {/* One entry point per paper form: BJ-F 50208 daily + hourly (D13), and
-          BJ-F 50207 the hourly work errand (2026-07-30 spec, D4). */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* One entry point per request type, in the same order as the request
+          screen's tab strip: BJ-F 50208 daily + hourly (D13), the daily work
+          errand (2026-08-05 spec), and BJ-F 50207 the hourly work errand
+          (2026-07-30 spec, D4). */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Link
           href={`/${locale}/request`}
           data-testid="home-request-daily"
@@ -97,6 +100,13 @@ export function HomeBoard({
           className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
         >
           {labels.requestHourly}
+        </Link>
+        <Link
+          href={`/${locale}/request/daily-errand`}
+          data-testid="home-request-daily-errand"
+          className="rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-center text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+        >
+          {labels.requestDailyErrand}
         </Link>
         <Link
           href={`/${locale}/request/errand`}

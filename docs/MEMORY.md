@@ -168,6 +168,19 @@ the selected tag in deployment tests. A terminal failed run stays immutable; `re
 creates a new run and may reuse the large artifact only after matching local/server SHA-256 plus
 unchanged migration and seed inputs.
 
+A filesystem path recorded by one machine and consumed by another must be canonical at the point it
+is written. `update.sh` recorded its verified dump as `./backups/<name>`, relative to the installer
+directory it had `cd`-ed into, and the Mac's `fetch_remote_backup` accepted only the absolute form —
+so a client update that had already switched the image, passed every health check, and preserved all
+row counts died on its final local step. Widening the controller's pattern alone would have been
+worse than the bug: `rsync user@host:relative/path` resolves against the SSH user's **home**, not the
+working directory of whatever wrote the path, so it would have silently fetched from the wrong place.
+Record absolute, and normalize on read. When such a value crosses into `rsync`/`ssh` it reaches a
+remote shell, so validate it as a whitelist rather than a prefix: `bj_resolve_remote_backup_path`
+reduces the file name to one `A-Za-z0-9._-` component, which is what actually stops traversal,
+nesting, a leading dash, and `$(…)`. A prefix glob like `"$DIR"/backups/*` looks like validation but
+passes every byte after the slash straight through.
+
 Detached worker status must come from the child action's real exit code. Bash disables `set -e`
 inside a function invoked on the left of `||`; this once allowed a failed `update.sh` disk preflight
 to continue into `record_installed_state` and end as `SUCCEEDED`. Run mutating actions in an

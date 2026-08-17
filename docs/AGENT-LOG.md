@@ -78,6 +78,118 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-13 (later) — Client deployment record closed; backup is off-server
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `f4bed65` (= `origin/main` and both review refs), clean tree
+**Trigger:** Completing the previous entry — the user ran the resume command it recommended.
+
+**Actions outside the repo**
+
+- The user ran `./deploy/bj-deploy resume 20260813T020320Z-901150` against the client. With the
+  fixed path contract it replayed the stored `job.log` and downloaded the verified dump. **No
+  deployment occurred**: the printed banner is the original run's log
+  (`STARTED_AT=2026-08-13T02:07:52Z`, `FINISHED_AT=02:08:52Z`), its rollback line still names the
+  pre-cutover `APP_VERSION=latest`, the backup filename is the original `…-053754.dump`, and rsync
+  transferred exactly one file. No worker, migration, container, or database operation ran.
+
+**Verification**
+
+- `backups/deploy-assistant/client/20260813T020320Z-901150/pre-20260813-004921-11373fe-2026-08-13-053754.dump`
+  — 330681 bytes, mode `600`, directory `700`. Recorded and recomputed SHA-256 both
+  `32bd9bc8f86bdc41713bb8f6072d7f91d24bb0f48d78a544912d1162e2893d59`. The server had already proved
+  the archive with `pg_restore -l` before the deploy; `pg_restore` is not on this Mac's PATH.
+- `git status --porcelain` empty; `main` still at `f4bed65`.
+
+**State left behind**
+
+- Client is live on `20260813-004921-11373fe` with all 41 migrations applied and row counts
+  unchanged (profiles 3, user_roles 6, leave_requests 1, leave_ledger 7, holidays 0, departments 5,
+  leave_types 3, companies 1). The pre-deploy dump now exists off-server. This closes the open item
+  in the entry below.
+- This log entry is uncommitted at the time of writing.
+
+**For the next agent**
+
+- The backup copy holds employee records and password hashes. `backups/` is Git-ignored; move it
+  only to approved encrypted storage.
+- Still open from earlier sessions: no scheduled off-server backups **between** releases.
+
+## 2026-08-13 (later still) — "Deploy the latest update": nothing to deploy; replay landmine already closed
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `f4bed65`, tree dirty only with the entry above
+**Trigger:** User asked to deploy the latest update to the client, and (after being shown there was
+none) chose a read-only health check plus work on the deferred migration-replay landmine.
+
+**What was found — no deployment was needed**
+
+- The client runs the tree of `11373fe`. `git diff --name-only 11373fe..main` touches only
+  `deploy/`, `tests/deploy/`, and `docs/` — **zero** changes under `app/`, `components/`, `lib/`,
+  `i18n/`, `messages/`, `supabase/`, `public/`, `next.config.ts`, `proxy.ts`, `package*.json`. The
+  repo has 41 migrations and the client has 41 applied. An `update` would have rebuilt a
+  byte-identical image and re-skipped every migration.
+- **The migration-replay landmine recorded on 2026-07-31 is already closed**, by the 2026-08-06
+  ledger work rather than by anything this session did. Every migration path —
+  `install.sh:175`, `update.sh:156`, `bj-deploy:591` — calls `bj_apply_migrations`, which consults
+  `bj_deploy.schema_migrations` and skips applied files by checksum, so
+  `20260623120001_core.sql:11` never re-executes. No `for f in migrations/*.sql` loop remains; the
+  only other `psql -f` is `bootstrap_admin.sql`, gated by `ADMIN_EXISTS`. The old all-or-nothing
+  worry is also gone: each migration and its ledger row share one `--single-transaction`, so a
+  mid-run failure rolls back that file alone and leaves earlier ones recorded and resumable.
+- **Process note:** two greps early in this session appeared to show `install.sh` still using a bare
+  replay loop and the docs still claiming idempotency. Both were wrong — the shell's working
+  directory had persisted into the linked worktree
+  `.claude/worktrees/peaceful-williams-9c1cf9` (checked out at `cce7b16`, an ancestor of `main`)
+  from an earlier `cd`, so they read old file contents at misleading line numbers. Re-run from the
+  repo root they contradict themselves. **After `cd`-ing into a worktree, `cd` back before grepping
+  or you will "confirm" a bug that was fixed weeks ago.**
+- That same worktree holds uncommitted app work not on `main`: `EmployeesTable.tsx` +
+  `manage/employees/page.tsx` move the bulk-password-reset dialog strings to client-side
+  `useTranslations` so `confirmBody` receives its `{count}` (replacing main's `.raw()` workaround),
+  plus a new `tests/unit/employees-table-regen.test.tsx`. The user chose not to ship it this
+  session. It is the only application change not on the client.
+
+**What changed**
+
+- `docs/TASKS.md` — replaced the 2026-07-31 "migrations are NOT idempotent, replay aborts on file
+  #1" caveat with the resolved state; marked the release-pipeline acceptance test done with its
+  measured row counts; added the unexercised rollback drill and a new client-disk item.
+- `docs/MEMORY.md` — added the durable lesson behind the backup-path fix: record cross-machine
+  paths canonically, because `rsync user@host:relative/path` resolves against the SSH user's home,
+  and validate such values as a whitelisted single component rather than a prefix glob.
+
+**Actions outside the repo**
+
+- One read-only SSH probe, authorized by the user in this session, mirroring `client_doctor`'s
+  non-sudo command: `hostname`/`whoami`/`uname -m`, `command -v docker|rsync|flock|curl`,
+  `docker compose version`, `df -h`. Result: `behsazan-virtual-machine`, `x86_64`, Docker present,
+  Compose v5.3.1, rsync/flock/curl present, **`/dev/sda3` 29 GiB total, 22 GiB used, 6.0 GiB free
+  (79%)**. Nothing was written, no sudo, no containers touched.
+- `sudo ./remote-job.sh stack-status` (the rest of `doctor client`) was deliberately **not** run: it
+  needs a TTY password this agent cannot supply. Run `./deploy/bj-deploy doctor client` by hand for
+  `docker compose ps`.
+
+**Verification**
+
+- Claims above come from `git diff --name-only 11373fe..main`, `grep` over `deploy/` re-run from the
+  repo root, and reading `deploy/lib/migrations.sh:266-292`. No test suite was re-run: this session
+  changed only Markdown.
+
+**State left behind**
+
+- No code changed. `docs/{AGENT-LOG,TASKS,MEMORY}.md` are modified and **uncommitted**; `main` is
+  still `f4bed65`. A client release requires a clean tree (`git_release_guard`), so these must be
+  committed before any future deploy.
+
+**For the next agent**
+
+- **Client disk is the next thing to break.** 6.0 GiB free against `CLIENT_MIN_FREE_GB=5`;
+  `client_release_preflight` refuses below that. `update.sh` already keeps only 3 images and 14
+  backups, so the excess is probably older untagged images — prune before the next release.
+- The `20260813-004921-11373fe` image is what the client runs; do not assume `latest` means anything
+  on that server.
+
 ## 2026-08-13 — Backup-path contract fix after the client update actually succeeded
 
 **Agent:** Claude Opus 5 via Claude Code

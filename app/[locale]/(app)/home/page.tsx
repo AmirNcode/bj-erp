@@ -118,6 +118,7 @@ async function HomeBoardData({
     coveringTitle: tRepl('coveringTitle'),
     coveringFor: tRepl('coveringFor'),
     requestHourly: t('requestHourly'),
+    requestDailyErrand: t('requestDailyErrand'),
     requestErrand: t('requestErrand'),
     errandBadge: tErrand('badge'),
     ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
