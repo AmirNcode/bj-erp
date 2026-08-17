@@ -72,12 +72,16 @@ type Props = {
     selectMgr: string;
     noneOption: string;
     allocTitle: string;
+    allocHint: string;
     allocWarn: string;
     policyTitle: string;
     policyHint: string;
     policyRate: string;
+    policyRateHint: string;
     policyAnnualCap: string;
+    policyAnnualCapHint: string;
     policyCarryCap: string;
+    policyCarryCapHint: string;
     policyWarn: string;
   };
 };
@@ -404,7 +408,10 @@ export function NewEmployeeForm({
               className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
               data-testid="alloc-section"
             >
-              <span className="block text-sm font-semibold">{labels.allocTitle}</span>
+              <div>
+                <span className="block text-sm font-semibold">{labels.allocTitle}</span>
+                <p className="mt-1 text-sm text-muted-foreground">{labels.allocHint}</p>
+              </div>
               {leaveTypes.map((type) => {
                 const slug = leaveTypeSlug(type);
                 const label = locale === 'fa' ? type.name_fa : type.name_en ?? type.name_fa;
@@ -456,8 +463,15 @@ export function NewEmployeeForm({
                             type.default_accrual_minutes_per_month,
                             hoursPerDay
                           )}
+                          aria-describedby={`policy_rate_hint_${type.id}`}
                           data-testid={`policy-rate-${slug}`}
                         />
+                        <p
+                          id={`policy_rate_hint_${type.id}`}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {labels.policyRateHint}
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor={`policy_cap_${type.id}`} className="text-xs">
@@ -473,8 +487,15 @@ export function NewEmployeeForm({
                             type.default_annual_cap_minutes,
                             hoursPerDay
                           )}
+                          aria-describedby={`policy_cap_hint_${type.id}`}
                           data-testid={`policy-cap-${slug}`}
                         />
+                        <p
+                          id={`policy_cap_hint_${type.id}`}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {labels.policyAnnualCapHint}
+                        </p>
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor={`policy_carry_${type.id}`} className="text-xs">
@@ -490,8 +511,15 @@ export function NewEmployeeForm({
                             type.default_carryover_cap_minutes,
                             hoursPerDay
                           )}
+                          aria-describedby={`policy_carry_hint_${type.id}`}
                           data-testid={`policy-carry-${slug}`}
                         />
+                        <p
+                          id={`policy_carry_hint_${type.id}`}
+                          className="text-xs text-muted-foreground"
+                        >
+                          {labels.policyCarryCapHint}
+                        </p>
                       </div>
                     </div>
                   </fieldset>

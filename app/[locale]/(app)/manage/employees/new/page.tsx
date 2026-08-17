@@ -93,12 +93,16 @@ async function NewEmployeeData({ locale }: { locale: string }) {
         selectMgr: t('employees.selectMgr'),
         noneOption: t('employees.none'),
         allocTitle: t('employees.allocTitle'),
+        allocHint: t('employees.allocHint'),
         allocWarn: t('employees.allocWarn'),
         policyTitle: t('employees.policyTitle'),
         policyHint: t('employees.policyHint'),
         policyRate: t('employees.policyRate'),
+        policyRateHint: t('employees.policyRateHint'),
         policyAnnualCap: t('employees.policyAnnualCap'),
+        policyAnnualCapHint: t('employees.policyAnnualCapHint'),
         policyCarryCap: t('employees.policyCarryCap'),
+        policyCarryCapHint: t('employees.policyCarryCapHint'),
         policyWarn: t('employees.policyWarn'),
       }}
     />

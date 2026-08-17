@@ -10,6 +10,41 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Request type is a dropdown on phones, and the form says which form it is (2026-08-17)
+
+- The four request tabs (daily leave, hourly leave, daily errand, hourly errand) no longer fit
+  across a phone — they were cut off and needed sideways scrolling to reach. Below the `sm`
+  breakpoint the tab strip is replaced by a **Request type** dropdown, which opens the phone's own
+  picker.
+- The chosen form's name is now shown as a heading at the top of the form on phones, so nobody has
+  to reopen the dropdown to check which of the four forms they are filling in.
+- Tablet and desktop are unchanged: the tab strip is exactly as it was.
+
+### Add/Edit Employee explains the difference between a starting balance and monthly accrual (2026-08-17)
+
+- The leave figures on **Add Employee** were being read as "the employee's yearly entitlement",
+  when they are a **one-off starting balance** that monthly accrual then adds to. Setting 12 days
+  plus 1 day/month capped at 12 gives 24 days over a full Jalali year, not 12.
+- Renamed the section to **Starting balance — one-off** and added a note saying it is normally 0
+  for a new hire, is meant for carrying a balance over from the paper records, and is not limited
+  by the yearly cap.
+- Added a note to each accrual field: that 0 turns accrual off, that the yearly cap is the annual
+  entitlement and counts accrual only, and that the carryover cap is what survives Nowruz. Also
+  spelled out that accrual starts from the current Jalali month rather than the hire date, so
+  someone added mid-year earns only the remaining months.
+- The accrual notes appear on **Edit Employee** as well. No change to how any balance is
+  calculated, and no database migrations.
+
+### Daily work errand reachable from the home board (2026-08-17)
+
+- Added a **Daily errand request** shortcut to the home board, alongside daily leave, hourly leave,
+  and hourly errand. The daily work errand form shipped on 2026-08-06 but was reachable only
+  through the tab strip on the request screen, so people looking at the home board concluded the
+  feature was missing.
+- The four shortcuts now appear in the same order as the request-screen tabs, and wrap two-by-two
+  on phones instead of being squeezed into one row.
+- Deployed to the client's server as `20260817-042022-faf3305`. No database migrations.
+
 ### Guided local and production deployment assistant (2026-08-06)
 
 - Added `./deploy/bj-deploy`, an interactive and command-line assistant for local ARM64 and client

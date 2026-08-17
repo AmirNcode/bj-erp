@@ -78,6 +78,234 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-17 (later) — Request tabs become a dropdown on phones; everything committed and pushed
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `faf3305`, carrying the uncommitted Add/Edit Employee wording
+work from the entry below plus pre-existing staged doc updates for the daily-errand home shortcut
+**Trigger:** The four request tabs are cut off on a phone and need horizontal scrolling. Amir asked
+what to do; I proposed a 2×2 grid, a segmented block, and shortened labels, and mocked all three at
+375px. He rejected all three as "clunky and unpolished" and specified a dropdown for mobile only,
+plus the chosen form's name at the top of the form. Then: commit and push to `main`.
+
+**What changed**
+- `app/[locale]/(app)/request/_components/RequestTypeSelect.tsx` — **new** client component. A
+  native `<select>` whose options are keyed by route; `onChange` pushes through next-intl's
+  `useRouter` inside a transition, and the select is disabled while that transition is pending so a
+  second choice cannot race the first. Native on purpose: it opens the OS picker, and Playwright's
+  `selectOption` needs a real `<select>` (`lib/native-select.ts` says the same).
+- `app/[locale]/(app)/request/_components/RequestTypeTabs.tsx` — now renders both presentations and
+  swaps them at one breakpoint. `< sm`: the dropdown, then an `h2` naming the active form in a
+  `bg-card` block that supplies the card's top corners and merges into it with the same
+  `-mb-px` + `z-10` trick the tabs use. `≥ sm`: the tab strip, `hidden sm:flex`.
+- Per-tab classes went from `min-w-36 flex-none … sm:min-w-0 sm:flex-1` to plain
+  `min-w-0 flex-1`, and `overflow-x-auto` is gone. **This is not a desktop change** — at `≥ sm` the
+  `sm:` variants already won, so the computed result is identical; the mobile-only halves are now
+  dead because the nav itself is hidden there.
+- `docs/CHANGELOG.md` — entries for this and for the Add/Edit Employee wording pass.
+
+**Not changed:** no message keys (`request.tabs.*` already had every label, including `label`
+reused as both the select's visible label and the nav's `aria-label`), no form components, no
+page files, no logic, no migration.
+
+**Actions outside the repo**
+- Pushed `main` to `origin` (github.com/AmirNcode/bj-erp). Nothing run against the client's server;
+  the client is still on `20260817-042022-faf3305` and does not have any of this.
+
+**Verification**
+- `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 40 files, 254 tests passed
+  · `npm run build` succeeded, all four request routes compiled.
+- Confirmed the utilities the layout depends on are really emitted in
+  `.next/static/chunks/038r16mwki-km.css`: `sm:hidden`, `sm:flex`, `rounded-t-xl`, `border-b-card`,
+  `rounded-t-none`, `min-w-0`.
+- Visual check on a **static replica** again — I cannot log in as admin, so I generated the exact
+  class strings and the real `fa.json`/`en.json` labels into a page linked against the built CSS.
+  At 375px, fa and en: no horizontal scroll, dropdown + form-name heading, heading merges into the
+  card with no seam. At 1100px: the tab strip, unchanged. At exactly 640px the two errand labels
+  wrap to two lines inside their tabs — that was already true before this change, and tabs are
+  `items-stretch` so they stay equal height. **Not seen inside the authenticated app.**
+- `tests/e2e/errand.spec.ts:164-170` asserts on and clicks `request-tab-dailyErrand` /
+  `request-tab-errand`. Playwright runs `devices['Desktop Chrome']` (1280×720), so the strip is
+  visible and those tests should be unaffected — but that is reasoning from the config, **not a
+  run**; e2e was not executed this session.
+
+**State left behind**
+- Committed and pushed to `main`. Working tree clean.
+
+**For the next agent**
+- Two testids exist for the mobile path if e2e ever covers it: `request-type-select` and
+  `request-type-heading`. Any mobile-viewport e2e must use those, not `request-tab-*`.
+- Known cosmetic edge case, deliberately left: on `/request/hourly` when no leave type has
+  `allow_hourly`, the page renders the `hourly-unavailable` paragraph (`bg-secondary/40`) instead of
+  a card. On mobile the new white `bg-card` heading sits directly on top of it, so the two surfaces
+  do not match. Only reachable with hourly leave switched off entirely.
+
+## 2026-08-17 — Local stack brought up twice, daily-errand home shortcut added, second client deploy
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `f4bed65`, clean apart from modified `docs/` files
+**Trigger:** Amir could not open the local Docker stack, then found the daily work errand form
+missing from the home board, then deployed the fix to the client's server.
+
+**What changed**
+- `app/[locale]/(app)/home/HomeBoard.tsx:84-115` — fourth quick-action link to
+  `/request/daily-errand` (`data-testid="home-request-daily-errand"`), `requestDailyErrand` added
+  to the `Labels` type, grid `sm:grid-cols-3` → `sm:grid-cols-2 lg:grid-cols-4` so four buttons
+  wrap 2×2 on phones. The comment above the grid used to claim one entry point per paper form and
+  was wrong once the daily errand shipped.
+- `app/[locale]/(app)/home/page.tsx:121` — wires `requestDailyErrand: t('requestDailyErrand')`.
+- `messages/en.json:41`, `messages/fa.json:41` — `requestDailyErrand`
+  ("Daily errand request" / "درخواست ماموریت روزانه").
+- Committed by Amir as `faf3305`, pushed; `main` and `origin/main` are in sync.
+
+**Investigation — three separate "it's broken" reports, none of them a code bug**
+1. `https://localhost:3500` failed with `ERR_SSL_PROTOCOL_ERROR`. `deploy/caddy/Caddyfile:29`
+   serves exactly one site, `https://{$APP_HOST}`, and the gateway had `APP_HOST=192.168.2.48`, so
+   SNI `localhost` gets no certificate: `TLSv1.3 (IN), TLS alert, internal error (592)`. The right
+   URL was the IP. Nothing to fix.
+2. iPhone showed `Client sent an HTTP request to an HTTPS server.` — Safari sent plain HTTP to the
+   TLS-only port because the scheme was omitted. Reproduced with
+   `curl http://192.168.2.48:3500/` → 400 and that exact body.
+3. The "old version without the daily errand form" was **not a stale image**. Before rebuilding I
+   checked `docker exec bj-erp-app-1 ls '.next/server/app/[locale]/(app)/request/'` and the
+   `daily-errand` route was already there, built 2026-08-12 15:24 (`.next/BUILD_ID` timestamp;
+   the newer file mtimes come from the entrypoint's Supabase placeholder rewrite). The real cause
+   was the home board only ever linking three request types.
+
+**Actions outside the repo**
+- Rebuilt `bj-erp-app:local-arm64` twice and recreated only the app container each time
+  (`docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local-arm64.yml up -d
+  --no-deps --force-recreate --pull never app`). Tagged `bj-erp-app:local-arm64-rollback` first.
+  DB container and `bj-erp_db-data` untouched; row counts unchanged (17 profiles, 3 requests,
+  5 departments).
+- **Deployed to the client's server.** Run `20260817T042022Z-9f9246`, version
+  `20260817-042022-faf3305`, replacing `20260813-004921-11373fe` on `10.10.10.50:3500`.
+  The 107,157,961-byte image tarball took ~2 h at ~14 KB/s. The run then died at the remote
+  `sudo` password prompt overnight (`Shared connection to 5.201.190.184 closed.`) leaving status
+  `PREPARED`; `caffeinate -i ./deploy/bj-deploy resume 20260817T042022Z-9f9246` restarted it with
+  **no re-upload** and finished in about a minute. 41 migrations all skipped as already applied —
+  this release had none. Row counts identical before and after (profiles 3, user_roles 6,
+  leave_requests 1, leave_ledger 7, holidays 0, departments 5, leave_types 3, companies 1).
+  Backup `pre-20260817-042022-faf3305-2026-08-17-171842.dump` (324K) verified and pulled to
+  `backups/deploy-assistant/client/20260817T042022Z-9f9246/`. Server auto-removed the older image
+  `bj-erp-app:20260812-052250-d941970`.
+- Exported the local Caddy root CA to the scratchpad for iPhone trust
+  (`docker cp bj-erp-gateway-1:/data/caddy/pki/authorities/local/root.crt`). Installing it is
+  Amir's own device-settings step; not done for him.
+- **Edited `deploy/.env` (local only, gitignored): `APP_HOST`/`APP_ORIGIN` 192.168.2.48 →
+  192.168.2.70** after the Mac's DHCP lease moved, then recreated `app`, `gateway`, and `auth`.
+  The client's `.env` was not touched.
+
+**Verification**
+- `npx tsc --noEmit` exit 0; `npm run lint` clean; `npx vitest run tests/unit` **254 passed
+  (40 files)**.
+- Release image architecture checked before shipping: `docker image inspect
+  bj-erp-app:20260817-042022-faf3305 --format '{{.Architecture}}'` → `amd64`; artifact SHA-256
+  matched its recorded `.sha256` (`1faf3301248e…`).
+- New bundle inside the running container greps for `home-request-daily-errand` plus both labels.
+- Local endpoints after the IP change: `/login` **200**, `/request/daily-errand` **307 → login**,
+  `/auth/v1/health` returns GoTrue v2.170.0.
+- **e2e not run** this session, in either environment. The home board change is verified at the
+  bundle level and by the client-side deploy health check, not by a logged-in browser assertion —
+  the board sits behind login and I do not enter passwords.
+
+**State left behind**
+- `main` @ `faf3305`, pushed, client server running that version. Local stack healthy at
+  **https://192.168.2.70:3500** (note the new IP).
+- `deploy/.env` now points at 192.168.2.70. It will break again on the next DHCP change: the
+  Caddy certificate name, `NEXT_PUBLIC_SUPABASE_URL`, and GoTrue's `API_EXTERNAL_URL` all come
+  from `APP_HOST`/`APP_ORIGIN`. A DHCP reservation for the Mac would end this.
+- Rollback on the client stays available: previous image is still on the server, command printed
+  in the deploy summary.
+
+**For the next agent**
+- `./deploy/bj-deploy resume RUN_ID` genuinely resumes from `PREPARED` without re-uploading; the
+  artifact and its checksum are already on the server. Do not restart a two-hour upload.
+- Monitoring a client deploy from a phone works: `cd ~/bj-erp-installer && sudo ./remote-job.sh
+  status|logs RUN_ID`, plus `stack-status`/`stack-logs`. Run dirs are `chmod 700` and root-owned,
+  so sudo is required; the interactive gates (sudo password, backup authorization) still need the
+  Mac.
+- Before blaming a stale image for a missing feature, list the route inside the running container.
+  Twice now the image was current and the gap was elsewhere.
+
+## 2026-08-17 — Leave-balance "bug" diagnosed as a wording problem; Add/Edit Employee hints rewritten
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `faf3305`, clean tree
+**Trigger:** Amir created an employee with 12 annual / 6 sick days, a 1-day-per-month accrual
+capped at 12, and a hire date two months back. On first login the employee showed **13** annual
+and **6.5** sick. He asked why, said not to change any code, then asked for clearer wording once
+the cause was clear.
+
+**Investigation — the finding, since this will be asked again**
+Not a bug. Two independent credits stack:
+- The days field on Add Employee is a **one-off opening allocation** —
+  `NewEmployeeForm.tsx:170` → `allocateLeave` → `private.allocate_leave_impl`, which writes a
+  `leave_ledger` row with **no `period_month`** (so it is NULL).
+- The policy fields are a separate rule — `NewEmployeeForm.tsx:191` → `setEmployeeLeavePolicy`.
+
+The annual cap counts accrual rows only. `20260729130006_leave_accrual_fns.sql:120-127` joins
+`jalali_months on jm.gregorian_start = l.period_month`, so a NULL `period_month` can never match
+and the opening 12 days never consumes the cap of 12. `lib/leave/accrual.ts:74-76` says so
+explicitly, and the unit test `starts from the opening balance` locks it in (opening 2400 min +
+first accrual 480 → 2880).
+
+Why only +1 and +0.5 rather than two months' worth: `accrualStartMonth` is
+`getCurrentJalaliMonthStart()`, **not** the hire date (`employees/new/page.tsx:60`), deliberate
+per spec §6 D10. Today 2026-08-17 sits in Mordad 1405 (`2026-07-23`–`2026-08-22`,
+`20260729130001_jalali_calendar.sql:100`), so the loop's
+`gregorian_start >= accrual_start_month and <= today` window contains exactly one month. Tir
+starts `2026-06-22`, before the start month, so the back-dated hire earned nothing. Mordad was
+credited in full because pro-rating only fires when the hire date falls *inside* the month being
+accrued. It surfaced at first login because accrual is lazy — `getMyBalances` → `accrueBeforeRead`
+→ `accrue_my_leave`.
+
+Amir's follow-up read ("set the opening balances to 0 and let the cap be the annual entitlement")
+is correct, with two caveats I gave him: the first Jalali year is partial (added in Mordad → 8
+days by Nowruz, not 12), and the carryover cap decides what survives Farvardin 1 — carryover 0
+means unused annual is forfeited every Nowruz.
+
+**What changed** — wording only, approved verbatim before applying. No logic, no migration.
+- `messages/{fa,en}.json` — `allocTitle` reworded to "Starting balance — one-off"; `policyHint`
+  reworded; five new keys: `allocHint`, `policyRateHint`, `policyAnnualCapHint`,
+  `policyCarryCapHint`. The hints state the three things that actually confused him: the opening
+  balance is one-off and normally 0, accrual starts from the current Jalali month rather than the
+  hire date, and the yearly cap counts accrual only.
+- `.../employees/new/NewEmployeeForm.tsx` — `allocHint` rendered under the section title; the
+  three policy hints rendered under their inputs, wired with `aria-describedby`.
+- `.../employees/[id]/EditEmployeeForm.tsx` — same three policy hints. **The policy label keys are
+  shared between the two pages**, so rewording them changes Edit Employee too; the copy is phrased
+  to read correctly on both ("added to their current balance", "balances set by hand do not
+  count"), which is why it does not say "starting balance" — that section only exists on Add.
+- Both pages' `page.tsx` thread the new label props.
+- `docs/MEMORY.md` — new lesson recording the stacking model and the two D10 consequences.
+
+**Actions outside the repo**
+- None. No server, no database, no deploy.
+
+**Verification**
+- `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 40 files, 254 tests passed
+  · `npm run build` succeeded.
+- Visual check on a **static replica**, not the live app — I cannot log in as admin (entering
+  credentials is out of bounds for me), so I generated HTML from the actual `fa.json`/`en.json`
+  values, linked the real built CSS chunk, and screenshotted. Farsi RTL and English both render
+  correctly at desktop and at 375px; the three hints stack to one column below `sm`.
+  **These sections have not been seen inside the authenticated app.**
+- Trap worth knowing for the next agent doing this: a scratchpad replica needs
+  `<meta name="viewport" content="width=device-width, initial-scale=1">` or the mobile preset is
+  ignored and the page lays out at 980px — my first "mobile" screenshot was wrong because of it.
+
+**State left behind**
+- Uncommitted on `main`. No dev server left running.
+
+**For the next agent**
+- The underlying model is unchanged and still surprising: opening allocation + accrual = up to
+  2× the intended annual entitlement in the first year. If Amir later asks to *fix* rather than
+  document it, the options are making the annual cap count opening allocations (change the join in
+  `accrue_leave` and `planAccruals` in lockstep), or defaulting the opening field to 0.
+- `leave_types.default_annual_quota_days` still pre-fills the opening allocation field, so the
+  form's default is non-zero out of the box — that is what makes the trap easy to fall into.
+
 ## 2026-08-13 (later) — Client deployment record closed; backup is off-server
 
 **Agent:** Claude Opus 5 via Claude Code

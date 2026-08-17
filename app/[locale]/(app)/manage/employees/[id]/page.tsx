@@ -129,8 +129,11 @@ export default async function EditEmployeePage({ params }: Props) {
           policyTitle: t('employees.policyTitle'),
           policyHint: t('employees.policyHint'),
           policyRate: t('employees.policyRate'),
+          policyRateHint: t('employees.policyRateHint'),
           policyAnnualCap: t('employees.policyAnnualCap'),
+          policyAnnualCapHint: t('employees.policyAnnualCapHint'),
           policyCarryCap: t('employees.policyCarryCap'),
+          policyCarryCapHint: t('employees.policyCarryCapHint'),
           policyWarn: t('employees.policyWarn'),
         }}
       />

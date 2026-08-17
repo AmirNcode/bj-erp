@@ -85,8 +85,11 @@ type Props = {
     policyTitle: string;
     policyHint: string;
     policyRate: string;
+    policyRateHint: string;
     policyAnnualCap: string;
+    policyAnnualCapHint: string;
     policyCarryCap: string;
+    policyCarryCapHint: string;
     policyWarn: string;
   };
 };
@@ -457,8 +460,15 @@ export function EditEmployeeForm({
                                 min={0}
                                 step="0.5"
                                 defaultValue={p.rate}
+                                aria-describedby={`policy_rate_hint_${balance.leaveTypeId}`}
                                 data-testid={`policy-rate-${slug}`}
                               />
+                              <p
+                                id={`policy_rate_hint_${balance.leaveTypeId}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {labels.policyRateHint}
+                              </p>
                             </div>
                             <div className="space-y-1">
                               <Label
@@ -474,8 +484,15 @@ export function EditEmployeeForm({
                                 min={0}
                                 step="0.5"
                                 defaultValue={p.cap}
+                                aria-describedby={`policy_cap_hint_${balance.leaveTypeId}`}
                                 data-testid={`policy-cap-${slug}`}
                               />
+                              <p
+                                id={`policy_cap_hint_${balance.leaveTypeId}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {labels.policyAnnualCapHint}
+                              </p>
                             </div>
                             <div className="space-y-1">
                               <Label
@@ -491,8 +508,15 @@ export function EditEmployeeForm({
                                 min={0}
                                 step="0.5"
                                 defaultValue={p.carry}
+                                aria-describedby={`policy_carry_hint_${balance.leaveTypeId}`}
                                 data-testid={`policy-carry-${slug}`}
                               />
+                              <p
+                                id={`policy_carry_hint_${balance.leaveTypeId}`}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {labels.policyCarryCapHint}
+                              </p>
                             </div>
                           </div>
                         </fieldset>

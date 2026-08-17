@@ -267,6 +267,21 @@ you get `must be owner of table …`, and anything you create lands with the wro
 `db reset`, so **every migration must be idempotent** — which `deploy/update.sh` requires anyway.
 Also: `create or replace function` cannot change a return type; drop it first.
 
+### Opening allocation and monthly accrual are two separate credits that stack
+The Add Employee form writes both: the days field is a **one-off** `allocation` ledger row with
+`period_month = NULL`, and the policy fields are the rule that keeps adding every month. The
+annual cap governs *accruals only* — its query joins `jalali_months on gregorian_start =
+period_month`, so a NULL `period_month` can never match and the opening balance never consumes
+the cap. Set 12 days opening **and** 1/month capped at 12 and the employee earns 24 in a full
+Jalali year. Amir hit exactly this on 2026-08-17 and read it as a bug. Two more things that look
+wrong but are not: accrual starts from `getCurrentJalaliMonthStart()`, **not** the hire date
+(spec §6 D10 — switching accrual on must not retroactively credit months nobody worked), so a
+back-dated hire earns nothing for those months; and the current month is credited in full unless
+the hire date falls inside it, in which case it is pro-rated by remaining calendar days. Net
+effect: a new employee's balance jumps the moment they first log in, because accrual runs lazily
+on the first balance read. The 2026-08-17 wording pass (`allocHint`, `policyAnnualCapHint`, …)
+explains this in the UI; the model itself was deliberately left alone.
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,
