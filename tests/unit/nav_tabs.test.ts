@@ -18,6 +18,17 @@ describe('tabsForRoles', () => {
   it('security (no manage)', () => {
     expect(tabsForRoles(['security']).map((t) => t.key)).not.toContain('manage');
   });
+  it('hr gets the manage tab (FR-35)', () => {
+    expect(tabsForRoles(['hr']).map((t) => t.key)).toContain('manage');
+  });
+  it('hr alongside employee still gets it', () => {
+    expect(tabsForRoles(['employee', 'hr']).map((t) => t.key)).toContain('manage');
+  });
+  it('an unknown role grants nothing', () => {
+    // Roles arrive from a JWT claim; an unrecognised one must not open /manage.
+    expect(tabsForRoles(['hrx']).map((t) => t.key)).not.toContain('manage');
+    expect(tabsForRoles(['HR']).map((t) => t.key)).not.toContain('manage');
+  });
   it('manage tab points at the employees hub', () => {
     const manage = tabsForRoles(['admin']).find((t) => t.key === 'manage');
     expect(manage?.href).toBe('/manage/employees');

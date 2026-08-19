@@ -9,6 +9,12 @@ import { Eye, EyeOff } from 'lucide-react';
 import { signInWithCode } from '@/lib/auth/usernameEmail';
 import { toLatinPassword } from '@/lib/auth/passwordPolicy';
 import { toLatinCode } from '@/lib/employees/code';
+import {
+  LOCALE_COOKIE,
+  LOCALE_COOKIE_MAX_AGE,
+  isAppLocale,
+  withLocalePrefix,
+} from '@/lib/i18n/locale';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,13 +37,26 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const { error: authError, inactive } = await signInWithCode(code, password);
+      const { error: authError, inactive, languagePref } = await signInWithCode(code, password);
       if (authError) {
         setError(t('invalidCredentials'));
       } else if (inactive) {
         setError(t('inactiveAccount'));
       } else {
-        router.push(`/${locale}/home`);
+        // FR-34: land on the language this person chose, not the one the login
+        // URL happened to carry. Signing in is the moment the preference is
+        // knowable again after a new device, a cleared browser, or a reinstalled
+        // PWA — all cases where the cookie is gone but the database still knows.
+        const target = isAppLocale(languagePref) ? languagePref : locale;
+        if (isAppLocale(target)) {
+          // Not httpOnly on purpose: this is a UI preference, not a credential,
+          // and the client writes it here while the server writes it from
+          // updateMyPrefs. The middleware reads whichever exists.
+          document.cookie = `${LOCALE_COOKIE}=${target}; path=/; max-age=${LOCALE_COOKIE_MAX_AGE}; samesite=lax`;
+        }
+        // withLocalePrefix keeps Farsi bare, so a Farsi user is not bounced
+        // through /fa/home on to /home on every single login.
+        router.push(isAppLocale(target) ? withLocalePrefix('/home', target) : `/${locale}/home`);
       }
     } finally {
       setLoading(false);

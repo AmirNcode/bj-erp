@@ -3,15 +3,14 @@
  * Pure module (no Supabase / no React) — unit-testable and shared between
  * the import wizard (client) and its tests.
  *
- * Dates: hire_date accepts Jalali (1404/04/22) or Gregorian (2025-07-13 or
- * 2025/07/13); years < 1600 are Jalali. Output is always Gregorian ISO —
- * dates in the DB are Gregorian, Jalali is a presentation concern (CLAUDE.md).
+ * Dates go through `lib/leave/parseUserDate.ts`, shared with the holiday import:
+ * Jalali (1404/04/22) or Gregorian (2025-07-13 or 2025/07/13), years < 1600 read
+ * as Jalali, output always Gregorian ISO — dates in the DB are Gregorian and
+ * Jalali is a presentation concern (CLAUDE.md).
  */
 
-import DateObject from 'react-date-object';
-import persian from 'react-date-object/calendars/persian';
-import gregorian from 'react-date-object/calendars/gregorian';
 import { toAsciiDigits, isValidPersonnelNo } from '@/lib/employees/code';
+import { parseUserDate } from '@/lib/leave/parseUserDate';
 
 export type ImportColumnKey =
   | 'full_name'
@@ -88,23 +87,13 @@ function matchColumn(cell: string): ImportColumnKey | null {
 
 /**
  * Converts a hire-date cell to Gregorian ISO. Returns null for empty,
- * undefined for unparseable.
+ * undefined for unparseable — including a day that does not exist in its month,
+ * which this used to accept and silently roll forward (see `parseUserDate`).
+ *
+ * Kept as a named export so the column's meaning stays readable at the call site
+ * and the existing tests keep their subject.
  */
-export function parseHireDate(raw: string): string | null | undefined {
-  const cell = toAsciiDigits(raw.trim());
-  if (!cell) return null;
-
-  const m = cell.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
-  if (!m) return undefined;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  if (mo < 1 || mo > 12 || d < 1 || d > 31) return undefined;
-
-  // Same construction pattern as tests/e2e/_helpers.ts (in-repo precedent).
-  const calendar = y < 1600 ? persian : gregorian;
-  const obj = new DateObject({ calendar, year: y, month: mo, day: d });
-  if (!obj.isValid) return undefined;
-  return obj.convert(gregorian).format('YYYY-MM-DD');
-}
+export const parseHireDate = parseUserDate;
 
 /**
  * Parses + validates a whole CSV file (already split into rows).

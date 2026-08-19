@@ -58,6 +58,15 @@ async function ApprovalsData({ locale }: { locale: string }) {
     errandLocation: tErrand('location'),
     requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
     approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
+          chainTitle: t('chainTitle'),
+          awaiting: t('awaiting'),
+          signed: t('signed'),
+          stepLabels: {
+            manager: t('steps.manager'),
+            hr: t('steps.hr'),
+            security: t('steps.security'),
+            admin: t('steps.admin'),
+          },
     ...durationLabelsFrom(tLeave), // days/hours/minutes/and
     dayPartLabels: {
       full: tLeave('dayPart.full'),

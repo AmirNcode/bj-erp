@@ -81,4 +81,83 @@ describe('countWorkingDays', () => {
     // Malformed input → NaN → guard returns 0
     expect(countWorkingDays('not-a-date', '2026-06-25', { ...W, dayPart: 'full' })).toBe(0);
   });
+
+  // ── FR-41: a weekday off every OTHER week ────────────────────────────────
+  //
+  // These four numbers were produced by public.compute_requested_minutes on the
+  // live database first (24 / 20 / 22 working days over the same range) and are
+  // asserted here so the TS mirror cannot drift from the SQL that actually
+  // charges the ledger. Range: Sun 2026-08-16 .. Sat 2026-09-12, 28 days.
+  describe('bi-weekly weekend days', () => {
+    const RANGE = ['2026-08-16', '2026-09-12'] as const;
+    const base = { holidays: [] as string[], dayPart: 'full' as const };
+
+    it('matches SQL for Friday only: 24 working days', () => {
+      expect(countWorkingDays(...RANGE, { ...base, weekendDays: [5] })).toBe(24);
+    });
+
+    it('matches SQL for Thursday AND Friday every week: 20', () => {
+      expect(countWorkingDays(...RANGE, { ...base, weekendDays: [4, 5] })).toBe(20);
+    });
+
+    it('matches SQL for Thursday every OTHER week: 22, exactly between', () => {
+      expect(
+        countWorkingDays(...RANGE, {
+          ...base,
+          weekendDays: [5],
+          biweeklyWeekendDays: [4],
+          biweeklyAnchor: '2026-08-20',
+        })
+      ).toBe(22);
+    });
+
+    it('charges nothing for a single day on an OFF Thursday', () => {
+      expect(
+        countWorkingDays('2026-08-20', '2026-08-20', {
+          ...base,
+          weekendDays: [5],
+          biweeklyWeekendDays: [4],
+          biweeklyAnchor: '2026-08-20',
+        })
+      ).toBe(0);
+    });
+
+    it('charges a full day on a WORKED Thursday', () => {
+      expect(
+        countWorkingDays('2026-08-27', '2026-08-27', {
+          ...base,
+          weekendDays: [5],
+          biweeklyWeekendDays: [4],
+          biweeklyAnchor: '2026-08-20',
+        })
+      ).toBe(1);
+    });
+
+    it('refuses a half-day on an OFF Thursday and allows one on a worked Thursday', () => {
+      const rule = {
+        weekendDays: [5],
+        biweeklyWeekendDays: [4],
+        biweeklyAnchor: '2026-08-20',
+        holidays: [] as string[],
+      };
+      expect(countWorkingDays('2026-08-20', '2026-08-20', { ...rule, dayPart: 'am' })).toBe(0);
+      expect(countWorkingDays('2026-08-27', '2026-08-27', { ...rule, dayPart: 'am' })).toBe(0.5);
+    });
+
+    it('is unchanged when no bi-weekly day is configured', () => {
+      // The guarantee that makes this safe to deploy against the client's live
+      // database: an empty list must behave exactly like the old code path.
+      expect(
+        countWorkingDays(...RANGE, { ...base, weekendDays: [5], biweeklyWeekendDays: [] })
+      ).toBe(24);
+      expect(
+        countWorkingDays(...RANGE, {
+          ...base,
+          weekendDays: [5],
+          biweeklyWeekendDays: [4],
+          biweeklyAnchor: null,
+        })
+      ).toBe(24);
+    });
+  });
 });

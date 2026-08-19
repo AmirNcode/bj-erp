@@ -55,6 +55,11 @@ type Labels = {
   dayPartLabels: { full: string; am: string; pm: string };
   requesterSignature: SignatureLabels;
   approverSignature: SignatureLabels;
+  /** FR-36 chain progress. */
+  chainTitle: string;
+  awaiting: string;
+  signed: string;
+  stepLabels: Record<string, string>;
 };
 
 type Props = {
@@ -237,6 +242,37 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         <span className="font-mono" dir="ltr" data-testid={`serial-${req.id}`}>
                           {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
                         </span>
+                      </div>
+                      {/* FR-36: who has signed and who is still needed. A queue
+                          that only says "pending" hides half the state now that
+                          two people must sign. */}
+                      <div
+                        className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"
+                        data-testid={`chain-${req.id}`}
+                      >
+                        <span className="text-muted-foreground">{labels.chainTitle}:</span>
+                        {(() => {
+                          const approved = new Set(
+                            req.signed.filter((x) => x.decision === 'approved').map((x) => x.stepRole)
+                          );
+                          // Everyone required, in order: those already approved
+                          // plus those still outstanding.
+                          const all = [...approved, ...req.outstanding.filter((r) => !approved.has(r))];
+                          return all.map((role) => (
+                            <span
+                              key={role}
+                              data-testid={`chain-${req.id}-${role}`}
+                              className={
+                                approved.has(role)
+                                  ? 'rounded bg-success/10 px-1.5 py-0.5 text-success'
+                                  : 'rounded bg-secondary px-1.5 py-0.5 text-muted-foreground'
+                              }
+                            >
+                              {approved.has(role) ? '✓' : '○'}{' '}
+                              {labels.stepLabels[role] ?? role}
+                            </span>
+                          ));
+                        })()}
                       </div>
                       {req.replacement_name && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>

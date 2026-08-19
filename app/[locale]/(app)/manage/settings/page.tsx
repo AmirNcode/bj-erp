@@ -8,13 +8,14 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
-import { getCompanyHolidays } from '@/lib/actions/settings';
+import { getCompanyHolidays, getApprovalSteps } from '@/lib/actions/settings';
 import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
 import { DepartmentsCard } from './DepartmentsCard';
 import { AccrualRunner } from './AccrualRunner';
+import { ApprovalStepsCard } from './ApprovalStepsCard';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = { params: Promise<{ locale: string }> };
@@ -28,17 +29,30 @@ export default async function SettingsPage({ params }: Props) {
 
   const roles = await getCachedRoles(user.id);
   const isAdmin = roles.includes('admin');
-  if (!isAdmin) redirect(`/${locale}/home`);
+  const isHr = roles.includes('hr');
+  // FR-42: HR reaches this page for the approval-chain card ONLY. Everything
+  // else on it — work settings, holidays, departments, accruals — stays
+  // admin-only and is not rendered below. RLS agrees: those tables keep their
+  // admin-only write policies, so an HR caller who reached them would be
+  // refused by the database as well.
+  if (!isAdmin && !isHr) redirect(`/${locale}/home`);
 
   const t = await getTranslations('manage.settings');
+  const tApproval = await getTranslations('manage.settings.approvalSteps');
+  const tImport = await getTranslations('manage.settings.holidayImport');
+  const tAdd = await getTranslations('manage.settings.approvalSteps.addStep');
+  const tSteps = await getTranslations('approvals.steps');
   const supabase = await createClient();
-  const [holidayData, { data: departments, error: departmentsError }] = await Promise.all([
+  const [holidayData, approvalData, { data: departments, error: departmentsError }] = await Promise.all([
     getCompanyHolidays(),
+    getApprovalSteps(),
     // Names only — the card never shows a code (spec 2026-07-30, D13).
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
   ]);
   const data = holidayData;
   const weekendDays = data.ok ? data.weekendDays : [5];
+  const biweeklyWeekendDays = data.ok ? data.biweeklyWeekendDays : [];
+  const biweeklyAnchor = data.ok ? data.biweeklyAnchor : null;
   const workStart = data.ok ? data.workStart : '07:00';
   const workEnd = data.ok ? data.workEnd : '15:00';
   const hourlyCapMinutes = data.ok ? data.maxHourlyMinutesPerDay : 240;
@@ -54,6 +68,77 @@ export default async function SettingsPage({ params }: Props) {
     fri: t('days.fri'),
   };
 
+
+  const approvalLabels = {
+    title: tApproval('title'),
+    hint: tApproval('hint'),
+    orderEnforced: tApproval('orderEnforced'),
+    orderHint: tApproval('orderHint'),
+    stepOrder: tApproval('stepOrder'),
+    active: tApproval('active'),
+    saved: tApproval('saved'),
+    error: tApproval('error'),
+    empty: tApproval('empty'),
+    personStep: tApproval('personStep'),
+    inactiveApprover: tApproval('inactiveApprover'),
+    remove: tApproval('remove'),
+    removeConfirm: tApproval('removeConfirm'),
+    removed: tApproval('removed'),
+    orderAdminOnly: tApproval('orderAdminOnly'),
+    steps: {
+      manager: tSteps('manager'),
+      hr: tSteps('hr'),
+      security: tSteps('security'),
+      admin: tSteps('admin'),
+      employee: tSteps('employee'),
+    },
+    addStep: {
+      button: tAdd('button'),
+      title: tAdd('title'),
+      intro: tAdd('intro'),
+      kind: tAdd('kind'),
+      kindRole: tAdd('kindRole'),
+      kindPerson: tAdd('kindPerson'),
+      role: tAdd('role'),
+      person: tAdd('person'),
+      personPlaceholder: tAdd('personPlaceholder'),
+      personHint: tAdd('personHint'),
+      searching: tAdd('searching'),
+      noMatches: tAdd('noMatches'),
+      selected: tAdd('selected'),
+      clear: tAdd('clear'),
+      order: tAdd('order'),
+      add: tAdd('add'),
+      adding: tAdd('adding'),
+      cancel: tAdd('cancel'),
+      added: tAdd('added'),
+      errorLabel: tAdd('errorLabel'),
+      roles: {
+        manager: tSteps('manager'),
+        hr: tSteps('hr'),
+        security: tSteps('security'),
+        admin: tSteps('admin'),
+        employee: tSteps('employee'),
+      },
+    },
+  };
+
+  if (!isAdmin) {
+    // HR sees the approval chain and nothing else.
+    return (
+      <main className="p-6 max-w-2xl mx-auto space-y-6">
+        <PageHeader title={t('title')} />
+        <ApprovalStepsCard
+          steps={approvalData.ok ? approvalData.steps : []}
+          orderEnforced={approvalData.ok ? approvalData.orderEnforced : false}
+          canEnforceOrder={false}
+          labels={approvalLabels}
+        />
+      </main>
+    );
+  }
+
+
   return (
     <main className="p-6 max-w-2xl mx-auto space-y-6">
       <PageHeader title={t('title')} />
@@ -62,6 +147,9 @@ export default async function SettingsPage({ params }: Props) {
         <CardContent>
           <WorkSettingsForm
             initial={weekendDays}
+            initialBiweekly={biweeklyWeekendDays}
+            initialAnchor={biweeklyAnchor}
+            locale={locale}
             initialWorkStart={workStart}
             initialWorkEnd={workEnd}
             initialHourlyCapMinutes={hourlyCapMinutes}
@@ -77,6 +165,11 @@ export default async function SettingsPage({ params }: Props) {
               saved: t('saved'),
               errorLabel: t('error'),
               days,
+              frequencyWorking: t('frequencyWorking'),
+              frequencyWeekly: t('frequencyWeekly'),
+              frequencyBiweekly: t('frequencyBiweekly'),
+              anchorLabel: t('anchorLabel'),
+              anchorHint: t('anchorHint'),
             }}
           />
         </CardContent>
@@ -98,10 +191,64 @@ export default async function SettingsPage({ params }: Props) {
               delete: t('delete'),
               noHolidays: t('noHolidays'),
               errorLabel: t('error'),
+              // FR-40 bulk upload. Built as one object so a new label is added
+              // in one place rather than threaded through two components.
+              holidayImport: {
+                button: tImport('button'),
+                title: tImport('title'),
+                intro: tImport('intro'),
+                template: tImport('template'),
+                templateHint: tImport('templateHint'),
+                upload: tImport('upload'),
+                recurringWarning: tImport('recurringWarning'),
+                previewTitle: tImport('previewTitle'),
+                // .raw() on purpose for the three strings carrying {count} /
+                // {added} / {updated}: the dialog substitutes them itself once a
+                // file has been parsed. Calling tImport('willAdd') with no value
+                // only "works" via a production-only fast path in use-intl that
+                // skips compilation — under `next dev` it renders the dotted key
+                // path instead of a sentence. Same trap, same fix, as the
+                // password-regen dialog in manage/employees/page.tsx.
+                willAdd: tImport.raw('willAdd'),
+                willUpdate: tImport.raw('willUpdate'),
+                problemsTitle: tImport('problemsTitle'),
+                line: tImport('line'),
+                problem: tImport('problem'),
+                confirm: tImport('confirm'),
+                importing: tImport('importing'),
+                done: tImport.raw('done'),
+                cancel: tImport('cancel'),
+                columnDate: tImport('columnDate'),
+                columnNameFa: tImport('columnNameFa'),
+                columnNameEn: tImport('columnNameEn'),
+                columnRecurring: tImport('columnRecurring'),
+                yes: tImport('yes'),
+                no: tImport('no'),
+                // Explicit map rather than tImport(`errors.${key}`): a dynamic
+                // message key has already caused a production-only failure in
+                // this codebase (docs/MEMORY.md).
+                errors: {
+                  missingColumn: tImport('errors.missingColumn'),
+                  required: tImport('errors.required'),
+                  badDate: tImport('errors.badDate'),
+                  badRecurring: tImport('errors.badRecurring'),
+                  nameTooLong: tImport('errors.nameTooLong'),
+                  dupInFile: tImport('errors.dupInFile'),
+                  noRows: tImport('errors.noRows'),
+                },
+              },
             }}
           />
         </CardContent>
       </Card>
+
+      {/* FR-36: who must sign, in what order, and whether that order binds. */}
+      <ApprovalStepsCard
+        steps={approvalData.ok ? approvalData.steps : []}
+        orderEnforced={approvalData.ok ? approvalData.orderEnforced : false}
+        canEnforceOrder
+        labels={approvalLabels}
+      />
 
       <Card>
         <CardContent>

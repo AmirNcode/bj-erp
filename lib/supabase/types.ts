@@ -377,6 +377,110 @@ export type Database = {
           },
         ]
       }
+      approval_steps: {
+        Row: {
+          approver_id: string | null
+          id: string
+          company_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          applies_to: Database["public"]["Enums"]["request_kind"][]
+          step_order: number
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          approver_id?: string | null
+          id?: string
+          company_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          applies_to?: Database["public"]["Enums"]["request_kind"][]
+          step_order?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          approver_id?: string | null
+          id?: string
+          company_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          applies_to?: Database["public"]["Enums"]["request_kind"][]
+          step_order?: number
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approval_steps_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },          {
+            foreignKeyName: "approval_steps_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_request_approvals: {
+        Row: {
+          step_id: string | null
+          id: string
+          request_id: string
+          step_role: Database["public"]["Enums"]["app_role"]
+          approver_id: string | null
+          decision: Database["public"]["Enums"]["leave_status"]
+          signature_data: string | null
+          signature_consent_at: string | null
+          note: string | null
+          created_at: string
+        }
+        Insert: {
+          step_id?: string | null
+          id?: string
+          request_id: string
+          step_role: Database["public"]["Enums"]["app_role"]
+          approver_id?: string | null
+          decision: Database["public"]["Enums"]["leave_status"]
+          signature_data?: string | null
+          signature_consent_at?: string | null
+          note?: string | null
+          created_at?: string
+        }
+        Update: {
+          step_id?: string | null
+          id?: string
+          request_id?: string
+          step_role?: Database["public"]["Enums"]["app_role"]
+          approver_id?: string | null
+          decision?: Database["public"]["Enums"]["leave_status"]
+          signature_data?: string | null
+          signature_consent_at?: string | null
+          note?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_request_approvals_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_request_approvals_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_request_serials: {
         Row: {
           company_id: string
@@ -675,10 +779,13 @@ export type Database = {
       }
       work_settings: {
         Row: {
+          biweekly_anchor: string | null
+          biweekly_weekend_days: number[]
           company_id: string
           hours_per_day: number
           id: string
           max_hourly_minutes_per_day: number
+          approval_order_enforced: boolean
           updated_at: string
           updated_by: string | null
           weekend_days: number[]
@@ -686,10 +793,13 @@ export type Database = {
           work_start: string
         }
         Insert: {
+          biweekly_anchor?: string | null
+          biweekly_weekend_days?: number[]
           company_id: string
           hours_per_day?: number
           id?: string
           max_hourly_minutes_per_day?: number
+          approval_order_enforced?: boolean
           updated_at?: string
           updated_by?: string | null
           weekend_days?: number[]
@@ -697,10 +807,13 @@ export type Database = {
           work_start?: string
         }
         Update: {
+          biweekly_anchor?: string | null
+          biweekly_weekend_days?: number[]
           company_id?: string
           hours_per_day?: number
           id?: string
           max_hourly_minutes_per_day?: number
+          approval_order_enforced?: boolean
           updated_at?: string
           updated_by?: string | null
           weekend_days?: number[]
@@ -772,6 +885,15 @@ export type Database = {
       }
     }
     Functions: {
+      search_approver_candidates: {
+        Args: { p_query: string }
+        Returns: {
+          id: string
+          full_name: string
+          personnel_no: string | null
+          employee_code: string
+        }[]
+      }
       allocate_leave: {
         Args: {
           p_minutes: number
@@ -978,7 +1100,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "security"
+      app_role: "admin" | "manager" | "employee" | "security" | "hr"
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
       leave_unit: "day" | "hour"
@@ -1117,7 +1239,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "security"],
+      app_role: ["admin", "manager", "employee", "security", "hr"],
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
       leave_unit: ["day", "hour"],

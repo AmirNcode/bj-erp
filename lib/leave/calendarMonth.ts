@@ -5,6 +5,7 @@ import gregorian_en from 'react-date-object/locales/gregorian_en';
 import persian_en from 'react-date-object/locales/persian_en';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import type { CalendarEntry, WorkSettings } from '@/lib/actions/leave';
+import { isWeekendDate } from './weekend';
 
 export type CalendarDayEntry = CalendarEntry & {
   returnDate: string;
@@ -70,7 +71,10 @@ function isoWeekday(iso: string): number {
 }
 
 function isWorkingDate(iso: string, workSettings: WorkSettings): boolean {
-  if (workSettings.weekendDays.includes(isoWeekday(iso))) return false;
+  // Via the shared rule, not a plain `includes`: since FR-41 a weekday may be off
+  // every OTHER week, and the shaded calendar must agree with the balance the
+  // ledger charges.
+  if (isWeekendDate(iso, workSettings)) return false;
   return !workSettings.holidays.includes(iso);
 }
 

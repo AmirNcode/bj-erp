@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave';
 import type { SignatureLabels } from '@/lib/leave/signature';
+import { formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 
@@ -220,17 +221,13 @@ type SignatureViewerProps = {
   kind?: 'requester' | 'approver';
 };
 
-/** Signature timestamps always use the Persian calendar, independent of UI language. */
-export function formatPersianConsentTimestamp(value: string, locale: string): string {
-  return new Intl.DateTimeFormat(
-    locale === 'fa' ? 'fa-IR-u-ca-persian' : 'en-US-u-ca-persian',
-    {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'Asia/Tehran',
-    }
-  ).format(new Date(value));
-}
+/**
+ * Signature timestamps always use the Persian calendar, independent of UI
+ * language. The implementation moved to lib/i18n/format.ts so Server Components
+ * (the printable form, FR-38) can use it without importing this client module;
+ * re-exported here because this is where callers and its unit test expect it.
+ */
+export { formatPersianConsentTimestamp } from '@/lib/i18n/format';
 
 /** Fetches the private image only when an authorized viewer asks to see it. */
 export function RequestSignatureViewer({

@@ -1,10 +1,12 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
+import { LOCALE_COOKIE, LOCALE_COOKIE_ATTRS } from '@/lib/i18n/locale';
 
 export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
 
@@ -34,6 +36,16 @@ export async function updateMyPrefs(input: {
     .select('id');
   if (error) return dbErr(error.message);
   if (!data || data.length !== 1) return dbErr('profile was not updated');
+
+  // FR-34: mirror the choice into the cookie the middleware reads, in the same
+  // action as the database write. The JWT's `app_locale` claim carries the same
+  // value but only refreshes on a new token (≤1 h), which is far too slow for a
+  // setting the user just changed and expects to see immediately.
+  if (patch.language_pref) {
+    const store = await cookies();
+    store.set(LOCALE_COOKIE, patch.language_pref, LOCALE_COOKIE_ATTRS);
+  }
+
   // Language changes how every page renders — drop all cached app data.
   invalidateAppCache();
   return { ok: true };

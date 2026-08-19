@@ -341,6 +341,229 @@ Two reviewers over the 42-commit diff, plus the first e2e run on this branch tip
 - ☐ Open: `login.codePlaceholder` still reads `prod-1042` — right for every existing account, wrong
   for every new hire. Left alone because changing it is the mixed-format hint D14 ruled out
 
+## Holidays, weekends, approvers, field errors (2026-08-18) ◐ batch A landed
+Spec: [`docs/specs/2026-08-18-holidays-weekends-approvers-design.md`](specs/2026-08-18-holidays-weekends-approvers-design.md) ·
+plan: [`docs/plans/2026-08-18-holidays-weekends-approvers.md`](plans/2026-08-18-holidays-weekends-approvers.md)
+
+Four changes the owner asked for on 2026-08-18. Owner decisions are recorded in the spec as
+**[owner]** — bi-weekly anchoring, full-day Thursdays, overwrite-on-duplicate holiday upload, and
+blocking (not falling back) when a named approver is deactivated.
+
+- ☑ **Batch A — FR-39 duplicate personnel number reported on the field.** Landed 2026-08-18,
+  **not yet deployed.** No migration.
+  - Root cause was the **error table, not the form**: `private.create_employee_impl` raises
+    `personnel number already exists` (errcode 23505) and no rule in `lib/errors/db-error.ts`
+    matched it, so `localizeDbError` logged `[db-error] unmapped:` and returned
+    `dbErrors.unexpected`. Verified against the **live** function body via `pg_proc`, not by
+    grepping migrations — this function has two versions in history and only the later one runs.
+  - Three rules added: the raised message, the `profiles_company_personnel_no_key` unique-index
+    violation (**not** redundant — the in-function `exists` test is a pre-check that two concurrent
+    creates can race past), and `invalid personnel number`.
+  - `Rule` gained an optional `field`; new `fieldForDbError()` returns it. It takes the **first
+    matching rule**, not the first field-carrying one, so the message and its placement can never
+    come from two different rules.
+  - `dbErr` carries `field` onto the result as `DbErrorResult`. Additive: every existing caller
+    reads only `.error`, and an error with no field still renders in the banner.
+  - `NewEmployeeForm` renders it under the input with `aria-invalid`/`aria-describedby`, suppresses
+    the banner for field-scoped errors, and clears on edit. Banner gained `data-testid="form-error"`.
+  - Tests: `tests/unit/db-error.test.ts` (8 cases, incl. that employee-code errors stay at page
+    level and that repeated calls are stateless — a `g` flag would break `.test()`),
+    `tests/e2e/duplicate-personnel.spec.ts`.
+  - **Both tests sabotage-checked.** With the rule's regex broken, the unit test fails
+    `expected undefined to be 'personnel_no'` and the e2e fails `element(s) not found` on the field
+    error; both green again after restoring.
+  - Deliberately **not** a live availability check as the user types — the owner asked for it on
+    submit, and probing per keystroke would leak the company's personnel numbering.
+  - Also flipped two stale statuses left by the previous session: FR-34 ☐ → ☑ (it shipped in
+    batch 1) and FR-35's parenthetical, which still said reports were pending.
+- ☐ **Batch B — FR-40 bulk holiday upload.** CSV + template, four fields, Jalali-or-Gregorian dates,
+  whole-file validation then upsert. No migration.
+- ☐ **Batch C — FR-41 weekend frequency.** Two migrations. `private.is_company_weekend` holds the
+  rule once; `compute_requested_minutes` currently repeats its weekend test in **four** places.
+  Riskiest batch — it changes the function every request's minutes come from.
+- ☐ **Batch D — FR-42 approval steps by role or person, editable by HR.** Two migrations. Swaps a
+  unique constraint on a table holding **real backfilled client approval evidence**.
+
+## Bulk holidays, weekend frequency, approval steps (2026-08-18) ☑ A–D landed, none deployed
+
+Spec `docs/specs/2026-08-18-holidays-weekends-approvers-design.md` ·
+plan `docs/plans/2026-08-18-holidays-weekends-approvers.md`.
+**All of it is uncommitted on `main` and none of it has reached the client.**
+
+- ☑ **Batch A — FR-39 personnel number reported on the field.** The bug was an *unmapped* database
+  message falling through to the generic "unexpected error", not a form problem. Three rules added,
+  errors gained an optional `field`, `NewEmployeeForm` renders it inline with `aria-invalid`.
+- ☑ **Batch B — FR-40 bulk holiday upload.** `lib/csv/holiday-rows.ts` (30 unit cases),
+  `bulkUpsertHolidays`, `HolidayImportDialog`. Whole-file validation, overwrite on duplicate date,
+  Jalali-or-Gregorian dates, Farsi/English yes-no.
+  - ☑ **Follow-up done 2026-08-18:** both parsers consolidated into
+    `lib/leave/parseUserDate.ts` with the read-back check, so `parseHireDate` no longer rolls a
+    non-existent day forward. Sabotage-checked — reverting the guard fails six tests across three
+    suites.
+  - ☑ **`date outside supported calendar range` is now translated.** It was unmapped, so
+    back-dating a leave request before Farvardin 1400 produced the generic "unexpected error".
+    Investigated because Amir asked what happens to staff hired before 1400 — **hire dates turned
+    out to be unaffected** (verified end to end with a 1355 hire date); the limit is on request
+    dates.
+  - ☐ **Optional: widen `jalali_months` below 1400** if the client ever wants to load historical
+    leave records. Cheap — `scripts/gen-jalali-months.mjs` generates the seed — but the error
+    message names Farvardin 1400 and must be updated with it.
+- ☑ **Batch C — FR-41 weekend frequency.** Migrations `20260818170001` (columns, two CHECKs,
+  `private.is_company_weekend`) and `20260818170002` (`compute_requested_minutes` routed through the
+  helper at its three weekend tests). `lib/leave/weekend.ts` rewritten as the mirror;
+  `WorkSettingsForm` gained a three-state per-day control plus the reference-date picker.
+  - Proven in SQL before any UI: 24 → 20 → **22** working days over one 28-day range.
+  - ☐ **Not applied to the client's server.**
+- ☑ **Batch D — FR-42 approval steps by role or named person.** Landed 2026-08-18.
+  THREE migrations, not two: `180001` (schema, partial unique indexes, HR write policies,
+  `search_approver_candidates`), `180002` (engine), and `180003` — the e2e reaper had to learn about
+  the new foreign key, because `approval_steps.approver_id` deliberately blocks deleting a named
+  approver and `app_cleanup_e2e_users()` hard-deletes throwaway accounts.
+  - The `coalesce(step_id::text, step_role::text)` expression index in the plan **does not work** —
+    an enum→text cast is only STABLE and an index expression must be IMMUTABLE. Two partial unique
+    indexes give the same guarantee.
+  - **An admin may not override a named step.** The spec's first draft said otherwise; it could not
+    be reconciled with a deactivated approver blocking the step. Resolved in D28.
+  - ☐ **Not applied to the client's server.**
+- ☑ **Shared-state leaks fixed at the root.** `tests/e2e/global-setup.ts` is new and restores the
+  demo admin's language and the weekend settings to baseline BEFORE the suite, so a spec that fails
+  partway can no longer poison every later run. `hr-role.spec` updated for FR-42's moved boundary.
+
+- ☐ **Fixed this session, worth not regressing:** `settings.spec.ts` left the shared demo admin on
+  English, which since FR-34 broke every spec asserting Farsi on an unprefixed URL
+  (`department.spec` ×2, `hourly.spec`). It now restores Farsi before logging out. **Any spec that
+  changes a shared account's `language_pref` must restore it.**
+
+## HR role, approval chain, language persistence (2026-08-18) ◐ planned, batch 0 landed
+Spec: [`docs/specs/2026-08-18-hr-role-and-locale-persistence-design.md`](specs/2026-08-18-hr-role-and-locale-persistence-design.md) ·
+plan: [`docs/plans/2026-08-18-hr-role-and-locale-persistence.md`](plans/2026-08-18-hr-role-and-locale-persistence.md)
+
+- ☑ **Batch 0 — local dev unblocked.** `deploy/docker-compose.local-arm64.yml` publishes Caddy's
+  plain-HTTP listener on `127.0.0.1:8080` (loopback only, never in `docker-compose.yml`);
+  `.env.local` repointed at it **and** given the local stack's anon key, which did not match and was
+  returning 401 from PostgREST. Verified end to end: preflight 204, token POST 200 with a real
+  credential / 400 with a wrong one, no CSP or CORS errors, HTTPS site and Caddy CA untouched.
+- ☑ **Batch 1 — FR-34 language persistence.** Landed 2026-08-18, **not yet deployed to the client.**
+  Root cause confirmed against next-intl's own `resolveLocaleFromPrefix`: `localeDetection: false`
+  skips cookie *and* header, so with `localePrefix: 'as-needed'` every prefix-less URL was Farsi —
+  and the PWA's `start_url: '/'` made that every home-screen launch.
+  - `lib/i18n/locale.ts` (new, pure) + 18 unit tests, including a guard that its locale list cannot
+    drift from `i18n/routing.ts`
+  - `proxy.ts` redirects a prefix-less path to the preferred locale, carrying over refreshed auth
+    cookies so a rotated session is not dropped at that exact moment
+  - cookie written by `updateMyPrefs` (server) and at login (client); `app_locale` JWT claim added by
+    `20260818120001_locale_claim.sql` for the new-device case
+  - `app/[locale]/page.tsx` resolves from the profile — the backstop for a token predating the claim
+  - `accept-language` still ignored on purpose (spec D2)
+  - Gates: tsc · lint · **unit 272/272 (41 files)** · build · **full e2e 33 passed / 1 pre-existing
+    skip, serial**. The new e2e assertions were confirmed to **fail** with the middleware branch
+    disabled, so they genuinely cover the bug.
+- ☑ **Batch 2 — FR-35 `hr` role exists and reads.** Landed 2026-08-18, **not yet deployed.**
+  - `20260818130001_hr_role_enum.sql` — `alter type … add value 'hr'` and **nothing else**. The split
+    is mandatory: Postgres refuses to *use* a new enum value in the transaction that added it, and
+    every migration file runs in one `--single-transaction`. Verified on this database.
+  - `20260818130002_hr_role_access.sql` — `can_read_all` gains `hr`. That single helper **is** the
+    whole grant; no policy was created or edited. It also asserts that `has_role` still requires an
+    active profile, so a deactivated HR account cannot keep the access.
+  - `lib/nav/tabs.ts`, `manage/layout.tsx` — hr reaches `/manage`; Settings, Allocations and
+    Add-Department still bounce it, since those are company configuration.
+  - `hr` added to the role checkbox lists and to the `app_role` union in the hand-maintained
+    `lib/supabase/types.ts`.
+  - Gates: tsc · lint · **unit 275/275** · build · **full e2e 35 passed / 1 pre-existing skip**.
+  - **A first version of the e2e proved nothing and was fixed.** Both throwaway users landed in the
+    same department, so `profiles_select`'s `same_team` branch granted the read and the test passed
+    even with the migration reverted. `createEmployee` gained an optional `departmentIndex` (default
+    unchanged) and the spec now puts them in different departments; with `hr` removed from
+    `can_read_all` it now fails, as it must.
+  - Known gap, deliberately not fixed here: role checkboxes render **raw English slugs**
+    (`admin`/`manager`/…/`hr`) even in Farsi. Pre-existing for the other four. Translating them means
+    changing `createEmployee`, which selects checkboxes **by label text** — a shared helper used by
+    ~15 specs. Worth doing as its own change, with `data-testid`s per the repo's own lesson.
+- ☑ **Batch 2b — FR-38 HR reads and prints every request.** Landed 2026-08-18 on the owner's request,
+  **not yet deployed.**
+  - `20260818140001_hr_reads_requests.sql` — `hr` joins the `leave_requests_select` policy, so HR
+    reads the full base row: reason, errand location, decision note, both signature images. **This is
+    a deliberate FR-25 widening**, justified by the paper process — all three client forms already
+    carry an امور اداری و منابع انسانی signature box. `team_leave_calendar` untouched.
+  - `/manage/requests` (hr + admin) — every request, every status, filter by status/kind/free text.
+  - `/print/request/[id]` in a new `(print)` route group with its own auth guard, so the printed
+    sheet carries no app chrome. Path is `/print/...` because `(print)/request/[id]` would collide
+    with the real `/request/hourly` screens.
+  - `lib/leave/paperForm.ts` + 13 unit tests — maps each stored request to the right form and its own
+    signature boxes.
+  - **Read off the photographs in `docs/forms/`:** the daily leave form is **BJ-F 50210(R0)**, a code
+    not previously recorded anywhere in these docs; every form carries **four** signature boxes whose
+    sets differ (50210 has جانشین and no حراست; the hourly forms are the reverse); and the fourth box
+    is always HR's — direct confirmation of the FR-36 chain design.
+  - Only the requester's and approver's signatures can be filled; the rest print blank for a wet
+    signature, and the sheet says so.
+  - ☐ **Ask the client:** is there a paper form for the *daily* work errand? We have no photograph.
+    It currently reuses the 50207 layout and code, matching the single shared errand serial sequence.
+- ☑ **Batch 3 — FR-35 HR adds employees.** Landed 2026-08-18, **not yet deployed.**
+  - `20260818150001_hr_creates_employees.sql` — third authorization path in `app_create_employee`
+    (checked **before** the manager branch, so a manager+hr user gets the wider scope) and a second in
+    `app_bulk_create_employees`. Any department and any reporting line; `p_roles` overwritten to
+    `{employee}`, and every CSV row's `role` column clamped the same way. Both bodies produced by
+    patching `pg_get_functiondef` output rather than retyping, per `docs/MEMORY.md`.
+  - `NewEmployeeForm` gained `canChooseScope` (admin || hr) alongside `isAdmin`. HR gets the
+    department and manager pickers; it does **not** get role checkboxes, the opening allocation, or
+    the accrual policy — `allocate_leave` and `set_employee_leave_policy` are admin-only in the
+    database, so offering those fields would build a form that fails on submit. HR-created employees
+    get the leave-type default quotas applied in-database instead, exactly like the manager path.
+  - Clamp verified by calling the RPC directly as an HR user with `p_roles => ['admin','manager']`
+    inside a rolled-back transaction: result was `employee`, audit path `hr`. **The e2e cannot prove
+    this** — HR's form has no role checkboxes, so it never sends `p_roles`.
+  - Gates: tsc · lint · **unit 288/288 (42 files)** · build · **full e2e 38 passed / 1 pre-existing
+    skip**, plus a targeted re-run of the four employee-creation specs after the form refactor.
+- ☑ **Batch 4 — FR-36 configurable approval chain.** Landed 2026-08-18, **not yet deployed.**
+  - Three migrations: `20260818160001` schema + seed, `160002` backfill, `160003` engine. Split so a
+    failure in one leaves the others resumable, since the ledger records each file separately.
+  - `leave_status` deliberately unchanged — a request stays `pending` until the chain completes, so
+    every existing query, view, index, policy and e2e assertion kept working.
+  - The advisory lock moved **earlier**, before the step is chosen: two approvers signing different
+    steps at the same instant would otherwise both see zero outstanding steps and both finalise,
+    debiting the ledger twice.
+  - Verified in SQL before any UI: manager signs → still pending, no ledger row; HR signs → approved
+    with exactly one `consumption` row (4800 → 3840 min); double-sign refused; order enforcement
+    refuses HR first, then allows manager→HR.
+  - `lib/leave/approvals.ts` rewritten as the pure mirror of the SQL (31 unit tests). The old
+    `tests/unit/approvals.test.ts` was superseded; its two unique edge cases were **ported**, not
+    dropped, before deleting it.
+  - UI: chain progress in the approvals queue, an admin card in Manage → Settings for order and
+    activation, and the printed form now fills its تصویب کننده box from the manager step and its HR
+    box from the hr step.
+  - **Three existing specs asserted the old one-signature contract and were updated**, not deleted:
+    `approval`, `hourly`, `leave`. New `approveThroughChain` helper.
+  - Gates: tsc · lint · **unit 321/321 (42 files)** · build · **full e2e 39 passed / 1 pre-existing
+    skip**.
+- ☑ **Batch 5 — FR-37 HR reports + CSV export.** Landed 2026-08-18, **not yet deployed.**
+  - `/manage/reports` (hr + admin; a manager is redirected). Five reports: leave balance by employee,
+    requests by status, absence by department, requests waiting (with who they are waiting on, from
+    the FR-36 chain), and headcount by department.
+  - `lib/reports/reports.ts` — pure builders, 23 unit tests. Every builder returns the same
+    `ReportTable`, so there is ONE table renderer and ONE download button rather than five of each.
+  - Export is UTF-8-BOM CSV via the existing `buildCsv`. **No new dependency.** Durations export as
+    decimal days, not "۹ روز و ۴ ساعت" — HR sums and sorts these in Excel, and a formatted string
+    cannot be summed.
+  - **No new RLS policy and no new SECURITY DEFINER function.** Everything is a plain SELECT; the
+    `can_read_all` widening from batch 2 is what makes it company-wide.
+  - The period is a URL parameter, so a report is linkable and reloadable and the server re-queries
+    rather than filtering a snapshot in the browser. Months come from the `jalali_months` table so
+    the report's idea of a Jalali month cannot drift from the ledger's.
+  - One real bug found by the e2e: PostgREST refused the self-referential `manager` embed on
+    `profiles` even with the correct constraint hint. Manager names are now resolved in memory from
+    the profile list that was already fetched — one fewer join and one fewer failure mode.
+  - Gates: tsc · lint · **unit 344/344 (43 files)** · build · **full e2e 41 passed / 1 pre-existing
+    skip, run against the built container** (`E2E_BASE_URL=https://<mac-ip>:3500`).
+- ☑ **e2e harness: run against the container, not a long-lived dev server.** Chasing a recurring
+  `createEmployee` timeout showed the suite degrading 7.3m → 10.0m with growing phantom failures,
+  including one inside `team.spec`'s own private copy of the helper. An 11-hour-old `next dev` was
+  the cause: identical specs passed against the container in 24s, and the full suite there runs in
+  **2.6 minutes** with everything green. `createEmployee` also gained the submit retry that `login`
+  already had for the documented cold-dev hydration race.
+- ☐ Tell the client: requests still pending when Batch 4 lands acquire the second signature
+  requirement, so a manager may have to re-sign something they had already approved.
+
 ## Backlog (post-v1, see PLAN §6)
 - ☐ Notifications (push/SMS/email) once a channel is chosen
 - ☐ Attendance/check-in · shift scheduling · overtime · advance/loan · payslips · announcements ·

@@ -16,7 +16,11 @@ const BASE: Tab[] = [
 ];
 
 export function tabsForRoles(roles: string[]): Tab[] {
-  const canManage = roles.includes('admin') || roles.includes('manager');
+  // `hr` joins admin/manager here (FR-35). What each of them can actually DO
+  // inside /manage differs and is enforced per page and by RLS — this only
+  // decides who is offered the tab.
+  const canManage =
+    roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
   return canManage
     ? [...BASE, { key: 'manage', href: '/manage/employees', labelKey: 'manage' }]
     : BASE;

@@ -168,6 +168,7 @@ export default async function EmployeesPage({ params }: Props) {
   const user = await getCachedUser();
   const myRoles = user ? await getCachedRoles(user.id) : [];
   const isAdmin = myRoles.includes('admin');
+  const isHr = myRoles.includes('hr');
 
   return (
     <main className="p-6 max-w-5xl mx-auto">
@@ -188,7 +189,25 @@ export default async function EmployeesPage({ params }: Props) {
             <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
               <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
             </Button>
-            {isAdmin && (
+            {/* FR-38 review screen. hr + admin only — a manager decides on their
+                own reports via Approvals and has no business browsing every
+                employee's private reason. */}
+            {(isAdmin || isHr) && (
+              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
+                <Link href={`/${locale}/manage/requests`} data-testid="nav-requests">
+                  {t('requestsLink')}
+                </Link>
+              </Button>
+            )}
+            {/* FR-37 reports. Same audience as the review screen. */}
+            {(isAdmin || isHr) && (
+              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
+                <Link href={`/${locale}/manage/reports`} data-testid="nav-reports">
+                  {t('reportsLink')}
+                </Link>
+              </Button>
+            )}
+            {(isAdmin || isHr) && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/${locale}/manage/employees/import`} data-testid="import-link">
                   {t('employees.regen.importLink')}
@@ -197,7 +216,9 @@ export default async function EmployeesPage({ params }: Props) {
             )}
             {/* Add Department moved to Manage → Settings on 2026-07-30 (D9). */}
             <Button asChild size="sm">
-              <Link href={`/${locale}/manage/employees/new`}>{t('employees.addNew')}</Link>
+              <Link href={`/${locale}/manage/employees/new`} data-testid="add-employee-link">
+                {t('employees.addNew')}
+              </Link>
             </Button>
           </div>
         }

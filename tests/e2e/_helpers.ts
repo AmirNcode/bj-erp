@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const DateObject = require('react-date-object').default;
@@ -179,9 +179,20 @@ export function nextTestDepartmentCode(): string {
  * the app (the personnel number, since 20260730130002) and read from the
  * preview. Returns the generated code and the temp password.
  */
+/**
+ * `departmentIndex` selects among the non-blank department options, 0 being the
+ * first — which is what every caller got implicitly before this existed, so the
+ * default preserves their behaviour exactly.
+ *
+ * It matters for any test about company-wide visibility. `profiles_select`
+ * grants a read via `same_team` OR `can_read_all`, so two throwaway users in the
+ * same department can see each other for the *wrong* reason, and a test meaning
+ * to prove broad access silently proves nothing. Put them in different
+ * departments and only the broad-access path can be responsible.
+ */
 export async function createEmployee(
   page: Page,
-  opts: { name: string; roles: string[]; personnelNo?: string }
+  opts: { name: string; roles: string[]; personnelNo?: string; departmentIndex?: number }
 ): Promise<{ code: string; password: string }> {
   await page.goto('/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
@@ -190,13 +201,18 @@ export async function createEmployee(
   await page.fill('#full_name', opts.name);
 
   const deptSelect = page.locator('#department_id');
+  const deptValues: string[] = [];
   for (const opt of await deptSelect.locator('option').all()) {
     const val = await opt.getAttribute('value');
-    if (val && val.trim()) {
-      await deptSelect.selectOption({ value: val });
-      break;
-    }
+    if (val && val.trim()) deptValues.push(val);
   }
+  const wanted = opts.departmentIndex ?? 0;
+  if (deptValues.length <= wanted) {
+    throw new Error(
+      `createEmployee: departmentIndex ${wanted} requested but only ${deptValues.length} department(s) exist`
+    );
+  }
+  await deptSelect.selectOption({ value: deptValues[wanted] });
 
   const labels = page.locator('label');
   const count = await labels.count();
@@ -213,10 +229,33 @@ export async function createEmployee(
   const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
   expect(code).toMatch(/^999[0-9]{7}$/);
 
-  await page.click('button[type="submit"]');
-
   const pwEl = page.locator('[data-testid="temp-password"]');
-  await expect(pwEl).toBeVisible({ timeout: 15_000 });
+  const formError = page.locator('form [role="alert"]');
+
+  // Retry the whole submit-and-assert cycle, exactly as `login` does.
+  //
+  // On a busy suite the first click can land before React has hydrated the form,
+  // and a swallowed click produces NEITHER the success screen nor an error — the
+  // page just sits there. This is the same cold-dev hydration race documented in
+  // docs/MEMORY.md; `createEmployee` was simply missing the retry that `login`
+  // already had, and it flaked three times before the diagnostics below made the
+  // cause visible ("neither the temp password nor an error appeared").
+  //
+  // Re-clicking cannot double-create: each attempt returns early if the success
+  // screen is already up, and the personnel number is fixed outside this loop, so
+  // a genuine second submit would be refused as a duplicate rather than creating
+  // a second employee.
+  await expect(async () => {
+    if (await pwEl.isVisible()) return;
+    if (await formError.isVisible()) {
+      throw new Error(`createEmployee failed: ${(await formError.textContent())?.trim()}`);
+    }
+    await page.click('button[type="submit"]');
+    // Generous inner wait: a slow-but-working submit must not be re-clicked. The
+    // outer toPass is for a click that was genuinely swallowed before hydration,
+    // not for impatience.
+    await expect(pwEl).toBeVisible({ timeout: 20_000 });
+  }).toPass({ timeout: 60_000 });
   const password = (await pwEl.textContent())?.trim() ?? '';
   expect(password.length).toBeGreaterThan(6);
   return { code, password };
@@ -386,4 +425,46 @@ export async function submitLeave(
   await signRequest(page, 'daily');
   await page.click('button[type="submit"]');
   await page.waitForTimeout(1500); // server action + revalidate
+}
+
+/**
+ * Approve one request through EVERY step it still needs, as whoever is logged in.
+ *
+ * FR-36 made approval a chain: a manager's signature alone no longer approves
+ * anything, so a test that signs once and then asserts a debited balance is
+ * asserting the old contract. An admin may fill any step, so calling this while
+ * signed in as the admin completes the whole chain; calling it as a manager
+ * fills their step and stops.
+ *
+ * Re-navigates each pass because the queue removes a decided row optimistically —
+ * the button for the NEXT step only appears after a real server round-trip.
+ */
+export async function approveThroughChain(page: Page, requestId: string, maxSteps = 4) {
+  for (let i = 0; i < maxSteps; i++) {
+    await page.goto('/manage/approvals');
+    const btn = page.locator(`[data-testid="approve-btn-${requestId}"]`);
+    // Wait for the queue to actually RENDER before counting. It streams inside a
+    // Suspense boundary, and `networkidle` resolves before the streamed content
+    // arrives — counting then returns 0, so the helper would report success
+    // having signed only the first step, leaving the balance untouched. That
+    // exact bug cost two spec failures; do not replace this with networkidle.
+    await expect(
+      page.locator('[data-testid="approvals-empty"], [data-testid^="approve-btn-"]').first()
+    ).toBeVisible({ timeout: 20_000 });
+    if ((await btn.count()) === 0) return i; // nothing left this caller can sign
+    await btn.click();
+    const confirm = page.locator(`[data-testid="approve-confirm-${requestId}"]`);
+    await expect(confirm).toBeVisible({ timeout: 10_000 });
+    await signApproval(page);
+    await confirm.click();
+    await expect(btn).toHaveCount(0, { timeout: 20_000 });
+  }
+  return maxSteps;
+}
+
+/** The request id behind an approvals-queue row, from its testid. */
+export async function requestIdFromQueueRow(row: Locator): Promise<string> {
+  const testId = await row.getAttribute('data-testid');
+  if (!testId) throw new Error('queue row has no data-testid');
+  return testId.replace('approval-row-', '');
 }

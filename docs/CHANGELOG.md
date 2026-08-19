@@ -10,6 +10,208 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Dates that do not exist are now refused instead of silently changed (2026-08-18)
+
+**Fixed.** A date typed into either import file — an employee's hire date, or a holiday — was
+accepted even when that day does not exist, and was then stored as a *different* date with no
+warning. 30 Esfand in a year where Esfand has 29 days became 1 Farvardin of the following year;
+30 February became 2 March. Nothing was shown back to the person importing, so there was no way to
+notice.
+
+For a hire date this mattered beyond tidiness: monthly leave accrual skips months that ended before
+someone was hired and pro-rates their first month, so a shifted date moves the leave they earn.
+
+Such a row is now reported as an invalid date on its own line, like any other bad cell, and the file
+is not imported until it is corrected. Genuine month-end dates are unaffected — 31 Shahrivar and
+30 Esfand of a leap year are real days and still import.
+
+Both import files now share one date reader, so the two cannot drift apart again.
+
+### A date outside the supported calendar now says so (2026-08-18)
+
+**Fixed.** Requesting leave for a date before Farvardin 1400 (March 2021) was refused with
+*"An unexpected error occurred"*, which gave no clue that the date was the problem. It now explains
+that the date is outside the range the system can record.
+
+Worth knowing: this limit applies to **leave request dates only**. Hire dates have no limit —
+an employee hired decades ago is entered, stored and displayed correctly, and their leave accrues
+normally.
+
+
+### Approval steps can now name a specific person, and HR can set them up (2026-08-18)
+
+The approval chain could only require a **role** — the requester's manager, then anyone in HR. It can
+now also require **one named individual**, chosen by name, personnel number or login code. Their
+signature is then needed on every request.
+
+A named step belongs to that person alone. **Not even an administrator can sign in their place** —
+that is the whole point of naming someone, and an override would quietly turn a required signature
+into an optional one. If that person's account is disabled, requests needing their signature stop
+rather than sliding through, and the step is flagged in red on the Settings screen so somebody fixes
+the configuration instead of wondering why approvals have stalled.
+
+**HR can now manage the approval chain too**, not just administrators — adding steps, reordering
+them, switching them off, and removing them. This is the only setting HR gains: work settings,
+holidays, departments and roles all remain administrator-only, and an HR user opening Settings sees
+the approval card by itself.
+
+Removing a step never erases history. Signatures already collected stay on the request and still
+print, because only the future requirement is removed.
+
+If the chain ends up with more approvers than the client's paper form has boxes, the extra
+signatures print in an **additional approvals** strip beneath them, rather than being left off the
+sheet.
+
+
+### A weekday can now be off every other week (2026-08-18)
+
+The working week was previously "these weekdays are always off". The real week at the client is
+**Friday off every week and Thursday off every other week**, which that could not express.
+
+Each weekday in Manage → Settings is now a three-way choice: **working day**, **off every week**, or
+**off every other week**. Choosing the last one reveals a reference-date field — pick any date that
+*is* a day off and the app alternates from it indefinitely. The reference date is required: without
+it there is no way to know *which* Thursdays are off, so the setting is refused rather than guessed.
+
+Leave duration, half-days, hourly leave and the calendar all honour it. A leave request spanning two
+weeks is charged for one Thursday, not two. Work errands are unaffected — they may fall on a weekend
+or holiday, as before.
+
+Nothing changes for a company that has not set an every-other-week day.
+
+### Bulk upload for official holidays (2026-08-18)
+
+Manage → Settings → **Bulk upload** takes a CSV of holidays with the same four fields as the form:
+date, Farsi name, English name, and repeats-yearly. A template downloads from the same dialog.
+
+Dates may be Persian (`1405/01/01`) or Gregorian (`2026-03-21`); repeats-yearly accepts بله/خیر as
+well as yes/no. The whole file is checked before anything is saved, and every bad line is listed
+with its line number — so a file is never half-imported. A date already in the list is **updated**
+rather than duplicated, which makes re-uploading a corrected file the natural way to fix a typo. The
+result reports how many were added and how many overwritten.
+
+Repeats-yearly remains a note only: Persian holidays do not fall on the same Gregorian day each
+year, so each year's dates still have to be uploaded.
+
+### A personnel number that is already taken now says so, on the field (2026-08-18)
+
+**Fixed.** Adding an employee with a personnel number that already belongs to someone showed
+*"An unexpected error occurred. Please try again."* in a red bar at the top of the form. Nothing
+told the admin which field was wrong or that the number was the problem, so the natural response was
+to retype the same number.
+
+The message now appears directly under the **Personnel number** box and reads
+*"This personnel number is already in use by another employee."* / «این شماره پرسنلی قبلاً برای
+کارمند دیگری ثبت شده است.» It clears as soon as the number is edited, and the top bar no longer
+appears for this case — the same problem is never reported twice on one screen.
+
+The cause was not the form. The database has always rejected a duplicate with a precise message, but
+the app's table of known database messages had no entry for it, so it fell into the catch-all
+"unexpected error" reply. Two related messages were missing the same way and are now covered: the
+database's own uniqueness check (which catches two people saving the same number at the same instant)
+and a personnel number that is not 1–10 digits.
+
+Screen readers announce the message and the box is marked invalid, so the error is not colour-only.
+
+### HR reports, downloadable for Excel (2026-08-18)
+
+- New **Reports** screen for HR and admins, with five reports over any period you pick:
+  - **Leave balance by employee** — every active employee, one column per leave type.
+  - **Requests by status** — how many, how many days, and how many unpaid days.
+  - **Absence by department** — which departments lost the most days. Work errands are excluded,
+    because an errand is work, not absence.
+  - **Requests waiting** — what is still pending, how many days it has been waiting, and **who it is
+    waiting on** (the manager, HR, or both).
+  - **Headcount by department** — active staff, plus who joined in the period.
+- Each one downloads as a **CSV that opens directly in Excel** with Persian text intact. Day figures
+  are plain numbers, so they can be summed and sorted in the spreadsheet.
+- The period you choose is part of the web address, so a report can be bookmarked or sent to someone.
+- Managers do not get this screen — it is company-wide, and a manager's remit is their own team.
+
+### Requests now need two signatures: the manager and HR (2026-08-18)
+
+- A request is no longer approved by one person. It waits until **both the employee's direct manager
+  and HR have signed**, and only then does it count as approved and come off the leave balance. Until
+  then it stays pending — a single signature changes nothing.
+- **Either of them can go first.** That is what the client asked for, and it is the default.
+- **You can change that later without new work.** Manage → Settings has a new *Request approval
+  steps* card: give each step a number, turn steps on or off, and switch on "require the order to be
+  followed" to make them sign in sequence instead.
+- The approvals screen now shows the whole picture — who has signed and who is still needed — rather
+  than just "pending".
+- Rejection stays with either of them: if the manager or HR rejects, the request is rejected
+  immediately, and whoever already signed is still recorded.
+- An admin can sign in place of either party, but still has to sign — nobody can skip a step. Nobody
+  except an admin can sign their own request.
+- The printed form fills itself in properly now: the manager's signature goes in the تصویب کننده box
+  and HR's in the امور اداری و منابع انسانی box.
+- Requests decided **before** this change keep their existing approval and are shown as signed by the
+  manager, which is who decided them. They are not re-opened.
+- Three migrations, no data loss. The one that adds history to existing requests can be re-run safely.
+
+### HR can review and print every request (2026-08-18)
+
+- HR now has a **Request review** screen listing every request in the company — pending, approved,
+  rejected and cancelled — searchable by name, personnel number or tracking number, and filterable by
+  status and request type.
+- Each request can be **printed as the paper form the company already uses**: the daily leave form
+  (BJ-F 50210), the hourly leave form (BJ-F 50208) or the work errand form (BJ-F 50207), each with
+  its own four signature boxes laid out as on the original.
+- The two signatures the app captures — the requester's and the approver's — print as real images
+  with the date and time they were given. The remaining boxes (جانشین, حراست, and HR's own) print
+  empty for a handwritten signature, and the sheet says so, so nothing looks missing by accident.
+- The daily leave form also prints the employee's remaining annual leave on the HR line, noting that
+  the figure is as of printing.
+- **HR can now see the private reason on a request.** This is a deliberate change, made because HR
+  already signs and files the completed paper form today. Nothing changed for anyone else — teammates
+  still see only that a colleague is away, never why.
+- One question for the client: is there a paper form for the **daily** work errand? We have
+  photographs of the other three but not that one, so it currently prints on the errand form.
+
+### New HR role — first step (2026-08-18)
+
+- Added a fifth role, **HR (منابع انسانی)**, alongside admin, manager, employee and security. An admin
+  assigns it from the employee's edit screen, the same way as any other role.
+- An HR user now gets the **Manage** tab and can see **every employee in the company**, not just their
+  own department — which is what they need in order to co-sign requests and run reports later.
+- HR is deliberately kept out of company configuration: work settings, holidays, leave allocations and
+  departments all still refuse anyone who is not an admin, and refuse them by redirecting rather than
+  by merely hiding a button.
+- **HR can add employees** to any department and set who they report to. Every account HR creates is
+  an ordinary employee: only an admin can make someone a manager, HR, security or admin, and that
+  limit is enforced inside the database rather than by hiding a control. Bulk import from a
+  spreadsheet works the same way — a role column in the file is ignored for an HR user.
+- New employees created by HR get the standard leave amounts automatically, with no admin step.
+- HR cannot yet co-sign requests or open reports — those are the next steps.
+- Four migrations (`20260818130001`, `130002`, `140001`, `150001`), no data change, safe to re-run.
+
+### The chosen language now sticks (2026-08-18)
+
+- **Fixed:** picking English in Settings did not survive opening the app again. The preference was
+  saved but never actually used to decide the language — that came only from the web address, and
+  Farsi is the address with no `/en` in it. So any way into the app that didn't already carry `/en`
+  silently went back to Farsi, while Settings still showed English. The two could disagree forever.
+- The worst case was the installed phone app: its launcher opens the bare address, so an English
+  user was thrown back to Farsi on **every single launch**. Old bookmarks and typing the plain
+  address did the same.
+- Now the saved preference decides the language whenever the address doesn't name one, and it is
+  applied the moment it is changed, at sign-in, and on a device that has never seen the setting
+  before. Typing `/en` or `/fa` still wins, so shared links keep working.
+- The phone's own browser language is still deliberately ignored: someone who chose Farsi must not
+  be flipped to English by their handset's settings.
+- Under the hood: a `bj-locale` cookie for instant effect, plus an `app_locale` claim carried in the
+  login token so the choice follows the person to a new phone. Neither costs a database lookup, so
+  page-to-page speed is unaffected. One migration (`20260818120001_locale_claim.sql`), no data
+  change, safe to re-run.
+
+### Local development environment repaired (2026-08-18)
+
+- `npm run dev` could not talk to the database at all: `.env.local` pointed at an address the Mac had
+  moved off, and carried an access key the local database rejected outright. Both fixed, and the
+  address is now loopback so a changing home-network address can never break it again.
+- The local stack now exposes the plain-HTTP port that development traffic needs, bound to this
+  machine only. The client's server is untouched by this — there, the port stays closed.
+
 ### Request type is a dropdown on phones, and the form says which form it is (2026-08-17)
 
 - The four request tabs (daily leave, hourly leave, daily errand, hourly errand) no longer fit

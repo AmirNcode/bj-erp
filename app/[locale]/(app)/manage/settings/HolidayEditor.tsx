@@ -8,6 +8,7 @@ import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { upsertHoliday, deleteHoliday, getCompanyHolidays, type Holiday } from '@/lib/actions/settings';
+import { HolidayImportDialog, type HolidayImportLabels } from './HolidayImportDialog';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -32,6 +33,8 @@ type Labels = {
   delete: string;
   noHolidays: string;
   errorLabel: string;
+  /** FR-40 bulk upload. */
+  holidayImport: HolidayImportLabels;
 };
 
 // react-multi-date-picker passes a DateObject; we only ever read it via dateObjectToGregorian.
@@ -59,6 +62,13 @@ export function HolidayEditor({
 
   const show = (d: string) => formatCalendarDate(d, locale);
 
+  // Re-read so rows carry their real DB ids (a subsequent delete needs them).
+  // Shared by add, delete and the bulk import.
+  const refresh = async () => {
+    const refreshed = await getCompanyHolidays();
+    if (refreshed.ok) setHolidays(refreshed.holidays);
+  };
+
   const onAdd = () => {
     setErrMsg('');
     if (!picked || !nameFa) {
@@ -73,9 +83,7 @@ export function HolidayEditor({
         toast.error(`${labels.errorLabel}: ${res.error}`);
         return;
       }
-      // Re-read so rows carry their real DB ids (needed for a subsequent delete).
-      const refreshed = await getCompanyHolidays();
-      if (refreshed.ok) setHolidays(refreshed.holidays);
+      await refresh();
       setPicked(null);
       setNameFa('');
       setNameEn('');
@@ -93,15 +101,23 @@ export function HolidayEditor({
         toast.error(`${labels.errorLabel}: ${res.error}`);
         return;
       }
-      const refreshed = await getCompanyHolidays();
-      if (refreshed.ok) setHolidays(refreshed.holidays);
+      await refresh();
       toast.success(labels.delete);
     });
   };
 
   return (
     <section className="space-y-4" data-testid="holiday-editor">
-      <p className="text-sm font-medium">{labels.holidaysTitle}</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium">{labels.holidaysTitle}</p>
+        <HolidayImportDialog
+          existingDates={holidays.map((h) => h.holiday_date)}
+          locale={locale}
+          labels={labels.holidayImport}
+          errorLabel={labels.errorLabel}
+          onImported={refresh}
+        />
+      </div>
       {errMsg && (
         <p role="alert" data-testid="holiday-error" className="text-sm text-destructive">
           {labels.errorLabel}: {errMsg}

@@ -3,17 +3,23 @@
  *
  * Dates are parsed as UTC to avoid timezone drift.
  * weekendDays uses ISO weekday numbers (Mon=1 … Sun=7).
+ *
+ * The weekend test itself lives in `isWeekendDate` (lib/leave/weekend.ts), which
+ * mirrors `private.is_company_weekend`. Since FR-41 a weekday can be off every
+ * OTHER week, so this cannot be a plain `includes` any more — and the rule must
+ * exist in exactly one place on each side of the wire.
  */
+import { isWeekendDate, type WeekendRule } from './weekend';
+
 export function countWorkingDays(
   start: string,
   end: string,
-  opts: {
-    weekendDays: number[];
+  opts: WeekendRule & {
     holidays: string[];
     dayPart: 'full' | 'am' | 'pm';
   }
 ): number {
-  const { weekendDays, holidays, dayPart } = opts;
+  const { holidays, dayPart } = opts;
 
   // Parse as UTC midnight to avoid timezone shifts
   const startMs = Date.parse(start + 'T00:00:00Z');
@@ -30,18 +36,16 @@ export function countWorkingDays(
 
   /**
    * Returns true if the given UTC Date is a working day:
-   * - its ISO weekday is not in weekendDays
+   * - it is not a weekend day under the company's rule (weekly or fortnightly)
    * - its 'YYYY-MM-DD' string is not in holidays
    */
   function isWorkingDay(d: Date): boolean {
-    const utcDay = d.getUTCDay(); // 0 (Sun) … 6 (Sat)
-    const iso = utcDay === 0 ? 7 : utcDay; // convert to ISO Mon=1..Sun=7
-    if (weekendDays.includes(iso)) return false;
-
     const yyyy = d.getUTCFullYear();
     const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
     const dd = String(d.getUTCDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
+
+    if (isWeekendDate(dateStr, opts)) return false;
     if (holidaySet.has(dateStr)) return false;
 
     return true;

@@ -16,6 +16,8 @@ import type { WorkSettings } from '@/lib/actions/leave';
  */
 export const WORK_SETTINGS_FALLBACK: WorkSettings = {
   weekendDays: [5],
+  biweeklyWeekendDays: [],
+  biweeklyAnchor: null,
   holidays: [],
   hoursPerDay: 8,
   workStart: '07:00',

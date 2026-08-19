@@ -1,0 +1,35 @@
+-- =============================================================================
+-- Migration: 20260818130001_hr_role_enum.sql
+-- Purpose  : Add 'hr' to the app_role enum. THAT IS ALL THIS FILE MAY DO.
+-- Requirement: FR-35
+-- Spec     : docs/specs/2026-08-18-hr-role-and-locale-persistence-design.md
+--
+-- ⚠️  DO NOT ADD ANYTHING ELSE TO THIS FILE, and do not merge it into the
+--     migration that follows it.
+--
+--     Postgres refuses to *use* a new enum value in the same transaction that
+--     added it, and `bj_apply_migrations` runs every migration file inside one
+--     `--single-transaction` (together with its ledger row). Verified on this
+--     project's own database, 2026-08-18:
+--
+--       alter type public.app_role add value if not exists 'hr';   -- ok
+--       -- then, same transaction:
+--       ERROR: unsafe use of new value "hr" of enum type app_role
+--
+--     So every statement that references 'hr' — policies, helper functions,
+--     grants, seeds — belongs in 20260818130002_hr_role_access.sql or later.
+--     Getting this wrong fails on the CLIENT's server rather than here, because
+--     the migration ledger skips files already applied on this machine.
+--
+--     The ledger insert itself is safe to share this transaction: it writes a
+--     filename and checksum into bj_deploy.schema_migrations and never touches
+--     the enum.
+--
+-- Idempotent: `if not exists`. Safe to re-run.
+--
+-- Note: enum values cannot be removed in Postgres. Rolling this back means
+-- restoring from the pre-deploy dump, which is why it ships on its own ahead of
+-- anything that depends on it.
+-- =============================================================================
+
+alter type public.app_role add value if not exists 'hr';

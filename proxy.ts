@@ -11,14 +11,21 @@
  *    writes updated auth cookies back via setAll if the token was refreshed).
  *    Unlike getUser(), getClaims() verifies the JWT locally (asymmetric
  *    signing keys) — no network round-trip to the Auth server per request.
- * 4. Return the (now cookie-enriched) next-intl response.
+ * 4. Honour the user's stored language on a URL that names no locale (FR-34).
+ * 5. Return the (now cookie-enriched) next-intl response.
  */
 
 import createMiddleware from 'next-intl/middleware';
 import { createServerClient } from '@supabase/ssr';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
 import { AUTH_COOKIE_NAME } from './lib/supabase/constants';
+import {
+  LOCALE_COOKIE,
+  resolveEntryLocale,
+  shouldRedirectToPreferredLocale,
+  withLocalePrefix,
+} from './lib/i18n/locale';
 
 const handleI18nRouting = createMiddleware(routing);
 
@@ -51,9 +58,37 @@ export default async function middleware(request: NextRequest) {
   // Step 3: Validate the session and refresh it if near expiry (refresh
   // writes updated tokens via setAll). Verification is local — the only
   // network call is a once-per-process JWKS fetch, cached afterwards.
-  await supabase.auth.getClaims();
+  const { data: claimsData } = await supabase.auth.getClaims();
 
-  // Step 4: Return next-intl response (now carrying any refreshed cookies).
+  // Step 4: FR-34 — a URL that names no locale means "unspecified", not Farsi.
+  //
+  // next-intl cannot do this for us: `localeDetection` is one flag covering the
+  // cookie AND `accept-language`, and we want the first without the second (a
+  // worker who chose Farsi must not be flipped by an English handset). So it
+  // stays false in routing.ts and the cookie is read here instead.
+  //
+  // Both carriers are free: the cookie is on the request, and the claim comes
+  // from the token just verified above. No database round-trip — this path is
+  // what the nav-performance work protects.
+  const preferred = resolveEntryLocale(
+    request.cookies.get(LOCALE_COOKIE)?.value,
+    claimsData?.claims?.app_locale
+  );
+
+  if (shouldRedirectToPreferredLocale(request.nextUrl.pathname, preferred)) {
+    const url = request.nextUrl.clone();
+    url.pathname = withLocalePrefix(request.nextUrl.pathname, preferred);
+
+    const redirect = NextResponse.redirect(url);
+    // Carry over everything written onto `response` — next-intl's own headers
+    // and, critically, any refreshed auth cookies from step 3. Returning a bare
+    // redirect here would drop a rotated session token and silently sign the
+    // user out at the exact moment they open the app.
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+    return redirect;
+  }
+
+  // Step 5: Return next-intl response (now carrying any refreshed cookies).
   return response;
 }
 

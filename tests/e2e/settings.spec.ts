@@ -29,6 +29,53 @@ test('profile settings persist, language switches locale, logout clears session'
   await expect(page.locator('#leave_type_id')).toContainText('Annual Leave');
   await expect(page.locator('#leave_type_id')).not.toContainText('مرخصی استحقاقی');
 
+  // FR-34 — the reported bug: the language chosen here must survive entering the
+  // app at a URL that carries no locale. Before the fix, `language_pref` was
+  // stored but never read for routing, so any unprefixed URL resolved to Farsi
+  // and Settings could show English while the app rendered Persian.
+  //
+  // The bare root is the important one: manifest.ts sets `start_url: '/'`, so
+  // this is exactly what the installed PWA opens on every launch.
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/en\/home$/, { timeout: 10_000 });
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+  // An unprefixed deep link (an old bookmark, a shared URL) behaves the same.
+  await page.goto('/request');
+  await expect(page).toHaveURL(/\/en\/request$/, { timeout: 10_000 });
+  await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
+
+  // Switching back must be equally sticky, and must NOT leave the user stranded
+  // on the /en prefix.
+  await page.goto('/en/profile');
+  await page.locator('[data-testid="settings-language"]').selectOption('fa');
+  await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
+  await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
+  await page.goto('/');
+  await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
+  await expect(page).not.toHaveURL(/\/en\//);
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+
+  // Switching to English and back again, so the round trip is covered in both
+  // directions.
+  await page.goto('/profile');
+  await page.locator('[data-testid="settings-language"]').selectOption('en');
+  await expect(page).toHaveURL(/\/en\/profile$/, { timeout: 10_000 });
+
+  // ── Restore the shared account to Farsi before finishing ──────────────────
+  //
+  // MANDATORY, and the reason is not tidiness. Since FR-34 the stored
+  // `language_pref` decides the locale for any URL without a prefix, and this
+  // spec drives the SHARED demo admin. Seventeen other specs assert Farsi text on
+  // unprefixed URLs, so leaving this account on English makes every one of them
+  // depend on run order — `department.spec` and `hourly.spec` both failed exactly
+  // this way, expecting Farsi and getting English, with nothing in their own code
+  // at fault. A `/fa/...` prefix is NOT an escape hatch either: next-intl
+  // normalises it away before the app sees it, so the preference still wins.
+  await page.locator('[data-testid="settings-language"]').selectOption('fa');
+  await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
+  await expect(page).not.toHaveURL(/\/en\//);
+
   // Logout asks for confirmation first; cancelling keeps the session.
   await page.goto('/profile');
   await page.locator('[data-testid="settings-logout"]').click();

@@ -8,7 +8,8 @@ import {
   allocate,
   fillPicker,
   jalali2DayRange,
-  signApproval,
+  approveThroughChain,
+  requestIdFromQueueRow,
   signRequest,
 } from './_helpers';
 
@@ -91,14 +92,24 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
   await expect(card).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText('۰۹:۰۰–۱۱:۰۰').first()).toBeVisible();
 
-  const approve = page.locator('[data-testid^="approve-btn-"]').first();
-  await approve.click();
-  await signApproval(page);
-  await page.locator('[data-testid^="approve-confirm-"]').first().click();
+  // FR-36: approval is a chain (manager then HR). The admin may fill any step,
+  // so this signs each outstanding one until the request is actually approved —
+  // a single signature no longer debits anything.
+  //
+  // Target THIS employee's row, not `.first()`. The admin's queue is
+  // company-wide, so in a full-suite run the first row can belong to another
+  // spec's pending request — which is exactly how this test failed twice while
+  // passing in isolation.
+  const hourlyRow = page.locator('[data-testid^="approval-row-"]', { hasText: 'Hourly Probe' });
+  await expect(hourlyRow).toHaveCount(1, { timeout: 20_000 });
+  const hourlyId = await requestIdFromQueueRow(hourlyRow);
+  await approveThroughChain(page, hourlyId);
 
   // Assert the OUTCOME, not the toast: sonner auto-dismisses, so waiting on it is
-  // a race. An approved request leaves the queue.
-  await expect(page.locator('[data-testid^="approve-btn-"]')).toHaveCount(0, { timeout: 20_000 });
+  // a race. A fully approved request leaves the queue for good.
+  await expect(page.locator(`[data-testid="approve-btn-${hourlyId}"]`)).toHaveCount(0, {
+    timeout: 20_000,
+  });
 
   // 2 hours on an 8h day is exactly a quarter of a day.
   const after = await openEmployee();

@@ -31,6 +31,9 @@ async function NewEmployeeData({ locale }: { locale: string }) {
     getCachedProfile(user.id),
   ]);
   const isAdmin = roles.includes('admin');
+  // FR-35 D4: hr picks the department and reporting line like an admin, but gets
+  // neither the role checkboxes nor the allocation/policy fields.
+  const canChooseScope = isAdmin || roles.includes('hr');
 
   // Admin picks dept/manager and types allocations; a manager's variant only
   // needs their own department row.
@@ -38,7 +41,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
     await Promise.all([
     // No `code`: the login code is the personnel number alone (20260730130002).
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
-    isAdmin
+    canChooseScope
       ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
       : Promise.resolve({ data: [] }),
     isAdmin
@@ -65,6 +68,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   return (
     <NewEmployeeForm
       isAdmin={isAdmin}
+      canChooseScope={canChooseScope}
       ownDepartment={ownDepartment}
       ownName={callerProfile?.full_name ?? ''}
       departments={departments ?? []}

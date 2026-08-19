@@ -29,3 +29,23 @@ services:
   gateway:
     image: caddy:2.8.4-alpine-local-arm64
     platform: linux/arm64
+    ports:
+      # Publishes Caddy's plain-HTTP :8080 listener (deploy/caddy/Caddyfile) so
+      # `npm run dev` on this Mac can reach Auth + PostgREST. The dev server is
+      # http://localhost:3000 while the stack's own site is HTTPS with a private
+      # CA, so the browser cannot use the 443 site: it would need to trust the CA
+      # AND the :8080 block is the only one that answers GoTrue's CORS preflight
+      # (GoTrue sends none of its own; on Supabase Cloud that is Kong's job).
+      #
+      # Bound to 127.0.0.1 deliberately. This listener is plain HTTP and replies
+      # `Access-Control-Allow-Origin: *` to preflights, so it must not be offered
+      # to the LAN. Loopback also makes it immune to the Mac's DHCP lease moving,
+      # which has broken .env.local twice. To drive `next dev` from a phone on the
+      # LAN you would need '0.0.0.0:8080:8080' here plus the Mac's current IP in
+      # .env.local and next.config.ts allowedDevOrigins — accepting that auth
+      # tokens then cross the network in the clear. Testing the phone against the
+      # built container on APP_ORIGIN (HTTPS) is the better path.
+      #
+      # Never add this to docker-compose.yml: on the client's server the port is
+      # unpublished, which is what keeps the listener inert in production.
+      - '127.0.0.1:8080:8080'

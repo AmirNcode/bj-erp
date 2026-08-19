@@ -51,6 +51,58 @@ describe('parseHireDate', () => {
     expect(parseHireDate('yesterday')).toBeUndefined();
     expect(parseHireDate('1404/13/01')).toBeUndefined();
   });
+
+  it('rejects a day that does not exist, instead of rolling it forward', () => {
+    // The bug this replaced: `DateObject.isValid` NORMALISES an out-of-range day
+    // and still reports true, so these were accepted and stored as a DIFFERENT
+    // date — silently, with nothing shown back to the person importing.
+    //
+    //   2026-02-30  became 2026-03-02
+    //   1405/07/31  became 1405/08/01   (Mehr has 30 days)
+    //   1405/12/30  became 1406/01/01   (Esfand has 29 days in 1405 — a whole
+    //                                    Persian YEAR crossed)
+    //
+    // It mattered because `accrue_leave` skips months ending before the hire date
+    // and pro-rates the hire month by the days left in it, so a rolled date moves
+    // earned leave. The row now reports `badDate` with its line number, like any
+    // other bad cell.
+    expect(parseHireDate('2026-02-30')).toBeUndefined();
+    expect(parseHireDate('2026-04-31')).toBeUndefined();
+    expect(parseHireDate('1405/07/31')).toBeUndefined();
+    expect(parseHireDate('1405/12/30')).toBeUndefined();
+  });
+
+  it('still accepts genuine month-end dates, in both calendars', () => {
+    // A naive "reject day > 30" would break all of these. 1403 is a Persian leap
+    // year so 30 Esfand exists; Shahrivar always has 31 days.
+    expect(parseHireDate('1403/12/30')).toBe('2025-03-20');
+    expect(parseHireDate('1405/06/31')).toBe('2026-09-22');
+    expect(parseHireDate('2024-02-29')).toBe('2024-02-29');
+    expect(parseHireDate('2026-01-31')).toBe('2026-01-31');
+  });
+
+  it('accepts hire dates long before the app’s calendar table starts', () => {
+    // `jalali_months` covers 1400-1450, but that table bounds which months leave
+    // can be ACCRUED for — it is not consulted here. Someone with decades of
+    // service must still be enterable. Verified end to end against the database:
+    // an employee hired 1355/01/01 was created and accrued correctly.
+    expect(parseHireDate('1380/05/15')).toBe('2001-08-06');
+    expect(parseHireDate('1355/01/01')).toBe('1976-03-21');
+    expect(parseHireDate('1300/01/01')).toBe('1921-03-21');
+  });
+
+  it('flags a rolled date as badDate on its row, not silently', () => {
+    const header = templateHeader();
+    const { rows, errors } = validateImportRows(
+      [
+        header,
+        ['نام', '9990000001', '1405/12/30', 'prod', '', 'employee', '', '0', '0'],
+      ],
+      { deptCodes: ['prod'], existingPersonnelNos: [] }
+    );
+    expect(rows).toEqual([]);
+    expect(errors).toContainEqual({ line: 2, field: 'hire_date', messageKey: 'badDate' });
+  });
 });
 
 describe('validateImportRows', () => {

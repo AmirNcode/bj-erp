@@ -32,7 +32,10 @@ type InitialLeaveType = {
   default_carryover_cap_minutes: number;
 };
 
-const ROLES = ['admin', 'manager', 'employee', 'security'] as const;
+// Rendered as raw slugs, matching the four that were already here. The e2e
+// helper picks these checkboxes by their exact label text, so translating them
+// is a separate, deliberate change — see docs/AGENT-LOG.md 2026-08-18.
+const ROLES = ['admin', 'manager', 'employee', 'security', 'hr'] as const;
 type Role = (typeof ROLES)[number];
 
 // react-multi-date-picker returns a DateObject; keeping this loose matches the
@@ -42,6 +45,16 @@ type DateObjectLike = any;
 
 type Props = {
   isAdmin: boolean;
+  /**
+   * Admin OR hr. Controls only the department and manager pickers (FR-35 D4).
+   *
+   * Kept separate from `isAdmin` on purpose: HR chooses where a new hire lands
+   * and who they report to, but must NOT get the role checkboxes, the opening
+   * allocation, or the accrual policy — `allocate_leave` and
+   * `set_employee_leave_policy` are admin-only in the database, so showing HR
+   * those fields would render a form that fails on submit.
+   */
+  canChooseScope: boolean;
   ownDepartment: Department | null;
   ownName: string;
   departments: Department[];
@@ -108,6 +121,7 @@ function minutesToDaysInput(minutes: number | null, hoursPerDay: number): number
 
 export function NewEmployeeForm({
   isAdmin,
+  canChooseScope,
   ownDepartment,
   ownName,
   departments,
@@ -121,6 +135,11 @@ export function NewEmployeeForm({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Errors the database attributes to one input (currently only the personnel
+  // number) render beside that input instead of in the banner — a duplicate
+  // personnel number used to arrive as a bare "unexpected error" at the top of
+  // the page, naming neither the field nor the cause.
+  const [fieldError, setFieldError] = useState<string | null>(null);
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
@@ -128,7 +147,7 @@ export function NewEmployeeForm({
   const [personnelNo, setPersonnelNo] = useState('');
   const [hireDate, setHireDate] = useState<DateObjectLike | null>(null);
   // Admin picks a department; manager is locked to their own.
-  const [deptId, setDeptId] = useState(isAdmin ? '' : ownDepartment?.id ?? '');
+  const [deptId, setDeptId] = useState(canChooseScope ? '' : ownDepartment?.id ?? '');
 
   // Since 20260730130002 the login code is the personnel number alone — the
   // department no longer feeds it, so the preview does not wait for one.
@@ -141,6 +160,7 @@ export function NewEmployeeForm({
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setFieldError(null);
     setAllocationError(null);
     setPolicyError(null);
     setPending(true);
@@ -159,15 +179,18 @@ export function NewEmployeeForm({
       personnel_no: normalizedPno,
       full_name: (fd.get('full_name') as string).trim(),
       job_title: ((fd.get('job_title') as string) || '').trim() || undefined,
-      department_id: isAdmin ? (fd.get('department_id') as string) || undefined : undefined,
-      manager_id: isAdmin ? (fd.get('manager_id') as string) || undefined : undefined,
+      department_id: canChooseScope ? (fd.get('department_id') as string) || undefined : undefined,
+      manager_id: canChooseScope ? (fd.get('manager_id') as string) || undefined : undefined,
       roles: isAdmin ? selectedRoles : undefined,
       hire_date: hireDate ? dateObjectToGregorian(hireDate) : undefined,
     });
 
     if (!result.ok) {
       setPending(false);
-      setError(result.error);
+      // Exactly one of the two is set, so the same failure is never reported
+      // twice on the page.
+      if (result.field === 'personnel_no') setFieldError(result.error);
+      else setError(result.error);
       return;
     }
 
@@ -263,6 +286,7 @@ export function NewEmployeeForm({
           {error && (
             <p
               role="alert"
+              data-testid="form-error"
               className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
             >
               {labels.errorLabel}: {error}
@@ -286,12 +310,29 @@ export function NewEmployeeForm({
               inputMode="numeric"
               autoCapitalize="off"
               autoCorrect="off"
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={fieldError ? 'personnel_no-error' : undefined}
               value={personnelNo}
-              onChange={(e) => setPersonnelNo(e.target.value)}
+              onChange={(e) => {
+                setPersonnelNo(e.target.value);
+                // Clear on edit: the message named a number the user is no
+                // longer typing, so leaving it up contradicts the field.
+                if (fieldError) setFieldError(null);
+              }}
             />
+            {fieldError && (
+              <p
+                id="personnel_no-error"
+                role="alert"
+                data-testid="personnel-no-error"
+                className="text-sm text-destructive"
+              >
+                {fieldError}
+              </p>
+            )}
           </div>
 
-          {isAdmin ? (
+          {canChooseScope ? (
             /* Native <select> — must stay native for Playwright selectOption e2e */
             <div className="space-y-1.5">
               <Label htmlFor="department_id">{labels.department}</Label>
@@ -320,7 +361,7 @@ export function NewEmployeeForm({
             </div>
           )}
 
-          {isAdmin ? (
+          {canChooseScope ? (
             <div className="space-y-1.5">
               <Label htmlFor="manager_id">{labels.manager}</Label>
               <select id="manager_id" name="manager_id" className={nativeSelectClass}>
@@ -533,6 +574,8 @@ export function NewEmployeeForm({
             </div>
           )}
 
+          {/* Non-admins (manager and hr) get the leave-type default quotas applied
+              in-database by app_create_employee, with no allocation fields here. */}
           {!isAdmin && (
             <p className="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="default-quota-hint">
               {labels.defaultQuotaHint}

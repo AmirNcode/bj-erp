@@ -6,6 +6,7 @@ import {
   nextWorkingDateAfter,
 } from '@/lib/leave/calendarMonth';
 import type { CalendarEntry } from '@/lib/actions/leave';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 const baseEntry = {
   kind: 'leave',
@@ -57,7 +58,7 @@ describe('buildCalendarMonth', () => {
       rangeStart: '2026-06-01',
       rangeEnd: '2026-06-30',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
+      workSettings: { ...WORK_SETTINGS_FALLBACK, weekendDays: [5], holidays: [] },
     });
 
     const june29 = month.days.find((day) => day.iso === '2026-06-29');
@@ -80,7 +81,7 @@ describe('buildCalendarMonth', () => {
       rangeStart: '2026-07-01',
       rangeEnd: '2026-07-31',
       locale: 'en',
-      workSettings: { weekendDays: [5], holidays: [], hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240 },
+      workSettings: { ...WORK_SETTINGS_FALLBACK, weekendDays: [5], holidays: [] },
     });
 
     for (const iso of ['2026-07-10', '2026-07-11', '2026-07-12', '2026-07-13']) {
@@ -93,11 +94,9 @@ describe('nextWorkingDateAfter', () => {
   it('skips configured weekends and holidays', () => {
     expect(
       nextWorkingDateAfter('2026-06-25', {
+        ...WORK_SETTINGS_FALLBACK,
         weekendDays: [5],
         holidays: ['2026-06-27'],
-        hoursPerDay: 8,
-        workStart: '07:00',
-        workEnd: '15:00',
         maxHourlyMinutesPerDay: 240,
       })
     ).toBe('2026-06-28');

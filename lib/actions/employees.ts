@@ -5,7 +5,7 @@ import { allowedProfileFields, generateTempPassword } from './employees-helpers'
 import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 
 // Re-export pure helpers so the unit test can import from this path
 export { allowedProfileFields, generateTempPassword };
@@ -58,17 +58,23 @@ export type CreateEmployeeInput = {
  * The employee code is composed in-DB — since 20260730130002 it is the
  * personnel number alone, with no department prefix.
  * Admins create freely; managers are scoped in-DB to their own department and
- * team with the employee role only — the fast-path check here just mirrors it.
+ * team; hr may pick any department and manager but is likewise forced to the
+ * employee role. Every one of those limits is enforced inside
+ * app_create_employee — the check here only avoids a pointless round-trip.
  * Returns the temp password so the creator can hand it to the worker.
  * The temp password is never logged or stored — shown once in the UI.
  */
 export async function createEmployee(
   input: CreateEmployeeInput
-): Promise<{ ok: true; tempPassword: string; userId: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; tempPassword: string; userId: string } | DbErrorResult> {
   const { supabase, user, roles, companyId } = await getCallerContext();
 
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin') && !roles.includes('manager')) {
+  if (
+    !roles.includes('admin') &&
+    !roles.includes('manager') &&
+    !roles.includes('hr')
+  ) {
     return dbErr('admin or manager role required');
   }
   if (!companyId) return dbErr('no profile for caller');

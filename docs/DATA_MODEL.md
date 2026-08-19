@@ -23,7 +23,7 @@ Source of truth for the schema. Postgres (Supabase). All employee-data tables ge
 ## Enums
 
 ```
-app_role        : 'admin' | 'manager' | 'employee' | 'security'
+app_role        : 'admin' | 'manager' | 'employee' | 'security' | 'hr'   -- hr 2026-08-18, FR-35
 department_kind : 'team' | 'security' | 'office'        -- extensible
 leave_status    : 'pending' | 'approved' | 'rejected' | 'cancelled'
 day_part        : 'full' | 'am' | 'pm'                  -- hourly added later
@@ -112,7 +112,10 @@ by `auth.uid()` and grants execute only to `authenticated`.
 ## HR module tables
 
 ### `work_settings`
-`id` · `company_id` **(unique — one row per company, 2026-07-02)** · `weekend_days int[]`
+`id` · `company_id` **(unique — one row per company, 2026-07-02)** ·
+`approval_order_enforced bool` (default **false**, 2026-08-18 — when true a step cannot be signed
+until every lower-ordered active step has been; false means any order, whoever is free) ·
+`weekend_days int[]`
 (ISO weekday numbers; default `{5}` = Friday) · `hours_per_day numeric` (default 8, 2026-07-29) ·
 `updated_by` · `updated_at`. Drives working-day counting. The settings UI upserts on `company_id`.
 `hours_per_day` defines what one *day* of leave means and governs every days↔minutes render; it does
@@ -120,10 +123,40 @@ by `auth.uid()` and grants execute only to `authenticated`.
 hourly requests, and `max_hourly_minutes_per_day int` (default 240 = 4h) caps them **per day**, summed
 across that day's own pending + approved hourly requests.
 
+**Weekend frequency (2026-08-18, FR-41):** `biweekly_weekend_days int[]` (default `{}`) ·
+`biweekly_anchor date` (nullable). A date is a weekend when its ISO weekday is in `weekend_days`
+**OR** it is in `biweekly_weekend_days` **AND** its week has the same parity as the anchor's week.
+The client's real week — Friday off weekly, Thursday off fortnightly — is `{5}` plus `{4}` with an
+anchor.
+
+Three things about this are deliberate and easy to break:
+
+- **`weekend_days` was not migrated.** The new array defaults to empty, which makes the second
+  branch unreachable, so every existing install behaves exactly as before until an admin changes the
+  setting. That is what made this safe to deploy against the client's live data.
+- **Week parity is counted on a SATURDAY-aligned grid**, `floor((d - date '2000-01-01') / 7)`, and
+  2000-01-01 was a Saturday. On an ISO Monday grid a Saturday and the Thursday of the *same* Iranian
+  week (Sat–Fri) fall in different buckets and can take opposite parities. The division is floored,
+  not truncated — the two agree for every realistic date, which is exactly why the distinction needs
+  a test that straddles the epoch.
+- **The anchor is required whenever the array is non-empty** (CHECK constraint), because without it
+  *which* Thursdays are off is undefined. A second CHECK keeps the union of both arrays below seven
+  days, or nothing could ever be requested.
+
+The rule lives once, in `private.is_company_weekend(company_id, date)`, which
+`compute_requested_minutes` calls at each of its **three** weekend tests (hourly leave, am/pm
+half-day, the daily loop). Its TS mirror is `isWeekendDate` in `lib/leave/weekend.ts` and the two
+must stay in lockstep, the same contract as `countWorkingDays` / `compute_requested_minutes`.
+**The daily-errand branch has no weekend test and must not gain one** — an errand may fall on a
+weekend or holiday (FR-30/FR-33).
+
 ### `holidays`
 `id` · `company_id` · `holiday_date date` (Gregorian) · `name_fa` · `name_en` ·
 `is_recurring bool` · `created_at`. Seeded with official Iranian (Jalali) public holidays for the
-current year(s), stored as their Gregorian equivalents. Admin-editable. **Unique**
+current year(s), stored as their Gregorian equivalents. Admin-editable. **Bulk-uploadable since
+2026-08-18 (FR-40)**: `bulkUpsertHolidays` sends a validated set as one PostgREST upsert on the
+unique key below, so an import is atomic and a date already present is overwritten rather than
+duplicated. No new RPC and no new policy — it writes through the same admin policies as the form. **Unique**
 (`company_id`,`holiday_date`) (2026-07-02). `is_recurring` is informational only — day counting
 matches exact dates, so each year's occurrences must be entered (Jalali recurrence has no fixed
 Gregorian month-day); the editor UI says so.
@@ -242,6 +275,76 @@ Errands are **not** bound by the work-hours window, **not** counted against
 `max_hourly_minutes_per_day`, and name **no** replacement. They **may fall on a weekend or holiday**.
 For `kind='errand'`, `compute_requested_minutes` returns the raw time difference for an hourly
 errand, or inclusive calendar days × configured `hours_per_day` for a daily errand.
+
+### `approval_steps` (2026-08-18, FR-36)
+`id` · `company_id → companies` · `role app_role` · `applies_to request_kind[]` (default
+`{leave,errand}`) · `step_order int` · `active bool` · `created_at` · `updated_at`.
+**Unique** (`company_id`,`role`). Company configuration: **who must sign a request**.
+Seeded `manager` (order 1) then `hr` (order 2) for every company, both kinds.
+
+`role = 'manager'` means **the requester's own direct manager**, resolved per request via
+`private.is_manager_of` — not "anyone holding the manager role", which would contradict FR-17's
+narrow-write rule. `'security'` is permitted by the CHECK for the deferred حراست step but nothing
+seeds it. RLS: any active user may SELECT (the requester is shown the chain's progress); **admin OR
+hr** for INSERT/UPDATE/DELETE since 2026-08-18 (FR-42).
+
+**Named approvers (2026-08-18, FR-42):** `approver_id → profiles` (nullable). NULL keeps the
+original meaning — anyone holding `role` may fill the step. Non-NULL means **only that person**, and
+there is deliberately **no admin override**: naming someone means that signature specifically is
+required, and an override could not be reconciled with a deactivated approver blocking the step.
+`role` stays meaningful for a person-step because it decides which signature box the form prints it
+in; `employee` joins the allowed set for a named person who holds no app role, with a CHECK that
+`employee` is only valid when `approver_id` is set.
+
+`unique (company_id, role)` is gone — it would have allowed only ONE named person in the entire
+company, since every person-step carries some role. Two **partial** unique indexes replace it:
+`(company_id, role) where approver_id is null` and `(company_id, approver_id) where approver_id is
+not null`.
+
+**`approver_id` has NO `on delete` action, and that is load-bearing.** `cascade` would silently drop
+a required approval step when a profile went away; `set null` would silently turn a step reserved for
+one person into one anybody with that role could fill. So a named approver cannot be deleted, only
+deactivated — which is the app's model anyway. The one place that hard-deletes profiles is
+`app_cleanup_e2e_users()`, and `20260818180003` teaches it to remove the steps naming the accounts it
+is about to reap rather than weakening the constraint.
+
+### `leave_request_approvals` (2026-08-18, FR-36)
+`id` · `request_id → leave_requests` · `step_role app_role` · `approver_id → profiles` ·
+`decision leave_status` (`approved|rejected`) · `signature_data text` ·
+`signature_consent_at timestamptz` · `note text` · `created_at`.
+**Keyed on the STEP since 2026-08-18 (FR-42):** `step_id uuid` (nullable, **no** foreign key — same
+reasoning as `step_role`, recorded evidence must survive its step being reordered or deleted). The
+old `unique (request_id, step_role)` is replaced by TWO partial unique indexes:
+`(request_id, step_role) where step_id is null` for rows written before FR-42, and
+`(request_id, step_id) where step_id is not null` for everything since. Several named people may
+share one role, so a role-only key would have let the first of them to sign complete a step the
+others never filled.
+
+Not one expression index over `coalesce(step_id::text, step_role::text)`: casting an enum to text is
+only STABLE, and an index expression must be IMMUTABLE — Postgres rejects it outright. Every
+"has this step been decided?" test in the engine reads
+`a.step_id = s.id or (a.step_id is null and a.step_role = s.role)`, and there are FOUR of them (step
+selection, the already-signed message, order enforcement, the remaining-step count).
+
+**Deliberately NOT a foreign key to `approval_steps`.** Configuration can be reordered or
+deactivated later, and recorded evidence must not change or vanish when it is.
+
+Signature columns carry the same bounded-PNG CHECK as `leave_requests.signature_data`. A rejection
+must be unsigned (FR-14); an approval is signed, **except** for rows written by the 2026-08-18
+backfill, which represent decisions made before FR-14 shipped and have no signature to record. New
+rows cannot exploit that allowance: the table has **no client write policy** and its only writer
+validates the PNG first. RLS SELECT mirrors `leave_requests_select` exactly.
+
+**Ledger timing moved.** `approve_leave_request` now fills ONE step; it writes the `consumption`
+row, flips `status` to `approved`, and sets `decided_by`/`decided_at` only when **every active step
+applying to that request's kind** has approved. `leave_status` itself is unchanged — a request stays
+`pending` throughout — so every existing query, view, index and policy keeps working. The
+per-employee advisory lock is taken **before** the step is chosen, not just before the ledger write:
+two approvers signing different steps at the same instant would otherwise both count zero
+outstanding steps and both finalize, debiting twice.
+
+`leave_requests.approver_signature_data`/`_consent_at` are retained and record whoever **completed**
+the chain, so pre-chain readers keep working; the per-step evidence lives here.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

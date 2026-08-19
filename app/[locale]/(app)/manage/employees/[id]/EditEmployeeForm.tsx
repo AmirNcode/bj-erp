@@ -38,7 +38,8 @@ type Profile = {
   language_pref: string;
 };
 
-const ALL_ROLES = ['admin', 'manager', 'employee', 'security'] as const;
+// See the note on ROLES in NewEmployeeForm about the raw slugs and e2e.
+const ALL_ROLES = ['admin', 'manager', 'employee', 'security', 'hr'] as const;
 type Role = (typeof ALL_ROLES)[number];
 
 type Props = {

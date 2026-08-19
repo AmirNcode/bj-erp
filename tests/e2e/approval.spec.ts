@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
+  approveThroughChain,
   fillDailyDateRange,
   fillPicker,
   jalaliRangeFromGregorian,
@@ -223,6 +224,13 @@ test.describe('Approval flow', () => {
       timeout: 10_000,
     });
 
+    // FR-36: capture the id — the manager's signature fills only the FIRST step,
+    // and the chain has to be completed before any balance moves.
+    const approvedId = (await approveButtons.first().getAttribute('data-testid'))!.replace(
+      'approve-btn-',
+      ''
+    );
+
     await approveButtons.first().click();
     // Confirm the approve AlertDialog
     const approveConfirm = page.locator('[data-testid^="approve-confirm-"]').first();
@@ -238,6 +246,13 @@ test.describe('Approval flow', () => {
     await page.locator('[data-testid^="reject-reason-"]').first().fill(REJECT_REASON);
     await rejectConfirm.click();
     await expect(page.locator('[data-testid="approvals-empty"]')).toBeVisible({ timeout: 10_000 });
+
+    // 3b. FR-36: the manager has signed their step, but the request is still
+    //     pending and the balance is untouched until HR signs too. The admin may
+    //     fill any outstanding step, so they complete the chain here.
+    await logout(page);
+    await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+    await approveThroughChain(page, approvedId);
 
     // 4. Employee sees one approved + one rejected.
     await logout(page);

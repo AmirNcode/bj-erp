@@ -23,7 +23,11 @@ export default async function ImportPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
   const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) redirect(`/${locale}/manage/employees`);
+  // hr bulk-onboards too (FR-35 D4). app_bulk_create_employees clamps every
+  // row's role to 'employee' for an hr caller, so the CSV cannot smuggle one in.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    redirect(`/${locale}/manage/employees`);
+  }
 
   const t = await getTranslations('manage.import');
   const tc = await getTranslations('manage.import.credentials');

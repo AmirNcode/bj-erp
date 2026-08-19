@@ -7,13 +7,23 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 
 - **FR-1** ☑ A single **admin** (the owner) can create, edit, deactivate employees.
 - **FR-2** ☑ Admin can assign/change an employee's **role(s)**, **team/department**, and **manager**.
-- **FR-3** ☑ Roles: **admin, manager, employee, security**. A user may hold more than one.
+- **FR-3** ☑ Roles: **admin, manager, employee, security**, plus **hr** (2026-08-18, FR-35).
+  A user may hold more than one.
 - **FR-4** ☑ Org model: company → departments (3 teams + 1 Security department) → employees, with
   a **manager hierarchy** (`manager_id` self-reference).
 - **FR-5** ☑ **Managers** can edit employees that **directly report** to them (subset of fields).
 - **FR-6** ☑ Employees can edit a limited set of their own profile fields.
 - **FR-7** ☑ Login is **username (employee code) + password**, issued by admin. **No email
   required.** Self-service password change (Profile → Change password; verifies current password).
+
+- **FR-35** ☑ **HR role.** A fifth role, `hr` (منابع انسانی), added to `app_role`. It reads
+  company-wide (via `can_read_all`), reaches `/manage/*`, and **may add employees to any department**
+  — but every account it creates is forced in-database to the `employee` role alone, so promotion to
+  manager/hr/security/admin stays admin-only and an HR account can never mint an admin. HR does not
+  reach company Settings or Departments. It is also a required approval step (FR-36) and owns the
+  reports screen (FR-37). *(**Role, company-wide read, `/manage` access, employee onboarding into any
+  department, request review/printing (FR-38), co-signing (FR-36) and reports (FR-37) all shipped
+  2026-08-18.**)*
 
 ## Functional — Time-Off
 
@@ -25,7 +35,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-11** ☑ Employee submits a request: type, date range, **full or half day** (am/pm). Schema
   reserves room for **hourly** leave later without migration.
 - **FR-12** ☑ **Working-day count** excludes configured **weekend** days and **holidays**;
-  half-day = 0.5. Computed **server-side**.
+  half-day = 0.5. Computed **server-side**. *(Amended by FR-41: a weekday may be off
+  every other week, decided by an admin-chosen reference date.)*
 - **FR-13** ☑ Paid-leave forms show the **requested duration**, **projected remaining paid
   balance**, and any **unpaid excess** before submit. A request may exceed the available paid
   balance: approval atomically consumes only the available paid minutes, leaves that balance at
@@ -35,7 +46,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   override** any decision. Approval requires the deciding manager/admin to draw a fresh digital
   signature and explicitly authorize its use; rejection requires neither. The signature, consent
   timestamp, decision, audit event, and ledger update are committed atomically. *(Extended
-  2026-08-05.)*
+  2026-08-05.)* **Amended by FR-36 (planned 2026-08-18):** approval becomes a chain of required
+  signed steps rather than one decision. The manager step described here is retained as the first
+  step; the ledger update moves to whichever signature completes the chain. **Shipped 2026-08-18.**
 - **FR-15** ☑ Employee can **cancel** a pending request, and an **approved future** request
   (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
   shipped in Phase 2; approved-future in Phase 6.)*
@@ -91,6 +104,77 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   follows the same signed request and signed manager/admin approval flow as hourly work errands.
   Any overlapping leave or errand conflicts in both directions. *(2026-08-05.)*
 
+- **FR-36** ☑ **Configurable approval chain.** A request requires a signed approval from every
+  **active step** configured for its kind, not a single decision. Steps ship seeded as
+  **manager** (order 1) then **hr** (order 2), applying to all four request kinds. Whether the order
+  binds is the company setting `work_settings.approval_order_enforced`, **default false** — so by
+  default either party may sign first and the request completes when both have. An admin may fill any
+  unfilled step but must still sign; rejection by any required approver is unilateral and immediate.
+  `leave_status` is unchanged: a request stays `pending` until the chain completes, and the ledger
+  consumption happens in the transaction that completes it. A non-admin may never sign a step on
+  their own request; an admin may, deliberately, so a company whose admin has no manager above them
+  is not stuck. If an admin deactivates every step, approval degrades to the pre-chain single
+  manager/admin decision rather than becoming impossible. *(2026-08-18; amends FR-14. Spec
+  `2026-08-18-hr-role-and-locale-persistence-design.md`.)*
+- **FR-37** ☑ **HR reports and export.** An `hr` or `admin` user gets `/manage/reports`: leave balance
+  by employee, requests by period and status, absence by department, pending-approval ageing, and
+  headcount by department, over a Jalali month range. Each downloads as a UTF-8-BOM CSV that opens
+  directly in Excel with Farsi intact — no new dependency, reusing the existing credentials-export
+  writer. Reports read through existing RLS and add no SECURITY DEFINER surface. Durations export as
+  **decimal days**, not formatted strings, because HR sums and sorts them in the spreadsheet. The
+  period is a URL parameter, so a report can be linked and reloaded. *(2026-08-18.)*
+
+- **FR-38** ☑ **HR reviews and prints every request.** An `hr` or `admin` user gets
+  `/manage/requests`: every request in the company in every status (pending, approved, rejected and
+  cancelled), filterable by status, kind and free text over name / personnel number / tracking
+  number. Each row opens `/print/request/[id]`, a printable sheet reproducing the client's own
+  stationery — **BJ-F 50210(R0)** daily leave, **50208(R0)** hourly leave, **50207(R0)** hourly
+  errand — with that form's own four signature boxes. The two signatures the app captures (requester,
+  approver) are printed as images with their consent timestamps; جانشین, حراست and the HR box print
+  empty for a wet signature until FR-36 fills them. The daily work errand has no photographed paper
+  original and reuses the 50207 layout, saying so on the sheet. *(2026-08-18.)*
+
+- **FR-39** ☑ **A taken personnel number is reported on the field.** Creating an employee with a
+  personnel number that already exists names the problem beside the Personnel number input, with
+  `aria-invalid` and `aria-describedby`, instead of the page-level banner. Root cause of the
+  original bug: the database raises `personnel number already exists`, no rule in
+  `lib/errors/db-error.ts` matched it, and the unmapped-error fallback turned it into "an
+  unexpected error occurred". The unique-index message and `invalid personnel number` are mapped
+  too, and errors now carry an optional `field` so placement is decided once, by the rule, rather
+  than at each call site. No live check as the user types — deliberately, so the company's
+  personnel numbering is not probeable. *(2026-08-18.)*
+- **FR-40** ☑ **Bulk holiday upload.** Admin uploads a CSV of official holidays with a downloadable
+  template carrying the same four fields as the form: date, Farsi name, English name, repeats
+  yearly. The date column accepts Jalali or Gregorian, disambiguated by the year (below 1600 =
+  Jalali), the same rule the employee import's hire-date column already uses. The whole file is
+  validated before anything is written; a date that already exists is then **updated** rather than
+  duplicated or skipped, so re-uploading a corrected file is the natural fix. Written through the
+  existing `holidays` admin policies — no new RPC, and one upsert statement so the set lands
+  atomically. Every bad line is listed by number so a file is never half-imported, and the result
+  reports added and updated counts. *(2026-08-18.)*
+- **FR-41** ☑ **Weekend frequency.** A weekday may be off **every week** or **every other week**,
+  because the real working week is Friday off weekly and Thursday off fortnightly. The alternation
+  is anchored on one admin-chosen reference date and alternates from it indefinitely; the week grid
+  starts Saturday so a whole Iranian week shares one parity. `weekend_days` keeps its meaning and is
+  not migrated — `biweekly_weekend_days` defaults to empty, making the new branch a no-op on every
+  existing install. The rule lives once in `private.is_company_weekend`, mirrored by
+  `lib/leave/weekend.ts`. Alternating days are **full** days off; fractional weekdays are out of
+  scope, and a reference date is **required** whenever any day is fortnightly — without one the
+  parity is undefined, so the save is refused rather than guessed. Work errands deliberately still
+  ignore weekends (FR-30/FR-33). *(2026-08-18; extends FR-12 and FR-24.)*
+- **FR-42** ☑ **Approval steps may name a person, and HR may configure them.** Admin **and hr** can
+  add approval steps beyond the seeded manager + HR: either another role, or a **specific person**
+  searchable by name or personnel number, whose signature is then required on every request. A
+  named approver who is deactivated **blocks** the step and is flagged in Settings rather than
+  falling back to their role or silently disappearing from the chain. Steps beyond the four boxes on
+  the client's paper stationery print in an additional-approvals strip below them. **A named step
+  admits that person ONLY — an admin may not override it**, because an override cannot be reconciled
+  with a deactivated approver blocking the step, and naming someone means that signature
+  specifically is required. Evidence rows key on the STEP rather than its role, so several named
+  people may share a role without one of them completing another's step. The order-enforcement
+  switch stays admin-only: it writes `work_settings`, which HR does not gain.
+  *(2026-08-18; extends FR-36.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.
@@ -98,7 +182,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-18** ☑ **Security** staff see **everyone's** calendar and time-off (read-only).
 - **FR-19** ☑ **Admin** sees and edits everything.
 - **FR-25** ☑ A leave request's free-text **`reason` is private**: visible only to the requester,
-  their manager, security, and admin — NOT to teammates. The team calendar shows coworkers' dates +
+  their manager, security, admin, and — since 2026-08-18 (FR-38) — **hr**. NOT to teammates. The team calendar shows coworkers' dates +
   status only. (Decided 2026-06-23; enforced in the Phase 3 team-calendar read path via the
   reason-less `team_leave_calendar` view — see PERMISSIONS.md.)
 
@@ -116,6 +200,17 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   the only calendar used by every picker and date display; it is no longer configurable. Calendar
   labels/digits follow the selected language, while user names are not translated. *(Calendar
   preference removed 2026-08-05.)*
+- **FR-34** ☑ **The chosen language persists across every entry into the app.** `language_pref` is
+  currently written by Settings and read by nothing that decides the locale, so any URL without an
+  `/en` prefix — most importantly the PWA's `start_url: '/'` — renders Farsi regardless of the
+  setting, which is why Settings can show English while the app shows Persian. The stored preference
+  becomes authoritative **at entry** (carried by a `bj-locale` cookie plus an `app_locale` JWT claim,
+  neither costing a database round-trip), while an explicit `/en` prefix in the URL still
+  wins so deep links and the switcher keep working. `accept-language` stays ignored deliberately: a
+  device's browser language must never override a worker's choice. **Accepted edge:** under
+  `localePrefix: 'as-needed'` next-intl normalises `/fa/x` to `/x` before the app sees it, so a user
+  whose preference is English cannot reach the Farsi UI by typing `/fa/…` — the preference wins,
+  which is the point of the fix. *(2026-08-18.)*
 - **FR-24** ☑ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
   **holiday list** (add/edit/delete) at `/manage/settings`. Editor shipped in Phase 6; the
   authoritative Iranian 1404–1405 dates are entered in-app (placeholder seed retained).
