@@ -78,6 +78,124 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-08-19 — FR-43: HR sets the opening leave balance and accrual policy
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `8ba15e9`, clean and pushed — **the previous batches are now
+COMMITTED, PUSHED, and DEPLOYED to the client.** Amir confirmed the app is running there and working.
+**Trigger:** Testing on the client's server, Amir found that an HR user adding an employee gets no
+time-off section — no opening balance, no yearly cap, no monthly accrual — and asked for parity with
+admin.
+
+**Why it was missing**
+
+Not an oversight in the UI. FR-35 batch 3 hid those fields from HR *because the database refused
+them*: `allocate_leave`, `set_employee_leave_policy` and `set_leave_balance` all guarded on
+`private.is_admin` alone, so rendering the fields would have built a form that fails on submit. The
+two halves had to move together.
+
+**What changed**
+
+- `supabase/migrations/20260819120001_hr_manages_leave_setup.sql` — **new**. Four functions, each
+  patched from `pg_get_functiondef` by a script whose guard anchor had to match exactly once:
+  `allocate_leave`, `set_employee_leave_policy`, `set_leave_balance` now admit `hr`, and
+  `accrue_employee_leave` does too (see below).
+- **A self-guard came with it:** a non-admin may not do any of this to their OWN record. FR-36
+  already draws that line for approvals — nobody but an admin signs their own request — and it
+  applies more sharply to setting your own balance. An admin is still allowed, so a company whose
+  admin is also its only HR person is not stuck.
+- `lib/actions/leave.ts` — five guards widened: `allocateLeave`, `setLeaveBalance`,
+  `setEmployeeLeavePolicy`, `getEmployeeBalances`, `getEmployeePolicies`.
+- `NewEmployeeForm` + its page — new `canManageLeave` prop (admin || hr) driving the allocation and
+  policy sections. **`isAdmin` still gates the role checkboxes** — HR creating a role holder is
+  refused in the database (FR-35 D4), and that boundary did not move.
+- `EditEmployeeForm` + its page — same prop for the balance and policy sections. The submit handler
+  used to run roles, balances and policy inside ONE `if (isAdmin)`; that conflated two different
+  authorities and is now two branches.
+- `lib/errors/db-error.ts` + messages — `cannotSetOwnBalance`, and `only admins or hr can …` added
+  to the existing not-allowed pattern so the widened guards never fall through to the generic
+  message.
+- `EditEmployeeForm` gained `data-testid` on its error and success banners — the repo's rule is that
+  anything e2e reads gets one, and these were being selected by ARIA role.
+
+**Two things found while building, neither of which was the requested change**
+
+1. **HR could not save the edit form at all.** `updateEmployee` requires admin **or manager**, and
+   the form always submitted the profile fields first — so an HR save failed on the profile write
+   before ever reaching the balance and policy writes. Fixed with a `canEditProfile` prop (admin ||
+   manager): the profile write is skipped entirely for a caller who may not make it, and the name
+   field renders disabled for them rather than pretending to be editable. Without this the feature
+   would have looked done and silently done nothing.
+2. **`[accrual] skipped: not allowed to accrue for this employee`** in the dev-server log —
+   `accrue_employee_leave` was manager-of/admin only, so HR would set an accrual policy and then
+   read a balance that never advanced. Widened in the same migration. It posts only months the
+   policy has already earned, so it credits nothing that was not due.
+
+**Actions outside the repo**
+
+- **Nothing against the client's server. No SSH, no VPN, no deploy.** The client is running
+  `8ba15e9`; this work is on top of it and not yet shipped.
+- Local database only. The migration was applied twice to prove idempotency, and all scenarios ran
+  inside rolled-back transactions.
+- Docker was down at session start (the Mac had restarted); started it and waited for the stack.
+- Set a known password on the LOCAL seeded HR account `201` to do the browser check. Local dev
+  database only — the client's server was not touched.
+
+**Verification** — all actually run:
+
+- `tsc` clean · `lint` clean · `build` clean · **unit 434/434 across 46 files** (unchanged — this
+  batch adds no pure logic) · full e2e serial: see the entry's tail.
+- **Seven SQL scenarios before any UI work**, in rolled-back transactions: HR sets another
+  employee's balance (4800 min), policy, and opening allocation — all succeed; HR setting their OWN
+  balance or policy is refused with "you cannot change your own leave balance"; a plain employee is
+  still refused with "only admins or hr can set leave balance"; and an ADMIN setting their own is
+  still allowed.
+- `tests/e2e/hr-leave-setup.spec.ts` — **new**, 2 tests, run three times for stability.
+- **Full e2e serial: 47 passed, 1 pre-existing skip** (was 46 + 1).
+- **One existing spec asserted the OLD contract and failed correctly**: `hr-role.spec:303` required
+  the allocation and policy sections to be ABSENT for HR. Updated, not deleted — the role-checkbox
+  assertion beside it is the boundary that has not moved and still passes. Same shape as the
+  `hr-role` settings assertion FR-42 had to update.
+- Verified in a browser on the seeded HR account (`201`), not only through Playwright: the
+  "Starting balance — one-off" and "Monthly accrual policy" sections render, with no role checkboxes
+  and no "defaults are applied" hint.
+- **Sabotage check: stripping the `hr` clause from the migration and re-applying fails the first
+  test**, and it passes again when restored.
+- **My first sabotage attempt silently did nothing** and briefly looked like proof. I replaced
+  `set_leave_balance` with a hand-written stub and suppressed stderr; the `create or replace` almost
+  certainly failed on the return type, so the real function was never touched and the suite passed.
+  A detection query I wrote at the same time also gave a false "ADMIN ONLY" reading, because it
+  matched `has_role(auth.uid()` while the accrual function uses `has_role(v_uid`. Both were my
+  errors, not the code's. **Sabotage by editing the real migration and re-applying it — never by
+  hand-writing a replacement — and never suppress psql's stderr.**
+
+**State left behind**
+
+- **Uncommitted on `main`**, not pushed. **ONE migration** the client does not have:
+  `20260819120001`. Everything before it is deployed.
+- Local database has it; local shared config untouched.
+
+**A dev-server trap worth recording**
+
+Mid-session the dev server wedged: every route timed out, including `/login`, and two specs failed
+with `waiting for locator('#personnel_no')` — which looked exactly like a regression in the page I
+had just edited. It was not. I had killed several concurrent Playwright runs with `pkill`, which
+takes the `webServer` child with them and leaves the port held by a half-dead process. Restarting it
+made the same route answer in 0.3 s. **Before believing a route-level failure, curl the route: a
+whole-server timeout is the dev server, a single-route failure is the code.**
+
+**For the next agent**
+
+- **HR still cannot edit profile fields**, deliberately — name, hire date, department, manager and
+  roles stay admin/manager. HR gets the leave sections on those screens and nothing else.
+- The self-guard is enforced in SQL, but through the Edit screen an HR user editing their own record
+  is refused EARLIER, by the profile-scope rule. The e2e asserts the refusal that actually happens
+  and says so; the SQL guard is defence in depth and is proven by the scenarios above.
+- `/manage/allocations` — the standalone bulk allocation screen — is **still admin-only** and was
+  not touched. It is the same authority HR now has on the employee forms, so it is a reasonable
+  follow-up if Amir wants it, but he asked about the Add Employee screen.
+
+
 ## 2026-08-18 (follow-up) — One shared date reader; the calendar-range error speaks
 
 **Agent:** Claude Opus 5 via Claude Code

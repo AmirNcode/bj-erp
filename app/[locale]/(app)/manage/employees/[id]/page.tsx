@@ -36,6 +36,15 @@ export default async function EditEmployeePage({ params }: Props) {
   // Fetch caller's roles
   const callerRoles = await getCachedRoles(user.id);
   const isAdmin = callerRoles.includes('admin');
+  // FR-43: HR administers leave, so it reads and writes the balance and accrual
+  // sections here too. Role assignment and the department/manager pickers stay
+  // admin-only above.
+  const canManageLeave = isAdmin || callerRoles.includes('hr');
+  // `updateEmployee` requires admin or manager (and RLS narrows a manager to
+  // their own reports). HR is neither, so the form must NOT call it for them —
+  // otherwise every HR save fails on the profile write before ever reaching the
+  // leave sections, which is exactly what happened when FR-43 was first wired up.
+  const canEditProfile = isAdmin || callerRoles.includes('manager');
 
   // Fetch target employee
   const { data: employee } = await supabase
@@ -63,19 +72,19 @@ export default async function EditEmployeePage({ params }: Props) {
       .neq('id', id)
       .order('full_name'),
   ]);
-  const balancesRes = isAdmin ? await getEmployeeBalances(id) : null;
+  const balancesRes = canManageLeave ? await getEmployeeBalances(id) : null;
   const balances = balancesRes?.ok ? balancesRes.balances : [];
   // Balances are stored in minutes; the editor renders and accepts days, so it
   // needs the company's day length to convert at the boundary.
-  const workSettingsRes = isAdmin ? await getWorkSettings() : null;
+  const workSettingsRes = canManageLeave ? await getWorkSettings() : null;
   const hoursPerDay = workSettingsRes?.ok ? workSettingsRes.settings.hoursPerDay : 8;
   // Accrual policy: existing rows pre-fill the form; the leave-type defaults fill
   // the gaps, and the start month defaults to the current Jalali month so turning
   // accrual on never back-credits months nobody worked.
-  const policiesRes = isAdmin ? await getEmployeePolicies(id) : null;
+  const policiesRes = canManageLeave ? await getEmployeePolicies(id) : null;
   const policies = policiesRes?.ok ? policiesRes.policies : [];
-  const accrualStartMonth = isAdmin ? await getCurrentJalaliMonthStart() : '';
-  const { data: typeDefaults } = isAdmin
+  const accrualStartMonth = canManageLeave ? await getCurrentJalaliMonthStart() : '';
+  const { data: typeDefaults } = canManageLeave
     ? await supabase
         .from('leave_types')
         .select(
@@ -97,6 +106,8 @@ export default async function EditEmployeePage({ params }: Props) {
         employee={employee}
         empRoles={empRoles as string[]}
         isAdmin={isAdmin}
+        canManageLeave={canManageLeave}
+        canEditProfile={canEditProfile}
         departments={departments ?? []}
         managers={managers ?? []}
         balances={balances}

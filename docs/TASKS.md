@@ -384,6 +384,21 @@ blocking (not falling back) when a named approver is deactivated.
 - ☐ **Batch D — FR-42 approval steps by role or person, editable by HR.** Two migrations. Swaps a
   unique constraint on a table holding **real backfilled client approval evidence**.
 
+## HR sets leave balances and accrual (2026-08-19) ☑ landed, NOT deployed
+
+- ☑ **FR-43.** Migration `20260819120001` widens `allocate_leave`,
+  `set_employee_leave_policy`, `set_leave_balance` and `accrue_employee_leave` to admin ∪ hr, each
+  with a self-guard (a non-admin cannot do it to their own record). `canManageLeave` drives the
+  allocation/policy sections on both employee forms.
+- ☑ **Two bugs found while building it**, neither the requested change: HR could not save the Edit
+  Employee form at all (the profile write ran first and requires admin/manager — now skipped via
+  `canEditProfile`), and `accrue_employee_leave` refused HR, so a balance HR read would lag the
+  policy HR had just set.
+- ☐ **Not applied to the client's server.** Everything before it IS deployed (`8ba15e9`), so this is
+  the only outstanding migration.
+- ☐ **Optional follow-up:** `/manage/allocations`, the standalone bulk allocation screen, is still
+  admin-only. It is the same authority HR now has on the employee forms.
+
 ## Bulk holidays, weekend frequency, approval steps (2026-08-18) ☑ A–D landed, none deployed
 
 Spec `docs/specs/2026-08-18-holidays-weekends-approvers-design.md` ·

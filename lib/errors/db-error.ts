@@ -118,6 +118,8 @@ const RULES: Rule[] = [
   { re: /employee cannot be their own manager|profiles_manager_not_self/i, key: 'managerCannotBeSelf' },
   { re: /no profile for caller/, key: 'noProfile' },
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
+  // FR-43: HR may set an opening balance and accrual policy, but not their own.
+  { re: /you cannot change your own leave balance/i, key: 'cannotSetOwnBalance' },
   { re: /this leave type cannot be taken hourly/, key: 'hourlyNotAllowed' },
   { re: /end time must be after start time/, key: 'endBeforeStart' },
   { re: /times must fall within working hours/, key: 'outsideWorkHours' },
@@ -145,7 +147,7 @@ const RULES: Rule[] = [
   { re: /holiday name is too long/i, key: 'holidayNameTooLong' },
   { re: /holidays were not saved/i, key: 'holidayImportNotSaved' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
-  { re: /not allowed to|only admins can|not permitted|admin role required|admin or manager role required|admin or hr role required/i, key: 'notAllowed' },
+  { re: /not allowed to|only admins can|not permitted|admin role required|admin or manager role required|admin or hr role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },
 ];
 

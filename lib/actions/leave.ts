@@ -364,7 +364,12 @@ export async function allocateLeave(
   const { supabase, user, roles } = await getCallerContext();
 
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  // FR-43: admin OR hr — HR administers leave, so the opening balance and the
+  // accrual policy are theirs too. The database re-checks and additionally
+  // refuses a non-admin doing this to their own record.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    return dbErr('admin or hr role required');
+  }
 
   const { error } = await supabase.rpc('allocate_leave', {
     p_employee_id: input.employeeId,
@@ -399,7 +404,12 @@ export async function setLeaveBalance(
   const { supabase, user, roles } = await getCallerContext();
 
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  // FR-43: admin OR hr — HR administers leave, so the opening balance and the
+  // accrual policy are theirs too. The database re-checks and additionally
+  // refuses a non-admin doing this to their own record.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    return dbErr('admin or hr role required');
+  }
 
   const { error } = await supabase.rpc('set_leave_balance', {
     p_employee_id: employeeId,
@@ -1151,7 +1161,12 @@ export async function getEmployeeBalances(
 ): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
   const { supabase, user, roles, companyId } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  // FR-43: admin OR hr — HR administers leave, so the opening balance and the
+  // accrual policy are theirs too. The database re-checks and additionally
+  // refuses a non-admin doing this to their own record.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    return dbErr('admin or hr role required');
+  }
   if (!companyId) return dbErr('no profile for caller');
 
   await accrueBeforeRead(supabase, employeeId);
@@ -1213,7 +1228,12 @@ export async function setEmployeeLeavePolicy(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  // FR-43: admin OR hr — HR administers leave, so the opening balance and the
+  // accrual policy are theirs too. The database re-checks and additionally
+  // refuses a non-admin doing this to their own record.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    return dbErr('admin or hr role required');
+  }
 
   const { error } = await supabase.rpc('set_employee_leave_policy', {
     p_employee_id: input.employeeId,
@@ -1235,7 +1255,12 @@ export async function getEmployeePolicies(
 ): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
   const { supabase, user, roles } = await getCallerContext();
   if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  // FR-43: admin OR hr — HR administers leave, so the opening balance and the
+  // accrual policy are theirs too. The database re-checks and additionally
+  // refuses a non-admin doing this to their own record.
+  if (!roles.includes('admin') && !roles.includes('hr')) {
+    return dbErr('admin or hr role required');
+  }
 
   const { data, error } = await supabase
     .from('employee_leave_policies')

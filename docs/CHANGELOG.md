@@ -10,6 +10,25 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### HR can now set leave balances and monthly accrual (2026-08-19)
+
+An HR user adding an employee saw no time-off section at all — no opening balance, no yearly cap, no
+monthly accrual — so every new hire they created had to be finished off by an administrator. Those
+fields now appear for HR exactly as they do for an admin, on both the **Add Employee** and **Edit
+Employee** screens.
+
+This was never a deliberate split. The fields were hidden because the database refused HR those
+three operations, and showing them would have produced a form that failed on save. Both halves moved
+together.
+
+**What HR still cannot do**, unchanged: assign roles, or change an employee's name, hire date,
+department or manager. Those remain with administrators and direct managers.
+
+**One new limit:** nobody except an administrator can change *their own* leave balance or accrual
+rule. An HR officer granting themselves leave is the kind of thing an audit asks about, and the app
+already draws the same line for approvals — nobody but an administrator signs off their own request.
+
+
 ### Dates that do not exist are now refused instead of silently changed (2026-08-18)
 
 **Fixed.** A date typed into either import file — an employee's hire date, or a holiday — was

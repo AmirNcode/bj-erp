@@ -46,13 +46,19 @@ type DateObjectLike = any;
 type Props = {
   isAdmin: boolean;
   /**
+   * FR-43: may set the opening leave balance and the accrual policy. Admin or hr.
+   * Separate from `isAdmin`, which still gates the ROLE checkboxes — HR creating
+   * an admin is refused in the database (FR-35 D4).
+   */
+  canManageLeave: boolean;
+  /**
    * Admin OR hr. Controls only the department and manager pickers (FR-35 D4).
    *
    * Kept separate from `isAdmin` on purpose: HR chooses where a new hire lands
-   * and who they report to, but must NOT get the role checkboxes, the opening
-   * allocation, or the accrual policy — `allocate_leave` and
-   * `set_employee_leave_policy` are admin-only in the database, so showing HR
-   * those fields would render a form that fails on submit.
+   * without gaining the role checkboxes. (Until FR-43 it also excluded the
+   * allocation and accrual fields, because `allocate_leave` and
+   * `set_employee_leave_policy` were admin-only in the database; both now admit
+   * hr, so those moved to `canManageLeave`.)
    */
   canChooseScope: boolean;
   ownDepartment: Department | null;
@@ -121,6 +127,7 @@ function minutesToDaysInput(minutes: number | null, hoursPerDay: number): number
 
 export function NewEmployeeForm({
   isAdmin,
+  canManageLeave,
   canChooseScope,
   ownDepartment,
   ownName,
@@ -166,7 +173,7 @@ export function NewEmployeeForm({
     setPending(true);
 
     const fd = new FormData(e.currentTarget);
-    const requestedAllocations = isAdmin
+    const requestedAllocations = canManageLeave
       ? leaveTypes
           .map((type) => ({
             typeId: type.id,
@@ -215,7 +222,7 @@ export function NewEmployeeForm({
     // Accrual policy per balance-affecting type. Separate from the opening
     // allocation above: that is a one-off starting position, this is the rule that
     // keeps adding to it every month.
-    if (isAdmin) {
+    if (canManageLeave) {
       for (const type of leaveTypes) {
         const rateDays = Number(fd.get(`policy_rate_${type.id}`) || 0);
         const capDays = Number(fd.get(`policy_cap_${type.id}`) || 0);
@@ -444,7 +451,7 @@ export function NewEmployeeForm({
             </div>
           </div>
 
-          {isAdmin && leaveTypes.length > 0 && (
+          {canManageLeave && leaveTypes.length > 0 && (
             <div
               className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
               data-testid="alloc-section"
@@ -474,7 +481,7 @@ export function NewEmployeeForm({
             </div>
           )}
 
-          {isAdmin && leaveTypes.length > 0 && (
+          {canManageLeave && leaveTypes.length > 0 && (
             <div
               className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
               data-testid="policy-section"
@@ -574,9 +581,10 @@ export function NewEmployeeForm({
             </div>
           )}
 
-          {/* Non-admins (manager and hr) get the leave-type default quotas applied
-              in-database by app_create_employee, with no allocation fields here. */}
-          {!isAdmin && (
+          {/* Managers get the leave-type default quotas applied in-database by
+              app_create_employee, with no allocation fields here. Since FR-43 hr
+              fills those fields in, so this hint would contradict what they typed. */}
+          {!canManageLeave && (
             <p className="text-sm text-muted-foreground rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="default-quota-hint">
               {labels.defaultQuotaHint}
             </p>

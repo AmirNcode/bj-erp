@@ -107,7 +107,16 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `leave_allocations`
 - **SELECT**: own · `is_manager_of` · `can_read_all`.
-- **WRITE**: `is_admin` (managers may be allowed later; v1 = admin sets allocations).
+- **WRITE**: `is_admin` **or `hr`** since 2026-08-19 (FR-43), through `allocate_leave`. HR
+  administers leave, so the opening balance and the accrual policy belong to it as well as to admin.
+  The same widening covers `set_employee_leave_policy`, `set_leave_balance` and
+  `accrue_employee_leave` (the last so the balances HR reads do not lag the policy HR just set).
+- **Nobody but an admin may do any of it to their OWN record.** Same asymmetry as FR-36's
+  self-approval rule and for the same reason. Enforced inside each function
+  (`p_employee_id = auth.uid()` raises `42501`), not in the UI.
+- Untouched by FR-43: role assignment, and the profile fields. `updateEmployee` still requires admin
+  or manager, so the Edit Employee screen skips the profile write entirely for an HR caller rather
+  than failing the whole save on it.
 
 ### `leave_requests`
 - **SELECT (full base row)**: own · direct `is_manager_of` · security · admin · **hr**

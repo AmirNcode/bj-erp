@@ -34,6 +34,11 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   // FR-35 D4: hr picks the department and reporting line like an admin, but gets
   // neither the role checkboxes nor the allocation/policy fields.
   const canChooseScope = isAdmin || roles.includes('hr');
+  // FR-43: HR sets the opening balance and accrual policy too. Kept separate from
+  // `canChooseScope` because they answer different questions — where the hire
+  // lands, versus what leave they start with — and separate from `isAdmin`
+  // because role assignment stays admin-only (FR-35 D4).
+  const canManageLeave = isAdmin || roles.includes('hr');
 
   // Admin picks dept/manager and types allocations; a manager's variant only
   // needs their own department row.
@@ -44,7 +49,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
     canChooseScope
       ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
       : Promise.resolve({ data: [] }),
-    isAdmin
+    canManageLeave
       ? supabase
           .from('leave_types')
           .select(
@@ -68,6 +73,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   return (
     <NewEmployeeForm
       isAdmin={isAdmin}
+      canManageLeave={canManageLeave}
       canChooseScope={canChooseScope}
       ownDepartment={ownDepartment}
       ownName={callerProfile?.full_name ?? ''}

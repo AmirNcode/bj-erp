@@ -46,6 +46,20 @@ type Props = {
   employee: Profile;
   empRoles: string[];
   isAdmin: boolean;
+  /**
+   * FR-43: may edit the leave balance and accrual policy. Admin or hr.
+   * `isAdmin` still gates roles and the department/manager pickers.
+   */
+  canManageLeave: boolean;
+  /**
+   * May change the basic profile fields (name, hire date, and — for an admin —
+   * department, manager and roles). Admin or manager.
+   *
+   * HR is deliberately NOT included: `updateEmployee` requires admin or manager,
+   * so submitting those fields as HR fails the whole save before the balance and
+   * policy writes are reached.
+   */
+  canEditProfile: boolean;
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
@@ -106,6 +120,8 @@ export function EditEmployeeForm({
   employee,
   empRoles,
   isAdmin,
+  canManageLeave,
+  canEditProfile,
   departments,
   managers,
   balances,
@@ -158,25 +174,30 @@ export function EditEmployeeForm({
 
     const fd = new FormData(e.currentTarget);
 
-    // Update basic fields
-    const result = await updateEmployee(employee.id, {
-      full_name: (fd.get('full_name') as string).trim(),
-      hire_date: hireDate ? dateObjectToGregorian(hireDate) : null,
-      ...(isAdmin
-        ? {
-            department_id: (fd.get('department_id') as string) || null,
-            manager_id: (fd.get('manager_id') as string) || null,
-          }
-        : {}),
-    });
+    // Basic fields — skipped entirely for a caller who may not change them, so an
+    // HR user's save proceeds straight to the leave sections instead of failing
+    // here on a write they were never allowed to make.
+    if (canEditProfile) {
+      const result = await updateEmployee(employee.id, {
+        full_name: (fd.get('full_name') as string).trim(),
+        hire_date: hireDate ? dateObjectToGregorian(hireDate) : null,
+        ...(isAdmin
+          ? {
+              department_id: (fd.get('department_id') as string) || null,
+              manager_id: (fd.get('manager_id') as string) || null,
+            }
+          : {}),
+      });
 
-    if (!result.ok) {
-      setPending(false);
-      setError(result.error);
-      return;
+      if (!result.ok) {
+        setPending(false);
+        setError(result.error);
+        return;
+      }
     }
 
-    // Update roles if admin
+    // Roles are admin-only — HR creating or promoting a role holder is refused
+    // in the database (FR-35 D4), so this branch must NOT follow canManageLeave.
     if (isAdmin) {
       const rolesResult = await setRoles(employee.id, selectedRoles);
       if (!rolesResult.ok) {
@@ -184,7 +205,12 @@ export function EditEmployeeForm({
         setError(rolesResult.error);
         return;
       }
+    }
 
+    // Balance and accrual policy: admin or hr (FR-43). Split out of the branch
+    // above, which used to conflate "may assign roles" with "may administer
+    // leave" — two different authorities that now belong to different people.
+    if (canManageLeave) {
       const changes = balanceAdjustments(
         balances.map((balance) => ({
           leaveTypeId: balance.leaveTypeId,
@@ -270,6 +296,7 @@ export function EditEmployeeForm({
       {error && (
         <p
           role="alert"
+          data-testid="edit-error"
           className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
         >
           {labels.errorLabel}: {error}
@@ -278,6 +305,7 @@ export function EditEmployeeForm({
       {success && (
         <p
           role="status"
+          data-testid="edit-success"
           className="bg-success-foreground border border-success/20 text-success px-4 py-3 rounded-lg text-sm"
         >
           {labels.saved}
@@ -305,6 +333,9 @@ export function EditEmployeeForm({
                 name="full_name"
                 required
                 defaultValue={employee.full_name}
+                // Read-only for a caller who cannot save it (HR): an editable box
+                // whose value is silently discarded is worse than a disabled one.
+                disabled={!canEditProfile}
               />
             </div>
 
@@ -387,6 +418,16 @@ export function EditEmployeeForm({
                     ))}
                   </div>
                 </div>
+              </>
+            )}
+
+            {/* FR-43: balance and accrual policy are admin OR hr. Deliberately
+                a separate block from the admin one above — department, manager
+                and roles are a different authority from administering leave, and
+                they used to share one condition purely because only admins had
+                either. */}
+            {canManageLeave && (
+              <>
 
                 {balances.length > 0 && (
                   <div

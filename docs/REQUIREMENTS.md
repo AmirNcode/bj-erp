@@ -175,6 +175,17 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   switch stays admin-only: it writes `work_settings`, which HR does not gain.
   *(2026-08-18; extends FR-36.)*
 
+- **FR-43** ☑ **HR sets the opening leave balance and the accrual policy.** The Add and Edit
+  Employee screens show HR the same allocation, yearly-cap and monthly-accrual fields an admin sees,
+  and `allocate_leave` / `set_employee_leave_policy` / `set_leave_balance` / `accrue_employee_leave`
+  admit `hr` accordingly. Before this, HR created employees who then needed an admin to finish
+  provisioning them — the fields were hidden purely because those functions were admin-only.
+  **Role assignment, and the name / hire date / department / manager fields, stay with admin and
+  direct managers** (FR-35 D4 is unchanged). **A non-admin may not do any of this to their own
+  record**, mirroring FR-36's rule that nobody but an admin signs their own request; an admin still
+  may, so a company whose admin is also its only HR person is not stuck. *(2026-08-19; extends
+  FR-35.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

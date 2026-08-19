@@ -716,6 +716,7 @@
     "managerCannotBeSelf": "An employee cannot be assigned as their own manager.",
     "noProfile": "Your profile could not be found. Contact the administrator.",
     "allocationInvalid": "Allocation days must be greater than 0.",
+    "cannotSetOwnBalance": "You cannot change your own leave balance or accrual policy. Ask an administrator.",
     "hourlyNotAllowed": "This leave type cannot be taken by the hour.",
     "endBeforeStart": "The end time must be after the start time.",
     "outsideWorkHours": "The times must fall within working hours.",

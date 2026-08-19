@@ -296,14 +296,21 @@ test('hr creates an employee in another department, and cannot grant a role', as
   await expect(page.locator('#manager_id')).toBeVisible();
   await expect(page.locator('[data-testid="mgr-locked"]')).toHaveCount(0);
 
-  // No role checkboxes, and no allocation or accrual-policy fields: both of the
-  // underlying RPCs are admin-only, so offering them would build a form that
-  // fails on submit.
+  // No role checkboxes — granting a role stays admin-only, and this is the
+  // boundary that has NOT moved: `app_create_employee` clamps an HR caller's role
+  // list to {employee} in the database (FR-35 D4).
   await expect(page.locator('input[type="checkbox"][value="admin"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="alloc-section"]')).toHaveCount(0);
-  await expect(page.locator('[data-testid="policy-section"]')).toHaveCount(0);
-  // Instead HR is told the leave-type defaults are applied automatically.
-  await expect(page.locator('[data-testid="default-quota-hint"]')).toBeVisible();
+
+  // CHANGED BY FR-43: the allocation and accrual-policy fields ARE offered to HR
+  // now. They were hidden only because `allocate_leave` and
+  // `set_employee_leave_policy` were admin-only in the database, so a form
+  // showing them would have failed on submit; both admit hr since
+  // 20260819120001, and the fields moved with them.
+  await expect(page.locator('[data-testid="alloc-section"]')).toBeVisible();
+  await expect(page.locator('[data-testid="policy-section"]')).toBeVisible();
+  // ...so the "defaults are applied automatically" hint is gone: HR types the
+  // real numbers in, and telling them defaults apply would contradict that.
+  await expect(page.locator('[data-testid="default-quota-hint"]')).toHaveCount(0);
 
   // Create into the SECOND department — proving "any department", not "my own".
   const hire = await createEmployee(page, {
