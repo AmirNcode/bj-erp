@@ -1,5 +1,9 @@
 # BJ ERP deployment assistant
 
+> **2026-09-29:** this tooling targets the client's on-prem server, which is no longer the
+> go-forward host — the app is moving to Liara ([DEPLOY-LIARA.md](DEPLOY-LIARA.md)). Kept for that
+> server and for local Docker work.
+
 This is the operator guide for deploying and testing BJ ERP without copying a long sequence of
 terminal commands. The assistant asks what you want to do, explains what data it will affect, and
 performs the build, backup, transfer, server command, and verification in the right order.
@@ -41,7 +45,8 @@ It connects to `behsazan@5.201.190.184` on port `2222`. Enter the server login p
 install the key. The password is not stored.
 
 The Mac does **not** need the client's VPN. It reaches public SSH directly. The phone needs the VPN
-to open `https://10.10.10.50:3500` until IT creates the production subdomain.
+to open `https://10.10.10.50:3500`. (The planned public subdomain was dropped on 2026-09-29 —
+IT could not create it; public hosting moved to Liara.)
 
 Verify both targets:
 

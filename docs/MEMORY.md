@@ -196,6 +196,34 @@ synonyms—the former preserves the Caddy CA; the latter replaces it and require
 new certificate. Ordinary app releases never silently adopt upstream Supabase infrastructure
 changes; service versions remain pinned until a separate reviewed upgrade.
 
+### Rate limiting a client-side login: the limit and the identity are two separate problems
+Pinned GoTrue v2.170.0 routes both password logins and refresh-token calls through
+one `/token` limiter (`internal/api/api.go`). In `internal/api/options.go` it
+refills at `RateLimitTokenRefresh / (60*5)` requests/second with burst capacity
+30. The setting is per **five minutes**, not per hour. Default 300 means about
+3600/hour sustained. `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` is the correct name;
+legacy `RATE_LIMIT_TOKEN_PER_IP_HOUR` remains a numeric fallback with no unit
+conversion. People sharing an office public IP also share the bucket.
+
+In this pinned version, `middleware.go` skips rate limiting when
+`GOTRUE_RATE_LIMIT_HEADER` is unset or its value is absent; there is no peer-IP
+fallback. Server-side refreshes need the gateway-stamped header forwarded by
+the app. Stamping these with the app/gateway IP instead collapses different
+clients into one bucket. Verify these semantics again before changing Auth
+versions; current upstream differs from the pinned image.
+
+So the identity has to be plumbed end to end: the gateway deletes any inbound copy of the header and
+re-stamps it from `{http.request.client_ip}` on both the browser's `/auth/v1` path and the app path;
+the app forwards that value on its own server-side Supabase calls; and the internal unpublished
+listener must **not** re-stamp, or it overwrites the forwarded value with the app's own address.
+`trusted_proxies` is the security boundary that decides whose `X-Forwarded-For` is believable — keep
+it to the single gateway address, never `private_ranges`, or every VPN client becomes able to claim
+any identity. And none of this can live in the app: login is client-side, so the browser calls
+`/auth/v1/token` directly and any app-layer check is bypassable with curl.
+
+Every failure mode here is silent — logins keep working, the bucket is just wrong — so the
+cross-file agreement is pinned by `tests/unit/login-rate-limit.test.ts` rather than left to review.
+
 ### Self-host: the public port lives in three places, and the browser bundle is one of them
 Moving the app off 443 by editing the compose `ports:` line alone leaves the site reachable but
 **login dead**. `NEXT_PUBLIC_SUPABASE_URL` is substituted into the compiled JS by
@@ -282,6 +310,16 @@ effect: a new employee's balance jumps the moment they first log in, because acc
 on the first balance read. The 2026-08-17 wording pass (`allocHint`, `policyAnnualCapHint`, …)
 explains this in the UI; the model itself was deliberately left alone.
 
+### Liara hosting decision (2026-09-30)
+The initial PaaS/one-click proposal was superseded by one Debian VM running the
+repository's minimal Docker stack. Use `docs/DEPLOY-LIARA.md` and the latest AGENT-LOG.
+- Fresh database; do not copy, reset or modify the client's existing installation.
+- Caddy stamps the client-IP header on Liara too. Its internal listener stays private.
+- Use the explicit Liara override and public certificate configuration. The legacy client
+  target retains its old host and port; it must not be mistaken for the Liara target.
+- Public values are substituted into a placeholder-built Linux image at container startup.
+  Never build/send actual private configuration or database backups.
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,
@@ -302,6 +340,8 @@ explains this in the UI; the model itself was deliberately left alone.
 - Read order: `CLAUDE.md` → `docs/PLAN.md` → `REQUIREMENTS.md` → `DATA_MODEL.md` →
   `PERMISSIONS.md` → current spec in `docs/specs/` → `TASKS.md` → `CHANGELOG.md`.
 - Granular task + commit history: `.superpowers/sdd/progress.md`.
-- Supabase demo project: `bj-app`, ref `rimshsfkjpwlvjxbxhqm`, eu-central-1. Vercel: `fra1`.
+- Host (since 2026-09-29): **Liara** — `docs/DEPLOY-LIARA.md`; Liara docs index
+  `https://docs.liara.ir/all-links-llms.txt` (Context7 `/liara-cloud/docs`).
+- Legacy: Supabase demo project `bj-app`, ref `rimshsfkjpwlvjxbxhqm`, eu-central-1. Vercel: `fra1`.
 - GitHub: `AmirNcode/bj-erp`. Demo logins: `admin`/`Admin!2026`; seeded roster `Demo!2026`.
 - Cross-session agent memory: `~/.claude/projects/-Users-amir-Workspace-bj/memory/`.

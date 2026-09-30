@@ -1,7 +1,10 @@
 node_modules
 .next
 .git
-.env*
+# Private configuration, database dumps, and deployment run metadata.
+**/.env*
+**/backups/
+**/.bj-deploy/
 dist
 test-results
 playwright-report

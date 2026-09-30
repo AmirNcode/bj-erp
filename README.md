@@ -61,7 +61,7 @@ or Gregorian calendar.
 | Calendar | `react-multi-date-picker` + `react-date-object` (Persian + Gregorian) |
 | PWA | Installable, persistent session, brand theme color |
 | Testing | **Vitest** (98 unit) + **Playwright** (20 e2e) |
-| Hosting | Demo: Vercel + Supabase Cloud · Production: company's own servers (self-hosted) |
+| Hosting | **Liara** (liara.ir) — testing phase since 2026-09-29 · legacy: Vercel + Supabase Cloud demo, on-prem self-host package |
 
 ## 🏛️ Architecture principles
 
@@ -73,8 +73,8 @@ or Gregorian calendar.
 - **Dates are stored Gregorian** (`date` / `timestamptz`); Jalali is a presentation concern,
   converted at the UI edge. Never store Jalali strings.
 - **Portable by design.** No proprietary cloud lock-in in the data/auth layer — the same code runs
-  on Vercel + Supabase Cloud (demo) or self-hosted on company servers (production); only env vars
-  change.
+  on Liara (current host: one Debian VM running Next.js, Postgres, Auth, PostgREST and Caddy), on Vercel + Supabase Cloud,
+  or on the company's own server; only env vars change.
 - **Module isolation.** Future modules (QC, finance, …) share the auth/org/roles core but own their
   tables and inject their own role-driven navigation.
 
@@ -109,8 +109,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx_or_legacy_anon_jwt
 ### Database & deployment
 
 Apply `supabase/migrations/*` (schema, RLS, functions) and `supabase/seed.sql` (config baseline),
-then `npm run seed` for the demo org. Full runbook for the Vercel demo and self-hosted production
-is in **[docs/DEPLOY.md](docs/DEPLOY.md)**.
+then `npm run seed` for the demo org. The app is hosted on **Liara** — runbook in
+**[docs/DEPLOY-LIARA.md](docs/DEPLOY-LIARA.md)**. The legacy Vercel demo and on-prem self-host
+notes are in [docs/DEPLOY.md](docs/DEPLOY.md).
 
 **Demo login:** `admin` / `Admin!2026`. Seeded role accounts (`1001`, `2001`, `1004`, …) use
 `Demo!2026` — full roster in [docs/DEPLOY.md](docs/DEPLOY.md).
@@ -143,7 +144,8 @@ Start with **[CLAUDE.md](CLAUDE.md)** (agent/human onboarding), then:
 | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) | Roles, visibility matrix, RLS policies |
 | [docs/TASKS.md](docs/TASKS.md) | Build checklist by phase with status |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | What shipped, per release |
-| [docs/DEPLOY.md](docs/DEPLOY.md) | Demo (Vercel) + production (self-host) runbook |
+| [docs/DEPLOY-LIARA.md](docs/DEPLOY-LIARA.md) | **Current host:** Liara runbook |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Deploy index; legacy Vercel demo + on-prem self-host notes |
 | [docs/specs/](docs/specs/) | Dated, frozen design records |
 
 ## 🗺️ Roadmap

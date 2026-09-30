@@ -9,13 +9,40 @@
 #
 # Plus a plain-HTTP :8080 listener with the same API routes, used ONLY by the
 # app container's server-side code (private CA isn't in its trust store).
+#
+# NOTE ON PUBLIC EXPOSURE: when the app is fronted by a company gateway on a
+# public subdomain, TLS for the public name is terminated on THAT gateway. This
+# file keeps serving the internal self-signed certificate on the internal hop —
+# nothing here changes for the public certificate. What does matter publicly is
+# the client-IP plumbing below, which is what makes GoTrue's per-IP rate limit
+# work; see "Login rate limiting" in RUNBOOK.md.
 # =============================================================================
-
 {
 	local_certs
 	# Browsers hitting the site by raw IP send no SNI; without this Caddy
 	# refuses the handshake ("tlsv1 alert internal error").
 	default_sni {$APP_HOST}
+
+	servers {
+		# Whose X-Forwarded-For we are willing to believe. This is a security
+		# boundary: anything trusted here can name any client IP it likes, and
+		# so can steal or exhaust another user's rate-limit bucket.
+		#
+		# Default 127.0.0.1/32 deliberately trusts NOBODY — no external peer can
+		# ever present that source address — so {http.request.client_ip} is the
+		# address actually on the socket. That is the correct answer while
+		# employees reach this server directly (LAN/VPN).
+		#
+		# At public cutover, set TRUSTED_PROXY_CIDRS in .env to the company
+		# gateway's own address (e.g. 10.10.10.1/32) and recreate the gateway.
+		# Never widen this to whole private ranges: every VPN client would then
+		# be "a proxy" and could name any IP it wanted.
+		trusted_proxies static {$TRUSTED_PROXY_CIDRS:127.0.0.1/32}
+		# Parse X-Forwarded-For right-to-left, stopping at the first untrusted
+		# hop, instead of blindly taking the leftmost (client-controlled) entry.
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
 }
 
 # APP_HOST is the bare hostname/IP — never include a port here. This block
@@ -28,7 +55,15 @@ https://{$APP_HOST} {
 
 	handle /auth/v1/* {
 		uri strip_prefix /auth/v1
-		reverse_proxy auth:9999
+		reverse_proxy auth:9999 {
+			# GoTrue rate-limits /token per client IP, reading the header named
+			# by GOTRUE_RATE_LIMIT_HEADER (see docker-compose.yml). Delete any
+			# inbound copy FIRST, then set our own: a value supplied by the
+			# caller must never be able to forge an identity or drain someone
+			# else's bucket. This path is the browser's direct login call.
+			header_up -X-BJ-Client-IP
+			header_up X-BJ-Client-IP {http.request.client_ip}
+		}
 	}
 
 	handle /rest/v1/* {
@@ -37,7 +72,15 @@ https://{$APP_HOST} {
 	}
 
 	handle {
-		reverse_proxy app:3000
+		reverse_proxy app:3000 {
+			# Same stamp for the app itself. Most session refreshes are issued
+			# by the app's server-side code on the user's behalf (proxy.ts), so
+			# the app has to know who it is acting for — otherwise GoTrue counts
+			# every employee's refresh against the app container and one shared
+			# bucket throttles the whole company.
+			header_up -X-BJ-Client-IP
+			header_up X-BJ-Client-IP {http.request.client_ip}
+		}
 	}
 }
 
@@ -58,7 +101,7 @@ http://:8080 {
 	handle @auth_preflight {
 		header Access-Control-Allow-Origin "*"
 		header Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-		header Access-Control-Allow-Headers "Authorization, apikey, content-type, x-client-info, x-supabase-api-version"
+		header Access-Control-Allow-Headers "Authorization, apikey, content-type, x-client-info, x-supabase-api-version, x-bj-client-ip"
 		header Access-Control-Max-Age "86400"
 		respond "" 204
 	}
@@ -67,6 +110,13 @@ http://:8080 {
 		uri strip_prefix /auth/v1
 		# GoTrue sets Access-Control-Allow-Origin on actual responses itself;
 		# only its preflight lacks CORS headers (handled above).
+		#
+		# X-BJ-Client-IP is deliberately NOT overwritten here. This listener is
+		# unpublished and reachable only from inside the container network, so
+		# its only caller is the app — which is forwarding the value this
+		# gateway already stamped on the public hop. Setting it here would
+		# rewrite every employee's refresh to the app container's own address
+		# and collapse them all into one rate-limit bucket.
 		reverse_proxy auth:9999
 	}
 

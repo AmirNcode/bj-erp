@@ -78,6 +78,981 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-09-30 — Prepare explicit Liara release and verify public IP HTTPS
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User authorized proceeding with the reviewed deployment plan, including the reviewed local changes and commit/push.
+
+**What changed**
+- Added the explicit `liara` Compose target, Caddy 2.11.4 public IP TLS configuration,
+  clean-commit Linux release packaging, serialized release application, and daily backup timer.
+- Added a push-to-main GitHub Actions build/test/artifact workflow with deployment gated
+  by `LIARA_DEPLOY_ENABLED`; its dedicated account/environment secrets are not installed yet.
+- Installer accepts the committed app image tag and skips internal-CA instructions for Liara.
+  Existing client/local targets remain separate. Updated recovery command overlay paths.
+- Reconciled the hosting overview and Liara runbook with the accepted one-VM architecture;
+  clarified backup archive checks versus actual recovery rehearsal and rate-limit comments.
+- Preserved and included the previously reviewed rate-limit, Docker-context and dependency fixes.
+
+**Actions outside the repo**
+- Verified current Caddy/ACME and GitHub Actions documentation through Context7 and official
+  sources; reviewed Supabase changelog without blindly upgrading the pinned compatible stack.
+- Started temporary `bj-liara-tls-preflight` on Liara 80/443. Let's Encrypt staging issuance
+  passed, followed by production issuance using persistent volume `bj-erp_caddy-data`.
+  A public curl returned the expected preparation HTTP 503 with TLS verification result 0.
+  Caddy logged successful issuance and a future renewal window; actual renewal has not occurred.
+- Fetched origin; local HEAD and origin/main have zero divergence.
+- Automatic approval review rejected creation of the dedicated sudo deployment account and
+  transfer of its new private key to GitHub. That command did not execute. Asked the user for
+  approval of that exact privilege/credential setup; other preparation continued independently.
+
+**Verification**
+- Real Caddy config validation passed; real Compose merge publishes only 80/443 with all
+  application/database/API services private, Linux amd64, and persistent certificate storage.
+- `npm run test:deploy`, five rate-limit environment cases, Liara configuration test,
+  shell syntax checks and `git diff --check` passed.
+- Prior clean install, 440 unit tests, lint, production build and zero-vulnerability npm audit
+  remain recorded above. The GitHub Linux image build and fresh stack verification are next.
+
+**State left behind / next steps**
+- This entry precedes the authorized release commit/push. Public TLS is ready; the VM still
+  serves only the preparation response. No application database has been created yet.
+- Await dedicated CI access approval, build the Linux artifact, install the fresh stack,
+  verify login/session behavior and backup restoration, then enable and test push deployment.
+- No commands were run against the client's existing server. Never delete the production
+  certificate volume when replacing the temporary preflight container with the real gateway.
+
+## 2026-09-30 — Review after all three fixes; remaining Liara deployment work
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User requested a review of completed work and the next steps.
+
+**Review findings**
+- Re-read the rate-limit changes, compatibility fallback, Docker exclusions,
+  dependency manifest/lockfile, tests, and deployment scripts. No new blocking
+  regression identified in the three completed fixes.
+- Public deployment configuration is still unfinished: Caddy retains
+  `local_certs` / `tls internal`, and `bj-deploy` defaults to the existing
+  client's host, port, user, and directory. An explicit Liara target and public
+  HTTPS configuration must be prepared before using these deployment commands.
+- `docs/DEPLOY-LIARA.md` correctly marks the original PaaS/one-click proposal
+  as superseded, but CLAUDE, README and other overview documents still describe
+  it as current. Reconcile these before committing the release.
+- No `.github/workflows` directory exists. GitHub Actions deployment and runner
+  connectivity are still unimplemented/unverified.
+- Remaining validation: actual Linux amd64 application image and fresh stack,
+  public TLS issuance/renewal, login/session behavior and gateway header handling,
+  backup/restore and rollback, then push-triggered deployment.
+
+**Actions outside the repo**
+- Read-only SSH to `liara-bj-vm`: hostname `debian-bj-vm`, Docker 29.8.1,
+  Compose 5.5.1, about 14 GiB free disk, 1931 MiB RAM with 1530 MiB available,
+  2047 MiB swap unused, UFW active allowing 32222/80/443, NTP synchronized.
+- `docker ps` returned no running containers; `/opt/bj-erp` was empty. No
+  server configuration changed and no application was deployed.
+
+**Verification**
+- `git diff --check` passed; locked Next.js version remains 16.3.8.
+- Inspected the saved successful audit result (zero vulnerabilities) and prior
+  turn's clean install, 440 unit tests, lint, deployment tests and production
+  build results. Did not repeat those checks because the implementation had
+  not changed since they passed.
+- An initial local read used nonexistent glob paths and failed in zsh; retried
+  with explicit existing deployment files. No edit resulted from that failure.
+
+**State left behind / next steps**
+- Review only; this journal is the sole file edited this turn. Existing local
+  changes remain uncommitted. No commit, push, workflow or deployment performed.
+- Next: reconcile architecture docs and prepare an explicit Liara deployment
+  target with public HTTPS; build/verify the Linux artifact; commit the reviewed
+  release when asked; install the fresh database and app; verify public access,
+  backups and resource usage; then implement/test GitHub Actions deployment.
+
+## 2026-09-30 — Fix 3 complete: dependency security updates; paused at user request
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User said "Proceed" to the third review fix under the one-fix-at-a-time instruction.
+
+**What changed**
+- `package.json` — pinned Next.js and eslint-config-next to 16.3.8, up from
+  16.2.9. npm preserved their production/development dependency categories.
+- `package-lock.json` — compatible security updates via `npm audit fix`
+  without `--force`, including sharp 0.35.5, PostCSS 8.5.23 (Next.js) / 8.5.28
+  (tooling), nanoid 3.3.19, Tailwind 4.3.3, Vitest 4.1.11, and undici 7.30.0.
+  Only the two Next.js entries changed in the manifest; other declared ranges
+  and React 19.2.4 remained unchanged. No application logic changed.
+- Updated CHANGELOG and TASKS, including the older unresolved audit item.
+
+**Actions outside the repo**
+- Queried current Next.js documentation through Context7 (`/vercel/next.js`),
+  npm metadata, and official release/security advisory pages. The registry's
+  current stable version and audit recommendation were 16.3.8, newer than the
+  earlier review's 16.3.7 recommendation; existing React and Node versions satisfy
+  its peer/engine requirements.
+- Refreshed audit reports in `/private/tmp/bj-audit-{before,after}-fix3.json`.
+  Before: 12 vulnerable groups (1 critical, 7 high, 4 moderate); after: zero.
+- No remote server actions, database changes, deployment, commit, or push.
+
+**Verification**
+- `npm install --save-exact next@16.3.8 eslint-config-next@16.3.8` succeeded;
+  compatible `npm audit fix` resolved the remaining reports without forcing majors.
+- `npm ci` succeeded from the updated lockfile (565 packages installed).
+- Full `npm audit --json` succeeded: zero vulnerabilities across production and
+  development dependencies. Linux x64 musl SWC/sharp/libvips optional packages
+  are represented in the lockfile; this was metadata verification, not a Linux build.
+- `npm run test:unit`: all 47 files / 440 tests passed under Vitest 4.1.11.
+- `npm run lint`, `npm run test:deploy`, and the five real Compose rate-limit
+  interpolation cases all passed.
+- Production `npm run build` passed under Next.js 16.3.8 with placeholder public
+  Supabase config and telemetry disabled: compilation, TypeScript, and 44 static
+  pages. Authorized worker-port access was used because the earlier sandbox build
+  failed to bind its worker. No Docker image build or live-backend e2e this turn.
+- `git diff --check` passed.
+
+**State left behind**
+- All three review fixes are now complete locally and uncommitted; the existing
+  local work is preserved. The Liara app has not been deployed.
+- Paused after fix 3 as explicitly requested. Local node_modules and .next reflect
+  the updated dependencies; build output uses placeholder public configuration.
+
+**For the next agent**
+- Wait for the user to continue. Commit only when asked. Resume the Liara
+  deployment preparation after this pause, preserving the pending local work.
+
+## 2026-09-30 — Fix 2 complete: private Docker inputs excluded; paused at user request
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User said "Proceed to next one" under the one-fix-at-a-time instruction.
+
+**What changed**
+- `.dockerignore:4` — replaced the root-only `.env*` pattern with `**/.env*`
+  and added `**/backups/` and `**/.bj-deploy/`. This excludes database dumps,
+  deployment run metadata, and nested configuration such as `deploy/.env`
+  before the production Dockerfile's `COPY . .` reaches them.
+- Updated CHANGELOG and TASKS to record fix 2 as complete. Dependency updates
+  remain pending; fix 3 was not started.
+
+**Actions outside the repo**
+- Started local Docker Desktop after the first check reported its daemon was
+  unavailable. No remote server actions, deployment, commit, or push.
+- Created `/private/tmp/bj-docker-context-check.sh`, a synthetic-only check;
+  temporary fixture and export directories were removed by its exit trap.
+
+**Verification**
+- Fetched Docker ignore-pattern documentation through Context7 (`/docker/docs`).
+- `bash /private/tmp/bj-docker-context-check.sh` ran a `FROM scratch` / `COPY .`
+  Buildx build with local output and networking disabled. Passed: nine private
+  fixtures absent, seven required app/build/deployment inputs retained.
+- Fixtures covered root/nested backup and state directories, root env files,
+  `deploy/.env`, and a deeper env file. No real dumps or credentials were sent
+  to the builder. No full app build was needed for an ignore-only change.
+- `git diff --check` passed.
+
+**State left behind**
+- Changes remain uncommitted with the existing local work preserved. Nothing
+  deployed. Paused after fix 2 as requested.
+
+**For the next agent**
+- Wait for the user to continue before fix 3 (vulnerable dependencies and
+  focused revalidation). Do not deploy or start that fix during this pause.
+
+## 2026-09-30 — Fix 1 complete: rate-limit units; paused at user request
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User authorized the review fixes one at a time and explicitly requested a pause after each.
+
+**What changed**
+- Renamed the active setting to `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` in Compose, installer,
+  and env example. Default remains 300, preserving the actual GoTrue v2.170.0 rate (one
+  request/second sustained), with its fixed burst capacity 30.
+- Compose retains old `RATE_LIMIT_TOKEN_PER_IP_HOUR` as a fallback. Installer backfills
+  the new name from the old numeric value, without unit conversion; new name wins.
+- Corrected RUNBOOK, CHANGELOG, repo MEMORY, and server-client comment: unset/missing header
+  skips the pinned Auth limiter, not a peer-IP fallback. Clarified NAT sharing and burst behavior.
+- Updated the existing unit capacity check to use five-minute units and added real Compose
+  interpolation checks in `tests/deploy/rate-limit-config.test.sh` (no daemon required).
+- TASKS records the remaining fixes and the user's explicit one-fix-at-a-time instruction.
+
+**Verification**
+- Six focused login-rate-limit unit tests passed.
+- Five Compose cases passed: default, legacy numeric preservation, new setting, new-over-old
+  precedence, empty-new fallback. All existing deployment assistant tests passed.
+- Bash syntax checks and `git diff --check` passed. No full app rebuild needed: runtime
+  TypeScript logic was not changed; only a comment in the server client changed.
+
+**State left behind**
+- Local changes only; no server modifications, deployment, commit, or push.
+- Fix 2 (Docker build exclusions) and fix 3 (dependency upgrades) NOT started.
+- Paused: wait for the user to explicitly say continue before starting fix 2.
+
+## 2026-09-30 — Local-change review before Liara deployment
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User requested a quick review and inclusion of local changes if they look good.
+
+**Review findings**
+- Client-IP forwarding matches the configured Caddy/GoTrue header; pinned Caddy 2.8.4 accepts
+  the configuration. No app-code regression identified by lint/unit/build checks.
+- Rate-limit units are incorrect in the new variable/docs/test: inspected GoTrue v2.170.0
+  `internal/api/options.go` lines 48-51: rate is `RateLimitTokenRefresh/(60*5)`, burst 30.
+  Therefore configured 300 is per FIVE MINUTES (~3600/hour sustained), not per hour. Initial
+  commentary suggesting 300/hour was insufficient for the office was explicitly corrected.
+- The same pinned version's `middleware.go` lines 59-79 skips rate limiting when the configured
+  header is absent (or when RateLimitHeader is unset). Comments claiming a peer-IP fallback
+  are wrong for this version. Public header stamping is essential; internal listener stays private.
+- Pre-existing `.dockerignore` omits backups/ and .bj-deploy/; local database dumps are present
+  and `deploy/Dockerfile` uses COPY . . in its builder. These must be excluded before packaging.
+  Did not send backups to a new builder or claim they exist in the final runtime image.
+- Runtime audit: 1 critical, 3 high, 1 moderate vulnerable dependency groups (5 total).
+  Next 16.2.9 is affected; audit recommends 16.3.7, with transitive nanoid/PostCSS/sharp fixes.
+  Reviewed official GHSA-2xp9-vwfh-vxw4 (AVIF optimization RCE, patched 16.3.3); actual
+  exploitability was not tested and Windows-only findings do not apply to Debian.
+- Supabase changelog reviewed; do not switch to current self-host gateway/Auth defaults while
+  retaining this pinned stack. Existing historical PaaS documentation still needs reconciliation.
+
+**Verification / actions outside the repo**
+- `npm run test:unit`: 47 files, 440 tests passed.
+- `npm run lint`: passed. `npm run test:deploy`: all deployment assistant tests passed.
+- `git diff --check`: passed. Caddy 2.8.4 `caddy validate`: passed in a temporary container.
+  First invocation omitted the caddy executable and failed; corrected invocation succeeded.
+- Production `npm run build` with placeholder public config passed (compile, TypeScript, 44
+  static pages) after authorized retry; initial sandbox blocked Turbopack's local worker port.
+- Audit report: `/private/tmp/bj-audit.json`. Version-specific GoTrue review sources in
+  `/private/tmp/bj-gotrue-{api,middleware,options,token}.go`.
+
+**State left behind**
+- Review did not meet the user's all-good condition for deployment. No app/config/dependency
+  edits, package build, remote changes, commit, or push. Only this journal appended.
+- Recommend correcting rate-limit naming/semantics and tests, excluding private build inputs,
+  updating vulnerable dependencies, then revalidating before including local changes in deployment.
+
+## 2026-09-30 — Liara VM provisioned and verified after reboot
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 77c33ea
+**Trigger:** User installed the dedicated public key and asked to continue setup after a usage interruption.
+
+**What changed**
+- `docs/DEPLOY-LIARA.md` now begins with the agreed single-VM architecture and verified server
+  preparation. Original PaaS/one-click proposal retained as explicitly historical, not executable
+  guidance for this VM. Other older architecture references need reconciliation before release.
+- `/Users/amir/.ssh/config` alias now uses `~/.ssh/bj_liara_deploy`, IdentitiesOnly, publickey
+  first and password fallback. Backup `config.before-liara-key-20260930` saved next to it.
+
+**Actions outside the repo**
+- Verified root login with the user-installed key on `62.60.191.132:32222`. Initial inventory:
+  Debian 12, 1931 MiB RAM, no swap or Docker, ~17 GiB free, SSH only public listener.
+- Installed ca-certificates, curl, gnupg, UFW and Chrony through existing Liara Debian mirrors.
+  Chrony replaced systemd-timesyncd, which reported unsynchronized; Chrony synchronized.
+- Installed Docker Engine 29.8.1, Compose 5.5.1, Buildx 0.37.1 and containerd 2.3.6 through
+  Docker's signed Debian apt repository, configured in `/etc/apt/sources.list.d/docker.sources`.
+- Created `/swapfile` (2 GiB, 600), enabled through `/etc/fstab`, swappiness 10 through
+  `/etc/sysctl.d/90-bj-swap.conf`. Created empty `/opt/bj-erp` and `/var/backups/bj-erp` at 700.
+- Configured Docker local logging, 10m/max-file 3. Direct Docker Hub smoke test failed HTTP 403
+  from its CloudFront layer endpoint. Added official `https://docker-mirror.liara.ir` mirror,
+  preserving log settings and backing up `/etc/docker/daemon.json.before-mirror`; test passed.
+- Enabled UFW deny incoming/allow outgoing, permitting TCP 32222,80,443 for IPv4/IPv6. Used
+  a 180-second rollback timer, verified a fresh SSH session, then cancelled the timer.
+  Docker-published ports bypass UFW: future Compose must keep all non-gateway ports private.
+- Applied available Debian userspace updates with `--force-confold`, preserving SSH settings.
+  Logs: `/var/log/bj-bootstrap-upgrade.log`. Installed remaining linux-image-amd64 update
+  explicitly; log `/var/log/bj-bootstrap-kernel.log`. Old kernel retained for recovery.
+- Rebooted the empty VM through a transient systemd timer; reconnect and service checks passed.
+
+**Verification**
+- Dedicated SSH key and alias authenticate noninteractively; `sshd -t` passed after updates.
+- `docker run --rm hello-world` passed using Liara mirror; cached smoke test also passed after
+  reboot with `--pull=never`. Engine/Compose version queries succeeded.
+- Reboot runs kernel `6.1.0-53-amd64`; ssh/docker/chrony active and enabled, swap 2 GiB present,
+  UFW rules preserved, NTPSynchronized=yes. `dpkg --audit` empty, no remaining apt upgrades.
+- Final disk: root ~4.3 GiB used / 14 GiB available; /boot 121 MiB used / 274 MiB available.
+- Documentation whitespace check passed before final journal update; no application code changed.
+
+**State left behind / next steps**
+- No BJ app/database/secrets/TLS certificate/GitHub workflow deployed. No commits or pushes.
+- Existing local changes preserved; user clarification pending whether first deployment uses
+  published GitHub main or local app changes after review. Do not silently choose a revision.
+- Next stages: validate chosen source; adapt public HTTPS with reliable renewal and private
+  DB ports; initialize fresh DB/admin; configure and test GitHub main deployment separately.
+- Local temporary provisioning scripts: `/private/tmp/bj-liara-install-docker.sh` and
+  `/private/tmp/bj-liara-baseline.sh` (one-time guarded steps; not general-purpose rerun scripts).
+
+## 2026-09-30 — Prepared dedicated Liara deployment key
+
+**Agent:** Codex
+**Trigger:** User is logged into the fresh VM and asks what to prepare for deployment.
+
+**Actions outside the repo / verification**
+- Generated an Ed25519 key at `/Users/amir/.ssh/bj_liara_deploy` with no passphrase for
+  unattended setup/deployment, refusing to overwrite an existing file. Private key remains
+  on BigMac with ssh-keygen's owner-only permissions; only the public key was displayed.
+- Prepared commands for the user to append its public key to root's authorized_keys through
+  their existing authenticated session. Remote installation and login are not yet verified.
+- Reviewed installer/Compose prerequisites: Docker Engine and Compose plugin. Current
+  runbook still describes the older PaaS plus full Supabase plan; session-authorized plan
+  is the minimal Compose stack on the existing Debian VM. Runbook needs updating before use.
+
+**State left behind**
+- Alias remains password-only until the new key is installed and independently verified.
+- No VM packages installed, remote changes made, credentials removed, commit, or push.
+- Next: user installs public key, then agent verifies access, inventories VM, and prepares
+  Docker/Compose, memory/disk settings, public HTTPS, and the fresh app stack.
+
+## 2026-09-30 — Added Liara SSH alias on BigMac
+
+**Agent:** Codex
+**Trigger:** User confirmed password login succeeded and requested `ssh liara-bj-vm`.
+
+**Actions outside the repo / verification**
+- Added a host-specific block to `/Users/amir/.ssh/config`: alias `liara-bj-vm`, root,
+  `62.60.191.132:32222`, password authentication, public-key authentication disabled for
+  this alias to avoid prompting for the forgotten local key passphrase.
+- Preserved existing entries and saved `/Users/amir/.ssh/config.before-liara-20260930061402`.
+- Verified resolved values with `ssh -G liara-bj-vm`; no remote login attempted this turn.
+
+**State left behind**
+- Alias ready on BigMac; server password still required. No password stored in config.
+- No server changes, commit, or push. Dedicated deployment key remains to be configured.
+
+## 2026-09-30 — Enabled Mac Tailscale for phone access
+
+**Agent:** Codex
+**Trigger:** User requested turning on Tailscale to SSH into their Mac from their phone.
+
+**Actions outside the repo / verification**
+- Confirmed this host is `BigMac`; Tailscale was stopped. UI access timed out and sandboxed
+  CLI could not load preferences; authorized CLI access worked.
+- Ran `tailscale up` successfully. Verified backend `Running`, IPv4 `100.109.151.61`.
+- Read-only TCP check to `127.0.0.1:22` succeeded; existing SSH listener is available.
+- No SSH configuration, tailnet access policy, or remote Liara server changes.
+
+**State left behind**
+- Tailscale is enabled on BigMac; phone-to-Mac authentication has not been tested.
+
+## 2026-09-30 — Liara port 32222 reachable; key authentication incomplete
+
+**Agent:** Codex
+**Trigger:** User requested SSH access after support changed the server's SSH port.
+
+**Actions outside the repo / verification**
+- SSH at `62.60.191.132:32222` responds. Initial strict host verification stopped because
+  this port had no local known-host entry. Scanned its ED25519 public host key into
+  `/private/tmp/bj-liara-32222-known-hosts` and compared the fingerprint with the user's
+  earlier successful login screenshot: `SHA256:dQ/aBnbVlBAvVYWu/E6lVTAakBXMzklnoijY78wBTM0`.
+- Retried with strict verification using that file and `~/.ssh/id_ed25519`. Verbose SSH
+  confirms the server accepts the public key but the client sends no signed authentication
+  packet. Batch login ends in `Permission denied (publickey,password)`.
+- Authorized `ssh-add -l` shows only the unrelated mint key loaded. Explicit macOS
+  `UseKeychain=yes` did not resolve login. No password/passphrase requested or exposed.
+- Remote `hostname; id; uptime` checks did not execute because authentication failed.
+- User-provided support reply confirms upstream port-22 restrictions, inaccessible remote
+  console from abroad, powered-off plan billed at one third, and separate IPv4 billing.
+
+**State left behind**
+- Network access is restored on the new port; successful authenticated access and GitHub
+  runner reachability remain unverified. User may need to unlock their registered key locally.
+- No server changes, deployment, commit, or push. Only this journal updated in the repo.
+
+## 2026-09-29 — Overnight VM shutdown and access blockers
+
+**Agent:** Codex
+**Trigger:** User confirmed no VPN, failed fresh `ssh bj`, unavailable Liara remote console,
+and asked whether overnight shutdown saves credit.
+
+**Findings / state left behind**
+- Reviewed current Liara IaaS signal documentation and Context7: Settings supports graceful
+  shutdown, start, reboot, and a distinct force power-off action.
+- Current IaaS documents retrieved did not confirm the discounted powered-off billing rate
+  or treatment of IPv4. PaaS marketing's one-third rate is insufficient evidence for this VM.
+- Recommended support clarification for billing and inaccessible remote console; no shutdown,
+  server changes, or deployment performed.
+
+## 2026-09-29 — Liara SSH reachable through client server
+
+**Agent:** Codex
+**Trigger:** User connected from the client server to Liara after direct Mac SSH timed out.
+
+**Findings / state left behind**
+- User screenshot confirms successful Liara root login and SSH listening on IPv4/IPv6 port 22.
+- User confirmed the working first hop uses their existing `ssh bj` alias.
+- Two read-only SSH attempts through that alias from the agent failed with a connection reset
+  at `5.201.190.184:2222`, before authentication or remote command execution.
+- Direct Mac reachability remains unresolved; the evidence does not identify the blocking network.
+- Next step is a user-terminal ProxyJump test through `bj`, using the Mac's existing key.
+- No server configuration, credentials, application data or deployment changed.
+
+## 2026-09-29 — Liara VM created; SSH TCP timeout diagnosis
+
+**Agent:** Codex
+**Trigger:** User created `bj-vm` and reported SSH timeout to `62.60.191.132:22`.
+
+**Actions outside the repo / findings**
+- Network-authorized `liara vm list` confirmed `bj-vm`, `standard-base-g2`, `debian-12.9`,
+  state `CREATED`, power `POWERED_ON`.
+- `nc -vz -G 8 62.60.191.132 22` timed out from the Mac, independently reproducing the
+  TCP reachability failure. No authentication or SSH host-key verification was reached.
+- Network-authorized `route -n get 62.60.191.132` showed interface `en0`, gateway `192.168.2.1`.
+  This does not rule out router/network filtering. Initial sandbox route read was denied.
+- Read Liara's official `iaas/details/console` documentation: دورنما provides console access
+  independently of SSH, useful to inspect server startup/service status. Requested VPN/proxy
+  and creation-timing clarification; no response yet at the time of this entry.
+- Need console-side SSH listener/service checks to distinguish guest configuration from
+  upstream filtering. No reboot, firewall change, SSH configuration change or deployment.
+
+**What changed / state left behind**
+- Journal only. VM exists, SSH is unreachable from the Mac, provisioning of BJ is not started.
+- Checkout showed Debian 12.9, 1 key, 1 CPU/2 GB/20 GB, and 10% VAT; user-facing monthly
+  estimate corrected to 1,842,500 tomans before traffic (~49 days of credit).
+- No tests run; this turn performed read-only infrastructure diagnostics.
+
+## 2026-09-29 — Corrected PaaS versus VM creation flow
+
+**Agent:** Codex
+**Trigger:** User's creation screenshots showed base/silver/gold tiers, 2 GB at 2,300,000
+tomans/month, a private network `bj-network` and app URL `bj-app.liara.run`.
+
+**Findings / guidance**
+- These indicators match Docker PaaS, rather than the intended IaaS VM. Advised not to finish
+  that wizard. No paid resource creation was confirmed by the user or inspected this turn.
+- Rechecked Liara official Docker one-click and Debian VM quick-start docs. Offered the direct
+  `سرور مجازی ابری` -> `ایجاد سرور مجازی ابری` path with Debian, 1 CPU/2 GB/20 GB and the SSH
+  public key; Docker can be installed afterward. No need to create a PaaS app for this plan.
+- Existing network/app wizard state left untouched. No deletion, creation or deployment.
+
+**What changed / verification**
+- Journal only; documentation review and screenshot interpretation. No code changes or tests.
+- Sources: https://docs.liara.ir/one-click-apps/docker/quick-start/ and
+  https://docs.liara.ir/iaas/debian/quick-start/.
+
+## 2026-09-29 — Verified access before user creates the Liara VM
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `77c33ea`; pre-existing changes preserved.
+**Trigger:** User installed/logged into Liara CLI and requested exact manual setup steps.
+
+**What changed**
+- Journal only. No server, SSH authorization, credential, workflow or GitHub setting changed.
+
+**Actions outside the repo / verification**
+- `liara --version`: `@liara/cli/9.5.1 darwin-arm64 node-v24.13.0`.
+- Read `liara` / `account` / `vm` / `vm list` help. Network-authorized `liara vm list`
+  reached the service and reported `You didn't create any VMs yet` for the active account.
+- Sandbox `gh auth status` initially reported invalid tokens; network-authorized verification
+  succeeded with active account `AmirNcode` and repo/workflow scopes. Do not ask the user to
+  reauthenticate on the basis of the first sandbox result.
+- `gh repo view AmirNcode/bj-erp --json nameWithOwner,viewerPermission,visibility,defaultBranchRef`
+  confirmed ADMIN permission, PUBLIC visibility and default branch `main`.
+- Confirmed existing `~/.ssh/id_ed25519.pub` and matching private-key file. Read only its
+  fingerprint; no private-key contents read or displayed. SSH usability/passphrase and remote
+  server identity remain unverified until the VM exists.
+- Context7 confirmed Docker one-click is a Debian IaaS VM, with SSH public-key input during
+  creation. CLI account login is separate from SSH authorization.
+- No build or application tests; no deployment performed.
+
+**State left behind / next agent**
+- User to create Docker one-click VM with 1 CPU / 2 GB RAM / 20 GB SSD and add the Mac public
+  key, then supply VM identifier/IP and Connection-tab username/port. Verify host identity and
+  SSH access before configuration. Existing client server remains untouched.
+- Accepted plan: fresh database; public-IP HTTPS until company subdomain; top up credit as needed;
+  prepare GitHub Actions deployment for pushes to main. Workflow not created or enabled yet.
+
+## 2026-09-29 — GitHub auto-deploy feasibility for the Liara VM
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `77c33ea`; existing uncommitted work preserved.
+**Trigger:** User asked whether connecting GitHub can deploy pushes to `main` automatically.
+
+**What changed**
+- Journal only; no workflow, repository setting, secret, infrastructure or application change.
+- Confirmed subsequent user decisions: smallest VM with top-up if needed, fresh database,
+  public-IP HTTPS initially, company subdomain later.
+
+**Findings / proposed setup**
+- Git remote is `https://github.com/AmirNcode/bj-erp.git`; no local `.github` directory/workflows.
+- Context7 Liara docs describe native GitHub integration under PaaS applications. No native
+  IaaS Docker Compose auto-deployment integration was verified. Use GitHub Actions for the VM.
+- Proposed flow: push `main` -> source checks -> build the app image on a GitHub-hosted Linux
+  runner -> transfer a versioned image archive and migration manifest over verified SSH ->
+  server lock, backup, pending migrations, app replacement and health check. Building on GitHub
+  supersedes the earlier Mac-only build proposal for automatic releases and spares the 2 GB VM.
+- Existing `deploy/bj-deploy` / `remote-job.sh` / `update.sh` provide much of the release logic,
+  but have client defaults and TTY/sudo handling that require explicit Liara/noninteractive
+  adaptation. Do not point an unattended workflow at the current default client target.
+- GitHub concurrency and the existing server lock should prevent overlapping updates; do not
+  cancel an in-progress database deployment. Image rollback does not undo forward migrations.
+- Keep deployment credentials in GitHub Actions secrets and verify the SSH host key. Confirm
+  GitHub-runner-to-VM connectivity during setup. Do not upload database backups as CI artifacts.
+
+**Actions outside the repo**
+- Read official Liara and GitHub Actions documentation through Context7 and web; no account
+  connection, GitHub setting change, workflow dispatch, SSH or deployment.
+
+**Verification / state left behind**
+- Read current Git remote, local workflow inventory and deployment scripts. No tests run for
+  this research-only turn. Auto-deployment is proposed, not configured or verified.
+- VM address/access and initial installation still need establishing before activation.
+- Sources: https://docs.liara.ir/paas/docker/how-tos/deploy-app/ and
+  https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/control-deployments.
+
+## 2026-09-29 — Liara runbook review, budget and test-server sizing
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `77c33ea`; pre-existing uncommitted work preserved.
+**Trigger:** Review `docs/DEPLOY-LIARA.md` against current provider documentation and recommend
+a deployment path using 3,000,000 tomans of Liara credit, with a step-by-step walkthrough.
+
+**What changed**
+- This journal entry only. No application, runbook, or deployment configuration changed.
+- User clarified: start fresh; approximately 200 total employees, unlikely simultaneous use;
+  testing and frequent updates before real use; ideally credit lasts 2–3 months; company domain
+  is controlled by client IT and should be connected later. Existing Liara resources not confirmed.
+
+**Findings**
+- Verified https://liara.ir/pricing/ through web and the rendered base-tier pricing page:
+  IaaS 1 CPU/2 GB/20 GB is 1,475,000 tomans/month; 2 CPU/4 GB/40 GB is 2,650,000;
+  public IPv4 adds 200,000. PaaS 1 GB base is 1,300,000. Thus the runbook's 4 GB VM +
+  1 GB PaaS app costs 4,150,000/month before extras (~22 days of credit). Single 2 GB VM
+  is 1,675,000 (~54 days); single 4 GB VM is 2,850,000 (~32 days). These are estimates,
+  not account quotes; traffic, snapshots/backups, domain and any applicable taxes are excluded.
+- Budget-oriented proposal: adapt the existing five-service stack for a single 2 GB test VM,
+  building app images on the Mac, with monitoring and a later upgrade if needed. This is a
+  proposal, not an approved architecture change or production capacity guarantee. Liara documents
+  a Debian Docker one-click VM at https://docs.liara.ir/one-click-apps/docker/quick-start/.
+  Resizing requires shutdown/backup per https://docs.liara.ir/iaas/details/change-plan/.
+- `docs/DEPLOY-LIARA.md:139` uses `|| break`, then continues to seed/bootstrap after a failure;
+  it has no per-file transaction or durable migration ledger. Existing
+  `deploy/lib/migrations.sh:68` already pairs each migration and checksum ledger row atomically.
+- One-click Supabase's exact release is unverified. Current upstream differs from runbook
+  assumptions: Envoy is now the default gateway, and the current stock configuration expects
+  `/auth/v1` in `API_EXTERNAL_URL`. Do not apply those changes blindly to the pinned legacy
+  stack. Sources: Supabase changelog entries `48048-self-hosted-supabase-envoy-becomes-the-default-api-gateway-b`
+  and `47093-self-hosted-supabase-api-external-url-to-include-auth-v1`.
+- Preserve the guide's correct concerns about build-time public env/CSP, upload exclusions,
+  private backend ports, default-secret verification and trustworthy client-IP rate limiting.
+  Its destructive empty-DB reset is not a general secret-rotation procedure.
+- The single-VM path still needs public TLS, installer/update targeting and clean release
+  packaging reviewed. Current Caddy uses `local_certs`/`tls internal`; client release helpers
+  must not accidentally target the existing on-prem deployment. Pending source changes and
+  dependency checks must be reviewed before packaging any public release.
+- No VM-provided `liara.run` hostname was verified; PaaS documents one. A domain can also be
+  deferred using a public-IP certificate: Let’s Encrypt's 2026-01-15 and 2026-03-11 announcements
+  confirm IP certificates and Certbot >=5.4 webroot support, with ~6-day validity and automated
+  renewal required. This is not configured or tested here.
+
+**Actions outside the repo**
+- Read official Liara and Supabase docs using Context7, web, public HTTP downloads, and an
+  in-app browser pricing page. Read local Docker status and resource metrics only.
+- No Liara purchase, server creation, SSH, migration, deployment, DNS change or data transfer.
+
+**Verification**
+- Local `docker stats --no-stream`: app 138.3 MiB, DB 122 MiB, Auth 11.8 MiB,
+  REST 103.2 MiB, gateway 56.37 MiB; total ~431.7 MiB at near-idle. Local ARM64 containers
+  are not a Liara capacity/load test. Initial sandbox stats access failed; approved read succeeded.
+- Initial sandbox public HTTP DNS lookup failed; approved public fetch succeeded. Some web
+  documentation opens also failed; direct official markdown fetches supplied the contents.
+- No builds, unit/e2e tests or dependency audit run: this was a deployment-design review.
+
+**State left behind / next agent**
+- No commit or push. Budget tolerance (top-up versus hard limit/account-specific price) and
+  temporary-address preference asked asynchronously; not yet answered when this entry was written.
+- Complete those choices before resource creation. Guide is still the original proposal;
+  do not interpret this review as having deployed or validated it on Liara.
+
+## 2026-09-29 — Hosting decision recorded: Liara replaces the on-prem server (docs only)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ `77c33ea` (same session as the entry below; earlier sessions'
+uncommitted work untouched)
+**Trigger:** Amir: client IT could not create a subdomain with the company's own domain on the
+company's own servers, so a third-party server (Liara) will deploy and host the web app going
+forward; still in testing phase. Asked for the docs to record the change.
+
+**What changed** (documentation only — no code, config, or `deploy/` file)
+- `docs/DEPLOY-LIARA.md` — **new.** Runbook from the walkthrough below: why, shape, rejected
+  options, Phase 1 (Supabase one-click VM), Phase 2 (NEXTJS app), updating, before-real-users,
+  open decisions, sources. Marked "decided, not yet executed"; proposed `liara.json` /
+  `.liaraignore` contents are in it but the files were **not** added.
+- `CLAUDE.md` — hosting status paragraph; stack table Hosting rows (Liara current; Vercel +
+  on-prem legacy); layout lists `DEPLOY-LIARA.md`; "How to run" deploy pointer.
+- `README.md` — stack table, portability bullet, deployment paragraph, docs table.
+- `docs/PLAN.md` — §2 wording; §7 rewritten as the decision record (why, shape, runbook, legacy,
+  open decisions).
+- `docs/REQUIREMENTS.md` — NFR-4 wording (Liara host; `deploy/` remains a working target).
+- `docs/DEPLOY.md` — retitled as index + legacy; banner pointing to the Liara runbook.
+- `docs/DEPLOY-ASSISTANT.md`, `docs/DEPLOY-GUIDE.md` — banners: on-prem only; the "until IT creates
+  the production subdomain" line now says the subdomain plan was dropped.
+- `docs/TASKS.md` — hosting note at top; new "Liara hosting (2026-09-29) — testing phase"
+  checklist; note that the on-prem release-pipeline ☐ items apply only while that server stays.
+- `docs/MEMORY.md` — lesson "Hosting moved to Liara…" (tooling path, rate-limit caveat, Liara
+  traps); Pointers updated.
+- `docs/CHANGELOG.md` — `[Unreleased]` entry for the decision, noting the 2026-08-31 rate limiting
+  does not carry over.
+- `deploy/RUNBOOK.md` deliberately **not** touched: it ships inside the client installer bundle
+  and is written for client IT.
+
+**Actions outside the repo**
+- None. No Liara resource created, no server touched.
+
+**Verification**
+- `git diff --check` clean after the edits (see below). Nothing built or run; doc-only change.
+
+**State left behind**
+- All uncommitted on `main`, alongside the earlier sessions' uncommitted rate-limit and journal work.
+- The previous entry's "production with real data is the client's call" question is now answered:
+  Liara is the host (testing phase).
+
+**For the next agent**
+- Open decisions, recorded in `docs/TASKS.md` and the runbook: which domain serves `api.`, and
+  what happens to the on-prem server `10.10.10.50` and its data.
+- The runbook is untested. Whoever runs it first must correct it with what the VM actually has
+  (Supabase version, container names, published ports, whether secrets were generated).
+- The 2026-08-31 login rate-limit code (`proxy.ts`, `lib/supabase/server.ts`, Caddy) is built for the
+  on-prem gateway; on Liara the forwarded `x-bj-client-ip` header is visitor-controlled.
+
+---
+
+## 2026-09-29 — Liara (liara.ir) deployment walkthrough — research only
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ `77c33ea` (earlier sessions' uncommitted rate-limit + journal
+work left untouched)
+**Trigger:** Amir, sitting on Liara's "create app" screen (14 platform tiles), asked where to
+start deploying this app on Liara.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — this entry. No code, config, or deploy file changed.
+
+**Actions outside the repo**
+- None against the client server; no Liara account action. Read Liara docs via Context7
+  (`/liara-cloud/docs`) and `https://docs.liara.ir/llms/<path>.md` (index:
+  `https://docs.liara.ir/all-links-llms.txt`); Supabase self-hosting docs via Context7.
+
+**Findings (Liara docs as of 2026-09)**
+- PaaS has no Docker Compose support — one app per service, joined by env vars + private network
+  (`paas/docker/how-tos/deploy-docker-compose`). An app's private network cannot be changed after
+  creation.
+- Managed PostgreSQL offers only PostGIS/pgvector — not a stand-in for the Supabase roles/`auth`
+  schema that GoTrue and PostgREST need.
+- Supabase exists as a one-click app (برنامه‌های آماده), but it is a Debian **cloud VM** running the
+  stock Supabase compose in `/opt/supabase-project`, Studio/Kong on `http://<IP>:8000`, no TLS or
+  domain. Liara documents only `DASHBOARD_PASSWORD` as auto-generated — JWT secret/keys unverified.
+- Stock self-host compose ships the custom-access-token hook env commented out (Supabase
+  `docker/CONFIG.md`). Without it `lib/auth/context.ts:48-56` falls back to one `user_roles` query
+  per request and the FR-34 language claim is missing — degraded, not broken.
+- NEXTJS platform: `npm install` (devDeps too) → `npm run build` → `npm start`; console env vars
+  are visible at build time; `liara.json` `{"platform":"next","port":3000,"next":{"nodeVersion":"22"}}`
+  (Node 20/22/24); build location `iran|germany`.
+- The console zip upload applies no ignore file. The CLI honours `.liaraignore`, which, when
+  present, replaces `.gitignore`/`.dockerignore`. Repo `.dockerignore` does **not** list `backups/`
+  (employee PII dumps) or `deploy/` (holds `deploy/.env`).
+- `next start` with `output: 'standalone'` only warns (`node_modules/next/dist/server/next.js:227`),
+  so Liara's `npm start` works unchanged.
+- `supabase` devDependency 2.110.0 ships its binary via optionalDependencies — no GitHub download
+  during `npm install`, so the default iran build location should cope.
+- CSP `connect-src` is derived from `NEXT_PUBLIC_SUPABASE_URL` at build time (`next.config.ts:9-15`),
+  so both public vars must exist before the first Liara build, and changing them needs a redeploy.
+
+**Recommendation given to Amir**
+- Demo/staging: Supabase one-click VM (زحل, 4 GB) + NEXTJS app. Same topology as the old
+  Vercel + Supabase Cloud demo, so no code change. Steps: verify/replace default secrets while the
+  DB is empty; bind 8000/8443/5432/6543 to 127.0.0.1; nginx + certbot for `api.<domain>` proxying
+  only `/auth/v1/` and `/rest/v1/`; auth env (`DISABLE_SIGNUP`, autoconfirm, hook); apply
+  `supabase/migrations/*` + `supabase/seed.sql` + `deploy/sql/bootstrap_admin.sql` as
+  `supabase_admin` (mirrors `install.sh` `pgexec`); then the NEXTJS app with both `NEXT_PUBLIC_*`
+  vars set before the first build and `liara deploy` from the CLI.
+- Production with real data was flagged as the client's decision (CLAUDE.md: production = company's
+  own servers). If chosen, run this repo's `deploy/` stack on a Liara cloud server instead; that
+  needs a public-ACME mode in the Caddyfile (today `tls internal`).
+
+**Verification**
+- Nothing built or deployed. Findings above come from the cited docs and local source. No Liara
+  resource was created, so the one-click's Supabase version, secret generation, container names,
+  and published ports are unverified — the walkthrough tells Amir to check each on the VM.
+
+**State left behind**
+- No repo change besides this entry. Offered, not done: add `liara.json` + `.liaraignore`, and
+  write the walkthrough up as `docs/DEPLOY-LIARA.md`.
+
+**For the next agent**
+- Do not copy `GOTRUE_RATE_LIMIT_HEADER: X-BJ-Client-IP` onto a Liara VM as-is: nothing stamps or
+  strips that header there, and `proxy.ts` / `lib/supabase/server.ts` forward any inbound copy, so
+  a client could rotate it to dodge the `/token` limit. Needs app + nginx changes first.
+- On Liara all server-side session refreshes leave from the app's egress IP, so GoTrue's per-IP
+  `/token` bucket is shared by every user — tune before real users.
+- `scripts/seed-demo.mjs:35-36` hard-codes `admin` / `Admin!2026`; a public demo seeded with it
+  must change that password afterwards.
+
+---
+
+## 2026-08-31 — Login rate limiting ahead of public exposure
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `77c33ea` (journal work from earlier sessions already uncommitted)
+**Trigger:** Amir asked to set up login rate limiting before the app is published on a public
+subdomain (`app.bjeng.com`) and the VPN stops being the front door.
+
+**What was found first (this is the point of the change)**
+
+1. `GOTRUE_RATE_LIMIT_HEADER` was never set, so GoTrue keyed its `/token` limit on the connecting
+   peer — which behind Caddy is one address for everyone. **The entire company shared a single
+   bucket**, default 150/hour.
+2. That endpoint serves **both** password logins and background session refreshes
+   (`internal/api/token.go`: the `refresh_token` case changes the handler but not the limiter,
+   confirmed via Context7). With `GOTRUE_JWT_EXP=3600` and 200 employees, routine refreshes alone
+   exceed 150/hour. The existing default was already too low — a latent outage, not a theoretical one.
+3. **Most refreshes do not come from the employee's browser.** `proxy.ts` calls
+   `supabase.auth.getClaims()`, which calls `getSession()` and refreshes when expired; this
+   deployment signs HS256, so `getClaims()` cannot verify locally
+   (`node_modules/@supabase/auth-js/.../GoTrueClient.js` — `header.alg.startsWith('HS')` ⇒
+   `signingKey = null`). Refreshes therefore originate from the **app container**. Setting the
+   GoTrue env vars alone would have attributed all 200 employees to one address and locked
+   everyone out.
+4. Rate limiting cannot live in the app: login is client-side (`app/[locale]/(auth)/login/page.tsx`
+   → `lib/auth/usernameEmail.ts` → browser Supabase client), so the browser hits `/auth/v1/token`
+   directly and any app-layer check is bypassable with curl. GoTrue is the only enforcement point.
+5. CAPTCHA (`GOTRUE_SECURITY_CAPTCHA_ENABLED`) was considered and rejected — hCaptcha/Turnstile are
+   external services and unreachable from Iran.
+
+**What changed**
+- `lib/supabase/constants.ts` — new `CLIENT_IP_HEADER = 'x-bj-client-ip'`, the single source of truth.
+- `lib/supabase/server.ts:39-54` — reads the header via `headers()` (try/catch for no-request-scope)
+  and forwards it as `global.headers`. Done inside `createClient()` so all 13 call sites are
+  unchanged.
+- `proxy.ts:36-52` — same forwarding in the middleware, which is where refreshes actually happen.
+- `deploy/caddy/Caddyfile` — `servers { trusted_proxies static {$TRUSTED_PROXY_CIDRS:127.0.0.1/32};
+  trusted_proxies_strict; client_ip_headers X-Forwarded-For }`; `header_up -X-BJ-Client-IP` then
+  `header_up X-BJ-Client-IP {http.request.client_ip}` on the `/auth/v1/*` and app routes. The
+  `:8080` listener deliberately does **not** re-stamp (commented) — it would rewrite every
+  forwarded value to the app container's address, recreating the bug.
+- `deploy/docker-compose.yml` — `GOTRUE_RATE_LIMIT_HEADER: X-BJ-Client-IP`,
+  `GOTRUE_RATE_LIMIT_TOKEN_REFRESH: ${RATE_LIMIT_TOKEN_PER_IP_HOUR:-300}`, and
+  `TRUSTED_PROXY_CIDRS` passed to the gateway.
+- `deploy/env.example`, `deploy/install.sh:90-98,155-159` — both dials documented, written into new
+  `.env` files, and backfilled into existing ones.
+- `deploy/RUNBOOK.md` — new "Login rate limiting" section + a troubleshooting entry.
+- `tests/unit/login-rate-limit.test.ts` — new, 6 cases asserting the four files still agree.
+
+**Actions outside the repo**
+- Ran `caddy validate` / `caddy adapt` / `caddy fmt` in throwaway `caddy:2.8.4-alpine` containers
+  against the local file only. **Nothing was run against the client's server.** No deploy, no
+  container recreated, no database touched. The client remains on
+  `20260817-185601-c778c7b` with the old (unlimited-per-company) behaviour.
+
+**Verification**
+- `caddy validate` → `Valid configuration`, no warnings after `caddy fmt --overwrite`.
+- `caddy adapt` inspected: both routes compile to
+  `{"delete": ["X-BJ-Client-IP"], "set": {"X-Bj-Client-Ip": ["{http.request.client_ip}"]}}`;
+  `trusted_proxies` / `client_ip_headers` / `trusted_proxies_strict` present on both servers.
+- `docker compose config` with the local `.env` (which sets neither dial) → defaults render:
+  `GOTRUE_RATE_LIMIT_TOKEN_REFRESH: "300"`, `TRUSTED_PROXY_CIDRS: 127.0.0.1/32`.
+- `npx tsc --noEmit` exit 0; `npx eslint app components i18n lib tests scripts proxy.ts` exit 0.
+- `npm run test:unit` → 47 files / **440 tests passed** (was 434 + 6 new).
+- `npm run build` → passed; all routes still dynamic, so adding `headers()` caused no
+  static/dynamic regression.
+- **Mutation-tested the new test** — it is not a tautology. Dropping one `header_up -X-BJ-Client-IP`,
+  renaming the header in compose only, and making `:8080` re-stamp each produced the expected
+  failures; restored and re-ran to 6/6 green.
+- Not run: Playwright e2e (needs a reachable stack), and no runtime proof that GoTrue actually
+  honours `X-BJ-Client-IP` — that needs a live stack, see below.
+
+**State left behind**
+- **All uncommitted on `main`.** Nothing pushed, no PR. Earlier sessions' journal edits to
+  `docs/AGENT-LOG.md` are still uncommitted alongside.
+- Client server untouched and still unprotected — this ships with the next release.
+- The 13 client-unapplied migrations noted in earlier entries are unrelated and still pending.
+
+**For the next agent**
+- **The one unverified assumption:** that GoTrue reads `GOTRUE_RATE_LIMIT_HEADER` case-insensitively.
+  Caddy canonicalises the set key to `X-Bj-Client-Ip` while the env var says `X-BJ-Client-IP`. Go's
+  `Header.Get()` canonicalises, and Supabase's own docs example uses lowercase
+  `x-forwarded-for`, so this should be fine — but **prove it on the local stack before deploying**:
+  send >300 `/token` calls with a fixed `X-BJ-Client-IP` and confirm a 429, then repeat with
+  varying values and confirm no 429.
+- `TRUSTED_PROXY_CIDRS` must stay a single gateway address. Widening it to `10.0.0.0/8` or
+  `private_ranges` makes every VPN client a trusted proxy able to spoof any identity.
+- Changing either dial needs `up -d --force-recreate auth gateway`. A plain `restart` is enough for
+  these two (no placeholder substitution involved) but recreate is what the RUNBOOK documents.
+- **Still open, deliberately not done:** the password policy. Generated temp passwords are strong
+  (10 chars, CSPRNG, 62-char alphabet — `lib/actions/employees-helpers.ts:32`), but
+  `validatePassword` only enforces length ≥ 8, so a user can self-select `12345678`. Against a
+  public login page that is the weaker link; rate limiting slows guessing but does not fix it.
+  Raised with Amir as a separate follow-up.
+- At public cutover the address change (`APP_HOST` / `APP_ORIGIN` → `app.bjeng.com`) is a separate
+  job — see the two 2026-08-31 entries below.
+
+
+## 2026-08-31 — Public-internet subdomain clarification
+
+**Agent:** OpenAI Codex
+**Branch / HEAD:** `main` @ `77c33ea`; existing uncommitted journal work preserved
+**Trigger:** Amir clarified that the intended subdomain (for example `app.bjeng.com`) will let staff
+use personal devices over the public internet without the company LAN or VPN.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded the resulting security/deployment conclusion.
+- No app, Auth, Caddy, Compose, environment, certificate, DNS, deployment, or database source changed.
+
+**Actions outside the repo**
+- None. No DNS lookup/change, public exposure, SSH, client-server action, certificate issuance,
+  deployment, or client contact.
+- Consulted current Caddy and self-hosted Supabase Auth documentation through Context7 for public
+  ACME/TLS, trusted-proxy handling, login rate limiting, CAPTCHA, password length, and MFA support.
+
+**Findings**
+- Public DNS cannot make the RFC1918 backend `10.10.10.50:3500` internet-reachable by itself. The
+  client needs a public ingress/reverse proxy or an explicitly reviewed NAT/direct-Caddy design.
+- Recommended topology remains public TLS termination at an IT-managed reverse proxy/WAF on 443,
+  with only that ingress allowed to reach private backend HTTPS on `10.10.10.50:3500`.
+- The current login uses employee code + password through GoTrue. Signup is disabled and refresh
+  token rotation is enabled, but the repo has no explicit public-facing CAPTCHA, MFA login flow, or
+  tuned trusted-proxy/rate-limit configuration. The password policy minimum is eight characters.
+- Before internet exposure, configure trusted proxy source ranges/real-client-IP propagation and
+  add agreed public-login protections (at minimum edge/Auth rate limiting and stronger privileged
+  authentication; preferably MFA for HR/admin, with CAPTCHA/bot protection as appropriate).
+- Enabling GoTrue CAPTCHA alone would break the current login because the client sends no CAPTCHA
+  token; it requires a coordinated UI plus Auth configuration change.
+
+**Verification**
+- Re-read the active Caddy/Compose/Auth settings and login/password implementation; no implementation
+  or production verification was performed in this clarification turn.
+- `git diff --check` is to be run after this journal append.
+
+**For the next agent**
+- Obtain the final FQDN, public-ingress ownership/topology, proxy source IP ranges, TLS termination
+  mode, upstream Host/SNI behavior, certificate issuer/renewal owner, and desired access-control
+  policy before proposing exact configuration.
+- Do not publish DNS/NAT or expose port 3500 until the ingress and authentication-hardening gates are
+  agreed, implemented, and tested from an external network.
+
+---
+
+## 2026-08-31 — Subdomain/TLS architecture review and IT handoff
+
+**Agent:** OpenAI Codex
+**Branch / HEAD at start:** `main` @ `77c33ea`; existing uncommitted journal entry preserved
+**Trigger:** Amir asked for a thorough codebase review, then a walkthrough of what the client's IT
+administrator needs for the production subdomain and SSL certificate.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — recorded this read-only architecture/deployment review and its
+  verification, as required by the repository working agreement.
+- No app, Caddy, Compose, certificate, environment, deployment, database, or test source changed.
+
+**Actions outside the repo**
+- None. No SSH, client-server command, DNS change, certificate issuance, deployment, database
+  operation, or contact with the client's IT administrator.
+- Consulted current Caddy documentation through Context7 for `tls internal`, public automatic HTTPS,
+  and loading an operator-provided certificate/key.
+
+**Verification**
+- Read the required onboarding/document order, current deployment assistant design/runbooks, Caddy
+  and Compose topology, installer/reset behavior, browser-origin substitution, auth URL settings,
+  security headers, route guards, server actions, migration catalog, and test layout.
+- `npm run test:unit` — 46 files, **434/434 passed**.
+- `npm run test:deploy` — all deployment assistant safety/recovery tests passed.
+- `npm run lint` — clean.
+- `npx tsc --noEmit` — clean.
+- `npm run build` — Turbopack could not bind its sandbox worker port (`Operation not permitted`), an
+  environment restriction rather than a source failure.
+- `npm run build -- --webpack` — successful production build; 44 static pages generated.
+- `git diff --check` — clean before this journal append.
+
+**State left behind**
+- No production action was taken. The active code remains `main` @ `77c33ea`, matching
+  `origin/main` at review time.
+- The pre-existing uncommitted 2026-08-19 journal entry remains intact; this entry is appended to
+  the same already-modified `docs/AGENT-LOG.md`.
+- The current stack still models direct internal HTTPS: Caddy uses `tls internal`, the host publishes
+  port 3500, and `APP_ORIGIN` supplies the browser/Auth URL. No subdomain has been configured here.
+
+**For the next agent**
+- Recommended topology is IT-managed TLS termination at the corporate reverse proxy, forwarding all
+  paths to the private HTTPS backend. IT owns/renews the browser-trusted certificate; provide the
+  *actual production* Caddy root CA only if the proxy verifies backend TLS. Never send the Caddy CA
+  private key, `.env`, or a TLS private key.
+- Before cutover, obtain the exact FQDN and confirm public-vs-internal DNS, access restriction,
+  termination point, upstream Host/SNI behavior, and certificate issuer.
+- A reverse-proxy subdomain makes `APP_ORIGIN` intentionally differ from `APP_HOST:APP_PORT`. Normal
+  Compose accepts that, but `install.sh` and reset/factory-reset recovery currently re-derive the
+  origin from only host+port, while several `bj-deploy` messages hard-code the old IP URL. Harden and
+  test that contract before relying on a reset after the subdomain cutover.
+
+---
+
+## 2026-08-19 (evening) — FR-43 deploy stalled at the sudo prompt; run left PREPARED
+
+**Agent:** Claude Opus 5 via Claude Code
+**Branch / HEAD at start:** `main` @ `77c33ea`, clean (Amir committed FR-43 himself)
+**Trigger:** Amir ran `caffeinate -i ./deploy/bj-deploy update client`. It ended on
+`[sudo] password for behsazan: Shared connection to 5.201.190.184 closed.` — he asked nothing
+directly; this entry records the diagnosis so the next agent does not re-derive it.
+
+**What happened**
+
+The run got all the way through staging and upload, then died on the FIRST command that needs
+root. Everything before it is sudo-free, which is why nothing hinted at a problem earlier:
+
+- `remote_job()` (bj-deploy:117) runs `./remote-job.sh` with **no sudo** — that covers
+  `init`, `status`, `logs`.
+- `remote_job_tty()` (bj-deploy:121) runs `sudo ./remote-job.sh` — and `start` is the first
+  caller reached.
+
+The tarball upload took **3h 46m** (7.72 KB/s). By the time `start` asked for behsazan's
+password nobody was at the keyboard, sudo's `passwd_timeout` expired, and the SSH session
+closed. `caffeinate -i` keeps the Mac awake; it does not answer a password prompt.
+
+**Nothing was applied.** `PREPARED` is the state *before* the backup is taken, so the client's
+database was never touched and no backup exists for this run.
+
+**Actions outside the repo** — all read-only, over `ssh bj`:
+- `./deploy/bj-deploy status client 20260819T195626Z-4f7a33` → `PREPARED`
+- `sha256sum bj-erp-app-20260819-195626-77c33ea.tar.gz` → `c1a9f0d4…8aa4`, matches the uploaded
+  `.sha256` byte for byte. 107,572,873 bytes. **The upload is complete and intact.**
+- `ls .bj-deploy/runs/20260819T195626Z-4f7a33/migrations/ | wc -l` → 55 staged
+- `df -h` → 6.0 GiB free
+- `docker ps` → `bj-erp-app:20260819-022529-8ba15e9`, up 24 hours; db/auth/rest/gateway up 13
+  days, db healthy. **The client is still serving the previous release, unaffected.**
+- `select count(*) from bj_deploy.schema_migrations` → **54**; newest is
+  `20260818180003_cleanup_e2e_approval_steps.sql`. 55 staged − 54 applied = exactly one pending
+  migration, `20260819120001_hr_manages_leave_setup.sql`, as intended.
+
+**Note for the record:** the client is on `20260819-022529-8ba15e9`, not
+`20260817-185601-c778c7b` — batches 0–5 plus FR-39/40/41/42 shipped on 2026-08-18. Any note
+saying otherwise is stale.
+
+**Verification** — did NOT run the deploy. Finishing it needs behsazan's sudo password typed at
+a live prompt, which an agent must not handle.
+
+**State left behind**
+
+Run `20260819T195626Z-4f7a33` is `PREPARED` on the server with its artifact verified. Resume it:
+
+    ./deploy/bj-deploy resume 20260819T195626Z-4f7a33
+
+`resume_client` has an explicit `PREPARED` branch (bj-deploy:723) — "The run was staged but not
+started; starting it now" — which calls `start` and monitors. **No rebuild, no re-upload.**
+
+**For the next agent**
+
+- **Never answer this by re-running `update client`.** `release_version()` stamps
+  `$(date -u +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)`, so a fresh invocation mints a new
+  version, a new tarball, and a new 4-hour upload, and orphans the verified one already there.
+  `retry-uploaded` will not help either: it demands the remote run be terminal `FAILED:*`, and
+  this one is `PREPARED`.
+- **Stay at the keyboard when resuming.** `resume` asks for the sudo password within seconds —
+  this is the one moment that needs a human, and walking away is exactly what broke it.
+- **Root cause worth fixing:** a passwordless sudoers entry for `remote-job.sh`, or prompting
+  for sudo *before* the multi-hour upload rather than after it. Right now every client deploy is
+  one unattended upload away from this same stall.
+
+---
+
 ## 2026-08-19 — FR-43: HR sets the opening leave balance and accrual policy
 
 **Agent:** Claude Opus 5 via Claude Code

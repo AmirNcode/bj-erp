@@ -1,0 +1,52 @@
+# Public Liara ingress. Caddy manages and renews the IP certificate in /data.
+{
+	default_sni {$APP_HOST}
+	servers {
+		trusted_proxies static {$TRUSTED_PROXY_CIDRS:127.0.0.1/32}
+		trusted_proxies_strict
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+https://{$APP_HOST} {
+	tls {
+		issuer acme {
+			dir {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+			profile shortlived
+			disable_tlsalpn_challenge
+		}
+	}
+	encode gzip
+	handle /auth/v1/* {
+		uri strip_prefix /auth/v1
+		reverse_proxy auth:9999 {
+			header_up -X-BJ-Client-IP
+			header_up X-BJ-Client-IP {http.request.client_ip}
+		}
+	}
+	handle /rest/v1/* {
+		uri strip_prefix /rest/v1
+		reverse_proxy rest:3000
+	}
+	handle {
+		reverse_proxy app:3000 {
+			header_up -X-BJ-Client-IP
+			header_up X-BJ-Client-IP {http.request.client_ip}
+		}
+	}
+}
+
+# Private service-to-service listener; preserve the trusted public-hop stamp.
+http://:8080 {
+	handle /auth/v1/* {
+		uri strip_prefix /auth/v1
+		reverse_proxy auth:9999
+	}
+	handle /rest/v1/* {
+		uri strip_prefix /rest/v1
+		reverse_proxy rest:3000
+	}
+	handle {
+		respond 404
+	}
+}

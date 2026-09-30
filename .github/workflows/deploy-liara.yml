@@ -1,0 +1,67 @@
+name: Deploy Liara
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: liara-main
+  cancel-in-progress: false
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm audit --omit=dev
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run test:deploy
+      - run: bash tests/deploy/rate-limit-config.test.sh
+      - run: bash tests/deploy/liara-config.test.sh
+      - name: Build committed Linux release
+        run: bash deploy/liara/package-release.sh "$GITHUB_SHA"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: liara-release
+          path: .bj-deploy/liara/artifacts/${{ github.sha }}/release.*
+          include-hidden-files: true
+          retention-days: 3
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && vars.LIARA_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    environment:
+      name: liara
+      url: https://62.60.191.132
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: liara-release
+      - name: Transfer and apply release
+        env:
+          LIARA_SSH_KEY: ${{ secrets.LIARA_SSH_KEY }}
+          LIARA_KNOWN_HOSTS: ${{ secrets.LIARA_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$LIARA_SSH_KEY" > ~/.ssh/liara
+          printf '%s\n' "$LIARA_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/liara' EXIT
+          sha256sum --check release.sha256
+          SSH_ARGS=(-i ~/.ssh/liara -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30)
+          scp -P 32222 "${SSH_ARGS[@]}" release.tar "bjdeploy@62.60.191.132:/var/lib/bj-deploy/incoming/$GITHUB_SHA.tar"
+          scp -P 32222 "${SSH_ARGS[@]}" release.sha256 "bjdeploy@62.60.191.132:/var/lib/bj-deploy/incoming/$GITHUB_SHA.sha256"
+          ssh -p 32222 "${SSH_ARGS[@]}" bjdeploy@62.60.191.132 "sudo -n /usr/local/sbin/bj-liara-apply $GITHUB_SHA"
+          curl --fail --retry 3 --max-time 20 https://62.60.191.132/api/health

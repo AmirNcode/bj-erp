@@ -12,8 +12,9 @@
 #     `docker compose up -d app` (recreates ONE container). The db container is
 #     never stopped; `docker compose down`, `down -v` and `volume rm` appear
 #     nowhere.
-#   * A backup is taken FIRST and proven restorable (`pg_restore -l`) before
-#     anything changes. An empty or invalid dump aborts the deploy.
+#   * A backup is taken FIRST and its archive structure checked (`pg_restore -l`)
+#     before anything changes. Recovery must also be rehearsed separately.
+#     An empty or invalid dump aborts the deploy.
 #   * Migration and seed paths are explicit per run, rather than relying on the
 #     database container's bind mounts. This avoids stale single-file mounts and
 #     prevents another staged release from changing a running job's SQL inputs.
@@ -182,7 +183,7 @@ if ! bj_wait_for_stack "$HEALTH_RETRIES" || ! bj_verify_running_architecture amd
 !! The IMAGE was rolled back. Any migrations applied above are NOT undone.
 !! If the previous version cannot run against the new schema, restore the dump:
 !!   cd $(pwd)
-!!   sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \\
+!!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
 !!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
 WARNEOF
@@ -211,7 +212,7 @@ if [ "$LOST" != 0 ]; then
 !! DATA LOSS DETECTED. The app is running ${VERSION} but rows are missing.
 !! Restore immediately:
 !!   cd $(pwd)
-!!   sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \\
+!!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
 !!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
 LOSTEOF
@@ -242,6 +243,6 @@ cat <<DONEEOF
    Data:     verified — no table lost rows
    Rollback: sudo sed -i 's/^APP_VERSION=.*/APP_VERSION=${PREVIOUS_VERSION}/' .env && \\
              sudo docker compose -f docker-compose.yml \\
-               -f docker-compose.client-amd64.yml up -d app
+               -f ${BJ_COMPOSE_OVERLAY##*/} up -d app
 =============================================================
 DONEEOF

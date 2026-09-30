@@ -52,6 +52,68 @@ including the port when it is not 443, e.g. `https://10.10.10.50:3500` — and
 "Add to Home Screen" / "Install app". There is no http:// redirect: typing the
 bare address without `https://` and the port will not reach the app.
 
+## Login rate limiting
+
+Pinned GoTrue **v2.170.0** uses a token bucket for `/token`, shared by password
+logins and session refreshes from the same client IP. Its configured number is
+the **refill rate per five minutes**, with a fixed **burst capacity of 30**.
+The default 300 means one request/second sustained (about 3600/hour), not an
+hourly cap of 300. Employees behind one public office IP share that bucket;
+simultaneous bursts can still receive 429 even when average traffic is low.
+
+Two `.env` dials:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` | `300` | Refill rate per five minutes per IP; does not change burst capacity. |
+| `TRUSTED_PROXY_CIDRS` | `127.0.0.1/32` | Which upstream proxy may declare the real client IP. |
+
+The old `RATE_LIMIT_TOKEN_PER_IP_HOUR` name remains a fallback for existing
+installations. It always had five-minute semantics: **do not convert its numeric
+value when renaming it**. The new name takes precedence. Rerunning `install.sh`
+backfills the new name from the old value without changing the effective rate;
+update-only deployments can keep using the fallback.
+
+Apply changes by recreating services (briefly interrupts requests):
+
+```bash
+cd bj-erp-installer
+sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \
+     up -d --force-recreate auth gateway
+```
+
+### Why the client IP plumbing exists
+
+Server-side session refreshes are made by the app container on the employee's
+behalf. Stamping them with the gateway/app address collapses different client
+IPs into one bucket. In this pinned Auth version, leaving the rate-limit header
+unset or omitting its value skips the limiter entirely; it does not fall back
+to the connecting peer. Auth and the internal gateway must remain private.
+
+So the gateway stamps each request with the caller's real address in
+`X-BJ-Client-IP`, deleting any inbound copy first so it cannot be forged, and
+the app forwards that stamp on the calls it makes for that user
+(`proxy.ts`, `lib/supabase/server.ts`). The unpublished `:8080` listener
+deliberately does **not** re-stamp: its only caller is the app, which is already
+carrying the right value.
+
+`tests/unit/login-rate-limit.test.ts` asserts all four files still agree. Every
+way of breaking this fails silently in normal use, so do not delete that test.
+
+### `TRUSTED_PROXY_CIDRS` is a security boundary
+
+Anything trusted here can claim to be any user and drain their bucket.
+
+- **`127.0.0.1/32` (default)** trusts nobody. No inbound connection can carry
+  that source address, so the app uses the address actually on the socket. This
+  is correct while employees reach the server directly over the LAN/VPN.
+- **Behind a company gateway on a public subdomain**, set it to that gateway's
+  own address, e.g. `TRUSTED_PROXY_CIDRS=10.10.10.1/32`, and ask IT to pass the
+  real client address in `X-Forwarded-For`.
+
+**Never widen this to whole private ranges** (`10.0.0.0/8` and friends): every
+VPN client would then count as a proxy and could name any address it liked.
+
 ## Backups (do this on a schedule)
 
 Every release already takes a verified backup automatically (see *Updating the
@@ -293,6 +355,14 @@ volume. Never add `-v`.
 - **Login fails for everyone:** use `./deploy/bj-deploy logs client` and inspect Auth.
 - **Phone won't install the app:** the certificate step was skipped — see
   "Trusting the certificate on phones".
+- **Several people locked out at once, "too many requests" on login:** the
+  rate-limit ceiling was hit. If it is a genuine busy period, raise
+  `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` and recreate `auth`. Burst capacity stays
+  at 30 regardless of this setting. If it happened suddenly
+  with normal traffic, suspect the client-IP plumbing instead — check that
+  `TRUSTED_PROXY_CIDRS` names the real gateway and that the gateway is sending
+  `X-Forwarded-For`; a wrong value collapses the whole company into one bucket.
+  See "Login rate limiting".
 - **`install.sh` fails at migrations:** use `./deploy/bj-deploy logs client`; the
   failing SQL file is printed by the installer.
 

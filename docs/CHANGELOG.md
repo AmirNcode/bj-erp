@@ -10,6 +10,58 @@ pending a tagged release; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Dependency security updates (2026-09-30)
+
+Updated Next.js and eslint-config-next from 16.2.9 to 16.3.8 and refreshed
+vulnerable dependencies within their existing version ranges. Full `npm audit`
+now reports zero vulnerabilities, including development tools. Clean lockfile
+installation, 440 unit tests, lint, deployment checks, and the production build
+passed. These changes remain local; no deployment occurred.
+
+### Private deployment files excluded from Docker builds (2026-09-30)
+
+The build context now excludes `backups/`, `.bj-deploy/`, and `.env*` at every
+folder depth, including `deploy/.env`. Database dumps and deployment secrets
+are kept out of the builder's `COPY . .` inputs. Verified with synthetic private
+files and required app/deployment inputs in an actual Docker scratch build.
+
+### Hosting moves to Liara (2026-09-29) — decision, nothing deployed yet
+
+The app will be hosted on **Liara** (liara.ir), an Iranian cloud provider, instead of the
+company's own server. The company's IT could not create a public subdomain for the on-prem server,
+so it could never be reached from outside the office without the VPN. Still in testing.
+
+The initial PaaS/one-click proposal was superseded on 2026-09-30 by one Debian VM
+running the minimal Docker stack, with public HTTPS and Linux releases built off-VM.
+The Caddy client-IP scheme is preserved. The Liara override and GitHub Actions
+workflow are being prepared; deployment evidence is recorded in `docs/AGENT-LOG.md`.
+
+### Login rate-limit units corrected (2026-09-30)
+
+Renamed the setting to `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` to match pinned
+GoTrue v2.170.0: the default 300 refills at one request/second, with burst capacity
+30. The old `RATE_LIMIT_TOKEN_PER_IP_HOUR` remains a fallback; existing numeric
+values are preserved without conversion. Corrected docs/tests and the claim
+that a missing rate-limit header falls back to the peer IP: this version skips
+limiting when the header is absent. No service version or live setting changed.
+
+### Login rate limiting, per client IP (2026-08-31)
+
+Preparation for publishing the login page on the public internet. Caddy stamps
+`X-BJ-Client-IP` from the connection and the app forwards it for server-side Auth
+calls. An external caller cannot choose the value. Employees behind one public
+NAT address still share a bucket; this is not a per-person limit.
+
+The token endpoint serves password logins and refreshes. In pinned GoTrue,
+missing rate-limit headers skip limiting; a gateway/app address used as the
+header would collapse all clients into one bucket. The private internal
+listener preserves the original trusted stamp. See the five-minute unit and
+burst-capacity correction above.
+
+Two `.env` settings are documented in the runbook:
+`RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` and `TRUSTED_PROXY_CIDRS` (which upstream
+proxy may declare the real client IP). This does not replace a password policy.
+
 ### HR can now set leave balances and monthly accrual (2026-08-19)
 
 An HR user adding an employee saw no time-off section at all — no opening balance, no yearly cap, no

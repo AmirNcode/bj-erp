@@ -171,6 +171,7 @@ bj_compose_init() {
   case "$BJ_COMPOSE_TARGET" in
     local)  BJ_COMPOSE_OVERLAY="$BJ_COMPOSE_ROOT/docker-compose.local-arm64.yml" ;;
     client) BJ_COMPOSE_OVERLAY="$BJ_COMPOSE_ROOT/docker-compose.client-amd64.yml" ;;
+    liara)  BJ_COMPOSE_OVERLAY="$BJ_COMPOSE_ROOT/docker-compose.liara.yml" ;;
     *) bj_fail "unknown Compose target '$BJ_COMPOSE_TARGET'"; return 1 ;;
   esac
   [ -f "$BJ_COMPOSE_ROOT/docker-compose.yml" ] || { bj_fail "base Compose file missing"; return 1; }

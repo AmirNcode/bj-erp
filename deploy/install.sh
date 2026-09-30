@@ -86,6 +86,16 @@ if [ -f .env ] && [ "${BJ_FORCE_NEW_CONFIG:-0}" != 1 ]; then
     bj_env_set .env APP_PORT "$APP_PORT"
     bj_env_set .env APP_ORIGIN "$APP_ORIGIN"
   fi
+
+  # Rename the old misleading *_HOUR setting without changing effective behavior:
+  # pinned GoTrue has always interpreted the number per five minutes, burst 30.
+  if ! grep -q '^RATE_LIMIT_TOKEN_PER_IP_5_MINUTES=' .env; then
+    say "Adding five-minute login rate-limit setting to .env…"
+    bj_env_set .env RATE_LIMIT_TOKEN_PER_IP_5_MINUTES "${RATE_LIMIT_TOKEN_PER_IP_5_MINUTES:-${RATE_LIMIT_TOKEN_PER_IP_HOUR:-300}}"
+  fi
+  if ! grep -q '^TRUSTED_PROXY_CIDRS=' .env; then
+    bj_env_set .env TRUSTED_PROXY_CIDRS "${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}"
+  fi
 else
   DEFAULT_HOST=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
   if [ -n "${BJ_APP_HOST:-}" ]; then
@@ -121,7 +131,7 @@ else
   JWT_SECRET=$(openssl rand -hex 32)
 
   # Sign the API keys inside the app image (node is guaranteed there).
-  if [ "$BJ_DEPLOY_TARGET" = local ]; then KEY_IMAGE="bj-erp-app:local-arm64"; else KEY_IMAGE="bj-erp-app:latest"; fi
+  if [ "$BJ_DEPLOY_TARGET" = local ]; then KEY_IMAGE="bj-erp-app:local-arm64"; else KEY_IMAGE="bj-erp-app:${BJ_APP_VERSION:-latest}"; fi
   export BJ_JWT_SECRET="$JWT_SECRET"
   KEYS_JSON=$(docker run --rm -e BJ_JWT_SECRET --entrypoint node "$KEY_IMAGE" /gen-keys.mjs)
   unset BJ_JWT_SECRET
@@ -141,7 +151,12 @@ POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 ANON_KEY=${ANON_KEY}
 SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
-APP_VERSION=latest
+APP_VERSION=${BJ_APP_VERSION:-latest}
+# Auth /token refill rate per IP per FIVE MINUTES; fixed burst capacity 30.
+RATE_LIMIT_TOKEN_PER_IP_5_MINUTES=${RATE_LIMIT_TOKEN_PER_IP_5_MINUTES:-${RATE_LIMIT_TOKEN_PER_IP_HOUR:-300}}
+# Upstream proxy allowed to declare the real client IP. 127.0.0.1/32 trusts
+# nobody; set to the company gateway's address when publishing behind one.
+TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}
 EOF
   chmod 600 .env
 fi
@@ -208,6 +223,11 @@ bj_compose up -d
 say "Checking database, application, and Auth health…"
 bj_wait_for_stack 60
 bj_verify_running_architecture "$([ "$BJ_DEPLOY_TARGET" = local ] && printf arm64 || printf amd64)"
+
+if [ "$BJ_DEPLOY_TARGET" = liara ]; then
+  say "Liara stack healthy. Caddy manages public HTTPS automatically: ${APP_ORIGIN}"
+  exit 0
+fi
 
 # ── 7. HTTPS root certificate for phones ─────────────────────────────────────
 say "Exporting the HTTPS root certificate…"

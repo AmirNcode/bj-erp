@@ -1,5 +1,8 @@
 # DEPLOY GUIDE — shipping a new version to the client's server
 
+> **2026-09-29:** the client's on-prem server is no longer the go-forward host — the app is moving
+> to Liara ([DEPLOY-LIARA.md](DEPLOY-LIARA.md)). This guide applies only to that on-prem server.
+
 > Prefer the interactive `./deploy/bj-deploy` assistant in
 > [DEPLOY-ASSISTANT.md](DEPLOY-ASSISTANT.md). It wraps this pipeline with architecture isolation,
 > migration checksums, verified off-server reset backups, and reconnectable server jobs. This guide

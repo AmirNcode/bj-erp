@@ -83,6 +83,21 @@ services:
       GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: 'true'
       GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: '10'
 
+      # ── Login abuse protection ────────────────────────────────────────────
+      # GoTrue v2.170.0 refills the /token limiter at this many requests per
+      # FIVE MINUTES per IP, with a fixed burst capacity of 30. Both password
+      # logins and session refreshes use it. 300 means 1 request/second sustained
+      # (~3600/hour); employees behind one office address share the bucket.
+      #
+      # The IP is read from X-BJ-Client-IP, which the gateway overwrites from
+      # its own view of the connection (caddy/Caddyfile) — never from a header
+      # the caller supplied. This pinned version skips the limiter when the
+      # configured header is absent or RATE_LIMIT_HEADER is unset. Keep Auth
+      # private and preserve the gateway stamp and server-side forwarding.
+      # Legacy *_HOUR was misnamed: preserve its numeric value without conversion.
+      GOTRUE_RATE_LIMIT_HEADER: X-BJ-Client-IP
+      GOTRUE_RATE_LIMIT_TOKEN_REFRESH: ${RATE_LIMIT_TOKEN_PER_IP_5_MINUTES:-${RATE_LIMIT_TOKEN_PER_IP_HOUR:-300}}
+
   rest:
     image: postgrest/postgrest:v12.2.3
     restart: unless-stopped
@@ -132,6 +147,11 @@ services:
       - '${APP_PORT:-443}:443'
     environment:
       APP_HOST: ${APP_HOST}
+      # Which upstream proxy may declare the real client IP via
+      # X-Forwarded-For. Default trusts nobody (correct when employees reach
+      # this server directly). Set to the company gateway's address at public
+      # cutover — see caddy/Caddyfile and RUNBOOK.md.
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-127.0.0.1/32}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

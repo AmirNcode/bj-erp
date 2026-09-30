@@ -19,7 +19,7 @@ import createMiddleware from 'next-intl/middleware';
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
-import { AUTH_COOKIE_NAME } from './lib/supabase/constants';
+import { AUTH_COOKIE_NAME, CLIENT_IP_HEADER } from './lib/supabase/constants';
 import {
   LOCALE_COOKIE,
   resolveEntryLocale,
@@ -35,12 +35,20 @@ export default async function middleware(request: NextRequest) {
 
   // Step 2: Create Supabase client — reads cookies from the request,
   // writes refreshed auth cookies onto the response from step 1.
+  //
+  // This middleware is where most session refreshes actually happen (step 3),
+  // and a refresh is a POST to GoTrue's rate-limited /token endpoint. Forward
+  // the gateway-stamped client IP so the refresh counts against the employee
+  // it belongs to. Pinned GoTrue skips its limiter when this header is absent.
+  const clientIp = request.headers.get(CLIENT_IP_HEADER);
+
   const supabase = createServerClient(
     // Self-host (deploy/): prefer the internal plain-HTTP gateway URL — the
     // public HTTPS cert is a private CA this process doesn't trust.
     process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(clientIp ? { global: { headers: { [CLIENT_IP_HEADER]: clientIp } } } : {}),
       // Must match the browser/server clients (lib/supabase/constants.ts).
       cookieOptions: { name: AUTH_COOKIE_NAME },
       cookies: {

@@ -1,12 +1,18 @@
-# DEPLOY — Demo (Vercel) & Production (self-host)
+# DEPLOY — index · legacy Vercel demo & on-prem self-host
+
+> **Current host (since 2026-09-29): Liara — see [`docs/DEPLOY-LIARA.md`](DEPLOY-LIARA.md).**
+> Client IT could not publish a company subdomain for the on-prem server, so the app moved to
+> Liara (testing phase). The Vercel demo and on-prem sections below are legacy — kept for reference
+> and portability. Liara uses its own explicit target, public HTTPS and fresh admin credentials;
+> the demo logins below do not apply to the new installation.
 
 For local Docker and the offline client server, start with
 [`docs/DEPLOY-ASSISTANT.md`](DEPLOY-ASSISTANT.md) and `./deploy/bj-deploy`. It is the guarded,
 resumable path for restart, app-only redeploy, database-preserving update, and fresh installation.
 
-How to deploy the HR / Time-Off app. The **demo** runs on Vercel + Supabase Cloud; **production**
-runs on the company's own servers (self-hosted Supabase + Next.js). The same code targets both —
-only environment variables change (NFR-4).
+Before the move to Liara, the **demo** ran on Vercel + Supabase Cloud and **production** on the
+company's own server (self-hosted Supabase + Next.js). The same code targets all of these, Liara
+included — only environment variables change (NFR-4).
 
 ## Environment variables
 

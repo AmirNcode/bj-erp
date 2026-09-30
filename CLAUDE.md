@@ -17,14 +17,19 @@ tokens, Rubik with Vazirmatn fallback) complete, merged to `main`. See `docs/CHA
 what shipped, `docs/TASKS.md` for what's next (PLAN §6 modules), `docs/specs/` for frozen design
 records (start with `2026-06-23-hr-timeoff-design.md`).
 
+**Hosting (2026-09-29): moving to Liara (liara.ir), testing phase.** Client IT could not publish a
+company subdomain for the on-prem server, so the app will be hosted on Liara from now on. Runbook:
+`docs/DEPLOY-LIARA.md`. The minimal Docker stack in `deploy/` is reused with an explicit Liara
+override; the existing client-server target remains separate.
+
 ## Stack (decided)
 
 | Concern | Choice | Notes |
 |---|---|---|
 | Framework | **Next.js (App Router) + TypeScript** | Mobile-first, responsive, SSR. |
-| Hosting (demo) | **Vercel** | Preview + prod demo. |
-| Hosting (production) | **Company's own servers** | Must stay portable. |
-| Backend | **Supabase** (Postgres + Auth + RLS + Storage) | Self-hostable → same code in prod. |
+| Hosting | **Liara** (Iranian cloud) — testing phase, decided 2026-09-29 | One Debian VM: Next.js + Postgres + Auth + PostgREST + Caddy. GitHub Actions builds off-VM. |
+| Hosting (legacy) | Vercel demo · client's on-prem server (`deploy/`) | No longer deploy targets; kept for reference and portability. |
+| Backend | **Supabase** (Postgres + Auth + RLS + Storage) | Self-hosted (on a Liara VM) → same code everywhere. |
 | Auth | **Admin-issued username + password** | Labourers have no email. Long-lived/PWA session. |
 | i18n / layout | **Farsi (fa) default, RTL** + English (en) toggle | Per-user preference. |
 | Calendar | **`react-multi-date-picker`** + `react-date-object` (Persian + Gregorian) | User switches in settings. |
@@ -71,7 +76,8 @@ docs/
   PERMISSIONS.md           roles, visibility matrix, RLS policy descriptions (source of truth)
   TASKS.md                 build checklist by phase with status
   CHANGELOG.md             what changed, per release (Keep a Changelog format)
-  DEPLOY.md                demo (Vercel) + production (self-host) runbook
+  DEPLOY-LIARA.md          CURRENT host: Liara VM runbook (Docker Compose + GitHub Actions)
+  DEPLOY.md                deploy index; legacy Vercel demo + on-prem self-host notes
   specs/                   dated, frozen design records (one per module/feature)
 ```
 Granular task + commit history: `.superpowers/sdd/progress.md`.
@@ -93,8 +99,8 @@ npm run dev                    # http://localhost:3000 → boots fa-RTL at /logi
 
 Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest, 165 tests) ·
 `npm run test:e2e` (Playwright, 26 specs — needs reachable Supabase + dev server; run serial
-`--workers=1`) · `npm run seed` (demo org). Database setup, Vercel demo deploy, self-host
-production: see `docs/DEPLOY.md`. Demo admin login: `admin` / `Admin!2026`.
+`--workers=1`) · `npm run seed` (demo org). Deploying: Liara → `docs/DEPLOY-LIARA.md`; legacy
+Vercel demo + on-prem self-host → `docs/DEPLOY.md`. Demo admin login: `admin` / `Admin!2026`.
 
 ## Working agreements
 

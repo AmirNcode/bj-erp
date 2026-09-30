@@ -15,9 +15,10 @@ implementation. **HR / time-off is module #1.**
 ## 2. Why these choices
 
 - **Next.js + Supabase** gives a single TypeScript codebase, Postgres with Row-Level Security for
-  multi-role access, built-in auth, and storage — all **self-hostable**, which matters because
-  production runs on the **company's own servers** while the demo runs on **Vercel + Supabase
-  cloud**. The same code targets both; only environment variables change.
+  multi-role access, built-in auth, and storage — all **self-hostable**, which matters because the
+  app has run on **Vercel + Supabase Cloud** (demo), on the **company's own server**, and now on
+  **Liara** (self-hosted Supabase on a cloud VM, §7). The same code targets all of them; only
+  environment variables change.
 - **Module isolation over a monolith fork.** We deliberately did *not* fork an existing
   open-source HRMS (Frappe HR, OrangeHRM, …). Those are closed monoliths in foreign stacks (PHP /
   Python) and would fight the "one growing custom app" vision. Instead we **reuse the proven leave
@@ -86,7 +87,17 @@ control** (test-result entry forms, mobile-optimized), **finance** (dashboards, 
 
 ## 7. Deployment
 
-- **Demo**: Vercel (Next.js) + Supabase Cloud. Env via `vercel env` / Supabase dashboard.
-- **Production**: company servers — self-hosted Supabase + Next.js (Node). No proprietary Vercel-
-  only features in the data/auth layer, so the migration is config-only. Keep Vercel-specific
-  niceties optional.
+**Current host (decided 2026-09-29, testing phase): Liara (liara.ir), an Iranian cloud provider.**
+
+- **Why:** the plan was production on the client's own server (`10.10.10.50`, LAN + corporate
+  VPN), later published on a company subdomain. Client IT could not create that subdomain on the
+  company's own infrastructure, so hosting moves to a third party. Employee data now sits with
+  Liara — the client's decision.
+- **Shape:** one Debian VM running the minimal Next.js, Postgres, GoTrue, PostgREST and
+  Caddy stack. Public HTTPS initially uses the IP address; the app and API share an origin.
+  GitHub Actions builds Linux images off-VM and deploys over SSH port 32222.
+- **Runbook:** `docs/DEPLOY-LIARA.md`; live progress/evidence is in `docs/AGENT-LOG.md`.
+- **Data:** fresh test database, no migration from the client's existing server. That server
+  remains separate. The Vercel demo and original on-prem commands are retained for reference.
+- **Portability rule unchanged:** no proprietary host-only features in the data/auth layer, so
+  moving hosts stays config-only.

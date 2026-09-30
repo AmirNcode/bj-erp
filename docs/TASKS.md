@@ -5,6 +5,11 @@ The **detailed step-by-step implementation plan** (file-level, TDD) for Phases 0
 [`docs/plans/2026-06-23-hr-timeoff-v1.md`](plans/2026-06-23-hr-timeoff-v1.md). Phases 3–5 get
 their own plan files when reached.
 
+> **Hosting (2026-09-29): moving to Liara, testing phase.** Client IT could not publish a company
+> subdomain for the on-prem server. Checklist in [Liara hosting](#liara-hosting-2026-09-29--testing-phase)
+> below; runbook `docs/DEPLOY-LIARA.md`. On-prem release-pipeline items further down apply only
+> while that server stays in service.
+
 > Current state: **Phases 0–6 + frontend overhaul COMPLETE — all merged to `main`; v1
 > feature-complete & demo-ready, no v1 FR outstanding.** Identity/org, code+password auth, admin
 > CRUD + manager edits, leave core (types/allocations/ledger/request), approval flow
@@ -35,7 +40,19 @@ their own plan files when reached.
 > hardening are complete locally. Evidence: `docs/SECURITY-REVIEW-2026-07-30.md`.
 > ☑ Release gate closed 2026-07-31: `npm audit --omit=dev` DOES run from this Mac. Result: **3 high**,
 > all transitive through `next@16.2.9` (postcss XSS + path traversal, sharp/libvips). Pre-existing on
-> `main` — not introduced by any recent branch. Fix is a patch bump to `next@16.2.12`.
+> `main` — not introduced by any recent branch. **Resolved locally 2026-09-30:** Next.js and
+> eslint-config-next 16.3.8 plus compatible dependency fixes; full `npm audit`: **0 vulnerabilities**.
+
+## Deployment review follow-up (2026-09-30)
+
+- ☑ Correct rate-limit units and preserve old configuration values (GoTrue
+  v2.170.0: per five minutes, burst 30). See AGENT-LOG for validation.
+- ☑ Exclude private backups, deployment state, and nested env files from Docker
+  builds; verified with a scratch build using synthetic fixtures.
+- ☑ Update vulnerable dependencies and revalidate before deployment: Next.js and
+  eslint-config-next 16.3.8; full audit clean, clean install, 440 unit tests,
+  lint, deployment checks, and production build passed.
+- User requested a pause after each fix; do not start the next one until asked.
 
 ## Phase 0 — Scaffold
 - ☐ Init repo (git), Next.js App Router + TypeScript + Tailwind
@@ -115,7 +132,22 @@ their own plan files when reached.
   Apple Silicon, while production package/release remains explicitly `linux/amd64`; conversion
   reuses and verifies the existing `bj-erp_db-data` volume
 
+## Liara hosting (2026-09-29) — testing phase
+Decision: one Liara VM running the minimal Docker stack. Runbook `docs/DEPLOY-LIARA.md`.
+- ☑ Fresh database selected; existing client deployment stays separate.
+- ☑ Debian VM, SSH 32222, Docker, swap, firewall, logging and time synchronization prepared.
+- ☑ Rate-limit units, private build inputs and dependency security findings fixed.
+- ☑ Explicit Liara Compose/Caddy configuration; staging and trusted production IP certificates validated.
+- ◐ Commit/release pipeline: Linux build, scoped CI access and initial deployment in progress.
+- ☐ Fresh schema, first admin and public application verified.
+- ☐ Backup restore rehearsal and off-VM copy verified; daily backup timer enabled.
+- ☐ Push-triggered GitHub deployment verified.
+- ☐ Company subdomain supplied by IT, then DNS/TLS/origin updated.
+
 ## Production deploy + release pipeline (2026-07-26)
+> **2026-09-29:** on-prem path — no longer the go-forward deploy target (hosting moved to Liara,
+> section above). Open ☐ items here matter only while the on-prem server stays in service.
+
 Plan `docs/plans/2026-07-26-release-pipeline.md` · guide `docs/DEPLOY-GUIDE.md`
 
 ### Guided deployment assistant (2026-08-06)
@@ -335,8 +367,9 @@ Two reviewers over the 42-commit diff, plus the first e2e run on this branch tip
   - Two routes: guard the nine (mechanical, directly provable by a replay loop), or add a
     `schema_migrations` table so each file runs once (the durable fix every migration tool uses).
     Recommend the guards first, tracking table after
-- ☐ `npm audit`: 3 high via `next@16.2.9` (postcss, sharp). Pre-existing on `main`; fix is a patch
-  bump to `next@16.2.12`
+- ☑ Dependency security fixes verified locally 2026-09-30: Next.js and
+  eslint-config-next 16.3.8 with compatible lockfile updates; full `npm audit`
+  reports zero vulnerabilities. Not deployed yet.
 - ☐ Withdrawn mid-design: the bulk department-code editor. Client dropped code editing instead
 - ☐ Open: `login.codePlaceholder` still reads `prod-1042` — right for every existing account, wrong
   for every new hire. Left alone because changing it is the mixed-format hint D14 ruled out
