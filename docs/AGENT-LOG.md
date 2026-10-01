@@ -78,6 +78,15 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-01 — Final screenshot readiness check
+
+**Agent:** Codex · **Branch / HEAD:** main @ 1bbe539
+
+Visual inspection caught a desktop screenshot taken during a loading skeleton despite
+passing DOM assertions. Strengthened the temporary Playwright script to wait for a visible
+heading and zero skeletons, reran all seven checks successfully, and inspected the fully
+rendered desktop screenshot. No application/runtime code changed.
+
 ## 2026-10-01 — Push-to-main deployment verified and handoff
 
 **Agent:** Codex
