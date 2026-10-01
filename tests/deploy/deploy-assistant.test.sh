@@ -8,6 +8,15 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 pass() { printf 'ok - %s\n' "$*"; }
 assert_eq() { [ "$1" = "$2" ] || fail "expected '$2', got '$1'"; }
+file_mode() {
+  # GNU stat -f can print filesystem data before failing on BSD format syntax.
+  # Probe without output so the fallback never includes that partial output.
+  if stat -f '%Lp' "$1" >/dev/null 2>&1; then
+    stat -f '%Lp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
+}
 
 # shellcheck source=../../deploy/lib/common.sh
 . "$ROOT/deploy/lib/common.sh"
@@ -33,7 +42,7 @@ bj_env_set "$ENV_FILE" ADDED value
 assert_eq "$(bj_env_value KEEP "$ENV_FILE")" original
 assert_eq "$(bj_env_value CHANGE "$ENV_FILE")" new
 assert_eq "$(bj_env_value ADDED "$ENV_FILE")" value
-assert_eq "$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE")" 600
+assert_eq "$(file_mode "$ENV_FILE")" 600
 pass "atomic environment updates preserve unrelated values and permissions"
 
 # Compose prioritizes an exported shell variable over the .env file. The
@@ -212,7 +221,7 @@ pass "remote run initialization is idempotent only while prepared"
   cmp -s "$TMP/state/runs/run-verify/source-migrations.sha256" \
     "$TMP/state/installed-migrations.sha256" \
     || fail "installed migration state was recomputed from mutable shared files"
-  assert_eq "$(stat -f '%Lp' "$TMP/state/installed-migrations.sha256" 2>/dev/null || stat -c '%a' "$TMP/state/installed-migrations.sha256")" 600
+  assert_eq "$(file_mode "$TMP/state/installed-migrations.sha256")" 600
 )
 pass "run-scoped migrations are verified and installed manifests remain owner-readable"
 
@@ -441,7 +450,7 @@ cmp -s "$FETCHED" "$SERVER_ROOT$REMOTE_DIR/backups/$RESUME_DUMP" \
   || fail "the resumed run did not download the verified server backup"
 assert_eq "$(cat "$RESUME_REPO/backups/deploy-assistant/client/$RESUME_RUN/backup.sha256")" \
   "$(cat "$TMP/fake-backup-sha")"
-assert_eq "$(stat -f '%Lp' "$FETCHED" 2>/dev/null || stat -c '%a' "$FETCHED")" 600
+assert_eq "$(file_mode "$FETCHED")" 600
 assert_eq "$(wc -l < "$TMP/resume-rsync.log" | tr -d ' ')" 1
 grep -q "bj:$REMOTE_DIR/backups/$RESUME_DUMP" "$TMP/resume-rsync.log" \
   || fail "the backup was not fetched from the absolute remote backup directory"

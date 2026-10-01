@@ -78,6 +78,22 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-09-30 — First Linux CI run identifies BSD stat test portability
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 6ab2265
+**Trigger:** Continued the authorized Liara release build.
+
+**What changed / verification**
+- Pushed the reviewed release preparation as `6ab2265`. GitHub run `36781967711`
+  passed npm install, runtime audit, lint and all 440 unit tests.
+- Deployment tests then failed because GNU `stat -f` emitted filesystem data
+  before the BSD-format probe failed. Replaced three permission checks with a
+  silent probe and platform-compatible formatter; retained all assertions.
+- Public HTTPS remained trusted after restarting the preflight gateway. The
+  service-image pull was interrupted before completion and is being retried.
+- CI deployment access approval remains pending. No app/database deployment yet.
+
 ## 2026-09-30 — Prepare explicit Liara release and verify public IP HTTPS
 
 **Agent:** Codex
