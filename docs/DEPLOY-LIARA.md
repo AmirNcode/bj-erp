@@ -19,8 +19,10 @@ database; the client's existing installation and data are separate.
   with IPv4 billed separately. Check current account billing for actual costs.
 
 Status and deployment evidence are recorded in `docs/AGENT-LOG.md`. The first
-release is installed and browser-tested. Automatic deployment is being verified;
-use the journal and GitHub Actions run status for the current release.
+release is installed and browser-tested. Push-to-main deployment is enabled and
+verified: [run 36806814730](https://github.com/AmirNcode/bj-erp/actions/runs/36806814730)
+deployed `a0cb7b1bc6534724b8c7f43ad016ee71c8981b12`. Use the journal and Actions
+run status for later releases.
 
 ## Explicit deployment configuration
 
@@ -76,7 +78,7 @@ entrypoint verifies the archive checksum, rejects unsafe members, serializes
 releases and refuses unexpected infrastructure changes. Protect repository
 write access: deployment code can affect the VM and database.
 
-The first launch remains manual until tested. Subsequent releases take a
+The first launch was installed and verified manually. Subsequent releases take a
 private database dump, verify its archive structure, apply only pending
 checksum-verified migrations, switch the app image, and check service/public
 health. Failed service health restores the prior app image. **Database migrations

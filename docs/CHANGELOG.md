@@ -16,7 +16,7 @@ Updated Next.js and eslint-config-next from 16.2.9 to 16.3.8 and refreshed
 vulnerable dependencies within their existing version ranges. Full `npm audit`
 now reports zero vulnerabilities, including development tools. Clean lockfile
 installation, 440 unit tests, lint, deployment checks, and the production build
-passed. These changes remain local; no deployment occurred.
+passed. These changes are now deployed to Liara; see the hosting entry below.
 
 ### Private deployment files excluded from Docker builds (2026-09-30)
 
@@ -37,7 +37,9 @@ The fresh stack has public IP HTTPS, verified desktop/mobile login and session
 persistence, a daily backup timer and a successful 33-table restore rehearsal.
 GitHub Actions builds/tests Linux releases; its approved `bj-deploy` account is
 restricted to the deployment entrypoint and the environment accepts only `main`.
-Automatic release verification is in progress; evidence is in `docs/AGENT-LOG.md`.
+Push-triggered build and deployment passed in run `36806814730`, deploying `a0cb7b1`.
+Post-deployment browser checks and controlled app-image rollback also passed;
+evidence is in `docs/AGENT-LOG.md`.
 
 Runtime proxy tests corrected two client-IP configuration errors: use Caddy's
 `{client_ip}` placeholder, and overwrite the header without a conflicting delete.

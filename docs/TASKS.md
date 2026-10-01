@@ -138,11 +138,12 @@ Decision: one Liara VM running the minimal Docker stack. Runbook `docs/DEPLOY-LI
 - ☑ Debian VM, SSH 32222, Docker, swap, firewall, logging and time synchronization prepared.
 - ☑ Rate-limit units, private build inputs and dependency security findings fixed.
 - ☑ Explicit Liara Compose/Caddy configuration; staging and trusted production IP certificates validated.
-- ◐ Commit/release pipeline: Linux build, scoped CI access and initial deployment in progress.
+- ☑ Linux release pipeline, scoped `bj-deploy` CI access and initial deployment complete.
 - ☑ Fresh schema, first admin and public desktop/mobile application verified.
 - ☑ Backup restore rehearsal verified (33 tables); daily backup timer enabled.
 - ◐ Private off-VM recovery copy awaiting explicit transfer approval.
-- ☐ Push-triggered GitHub deployment verified.
+- ☑ Push-triggered GitHub deployment verified (run `36806814730`, release `a0cb7b1`).
+- ☑ Controlled failing-image test automatically restored the previous app release.
 - ☐ Company subdomain supplied by IT, then DNS/TLS/origin updated.
 
 ## Production deploy + release pipeline (2026-07-26)

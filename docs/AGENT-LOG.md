@@ -78,6 +78,42 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-01 — Push-to-main deployment verified and handoff
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ a0cb7b1
+**Trigger:** User resumed after the usage limit reset.
+
+**What changed**
+- Updated runbook, task checklist and changelog from preparation to verified deployment.
+- This final documentation-only handoff is committed with `[skip ci]`; the running code release
+  remains `a0cb7b1bc6534724b8c7f43ad016ee71c8981b12` and no runtime changes follow it.
+
+**Actions outside the repo / verification**
+- Enabled `LIARA_DEPLOY_ENABLED=true` and pushed reviewed fixes in a0cb7b1 with prior authorization.
+- GitHub run https://github.com/AmirNcode/bj-erp/actions/runs/36806814730 passed all build/test
+  stages and the actual SSH transfer/apply deployment through the approved `bj-deploy` account.
+- Resumed after the usage interruption: VM `DEPLOYED_RELEASE` matches a0cb7b1, all five services
+  have stayed up for about 12 hours, database healthy, public HTTPS health HTTP 200.
+- Post-deployment Playwright smoke passed all seven checks: protected-page redirect, invalid-password
+  rejection, fresh-admin login, session reload, admin employee list, mobile overflow and browser errors.
+  Browser plugin not available; used existing Playwright/Chromium with full TLS verification.
+  Navigation-canceled prefetch requests occurred, but no browser runtime or console errors.
+  Screenshots: `/private/tmp/bj-liara-home-desktop.png` and `/private/tmp/bj-liara-home-mobile.png`.
+- Daily timer remains enabled; last backup service result success. Controlled image rollback and
+  isolated full database restore already passed (previous entry). Private recovery bundle exists on VM.
+- Working tree was clean before final documentation updates. Client server remains untouched.
+
+**State left behind / next steps**
+- Application ready for testing at https://62.60.191.132. Username `admin`; unique password is in
+  ignored mode-600 `.bj-deploy/liara/admin-password` on the Mac and the private root file on Liara.
+- Ordinary pushes to main now build/test/deploy automatically; infrastructure changes still require
+  explicit installation/verification before the deploy guard accepts them.
+- Approval review previously blocked copying the database/env/TLS recovery bundle to the Mac.
+  No approval reply received, so no transfer attempted. User approval for that exact copy remains open.
+- Daily backups are VM-local; ongoing offsite backup scheduling is not configured. Client IT supplies
+  the eventual hostname; real employee rollout and first scheduled certificate renewal remain untested.
+
 ## 2026-09-30 — Liara live rollout, deployment access and recovery rehearsal
 
 **Agent:** Codex
