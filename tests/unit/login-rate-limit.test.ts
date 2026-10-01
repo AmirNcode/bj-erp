@@ -23,16 +23,19 @@ describe('login rate limiting wiring', () => {
     // the app path, since most refreshes are issued by the app on the user's
     // behalf and it can only forward a value it was given.
     const stamps = caddyfile.match(
-      new RegExp(`header_up\\s+${CLIENT_IP_HEADER}\\s+\\{http\\.request\\.client_ip\\}`, 'gi')
+      new RegExp(`header_up\\s+${CLIENT_IP_HEADER}\\s+\\{client_ip\\}`, 'gi')
     );
     expect(stamps).toHaveLength(2);
   });
 
-  it('deletes any inbound copy of the header before setting its own', () => {
-    // Without the delete, a caller could supply the header itself and either
-    // impersonate another user's bucket or dodge the limit entirely.
-    const deletes = caddyfile.match(new RegExp(`header_up\\s+-${CLIENT_IP_HEADER}`, 'gi'));
-    expect(deletes).toHaveLength(2);
+  it('overwrites client identity without a conflicting delete operation', () => {
+    // Caddy's set replaces all inbound values. Combining set and delete for the
+    // same header removes the trusted value; pinned GoTrue then skips limiting.
+    for (const path of ['deploy/caddy/Caddyfile', 'deploy/liara/Caddyfile']) {
+      const config = readFileSync(path, 'utf8');
+      expect(config).not.toMatch(/header_up\s+-X-BJ-Client-IP/i);
+      expect(config.match(/header_up\s+X-BJ-Client-IP\s+\{client_ip\}/gi)).toHaveLength(2);
+    }
   });
 
   it('never lets the internal listener overwrite the forwarded header', () => {

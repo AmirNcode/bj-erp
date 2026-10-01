@@ -78,6 +78,66 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-09-30 — Liara live rollout, deployment access and recovery rehearsal
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 490491a
+**Trigger:** User authorized continuing deployment and explicitly approved the dedicated GitHub credential/account, preferring `bj-deploy`.
+
+**What changed**
+- Corrected public Caddy identity stamping in both targets: `{client_ip}` replaces the invalid
+  `{http.request.client_ip}`; removed the same-header deletion that ran after the set operation.
+  Earlier journal claims based on text assertions did not prove actual forwarding. Added real
+  isolated Caddy 2.8.4/2.11.4 runtime tests, including duplicate spoofed headers and private forwarding.
+- Liara serves public HTTPS over HTTP/1.1 with `Connection: close`: direct HTTP/2 redirect chains
+  and some reused HTTP/1.1 connections stalled from Canada, while local/tunneled requests worked.
+  This compatibility workaround passed normal Chromium with full TLS verification; upstream cause
+  remains unconfirmed. It adds public handshake overhead and should be revisited with the domain.
+- Workflow uses approved `bj-deploy` and runs the real forwarding regression test.
+- Added the pinned-image GraphQL wrapper recovery helper; updated deployment/recovery documentation.
+
+**Actions outside the repo**
+- Installed release `490491a48ae550c5a3f577181e548b29c5c8e607` on Liara: fresh schema,
+  baseline organization and unique admin; no demo users. Client server was untouched.
+- Installed rsync/sudo from Debian's Liara mirror. Docker apt repository returned 403 on update;
+  existing tested Docker runtime remained usable. Production IP TLS issuance and restart passed.
+- Created `bj-deploy` with restricted SSH key and sudo permission only for the root deployment
+  entrypoint plus a 40-hex SHA. Unrelated sudo commands were denied. Stored dedicated key/known-host
+  secrets in GitHub's `liara` environment, restricted to main. Deployment switch remained false
+  through these checks; enabling and testing the real push workflow is next.
+- Applied verified gateway configuration live. Auth burst probe returned 30 invalid-login responses
+  followed by ten 429 responses despite forged identity headers.
+- Browser desktop/mobile QA passed login, invalid-password rejection, persisted session, admin
+  employee list, mobile overflow and console checks. A failed diagnostic assertion exposed the
+  initial test password in tool output: rotated it immediately, revoked old sessions, sanitized
+  subsequent error reporting and reverified login. Final credential is only in private ignored files.
+- Enabled daily backup timer and completed isolated restore of the full dump. The pg_graphql wrapper
+  ACL failed initially because its extension-member DDL is absent from pg_dump; excluded ONLY that
+  TOC ACL, then recreated the exact wrapper/grants/membership. Corrected the test's scoped PGPASSWORD
+  after its helper unset it. All 33 public/Auth/migration-ledger tables matched counts/content hashes.
+  Disposable restore container/volume were removed; live data was not replaced.
+- Prepared private `/root/bj-liara/recovery-20261001T023025Z.tar.gz`, including database, roles,
+  environment and TLS state. First streamed-script attempt consumed stdin; reran a saved script.
+  Automatic approval review blocked copying this sensitive bundle to the Mac; explicit approval
+  was requested and remains pending. No off-VM copy has been made.
+- Controlled failing-image rehearsal completed: `update.sh` rejected `liara-rollback-check`,
+  restored image 490491a, and public health recovered. Test image/archive removed. Database
+  migrations are NOT rolled back by image recovery; no new migrations were introduced in this test.
+
+**Verification**
+- GitHub Linux build run 36802135762 succeeded before manual first installation.
+- Real forwarding tests, unit rate-limit tests, lint, Compose checks and diff whitespace checks passed.
+- Desktop/mobile browser smoke passed with TLS verification; all five services running, DB healthy.
+- Latest live Liara Caddyfile SHA-256 matches the reviewed local file; public health returns HTTP 200.
+- Backup restore and controlled app-image rollback both passed.
+
+**State left behind / next steps**
+- Commit/push these fixes, enable auto-deploy, then verify the complete GitHub SSH deployment.
+- Recovery bundle copy awaits the separate explicit sensitive-transfer approval. Daily backups
+  currently remain on the VM; do not describe them as ongoing offsite protection.
+- Client IT still owns the future company hostname. First actual IP-certificate renewal has not
+  occurred yet; preserve certificate storage and keep HTTP reachable for renewal.
+
 ## 2026-09-30 — First Linux CI run identifies BSD stat test portability
 
 **Agent:** Codex

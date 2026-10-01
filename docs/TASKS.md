@@ -139,8 +139,9 @@ Decision: one Liara VM running the minimal Docker stack. Runbook `docs/DEPLOY-LI
 - ☑ Rate-limit units, private build inputs and dependency security findings fixed.
 - ☑ Explicit Liara Compose/Caddy configuration; staging and trusted production IP certificates validated.
 - ◐ Commit/release pipeline: Linux build, scoped CI access and initial deployment in progress.
-- ☐ Fresh schema, first admin and public application verified.
-- ☐ Backup restore rehearsal and off-VM copy verified; daily backup timer enabled.
+- ☑ Fresh schema, first admin and public desktop/mobile application verified.
+- ☑ Backup restore rehearsal verified (33 tables); daily backup timer enabled.
+- ◐ Private off-VM recovery copy awaiting explicit transfer approval.
 - ☐ Push-triggered GitHub deployment verified.
 - ☐ Company subdomain supplied by IT, then DNS/TLS/origin updated.
 

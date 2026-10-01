@@ -13,7 +13,7 @@ export const AUTH_COOKIE_NAME = 'bj-auth';
 /**
  * Header carrying the end user's real IP address, stamped by the Caddy gateway
  * from its own view of the connection (deploy/caddy/Caddyfile). Clients cannot
- * forge it — the gateway deletes any inbound copy before setting its own.
+ * forge it — the gateway replaces all inbound values with its own.
  *
  * GoTrue rate-limits the `/token` endpoint — which serves BOTH password logins
  * and background session refreshes — per client IP, reading the header named by

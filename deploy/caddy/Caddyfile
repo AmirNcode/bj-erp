@@ -29,7 +29,7 @@
 		# so can steal or exhaust another user's rate-limit bucket.
 		#
 		# Default 127.0.0.1/32 deliberately trusts NOBODY — no external peer can
-		# ever present that source address — so {http.request.client_ip} is the
+		# ever present that source address — so {client_ip} is the
 		# address actually on the socket. That is the correct answer while
 		# employees reach this server directly (LAN/VPN).
 		#
@@ -57,12 +57,11 @@ https://{$APP_HOST} {
 		uri strip_prefix /auth/v1
 		reverse_proxy auth:9999 {
 			# GoTrue rate-limits /token per client IP, reading the header named
-			# by GOTRUE_RATE_LIMIT_HEADER (see docker-compose.yml). Delete any
-			# inbound copy FIRST, then set our own: a value supplied by the
-			# caller must never be able to forge an identity or drain someone
-			# else's bucket. This path is the browser's direct login call.
-			header_up -X-BJ-Client-IP
-			header_up X-BJ-Client-IP {http.request.client_ip}
+			# by GOTRUE_RATE_LIMIT_HEADER (see docker-compose.yml). Setting the
+			# header replaces every inbound value. Do not also delete it: Caddy
+			# applies deletions after sets, removing the trusted stamp.
+			# This path is the browser's direct login call.
+			header_up X-BJ-Client-IP {client_ip}
 		}
 	}
 
@@ -75,11 +74,9 @@ https://{$APP_HOST} {
 		reverse_proxy app:3000 {
 			# Same stamp for the app itself. Most session refreshes are issued
 			# by the app's server-side code on the user's behalf (proxy.ts), so
-			# the app has to know who it is acting for — otherwise GoTrue counts
-			# every employee's refresh against the app container and one shared
-			# bucket throttles the whole company.
-			header_up -X-BJ-Client-IP
-			header_up X-BJ-Client-IP {http.request.client_ip}
+			# the app forwards this trusted value. The pinned Auth skips its
+			# limiter when the configured header is missing.
+			header_up X-BJ-Client-IP {client_ip}
 		}
 	}
 }

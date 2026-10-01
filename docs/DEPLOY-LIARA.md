@@ -19,7 +19,8 @@ database; the client's existing installation and data are separate.
   with IPv4 billed separately. Check current account billing for actual costs.
 
 Status and deployment evidence are recorded in `docs/AGENT-LOG.md`. The first
-release is being prepared; do not infer a running app from this runbook alone.
+release is installed and browser-tested. Automatic deployment is being verified;
+use the journal and GitHub Actions run status for the current release.
 
 ## Explicit deployment configuration
 
@@ -42,6 +43,14 @@ The public gateway replaces `X-BJ-Client-IP`; server-side Auth calls forward it
 through the private listener. The pinned GoTrue rate setting is per five minutes
 with burst capacity 30; office users behind one public IP share the bucket.
 
+HTTPS currently uses HTTP/1.1 for compatibility: direct HTTP/2 redirect chains
+from Canada stalled, while HTTP/1.1 and HTTP/2 through an SSH tunnel succeeded.
+Some reused HTTP/1.1 connections also stalled during browser asset/login requests.
+Closing public connections after each response made the complete browser smoke
+test pass. TLS verification remains enabled; private service connections still
+reuse connections. This adds TLS handshake overhead. Re-evaluate these settings
+after the company hostname is connected; the exact upstream cause is unconfirmed.
+
 Do not run `bj-deploy ... client` for Liara: that target intentionally retains
 the client's original server defaults. Do not use `liara deploy` for this VM.
 
@@ -60,7 +69,7 @@ the client's original server defaults. Do not use `liara deploy` for this VM.
    The known host is pinned from the already verified server key, not accepted
    blindly during CI. Only `main` is allowed to use this environment.
 
-CI uses a dedicated `bjdeploy` account. It can upload to
+CI uses a dedicated `bj-deploy` account. It can upload to
 `/var/lib/bj-deploy/incoming`, and sudo permits only the root-owned
 `/usr/local/sbin/bj-liara-apply` entrypoint with a validated commit SHA. That
 entrypoint verifies the archive checksum, rejects unsafe members, serializes
@@ -89,6 +98,11 @@ requirement prevents a release from silently omitting local work.
 
 ## Backups, credentials and operations
 
+The daily backup timer is enabled. The first backup was restored into a disposable
+instance of the same Postgres image; all 33 application, Auth and migration-ledger
+tables matched by row count and content checksum. This was a recovery rehearsal
+against an idle fresh database, not a restore over the live installation.
+
 A fresh installation generates unique secrets and a random initial admin
 password, saved on the VM at `/root/bj-liara/admin-password` (root only). The
 login code is `admin`. No public demo passwords or sample employee accounts are
@@ -100,6 +114,17 @@ data. Pre-deploy backups also remain in `/opt/bj-erp/backups`. These do not back
 up `.env` or Caddy certificate storage; preserve secrets separately. `pg_restore
 -l` checks archive structure only: validate recovery by restoring a disposable
 copy. Maintain off-server copies; local VM backups alone cannot survive VM loss.
+
+For the pinned `supabase/postgres:15.8.1.085`, full dump restoration needs one
+extension-specific repair: `pg_dump` records the ACL of the dynamically generated
+`graphql_public.graphql` wrapper without its definition. Make a `pg_restore -l`
+list, exclude only its ` ACL graphql_public FUNCTION graphql(` entry, restore
+with that list and `--clean --if-exists --exit-on-error --single-transaction`,
+then run `liara/restore-graphql.sql` as `supabase_admin`. The helper restores the
+wrapper, original grants and extension membership. **Do not remove all ACLs.**
+This exact procedure passed the isolated restore rehearsal. Revalidate it before
+changing the Postgres image. A live database restore requires a separate recovery
+plan and explicit authorization; never point a rehearsal at `bj-erp-db-1`.
 
 ```bash
 cd /opt/bj-erp

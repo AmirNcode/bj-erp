@@ -212,8 +212,8 @@ the app. Stamping these with the app/gateway IP instead collapses different
 clients into one bucket. Verify these semantics again before changing Auth
 versions; current upstream differs from the pinned image.
 
-So the identity has to be plumbed end to end: the gateway deletes any inbound copy of the header and
-re-stamps it from `{http.request.client_ip}` on both the browser's `/auth/v1` path and the app path;
+So the identity has to be plumbed end to end: the gateway replaces all inbound values of the header and
+re-stamps it from `{client_ip}` on both the browser's `/auth/v1` path and the app path;
 the app forwards that value on its own server-side Supabase calls; and the internal unpublished
 listener must **not** re-stamp, or it overwrites the forwarded value with the app's own address.
 `trusted_proxies` is the security boundary that decides whose `X-Forwarded-For` is believable — keep

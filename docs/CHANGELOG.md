@@ -25,16 +25,26 @@ folder depth, including `deploy/.env`. Database dumps and deployment secrets
 are kept out of the builder's `COPY . .` inputs. Verified with synthetic private
 files and required app/deployment inputs in an actual Docker scratch build.
 
-### Hosting moves to Liara (2026-09-29) — decision, nothing deployed yet
+### Liara VM deployment (2026-09-30) — testing rollout
 
-The app will be hosted on **Liara** (liara.ir), an Iranian cloud provider, instead of the
+The app is hosted on **Liara** (liara.ir), an Iranian cloud provider, instead of the
 company's own server. The company's IT could not create a public subdomain for the on-prem server,
 so it could never be reached from outside the office without the VPN. Still in testing.
 
 The initial PaaS/one-click proposal was superseded on 2026-09-30 by one Debian VM
 running the minimal Docker stack, with public HTTPS and Linux releases built off-VM.
-The Caddy client-IP scheme is preserved. The Liara override and GitHub Actions
-workflow are being prepared; deployment evidence is recorded in `docs/AGENT-LOG.md`.
+The fresh stack has public IP HTTPS, verified desktop/mobile login and session
+persistence, a daily backup timer and a successful 33-table restore rehearsal.
+GitHub Actions builds/tests Linux releases; its approved `bj-deploy` account is
+restricted to the deployment entrypoint and the environment accepts only `main`.
+Automatic release verification is in progress; evidence is in `docs/AGENT-LOG.md`.
+
+Runtime proxy tests corrected two client-IP configuration errors: use Caddy's
+`{client_ip}` placeholder, and overwrite the header without a conflicting delete.
+Both pinned Caddy versions now pass spoofing/forwarding tests. The live Auth
+burst probe returned 30 credential rejections followed by 10 rate-limit rejections.
+Public HTTPS uses HTTP/1.1 and closes connections after responses to avoid observed
+external connection stalls; private service connections still reuse connections.
 
 ### Login rate-limit units corrected (2026-09-30)
 
