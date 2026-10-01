@@ -141,7 +141,8 @@ Decision: one Liara VM running the minimal Docker stack. Runbook `docs/DEPLOY-LI
 - ☑ Linux release pipeline, scoped `bj-deploy` CI access and initial deployment complete.
 - ☑ Fresh schema, first admin and public desktop/mobile application verified.
 - ☑ Backup restore rehearsal verified (33 tables); daily backup timer enabled.
-- ◐ Private off-VM recovery copy awaiting explicit transfer approval.
+- ☑ Initial private recovery bundle copied to the Mac with approval; SHA-256 verified.
+- ☐ Scheduled offsite backups (daily backups currently remain on the VM).
 - ☑ Push-triggered GitHub deployment verified (run `36806814730`, release `a0cb7b1`).
 - ☑ Controlled failing-image test automatically restored the previous app release.
 - ☐ Company subdomain supplied by IT, then DNS/TLS/origin updated.

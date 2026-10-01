@@ -78,6 +78,21 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-01 — Approved recovery bundle copied to the Mac
+
+**Agent:** Codex · **Branch / HEAD:** main @ 8de4396
+**Trigger:** User explicitly approved the private recovery copy and requested only the location of the admin password.
+
+- Confirmed the local admin-password file exists with mode 600; did not read or display its contents.
+- Verified the VM checksum, then copied `recovery-20261001T023025Z.tar.gz` and its checksum from
+  `/root/bj-liara/` into the Mac's ignored `.bj-deploy/liara/backups/` directory.
+- Local SHA-256 matches the original. Verified database dump, environment, roles and TLS archive
+  members are present without extracting or displaying sensitive contents. Archive is 200099 bytes.
+- Backup directory mode 700, files mode 600; `git check-ignore` confirms Git exclusion.
+- Marked the initial off-VM copy complete. This is a snapshot from before the first automatic
+  deployment, not a new database backup and not a scheduled offsite backup service.
+- No live application, credential or database changes. Documentation-only commit skips CI.
+
 ## 2026-10-01 — Final screenshot readiness check
 
 **Agent:** Codex · **Branch / HEAD:** main @ 1bbe539
