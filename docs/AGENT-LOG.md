@@ -78,6 +78,29 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-01 — Authorized overnight VM power-off test
+
+**Agent:** Codex · **Branch / HEAD:** main @ ee706ca
+**Trigger:** User requested startup/persistence checks, then power-off from the terminal for approximately one day.
+
+- Live Docker service is enabled/active; all five running containers have `unless-stopped` restart
+  policies. Database volume `bj-erp_db-data` and certificate volume `bj-erp_caddy-data` persist.
+- System state running, 9.7 GiB disk free, public health OK, deployed code a0cb7b1. No running
+  deployment workflow, release lock free, backup service inactive and no dump/update process.
+- Backup timer enabled with `Persistent=true`; missed schedule should catch up after boot.
+  Docker shutdown timeout 90 seconds. Public certificate expires 2026-10-07 12:43:04 UTC.
+- Pre-shutdown boot ID: `c326baf3-d306-4272-a815-b8ef42874dc0`.
+- Acquired release lock, rechecked backup inactivity, issued `systemctl poweroff --no-block`
+  via root SSH on port 32222. Command returned `Graceful power-off accepted`.
+- Follow-up SSH 32222 and HTTPS 443 connection attempts both timed out after shutdown.
+  The OS accepted power-off; Liara control-plane power/billing status was not independently queried.
+- Did not manually stop/remove containers, alter restart policies, delete volumes or disable CI.
+- User must start the VM through Liara's control plane. No automatic wake-up was scheduled.
+  After boot verify new boot ID, all services, public TLS/login, database persistence and timer;
+  auto-start is configured but the actual cold-start test remains pending.
+- Avoid ordinary main pushes while offline; CI deployment would fail. This journal-only commit
+  uses `[skip ci]` and makes no application changes.
+
 ## 2026-10-01 — Approved recovery bundle copied to the Mac
 
 **Agent:** Codex · **Branch / HEAD:** main @ 8de4396
