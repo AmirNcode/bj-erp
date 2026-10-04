@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getPendingApprovals, getWorkSettings } from '@/lib/actions/leave';
+import { getPendingApprovals } from '@/lib/actions/leave/approvals';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';

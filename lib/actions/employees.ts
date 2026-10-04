@@ -3,44 +3,11 @@
 import type { Database } from '@/lib/supabase/types';
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
 import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 
-// Re-export pure helpers so the unit test can import from this path
-export { allowedProfileFields, generateTempPassword };
-
 type AppRole = Database['public']['Enums']['app_role'];
-
-// ---------------------------------------------------------------------------
-// Internal: fetch caller's roles and company_id
-// ---------------------------------------------------------------------------
-
-async function getCallerContext() {
-  const { createClient } = await import('@/lib/supabase/server');
-  const supabase = await createClient();
-  const user = await getCachedUser();
-
-  if (!user) {
-    return { supabase, user: null, roles: [] as AppRole[], companyId: null };
-  }
-
-  const [roles, profile] = await Promise.all([
-    getCachedRoles(user.id),
-    getCachedProfile(user.id),
-  ]);
-
-  return {
-    supabase,
-    user,
-    roles: roles as AppRole[],
-    companyId: profile?.company_id ?? null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Server actions
-// ---------------------------------------------------------------------------
 
 export type CreateEmployeeInput = {
   personnel_no: string;
@@ -67,17 +34,8 @@ export type CreateEmployeeInput = {
 export async function createEmployee(
   input: CreateEmployeeInput
 ): Promise<{ ok: true; tempPassword: string; userId: string } | DbErrorResult> {
-  const { supabase, user, roles, companyId } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (
-    !roles.includes('admin') &&
-    !roles.includes('manager') &&
-    !roles.includes('hr')
-  ) {
-    return dbErr('admin or manager role required');
-  }
-  if (!companyId) return dbErr('no profile for caller');
+  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'], company: true });
+  if (!c.ok) return c;
 
   // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)
@@ -86,11 +44,11 @@ export async function createEmployee(
 
   const tempPassword = generateTempPassword();
 
-  const { data: userId, error } = await supabase.rpc('app_create_employee', {
+  const { data: userId, error } = await c.supabase.rpc('app_create_employee', {
     p_personnel_no: personnelNo,
     p_full_name: input.full_name,
     p_password: tempPassword,
-    p_company_id: companyId,
+    p_company_id: c.companyId,
     ...(input.department_id ? { p_department_id: input.department_id } : {}),
     ...(input.manager_id ? { p_manager_id: input.manager_id } : {}),
     ...(input.roles?.length ? { p_roles: input.roles } : {}),
@@ -124,12 +82,9 @@ export async function updateEmployee(
   id: string,
   fields: UpdateEmployeeFields
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  const isAdmin = roles.includes('admin');
-  const isManager = roles.includes('manager');
-  if (!isAdmin && !isManager) return dbErr('admin or manager role required');
+  const c = await requireCaller({ anyOf: ['admin', 'manager'] });
+  if (!c.ok) return c;
+  const isAdmin = c.roles.includes('admin');
 
   const allowed = allowedProfileFields(isAdmin);
   const filtered = Object.fromEntries(
@@ -140,7 +95,7 @@ export async function updateEmployee(
     return dbErr('not permitted to update these fields');
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await c.supabase
     .from('profiles')
     .update(filtered)
     .eq('id', id)
@@ -162,12 +117,10 @@ export async function setRoles(
   id: string,
   roles: AppRole[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { supabase, user, roles: callerRoles } = await getCallerContext();
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
 
-  if (!user) return dbErr('not authenticated');
-  if (!callerRoles.includes('admin')) return dbErr('admin role required');
-
-  const { error } = await supabase.rpc('app_set_user_roles', {
+  const { error } = await c.supabase.rpc('app_set_user_roles', {
     p_user_id: id,
     p_roles: roles,
   });
@@ -184,65 +137,12 @@ export async function setActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
 
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
-
-  const { data, error } = await supabase
+  const { data, error } = await c.supabase
     .from('profiles')
     .update({ active })
-    .eq('id', id)
-    .select('id');
-
-  if (error) return dbErr(error.message);
-  if (!data || data.length !== 1) return dbErr('employee not found');
-
-  invalidateAppCache();
-  return { ok: true };
-}
-
-/**
- * Sets the team (department) for an employee. Admin-only.
- */
-export async function setTeam(
-  id: string,
-  departmentId: string | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ department_id: departmentId })
-    .eq('id', id)
-    .select('id');
-
-  if (error) return dbErr(error.message);
-  if (!data || data.length !== 1) return dbErr('employee not found');
-
-  invalidateAppCache();
-  return { ok: true };
-}
-
-/**
- * Sets the manager for an employee. Admin-only.
- */
-export async function setManager(
-  id: string,
-  managerId: string | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
-  if (managerId === id) return dbErr('an employee cannot be their own manager');
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({ manager_id: managerId })
     .eq('id', id)
     .select('id');
 
@@ -260,14 +160,12 @@ export async function setManager(
 export async function resetPassword(
   id: string
 ): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
 
   const tempPassword = generateTempPassword();
 
-  const { error } = await supabase.rpc('app_set_employee_password', {
+  const { error } = await c.supabase.rpc('app_set_employee_password', {
     p_user_id: id,
     p_password: tempPassword,
   });
@@ -308,17 +206,14 @@ export type IssuedCredential = {
 export async function bulkCreateEmployees(
   rows: BulkImportRow[]
 ): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
-  const { supabase, user, roles, companyId } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
-  if (!companyId) return dbErr('no profile for caller');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no rows to import');
 
   const withPasswords = rows.map((row) => ({ ...row, password: generateTempPassword() }));
 
-  const { data, error } = await supabase.rpc('app_bulk_create_employees', {
-    p_company_id: companyId,
+  const { data, error } = await c.supabase.rpc('app_bulk_create_employees', {
+    p_company_id: c.companyId,
     p_rows: withPasswords as unknown as import('@/lib/supabase/types').Json,
   });
 
@@ -345,16 +240,14 @@ export async function bulkCreateEmployees(
 export async function bulkResetPasswords(
   userIds: string[]
 ): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
-  const { supabase, user, roles } = await getCallerContext();
-
-  if (!user) return dbErr('not authenticated');
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
   if (userIds.length === 0) return dbErr('no employees selected');
   const uniqueIds = [...new Set(userIds)];
   if (uniqueIds.length > 100) return dbErr('select between 1 and 100 employees');
-  if (uniqueIds.includes(user.id)) return dbErr('cannot bulk-reset your own password');
+  if (uniqueIds.includes(c.user.id)) return dbErr('cannot bulk-reset your own password');
 
-  const { data: profiles, error: readError } = await supabase
+  const { data: profiles, error: readError } = await c.supabase
     .from('profiles')
     .select('id, full_name, employee_code')
     .in('id', uniqueIds);
@@ -365,7 +258,7 @@ export async function bulkResetPasswords(
     profile,
     password: generateTempPassword(),
   }));
-  const { error } = await supabase.rpc('app_bulk_set_employee_passwords', {
+  const { error } = await c.supabase.rpc('app_bulk_set_employee_passwords', {
     p_resets: resets.map(({ profile, password }) => ({
       user_id: profile.id,
       password,

@@ -87,8 +87,3 @@ export function timeSlots(window: TimeRange, stepMinutes: number): string[] {
   for (let m = from; m <= to; m += stepMinutes) slots.push(minutesToTime(m));
   return slots;
 }
-
-/** That day's hourly minutes once this request is added — checked against the cap. */
-export function hourlyDayTotal(existingMinutes: number, requestedMinutes: number): number {
-  return existingMinutes + requestedMinutes;
-}

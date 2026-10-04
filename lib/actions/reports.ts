@@ -12,11 +12,11 @@
  */
 
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import { todayInAppTz } from '@/lib/appDate';
 import { outstandingSteps, type SignedStep, type StepRole } from '@/lib/leave/approvals';
-import { getApprovalConfig } from '@/lib/actions/leave';
+import { getApprovalConfig } from '@/lib/actions/leave/approvals';
 import type { EmployeeRow, LedgerRow, LeaveTypeRow, RequestRow } from '@/lib/reports/reports';
 
 export type ReportData = {
@@ -78,19 +78,11 @@ export async function getReportData(
   rangeStart: string,
   rangeEnd: string
 ): Promise<{ ok: true; data: ReportData } | { ok: false; error: string }> {
-  const supabase = await createClient();
-  const user = await getCachedUser();
-  if (!user) return dbErr('not authenticated');
-
-  const [roles, profile] = await Promise.all([
-    getCachedRoles(user.id),
-    getCachedProfile(user.id),
-  ]);
-  if (!roles.includes('hr') && !roles.includes('admin')) {
+  const c = await requireCaller({ company: true });
+  if (!c.ok) return c;
+  if (!c.roles.includes('hr') && !c.roles.includes('admin')) {
     return dbErr('not allowed to review requests');
   }
-  const companyId = profile?.company_id;
-  if (!companyId) return dbErr('no profile for caller');
 
   const [
     { data: employees, error: empError },
@@ -104,31 +96,31 @@ export async function getReportData(
     // between 'profiles' and 'profiles'") even with the correct constraint hint,
     // and since every profile is already in this result set, the join buys
     // nothing but a failure mode.
-    supabase
+    c.supabase
       .from('profiles')
       .select(
         `id, full_name, employee_code, personnel_no, hire_date, active, manager_id,
          departments!profiles_department_id_fkey(name_fa, name_en)`
       )
-      .eq('company_id', companyId)
+      .eq('company_id', c.companyId)
       .order('full_name'),
-    supabase.from('leave_ledger').select('employee_id, leave_type_id, balance_after_minutes, seq'),
-    supabase
+    c.supabase.from('leave_ledger').select('employee_id, leave_type_id, balance_after_minutes, seq'),
+    c.supabase
       .from('leave_types')
       .select('id, name_fa, name_en')
-      .eq('company_id', companyId)
+      .eq('company_id', c.companyId)
       .eq('active', true)
       .order('name_fa'),
     // Overlap test, matching the calendar: a request counts for the period when
     // it starts on or before the end AND ends on or after the start.
-    supabase
+    c.supabase
       .from('leave_requests')
       .select(
         'id, employee_id, kind, status, start_date, end_date, requested_minutes, unpaid_minutes, created_at, leave_types(name_fa, name_en)'
       )
       .lte('start_date', rangeEnd)
       .gte('end_date', rangeStart),
-    supabase.from('work_settings').select('hours_per_day').eq('company_id', companyId).maybeSingle(),
+    c.supabase.from('work_settings').select('hours_per_day').eq('company_id', c.companyId).maybeSingle(),
   ]);
 
   if (empError) return dbErr(empError.message);
@@ -178,7 +170,7 @@ export async function getReportData(
   if (pendingIds.length > 0) {
     const [{ steps }, { data: approvals }] = await Promise.all([
       getApprovalConfig(),
-      supabase
+      c.supabase
         .from('leave_request_approvals')
         .select('request_id, step_role, decision')
         .in('request_id', pendingIds),

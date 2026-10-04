@@ -9,11 +9,8 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
-import {
-  getActiveLeaveTypes,
-  getMyLeaveRequests,
-  getWorkSettings,
-} from '@/lib/actions/leave';
+import { getActiveLeaveTypes, getWorkSettings } from '@/lib/actions/leave/reference';
+import { getMyLeaveRequests } from '@/lib/actions/leave/requests';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';

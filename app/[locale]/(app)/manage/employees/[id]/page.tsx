@@ -7,12 +7,8 @@
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
-import {
-  getEmployeeBalances,
-  getWorkSettings,
-  getEmployeePolicies,
-  getCurrentJalaliMonthStart,
-} from '@/lib/actions/leave';
+import { getEmployeeBalances, getEmployeePolicies, getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { notFound } from 'next/navigation';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';

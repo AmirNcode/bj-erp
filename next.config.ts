@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
 
   // Self-host packaging (deploy/): emit a minimal standalone server bundle so
-  // the Docker image ships only what it runs. No effect on Vercel deploys.
+  // the Docker image ships only what it runs.
   output: 'standalone',
 
   // Dev-only: let devices on the LAN (e.g. a phone on the same Wi-Fi) load the

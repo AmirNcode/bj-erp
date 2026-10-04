@@ -2,9 +2,6 @@
   "common": {
     "dismiss": "Cancel"
   },
-  "app": {
-    "title": "HR System"
-  },
   "nav": {
     "appName": "Behsazan Jonoob",
     "primary": "Primary",
@@ -34,7 +31,6 @@
   "home": {
     "greeting": "Welcome, {name}",
     "title": "Home",
-    "manageLink": "Manage Employees",
     "balancesTitle": "My Balances",
     "requestDaily": "Daily leave request",
     "requestHourly": "Hourly leave request",
@@ -87,11 +83,9 @@
     "submit": "Submit Request",
     "preview": "Preview",
     "workingDaysLabel": "Working days",
-    "workingDays": "Working days: {count}",
     "requestingLabel": "Requesting",
     "remainingBalanceLabel": "Remaining balance",
     "unpaidTimeOffLabel": "Unpaid time off",
-    "remainingBalance": "Remaining balance: {days} days",
     "noBalance": "Balance unknown",
     "success": "Request submitted successfully.",
     "error": "Error",
@@ -238,20 +232,6 @@
       "confirm": "Log out"
     }
   },
-  "allocations": {
-    "title": "Leave Allocations",
-    "navLink": "Allocations",
-    "employee": "Employee",
-    "selectEmployee": "— Select Employee —",
-    "leaveType": "Leave Type",
-    "selectType": "— Select Leave Type —",
-    "periodStart": "Period Start",
-    "periodEnd": "Period End",
-    "days": "Days",
-    "submit": "Submit Allocation",
-    "success": "Leave allocation recorded successfully.",
-    "error": "Error"
-  },
   "approvals": {
     "title": "Approvals",
     "navLink": "Approvals",
@@ -323,7 +303,6 @@
       "name": "Full name",
       "personnelNo": "Personnel no.",
       "department": "Department",
-      "jobTitle": "Job title",
       "from": "From date",
       "to": "To date",
       "fromTime": "From time",
@@ -335,7 +314,6 @@
       "reason": "Notes",
       "status": "Status",
       "leaveType": "Leave type",
-      "decidedBy": "Approved by",
       "decisionNote": "Decision note"
     },
     "types": {
@@ -353,8 +331,7 @@
       "hrOffice": "Administrative & HR Office"
     },
     "hrExpert": "Administrative & HR Officer",
-    "balanceLine": "The applicant has {duration} of annual leave remaining.",
-    "signedAt": "Signed at"
+    "balanceLine": "The applicant has {duration} of annual leave remaining."
   },
   "reports": {
     "title": "HR reports",
@@ -495,9 +472,7 @@
       "createdTitle": "Department created",
       "createdHint": "You can now add employees to this department.",
       "addEmployee": "Add an employee",
-      "backToList": "Back to employees",
       "backToSettings": "Back to settings",
-      "invalid": "Code must be 2-6 latin letters or digits.",
       "nameRequired": "Both the Farsi and English names are required.",
       "error": "Error"
     },
@@ -545,8 +520,7 @@
         "workersLabel": "Workers",
         "noMembers": "No one is assigned to this department.",
         "loading": "Loading…",
-        "close": "Close",
-        "invalid": "Code must be 2-6 latin letters or digits."
+        "close": "Close"
       },
       "accrual": {
         "title": "Monthly leave accrual",
@@ -669,7 +643,6 @@
   "dbErrors": {
     "notAuthenticated": "You are not signed in. Please sign in again.",
     "notAllowed": "You are not allowed to perform this action.",
-    "insufficientBalance": "Insufficient leave balance ({requested} day(s) requested, {available} available).",
     "insufficientBalanceMinutes": "Insufficient leave balance ({requested} minutes requested, {available} available).",
     "accountInactive": "This account is inactive. Contact an administrator.",
     "employeeNotFound": "Employee not found.",

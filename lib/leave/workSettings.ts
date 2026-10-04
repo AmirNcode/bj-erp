@@ -1,10 +1,10 @@
-import type { WorkSettings } from '@/lib/actions/leave';
+import type { WorkSettings } from '@/lib/actions/leave/reference';
 
 /**
  * Every field of `WorkSettings` at its column default — the "settings could not
  * be read" fallback.
  *
- * It lives here rather than beside `getWorkSettings` because `lib/actions/leave.ts`
+ * It lives here rather than beside `getWorkSettings` because `lib/actions/leave/reference.ts`
  * is a `'use server'` module, and such a file may only export async functions: a
  * plain object export fails the build with "A 'use server' file can only export
  * async functions, found object". The type import above is erased at runtime, so

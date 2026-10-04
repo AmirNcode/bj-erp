@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
-import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { upsertHoliday, deleteHoliday, getCompanyHolidays, type Holiday } from '@/lib/actions/settings';
@@ -37,10 +37,6 @@ type Labels = {
   holidayImport: HolidayImportLabels;
 };
 
-// react-multi-date-picker passes a DateObject; we only ever read it via dateObjectToGregorian.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DateObjectLike = any;
-
 export function HolidayEditor({
   initial,
   locale,
@@ -53,7 +49,7 @@ export function HolidayEditor({
   const tc = useTranslations('common');
   const { calendar, calLocale } = calendarPickerConfig(locale);
   const [holidays, setHolidays] = useState<Holiday[]>(initial);
-  const [picked, setPicked] = useState<DateObjectLike | null>(null);
+  const [picked, setPicked] = useState<PickerDate | null>(null);
   const [nameFa, setNameFa] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [recurring, setRecurring] = useState(false);

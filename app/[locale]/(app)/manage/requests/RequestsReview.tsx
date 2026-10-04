@@ -12,7 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import type { ReviewRequestRow } from '@/lib/actions/leave';
+import type { ReviewRequestRow } from '@/lib/actions/leave/review';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';

@@ -161,7 +161,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.client-amd64.yml \
 An update ships **only a new app image** — never the full installer bundle. The
 database, its volume, and the four service images stay exactly as they are.
 
-**Step-by-step operator instructions: [`../docs/DEPLOY-GUIDE.md`](../docs/DEPLOY-GUIDE.md).**
+**Step-by-step operator instructions: [`../docs/DEPLOY-ASSISTANT.md`](../docs/DEPLOY-ASSISTANT.md).**
 
 ### The pipeline
 
@@ -288,29 +288,12 @@ production server**, and keep `999…` personnel numbers reserved for testing.
 Take a backup before any update that carries migrations (see *Backups* above);
 it costs seconds and makes the update reversible.
 
-## Later: automating deploys (design, not yet built)
+## Automated releases
 
-The server sits on the LAN behind NAT, so it should **pull** rather than be
-pushed to. The intended design, when this is worth building:
-
-1. A read-only GitHub deploy key on the server, and a clone of the repo
-   (the server has outbound internet, so it can build its own image — no more
-   ~400 MB image transfers).
-2. A `deploy.sh` on the server that runs: `git fetch` → check out the target
-   **tag** → `docker build` → sync any new `migrations/*.sql` → `install.sh` →
-   health-check `https://<APP_HOST>/` → roll back to the previous image tag if
-   the health check fails.
-3. Trigger by pushing a `deploy-*` git tag, keeping every release a deliberate
-   act. A `systemd` timer polling for new tags can make it hands-off later.
-
-Deliberately **not** chosen: auto-deploying every push to `main` (a bad commit
-would reach a live HR system with no human gate), and registry-based pulls
-(container registries are frequently unreachable from Iran — the reason this
-package ships images as tar files in the first place).
-
-**Prerequisite:** the repository must be the source of truth. Do not enable
-git-based deploys while the deployed image is built from an uncommitted working
-tree — the server would silently roll back to whatever is on `main`.
+Releases are pushed from the developer's Mac with `./deploy/bj-deploy`; see
+`docs/DEPLOY-ASSISTANT.md` in the repository. Server-side builds were rejected
+because container registries are often unreachable from Iran, which is also
+why this package ships its images as tar files.
 
 ## Day-2 operations
 

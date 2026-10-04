@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RequestCancelButton } from '@/app/[locale]/(app)/request/_components/RequestCancelButton';
-import { cancelRequest } from '@/lib/actions/leave';
+import { cancelRequest } from '@/lib/actions/leave/requests';
 
 const routerRefresh = vi.fn();
 
@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: routerRefresh }),
 }));
 
-vi.mock('@/lib/actions/leave', () => ({
+vi.mock('@/lib/actions/leave/requests', () => ({
   cancelRequest: vi.fn(async () => ({ ok: true })),
 }));
 

@@ -5,7 +5,7 @@ import {
   formatCalendarDate,
   nextWorkingDateAfter,
 } from '@/lib/leave/calendarMonth';
-import type { CalendarEntry } from '@/lib/actions/leave';
+import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 const baseEntry = {

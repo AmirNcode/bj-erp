@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { readFileSync } from 'node:fs';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AppShell } from '@/app/[locale]/(app)/_components/AppShell';
 import { PageHeader } from '@/app/[locale]/(app)/_components/PageHeader';
 import {
   PageRefreshButton,
@@ -13,7 +13,7 @@ const routerRefresh = vi.fn();
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/en/home',
-  useRouter: () => ({ refresh: routerRefresh }),
+  useRouter: () => ({ refresh: routerRefresh, prefetch: vi.fn() }),
 }));
 
 vi.mock('@/lib/actions/refresh', () => ({
@@ -26,15 +26,16 @@ afterEach(() => {
 });
 
 const messages = {
+  nav: { primary: 'Primary' },
   refresh: {
     updated: 'Updated {time}',
     pending: 'Updating...',
   },
 };
 
-function renderWithIntl(ui: React.ReactElement) {
+function renderWithIntl(ui: React.ReactElement, locale = 'en') {
   return render(
-    <NextIntlClientProvider locale="en" messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages}>
       {ui}
     </NextIntlClientProvider>
   );
@@ -66,19 +67,34 @@ describe('PageHeader', () => {
   });
 });
 
-describe('AppShell refresh placement', () => {
-  const source = readFileSync(
-    'app/[locale]/(app)/_components/AppShell.tsx',
-    'utf8'
-  );
+describe('AppShell header', () => {
+  const labels = {
+    home: 'Home',
+    request: 'Request',
+    calendar: 'Calendar',
+    profile: 'Profile',
+    manage: 'Manage',
+  };
 
-  it('renders the only header refresh control immediately before the profile link', () => {
-    const refreshIndex = source.indexOf('<PageRefreshButton');
-    const profileIndex = source.indexOf('data-testid="nav-profile"');
+  it.each([
+    ['en', 'ltr'],
+    ['fa', 'rtl'],
+  ])('in %s, renders one refresh control just before the profile link (%s)', (locale, dir) => {
+    renderWithIntl(
+      <AppShell roles={['employee']} locale={locale} labels={labels} appName="BJ">
+        <p>content</p>
+      </AppShell>,
+      locale
+    );
 
-    expect(refreshIndex).toBeGreaterThan(0);
-    expect(refreshIndex).toBeLessThan(profileIndex);
-    expect(source.match(/<PageRefreshButton/g)).toHaveLength(1);
-    expect(source).toContain("dir={locale === 'fa' ? 'rtl' : 'ltr'}");
+    const refresh = screen.getAllByTestId('page-refresh-button');
+    expect(refresh).toHaveLength(1);
+    const profile = screen.getByTestId('nav-profile');
+    const group = profile.parentElement as HTMLElement;
+    expect(group.contains(refresh[0])).toBe(true);
+    expect(
+      refresh[0].compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(group.getAttribute('dir')).toBe(dir);
   });
 });

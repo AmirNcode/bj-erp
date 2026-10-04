@@ -1,7 +1,7 @@
 'use server';
 
 import type { Database } from '@/lib/supabase/types';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 import {
@@ -40,26 +40,17 @@ const CODE_ATTEMPTS = 5;
 export async function createDepartment(
   input: CreateDepartmentInput
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const { createClient } = await import('@/lib/supabase/server');
-  const supabase = await createClient();
-  const user = await getCachedUser();
-
-  if (!user) return dbErr('not authenticated');
-  const [roles, profile] = await Promise.all([
-    getCachedRoles(user.id),
-    getCachedProfile(user.id),
-  ]);
-  if (!roles.includes('admin')) return dbErr('admin role required');
-  if (!profile?.company_id) return dbErr('no profile for caller');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
 
   const nameFa = input.name_fa.trim();
   const nameEn = input.name_en.trim();
   if (!nameFa || !nameEn) return dbErr('department name is required');
 
-  const { data: existing, error: existingError } = await supabase
+  const { data: existing, error: existingError } = await c.supabase
     .from('departments')
     .select('code')
-    .eq('company_id', profile.company_id);
+    .eq('company_id', c.companyId);
   if (existingError) return dbErr(existingError.message);
 
   const taken = new Set((existing ?? []).map((d) => d.code));
@@ -67,10 +58,10 @@ export async function createDepartment(
   for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {
     const code = generateDepartmentCode(nameEn, taken);
 
-    const { data, error } = await supabase
+    const { data, error } = await c.supabase
       .from('departments')
       .insert({
-        company_id: profile.company_id,
+        company_id: c.companyId,
         name_fa: nameFa,
         name_en: nameEn,
         code,
@@ -110,18 +101,13 @@ export async function updateDepartmentCode(
   id: string,
   code: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { createClient } = await import('@/lib/supabase/server');
-  const supabase = await createClient();
-  const user = await getCachedUser();
-
-  if (!user) return dbErr('not authenticated');
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
 
   const normalized = normalizeDepartmentCode(code);
   if (!isValidDepartmentCode(normalized)) return dbErr('invalid department code');
 
-  const { data, error } = await supabase
+  const { data, error } = await c.supabase
     .from('departments')
     .update({ code: normalized })
     .eq('id', id)
@@ -165,15 +151,10 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
 export async function getDepartmentMembers(
   departmentId: string
 ): Promise<{ ok: true; members: DepartmentMembers } | { ok: false; error: string }> {
-  const { createClient } = await import('@/lib/supabase/server');
-  const supabase = await createClient();
-  const user = await getCachedUser();
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
 
-  if (!user) return dbErr('not authenticated');
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) return dbErr('admin role required');
-
-  const { data: department, error: departmentError } = await supabase
+  const { data: department, error: departmentError } = await c.supabase
     .from('departments')
     .select('id, manager_id')
     .eq('id', departmentId)
@@ -181,7 +162,7 @@ export async function getDepartmentMembers(
   if (departmentError) return dbErr(departmentError.message);
   if (!department) return dbErr('department not found');
 
-  const { data: rows, error: rowsError } = await supabase
+  const { data: rows, error: rowsError } = await c.supabase
     .from('profiles')
     .select('id, full_name, employee_code')
     .eq('department_id', departmentId)
@@ -199,7 +180,7 @@ export async function getDepartmentMembers(
   // profile lives in a different department — one extra read, only when needed.
   const leadId = department.manager_id;
   if (leadId && !people.some((p) => p.id === leadId)) {
-    const { data: lead, error: leadError } = await supabase
+    const { data: lead, error: leadError } = await c.supabase
       .from('profiles')
       .select('id, full_name, employee_code')
       .eq('id', leadId)
@@ -213,7 +194,7 @@ export async function getDepartmentMembers(
 
   const managerIds = new Set<string>(leadId ? [leadId] : []);
   if (people.length > 0) {
-    const { data: roleRows, error: roleError } = await supabase
+    const { data: roleRows, error: roleError } = await c.supabase
       .from('user_roles')
       .select('user_id')
       .eq('role', 'manager')

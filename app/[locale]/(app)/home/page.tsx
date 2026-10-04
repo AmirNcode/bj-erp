@@ -9,14 +9,11 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
-import {
-  getMyLeaveRequests,
-  getMyBalances,
-  getCalendarEntries,
-  getPendingApprovals,
-  getWorkSettings,
-  getMyCoverDuties,
-} from '@/lib/actions/leave';
+import { getPendingApprovals } from '@/lib/actions/leave/approvals';
+import { getMyBalances } from '@/lib/actions/leave/balances';
+import { getCalendarEntries } from '@/lib/actions/leave/calendar';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { getMyLeaveRequests, getMyCoverDuties } from '@/lib/actions/leave/requests';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import { nowInAppTz } from '@/lib/appDate';
 import { buildHomeBoard } from '@/lib/home/board';
@@ -49,7 +46,7 @@ async function HomeBoardData({
   const canApprove = roles.includes('admin') || roles.includes('manager');
 
   // Upcoming time off for the team directory. "Today" in the company
-  // timezone, not the server's (Vercel = UTC).
+  // timezone, not the server's (UTC).
   const now = nowInAppTz();
   const rangeStart = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())

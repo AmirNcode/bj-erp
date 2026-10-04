@@ -23,14 +23,6 @@ import { rangeMinutes } from '@/lib/leave/hourly';
  */
 export const MAX_ERRAND_LOCATION_LENGTH = 200;
 
-export type ErrandInput = {
-  /** Company-local 'HH:MM' (or 'HH:MM:SS', which is what Postgres returns). */
-  startTime: string;
-  endTime: string;
-  /** محل ماموریت — required, non-blank once trimmed. */
-  location: string;
-};
-
 /**
  * Duration in minutes. 0 for a reversed or empty range, never negative —
  * the same contract `rangeMinutes` gives hourly leave, reused rather than
@@ -44,26 +36,4 @@ export function errandMinutes(startTime: string, endTime: string): number {
 export function isValidErrandLocation(location: string): boolean {
   const trimmed = location.trim();
   return trimmed.length > 0 && trimmed.length <= MAX_ERRAND_LOCATION_LENGTH;
-}
-
-export type ErrandValidation =
-  | { valid: true }
-  /**
-   * The first failure only. `reason` names the field so the caller can pick its
-   * own translated string; this module holds no user-facing text.
-   */
-  | { valid: false; reason: 'times' | 'location' };
-
-/**
- * Validates an errand exactly as the SQL does, in the SQL's order: the time
- * range first (`end_time > start_time`), then the location.
- */
-export function validateErrand(input: ErrandInput): ErrandValidation {
-  if (errandMinutes(input.startTime, input.endTime) <= 0) {
-    return { valid: false, reason: 'times' };
-  }
-  if (!isValidErrandLocation(input.location)) {
-    return { valid: false, reason: 'location' };
-  }
-  return { valid: true };
 }

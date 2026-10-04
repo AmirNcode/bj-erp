@@ -10,7 +10,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
-import { getCurrentJalaliMonthStart } from '@/lib/actions/leave';
+import { getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
 import { PageHeader } from '../../../_components/PageHeader';
 import { NewEmployeeForm } from './NewEmployeeForm';
 import { FormSkeleton } from '@/components/Skeletons';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { LeaveRequestWithType } from '@/lib/actions/leave';
+import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';

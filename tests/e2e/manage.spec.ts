@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { ADMIN_CODE, ADMIN_PASSWORD } from './_helpers';
 
-const ADMIN_CODE = 'admin';
-const ADMIN_PASSWORD = 'Admin!2026';
 
 test.describe('Employee CRUD — admin flow', () => {
   test('admin creates employee → appears in list → new employee can log in', async ({ page }) => {

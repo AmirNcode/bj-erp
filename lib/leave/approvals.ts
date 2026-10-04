@@ -154,15 +154,6 @@ export function outstandingSteps(
     .map((s) => s.role);
 }
 
-/** True once every applicable step has approved — i.e. the request is complete. */
-export function chainComplete(
-  steps: ApprovalStep[],
-  signed: SignedStep[],
-  kind: RequestKind
-): boolean {
-  return outstandingSteps(steps, signed, kind).length === 0;
-}
-
 /**
  * Narrows the approvals queue to requests the caller can act on **now**.
  *

@@ -73,6 +73,6 @@ cat <<EOF
 
    ./deploy/release.sh
 
- Full instructions: docs/DEPLOY-GUIDE.md
+ Full instructions: docs/DEPLOY-ASSISTANT.md
 =============================================================
 EOF

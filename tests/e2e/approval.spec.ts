@@ -2,171 +2,20 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   approveThroughChain,
   fillDailyDateRange,
-  fillPicker,
-  jalaliRangeFromGregorian,
   jalali2DayRange,
-  nextTestPersonnelNo,
   signApproval,
   signRequest,
+  ADMIN_CODE,
+  ADMIN_PASSWORD,
+  login,
+  logout,
+  createEmployee,
+  setManager,
+  allocate,
 } from './_helpers';
 
-const ADMIN_CODE = 'admin';
-const ADMIN_PASSWORD = 'Admin!2026';
 // Optional rejection note — typed by the manager, read back by the employee.
 const REJECT_REASON = 'پوشش شیفت کافی نیست';
-
-// JALALI_2DAY was removed — date is now computed dynamically at test time.
-// See jalali2DayRange() in _helpers.ts for the 3-constraint algorithm.
-
-async function login(page: Page, code: string, password: string) {
-  await page.goto('/login');
-  // Fill-and-verify, then click-and-verify, all inside one retry loop: on a
-  // cold `next dev` the first fill can land before React hydrates (hydration
-  // resets the controlled inputs) and the first submit click can hit a
-  // not-yet-hydrated button (the form never submits). Retrying the whole
-  // cycle covers both races.
-  await expect(async () => {
-    if (/\/home$/.test(page.url())) return; // already navigated on a prior pass
-    await page.fill('#code', code);
-    await page.fill('#password', password);
-    await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
-    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
-  }).toPass({ timeout: 60_000 });
-}
-
-async function logout(page: Page) {
-  await page.goto('/login');
-  await expect(page).toHaveURL(/\/login$/);
-}
-
-/** Create an employee via the admin console; returns generated code + temp password. */
-async function createEmployee(
-  page: Page,
-  opts: { name: string; roles: string[] }
-): Promise<{ code: string; password: string }> {
-  await page.goto('/manage/employees/new');
-  await expect(page).toHaveURL(/\/manage\/employees\/new$/);
-
-  await page.fill('#personnel_no', nextTestPersonnelNo());
-  await page.fill('#full_name', opts.name);
-
-  // First real department.
-  const deptSelect = page.locator('#department_id');
-  for (const opt of await deptSelect.locator('option').all()) {
-    const val = await opt.getAttribute('value');
-    if (val && val.trim()) {
-      await deptSelect.selectOption({ value: val });
-      break;
-    }
-  }
-
-  // Ensure each requested role checkbox is checked (labels are literal role names).
-  const labels = page.locator('label');
-  const count = await labels.count();
-  for (let i = 0; i < count; i++) {
-    const text = (await labels.nth(i).textContent())?.trim();
-    if (text && opts.roles.includes(text)) {
-      const cb = labels.nth(i).locator('input[type="checkbox"]');
-      if (await cb.count()) {
-        if (!(await cb.isChecked())) await cb.check();
-      }
-    }
-  }
-
-  const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
-  expect(code).toMatch(/^999[0-9]{7}$/);
-
-  await page.click('button[type="submit"]');
-
-  const pwEl = page.locator('[data-testid="temp-password"]');
-  await expect(pwEl).toBeVisible({ timeout: 15_000 });
-  const pw = (await pwEl.textContent())?.trim() ?? '';
-  expect(pw.length).toBeGreaterThan(6);
-  return { code, password: pw };
-}
-
-/** On the employee's edit page, set their direct manager (match by code substring). */
-async function setManager(page: Page, employeeCode: string, managerCodeSubstring: string) {
-  await page.goto('/manage/employees');
-  const row = page.locator('tr', { hasText: employeeCode });
-  await expect(row.first()).toBeVisible({ timeout: 10_000 });
-  await row.first().locator('a').first().click();
-  await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 10_000 });
-
-  const mgrSelect = page.locator('#manager_id');
-  await expect(mgrSelect).toBeVisible({ timeout: 10_000 });
-  let mgrValue = '';
-  for (const opt of await mgrSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(managerCodeSubstring)) {
-      mgrValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(mgrValue).not.toBe('');
-  await mgrSelect.selectOption({ value: mgrValue });
-
-  await page.click('button[type="submit"]');
-  // "saved" status banner (role="status").
-  await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 15_000 });
-}
-
-/** Allocate `days` of the first balance-affecting leave type to an employee. Returns the type value. */
-async function allocate(page: Page, employeeCodeSubstring: string, days: number): Promise<string> {
-  await page.goto('/manage/allocations');
-  await expect(page).toHaveURL(/\/manage\/allocations$/);
-
-  const empSelect = page.locator('#alloc_employee');
-  await expect(empSelect).toBeVisible({ timeout: 10_000 });
-  let empValue = '';
-  for (const opt of await empSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(employeeCodeSubstring)) {
-      empValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(empValue).not.toBe('');
-  await empSelect.selectOption({ value: empValue });
-
-  const ltSelect = page.locator('#alloc_leave_type');
-  let ltValue = '';
-  for (const opt of await ltSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text && (text.includes('سالان') || text.includes('Annual') || text.includes('مرخصی'))) {
-      const val = await opt.getAttribute('value');
-      if (val && val.trim()) {
-        ltValue = val;
-        break;
-      }
-    }
-  }
-  if (!ltValue) {
-    for (const opt of await ltSelect.locator('option').all()) {
-      const val = await opt.getAttribute('value');
-      if (val && val.trim()) {
-        ltValue = val;
-        break;
-      }
-    }
-  }
-  expect(ltValue).not.toBe('');
-  await ltSelect.selectOption({ value: ltValue });
-
-  const year = new Date().getFullYear();
-  const [periodStart, periodEnd] = jalaliRangeFromGregorian(
-    new Date(Date.UTC(year, 0, 1)),
-    new Date(Date.UTC(year, 11, 31))
-  ).split(/\s+—\s+/);
-  await fillPicker(page, periodStart, '[data-testid="allocation-start-date-picker"]');
-  await fillPicker(page, periodEnd, '[data-testid="allocation-end-date-picker"]');
-  await page.fill('[data-testid="alloc-days-input"]', String(days));
-  await page.click('[data-testid="alloc-submit"]');
-  await expect(page.locator('[data-testid="alloc-success"]')).toBeVisible({ timeout: 15_000 });
-  return ltValue;
-}
 
 /** Submit a fresh 2-working-day request for the given leave type (Persian picker). */
 async function submitTwoDayRequest(page: Page, leaveTypeValue: string, offsetDays = 0) {

@@ -3,7 +3,8 @@
  * data. No I/O — unit-tested.
  */
 
-import type { LeaveRequestWithType, CalendarEntry } from '@/lib/actions/leave';
+import type { CalendarEntry } from '@/lib/actions/leave/calendar';
+import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
 import type { BalanceItem } from '@/lib/leave/balances';
 
 export type TeamDirectoryMember = {

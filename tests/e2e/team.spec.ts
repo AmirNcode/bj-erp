@@ -10,32 +10,19 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
-import { nextTestPersonnelNo } from './_helpers';
+import {
+  nextTestPersonnelNo,
+  ADMIN_CODE,
+  ADMIN_PASSWORD,
+  login,
+} from './_helpers';
 
-const ADMIN_CODE = 'admin';
-const ADMIN_PASSWORD = 'Admin!2026';
-
-// Helper: log in as given code/password and expect redirect to /home
-async function loginAs(page: Page, code: string, password: string) {
-  await page.goto('/login');
-  // Fill-and-verify, then click-and-verify, all inside one retry loop: on a
-  // cold `next dev` the first fill can land before React hydrates (hydration
-  // resets the controlled inputs) and the first submit click can hit a
-  // not-yet-hydrated button (the form never submits). Retrying the whole
-  // cycle covers both races.
-  await expect(async () => {
-    if (/\/home$/.test(page.url())) return; // already navigated on a prior pass
-    await page.fill('#code', code);
-    await page.fill('#password', password);
-    await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
-    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
-    await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
-  }).toPass({ timeout: 60_000 });
-}
-
-async function createEmployee(
-  page: Parameters<typeof loginAs>[0],
+/**
+ * Unlike the shared `createEmployee`, this one sets exactly one role and can
+ * name the new employee's manager in the same form.
+ */
+async function createEmployeeWithManager(
+  page: Page,
   opts: {
     name: string;
     role: string;
@@ -103,10 +90,10 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     const ts = Date.now();
 
     // ── 1. Log in as admin ─────────────────────────────────────────────────
-    await loginAs(page, ADMIN_CODE, ADMIN_PASSWORD);
+    await login(page, ADMIN_CODE, ADMIN_PASSWORD);
 
     // ── 2. Create manager M ────────────────────────────────────────────────
-    const { code: mgrCode, password: mgrPassword } = await createEmployee(page, {
+    const { code: mgrCode, password: mgrPassword } = await createEmployeeWithManager(page, {
       name: `Manager ${ts}`,
       role: 'manager',
     });
@@ -122,7 +109,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(mgrId).toBeTruthy();
 
     // ── 3. Create employee E (report of M) ─────────────────────────────────
-    const { code: empCode } = await createEmployee(page, {
+    const { code: empCode } = await createEmployeeWithManager(page, {
       name: `Employee Report ${ts}`,
       role: 'employee',
       managerId: mgrId,
@@ -138,7 +125,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(empId).toBeTruthy();
 
     // ── 4. Create employee X (no manager) ─────────────────────────────────
-    const { code: nonCode } = await createEmployee(page, {
+    const { code: nonCode } = await createEmployeeWithManager(page, {
       name: `Non-Report ${ts}`,
       role: 'employee',
     });

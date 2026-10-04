@@ -4,7 +4,8 @@ import persian from 'react-date-object/calendars/persian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
 import persian_en from 'react-date-object/locales/persian_en';
 import persian_fa from 'react-date-object/locales/persian_fa';
-import type { CalendarEntry, WorkSettings } from '@/lib/actions/leave';
+import type { CalendarEntry } from '@/lib/actions/leave/calendar';
+import type { WorkSettings } from '@/lib/actions/leave/reference';
 import { isWeekendDate } from './weekend';
 
 export type CalendarDayEntry = CalendarEntry & {

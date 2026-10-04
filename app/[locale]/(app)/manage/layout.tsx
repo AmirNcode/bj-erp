@@ -4,7 +4,7 @@
  * Everyone else is redirected to /home.
  *
  * This is the outer door only. The pages behind it guard themselves further:
- * Settings, Allocations and Add-Department redirect anyone who is not an admin,
+ * Settings and Add-Department redirect anyone who is not an admin,
  * so `hr` reaching /manage does not reach company configuration (FR-35).
  */
 

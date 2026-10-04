@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
 import { LOCALE_COOKIE, LOCALE_COOKIE_ATTRS } from '@/lib/i18n/locale';
@@ -17,9 +17,8 @@ export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
 export async function updateMyPrefs(input: {
   languagePref?: 'fa' | 'en';
 }): Promise<UpdatePrefsResult> {
-  const supabase = await createClient();
-  const user = await getCachedUser();
-  if (!user) return dbErr('not authenticated');
+  const c = await requireCaller();
+  if (!c.ok) return c;
 
   const patch: { language_pref?: string } = {};
   if (input.languagePref === 'fa' || input.languagePref === 'en') {
@@ -29,10 +28,10 @@ export async function updateMyPrefs(input: {
     return dbErr('not permitted to update these fields');
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await c.supabase
     .from('profiles')
     .update(patch)
-    .eq('id', user.id)
+    .eq('id', c.user.id)
     .select('id');
   if (error) return dbErr(error.message);
   if (!data || data.length !== 1) return dbErr('profile was not updated');
@@ -65,11 +64,10 @@ export async function changeMyPassword(
   current: string,
   next: string
 ): Promise<ChangePasswordResult> {
-  const supabase = await createClient();
-  const user = await getCachedUser();
-  if (!user) return dbErr('not authenticated');
+  const c = await requireCaller();
+  if (!c.ok) return c;
 
-  const { error } = await supabase.rpc('app_change_my_password', {
+  const { error } = await c.supabase.rpc('app_change_my_password', {
     p_current: current,
     p_new: next,
   });

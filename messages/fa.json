@@ -2,9 +2,6 @@
   "common": {
     "dismiss": "انصراف"
   },
-  "app": {
-    "title": "سامانه منابع انسانی"
-  },
   "nav": {
     "appName": "بهسازان جنوب",
     "primary": "ناوبری اصلی",
@@ -34,7 +31,6 @@
   "home": {
     "greeting": "خوش آمدید، {name}",
     "title": "صفحه اصلی",
-    "manageLink": "مدیریت کارمندان",
     "balancesTitle": "مانده مرخصی من",
     "requestDaily": "درخواست مرخصی روزانه",
     "requestHourly": "درخواست مرخصی ساعتی",
@@ -87,11 +83,9 @@
     "submit": "ارسال درخواست",
     "preview": "پیش‌نمایش",
     "workingDaysLabel": "روزهای کاری",
-    "workingDays": "روزهای کاری: {count}",
     "requestingLabel": "مدت درخواست",
     "remainingBalanceLabel": "مانده مرخصی",
     "unpaidTimeOffLabel": "مرخصی بدون حقوق",
-    "remainingBalance": "مانده مرخصی: {days} روز",
     "noBalance": "موجودی نامشخص",
     "success": "درخواست با موفقیت ارسال شد.",
     "error": "خطا",
@@ -238,20 +232,6 @@
       "confirm": "خروج"
     }
   },
-  "allocations": {
-    "title": "تخصیص مرخصی",
-    "navLink": "تخصیص‌ها",
-    "employee": "کارمند",
-    "selectEmployee": "— انتخاب کارمند —",
-    "leaveType": "نوع مرخصی",
-    "selectType": "— انتخاب نوع مرخصی —",
-    "periodStart": "شروع دوره",
-    "periodEnd": "پایان دوره",
-    "days": "تعداد روز",
-    "submit": "ثبت تخصیص",
-    "success": "تخصیص مرخصی با موفقیت ثبت شد.",
-    "error": "خطا"
-  },
   "approvals": {
     "title": "تأیید درخواست‌ها",
     "navLink": "تأییدها",
@@ -323,7 +303,6 @@
       "name": "نام و نام خانوادگی",
       "personnelNo": "شماره پرسنلی",
       "department": "واحد",
-      "jobTitle": "سمت",
       "from": "از تاریخ",
       "to": "الی تاریخ",
       "fromTime": "از ساعت",
@@ -335,7 +314,6 @@
       "reason": "توضیحات",
       "status": "وضعیت",
       "leaveType": "نوع مرخصی",
-      "decidedBy": "تصویب‌کننده",
       "decisionNote": "توضیح تصمیم"
     },
     "types": {
@@ -353,8 +331,7 @@
       "hrOffice": "امور اداری و منابع انسانی"
     },
     "hrExpert": "کارشناس اداری و منابع انسانی",
-    "balanceLine": "متقاضی دارای مرخصی استحقاقی بمدت {duration} می باشد.",
-    "signedAt": "امضا شده در"
+    "balanceLine": "متقاضی دارای مرخصی استحقاقی بمدت {duration} می باشد."
   },
   "reports": {
     "title": "گزارش‌های منابع انسانی",
@@ -495,9 +472,7 @@
       "createdTitle": "واحد ایجاد شد",
       "createdHint": "اکنون می‌توانید برای این واحد کارمند تعریف کنید.",
       "addEmployee": "افزودن کارمند",
-      "backToList": "بازگشت به فهرست کارمندان",
       "backToSettings": "بازگشت به تنظیمات",
-      "invalid": "کد باید ۲ تا ۶ حرف لاتین یا رقم باشد.",
       "nameRequired": "نام فارسی و انگلیسی هر دو الزامی است.",
       "error": "خطا"
     },
@@ -545,8 +520,7 @@
         "workersLabel": "کارکنان",
         "noMembers": "کارمندی در این واحد ثبت نشده است.",
         "loading": "در حال دریافت…",
-        "close": "بستن",
-        "invalid": "کد باید ۲ تا ۶ حرف لاتین یا رقم باشد."
+        "close": "بستن"
       },
       "accrual": {
         "title": "تعلق ماهانه مرخصی",
@@ -669,7 +643,6 @@
   "dbErrors": {
     "notAuthenticated": "وارد حساب کاربری نشده‌اید. دوباره وارد شوید.",
     "notAllowed": "شما اجازه انجام این عملیات را ندارید.",
-    "insufficientBalance": "موجودی مرخصی کافی نیست ({requested} روز درخواست شده، {available} روز باقی‌مانده).",
     "insufficientBalanceMinutes": "موجودی مرخصی کافی نیست ({requested} دقیقه درخواست شده، {available} دقیقه باقی‌مانده).",
     "accountInactive": "این حساب غیرفعال است. با مدیر سامانه تماس بگیرید.",
     "employeeNotFound": "کارمند موردنظر پیدا نشد.",

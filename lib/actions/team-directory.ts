@@ -1,7 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { getCachedUser } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import type { TeamDirectoryMember } from '@/lib/home/board';
 
@@ -19,12 +18,10 @@ type TeamDirectoryRow = {
 export async function getMyTeamDirectory(): Promise<
   { ok: true; members: TeamDirectoryMember[] } | { ok: false; error: string }
 > {
-  const supabase = await createClient();
-  const user = await getCachedUser();
+  const c = await requireCaller();
+  if (!c.ok) return c;
 
-  if (!user) return dbErr('not authenticated');
-
-  const { data, error } = await supabase.rpc('get_my_team_directory');
+  const { data, error } = await c.supabase.rpc('get_my_team_directory');
   if (error) return dbErr(error.message);
 
   const members: TeamDirectoryMember[] = ((data ?? []) as TeamDirectoryRow[]).map((row) => {

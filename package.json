@@ -1,5 +1,5 @@
 {
-  "name": "hr-scaffold",
+  "name": "bj-erp",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,8 @@
     "test:deploy": "bash tests/deploy/deploy-assistant.test.sh",
     "test:e2e": "playwright test",
     "seed": "node scripts/seed-demo.mjs",
-    "cleanup:e2e": "node scripts/cleanup-e2e.mjs"
+    "cleanup:e2e": "node scripts/cleanup-e2e.mjs",
+    "schema:dump": "bash scripts/dump-schema.sh"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -21,7 +22,6 @@
     "lucide-react": "^1.22.0",
     "next": "16.3.8",
     "next-intl": "^4.13.0",
-    "next-themes": "^0.4.6",
     "radix-ui": "^1.6.0",
     "react": "19.2.4",
     "react-date-object": "^2.1.9",

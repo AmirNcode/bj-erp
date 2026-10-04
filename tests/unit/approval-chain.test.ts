@@ -3,7 +3,6 @@ import {
   applicableSteps,
   fillableStep,
   outstandingSteps,
-  chainComplete,
   filterApprovable,
   type ApprovalStep,
   type SignedStep,
@@ -186,7 +185,7 @@ describe('fillableStep — no configured steps', () => {
   });
 });
 
-describe('outstandingSteps / chainComplete', () => {
+describe('outstandingSteps', () => {
   it('lists who is still needed', () => {
     expect(outstandingSteps(STEPS, [], 'leave')).toEqual(['manager', 'hr']);
     expect(outstandingSteps(STEPS, [{ stepRole: 'manager', decision: 'approved' }], 'leave')).toEqual([
@@ -201,11 +200,9 @@ describe('outstandingSteps / chainComplete', () => {
     ]);
   });
 
-  it('complete only when every applicable step approved', () => {
-    expect(chainComplete(STEPS, [], 'leave')).toBe(false);
-    expect(chainComplete(STEPS, [{ stepRole: 'manager', decision: 'approved' }], 'leave')).toBe(false);
+  it('is empty only when every applicable step approved', () => {
     expect(
-      chainComplete(
+      outstandingSteps(
         STEPS,
         [
           { stepRole: 'manager', decision: 'approved' },
@@ -213,14 +210,14 @@ describe('outstandingSteps / chainComplete', () => {
         ],
         'leave'
       )
-    ).toBe(true);
+    ).toEqual([]);
   });
 
-  it('a kind with no applicable steps is trivially complete', () => {
+  it('a kind with no applicable steps needs nobody', () => {
     const leaveOnly: ApprovalStep[] = [
       { id: 'manager-1', role: 'manager', stepOrder: 1, appliesTo: ['leave'], active: true },
     ];
-    expect(chainComplete(leaveOnly, [], 'errand')).toBe(true);
+    expect(outstandingSteps(leaveOnly, [], 'errand')).toEqual([]);
   });
 });
 
@@ -355,7 +352,6 @@ describe('named-person steps (FR-42)', () => {
     ).toBeNull();
     // ...and the chain is still outstanding on the named step.
     expect(outstandingSteps(STEPS_WITH_PERSON, afterAdmin, 'leave')).toEqual(['employee']);
-    expect(chainComplete(STEPS_WITH_PERSON, afterAdmin, 'leave')).toBe(false);
   });
 
   it('the named person cannot sign twice', () => {
@@ -370,7 +366,6 @@ describe('named-person steps (FR-42)', () => {
       { stepId: 'mgr', stepRole: 'manager', decision: 'approved' },
       { stepId: 'named', stepRole: 'employee', decision: 'approved' },
     ];
-    expect(chainComplete(STEPS_WITH_PERSON, signed, 'leave')).toBe(true);
     expect(outstandingSteps(STEPS_WITH_PERSON, signed, 'leave')).toEqual([]);
   });
 
@@ -388,7 +383,7 @@ describe('named-person steps (FR-42)', () => {
     const firstSigned: SignedStep[] = [
       { stepId: 'a', stepRole: 'employee', decision: 'approved' },
     ];
-    expect(chainComplete(twoPeople, firstSigned, 'leave')).toBe(false);
+    expect(outstandingSteps(twoPeople, firstSigned, 'leave')).toEqual(['employee']);
     expect(
       fillableStep({ ...withPerson, steps: twoPeople, signed: firstSigned, callerId: OTHER })?.id
     ).toBe('b');

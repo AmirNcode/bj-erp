@@ -11,8 +11,8 @@ const gregorian = require('react-date-object/calendars/gregorian');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const gregorian_en = require('react-date-object/locales/gregorian_en');
 
-export const ADMIN_CODE = 'admin';
-export const ADMIN_PASSWORD = 'Admin!2026';
+export const ADMIN_CODE = process.env.E2E_ADMIN_CODE ?? 'admin';
+export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'Admin!2026';
 export const SEEDED_MANAGER_CODE = '1001';
 export const SEEDED_EMPLOYEE_CODE = '2001';
 export const SEEDED_SECURITY_CODE = '1004';
@@ -261,6 +261,31 @@ export async function createEmployee(
   return { code, password };
 }
 
+/** On the employee's edit page, set their direct manager (match by code substring). */
+export async function setManager(page: Page, employeeCode: string, managerCodeSubstring: string) {
+  await page.goto('/manage/employees');
+  const row = page.locator('tr', { hasText: employeeCode });
+  await expect(row.first()).toBeVisible({ timeout: 20_000 });
+  await row.first().locator('a').first().click();
+  await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
+
+  const mgrSelect = page.locator('#manager_id');
+  await expect(mgrSelect).toBeVisible({ timeout: 20_000 });
+  let mgrValue = '';
+  for (const opt of await mgrSelect.locator('option').all()) {
+    const text = await opt.textContent();
+    if (text?.includes(managerCodeSubstring)) {
+      mgrValue = (await opt.getAttribute('value')) ?? '';
+      break;
+    }
+  }
+  expect(mgrValue).not.toBe('');
+  await mgrSelect.selectOption({ value: mgrValue });
+
+  await page.click('button[type="submit"]');
+  await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 20_000 });
+}
+
 /** Fill a single react-multi-date-picker input (hourly leave or errand). */
 export async function fillPicker(page: Page, value: string, selector?: string) {
   const scope = selector ? page.locator(selector) : page;
@@ -356,59 +381,28 @@ async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, pre
     .check();
 }
 
-/** Allocate `days` of the first balance-affecting leave type to an employee. Returns the type value. */
-export async function allocate(page: Page, employeeCodeSubstring: string, days: number): Promise<string> {
-  await page.goto('/manage/allocations');
-  await expect(page).toHaveURL(/\/manage\/allocations$/);
+/**
+ * Add `days` to an employee's Annual balance on the Edit Employee form, as an admin.
+ * Returns the leave type id, which is the value of the request form's type select.
+ * The input steps by half days, so the new figure is rounded to the nearest 0.5.
+ */
+export async function allocate(page: Page, employeeCode: string, days: number): Promise<string> {
+  await page.goto('/manage/employees');
+  const row = page.locator('tr', { hasText: employeeCode }).first();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  await row.locator('a[href*="/manage/employees/"]').first().click();
+  await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
 
-  const empSelect = page.locator('#alloc_employee');
-  await expect(empSelect).toBeVisible({ timeout: 10_000 });
-  let empValue = '';
-  for (const opt of await empSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(employeeCodeSubstring)) {
-      empValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(empValue).not.toBe('');
-  await empSelect.selectOption({ value: empValue });
+  const field = page.locator('[data-testid="balance-days-annual"]');
+  await expect(field).toBeVisible({ timeout: 20_000 });
+  const current = Number(await field.inputValue());
+  await field.fill(String(Math.round((current + days) * 2) / 2));
+  await page.click('button[type="submit"]');
+  await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 20_000 });
 
-  const ltSelect = page.locator('#alloc_leave_type');
-  let ltValue = '';
-  for (const opt of await ltSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text && (text.includes('سالان') || text.includes('Annual') || text.includes('مرخصی'))) {
-      const val = await opt.getAttribute('value');
-      if (val && val.trim()) {
-        ltValue = val;
-        break;
-      }
-    }
-  }
-  if (!ltValue) {
-    for (const opt of await ltSelect.locator('option').all()) {
-      const val = await opt.getAttribute('value');
-      if (val && val.trim()) {
-        ltValue = val;
-        break;
-      }
-    }
-  }
-  expect(ltValue).not.toBe('');
-  await ltSelect.selectOption({ value: ltValue });
-
-  const year = new Date().getFullYear();
-  const [periodStart, periodEnd] = jalaliRangeFromGregorian(
-    new Date(Date.UTC(year, 0, 1)),
-    new Date(Date.UTC(year, 11, 31))
-  ).split(/\s+—\s+/);
-  await fillPicker(page, periodStart, '[data-testid="allocation-start-date-picker"]');
-  await fillPicker(page, periodEnd, '[data-testid="allocation-end-date-picker"]');
-  await page.fill('[data-testid="alloc-days-input"]', String(days));
-  await page.click('[data-testid="alloc-submit"]');
-  await expect(page.locator('[data-testid="alloc-success"]')).toBeVisible({ timeout: 15_000 });
-  return ltValue;
+  const leaveTypeId = (await field.getAttribute('data-leave-type-id')) ?? '';
+  expect(leaveTypeId).not.toBe('');
+  return leaveTypeId;
 }
 
 /** Submit a fresh 2-working-day request for the given leave type, optionally with a reason. */

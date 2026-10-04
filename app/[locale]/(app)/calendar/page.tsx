@@ -10,12 +10,10 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
-import {
-  getCalendarEntries,
-  getPendingApprovals,
-  getVisibleSignatureConsents,
-  getWorkSettings,
-} from '@/lib/actions/leave';
+import { getPendingApprovals } from '@/lib/actions/leave/approvals';
+import { getCalendarEntries } from '@/lib/actions/leave/calendar';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { getVisibleSignatureConsents } from '@/lib/actions/leave/signatures';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { currentCalendarMonthRange } from '@/lib/leave/calendarMonth';
 import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
@@ -42,7 +40,7 @@ async function CalendarData({ locale }: { locale: string }) {
   const canApprove = roles.includes('admin') || roles.includes('manager');
   const canReviewSignatures = canApprove || roles.includes('security');
 
-  // "This month" in the company timezone, not the server's (Vercel = UTC).
+  // "This month" in the company timezone, not the server's (UTC).
   const { rangeStart, rangeEnd, monthLabel } = currentCalendarMonthRange(nowInAppTz(), locale);
 
   const [result, workSettingsResult, approvalsResult, signaturesResult] = await Promise.all([

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   ADMIN_CODE,
   ADMIN_PASSWORD,
@@ -8,40 +8,9 @@ import {
   allocate,
   submitLeave,
   signApproval,
+  setManager,
 } from './_helpers';
 
-
-/**
- * Point an employee at a manager, via the admin edit screen.
- *
- * A THIRD copy of this — approval.spec.ts:91 and errand.spec.ts:33 have their
- * own, and they differ (10s vs 20s timeouts, plus an extra saved-banner
- * assertion). Promoting one to _helpers.ts would silently change the other
- * spec's behaviour, so it is duplicated here deliberately rather than as an
- * oversight. Worth consolidating as its own small change, with a full run.
- */
-async function setManager(page: Page, employeeCode: string, managerCodeSubstring: string) {
-  await page.goto('/manage/employees');
-  const row = page.locator('tr', { hasText: employeeCode });
-  await expect(row.first()).toBeVisible({ timeout: 20_000 });
-  await row.first().locator('a').first().click();
-  await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
-
-  const mgrSelect = page.locator('#manager_id');
-  await expect(mgrSelect).toBeVisible({ timeout: 20_000 });
-  let mgrValue = '';
-  for (const opt of await mgrSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(managerCodeSubstring)) {
-      mgrValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(mgrValue).not.toBe('');
-  await mgrSelect.selectOption({ value: mgrValue });
-  await page.click('button[type="submit"]');
-  await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 20_000 });
-}
 
 /**
  * FR-35 — the `hr` role, batch 2: it exists, it reaches /manage, it reads
@@ -107,9 +76,6 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   });
   await expect(page.locator('[data-testid="work-settings"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="holiday-editor"]')).toHaveCount(0);
-
-  await page.goto('/manage/allocations');
-  await expect(page).toHaveURL(/\/home$/, { timeout: 20_000 });
 
   // Departments are company-wide config too; admins only.
   await page.goto('/manage/departments/new');

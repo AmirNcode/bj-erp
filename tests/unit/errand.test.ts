@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   errandMinutes,
   isValidErrandLocation,
-  validateErrand,
   MAX_ERRAND_LOCATION_LENGTH,
 } from '@/lib/leave/errand';
 
@@ -53,57 +52,5 @@ describe('isValidErrandLocation', () => {
 
   it('pins the limit to the CHECK constraint', () => {
     expect(MAX_ERRAND_LOCATION_LENGTH).toBe(200);
-  });
-});
-
-describe('validateErrand', () => {
-  it('accepts a well-formed errand', () => {
-    expect(validateErrand({ startTime: '08:00', endTime: '12:00', location: LOCATION })).toEqual({
-      valid: true,
-    });
-  });
-
-  it('rejects touching ends — a zero-length errand is not a range', () => {
-    expect(validateErrand({ startTime: '10:00', endTime: '10:00', location: LOCATION })).toEqual({
-      valid: false,
-      reason: 'times',
-    });
-  });
-
-  it('rejects a reversed range', () => {
-    expect(validateErrand({ startTime: '14:00', endTime: '09:00', location: LOCATION })).toEqual({
-      valid: false,
-      reason: 'times',
-    });
-  });
-
-  it('rejects a blank location', () => {
-    expect(validateErrand({ startTime: '08:00', endTime: '12:00', location: '   ' })).toEqual({
-      valid: false,
-      reason: 'location',
-    });
-  });
-
-  it('rejects an over-long location', () => {
-    expect(
-      validateErrand({
-        startTime: '08:00',
-        endTime: '12:00',
-        location: 'x'.repeat(MAX_ERRAND_LOCATION_LENGTH + 1),
-      })
-    ).toEqual({ valid: false, reason: 'location' });
-  });
-
-  it('reports the time failure first when both are wrong, mirroring the SQL order', () => {
-    expect(validateErrand({ startTime: '12:00', endTime: '08:00', location: '' })).toEqual({
-      valid: false,
-      reason: 'times',
-    });
-  });
-
-  it('accepts a minimal 30-minute errand', () => {
-    expect(validateErrand({ startTime: '08:00', endTime: '08:30', location: 'x' })).toEqual({
-      valid: true,
-    });
   });
 });

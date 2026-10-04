@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
   ADMIN_CODE,
   ADMIN_PASSWORD,
@@ -11,6 +11,7 @@ import {
   jalali2DayRange,
   signApproval,
   signRequest,
+  setManager,
 } from './_helpers';
 
 /**
@@ -28,31 +29,6 @@ import {
 
 const LOCATION = 'اداره کار اهواز';
 const DESCRIPTION = 'پیگیری پرونده بیمه';
-
-/** On the employee's edit page, set their direct manager (match by code substring). */
-async function setManager(page: Page, employeeCode: string, managerCodeSubstring: string) {
-  await page.goto('/manage/employees');
-  const row = page.locator('tr', { hasText: employeeCode });
-  await expect(row.first()).toBeVisible({ timeout: 20_000 });
-  await row.first().locator('a').first().click();
-  await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
-
-  const mgrSelect = page.locator('#manager_id');
-  await expect(mgrSelect).toBeVisible({ timeout: 20_000 });
-  let mgrValue = '';
-  for (const opt of await mgrSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(managerCodeSubstring)) {
-      mgrValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(mgrValue).not.toBe('');
-  await mgrSelect.selectOption({ value: mgrValue });
-
-  await page.click('button[type="submit"]');
-  await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 20_000 });
-}
 
 test('errand request: submit, manager approves, leave balance untouched', async ({ page }) => {
   test.setTimeout(300_000); // cold `next dev` compiles each route on first hit

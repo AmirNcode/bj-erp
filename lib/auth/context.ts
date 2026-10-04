@@ -24,6 +24,7 @@
 
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 
 export type AuthUser = { id: string; email?: string };
 
@@ -63,3 +64,44 @@ export const getCachedProfile = cache(async (userId: string) => {
   const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
   return data;
 });
+
+/** A signed-in caller of a server action. */
+export type Caller = {
+  ok: true;
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  user: AuthUser;
+  roles: string[];
+};
+
+type CallerOptions = {
+  /** The caller must hold at least one of these roles. */
+  anyOf?: string[];
+  /** Also load the caller's company id (one profile read). */
+  company?: boolean;
+};
+
+/**
+ * Guard for a server action: the signed-in caller, or the localized error result
+ * to hand straight back (`if (!c.ok) return c;`). The database enforces the same
+ * rules; this only fails fast with a clear message.
+ */
+export async function requireCaller(
+  options: CallerOptions & { company: true }
+): Promise<(Caller & { companyId: string }) | DbErrorResult>;
+export async function requireCaller(options?: CallerOptions): Promise<Caller | DbErrorResult>;
+export async function requireCaller({ anyOf, company }: CallerOptions = {}) {
+  const supabase = await createClient();
+  const user = await getCachedUser();
+  if (!user) return dbErr('not authenticated');
+
+  const [roles, profile] = await Promise.all([
+    getCachedRoles(user.id),
+    company ? getCachedProfile(user.id) : null,
+  ]);
+  if (anyOf && !anyOf.some((role) => roles.includes(role))) {
+    return dbErr(`${anyOf.join(' or ')} role required`);
+  }
+  if (!company) return { ok: true as const, supabase, user, roles };
+  if (!profile?.company_id) return dbErr('no profile for caller');
+  return { ok: true as const, supabase, user, roles, companyId: profile.company_id };
+}

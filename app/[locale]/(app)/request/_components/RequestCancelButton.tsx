@@ -4,7 +4,7 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { cancelRequest } from '@/lib/actions/leave';
+import { cancelRequest } from '@/lib/actions/leave/requests';
 import { todayInAppTz } from '@/lib/appDate';
 import { isCancellable } from '@/lib/leave/cancellable';
 import {

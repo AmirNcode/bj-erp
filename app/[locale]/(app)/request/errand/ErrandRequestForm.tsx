@@ -1,25 +1,19 @@
 'use client';
 
-import { useState, useCallback, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
-import { LazyDatePicker } from '@/components/LazyDatePicker';
-import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
-import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import { useState } from 'react';
+import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { timeSlots, timeToMinutes } from '@/lib/leave/hourly';
-import { errandMinutes, isValidErrandLocation, MAX_ERRAND_LOCATION_LENGTH } from '@/lib/leave/errand';
+import { errandMinutes, isValidErrandLocation } from '@/lib/leave/errand';
 import { formatDuration } from '@/lib/leave/duration';
-import { submitErrandRequest } from '@/lib/actions/leave';
-import type { WorkSettings } from '@/lib/actions/leave';
+import { submitErrandRequest } from '@/lib/actions/leave/requests';
+import type { WorkSettings } from '@/lib/actions/leave/reference';
+import { PersianDateField } from '@/components/PersianDateField';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { nativeSelectClass } from '@/lib/native-select';
-import {
-  RequestSignatureFields,
-  type SignatureLabels,
-} from '../_components/RequestSignature';
+import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
+import { ErrandDetailsFields, FormFeedback, TimeRangeFields } from '../_components/FormParts';
+import { useRequestSubmit, useSignature } from '../_components/useRequestForm';
 
 type Labels = {
   date: string;
@@ -51,9 +45,6 @@ type Props = {
   locale: string;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DateObjectLike = any;
-
 /**
  * Times span the WHOLE day, not the company work window.
  *
@@ -76,83 +67,53 @@ function slotIndexAtOrAfter(time: string): number {
  * time, محل ماموریت, and an optional شرح ماموریت.
  *
  * No leave type, no balance line, no replacement picker: an errand is work, so
- * none of those apply. Times are native <select>s of 30-minute slots — the e2e
- * suite drives native selects with selectOption (a repo rule), and on a
- * factory-floor phone a fixed slot list beats a free-text time field.
+ * none of those apply.
  */
 export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
-  const router = useRouter();
-  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
-
   const defaultFrom = slotIndexAtOrAfter(workSettings.workStart);
 
-  const [date, setDate] = useState<DateObjectLike | null>(null);
+  const [date, setDate] = useState<PickerDate | null>(null);
   const [startTime, setStartTime] = useState(DAY_SLOTS[defaultFrom] ?? '08:00');
   const [endTime, setEndTime] = useState(
     DAY_SLOTS[defaultFrom + 2] ?? DAY_SLOTS[DAY_SLOTS.length - 1] ?? '10:00'
   );
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
-  const [signatureData, setSignatureData] = useState('');
-  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
-  const [errorMsg, setErrorMsg] = useState('');
-  const [isPending, startTransition] = useTransition();
+  const signature = useSignature();
+  const { success, error, isPending, submit } = useRequestSubmit(labels.success);
 
-  const gregorianDate = useCallback(() => (date ? dateObjectToGregorian(date) : ''), [date]);
-
+  const isoDate = date ? dateObjectToGregorian(date) : '';
   const durationMinutes = errandMinutes(startTime, endTime);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
+    const problem = !isoDate
+      ? labels.validationSelectDate
+      : durationMinutes <= 0
+        ? labels.validationTimes
+        : !isValidErrandLocation(location)
+          ? labels.validationLocation
+          : signature.problem(labels.signature);
 
-    const iso = gregorianDate();
-    if (!iso) {
-      setErrorMsg(labels.validationSelectDate);
-      return;
-    }
-    if (durationMinutes <= 0) {
-      setErrorMsg(labels.validationTimes);
-      return;
-    }
-    if (!isValidErrandLocation(location)) {
-      setErrorMsg(labels.validationLocation);
-      return;
-    }
-    if (!signatureData) {
-      setErrorMsg(labels.signature.validationSignature);
-      return;
-    }
-    if (!signatureAuthorized) {
-      setErrorMsg(labels.signature.validationAuthorization);
-      return;
-    }
-
-    startTransition(async () => {
-      const result = await submitErrandRequest({
-        date: iso,
-        startTime,
-        endTime,
-        location: location.trim(),
-        description: description || undefined,
-        signatureData,
-        signatureAuthorized,
-      });
-
-      if (result.ok) {
-        setSuccessMsg(labels.success);
+    submit(
+      problem,
+      () =>
+        submitErrandRequest({
+          date: isoDate,
+          startTime,
+          endTime,
+          location: location.trim(),
+          description: description || undefined,
+          signatureData: signature.data,
+          signatureAuthorized: signature.authorized,
+        }),
+      () => {
         setDate(null);
         setLocation('');
         setDescription('');
-        setSignatureData('');
-        setSignatureAuthorized(false);
-        router.refresh();
-      } else {
-        setErrorMsg(result.error);
+        signature.reset();
       }
-    });
+    );
   };
 
   return (
@@ -167,106 +128,36 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
             {labels.hint}
           </p>
 
-          {/* Single date */}
           <div className="space-y-1.5">
             <Label>{labels.date}</Label>
-            <div
-              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
-              className="w-full"
-              onKeyDown={(e) => {
-                // Enter commits the date in the picker; it must not also submit.
-                if (e.key === 'Enter') e.preventDefault();
-              }}
-            >
-              <LazyDatePicker
-                value={date}
-                onChange={(d: DateObjectLike) => setDate(d ?? null)}
-                calendar={calendar}
-                locale={calLocale}
-                calendarPosition={calendarPosition}
-                inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                containerClassName="rmdp-container w-full"
-                format="YYYY/MM/DD"
-              />
-            </div>
+            <PersianDateField locale={locale} value={date} onChange={setDate} />
           </div>
 
           {/* ساعت خروج / ساعت برگشت */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="errand_from">{labels.fromTime}</Label>
-              <select
-                id="errand_from"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className={nativeSelectClass}
-                dir="ltr"
-                data-testid="errand-from"
-              >
-                {DAY_SLOTS.map((s) => (
-                  <option key={`from-${s}`} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="errand_to">{labels.toTime}</Label>
-              <select
-                id="errand_to"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className={nativeSelectClass}
-                dir="ltr"
-                data-testid="errand-to"
-              >
-                {DAY_SLOTS.map((s) => (
-                  <option key={`to-${s}`} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* محل ماموریت — required. maxLength mirrors the CHECK constraint. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="errand_location">{labels.location}</Label>
-            <Input
-              id="errand_location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder={labels.locationPlaceholder}
-              maxLength={MAX_ERRAND_LOCATION_LENGTH}
-              required
-              data-testid="errand-location"
-            />
-          </div>
-
-          {/* شرح ماموریت — optional; stored in `reason`, so FR-25-private. */}
-          <div className="space-y-1.5">
-            <Label htmlFor="errand_description">{labels.description}</Label>
-            <Textarea
-              id="errand_description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              maxLength={500}
-              className="resize-none"
-              data-testid="errand-description"
-            />
-          </div>
-
-          <RequestSignatureFields
-            idPrefix="errand"
-            value={signatureData}
-            onChange={setSignatureData}
-            authorized={signatureAuthorized}
-            onAuthorizedChange={setSignatureAuthorized}
-            labels={labels.signature}
+          <TimeRangeFields
+            prefix="errand"
+            slots={DAY_SLOTS}
+            from={startTime}
+            to={endTime}
+            onFromChange={setStartTime}
+            onToChange={setEndTime}
+            fromLabel={labels.fromTime}
+            toLabel={labels.toTime}
           />
 
-          {/* Live preview — duration only. There is no balance to show. */}
+          <ErrandDetailsFields
+            idPrefix="errand"
+            testIdPrefix="errand"
+            location={location}
+            description={description}
+            onLocationChange={setLocation}
+            onDescriptionChange={setDescription}
+            labels={labels}
+          />
+
+          <RequestSignatureFields idPrefix="errand" {...signature.fieldProps} labels={labels.signature} />
+
+          {/* Duration only: an errand spends no balance. */}
           {durationMinutes > 0 && (
             <div
               className="rounded-lg bg-secondary px-4 py-3 text-sm space-y-1"
@@ -281,22 +172,13 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
             </div>
           )}
 
-          {successMsg && (
-            <div
-              className="rounded-lg px-4 py-3 text-sm text-success bg-success/10 border border-success/20"
-              data-testid="errand-success"
-            >
-              {successMsg}
-            </div>
-          )}
-          {errorMsg && (
-            <div
-              className="rounded-lg px-4 py-3 text-sm text-destructive bg-destructive/10 border border-destructive/20"
-              data-testid="errand-error"
-            >
-              <strong>{labels.errorLabel}:</strong> {errorMsg}
-            </div>
-          )}
+          <FormFeedback
+            success={success}
+            error={error}
+            errorLabel={labels.errorLabel}
+            successTestId="errand-success"
+            errorTestId="errand-error"
+          />
 
           <Button type="submit" disabled={isPending} className="w-full" data-testid="errand-submit">
             {isPending ? '...' : labels.submit}

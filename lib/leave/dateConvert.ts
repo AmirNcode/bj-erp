@@ -16,20 +16,11 @@ type DateObjectLike = {
   format(fmt: string): string;
 };
 
+/** The value react-multi-date-picker hands back. */
+export type PickerDate = DateObject;
+
 export function dateObjectToGregorian(dateObj: DateObjectLike): string {
   return dateObj.convert(gregorian, gregorian_en).format('YYYY-MM-DD');
-}
-
-/**
- * Formats a Gregorian YYYY-MM-DD string as a Jalali (Persian) YYYY/MM/DD string
- * for display. Builds the DateObject from explicit y/m/d fields to avoid any
- * timezone drift. Returns the input unchanged if it is not a valid ISO date.
- */
-export function gregorianToJalali(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  if (!y || !m || !d) return iso;
-  const obj = new DateObject({ calendar: gregorian, locale: gregorian_en, year: y, month: m, day: d });
-  return obj.convert(persian, persian_fa).format('YYYY/MM/DD');
 }
 
 /** Convert stored Gregorian ISO into a Persian DateObject for controlled pickers. */

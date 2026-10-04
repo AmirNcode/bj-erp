@@ -77,4 +77,3 @@ else
 fi
 
 printf '\nNative local images are ready. No containers or volumes were changed.\n'
-printf 'Continue with the backup and recreation steps in docs/LOCAL_REDEPLOY.md.\n'

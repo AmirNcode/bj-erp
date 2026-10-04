@@ -10,13 +10,11 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CalendarDays, List } from 'lucide-react';
 import { toast } from 'sonner';
-import { approveRequest, rejectRequest } from '@/lib/actions/leave';
-import type {
-  CalendarEntry,
-  DecisionResult,
-  VisibleSignatureConsent,
-  WorkSettings,
-} from '@/lib/actions/leave';
+import { approveRequest, rejectRequest } from '@/lib/actions/leave/approvals';
+import type { DecisionResult } from '@/lib/actions/leave/approvals';
+import type { CalendarEntry } from '@/lib/actions/leave/calendar';
+import type { WorkSettings } from '@/lib/actions/leave/reference';
+import type { VisibleSignatureConsent } from '@/lib/actions/leave/signatures';
 import { buildCalendarMonth, formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';

@@ -1,7 +1,7 @@
 /**
  * Pure leave-balance helpers. No I/O — unit-tested.
  * `BalanceItem` lives here (the neutral module) so both the home view-model
- * (lib/home/board.ts) and the getMyBalances action (lib/actions/leave.ts) can
+ * (lib/home/board.ts) and the getMyBalances action (lib/actions/leave/balances.ts) can
  * import it without a circular dependency.
  *
  * Balances are integer MINUTES (spec §5). Render via lib/leave/duration.ts —

@@ -10,7 +10,6 @@ test-results
 playwright-report
 tests
 docs
-assets
 .superpowers
 .claude
 *.md

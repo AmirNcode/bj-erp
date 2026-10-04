@@ -1,38 +1,21 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
+  allocate,
   fillDailyDateRange,
-  fillPicker,
   jalali2DayRange,
   jalaliRangeFromGregorian,
   approveThroughChain,
   requestIdFromQueueRow,
   signRequest,
+  ADMIN_CODE,
+  ADMIN_PASSWORD,
+  login,
+  logout,
 } from './_helpers';
 
-const ADMIN_CODE = 'admin';
-const ADMIN_PASSWORD = 'Admin!2026';
-
-/**
- * Helper: log in with employee code + password.
- */
-async function login(page: Page, code: string, password: string) {
-  await page.goto('/login');
-  await page.fill('#code', code);
-  await page.fill('#password', password);
-  await page.click('button[type="submit"]');
-  await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
-}
-
-/**
- * Helper: navigate directly to /login and back to force a clean session.
- */
-async function logout(page: Page) {
-  await page.goto('/login');
-  await expect(page).toHaveURL(/\/login$/);
-}
 
 test.describe('Leave request + allocation flow', () => {
-  test('admin allocates → employee submits → previews → cancels → over-balance becomes unpaid', async ({ page }) => {
+  test('admin adds balance → employee submits → previews → cancels → over-balance becomes unpaid', async ({ page }) => {
     // This spec had no explicit budget and ran on Playwright's 30s default. It
     // was already close to it; FR-36's second approval step pushed it over, so
     // the budget is now stated rather than inherited. Matches the other
@@ -86,69 +69,8 @@ test.describe('Leave request + allocation flow', () => {
     const tempPassword = (await pwEl.textContent()) ?? '';
     expect(tempPassword.trim().length).toBeGreaterThan(6);
 
-    // ── 3. Admin navigates to Allocations and allocates 26 days of Annual Leave ──
-    await page.goto('/manage/allocations');
-    await expect(page).toHaveURL(/\/manage\/allocations$/);
-
-    // Pick the employee
-    const empSelect = page.locator('#alloc_employee');
-    await expect(empSelect).toBeVisible({ timeout: 10_000 });
-
-    // Find the new employee option by code substring
-    const empOptions = await empSelect.locator('option').all();
-    let foundEmpValue = '';
-    for (const opt of empOptions) {
-      const text = await opt.textContent();
-      if (text?.includes(uniqueCode)) {
-        foundEmpValue = (await opt.getAttribute('value')) ?? '';
-        break;
-      }
-    }
-    expect(foundEmpValue).not.toBe('');
-    await empSelect.selectOption({ value: foundEmpValue });
-
-    // Pick leave type — find "Annual Leave" or the first non-empty type
-    const ltSelect = page.locator('#alloc_leave_type');
-    const ltOptions = await ltSelect.locator('option').all();
-    let foundLtValue = '';
-    for (const opt of ltOptions) {
-      const text = await opt.textContent();
-      // Try to find an annual-leave-like type; fall back to first available
-      if (text && (text.includes('سالان') || text.includes('Annual') || text.includes('مرخصی'))) {
-        const val = await opt.getAttribute('value');
-        if (val && val.trim()) {
-          foundLtValue = val;
-          break;
-        }
-      }
-    }
-    // Fallback: first non-empty option
-    if (!foundLtValue) {
-      for (const opt of ltOptions) {
-        const val = await opt.getAttribute('value');
-        if (val && val.trim()) { foundLtValue = val; break; }
-      }
-    }
-    expect(foundLtValue).not.toBe('');
-    await ltSelect.selectOption({ value: foundLtValue });
-
-    // Set period: current year
-    const year = new Date().getFullYear();
-    const [periodStart, periodEnd] = jalaliRangeFromGregorian(
-      new Date(Date.UTC(year, 0, 1)),
-      new Date(Date.UTC(year, 11, 31))
-    ).split(/\s+—\s+/);
-    await fillPicker(page, periodStart, '[data-testid="allocation-start-date-picker"]');
-    await fillPicker(page, periodEnd, '[data-testid="allocation-end-date-picker"]');
-
-    // Set 26 days
-    await page.fill('[data-testid="alloc-days-input"]', '26');
-
-    // Submit allocation
-    await page.click('[data-testid="alloc-submit"]');
-
-    // Wait for success
-    await expect(page.locator('[data-testid="alloc-success"]')).toBeVisible({ timeout: 15_000 });
+    // ── 3. Admin gives the new employee 26 more days of Annual Leave ──────
+    const foundLtValue = await allocate(page, uniqueCode, 26);
 
     // ── 4. Log out and log in as new employee ─────────────────────────────
     await logout(page);

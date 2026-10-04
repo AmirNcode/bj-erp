@@ -147,7 +147,7 @@ const RULES: Rule[] = [
   { re: /holiday name is too long/i, key: 'holidayNameTooLong' },
   { re: /holidays were not saved/i, key: 'holidayImportNotSaved' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
-  { re: /not allowed to|only admins can|not permitted|admin role required|admin or manager role required|admin or hr role required|only admins or hr can/i, key: 'notAllowed' },
+  { re: /not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },
 ];
 

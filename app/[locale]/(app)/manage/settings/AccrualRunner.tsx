@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { runAllAccruals } from '@/lib/actions/leave';
+import { runAllAccruals } from '@/lib/actions/leave/balances';
 import { Button } from '@/components/ui/button';
 import { formatNumber } from '@/lib/i18n/format';
 

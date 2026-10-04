@@ -3,11 +3,10 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createEmployee } from '@/lib/actions/employees';
-import { allocateLeave, setEmployeeLeavePolicy } from '@/lib/actions/leave';
+import { allocateLeave, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
 import { daysToMinutes } from '@/lib/leave/duration';
 import { currentYearPeriod } from '@/lib/leave/allocations';
-import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
-import { dateObjectToGregorian } from '@/lib/leave/dateConvert';
+import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import {
   buildEmployeeCode,
   isValidPersonnelNo,
@@ -18,7 +17,14 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
-import { LazyDatePicker } from '@/components/LazyDatePicker';
+import { PersianDateField } from '@/components/PersianDateField';
+import {
+  AccrualPolicyFields,
+  RoleCheckboxes,
+  leaveTypeSlug,
+  minutesToDaysInput,
+  type Role,
+} from '../_components/EmployeeFormParts';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -31,17 +37,6 @@ type InitialLeaveType = {
   default_annual_cap_minutes: number | null;
   default_carryover_cap_minutes: number;
 };
-
-// Rendered as raw slugs, matching the four that were already here. The e2e
-// helper picks these checkboxes by their exact label text, so translating them
-// is a separate, deliberate change — see docs/AGENT-LOG.md 2026-08-18.
-const ROLES = ['admin', 'manager', 'employee', 'security', 'hr'] as const;
-type Role = (typeof ROLES)[number];
-
-// react-multi-date-picker returns a DateObject; keeping this loose matches the
-// existing request forms while conversion stays type-checked at the boundary.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DateObjectLike = any;
 
 type Props = {
   isAdmin: boolean;
@@ -105,24 +100,8 @@ type Props = {
   };
 };
 
-function leaveTypeSlug(type: { name_en: string | null; name_fa: string }) {
-  const label = (type.name_en ?? type.name_fa).toLowerCase();
-  if (label.includes('annual')) return 'annual';
-  if (label.includes('sick')) return 'sick';
-  return label.replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'leave';
-}
-
 function defaultDaysFor(type: InitialLeaveType) {
   return type.default_annual_quota_days ?? 0;
-}
-
-/**
- * Minutes -> the days figure the policy inputs show. 0 means "no cap" for the
- * annual field, which setEmployeeLeavePolicy turns back into null.
- */
-function minutesToDaysInput(minutes: number | null, hoursPerDay: number): number {
-  if (!minutes || minutes <= 0) return 0;
-  return Math.round((minutes / (hoursPerDay * 60)) * 100) / 100;
 }
 
 export function NewEmployeeForm({
@@ -152,7 +131,7 @@ export function NewEmployeeForm({
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(['employee']);
   const [personnelNo, setPersonnelNo] = useState('');
-  const [hireDate, setHireDate] = useState<DateObjectLike | null>(null);
+  const [hireDate, setHireDate] = useState<PickerDate | null>(null);
   // Admin picks a department; manager is locked to their own.
   const [deptId, setDeptId] = useState(canChooseScope ? '' : ownDepartment?.id ?? '');
 
@@ -162,7 +141,6 @@ export function NewEmployeeForm({
   const codePreview = isValidPersonnelNo(normalizedPno)
     ? buildEmployeeCode(normalizedPno)
     : '—';
-  const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -246,12 +224,6 @@ export function NewEmployeeForm({
 
     setPending(false);
     setTempPassword(result.tempPassword);
-  }
-
-  function toggleRole(role: Role) {
-    setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
   }
 
   if (tempPassword) {
@@ -407,48 +379,18 @@ export function NewEmployeeForm({
           </div>
 
           {isAdmin && (
-            /* Native role checkboxes — must stay native for Playwright label+checkbox e2e */
-            <div className="space-y-2">
-              <span className="block text-sm font-medium leading-none">{labels.roles}</span>
-              <div className="flex flex-wrap gap-3">
-                {ROLES.map((role) => (
-                  <label key={role} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedRoles.includes(role)}
-                      onChange={() => toggleRole(role)}
-                      className="rounded border-input text-primary focus:ring-ring"
-                    />
-                    <span className="text-sm">{role}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
+            <RoleCheckboxes label={labels.roles} selected={selectedRoles} onChange={setSelectedRoles} />
           )}
 
           <div className="space-y-1.5">
             <Label htmlFor="hire_date">{labels.hireDate}</Label>
-            <div
-              style={{ direction: isRtl ? 'rtl' : 'ltr' }}
-              className="w-full"
-              data-testid="hire-date-picker"
-              data-calendar="jalali"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.preventDefault();
-              }}
-            >
-              <LazyDatePicker
-                id="hire_date"
-                value={hireDate}
-                onChange={(date: DateObjectLike) => setHireDate(date ?? null)}
-                calendar={calendar}
-                locale={calLocale}
-                calendarPosition={calendarPosition}
-                inputClass="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                containerClassName="rmdp-container w-full"
-                format="YYYY/MM/DD"
-              />
-            </div>
+            <PersianDateField
+              id="hire_date"
+              testId="hire-date-picker"
+              locale={locale}
+              value={hireDate}
+              onChange={setHireDate}
+            />
           </div>
 
           {canManageLeave && leaveTypes.length > 0 && (
@@ -494,83 +436,18 @@ export function NewEmployeeForm({
                 const slug = leaveTypeSlug(type);
                 const label = locale === 'fa' ? type.name_fa : type.name_en ?? type.name_fa;
                 return (
-                  <fieldset className="space-y-1.5" key={`policy-${type.id}`}>
-                    <legend className="text-sm font-medium">{label}</legend>
-                    <div className="grid gap-2 sm:grid-cols-3">
-                      <div className="space-y-1">
-                        <Label htmlFor={`policy_rate_${type.id}`} className="text-xs">
-                          {labels.policyRate}
-                        </Label>
-                        <Input
-                          id={`policy_rate_${type.id}`}
-                          name={`policy_rate_${type.id}`}
-                          type="number"
-                          min={0}
-                          step="0.5"
-                          defaultValue={minutesToDaysInput(
-                            type.default_accrual_minutes_per_month,
-                            hoursPerDay
-                          )}
-                          aria-describedby={`policy_rate_hint_${type.id}`}
-                          data-testid={`policy-rate-${slug}`}
-                        />
-                        <p
-                          id={`policy_rate_hint_${type.id}`}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {labels.policyRateHint}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor={`policy_cap_${type.id}`} className="text-xs">
-                          {labels.policyAnnualCap}
-                        </Label>
-                        <Input
-                          id={`policy_cap_${type.id}`}
-                          name={`policy_cap_${type.id}`}
-                          type="number"
-                          min={0}
-                          step="0.5"
-                          defaultValue={minutesToDaysInput(
-                            type.default_annual_cap_minutes,
-                            hoursPerDay
-                          )}
-                          aria-describedby={`policy_cap_hint_${type.id}`}
-                          data-testid={`policy-cap-${slug}`}
-                        />
-                        <p
-                          id={`policy_cap_hint_${type.id}`}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {labels.policyAnnualCapHint}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor={`policy_carry_${type.id}`} className="text-xs">
-                          {labels.policyCarryCap}
-                        </Label>
-                        <Input
-                          id={`policy_carry_${type.id}`}
-                          name={`policy_carry_${type.id}`}
-                          type="number"
-                          min={0}
-                          step="0.5"
-                          defaultValue={minutesToDaysInput(
-                            type.default_carryover_cap_minutes,
-                            hoursPerDay
-                          )}
-                          aria-describedby={`policy_carry_hint_${type.id}`}
-                          data-testid={`policy-carry-${slug}`}
-                        />
-                        <p
-                          id={`policy_carry_hint_${type.id}`}
-                          className="text-xs text-muted-foreground"
-                        >
-                          {labels.policyCarryCapHint}
-                        </p>
-                      </div>
-                    </div>
-                  </fieldset>
+                  <AccrualPolicyFields
+                    key={`policy-${type.id}`}
+                    leaveTypeId={type.id}
+                    slug={slug}
+                    legend={label}
+                    defaults={{
+                      rate: minutesToDaysInput(type.default_accrual_minutes_per_month, hoursPerDay),
+                      cap: minutesToDaysInput(type.default_annual_cap_minutes, hoursPerDay),
+                      carry: minutesToDaysInput(type.default_carryover_cap_minutes, hoursPerDay),
+                    }}
+                    labels={labels}
+                  />
                 );
               })}
               {policyError && (

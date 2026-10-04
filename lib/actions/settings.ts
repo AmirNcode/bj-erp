@@ -1,7 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { requireCaller } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
 import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
@@ -14,34 +13,6 @@ export type Holiday = {
   name_en: string | null;
   is_recurring: boolean;
 };
-
-type Ctx = {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  userId: string;
-  companyId: string;
-  isAdmin: boolean;
-  isHr: boolean;
-};
-
-async function getCtx(): Promise<Ctx | null> {
-  const supabase = await createClient();
-  const user = await getCachedUser();
-  if (!user) return null;
-  const [roles, profile] = await Promise.all([
-    getCachedRoles(user.id),
-    getCachedProfile(user.id),
-  ]);
-  return {
-    supabase,
-    userId: user.id,
-    companyId: profile?.company_id ?? '',
-    isAdmin: roles.includes('admin'),
-    // FR-42: HR configures the approval chain alongside admin. This widens
-    // exactly one table — HR still cannot touch work settings, holidays,
-    // departments or roles.
-    isHr: roles.includes('hr'),
-  };
-}
 
 export async function getCompanyHolidays(): Promise<
   | {
@@ -56,8 +27,8 @@ export async function getCompanyHolidays(): Promise<
     }
   | { ok: false; error: string }
 > {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
+  const c = await requireCaller({ company: true });
+  if (!c.ok) return c;
   const [{ data: hols, error: he }, { data: ws, error: we }] = await Promise.all([
     c.supabase
       .from('holidays')
@@ -103,9 +74,8 @@ export async function updateWorkSettings(
   input: WorkSettingsInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const weekendDays = input.weekendDays;
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
   const v = validateWeekendDays(
     weekendDays,
     input.biweeklyWeekendDays ?? [],
@@ -143,7 +113,7 @@ export async function updateWorkSettings(
         work_start: hourly.workStart,
         work_end: hourly.workEnd,
         max_hourly_minutes_per_day: hourly.capMinutes,
-        updated_by: c.userId,
+        updated_by: c.user.id,
       },
       { onConflict: 'company_id' }
     )
@@ -161,9 +131,8 @@ export async function upsertHoliday(input: {
   nameEn?: string;
   isRecurring?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
   const nameFa = input.nameFa.trim();
   if (!isValidIsoDate(input.date) || !nameFa) {
     return dbErr('holiday date and farsi name are required');
@@ -207,9 +176,8 @@ export async function upsertHoliday(input: {
 export async function bulkUpsertHolidays(
   rows: { date: string; nameFa: string; nameEn?: string | null; isRecurring?: boolean }[]
 ): Promise<{ ok: true; added: number; updated: number } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no holidays to import');
   // Bounded so a runaway file cannot become one enormous statement. 500 is far
   // more than a country's public holidays over several years.
@@ -262,9 +230,8 @@ export async function bulkUpsertHolidays(
 }
 
 export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
   const { data, error } = await c.supabase
     .from('holidays')
     .delete()
@@ -283,7 +250,8 @@ export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: fa
 // Writes go through the `approval_steps` RLS policies directly, like
 // work_settings and holidays: this is company configuration, not transactional
 // leave data, so it needs no SECURITY DEFINER wrapper. The role checks below are
-// fast localized refusals; the policies are the boundary.
+// fast localized refusals; the policies are the boundary. HR gains this table
+// only: work settings, holidays, departments and roles stay admin-only.
 // ---------------------------------------------------------------------------
 
 export type ApprovalStepRow = {
@@ -308,8 +276,8 @@ export async function getApprovalSteps(): Promise<
   | { ok: true; steps: ApprovalStepRow[]; orderEnforced: boolean }
   | { ok: false; error: string }
 > {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
+  const c = await requireCaller({ company: true });
+  if (!c.ok) return c;
   const [{ data: steps, error }, { data: ws }] = await Promise.all([
     c.supabase
       .from('approval_steps')
@@ -353,9 +321,8 @@ export async function updateApprovalStep(input: {
   active?: boolean;
   stepOrder?: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin && !c.isHr) return dbErr('admin or hr role required');
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  if (!c.ok) return c;
 
   const patch: { active?: boolean; step_order?: number } = {};
   if (typeof input.active === 'boolean') patch.active = input.active;
@@ -394,9 +361,8 @@ export async function createApprovalStep(input: {
   stepOrder?: number;
   appliesTo?: ('leave' | 'errand')[];
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin && !c.isHr) return dbErr('admin or hr role required');
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  if (!c.ok) return c;
 
   const role = input.role;
   if (!['manager', 'hr', 'security', 'admin', 'employee'].includes(role)) {
@@ -440,9 +406,8 @@ export async function createApprovalStep(input: {
 export async function deleteApprovalStep(
   id: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin && !c.isHr) return dbErr('admin or hr role required');
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  if (!c.ok) return c;
 
   const { data, error } = await c.supabase
     .from('approval_steps')
@@ -474,9 +439,8 @@ export type ApproverCandidate = {
 export async function searchApproverCandidates(
   query: string
 ): Promise<{ ok: true; candidates: ApproverCandidate[] } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
-  if (!c.isAdmin && !c.isHr) return dbErr('admin or hr role required');
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  if (!c.ok) return c;
 
   const { data, error } = await c.supabase.rpc('search_approver_candidates', {
     p_query: query ?? '',
@@ -507,20 +471,19 @@ export async function searchApproverCandidates(
 export async function setApprovalOrderEnforced(
   enforced: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await getCtx();
-  if (!c) return dbErr('not authenticated');
   // Admin only, deliberately, even though HR may now edit the STEPS. This writes
   // `work_settings`, whose policy is admin-only and stays that way — admitting HR
   // here would just move the refusal from a clear message to a database error.
   // The card disables the switch for HR to match.
-  if (!c.isAdmin) return dbErr('admin role required');
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
 
   // Upsert on company_id for the same reason updateWorkSettings does: a missing
   // row must be created rather than silently updating zero rows.
   const { data, error } = await c.supabase
     .from('work_settings')
     .upsert(
-      { company_id: c.companyId, approval_order_enforced: enforced, updated_by: c.userId },
+      { company_id: c.companyId, approval_order_enforced: enforced, updated_by: c.user.id },
       { onConflict: 'company_id' }
     )
     .select('id');

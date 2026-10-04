@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
-import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave';
+import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave/signatures';
 import type { SignatureLabels } from '@/lib/leave/signature';
 import { formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { Button } from '@/components/ui/button';

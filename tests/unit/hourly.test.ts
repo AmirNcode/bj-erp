@@ -7,7 +7,6 @@ import {
   rangesOverlap,
   leavePeriodsOverlap,
   timeSlots,
-  hourlyDayTotal,
 } from '@/lib/leave/hourly';
 
 const WINDOW = { start: '07:00', end: '15:00' };
@@ -145,12 +144,5 @@ describe('timeSlots', () => {
 
   it('returns an empty list for a reversed window', () => {
     expect(timeSlots({ start: '15:00', end: '07:00' }, 30)).toEqual([]);
-  });
-});
-
-describe('hourlyDayTotal', () => {
-  it('sums the day', () => {
-    expect(hourlyDayTotal(120, 120)).toBe(240);
-    expect(hourlyDayTotal(0, 60)).toBe(60);
   });
 });

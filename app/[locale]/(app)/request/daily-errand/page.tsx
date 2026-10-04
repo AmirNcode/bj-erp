@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
-import { getWorkSettings } from '@/lib/actions/leave';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';

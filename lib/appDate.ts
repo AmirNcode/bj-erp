@@ -1,7 +1,7 @@
 /**
  * Company-local "today", independent of server timezone.
  *
- * The demo runs on Vercel (UTC) while the company operates in Iran
+ * Servers run on UTC while the company operates in Iran
  * (Asia/Tehran, UTC+3:30) — between midnight and 03:30 Tehran time a plain
  * `new Date()` on the server is still on *yesterday's* date, shifting the home
  * board range and the calendar month label. These helpers pin date-only logic

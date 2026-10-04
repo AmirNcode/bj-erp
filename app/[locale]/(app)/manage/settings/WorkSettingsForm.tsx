@@ -5,15 +5,10 @@ import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
 import { updateWorkSettings } from '@/lib/actions/settings';
 import { WEEKDAYS, frequencyOf, type WeekendFrequency } from '@/lib/leave/weekend';
-import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave/dateConvert';
+import { dateObjectToGregorian, gregorianToPersianDateObject, type PickerDate } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { Button } from '@/components/ui/button';
 import { nativeSelectClass } from '@/lib/native-select';
-
-// react-multi-date-picker passes a DateObject; we only ever read it via
-// dateObjectToGregorian. Same escape hatch HolidayEditor uses for this picker.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type DateObjectLike = any;
 
 type Labels = {
   weekendTitle: string;
@@ -57,7 +52,7 @@ export function WorkSettingsForm({
   const [selected, setSelected] = useState<number[]>(initial);
   const [biweekly, setBiweekly] = useState<number[]>(initialBiweekly);
   // react-multi-date-picker wants a DateObject; the DB stores Gregorian ISO.
-  const [anchor, setAnchor] = useState<DateObjectLike | null>(
+  const [anchor, setAnchor] = useState<PickerDate | null>(
     initialAnchor ? gregorianToPersianDateObject(initialAnchor, locale) : null
   );
   // Times are 'HH:MM' for <input type="time">; Postgres hands back 'HH:MM:SS'.

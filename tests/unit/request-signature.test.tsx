@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -7,14 +6,14 @@ import {
   formatPersianConsentTimestamp,
   type SignatureLabels,
 } from '@/app/[locale]/(app)/request/_components/RequestSignature';
-import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave';
+import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave/signatures';
 import {
   isValidSignatureData,
   MAX_SIGNATURE_DATA_LENGTH,
   MIN_SIGNATURE_DATA_LENGTH,
 } from '@/lib/leave/signature';
 
-vi.mock('@/lib/actions/leave', () => ({
+vi.mock('@/lib/actions/leave/signatures', () => ({
   getApproverSignature: vi.fn(),
   getRequestSignature: vi.fn(),
 }));
@@ -181,63 +180,5 @@ describe('RequestSignatureViewer', () => {
       expect(screen.getByTestId('approver-signature-preview-request-2')).toBeTruthy();
     });
     expect(formatPersianConsentTimestamp('2026-08-05T12:00:00.000Z', 'en')).toContain('1405');
-  });
-});
-
-describe('daily date fields and database enforcement', () => {
-  it('uses two daily pickers while hourly and errand remain single-date forms', () => {
-    const daily = readFileSync('app/[locale]/(app)/request/LeaveRequestForm.tsx', 'utf8');
-    const hourly = readFileSync(
-      'app/[locale]/(app)/request/hourly/HourlyRequestForm.tsx',
-      'utf8'
-    );
-    const errand = readFileSync(
-      'app/[locale]/(app)/request/errand/ErrandRequestForm.tsx',
-      'utf8'
-    );
-
-    expect(daily).toContain('data-testid="daily-start-date"');
-    expect(daily).toContain('data-testid="daily-end-date"');
-    expect(daily).toContain('minDate={startDate ?? undefined}');
-    expect(daily).not.toMatch(/\n\s+range(?:\s|=)/);
-    expect(hourly.match(/<LazyDatePicker/g)).toHaveLength(1);
-    expect(errand.match(/<LazyDatePicker/g)).toHaveLength(1);
-  });
-
-  it('requires signature evidence in every database submission wrapper', () => {
-    const sql = readFileSync(
-      'supabase/migrations/20260805171924_request_signatures.sql',
-      'utf8'
-    );
-
-    expect(sql).toContain('leave_requests_signature_shape');
-    expect(sql).toContain('signature_consent_at = now()');
-    expect(sql.match(/perform private\.attach_request_signature/g)).toHaveLength(3);
-    expect(sql).not.toMatch(/(?:create|replace|alter|drop)\s+(?:or\s+replace\s+)?view\s+public\.team_leave_calendar/i);
-  });
-
-  it('removes unsigned approvals and Gregorian calendar preferences', () => {
-    const sql = readFileSync(
-      'supabase/migrations/20260805185628_approval_signatures_persian_only.sql',
-      'utf8'
-    );
-    const queue = readFileSync(
-      'app/[locale]/(app)/manage/approvals/ApprovalQueue.tsx',
-      'utf8'
-    );
-    const settings = readFileSync(
-      'app/[locale]/(app)/profile/SettingsForm.tsx',
-      'utf8'
-    );
-
-    expect(sql).toContain('drop function if exists public.approve_leave_request(uuid)');
-    expect(sql).toContain('approver_signature_consent_at = v_consent_at');
-    expect(sql).toContain('p_signature_authorized boolean');
-    expect(sql).toContain("status in ('approved', 'cancelled')");
-    expect(sql).toContain("check (calendar_pref = 'jalali')");
-    expect(queue).toContain('<RequestSignatureFields');
-    expect(queue).toContain('formatCalendarDate(req.start_date, locale)');
-    expect(settings).not.toContain('settings-calendar');
-    expect(settings).not.toContain('gregorian');
   });
 });
