@@ -5,7 +5,8 @@ maintained source of truth for how the codebase is organized, the decisions alre
 to resume work without re-asking.
 
 **Start there.** Then follow the read order it lists:
-`docs/PLAN.md` → `docs/REQUIREMENTS.md` → `docs/DATA_MODEL.md` → `docs/PERMISSIONS.md` →
-the current spec in `docs/specs/` → `docs/TASKS.md` (what's next) → `docs/CHANGELOG.md` (what's done).
+`docs/AGENT-LOG.md` (what the last agent did — read before touching anything) → `docs/PLAN.md` →
+`docs/REQUIREMENTS.md` → `docs/DATA_MODEL.md` → `docs/PERMISSIONS.md` → the current spec in
+`docs/specs/` → `docs/TASKS.md` (what's next) → `docs/CHANGELOG.md` (what's done).
 
-Granular task + commit history: `.superpowers/sdd/progress.md`.
+Every session appends an entry to `docs/AGENT-LOG.md` before finishing — see CLAUDE.md.

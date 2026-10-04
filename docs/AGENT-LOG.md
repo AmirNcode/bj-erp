@@ -78,6 +78,46 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-04 — CLAUDE.md audit and onboarding-doc refresh
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 6bd31dc
+**Trigger:** User asked for a CLAUDE.md audit against the codebase, then said to apply every proposed edit.
+
+**What changed**
+- `CLAUDE.md` — fixed claims that were wrong: roles now include `hr`; calendar is Persian-only
+  (since 2026-08-05); the self-hosted stack has no Storage service; dropped the stale test counts
+  (165/26, real numbers 440/28); the status block was dated 2026-06-30; the demo admin login applies
+  only to the seed (Liara password is in `.bj-deploy/liara/admin-password`); `^` ranges, not pinned.
+  Merged the hosting paragraph into the stack table and resolved the contradiction about the on-prem
+  target. Layout now lists `(print)/`, `app/api/health`, `deploy/`, `.github/workflows/`,
+  `tests/deploy/`, the scripts, `docs/MEMORY.md`, `DEPLOY-ASSISTANT.md`, `plans/`. Removed the
+  `.superpowers/sdd/progress.md` pointer: that folder is gitignored and its last entry is from 2026-06-30.
+  Added `test:deploy`, `cleanup:e2e`, `E2E_BASE_URL`. New **Gotchas** section: a push to main deploys
+  to Liara (`[skip ci]` for docs); `deploy/migrations/` is a stale copy; a new enum value needs its own
+  migration; `types.ts` is hand-edited. New working agreement (user wording): propose a one-line
+  CLAUDE.md update when you find a non-obvious convention, gotcha, or command.
+- `AGENTS.md` — read order now starts with `docs/AGENT-LOG.md`; dropped the `progress.md` pointer.
+- `README.md` — test badge/table 440 unit · 28 e2e; Persian-only calendar (intro, requests,
+  self-service, stack); `hr` role; no Storage; added `test:deploy` and `cleanup:e2e` scripts.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Each claim was checked against the repo: `npx vitest list` → 440; 28 `tests/e2e/*.spec.ts`;
+  55 files in `supabase/migrations/` against 38 in `deploy/migrations/` (last commit 4e6b6bf,
+  2026-08-04); `deploy/docker-compose.yml:42` bind-mounts `./migrations`; neither compose file has a
+  storage service and the code never calls `.storage`; `docs/CHANGELOG.md:437` (Persian-only);
+  `docs/PERMISSIONS.md:14` (`hr`). No build or test run: these are doc-only edits.
+
+**State left behind**
+- Uncommitted on `main` (CLAUDE.md, AGENTS.md, README.md, this file). If this gets committed, use `[skip ci]`.
+
+**For the next agent**
+- The tracked `deploy/migrations/` copy is still in the repo. Removing it or regenerating it is a
+  separate decision, because `deploy/docker-compose.yml` mounts it when the stack runs from the repo.
+
 ## 2026-10-01 — Authorized overnight VM power-off test
 
 **Agent:** Codex · **Branch / HEAD:** main @ ee706ca

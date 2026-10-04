@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3FCF8E?logo=supabase&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-98%20unit%20%C2%B7%2020%20e2e-success)
+![Tests](https://img.shields.io/badge/tests-440%20unit%20%C2%B7%2028%20e2e-success)
 ![Status](https://img.shields.io/badge/v1-feature--complete-2E3C92)
 
 A unified, mobile-first web application for a manufacturing company (Behsazan Jonoob). The
@@ -15,7 +15,7 @@ control, finance, procurement, and more — built **module by module**.
 **Module #1 — HR / Time-Off (leave) management — is built and demo-ready.** It replaces the
 company's manual, paper-based leave process: employees request time off, managers approve, and
 balances stay auditable, all on a **Farsi-first, right-to-left** interface with a Persian (Jalali)
-or Gregorian calendar.
+calendar.
 
 ---
 
@@ -25,12 +25,12 @@ or Gregorian calendar.
   workers don't have one). Persistent PWA session: *log in once, stays logged in.*
 - **Identity & org** — company → departments (teams + Security) → employees, with a manager
   hierarchy. Admin CRUD for employees; managers edit their direct reports.
-- **Roles** — `admin · manager · employee · security`; a user can hold several. Enforced by
+- **Roles** — `admin · manager · hr · employee · security`; a user can hold several. Enforced by
   Postgres Row-Level Security, not just the UI.
 - **Leave core** — configurable leave types and an auditable **balance ledger** (every allocation /
   consumption / reversal / adjustment is a row). Admins set a worker's PTO + sick balances right in
   the employee **create/edit** forms (audited `set_leave_balance` RPC), or via the allocation screen.
-- **Requests** — pick a type and date range (full or half day) on a Persian **or** Gregorian
+- **Requests** — pick a type and date range (full or half day) on a Persian (Jalali)
   picker; working days are counted **server-side**, excluding configured weekends + holidays, with
   a live remaining-balance preview.
 - **Approval flow** — the direct manager approves/rejects; admin can override. Approval atomically
@@ -44,8 +44,8 @@ or Gregorian calendar.
   requests, a **My Team** panel (your manager + same-team colleagues and their upcoming leave), and
   — for managers/admins — a pending-approval queue.
 - **Admin settings** — edit weekend days and the holiday list in-app.
-- **Self-service** — change your own password; switch language (فارسی ⇄ English) and calendar
-  (Jalali ⇄ Gregorian), persisted per user.
+- **Self-service** — change your own password; switch language (فارسی ⇄ English), persisted
+  per user.
 - **Responsive + accessible** — bottom tab bar on mobile, side rail on desktop; RTL-correct; touch
   targets sized for factory phones.
 
@@ -54,13 +54,13 @@ or Gregorian calendar.
 | Concern | Choice |
 |---|---|
 | Framework | **Next.js 16** (App Router) + **React 19** + TypeScript |
-| Backend | **Supabase** — Postgres + Auth + Row-Level Security + Storage (self-hostable) |
+| Backend | **Supabase** — Postgres + Auth + PostgREST + Row-Level Security (self-hostable; no Storage) |
 | Auth | Admin-issued employee code + password (synthetic-email mapping; no `service_role` in app) |
 | i18n / layout | **next-intl** — Farsi (`fa`) default + RTL, English (`en`) toggle |
 | UI | **Tailwind CSS v4** + **shadcn/ui** (new-york), brand OKLCH tokens (`#2E3C92`), Rubik + Vazirmatn (Persian) fonts, light-only |
-| Calendar | `react-multi-date-picker` + `react-date-object` (Persian + Gregorian) |
+| Calendar | `react-multi-date-picker` + `react-date-object` (Persian/Jalali only since 2026-08-05) |
 | PWA | Installable, persistent session, brand theme color |
-| Testing | **Vitest** (98 unit) + **Playwright** (20 e2e) |
+| Testing | **Vitest** (440 unit) + **Playwright** (28 e2e) + deploy shell tests |
 | Hosting | **Liara** (liara.ir) — testing phase since 2026-09-29 · legacy: Vercel + Supabase Cloud demo, on-prem self-host package |
 
 ## 🏛️ Architecture principles
@@ -102,8 +102,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx_or_legacy_anon_jwt
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run test:unit` | Vitest unit suite (98 tests) |
-| `npm run test:e2e` | Playwright e2e (20 specs; needs a reachable Supabase + dev server — run serial with `--workers=1`) |
+| `npm run test:unit` | Vitest unit suite (440 tests) |
+| `npm run test:deploy` | Deployment-script shell tests |
+| `npm run test:e2e` | Playwright e2e (28 specs; needs a reachable Supabase + dev server — run serial with `--workers=1`) |
+| `npm run cleanup:e2e` | Delete e2e throwaway users (Playwright teardown also runs it) |
 | `npm run seed` | Seed the demo org (BJ Manufacturing) via guarded RPCs |
 
 ### Database & deployment

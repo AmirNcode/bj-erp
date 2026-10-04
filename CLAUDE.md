@@ -10,33 +10,26 @@ database** spanning every department (HR, quality control, finance, procurement,
 **module by module**, starting **HR → time-off (leave) management** — client's biggest pain is
 manual, paper-based time-off process.
 
-**Status (2026-06-30): v1 built and demo-ready.** Phases 0–6 — identity/org, code+password auth,
-leave core, approval flow, FR-25 reason-private calendar, role-aware home board + nav, seeded
-demo, settings/password/cancel-approved — plus full **frontend overhaul** (shadcn/ui, brand
-tokens, Rubik with Vazirmatn fallback) complete, merged to `main`. See `docs/CHANGELOG.md` for
-what shipped, `docs/TASKS.md` for what's next (PLAN §6 modules), `docs/specs/` for frozen design
-records (start with `2026-06-23-hr-timeoff-design.md`).
-
-**Hosting (2026-09-29): moving to Liara (liara.ir), testing phase.** Client IT could not publish a
-company subdomain for the on-prem server, so the app will be hosted on Liara from now on. Runbook:
-`docs/DEPLOY-LIARA.md`. The minimal Docker stack in `deploy/` is reused with an explicit Liara
-override; the existing client-server target remains separate.
+**Status (2026-10-04):** HR → leave module live for testing on Liara. Beyond v1: leave v2
+(minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
+Persian-only calendar, `hr` role, approval chain, reports, print, CSV import. What shipped:
+`docs/CHANGELOG.md` · next: `docs/TASKS.md` · frozen designs: `docs/specs/`.
 
 ## Stack (decided)
 
 | Concern | Choice | Notes |
 |---|---|---|
 | Framework | **Next.js (App Router) + TypeScript** | Mobile-first, responsive, SSR. |
-| Hosting | **Liara** (Iranian cloud) — testing phase, decided 2026-09-29 | One Debian VM: Next.js + Postgres + Auth + PostgREST + Caddy. GitHub Actions builds off-VM. |
-| Hosting (legacy) | Vercel demo · client's on-prem server (`deploy/`) | No longer deploy targets; kept for reference and portability. |
-| Backend | **Supabase** (Postgres + Auth + RLS + Storage) | Self-hosted (on a Liara VM) → same code everywhere. |
+| Hosting | **Liara** VM — testing since 2026-09-29 (client IT couldn't publish an on-prem subdomain) | Next.js + Postgres + GoTrue + PostgREST + Caddy, `deploy/docker-compose.yml` + `.liara.yml`. Runbook `docs/DEPLOY-LIARA.md`. |
+| Hosting (legacy) | Vercel demo · client on-prem server (`./deploy/bj-deploy`) | On-prem still runs an older release with real data; untouched since the Liara move. |
+| Backend | **Supabase** pieces (Postgres + GoTrue + PostgREST + RLS) | Self-hosted. No Storage service. No `service_role` in app. |
 | Auth | **Admin-issued username + password** | Labourers have no email. Long-lived/PWA session. |
 | i18n / layout | **Farsi (fa) default, RTL** + English (en) toggle | Per-user preference. |
-| Calendar | **`react-multi-date-picker`** + `react-date-object` (Persian + Gregorian) | User switches in settings. |
+| Calendar | **`react-multi-date-picker`** + `react-date-object` | **Persian (Jalali) only** since 2026-08-05. Holiday CSV import still accepts Gregorian input. |
 | PWA | Installable, persistent session | "Log in once, stays logged in." |
 
-Versions pinned at scaffold time. **Always verify library APIs against Context7 before using
-them** — no training-data API details.
+`next`/`react` pinned exactly; the rest use `^` ranges. **Always verify library APIs against
+Context7 before using them** — no training-data API details.
 
 ## Non-negotiable conventions
 
@@ -44,7 +37,7 @@ them** — no training-data API details.
    Jalali = *presentation* concern only — convert at UI edge. Never store Jalali strings.
 2. **RLS is source of truth** for access control. UI hides forbidden data; Postgres
    Row-Level Security enforces. Every table touching employee data has policies.
-3. **Roles** live in `user_roles` table (`admin | manager | employee | security`), checked via
+3. **Roles** live in `user_roles` table (`admin | manager | hr | employee | security`), checked via
    `has_role()` SQL helper — not single enum column. One user may hold several.
 4. **Farsi-first**: default locale `fa`, default direction RTL. All user-facing strings
    translated (`fa` + `en`).
@@ -58,14 +51,18 @@ CLAUDE.md                  ← you are here
 app/[locale]/              Next.js App Router — (auth)/login + (app)/* authed screens
   (app)/                   home · request · calendar · profile · team · manage/* (RBAC layout guard)
     _components/           AppShell, MainNav, PageHeader, nav-icons
+  (print)/print/request    printable paper form of a request
+app/api/health             health endpoint (deploy checks)
 components/                shared UI — ui/* (shadcn primitives), StatusBadge, Skeletons, EmptyState
 lib/                       actions/* (server actions) · supabase/* (clients + generated types)
                            leave/* (pure day-count, balances, approvals) · auth/* · home/* · nav/*
 i18n/                      next-intl routing / navigation / request config
 messages/                  fa.json (default, RTL) + en.json
 supabase/                  migrations/* (schema, RLS, SECURITY DEFINER fns) · seed.sql · config.toml
-scripts/seed-demo.mjs      `npm run seed` — demo org via guarded RPCs (no service_role)
-tests/                     unit/* (Vitest) + e2e/* (Playwright)
+scripts/                   seed-demo.mjs (`npm run seed`) · cleanup-e2e.mjs · gen-jalali-months.mjs
+tests/                     unit/* (Vitest) · e2e/* (Playwright) · deploy/*.sh (deploy-script tests)
+deploy/                    Docker stack, Caddy, bj-deploy (on-prem), liara/* (Liara release + backup)
+.github/workflows/         deploy-liara.yml — push to main → test → package → deploy
 proxy.ts                   middleware: Supabase session refresh + next-intl routing (Next 16 name)
 docs/
   AGENT-LOG.md             MANDATORY session journal — every agent appends what it did, incl.
@@ -76,11 +73,13 @@ docs/
   PERMISSIONS.md           roles, visibility matrix, RLS policy descriptions (source of truth)
   TASKS.md                 build checklist by phase with status
   CHANGELOG.md             what changed, per release (Keep a Changelog format)
+  MEMORY.md                durable lessons (gotchas that outlive a change)
   DEPLOY-LIARA.md          CURRENT host: Liara VM runbook (Docker Compose + GitHub Actions)
   DEPLOY.md                deploy index; legacy Vercel demo + on-prem self-host notes
+  DEPLOY-ASSISTANT.md      local Docker + on-prem client server via ./deploy/bj-deploy
   specs/                   dated, frozen design records (one per module/feature)
+  plans/                   implementation plans
 ```
-Granular task + commit history: `.superpowers/sdd/progress.md`.
 
 ## Read order for a new agent
 
@@ -97,10 +96,25 @@ cp .env.example .env.local     # fill NEXT_PUBLIC_SUPABASE_URL + ANON_KEY (publi
 npm run dev                    # http://localhost:3000 → boots fa-RTL at /login
 ```
 
-Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest, 165 tests) ·
-`npm run test:e2e` (Playwright, 26 specs — needs reachable Supabase + dev server; run serial
-`--workers=1`) · `npm run seed` (demo org). Deploying: Liara → `docs/DEPLOY-LIARA.md`; legacy
-Vercel demo + on-prem self-host → `docs/DEPLOY.md`. Demo admin login: `admin` / `Admin!2026`.
+Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest) ·
+`npm run test:deploy` (deploy shell tests) · `npm run test:e2e` (Playwright — needs reachable
+Supabase + dev server; run serial `--workers=1`; `E2E_BASE_URL` targets an external server) ·
+`npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org).
+Deploying: Liara → `docs/DEPLOY-LIARA.md`; legacy → `docs/DEPLOY.md`.
+Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin password:
+`.bj-deploy/liara/admin-password`.
+
+## Gotchas
+
+- **Push to `main` deploys to Liara** (`LIARA_DEPLOY_ENABLED=true`): audit → lint → unit →
+  deploy tests → package → SSH apply. Docs-only commits: add `[skip ci]`.
+- **Migrations: `supabase/migrations/` only.** `deploy/migrations/` is a stale tracked copy
+  bind-mounted by `deploy/docker-compose.yml`; release scripts copy from `supabase/migrations/`.
+- **New enum value = its own migration file.** Postgres rejects using it in the same
+  transaction (see `20260818130001_hr_role_enum.sql`).
+- **`lib/supabase/types.ts` is hand-edited.** `supabase gen types` image unreachable from Iran;
+  verify with `tsc --noEmit` + `npm run build`.
+- More: `docs/MEMORY.md`.
 
 ## Working agreements
 
@@ -114,3 +128,5 @@ Vercel demo + on-prem self-host → `docs/DEPLOY.md`. Demo admin login: `admin` 
 - Keep `docs/CHANGELOG.md` (what shipped) and `docs/TASKS.md` (what's next) current as work
   lands. `docs/MEMORY.md` takes lessons that will still matter in six months. `AGENT-LOG.md` is
   always updated; these three only when they apply.
+- When you discover a non-obvious convention, gotcha, or command, propose a CLAUDE.md update at
+  task end. Keep entries one line. Don't add what's obvious from code.
