@@ -21,7 +21,7 @@ Persian-only calendar, `hr` role, approval chain, reports, print, CSV import. Wh
 |---|---|---|
 | Framework | **Next.js (App Router) + TypeScript** | Mobile-first, responsive, SSR. |
 | Hosting | **Liara** VM — testing since 2026-09-29 (client IT couldn't publish an on-prem subdomain) | Next.js + Postgres + GoTrue + PostgREST + Caddy, `deploy/docker-compose.yml` + `.liara.yml`. Runbook `docs/DEPLOY-LIARA.md`. |
-| Hosting (legacy) | Vercel demo · client on-prem server (`./deploy/bj-deploy`) | On-prem still runs an older release with real data; untouched since the Liara move. |
+| Hosting (retired 2026-10-04) | Vercel demo · client on-prem server | `./deploy/bj-deploy` now only runs the local Docker stack; its on-prem code paths remain. |
 | Backend | **Supabase** pieces (Postgres + GoTrue + PostgREST + RLS) | Self-hosted. No Storage service. No `service_role` in app. |
 | Auth | **Admin-issued username + password** | Labourers have no email. Long-lived/PWA session. |
 | i18n / layout | **Farsi (fa) default, RTL** + English (en) toggle | Per-user preference. |
@@ -51,42 +51,46 @@ CLAUDE.md                  ← you are here
 app/[locale]/              Next.js App Router — (auth)/login + (app)/* authed screens
   (app)/                   home · request · calendar · profile · team · manage/* (RBAC layout guard)
     _components/           AppShell, MainNav, PageHeader, nav-icons
+    request/_components/   FormParts + useRequestForm: shared pieces of the four request forms
   (print)/print/request    printable paper form of a request
 app/api/health             health endpoint (deploy checks)
-components/                shared UI — ui/* (shadcn primitives), StatusBadge, Skeletons, EmptyState
-lib/                       actions/* (server actions) · supabase/* (clients + generated types)
-                           leave/* (pure day-count, balances, approvals) · auth/* · home/* · nav/*
+components/                shared UI — ui/* (shadcn primitives), PersianDateField, StatusBadge, Skeletons
+lib/                       actions/* (server actions; leave/* split by concern) · supabase/* (clients, types)
+                           leave/* (pure day-count, balances, approvals) · auth/* (requireCaller) · home/* · nav/*
 i18n/                      next-intl routing / navigation / request config
 messages/                  fa.json (default, RTL) + en.json
-supabase/                  migrations/* (schema, RLS, SECURITY DEFINER fns) · seed.sql · config.toml
-scripts/                   seed-demo.mjs (`npm run seed`) · cleanup-e2e.mjs · gen-jalali-months.mjs
+supabase/                  migrations/* (history) · schema.sql (current, generated) · seed.sql · config.toml
+scripts/                   seed-demo.mjs · cleanup-e2e.mjs · gen-jalali-months.mjs · dump-schema.sh
 tests/                     unit/* (Vitest) · e2e/* (Playwright) · deploy/*.sh (deploy-script tests)
-deploy/                    Docker stack, Caddy, bj-deploy (on-prem), liara/* (Liara release + backup)
+deploy/                    Docker stack, Caddy, bj-deploy (local Docker), liara/* (Liara release + backup)
 .github/workflows/         deploy-liara.yml — push to main → test → package → deploy
 proxy.ts                   middleware: Supabase session refresh + next-intl routing (Next 16 name)
 docs/
   AGENT-LOG.md             MANDATORY session journal — every agent appends what it did, incl.
-                           actions run against the client's live server. Read first, write last.
+                           actions run against the live server. Newest first; read the top, write last.
   PLAN.md                  architecture blueprint + phased roadmap (start here for the big picture)
   REQUIREMENTS.md          numbered functional (FR-*) + non-functional (NFR-*) requirements
   DATA_MODEL.md            tables, columns, enums, ledger + day-counting logic (source of truth)
   PERMISSIONS.md           roles, visibility matrix, RLS policy descriptions (source of truth)
-  TASKS.md                 build checklist by phase with status
+  TASKS.md                 open work only
   CHANGELOG.md             what changed, per release (Keep a Changelog format)
   MEMORY.md                durable lessons (gotchas that outlive a change)
   DEPLOY-LIARA.md          CURRENT host: Liara VM runbook (Docker Compose + GitHub Actions)
-  DEPLOY.md                deploy index; legacy Vercel demo + on-prem self-host notes
-  DEPLOY-ASSISTANT.md      local Docker + on-prem client server via ./deploy/bj-deploy
+  DEPLOY-ASSISTANT.md      local Docker stack via ./deploy/bj-deploy (on-prem sections retired)
   specs/                   dated, frozen design records (one per module/feature)
-  plans/                   implementation plans
+  plans/                   active implementation plans (finished ones move to archive/)
+  archive/                 retired history: old journal, plans, closed docs. Not read by default
 ```
 
 ## Read order for a new agent
 
-1. This file → 2. **`docs/AGENT-LOG.md`** (what the last agent did — read this before touching
-anything) → 3. `docs/PLAN.md` → 4. `docs/REQUIREMENTS.md` → 5. `docs/DATA_MODEL.md` →
-6. `docs/PERMISSIONS.md` → 7. current spec in `docs/specs/` → 8. `docs/TASKS.md` (what's next) →
-9. `docs/CHANGELOG.md` (what's done).
+- **Always:** this file → the newest 3 entries of **`docs/AGENT-LOG.md`** (what the last agents
+  did) → `docs/TASKS.md` (open work).
+- **When the task touches it:** `docs/DATA_MODEL.md` (schema, ledger maths) ·
+  `docs/PERMISSIONS.md` (roles, RLS) · `docs/REQUIREMENTS.md` (FR/NFR) · the matching spec in
+  `docs/specs/` · `supabase/schema.sql` (current SQL) · `docs/MEMORY.md` (lessons) · `docs/PLAN.md`.
+- **Only on demand:** `docs/CHANGELOG.md`, `docs/plans/`, the deploy runbooks.
+- **Never, unless the user asks:** `docs/archive/`. Root `.ignore` hides it from ripgrep search.
 
 ## How to run
 
@@ -99,8 +103,9 @@ npm run dev                    # http://localhost:3000 → boots fa-RTL at /logi
 Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest) ·
 `npm run test:deploy` (deploy shell tests) · `npm run test:e2e` (Playwright — needs reachable
 Supabase + dev server; run serial `--workers=1`; `E2E_BASE_URL` targets an external server) ·
-`npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org).
-Deploying: Liara → `docs/DEPLOY-LIARA.md`; legacy → `docs/DEPLOY.md`.
+`npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org) ·
+`npm run schema:dump` (regenerate `supabase/schema.sql` from the local DB).
+Deploying: Liara → `docs/DEPLOY-LIARA.md`; local Docker → `docs/DEPLOY-ASSISTANT.md`.
 Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin password:
 `.bj-deploy/liara/admin-password`.
 
@@ -108,8 +113,11 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
 
 - **Push to `main` deploys to Liara** (`LIARA_DEPLOY_ENABLED=true`): audit → lint → unit →
   deploy tests → package → SSH apply. Docs-only commits: add `[skip ci]`.
-- **Migrations: `supabase/migrations/` only.** `deploy/migrations/` is a stale tracked copy
-  bind-mounted by `deploy/docker-compose.yml`; release scripts copy from `supabase/migrations/`.
+- **Migrations: edit `supabase/migrations/` only.** `deploy/migrations` and `deploy/sql/seed.sql`
+  are symlinks into `supabase/` (bind-mounted by `deploy/docker-compose.yml`).
+- **Current SQL lives in `supabase/schema.sql`**, not the migrations (one function can have 9
+  definitions there). After applying a migration locally, run `npm run schema:dump` and commit both.
+- **Server actions start with `requireCaller(...)`** (`lib/auth/context.ts`): `if (!c.ok) return c;`.
 - **New enum value = its own migration file.** Postgres rejects using it in the same
   transaction (see `20260818130001_hr_role_enum.sql`).
 - **`lib/supabase/types.ts` is hand-edited.** `supabase gen types` image unreachable from Iran;
@@ -120,7 +128,7 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
 
 - **Log every session in `docs/AGENT-LOG.md` — mandatory, no exceptions.** Append an entry
   before you finish, using the template in that file. It is the running journal of who changed
-  what, why, what was run against the client's live server, and what was left half-done. Log
+  what, why, what was run against the live server, and what was left half-done. Log
   dead ends and abandoned attempts too. Multiple agents work on this repo and git alone does
   not carry the reasoning or the out-of-repo actions.
 - **Plan before code.** Design → spec → plan → implement, with user review gates.

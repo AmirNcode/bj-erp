@@ -17,7 +17,7 @@ the lessons that will still matter in six months.
   `app_change_my_password`, …). Deliberate: portability to self-hosted Supabase in production.
 - **Dates are Gregorian in the DB, always.** Jalali is a presentation concern converted at the
   UI edge (`react-date-object`). Never store Jalali strings.
-- **"Today" is Asia/Tehran** (`lib/appDate.ts` + SQL equivalents). Vercel/Supabase run UTC —
+- **"Today" is Asia/Tehran** (`lib/appDate.ts` + SQL equivalents). Servers run UTC —
   naive `new Date()` drifts 3.5h nightly and breaks date-boundary logic (e.g. cancelability).
 - **Farsi-first RTL discipline.** Logical CSS utilities only (`start-*`/`end-*`, no `left/right`);
   fa/en message key trees kept byte-identical; test RTL rendering, not just LTR.
@@ -57,6 +57,14 @@ Pinning date logic to `Asia/Tehran` was not enough. A Client Component still ser
 causing production hydration error #418. Any server-rendered time label must specify
 `APP_TIME_ZONE`, just like date-only calculations.
 
+### Translate an ICU message where its variables live; `build` won't catch it
+Calling `t('confirmBody')` (it holds `{count}`) on the server without the value rendered the key
+path plus `FORMATTING_ERROR` in `npm run dev` only. The production bundle skips compiling it, so
+`npm run build` and a prod smoke test looked healthy. `manage/employees/page.tsx` works around it
+with `tr.raw()` and a client-side `.replace()`. The real fix is `useTranslations()` in the client
+component (audit D3). Test rendered output of any `{placeholder}` message. A bare `{count}`
+prints ASCII digits; use `{count, number}` for Persian digits.
+
 ### Ledger writes race without locks
 All balance writers (`allocate_leave`, `approve_leave_request`, cancel-reversal,
 `set_leave_balance`) did read-latest-balance-then-insert; concurrent writers wrote stale
@@ -68,8 +76,7 @@ balances, and approve could go negative or double-book. Fix: per-employee
 1–2s tab switches were 5–6 serial RTTs/nav (double `getUser`, roles, profile, data). Fixes that
 worked: `auth.getClaims()` local JWT verify (~0.5ms vs ~140ms), roles embedded as an `app_roles`
 JWT claim via custom access token hook (with `user_roles` table fallback), router `staleTimes`,
-parallel home reads, Vercel pinned `fra1` next to eu-central-1. Plan:
-`docs/plans/2026-07-02-nav-performance.md`. Trade-off accepted: role edits propagate on token
+parallel home reads. Trade-off accepted: role edits propagate on token
 refresh (≤1h); RLS still enforces in real time.
 
 ### e2e: cold-dev hydration race wipes the first login fill
@@ -123,8 +130,8 @@ Caddy refuses the handshake ("tlsv1 alert internal error"), which would have hit
 (2) GoTrue itself sends **no CORS preflight headers** (Supabase Cloud's Kong does that), so the
 internal `:8080` listener answers preflights for cross-origin dev (`npm run dev` on the host).
 GoTrue *does* set `Access-Control-Allow-Origin` on actual responses — don't add it again at the
-proxy (browsers reject the duplicate). Dev/e2e point `.env.local` at `http://<mac-ip>:8080`
-(compose override in `dist/bj-erp-installer/` publishes the port; not shipped).
+proxy (browsers reject the duplicate). Dev/e2e point `.env.local` at `http://127.0.0.1:8080`
+(`deploy/docker-compose.local-arm64.yml` publishes the port; not shipped).
 
 ### Every local service must be native ARM64; production packaging stays AMD64
 `package.sh`/`release.sh` deliberately pin `linux/amd64` for the client's server, so an arm64 Mac
@@ -279,6 +286,8 @@ select n.nspname||'.'||p.proname, pg_get_function_arguments(p.oid)
 ```
 For large functions, patch `pg_get_functiondef` output programmatically rather than retyping
 security-critical bodies. And keep e2e in the loop: `tsc` cannot see inside PL/pgSQL.
+Without a database at hand, `supabase/schema.sql` is the same catalog dumped to a file
+(`npm run schema:dump`); `grep` it, not the migrations.
 
 ### `supabase gen types` needs a container image this network won't deliver
 The CLI shells out to `public.ecr.aws/supabase/postgres-meta` at runtime, so type generation fails
@@ -337,11 +346,11 @@ repository's minimal Docker stack. Use `docs/DEPLOY-LIARA.md` and the latest AGE
 
 ## Pointers
 
-- Read order: `CLAUDE.md` → `docs/PLAN.md` → `REQUIREMENTS.md` → `DATA_MODEL.md` →
-  `PERMISSIONS.md` → current spec in `docs/specs/` → `TASKS.md` → `CHANGELOG.md`.
+- Read order: see `CLAUDE.md`.
 - Granular task + commit history: `.superpowers/sdd/progress.md`.
 - Host (since 2026-09-29): **Liara** — `docs/DEPLOY-LIARA.md`; Liara docs index
   `https://docs.liara.ir/all-links-llms.txt` (Context7 `/liara-cloud/docs`).
-- Legacy: Supabase demo project `bj-app`, ref `rimshsfkjpwlvjxbxhqm`, eu-central-1. Vercel: `fra1`.
+- Retired 2026-10-04: the Vercel demo (`fra1`), its paused Supabase Cloud project `bj-app` (ref
+  `rimshsfkjpwlvjxbxhqm`), and the on-prem client server `10.10.10.50`.
 - GitHub: `AmirNcode/bj-erp`. Demo logins: `admin`/`Admin!2026`; seeded roster `Demo!2026`.
 - Cross-session agent memory: `~/.claude/projects/-Users-amir-Workspace-bj/memory/`.

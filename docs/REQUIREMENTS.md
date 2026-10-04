@@ -234,7 +234,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **NFR-3** ☑ **RTL** correctness in Farsi; clean LTR in English.
 - **NFR-4** ☑ **Portability**: no proprietary cloud lock-in in data/auth; the app self-hosts
   Supabase + Next.js with config-only changes. Since 2026-09-29 the host is Liara (self-hosted
-  Supabase on a cloud VM); the on-prem package in `deploy/` remains a working target.
+  Supabase on a cloud VM). The on-prem target was retired on 2026-10-04.
 - **NFR-5** ☑ **Security**: RLS on all employee-data tables; passwords hashed by Supabase Auth;
   **audit log** of admin/manager changes; minimize sensitive PII (avoid storing national ID unless
   required).

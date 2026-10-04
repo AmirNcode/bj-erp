@@ -1,14 +1,40 @@
 # CHANGELOG
 
-Format: [Keep a Changelog](https://keepachangelog.com/). The app is built; v1 (Phases 0–6 +
-frontend overhaul) is feature-complete and merged to `main`. `[Unreleased]` holds the v1 work
-pending a tagged release; semantic versioning starts at the first tag.
+Format: [Keep a Changelog](https://keepachangelog.com/). Releases are named by the commit that
+was deployed; semantic versioning starts at the first tag.
 
 > This file records **what shipped**, for a release reader. For *what the last agent actually
 > did this session* — including investigations, dead ends, and commands run against the client's
 > live server — see **`docs/AGENT-LOG.md`**, which every agent is required to append to.
 
 ## [Unreleased]
+
+### Codebase cleanup (2026-10-04) — no user-visible change
+
+Driven by `docs/CLEANUP-AUDIT-2026-10-04.md`, to cut what agents must read:
+- `lib/actions/leave.ts` (1,619 lines) split into `lib/actions/leave/{requests, balances,
+  reference, approvals, signatures, calendar, review}.ts`. Every server action now starts with
+  the shared `requireCaller()` guard; the error messages users see are unchanged.
+- The four request forms share their date, time, errand, replacement, balance-preview and
+  feedback pieces (`request/_components/FormParts.tsx`, `useRequestForm.ts`); both employee
+  forms share their roles, accrual-policy and date pieces. Every date input is now
+  `components/PersianDateField`.
+- New `supabase/schema.sql` (`npm run schema:dump`): the one current copy of every table,
+  function and policy, so nobody has to find the last of nine definitions across 55 migrations.
+- Removed dead code: unused UI primitives, server actions (`setTeam`, `setManager`) and helpers,
+  the `next-themes` dependency, 11 unused translation keys, unused fonts and images, scaffold
+  files. `deploy/migrations` and `deploy/sql/seed.sql` became symlinks into `supabase/`.
+- Tests: source-text assertions replaced by behaviour tests or dropped; e2e helpers live once in
+  `tests/e2e/_helpers.ts` and honour `E2E_ADMIN_CODE` / `E2E_ADMIN_PASSWORD`.
+
+### Removed (2026-10-04)
+
+- The admin-only `/manage/allocations` screen. Nothing linked to it since opening balances moved
+  to the Add and Edit Employee forms (FR-43), which remain the way to set a balance.
+
+## a0cb7b1 — 2026-10-01 (Liara testing release)
+
+Everything below is in this release. The on-prem client server runs the older `8ba15e9`.
 
 ### Dependency security updates (2026-09-30)
 

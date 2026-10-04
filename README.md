@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3FCF8E?logo=supabase&logoColor=white)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-06B6D4?logo=tailwindcss&logoColor=white)
-![Tests](https://img.shields.io/badge/tests-440%20unit%20%C2%B7%2028%20e2e-success)
+![Tests](https://img.shields.io/badge/tests-427%20unit%20%C2%B7%2028%20e2e-success)
 ![Status](https://img.shields.io/badge/v1-feature--complete-2E3C92)
 
 A unified, mobile-first web application for a manufacturing company (Behsazan Jonoob). The
@@ -60,8 +60,8 @@ calendar.
 | UI | **Tailwind CSS v4** + **shadcn/ui** (new-york), brand OKLCH tokens (`#2E3C92`), Rubik + Vazirmatn (Persian) fonts, light-only |
 | Calendar | `react-multi-date-picker` + `react-date-object` (Persian/Jalali only since 2026-08-05) |
 | PWA | Installable, persistent session, brand theme color |
-| Testing | **Vitest** (440 unit) + **Playwright** (28 e2e) + deploy shell tests |
-| Hosting | **Liara** (liara.ir) — testing phase since 2026-09-29 · legacy: Vercel + Supabase Cloud demo, on-prem self-host package |
+| Testing | **Vitest** (427 unit) + **Playwright** (28 e2e) + deploy shell tests |
+| Hosting | **Liara** (liara.ir) — testing phase since 2026-09-29 |
 
 ## 🏛️ Architecture principles
 
@@ -73,8 +73,8 @@ calendar.
 - **Dates are stored Gregorian** (`date` / `timestamptz`); Jalali is a presentation concern,
   converted at the UI edge. Never store Jalali strings.
 - **Portable by design.** No proprietary cloud lock-in in the data/auth layer — the same code runs
-  on Liara (current host: one Debian VM running Next.js, Postgres, Auth, PostgREST and Caddy), on Vercel + Supabase Cloud,
-  or on the company's own server; only env vars change.
+  on Liara (one Debian VM running Next.js, Postgres, Auth, PostgREST and Caddy), on Supabase Cloud,
+  or on any Docker host; only env vars change.
 - **Module isolation.** Future modules (QC, finance, …) share the auth/org/roles core but own their
   tables and inject their own role-driven navigation.
 
@@ -102,21 +102,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxx_or_legacy_anon_jwt
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-| `npm run test:unit` | Vitest unit suite (440 tests) |
+| `npm run test:unit` | Vitest unit suite (427 tests) |
 | `npm run test:deploy` | Deployment-script shell tests |
 | `npm run test:e2e` | Playwright e2e (28 specs; needs a reachable Supabase + dev server — run serial with `--workers=1`) |
 | `npm run cleanup:e2e` | Delete e2e throwaway users (Playwright teardown also runs it) |
 | `npm run seed` | Seed the demo org (BJ Manufacturing) via guarded RPCs |
+| `npm run schema:dump` | Regenerate `supabase/schema.sql` (current SQL definitions) from the local database |
 
 ### Database & deployment
 
 Apply `supabase/migrations/*` (schema, RLS, functions) and `supabase/seed.sql` (config baseline),
 then `npm run seed` for the demo org. The app is hosted on **Liara** — runbook in
-**[docs/DEPLOY-LIARA.md](docs/DEPLOY-LIARA.md)**. The legacy Vercel demo and on-prem self-host
-notes are in [docs/DEPLOY.md](docs/DEPLOY.md).
+**[docs/DEPLOY-LIARA.md](docs/DEPLOY-LIARA.md)**. The local Docker stack runs through
+`./deploy/bj-deploy` ([docs/DEPLOY-ASSISTANT.md](docs/DEPLOY-ASSISTANT.md)).
 
 **Demo login:** `admin` / `Admin!2026`. Seeded role accounts (`1001`, `2001`, `1004`, …) use
-`Demo!2026` — full roster in [docs/DEPLOY.md](docs/DEPLOY.md).
+`Demo!2026` — full roster in `scripts/seed-demo.mjs`.
 
 ## 📁 Project structure
 
@@ -144,10 +145,10 @@ Start with **[CLAUDE.md](CLAUDE.md)** (agent/human onboarding), then:
 | [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) | Numbered functional (FR-*) + non-functional (NFR-*) requirements |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Tables, columns, enums, ledger + day-counting logic |
 | [docs/PERMISSIONS.md](docs/PERMISSIONS.md) | Roles, visibility matrix, RLS policies |
-| [docs/TASKS.md](docs/TASKS.md) | Build checklist by phase with status |
+| [docs/TASKS.md](docs/TASKS.md) | Open work |
 | [docs/CHANGELOG.md](docs/CHANGELOG.md) | What shipped, per release |
 | [docs/DEPLOY-LIARA.md](docs/DEPLOY-LIARA.md) | **Current host:** Liara runbook |
-| [docs/DEPLOY.md](docs/DEPLOY.md) | Deploy index; legacy Vercel demo + on-prem self-host notes |
+| [docs/DEPLOY-ASSISTANT.md](docs/DEPLOY-ASSISTANT.md) | Local Docker stack via `./deploy/bj-deploy` |
 | [docs/specs/](docs/specs/) | Dated, frozen design records |
 
 ## 🗺️ Roadmap

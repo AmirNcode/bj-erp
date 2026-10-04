@@ -3,7 +3,7 @@
 **Date:** 2026-08-18
 **Status:** Accepted — decisions D1–D6 answered by the owner on 2026-08-18
 **Module:** Shared core (roles, locale) + HR → Time-Off (approvals, reports)
-**Plan:** [`docs/plans/2026-08-18-hr-role-and-locale-persistence.md`](../plans/2026-08-18-hr-role-and-locale-persistence.md)
+**Plan:** [`docs/archive/plans/2026-08-18-hr-role-and-locale-persistence.md`](../archive/plans/2026-08-18-hr-role-and-locale-persistence.md)
 
 ## Scope
 

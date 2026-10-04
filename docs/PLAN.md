@@ -16,7 +16,7 @@ implementation. **HR / time-off is module #1.**
 
 - **Next.js + Supabase** gives a single TypeScript codebase, Postgres with Row-Level Security for
   multi-role access, built-in auth, and storage — all **self-hostable**, which matters because the
-  app has run on **Vercel + Supabase Cloud** (demo), on the **company's own server**, and now on
+  app has run on Vercel + Supabase Cloud (demo) and on the company's own server, and now runs on
   **Liara** (self-hosted Supabase on a cloud VM, §7). The same code targets all of them; only
   environment variables change.
 - **Module isolation over a monolith fork.** We deliberately did *not* fork an existing
@@ -97,7 +97,7 @@ control** (test-result entry forms, mobile-optimized), **finance** (dashboards, 
   Caddy stack. Public HTTPS initially uses the IP address; the app and API share an origin.
   GitHub Actions builds Linux images off-VM and deploys over SSH port 32222.
 - **Runbook:** `docs/DEPLOY-LIARA.md`; live progress/evidence is in `docs/AGENT-LOG.md`.
-- **Data:** fresh test database, no migration from the client's existing server. That server
-  remains separate. The Vercel demo and original on-prem commands are retained for reference.
+- **Data:** fresh test database, no migration from the client's existing server.
+- **Retired 2026-10-04:** the on-prem server and the Vercel demo.
 - **Portability rule unchanged:** no proprietary host-only features in the data/auth layer, so
   moving hosts stays config-only.

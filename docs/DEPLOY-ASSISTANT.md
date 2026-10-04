@@ -1,8 +1,8 @@
 # BJ ERP deployment assistant
 
-> **2026-09-29:** this tooling targets the client's on-prem server, which is no longer the
-> go-forward host — the app is moving to Liara ([DEPLOY-LIARA.md](DEPLOY-LIARA.md)). Kept for that
-> server and for local Docker work.
+> **2026-10-04:** the on-prem client server is retired; the app runs on Liara
+> ([DEPLOY-LIARA.md](DEPLOY-LIARA.md)). Use this tool for the local Docker stack. Its `client`
+> target and the on-prem sections below are kept in case the app moves back on-site.
 
 This is the operator guide for deploying and testing BJ ERP without copying a long sequence of
 terminal commands. The assistant asks what you want to do, explains what data it will affect, and
@@ -303,4 +303,3 @@ docker compose --project-name bj-erp --project-directory deploy \
 Cold-start design and implementation handoff:
 
 - `docs/specs/2026-08-06-interactive-deployment-assistant-design.md`
-- `docs/plans/2026-08-06-interactive-deployment-assistant.md`
