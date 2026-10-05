@@ -97,14 +97,16 @@ export function WorkSettingsForm({
   const keyOf = (iso: number) => WEEKDAYS.find((d) => d.iso === iso)?.key ?? '';
   const isoOf = (key: string): Slot => WEEKDAYS.find((d) => d.key === key)?.iso ?? null;
 
-  const renderRow = (
+  // Dropdowns stack vertically, one per line; "Add day" sits beside the first
+  // so a new dropdown appears directly under the last one.
+  const renderSlots = (
     kind: 'weekly' | 'biweekly',
     slots: Slot[],
     setSlots: (fn: (prev: Slot[]) => Slot[]) => void
   ) => (
-    <>
+    <div className="flex flex-col gap-2">
       {slots.map((slot, i) => (
-        <div key={i} className="flex items-center gap-1">
+        <div key={i} className="flex flex-wrap items-center gap-1">
           {/* Native <select> — must stay native for Playwright selectOption. */}
           <select
             value={slot === null ? 'none' : keyOf(slot)}
@@ -115,7 +117,7 @@ export function WorkSettingsForm({
               const next = isoOf(e.target.value);
               setSlots((prev) => prev.map((v, j) => (j === i ? next : v)));
             }}
-            className={cn(nativeSelectClass, 'h-9 w-auto min-w-36 rounded-[10px] bg-card text-[13px]')}
+            className={cn(nativeSelectClass, 'h-9 w-40 rounded-[10px] bg-card text-[13px]')}
           >
             <option value="none">{labels.dayNone}</option>
             {WEEKDAYS.map((d) => (
@@ -138,23 +140,23 @@ export function WorkSettingsForm({
               <X aria-hidden="true" />
             </Button>
           )}
+          {i === 0 && slots.length < WEEKDAYS.length && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isPending}
+              data-testid={`weekend-${kind}-add`}
+              onClick={() => setSlots((prev) => [...prev, null])}
+              className="text-primary hover:text-primary"
+            >
+              <Plus aria-hidden="true" />
+              {labels.addDay}
+            </Button>
+          )}
         </div>
       ))}
-      {slots.length < WEEKDAYS.length && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={isPending}
-          data-testid={`weekend-${kind}-add`}
-          onClick={() => setSlots((prev) => [...prev, null])}
-          className="text-primary hover:text-primary"
-        >
-          <Plus aria-hidden="true" />
-          {labels.addDay}
-        </Button>
-      )}
-    </>
+    </div>
   );
 
   const onSave = () => {
@@ -191,35 +193,35 @@ export function WorkSettingsForm({
         <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.weekendHint}</p>
       </div>
 
-      {/* Two fixed rows, each a list of day dropdowns. */}
+      {/* Two fixed rows: a label column, then the row's controls stacked. */}
       <div className="flex flex-col gap-2.5 px-6 py-3.5">
         <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border p-3"
+          className="grid items-start gap-x-3 gap-y-2 rounded-[10px] border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-weekly-row"
         >
-          <span className="w-full whitespace-nowrap text-[13.5px] font-semibold sm:w-44">
+          <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
             {labels.frequencyWeekly}
           </span>
-          {renderRow('weekly', weeklySlots, setWeeklySlots)}
+          {renderSlots('weekly', weeklySlots, setWeeklySlots)}
         </div>
 
         <div
-          className="flex flex-col gap-2 rounded-[10px] border p-3"
+          className="grid items-start gap-x-3 gap-y-2 rounded-[10px] border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-biweekly-row"
         >
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="w-full whitespace-nowrap text-[13.5px] font-semibold sm:w-44">
-              {labels.frequencyBiweekly}
-            </span>
-            {renderRow('biweekly', biweeklySlots, setBiweeklySlots)}
+          <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
+            {labels.frequencyBiweekly}
+          </span>
+          <div className="flex flex-col gap-2">
+            {renderSlots('biweekly', biweeklySlots, setBiweeklySlots)}
             {/* Only meaningful once a day is fortnightly: without a reference date
                 the parity — WHICH Thursdays are off — is undefined, and the server
                 refuses the save rather than guessing one. */}
             {biweekly.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
-                <label className="whitespace-nowrap text-[13px] font-medium">{labels.anchorLabel}</label>
+              <div className="mt-1 flex flex-col gap-1 border-t border-muted pt-3">
+                <label className="text-[13px] font-medium">{labels.anchorLabel}</label>
                 {/* rmdp-container class is intentional — e2e locates input via it. */}
-                <div data-testid="biweekly-anchor" className="w-[180px]">
+                <div data-testid="biweekly-anchor" className="w-40">
                   <DatePicker
                     value={anchor}
                     onChange={setAnchor}
@@ -229,12 +231,10 @@ export function WorkSettingsForm({
                     inputClass="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm"
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
               </div>
             )}
           </div>
-          {biweekly.length > 0 && (
-            <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
-          )}
         </div>
       </div>
 
