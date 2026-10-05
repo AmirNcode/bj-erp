@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildHomeBoard } from '@/lib/home/board';
 
-const base = { requests: [], balances: [], team: [], pendingCount: 3 };
+const base = { requests: [], team: [], pendingCount: 3 };
 
 describe('buildHomeBoard', () => {
   it('employee: no approvals card', () => {
@@ -11,6 +11,9 @@ describe('buildHomeBoard', () => {
     const b = buildHomeBoard({ ...base, roles: ['manager'] });
     expect(b.showApprovals).toBe(true);
     expect(b.pendingCount).toBe(3);
+  });
+  it('hr: approvals card (signs a chain step)', () => {
+    expect(buildHomeBoard({ ...base, roles: ['hr'] }).showApprovals).toBe(true);
   });
   it('admin: approvals card', () => {
     expect(buildHomeBoard({ ...base, roles: ['admin'] }).showApprovals).toBe(true);

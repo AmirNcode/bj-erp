@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave/approvals';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave/approvals';
@@ -11,25 +10,11 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
-  RequestSignatureFields,
   RequestSignatureViewer,
   type SignatureLabels,
 } from '../../request/_components/RequestSignature';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { ApproveDialog, RejectDialog } from './DecisionDialogs';
 
 type Labels = {
   empty: string;
@@ -70,83 +55,7 @@ type Props = {
   hoursPerDay: number;
 };
 
-function ApproveDialog({
-  id,
-  labels,
-  disabled,
-  onApprove,
-}: {
-  id: string;
-  labels: Labels;
-  disabled: boolean;
-  onApprove: (signatureData: string, signatureAuthorized: boolean) => void;
-}) {
-  const tc = useTranslations('common');
-  const [signatureData, setSignatureData] = useState('');
-  const [signatureAuthorized, setSignatureAuthorized] = useState(false);
-  const [validationError, setValidationError] = useState('');
-
-  return (
-    <AlertDialog
-      onOpenChange={(open) => {
-        if (open) {
-          setSignatureData('');
-          setSignatureAuthorized(false);
-          setValidationError('');
-        }
-      }}
-    >
-      <AlertDialogTrigger asChild>
-        <Button size="sm" disabled={disabled} data-testid={`approve-btn-${id}`}>
-          {labels.approve}
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent size="default">
-        <AlertDialogHeader>
-          <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
-          <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <RequestSignatureFields
-          idPrefix={`approval-${id}`}
-          value={signatureData}
-          onChange={setSignatureData}
-          authorized={signatureAuthorized}
-          onAuthorizedChange={setSignatureAuthorized}
-          labels={labels.approverSignature}
-        />
-        {validationError && (
-          <p className="text-sm text-destructive" role="alert">
-            {validationError}
-          </p>
-        )}
-        <AlertDialogFooter>
-          <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={(event) => {
-              if (!signatureData) {
-                event.preventDefault();
-                setValidationError(labels.approverSignature.validationSignature);
-                return;
-              }
-              if (!signatureAuthorized) {
-                event.preventDefault();
-                setValidationError(labels.approverSignature.validationAuthorization);
-                return;
-              }
-              onApprove(signatureData, signatureAuthorized);
-            }}
-            data-testid={`approve-confirm-${id}`}
-          >
-            {labels.approve}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
-
 export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
-  const tc = useTranslations('common');
   const router = useRouter();
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
@@ -309,59 +218,18 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         }
                       />
 
-                      {/* Reject */}
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={isPending}
-                            data-testid={`reject-btn-${req.id}`}
-                          >
-                            {labels.reject}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent size="sm">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{labels.reject}</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              {labels.rejectConfirm}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-
-                          <div className="space-y-1.5 text-start">
-                            <Label htmlFor={`reject-reason-${req.id}`}>
-                              {labels.rejectReasonLabel}
-                            </Label>
-                            <Textarea
-                              id={`reject-reason-${req.id}`}
-                              data-testid={`reject-reason-${req.id}`}
-                              rows={3}
-                              maxLength={500}
-                              placeholder={labels.rejectReasonPlaceholder}
-                              value={rejectNotes[req.id] ?? ''}
-                              onChange={(e) =>
-                                setRejectNotes((n) => ({ ...n, [req.id]: e.target.value }))
-                              }
-                            />
-                          </div>
-
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-                            <AlertDialogAction
-                              variant="destructive"
-                              onClick={() =>
-                                decide(req.id, labels.rejectSuccess, (id) =>
-                                  rejectRequest(id, rejectNotes[id])
-                                )
-                              }
-                              data-testid={`reject-confirm-${req.id}`}
-                            >
-                              {labels.reject}
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <RejectDialog
+                        id={req.id}
+                        labels={labels}
+                        disabled={isPending}
+                        note={rejectNotes[req.id] ?? ''}
+                        onNoteChange={(v) => setRejectNotes((n) => ({ ...n, [req.id]: v }))}
+                        onReject={() =>
+                          decide(req.id, labels.rejectSuccess, (id) =>
+                            rejectRequest(id, rejectNotes[id])
+                          )
+                        }
+                      />
                     </div>
                   </div>
                 </CardContent>

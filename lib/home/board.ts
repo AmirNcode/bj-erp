@@ -5,7 +5,6 @@
 
 import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
-import type { BalanceItem } from '@/lib/leave/balances';
 
 export type TeamDirectoryMember = {
   id: string;
@@ -36,19 +35,19 @@ export type HomeBoard = {
   showApprovals: boolean;
   pendingCount: number;
   recent: LeaveRequestWithType[];
-  balances: BalanceItem[];
   directory: TeamDirectoryMemberWithUpcoming[];
 };
 
 export function buildHomeBoard(input: {
   roles: string[];
   requests: LeaveRequestWithType[];
-  balances: BalanceItem[];
   team: CalendarEntry[];
   directory?: TeamDirectoryMember[];
   pendingCount: number;
 }): HomeBoard {
-  const showApprovals = input.roles.includes('admin') || input.roles.includes('manager');
+  // hr signs a step of the approval chain too (FR-36), so it gets the queue.
+  const showApprovals =
+    input.roles.includes('admin') || input.roles.includes('manager') || input.roles.includes('hr');
   const upcomingByEmployee = new Map<string, TeamUpcomingTimeOff[]>();
 
   for (const entry of input.team) {
@@ -69,7 +68,6 @@ export function buildHomeBoard(input: {
     showApprovals,
     pendingCount: input.pendingCount,
     recent: input.requests.slice(0, 5),
-    balances: input.balances,
     directory: (input.directory ?? []).map((member) => ({
       ...member,
       upcomingTimeOff: upcomingByEmployee.get(member.id) ?? [],

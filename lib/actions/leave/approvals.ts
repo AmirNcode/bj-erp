@@ -82,6 +82,15 @@ export type PendingApproval = {
   errand_location: string | null;
   employee_name: string;
   employee_manager_id: string | null;
+  /** Requester's department — the home dashboard's short-staffed warning. */
+  department_id: string | null;
+  department_name_fa: string | null;
+  department_name_en: string | null;
+  /** When it was submitted (the home dashboard's "oldest: n days ago"). */
+  submitted_at: string;
+  leave_type_id: string | null;
+  /** False for unpaid types and errands: approving moves no balance. */
+  affects_balance: boolean;
   leave_type_name_fa: string;
   leave_type_name_en: string | null;
   start_date: string;
@@ -161,10 +170,10 @@ export async function getPendingApprovals(): Promise<
   const { data, error } = await c.supabase
     .from('leave_requests')
     .select(
-      `id, employee_id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id, signature_consent_at,
+      `id, employee_id, kind, errand_location, created_at, leave_type_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id, signature_consent_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
-       profiles!leave_requests_employee_id_fkey(full_name, manager_id),
-       leave_types(name_fa, name_en)`
+       profiles!leave_requests_employee_id_fkey(full_name, manager_id, department_id, departments!profiles_department_id_fkey(name_fa, name_en)),
+       leave_types(name_fa, name_en, affects_balance)`
     )
     .eq('status', 'pending')
     .order('start_date', { ascending: true });
@@ -176,6 +185,8 @@ export async function getPendingApprovals(): Promise<
     employee_id: string;
     kind: Database['public']['Enums']['request_kind'];
     errand_location: string | null;
+    created_at: string;
+    leave_type_id: string | null;
     start_date: string;
     end_date: string;
     day_part: DayPart;
@@ -189,8 +200,13 @@ export async function getPendingApprovals(): Promise<
     serial_year: number;
     serial_seq: number;
     signature_consent_at: string | null;
-    profiles: { full_name: string; manager_id: string | null } | null;
-    leave_types: { name_fa: string; name_en: string | null } | null;
+    profiles: {
+      full_name: string;
+      manager_id: string | null;
+      department_id: string | null;
+      departments: { name_fa: string; name_en: string | null } | null;
+    } | null;
+    leave_types: { name_fa: string; name_en: string | null; affects_balance: boolean } | null;
   };
 
   const mapped: PendingApproval[] = ((data ?? []) as unknown as Row[]).map((r) => ({
@@ -199,6 +215,12 @@ export async function getPendingApprovals(): Promise<
     errand_location: r.errand_location ?? null,
     employee_name: r.profiles?.full_name ?? '—',
     employee_manager_id: r.profiles?.manager_id ?? null,
+    department_id: r.profiles?.department_id ?? null,
+    department_name_fa: r.profiles?.departments?.name_fa ?? null,
+    department_name_en: r.profiles?.departments?.name_en ?? null,
+    submitted_at: r.created_at,
+    leave_type_id: r.leave_type_id ?? null,
+    affects_balance: r.kind !== 'errand' && (r.leave_types?.affects_balance ?? false),
     leave_type_name_fa: r.leave_types?.name_fa ?? '—',
     leave_type_name_en: r.leave_types?.name_en ?? null,
     start_date: r.start_date,
