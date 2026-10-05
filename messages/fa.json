@@ -352,11 +352,8 @@
     "balanceLine": "متقاضی دارای مرخصی استحقاقی بمدت {duration} می باشد."
   },
   "reports": {
-    "title": "گزارش‌های منابع انسانی",
-    "hint": "بازه زمانی را انتخاب کنید. هر گزارش را می‌توانید به صورت فایل اکسل (CSV) دانلود کنید.",
     "from": "از ماه",
     "to": "تا ماه",
-    "apply": "نمایش",
     "download": "دانلود اکسل",
     "empty": "داده‌ای در این بازه نیست.",
     "error": "خطا",
@@ -410,7 +407,17 @@
       "department": "واحد",
       "headcount": "تعداد",
       "joiners": "استخدام جدید"
-    }
+    },
+    "rangeJoin": "تا",
+    "export": "خروجی اکسل",
+    "capacityTitle": "ظرفیت واحدها",
+    "capacitySub": "حاضر امروز از کل نفرات",
+    "absenceChartTitle": "مرخصی‌ها به تفکیک واحد",
+    "absenceChartSub": "روزهای غیبت، {from} تا {to}",
+    "totalDays": "مجموع {days} روز",
+    "daysValue": "{days} روز",
+    "lowCapacity": "کمتر از ۸۰٪ حاضر",
+    "noDepartment": "بدون واحد"
   },
   "manage": {
     "employees": {

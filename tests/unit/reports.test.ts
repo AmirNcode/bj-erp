@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  absenceDaysByDepartment,
+  buildCapacity,
   minutesToDecimalDays,
   daysBetween,
   buildBalanceReport,
@@ -346,5 +348,46 @@ describe('tableToCsvRows', () => {
     ]);
     // Everything must be a string for buildCsv's escaper.
     expect(rows.every((r) => r.every((c) => typeof c === 'string'))).toBe(true);
+  });
+});
+
+describe('absenceDaysByDepartment', () => {
+  it('sums approved leave days per department, most first, ignoring errands', () => {
+    const employees = [
+      { id: 'a', departmentName: 'Prod' },
+      { id: 'b', departmentName: 'QC' },
+    ] as never[];
+    const req = (over: object) =>
+      ({ kind: 'leave', status: 'approved', requestedMinutes: 480, ...over }) as never;
+    expect(
+      absenceDaysByDepartment({
+        employees,
+        hoursPerDay: 8,
+        requests: [
+          req({ employeeId: 'a' }),
+          req({ employeeId: 'b' }),
+          req({ employeeId: 'b' }),
+          req({ employeeId: 'b', kind: 'errand' }),
+          req({ employeeId: 'a', status: 'pending' }),
+        ],
+      })
+    ).toEqual([
+      { department: 'QC', days: 2 },
+      { department: 'Prod', days: 1 },
+    ]);
+  });
+});
+
+describe('buildCapacity', () => {
+  it('flags departments under 80% present and drops empty ones', () => {
+    const rows = buildCapacity({
+      headcountByDepartment: { d1: 10, d2: 4, d3: 0 },
+      absentByDepartment: { d1: 1, d2: 1 },
+      departmentName: (id) => ({ d1: 'A', d2: 'B', d3: 'C' })[id] ?? '—',
+    });
+    expect(rows).toEqual([
+      { department: 'A', present: 9, headcount: 10, low: false },
+      { department: 'B', present: 3, headcount: 4, low: true },
+    ]);
   });
 });

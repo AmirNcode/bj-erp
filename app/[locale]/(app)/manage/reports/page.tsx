@@ -13,8 +13,11 @@ import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getReportData, getReportMonths } from '@/lib/actions/reports';
+import { getTodayPulse } from '@/lib/actions/home';
+import { createClient } from '@/lib/supabase/server';
 import { todayInAppTz } from '@/lib/appDate';
-import { PageHeader } from '../../_components/PageHeader';
+import { localizedLeaveTypeName } from '@/lib/i18n/format';
+import { buildCapacity } from '@/lib/reports/reports';
 import { ListSkeleton } from '@/components/Skeletons';
 import { ReportsDashboard } from './ReportsDashboard';
 
@@ -34,12 +37,21 @@ async function ReportsData({
   from?: string;
   to?: string;
 }) {
-  const t = await getTranslations('reports');
-  const tLeave = await getTranslations('leave');
-  const tReview = await getTranslations('review');
-  const tSteps = await getTranslations('approvals.steps');
+  const [t, tLeave, tReview, tSteps, tNav] = await Promise.all([
+    getTranslations('reports'),
+    getTranslations('leave'),
+    getTranslations('review'),
+    getTranslations('approvals.steps'),
+    getTranslations('nav'),
+  ]);
 
-  const months = await getReportMonths();
+  const supabase = await createClient();
+  const [months, pulseRes, { data: departments }] = await Promise.all([
+    getReportMonths(),
+    // hr/admin: company-wide, which is what this screen is for.
+    getTodayPulse(),
+    supabase.from('departments').select('id, name_fa, name_en'),
+  ]);
 
   // Default to the CURRENT Jalali year, Farvardin through the month we are in —
   // the range HR asks for most, and the one that makes the annual cap and the
@@ -64,6 +76,17 @@ async function ReportsData({
   const rangeEnd = to && ISO.test(to) ? to : defaultTo;
 
   const result = await getReportData(rangeStart, rangeEnd);
+
+  const deptNames = new Map(
+    (departments ?? []).map((d) => [d.id, localizedLeaveTypeName(d, locale)])
+  );
+  const capacity = pulseRes.ok
+    ? buildCapacity({
+        headcountByDepartment: pulseRes.pulse.headcountByDepartment,
+        absentByDepartment: pulseRes.pulse.absentByDepartment,
+        departmentName: (id) => deptNames.get(id) ?? t('noDepartment'),
+      })
+    : [];
   if (!result.ok) {
     return (
       <p role="alert" className="text-sm text-destructive" data-testid="reports-error">
@@ -76,13 +99,25 @@ async function ReportsData({
     <ReportsDashboard
       data={result.data}
       months={months}
+      capacity={capacity}
       locale={locale}
       labels={{
+        breadcrumb: tNav('manage'),
+        title: tNav('reports'),
         from: t('from'),
         to: t('to'),
-        apply: t('apply'),
+        rangeJoin: t('rangeJoin'),
+        export: t('export'),
         download: t('download'),
         empty: t('empty'),
+        capacityTitle: t('capacityTitle'),
+        capacitySub: t('capacitySub'),
+        lowCapacity: t('lowCapacity'),
+        // .raw(): the dashboard fills these as the period and totals change.
+        absenceChartTitle: t('absenceChartTitle'),
+        absenceChartSub: t.raw('absenceChartSub'),
+        totalDays: t.raw('totalDays'),
+        daysValue: t.raw('daysValue'),
         months: {
           m1: t('months.m1'), m2: t('months.m2'), m3: t('months.m3'), m4: t('months.m4'),
           m5: t('months.m5'), m6: t('months.m6'), m7: t('months.m7'), m8: t('months.m8'),
@@ -158,15 +193,10 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   }
 
   const { from, to } = await searchParams;
-  const t = await getTranslations('reports');
 
   return (
-    <main className="p-6 max-w-5xl mx-auto space-y-4">
-      <PageHeader title={t('title')} />
-      <p className="text-sm text-muted-foreground">{t('hint')}</p>
-      <Suspense fallback={<ListSkeleton count={4} />}>
-        <ReportsData locale={locale} from={from} to={to} />
-      </Suspense>
-    </main>
+    <Suspense fallback={<ListSkeleton count={4} />}>
+      <ReportsData locale={locale} from={from} to={to} />
+    </Suspense>
   );
 }

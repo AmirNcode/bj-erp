@@ -209,6 +209,55 @@ export function buildAbsenceByDepartment(input: {
   };
 }
 
+/**
+ * The same approved-leave days as `buildAbsenceByDepartment`, as numbers for the
+ * on-screen bar chart: one entry per department, most days first.
+ */
+export function absenceDaysByDepartment(input: {
+  requests: RequestRow[];
+  employees: EmployeeRow[];
+  hoursPerDay: number;
+}): { department: string; days: number }[] {
+  const deptOf = new Map(input.employees.map((e) => [e.id, e.departmentName ?? '—']));
+  const minutes = new Map<string, number>();
+  for (const r of input.requests) {
+    if (r.kind !== 'leave' || r.status !== 'approved') continue;
+    const dept = deptOf.get(r.employeeId) ?? '—';
+    minutes.set(dept, (minutes.get(dept) ?? 0) + r.requestedMinutes);
+  }
+  return [...minutes.entries()]
+    .map(([department, m]) => ({ department, days: minutesToDecimalDays(m, input.hoursPerDay) }))
+    .sort((a, b) => b.days - a.days);
+}
+
+/** Below this share present today, a department's capacity row turns to a warning. */
+export const CAPACITY_WARNING_RATIO = 0.8;
+
+export type CapacityRow = { department: string; present: number; headcount: number; low: boolean };
+
+/**
+ * Present-today per department from headcount and off-site counts keyed by
+ * department id (`''` = no department). Departments with nobody are left out.
+ */
+export function buildCapacity(input: {
+  headcountByDepartment: Record<string, number>;
+  absentByDepartment: Record<string, number>;
+  departmentName: (id: string) => string;
+}): CapacityRow[] {
+  return Object.entries(input.headcountByDepartment)
+    .filter(([, headcount]) => headcount > 0)
+    .map(([id, headcount]) => {
+      const present = Math.max(headcount - (input.absentByDepartment[id] ?? 0), 0);
+      return {
+        department: input.departmentName(id),
+        present,
+        headcount,
+        low: present / headcount < CAPACITY_WARNING_RATIO,
+      };
+    })
+    .sort((a, b) => a.department.localeCompare(b.department));
+}
+
 // ---------------------------------------------------------------------------
 // 4. Pending approvals ageing
 // ---------------------------------------------------------------------------

@@ -424,21 +424,15 @@ test('hr opens the reports screen and downloads a CSV that matches the table', a
   await page.goto('/manage/reports');
   await expect(page.locator('[data-testid="reports-dashboard"]')).toBeVisible({ timeout: 30_000 });
 
-  // All five reports render.
-  for (const id of ['balances', 'requests', 'absence', 'ageing', 'headcount']) {
-    await expect(page.locator(`[data-testid="report-${id}"]`)).toBeVisible();
-  }
-
-  // The balance report carries real data: the employee just allocated 12 days.
-  const balances = page.locator('[data-testid="report-table-balances"]');
-  await expect(balances).toBeVisible();
-  await expect(balances).toContainText('Report Subject');
-
-  // Headcount is never empty — there is always at least the admin.
-  await expect(page.locator('[data-testid="report-table-headcount"]')).toBeVisible();
+  // The screen keeps two bar cards; the five tabular reports live in the export.
+  await expect(page.locator('[data-testid="report-capacity"]')).toBeVisible();
+  await expect(page.locator('[data-testid="report-absence-chart"]')).toBeVisible();
 
   // ── the export ────────────────────────────────────────────────────────────
-  const onScreenHeaders = await balances.locator('thead th').allTextContents();
+  await page.locator('[data-testid="report-export"]').click();
+  for (const id of ['balances', 'requests', 'absence', 'ageing', 'headcount']) {
+    await expect(page.locator(`[data-testid="report-download-${id}"]`)).toBeVisible();
+  }
 
   const downloadPromise = page.waitForEvent('download');
   await page.locator('[data-testid="report-download-balances"]').click();
@@ -453,11 +447,11 @@ test('hr opens the reports screen and downloads a CSV that matches the table', a
   // A UTF-8 BOM is what makes Excel read the Persian columns correctly.
   expect(csv.charCodeAt(0)).toBe(0xfeff);
 
-  const headerLine = csv.replace(/^﻿/, '').split('\r\n')[0];
-  const csvHeaders = headerLine.split(',').map((h) => h.replace(/^"|"$/g, ''));
-  expect(csvHeaders).toEqual(onScreenHeaders.map((h) => h.trim()));
+  // Name, personnel number, department, manager, then one column per leave type.
+  const headerLine = csv.replace(/^\uFEFF/, '').split('\r\n')[0];
+  expect(headerLine.split(',').length).toBeGreaterThanOrEqual(5);
 
-  // And the employee is actually in the file, not just on the screen.
+  // And the employee is actually in the file.
   expect(csv).toContain('Report Subject');
 });
 

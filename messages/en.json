@@ -352,11 +352,8 @@
     "balanceLine": "The applicant has {duration} of annual leave remaining."
   },
   "reports": {
-    "title": "HR reports",
-    "hint": "Pick a period. Each report downloads as a CSV file that opens in Excel.",
     "from": "From month",
     "to": "To month",
-    "apply": "Show",
     "download": "Download for Excel",
     "empty": "No data in this period.",
     "error": "Error",
@@ -410,7 +407,17 @@
       "department": "Department",
       "headcount": "Headcount",
       "joiners": "New joiners"
-    }
+    },
+    "rangeJoin": "to",
+    "export": "Export to Excel",
+    "capacityTitle": "Department capacity",
+    "capacitySub": "Present today out of headcount",
+    "absenceChartTitle": "Time off by department",
+    "absenceChartSub": "Days absent, {from} to {to}",
+    "totalDays": "Total {days} days",
+    "daysValue": "{days} days",
+    "lowCapacity": "Under 80% present",
+    "noDepartment": "No department"
   },
   "manage": {
     "employees": {
