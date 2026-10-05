@@ -87,6 +87,9 @@ Copy this block verbatim and fill it in.
 - Then, on user request, pushed main to trigger Liara deploy. Local CI mirror all green: audit 0
   vulns, lint, 455 unit tests, test:deploy + 3 deploy scripts, tsc. Previous HEAD `fd407bf` had
   `[skip ci]`, so the push commit deliberately omits it. `docs/design/` left untracked (other agent's handoff).
+- Run 37266101461 FAILED: build ok, deploy step `ssh: connect to host 62.60.191.132 port 32222:
+  Connection timed out` before any file transfer. Mac probe 05:1x UTC: SSH 32222 and HTTPS 443 both
+  time out too, so the VM is unreachable again (like 2026-10-04). Live release unchanged. No VM restart done.
 
 ## 2026-10-05 — HR admin UI redesign (shell, Home, Employees, Settings, Reports)
 
