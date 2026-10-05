@@ -76,14 +76,6 @@
     "noHoliday": "No upcoming official holiday is recorded."
   },
   "team": {
-    "title": "My Team",
-    "subtitle": "Your direct reports.",
-    "navLink": "My Team",
-    "code": "Employee Code",
-    "name": "Full Name",
-    "department": "Department",
-    "edit": "Edit",
-    "noReports": "You have no direct reports assigned.",
     "managerNote": "As a manager you can edit only name and hire date."
   },
   "request": {
@@ -480,6 +472,26 @@
         "cancel": "Cancel",
         "confirm": "Generate new passwords",
         "importLink": "Bulk import (CSV)"
+      },
+      "list": {
+        "title": "Employees",
+        "filterLabel": "Show",
+        "filterAll": "All",
+        "filterReports": "My direct reports",
+        "filterInactive": "Inactive",
+        "search": "Search name or personnel number",
+        "department": "Department",
+        "allDepartments": "All departments",
+        "lockedHint": "Locked columns can only be changed by admins and HR. You can edit the name and hire date of your direct reports.",
+        "locked": "Admins and HR only",
+        "employee": "Employee",
+        "upcomingLeave": "Upcoming leave",
+        "selected": "{count} selected",
+        "clearSelection": "Clear selection",
+        "rangeOf": "{from}–{to} of {total}",
+        "prev": "Previous",
+        "next": "Next",
+        "pagination": "Pagination"
       }
     },
     "departments": {

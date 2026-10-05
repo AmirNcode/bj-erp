@@ -76,8 +76,9 @@ test.describe('Employee CRUD — admin flow', () => {
     await page.click('[data-testid="done-link"]');
     await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10000 });
 
-    // Wait for the table to have the new code (full-page nav ensures fresh data)
-    // Use .first() to avoid strict-mode failure when code appears in both code and name columns
+    // The list is paginated (25/page): search for the new code.
+    await page.goto(`/manage/employees?q=${uniqueCode}`);
+    // .first(): the row renders in both the desktop table and the mobile list.
     await expect(page.getByText(uniqueCode).first()).toBeVisible({ timeout: 10000 });
 
     // ── 7. Admin can edit the employee's current balances ────────────────

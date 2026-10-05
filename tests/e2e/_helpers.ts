@@ -263,7 +263,8 @@ export async function createEmployee(
 
 /** On the employee's edit page, set their direct manager (match by code substring). */
 export async function setManager(page: Page, employeeCode: string, managerCodeSubstring: string) {
-  await page.goto('/manage/employees');
+  // The list is paginated (25/page): search for the row.
+  await page.goto(`/manage/employees?q=${encodeURIComponent(employeeCode)}`);
   const row = page.locator('tr', { hasText: employeeCode });
   await expect(row.first()).toBeVisible({ timeout: 20_000 });
   await row.first().locator('a').first().click();

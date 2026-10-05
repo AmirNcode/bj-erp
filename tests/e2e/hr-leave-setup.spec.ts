@@ -63,7 +63,7 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   await expect(page.locator('[data-testid="policy-error"]')).toHaveCount(0);
 
   // ── 3. It actually landed — read it back on the edit screen ───────────────
-  await page.goto('/en/manage/employees');
+  await page.goto(`/en/manage/employees?q=${pno}`);
   await page.locator('tr', { hasText: pno }).first().locator('a[href*="/manage/employees/"]').click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="policy-section"]')).toBeVisible();
@@ -87,7 +87,7 @@ test('hr is refused when editing their own record', async ({ page }) => {
   await logout(page);
 
   await login(page, hr.code, hr.password);
-  await page.goto('/en/manage/employees');
+  await page.goto(`/en/manage/employees?q=${hr.code}`);
   await page
     .locator('tr', { hasText: hr.code })
     .first()

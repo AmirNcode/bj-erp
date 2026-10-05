@@ -110,7 +110,9 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   // ── bulk password regeneration ────────────────────────────────────────────
   await logout(page);
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/manage/employees');
+  // The list is paginated (25/page) and selection lives on one page: narrow it
+  // to this file's people, whose names all start with "Bulk".
+  await page.goto('/manage/employees?q=Bulk');
   await page.locator(`[data-testid="emp-check-${empCode}"]`).check();
   await page.locator(`[data-testid="emp-check-${mgrPno}"]`).check();
   await page.locator('[data-testid="regen-passwords"]').click();

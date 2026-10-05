@@ -55,6 +55,8 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   // …and the door actually opens, rather than bouncing back to /home.
   await page.locator('[data-testid="nav-manage"]').click();
   await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 20_000 });
+  // The list is paginated (25/page): search for the subject.
+  await page.goto(`/manage/employees?q=${other.code}`);
 
   // Company-wide read: an employee HR has no relationship with is listed.
   // This is `can_read_all` gaining 'hr'; without the migration the list is empty.
@@ -293,7 +295,7 @@ test('hr creates an employee in another department, and cannot grant a role', as
 
   // And an admin sees exactly one role on it.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/manage/employees');
+  await page.goto(`/manage/employees?q=${hire.code}`);
   await page.waitForLoadState('networkidle');
   const row = page.getByText('HR Hire').first();
   await expect(row).toBeVisible({ timeout: 20_000 });

@@ -2,14 +2,18 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
+import { Lock, Pencil } from 'lucide-react';
 import {
   bulkResetPasswords,
   type IssuedCredential,
 } from '@/lib/actions/employees';
 import { CredentialsDownload } from '@/components/CredentialsDownload';
+import { STATUS_BADGE_STYLES } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
+import { formatNumber } from '@/lib/i18n/format';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,27 +31,33 @@ export type EmployeeRow = {
   employee_code: string;
   full_name: string;
   active: boolean;
+  hireDateLabel: string;
   departmentLabel: string;
-  rolesLabel: string;
+  /** Localized role names — never the raw enum values. */
+  roleLabels: string[];
+  /** Next pending/approved leave, pre-formatted; null when none. */
+  upcoming: { label: string; status: 'pending' | 'approved' } | null;
   isSelf: boolean;
 };
 
 type Props = {
   employees: EmployeeRow[];
   isAdmin: boolean;
+  /** Manager without admin/hr: department and roles are read-only for them. */
+  showLocks: boolean;
   locale: string;
   labels: {
-    code: string;
-    name: string;
+    employee: string;
+    hireDate: string;
     department: string;
     roles: string;
-    status: string;
-    actions: string;
-    active: string;
-    inactive: string;
+    upcomingLeave: string;
     edit: string;
+    locked: string;
     noEmployees: string;
     errorLabel: string;
+    selected: string; // contains {count}
+    clearSelection: string;
     regen: {
       button: string;
       confirmTitle: string;
@@ -66,12 +76,24 @@ type Props = {
   };
 };
 
+export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+      className="flex shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
+    >
+      {name.trim().charAt(0)}
+    </span>
+  );
+}
+
 /**
- * Desktop employees table. For admins each row gets a checkbox and the
- * toolbar offers bulk password regeneration (the recovery path for a lost
+ * Desktop employees table. For admins each row gets a checkbox; a selection
+ * opens a bar offering bulk password regeneration (the recovery path for a lost
  * one-time credentials file) — confirmed first: old passwords stop working.
  */
-export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
+export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<IssuedCredential[] | null>(null);
@@ -109,14 +131,26 @@ export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
     return <CredentialsDownload credentials={credentials} labels={labels.credentials} />;
   }
 
+  const lock = showLocks ? (
+    <Lock aria-label={labels.locked} className="inline size-3 text-muted-foreground" />
+  ) : null;
+  const th = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
+  const colCount = (isAdmin ? 1 : 0) + 6;
+
   return (
-    <div className="hidden md:block space-y-3">
+    <div className="hidden space-y-3 md:block">
       {isAdmin && selected.size > 0 && (
-        <div className="flex items-center gap-3">
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-secondary px-4 py-2.5"
+          data-testid="emp-bulk-bar"
+        >
+          <span className="whitespace-nowrap text-sm font-semibold text-secondary-foreground">
+            {labels.selected.replace('{count}', formatNumber(selected.size, locale))}
+          </span>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" size="sm" disabled={isPending} data-testid="regen-passwords">
-                {labels.regen.button} ({selected.size})
+                {labels.regen.button}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -134,6 +168,9 @@ export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+            {labels.clearSelection}
+          </Button>
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {labels.errorLabel}: {error}
@@ -148,7 +185,7 @@ export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
             <thead className="border-b bg-muted/40">
               <tr>
                 {isAdmin && (
-                  <th className="px-4 py-3 w-10">
+                  <th className="w-10 px-4 py-3">
                     <input
                       type="checkbox"
                       aria-label="select all"
@@ -159,17 +196,32 @@ export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
                     />
                   </th>
                 )}
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.code}</th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.name}</th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.department}</th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.roles}</th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.status}</th>
-                <th className="text-start px-4 py-3 font-semibold text-foreground/80">{labels.actions}</th>
+                <th className={th}>{labels.employee}</th>
+                <th className={th}>{labels.hireDate}</th>
+                <th className={th}>
+                  <span className="inline-flex items-center gap-1">
+                    {labels.department}
+                    {lock}
+                  </span>
+                </th>
+                <th className={th}>
+                  <span className="inline-flex items-center gap-1">
+                    {labels.roles}
+                    {lock}
+                  </span>
+                </th>
+                <th className={th}>{labels.upcomingLeave}</th>
+                <th className="w-12 px-4 py-3">
+                  <span className="sr-only">{labels.edit}</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {employees.map((emp) => (
-                <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
+                <tr
+                  key={emp.id}
+                  className={cn('transition-colors hover:bg-muted/30', !emp.active && 'opacity-55')}
+                >
                   {isAdmin && (
                     <td className="px-4 py-3">
                       {!emp.isSelf && (
@@ -184,32 +236,66 @@ export function EmployeesTable({ employees, isAdmin, locale, labels }: Props) {
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 font-mono text-sm" dir="ltr">{emp.employee_code}</td>
-                  <td className="px-4 py-3">{emp.full_name}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{emp.departmentLabel}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{emp.rolesLabel}</td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant={emp.active ? 'default' : 'secondary'}
-                      className={
-                        emp.active
-                          ? 'bg-success-foreground text-success hover:bg-success-foreground'
-                          : 'bg-destructive/10 text-destructive hover:bg-destructive/10'
-                      }
-                    >
-                      {emp.active ? labels.active : labels.inactive}
-                    </Badge>
+                    <div className="flex items-center gap-3">
+                      <Avatar name={emp.full_name} />
+                      <div className="min-w-0">
+                        <div className="whitespace-nowrap font-medium">
+                          <bdi>{emp.full_name}</bdi>
+                        </div>
+                        <div className="text-xs text-muted-foreground" dir="ltr">
+                          {emp.employee_code}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">{emp.hireDateLabel}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                    {emp.departmentLabel}
                   </td>
                   <td className="px-4 py-3">
-                    <Button variant="link" size="sm" className="p-0 h-auto" asChild>
-                      <Link href={`/${locale}/manage/employees/${emp.id}`}>{labels.edit}</Link>
+                    <div className="flex flex-wrap gap-1">
+                      {emp.roleLabels.length === 0
+                        ? '—'
+                        : emp.roleLabels.map((r) => (
+                            <span
+                              key={r}
+                              className="whitespace-nowrap rounded-full bg-secondary px-2.5 py-0.5 text-xs text-secondary-foreground"
+                            >
+                              {r}
+                            </span>
+                          ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {emp.upcoming ? (
+                      <Badge
+                        variant="outline"
+                        className={cn('rounded-full', STATUS_BADGE_STYLES[emp.upcoming.status])}
+                      >
+                        {emp.upcoming.label}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-primary hover:text-primary"
+                      asChild
+                    >
+                      <Link href={`/${locale}/manage/employees/${emp.id}`} aria-label={`${labels.edit}: ${emp.full_name}`}>
+                        <Pencil aria-hidden="true" />
+                      </Link>
                     </Button>
                   </td>
                 </tr>
               ))}
               {employees.length === 0 && (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
                     {labels.noEmployees}
                   </td>
                 </tr>

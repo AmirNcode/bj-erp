@@ -102,7 +102,8 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     await page.click('[data-testid="done-link"]');
     await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10000 });
 
-    // We need to find M's row specifically. Use the code to find the row.
+    // The list is paginated (25/page): search for M's row by code.
+    await page.goto(`/fa/manage/employees?q=${mgrCode}`);
     const mgrRow = page.locator('tr').filter({ hasText: mgrCode });
     const mgrHref = await mgrRow.locator('a[href*="/manage/employees/"]').getAttribute('href');
     const mgrId = mgrHref?.split('/manage/employees/')[1]?.split('?')[0] ?? '';
@@ -119,6 +120,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10000 });
 
     // Capture E's UUID
+    await page.goto(`/fa/manage/employees?q=${empCode}`);
     const empRow = page.locator('tr').filter({ hasText: empCode });
     const empHref = await empRow.locator('a[href*="/manage/employees/"]').getAttribute('href');
     const empId = empHref?.split('/manage/employees/')[1]?.split('?')[0] ?? '';
@@ -134,6 +136,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10000 });
 
     // Capture X's UUID
+    await page.goto(`/fa/manage/employees?q=${nonCode}`);
     const nonRow = page.locator('tr').filter({ hasText: nonCode });
     const nonHref = await nonRow.locator('a[href*="/manage/employees/"]').getAttribute('href');
     const nonId = nonHref?.split('/manage/employees/')[1]?.split('?')[0] ?? '';
@@ -146,9 +149,9 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/home$/, { timeout: 15000 });
 
-    // ── 6. Navigate to /team — should see E but NOT X ─────────────────────
+    // ── 6. /team (now Employees › my direct reports) — E but NOT X ─────────
     await page.goto('/fa/team');
-    await expect(page).toHaveURL(/\/team$/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/manage\/employees\?filter=reports$/, { timeout: 10000 });
 
     // E's code should be visible
     await expect(page.getByText(empCode).first()).toBeVisible({ timeout: 8000 });

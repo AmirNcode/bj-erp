@@ -21,16 +21,12 @@ test('responsive: nav usable and no horizontal overflow on mobile + desktop', as
   const box = await page.locator('[data-testid="nav-home"]').boundingBox();
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
 
-  // Manage actions sit below the mobile page title instead of squeezed beside it.
+  // Manage › Employees on mobile: the title, then a floating add button in
+  // place of the header one, and no horizontal scroll from the table.
   await page.goto('/manage/employees');
-  const titleBox = await page.getByRole('heading', { name: /Manage Employees|مدیریت کارمندان/ }).boundingBox();
-  const firstAction = page.getByRole('link', { name: /My Team|تیم من/ });
-  const firstActionPaddingStart = await firstAction.evaluate((node) =>
-    Number.parseFloat(getComputedStyle(node).paddingInlineStart)
-  );
-  const addBox = await page.getByRole('link', { name: /Add Employee|افزودن کارمند/ }).boundingBox();
-  expect(firstActionPaddingStart).toBeLessThanOrEqual(1);
-  expect(addBox?.y ?? 0).toBeGreaterThan((titleBox?.y ?? 0) + (titleBox?.height ?? 0));
+  await expect(page.getByRole('heading', { name: /^(Employees|کارکنان)$/ })).toBeVisible();
+  await expect(page.locator('[data-testid="add-employee-fab"]')).toBeVisible();
+  await expect(page.locator('[data-testid="add-employee-link"]')).toBeHidden();
   const manageOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth
   );
