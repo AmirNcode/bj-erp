@@ -78,6 +78,156 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-05 — Local redeploy of HR admin redesign
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ fd407bf
+
+- `./deploy/bj-deploy app local` (no new migrations, LAN IP still 192.168.2.80). DB untouched.
+- Verified `/api/health` 200, `/login` 200. User confirmed site loads in phone Chrome.
+- Then, on user request, pushed main to trigger Liara deploy. Local CI mirror all green: audit 0
+  vulns, lint, 455 unit tests, test:deploy + 3 deploy scripts, tsc. Previous HEAD `fd407bf` had
+  `[skip ci]`, so the push commit deliberately omits it. `docs/design/` left untracked (other agent's handoff).
+
+## 2026-10-05 — HR admin UI redesign (shell, Home, Employees, Settings, Reports)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 2d2754b
+**Trigger:** Amir: implement `docs/design/design_handoff_hr_admin_redesign/README.md`, one commit per step.
+
+**What changed** (commits 8291b77, 9c26fae, 63f4933, c7e3f1d, 5f4635d)
+- Shell: `_components/MainNav.tsx` is the whole side panel (logo, grouped nav, footer with
+  `PageRefreshButton`, profile link, new `LanguageSwitch.tsx`); `AppShell.tsx` lost the header.
+  `lib/nav/tabs.ts` adds `manageItemsForRoles` / `settingsItemForRoles`. Desktop Employees item
+  owns `nav-manage`; the mobile Manage tab is `nav-manage-tab` (→ new `manage/page.tsx` list),
+  mobile Profile tab `nav-profile-tab`. Approvals badge streams a promise from `(app)/layout.tsx`.
+- Home: `lib/actions/home.ts` (getTodayPulse, getMyBalanceUsage, getNextHoliday,
+  getRequesterBalances) + pure `lib/home/pulse.ts`. `PendingApproval` gained submitted_at,
+  department, leave_type_id, affects_balance. Approve/reject dialogs extracted to
+  `manage/approvals/DecisionDialogs.tsx` and reused by `home/PendingApprovalsCard.tsx`.
+- Employees: `lib/employees/list.ts` (URL parsing, PostgREST-safe ilike term, 25/page);
+  `EmployeesToolbar.tsx`; `/team` redirects to `?filter=reports`.
+- Settings: `/settings` (admin) with `WorkSettingsForm`, `HolidayEditor`, `HolidayImportDialog`
+  moved from `manage/settings/`; `/manage/departments` (DepartmentsCard + AccrualRunner, admin),
+  `/manage/approval-steps` (admin + hr). `manage/settings/page.tsx` is now a role redirect.
+- Reports: `ReportsDashboard.tsx` rewritten (two bar cards, instant selects, export menu);
+  `absenceDaysByDepartment` + `buildCapacity` in `lib/reports/reports.ts`.
+- E2E specs updated for moved routes, pagination (`?q=<code>`) and the export menu.
+- `eslint.config.mjs` ignores `docs/design/**` (vendored support.js in the handoff zip).
+
+**Actions outside the repo**
+- Unzipped the handoff into `docs/design/` (left untracked, as found).
+- Local Docker DB only: submitted 3 pending leave requests via `submit_leave_request` as seeded
+  users 2001, 2002, 2101 (psql with impersonated JWT claims), then rejected 2101's from Home to
+  test inline decisions. The other two are still pending. The aborted e2e run's global setup also
+  reset the local admin locale to fa and the weekend to Friday-only.
+
+**Verification**
+- After each step: `npm run test:unit` (final 455 passed) and `npm run lint` clean; `tsc` clean;
+  `npm run build` passed.
+- Browser checks on the local dev server (desktop 1280 and mobile 375, fa RTL): shell, language
+  switch, Home pulse + inline reject, Employees search/filter/bulk bar/mobile cards, Settings,
+  Departments, Approval steps, Reports select + export menu. No horizontal overflow on mobile.
+- E2E **not run**: `npx playwright test --workers=1` failed every spec at launch (Chromium
+  headless-shell 1228 is not installed; needs `npx playwright install chromium`).
+
+**State left behind**
+- Five commits on local `main`, not pushed (push deploys to Liara). Docs commit follows.
+- This log and `docs/TASKS.md` carry earlier agents' uncommitted outage notes; left uncommitted.
+
+**For the next agent**
+- Install the Playwright browser and run the e2e suite before pushing.
+- README deviations are listed in the session summary: bulk bar has only password reset (no
+  change-department / deactivate actions exist), accrual lives on the Departments page, "،" kept
+  where the README spells it and "-" replaces old middle dots; Calendar, Request and print pages
+  still contain "·" (out of scope).
+
+## 2026-10-04 — Clean restart of local Docker stack for LAN testing
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ 2ff9af6
+**Trigger:** User asked to clean-start the local Docker stack and get a LAN link for laptop + phone.
+
+- Found `bj-erp` stack up 3 days; app image dated 2026-08-18 (stale). Mac LAN IP had drifted
+  192.168.2.70 → 192.168.2.80, so `deploy/.env` `APP_HOST`/`APP_ORIGIN` updated to `.80`
+  (gitignored, private file).
+- `docker build --no-cache --pull` of `bj-erp-app:local-arm64`, then `./deploy/bj-deploy update local`
+  (verified backup under `backups/deploy-assistant/local/`, applied migrations up to
+  `20260819120001`, reseeded, recreated app). Then `docker compose ... up -d --force-recreate` on all
+  five services so gateway (default_sni / cert) and GoTrue (SITE_URL) pick up the new IP. DB volume kept.
+- Verified: `/api/health` 200, `/auth/v1/health` 200, `/login` renders, cert SAN = IP 192.168.2.80,
+  `curl --cacert deploy/bj-root-ca.crt` trusted 200. No login/e2e test run.
+- For next agent: DHCP may change the Mac IP again → edit `deploy/.env` and recreate all containers.
+
+## 2026-10-04 — Connectivity recovered after provider restart
+
+**Agent:** Codex · **Branch / HEAD:** main @ 2ff9af6
+
+- Follow-up SSH succeeded with new boot ID `0c59670d-ade9-4e91-9cd4-6e74e6a4a46f`; uptime ~1 minute.
+  Public HTTPS health returned 200. User independently confirmed the app loads on phone cellular.
+- All five containers running without manual start/deploy commands; database healthy. Auth restart
+  count 1, other services 0 at check. Live release remains a0cb7b1. Original database/certificate
+  volumes remain mounted. No database content comparison or login test performed in this turn.
+- Docker and backup timer active; backup service last result success, next run scheduled.
+- Public certificate has renewed: valid Oct 4 21:30:46 UTC through Oct 11 13:30:45 UTC.
+- The provider restart restored observed reachability; exact original guest/network cause is unknown.
+  No forced reset/rebuild, credential changes, firewall changes or code deployment performed.
+- Updated open tasks for observed startup/certificate recovery; user login/data check still needed.
+  Outage journal and task updates are local only; no commits/pushes in this troubleshooting session.
+
+## 2026-10-04 — Controlled provider restart while investigating outage
+
+**Agent:** Codex · **Branch / HEAD:** main @ 2ff9af6
+**Trigger:** User requested alternatives to waiting for support for the post-power-on SSH timeout.
+
+- Checked installed `liara vm restart --help` and Context7's documented power signal API.
+- Issued exactly one `liara vm restart --vm bj-vm --detach`; CLI confirmed restart signal sent.
+  Existing VM/disks retained; no rebuild, deletion, firewall change or deployment.
+- Safe-column VM query still reports CREATED / POWERED_ON. TCP probes to 32222, 80 and 443
+  still timed out after request. Queried documented VM events using the existing CLI credential
+  in memory without printing it: newest operation, 2026-10-05T00:08:20.567Z, reports SUCCEEDED.
+  This confirms provider operation status, not successful guest boot or application health.
+- Asked user to test HTTPS on phone cellular data with Wi-Fi disabled to isolate the home route.
+- If external reachability remains absent, next evidence is an independent network/Iran-side
+  probe or provider console/guest/network diagnostics. Do not attribute outage to lost keys.
+- Journal remains uncommitted with previous outage entries; unrelated code is unchanged.
+
+## 2026-10-04 — SSH key intact; Liara confirms powered-on state
+
+**Agent:** Codex · **Branch / HEAD:** main @ 2ff9af6
+**Trigger:** User confirmed IP unchanged, remote console unavailable, refreshed CLI login, and asked whether code cleanup deleted SSH credentials.
+
+- Dedicated `/Users/amir/.ssh/bj_liara_deploy` exists (419 bytes, mode 600); ssh-keygen parses it
+  successfully as ED25519. Alias still targets root@62.60.191.132:32222.
+- Refreshed CLI access works: `liara vm list` and `vm info --vm bj-vm` report CREATED,
+  POWERED_ON, Debian 12.9 and expected IPv4. Power state alone does not verify guest boot/network.
+- Caution: default `liara vm info` output includes the server password, which appeared in tool
+  output. Do not repeat that value; use explicit safe columns on future VM queries. Rotate this
+  root password once authorized access is restored; no secret files were opened or keys printed.
+- Latest GitHub deployment remains successful a0cb7b1, run 36806814730; cleanup is local and no
+  subsequent deployment run appears. Missing keys cannot explain the prior TCP connection timeouts.
+- No restart or server mutation performed. Next evidence needed from Liara: guest boot/console,
+  NIC/public routing, firewall and persisted SSH port 32222. Root cause still unconfirmed.
+
+## 2026-10-04 — Post-power-on connectivity investigation
+
+**Agent:** Codex · **Branch / HEAD:** main @ 2ff9af6
+**Trigger:** User reports bj-vm powered on in Liara for an hour after two days off, but SSH times out.
+
+**Actions / verification**
+- Read current onboarding, newest journal entries and open tasks; did not read retired archive.
+- Effective `liara-bj-vm` SSH config still resolves root@62.60.191.132:32222 with the dedicated
+  key. Bounded SSH and HTTPS health attempts both timed out before connection; no auth/TLS stage.
+- Independent TCP probes to 22, 80 and 32222 also timed out. Mac route uses en0 via 192.168.2.1.
+  This does not distinguish guest boot/firewall failure from provider/international routing or IP change.
+- GitHub's latest deployment run remains successful 36806814730 (a0cb7b1); no active release shown.
+- Context7 Liara docs plus installed CLI help identified read-only `liara vm list/info` commands.
+  `liara vm list` returned Authentication failed and requested `liara login`; no VM state obtained.
+- Asked user to confirm the currently assigned IPv4 and what the remote console displays.
+  Need restored CLI authentication or console evidence before diagnosing the guest/network.
+
+**State left behind**
+- No VM restart, firewall change, deployment, credential change or data write performed.
+- Cold-start validation remains incomplete. Only this journal entry is modified locally.
+
 ## 2026-10-04 — `/manage/allocations` removed; branch deletion blocked; on-prem code kept
 
 **Agent:** Claude Opus 5.5 via Claude Code

@@ -5,11 +5,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Liara (production host, testing phase)
 
-- ☐ **Cold-start check.** The VM was powered off on 2026-10-01 and has to be started from Liara's
-  control plane. Afterwards verify a new boot ID, all five services, public TLS and login, database
-  persistence, and the backup timer. Do not push to `main` while it is off: the CI deploy fails.
-- ☐ **TLS certificate expires 2026-10-07 12:43 UTC.** The first scheduled renewal has never run, and
-  it needs the VM up.
+- ◐ **Cold-start check:** after initial post-power-on timeouts, a provider restart restored access
+  on 2026-10-04. New boot ID, all five services, persistent volume mounts, public HTTPS, renewed
+  certificate and active backup timer verified. User still needs to verify login and saved data.
+  Original timeout cause remains unknown; investigate with Liara if it recurs.
 - ☐ Scheduled offsite backups. Daily backups currently stay on the VM.
 - ☐ Company subdomain from client IT, then update DNS, TLS and the origin.
 - ☐ Real data: enter the 1404–1405 official holidays (CSV upload in Settings) and import the
