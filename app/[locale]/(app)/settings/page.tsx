@@ -77,11 +77,13 @@ export default async function SettingsPage({ params }: Props) {
           saved: t('saved'),
           errorLabel: t('error'),
           days,
-          frequencyWorking: t('frequencyWorking'),
           frequencyWeekly: t('frequencyWeekly'),
           frequencyBiweekly: t('frequencyBiweekly'),
           anchorLabel: t('anchorLabel'),
           anchorHint: t('anchorHint'),
+          dayNone: t('dayNone'),
+          addDay: t('addDay'),
+          removeDay: t('removeDay'),
         }}
       />
 

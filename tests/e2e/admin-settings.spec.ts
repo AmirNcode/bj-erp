@@ -35,28 +35,34 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   const addedRow = page.locator('[data-testid="holiday-list"] li', { hasText: HOLIDAY_NAME });
   await expect(addedRow).toBeVisible({ timeout: 10_000 });
 
-  // Set Thursday off every week, save, then set it back to a working day (reset).
+  // Add Thursday as a second weekly day off, save, then remove it again (reset).
   //
-  // Driven with selectOption, not a click on the label: since FR-41 each weekday
-  // is a three-state native <select> (working / weekly / every other week), and a
-  // click on the surrounding label changes nothing — the save would still report
-  // success and this assertion would have passed while testing nothing.
-  const thu = page.locator('[data-testid="weekend-freq-thu"]');
-  await thu.selectOption('weekly');
-  await expect(thu).toHaveValue('weekly');
+  // Driven with selectOption on the native day dropdowns: the "off every week"
+  // row is a list of <select>s, one per day, plus an "Add day" button.
+  const weeklyValues = () =>
+    page
+      .locator('select[data-testid^="weekend-weekly-"]')
+      .evaluateAll((els) => els.map((e) => (e as HTMLSelectElement).value));
+  await page.click('[data-testid="weekend-weekly-add"]');
+  const added = page.locator('[data-testid="weekend-weekly-1"]');
+  await added.selectOption('thu');
+  await expect(added).toHaveValue('thu');
   await page.click('[data-testid="work-settings-save"]');
   await expect(page.locator('[data-testid="work-settings-saved"]')).toBeVisible({ timeout: 10_000 });
 
   await page.reload();
   // The saved value survives a reload — proof the write landed, not just that the
-  // form said so.
-  await expect(page.locator('[data-testid="weekend-freq-thu"]')).toHaveValue('weekly', {
-    timeout: 15_000,
-  });
+  // form said so. Days come back in week order, so Thursday may move slots.
+  await expect(page.locator('[data-testid="weekend-weekly-0"]')).toBeVisible({ timeout: 15_000 });
+  expect(await weeklyValues()).toEqual(expect.arrayContaining(['thu', 'fri']));
 
-  await page.locator('[data-testid="weekend-freq-thu"]').selectOption('working');
+  const thuIndex = (await weeklyValues()).indexOf('thu');
+  await page.click(`[data-testid="weekend-weekly-remove-${thuIndex}"]`);
   await page.click('[data-testid="work-settings-save"]');
   await expect(page.locator('[data-testid="work-settings-saved"]')).toBeVisible({ timeout: 10_000 });
+  await page.reload();
+  await expect(page.locator('[data-testid="weekend-weekly-0"]')).toBeVisible({ timeout: 15_000 });
+  expect(await weeklyValues()).toEqual(['fri']);
 
   // Cleanup: delete the holiday we added via AlertDialog confirm; it disappears from the list.
   await addedRow.locator('button').click(); // opens AlertDialog

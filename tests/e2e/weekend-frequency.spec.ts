@@ -26,29 +26,32 @@ test('admin sets a weekday off every other week, with a reference date', async (
   await page.goto('/en/settings');
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 30_000 });
 
-  const thu = page.locator('[data-testid="weekend-freq-thu"]');
-  const fri = page.locator('[data-testid="weekend-freq-fri"]');
+  const weekly = page.locator('[data-testid="weekend-weekly-0"]');
+  const biweekly = page.locator('[data-testid="weekend-biweekly-0"]');
   const anchor = page.locator('[data-testid="biweekly-anchor"]');
   const saved = page.locator('[data-testid="work-settings-saved"]');
   const error = page.locator('[data-testid="work-settings-error"]');
 
   // Friday ships off every week; that is the baseline this builds on.
-  await expect(fri).toHaveValue('weekly');
+  await expect(weekly).toHaveValue('fri');
 
   // Normalize BEFORE asserting, not only after. globalSetup already restores this,
   // but a previous spec in the same run can have changed it, and a run that dies
   // here would otherwise leave the next one failing on step 1 for a reason that
   // has nothing to do with the code.
-  if ((await thu.inputValue()) !== 'working') {
-    await thu.selectOption('working');
+  if ((await biweekly.inputValue()) !== 'none') {
+    while ((await page.locator('[data-testid="weekend-biweekly-remove-1"]').count()) > 0) {
+      await page.click('[data-testid="weekend-biweekly-remove-1"]');
+    }
+    await biweekly.selectOption('none');
     await page.click('[data-testid="work-settings-save"]');
     await expect(saved).toBeVisible({ timeout: 15_000 });
     await page.reload();
   }
 
-  // ── 1. The reference date only appears once a day is fortnightly ───────────
+  // ── 1. The starting date only appears once a day is fortnightly ────────────
   await expect(anchor).toHaveCount(0);
-  await thu.selectOption('biweekly');
+  await biweekly.selectOption('thu');
   await expect(anchor).toBeVisible();
 
   // ── 2. Saving without a reference date is refused, and says why ────────────
@@ -74,20 +77,20 @@ test('admin sets a weekday off every other week, with a reference date', async (
 
   await page.reload();
   // Read back from the database, not from the form's own state.
-  await expect(page.locator('[data-testid="weekend-freq-thu"]')).toHaveValue('biweekly', {
+  await expect(page.locator('[data-testid="weekend-biweekly-0"]')).toHaveValue('thu', {
     timeout: 15_000,
   });
-  await expect(page.locator('[data-testid="weekend-freq-fri"]')).toHaveValue('weekly');
+  await expect(page.locator('[data-testid="weekend-weekly-0"]')).toHaveValue('fri');
   await expect(page.locator('[data-testid="biweekly-anchor"]')).toBeVisible();
   await expect(page.locator('[data-testid="biweekly-anchor"] input').first()).not.toHaveValue('');
 
   // ── 4. Restore: Thursday back to a working day ────────────────────────────
-  await page.locator('[data-testid="weekend-freq-thu"]').selectOption('working');
+  await page.locator('[data-testid="weekend-biweekly-0"]').selectOption('none');
   await page.click('[data-testid="work-settings-save"]');
   await expect(page.locator('[data-testid="work-settings-saved"]')).toBeVisible({ timeout: 15_000 });
 
   await page.reload();
-  await expect(page.locator('[data-testid="weekend-freq-thu"]')).toHaveValue('working', {
+  await expect(page.locator('[data-testid="weekend-biweekly-0"]')).toHaveValue('none', {
     timeout: 15_000,
   });
   // The reference-date field goes away with the last fortnightly day.

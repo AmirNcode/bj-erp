@@ -520,10 +520,9 @@
     "settings": {
       "weekendTitle": "Weekly days off",
       "weekendHint": "Days that do not count as working days.",
-      "frequencyWorking": "Working day",
       "frequencyWeekly": "Off every week",
       "frequencyBiweekly": "Off every other week",
-      "anchorLabel": "Next day off for every-other-week days",
+      "anchorLabel": "Starting date",
       "anchorHint": "Pick any date that IS a day off. The app alternates from it, so the following week is worked and the one after is off again.",
       "hoursTitle": "Working hours and hourly leave",
       "hoursHint": "Hourly leave requests must fall inside this window, and are capped per day.",
@@ -645,7 +644,10 @@
         }
       },
       "lastSaved": "Last saved: {date}",
-      "holidaysCount": "{count} holidays recorded"
+      "holidaysCount": "{count} holidays recorded",
+      "dayNone": "— No day —",
+      "addDay": "Add day",
+      "removeDay": "Remove day"
     },
     "import": {
       "title": "Bulk employee import",

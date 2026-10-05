@@ -4,9 +4,10 @@ import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
 import { updateWorkSettings } from '@/lib/actions/settings';
-import { WEEKDAYS, frequencyOf, type WeekendFrequency } from '@/lib/leave/weekend';
+import { WEEKDAYS } from '@/lib/leave/weekend';
 import { dateObjectToGregorian, gregorianToPersianDateObject, type PickerDate } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
+import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
@@ -28,13 +29,25 @@ type Labels = {
   saved: string;
   errorLabel: string;
   days: Record<string, string>;
-  /** FR-41 frequency control. */
-  frequencyWorking: string;
+  /** FR-41 frequency rows. */
   frequencyWeekly: string;
   frequencyBiweekly: string;
   anchorLabel: string;
   anchorHint: string;
+  /** Day dropdown's empty option. */
+  dayNone: string;
+  addDay: string;
+  removeDay: string;
 };
+
+/** One dropdown in a frequency row: an ISO weekday, or null for "none". */
+type Slot = number | null;
+
+// Week order (Sat..Fri), so a reload shows days the way the week reads.
+const weekOrder = (days: number[]) =>
+  WEEKDAYS.map((d) => d.iso).filter((iso) => days.includes(iso));
+const toSlots = (days: number[]): Slot[] => (days.length ? weekOrder(days) : [null]);
+const fromSlots = (slots: Slot[]) => slots.filter((d): d is number => d !== null);
 
 export function WorkSettingsForm({
   initial,
@@ -58,8 +71,10 @@ export function WorkSettingsForm({
   locale: string;
   labels: Labels;
 }) {
-  const [selected, setSelected] = useState<number[]>(initial);
-  const [biweekly, setBiweekly] = useState<number[]>(initialBiweekly);
+  const [weeklySlots, setWeeklySlots] = useState<Slot[]>(() => toSlots(initial));
+  const [biweeklySlots, setBiweeklySlots] = useState<Slot[]>(() => toSlots(initialBiweekly));
+  const selected = fromSlots(weeklySlots);
+  const biweekly = fromSlots(biweeklySlots);
   // react-multi-date-picker wants a DateObject; the DB stores Gregorian ISO.
   const [anchor, setAnchor] = useState<PickerDate | null>(
     initialAnchor ? gregorianToPersianDateObject(initialAnchor, locale) : null
@@ -75,17 +90,72 @@ export function WorkSettingsForm({
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  // Three states, so this cannot be a checkbox. A second parallel checkbox list
-  // would also let an admin mark one day both weekly and every-other-week, which
-  // the server and a CHECK constraint both refuse — better to make it unsayable.
-  const setFrequency = (iso: number, next: WeekendFrequency) => {
-    setSelected((prev) =>
-      next === 'weekly' ? [...prev.filter((d) => d !== iso), iso] : prev.filter((d) => d !== iso)
-    );
-    setBiweekly((prev) =>
-      next === 'biweekly' ? [...prev.filter((d) => d !== iso), iso] : prev.filter((d) => d !== iso)
-    );
-  };
+  // A day can be in only one slot across BOTH rows: weekly and every other
+  // week at once is refused by the server and a CHECK constraint, so the other
+  // slots' days are disabled in each dropdown rather than rejected on save.
+  const used = new Set([...selected, ...biweekly]);
+  const keyOf = (iso: number) => WEEKDAYS.find((d) => d.iso === iso)?.key ?? '';
+  const isoOf = (key: string): Slot => WEEKDAYS.find((d) => d.key === key)?.iso ?? null;
+
+  const renderRow = (
+    kind: 'weekly' | 'biweekly',
+    slots: Slot[],
+    setSlots: (fn: (prev: Slot[]) => Slot[]) => void
+  ) => (
+    <>
+      {slots.map((slot, i) => (
+        <div key={i} className="flex items-center gap-1">
+          {/* Native <select> — must stay native for Playwright selectOption. */}
+          <select
+            value={slot === null ? 'none' : keyOf(slot)}
+            disabled={isPending}
+            data-testid={`weekend-${kind}-${i}`}
+            aria-label={kind === 'weekly' ? labels.frequencyWeekly : labels.frequencyBiweekly}
+            onChange={(e) => {
+              const next = isoOf(e.target.value);
+              setSlots((prev) => prev.map((v, j) => (j === i ? next : v)));
+            }}
+            className={cn(nativeSelectClass, 'h-9 w-auto min-w-36 rounded-[10px] bg-card text-[13px]')}
+          >
+            <option value="none">{labels.dayNone}</option>
+            {WEEKDAYS.map((d) => (
+              <option key={d.key} value={d.key} disabled={d.iso !== slot && used.has(d.iso)}>
+                {labels.days[d.key]}
+              </option>
+            ))}
+          </select>
+          {slots.length > 1 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              disabled={isPending}
+              aria-label={labels.removeDay}
+              data-testid={`weekend-${kind}-remove-${i}`}
+              onClick={() => setSlots((prev) => prev.filter((_, j) => j !== i))}
+              className="text-muted-foreground hover:text-destructive"
+            >
+              <X aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+      ))}
+      {slots.length < WEEKDAYS.length && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={isPending}
+          data-testid={`weekend-${kind}-add`}
+          onClick={() => setSlots((prev) => [...prev, null])}
+          className="text-primary hover:text-primary"
+        >
+          <Plus aria-hidden="true" />
+          {labels.addDay}
+        </Button>
+      )}
+    </>
+  );
 
   const onSave = () => {
     setOkMsg('');
@@ -121,56 +191,52 @@ export function WorkSettingsForm({
         <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.weekendHint}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 px-6 py-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        {WEEKDAYS.map((d) => {
-          const freq = frequencyOf(d.iso, selected, biweekly);
-          return (
-            <label
-              key={d.iso}
-              data-testid={`weekend-${d.key}`}
-              className={cn(
-                'flex items-center justify-between gap-2 rounded-[10px] border p-2.5',
-                freq === 'working' ? 'bg-card' : 'border-primary/40 bg-primary/5'
-              )}
-            >
-              <span className="whitespace-nowrap text-[13.5px] font-semibold">{labels.days[d.key]}</span>
-              {/* Native <select> — must stay native for Playwright selectOption. */}
-              <select
-                value={freq}
-                disabled={isPending}
-                data-testid={`weekend-freq-${d.key}`}
-                aria-label={labels.days[d.key]}
-                onChange={(e) => setFrequency(d.iso, e.target.value as WeekendFrequency)}
-                className={cn(nativeSelectClass, 'h-8 w-auto min-w-[130px] rounded-[10px] bg-card py-0 text-[12.5px]')}
-              >
-                <option value="working">{labels.frequencyWorking}</option>
-                <option value="weekly">{labels.frequencyWeekly}</option>
-                <option value="biweekly">{labels.frequencyBiweekly}</option>
-              </select>
-            </label>
-          );
-        })}
-      </div>
-
-      {/* Only meaningful once a day is fortnightly: without a reference date the
-          parity — WHICH Thursdays are off — is undefined, and the server refuses
-          the save rather than guessing one. */}
-      {biweekly.length > 0 && (
-        <div className="mx-6 mb-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-primary/40 bg-primary/5 px-3 py-2.5">
-          <label className="whitespace-nowrap text-sm font-medium">{labels.anchorLabel}</label>
-          {/* rmdp-container class is intentional — e2e locates input via it. */}
-          <div data-testid="biweekly-anchor" className="w-[200px]">
-            <DatePicker
-              value={anchor}
-              onChange={setAnchor}
-              calendar={calendarPickerConfig(locale).calendar}
-              locale={calendarPickerConfig(locale).calLocale}
-              inputClass="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
+      {/* Two fixed rows, each a list of day dropdowns. */}
+      <div className="flex flex-col gap-2.5 px-6 py-3.5">
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border p-3"
+          data-testid="weekend-weekly-row"
+        >
+          <span className="w-full whitespace-nowrap text-[13.5px] font-semibold sm:w-44">
+            {labels.frequencyWeekly}
+          </span>
+          {renderRow('weekly', weeklySlots, setWeeklySlots)}
         </div>
-      )}
+
+        <div
+          className="flex flex-col gap-2 rounded-[10px] border p-3"
+          data-testid="weekend-biweekly-row"
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <span className="w-full whitespace-nowrap text-[13.5px] font-semibold sm:w-44">
+              {labels.frequencyBiweekly}
+            </span>
+            {renderRow('biweekly', biweeklySlots, setBiweeklySlots)}
+            {/* Only meaningful once a day is fortnightly: without a reference date
+                the parity — WHICH Thursdays are off — is undefined, and the server
+                refuses the save rather than guessing one. */}
+            {biweekly.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
+                <label className="whitespace-nowrap text-[13px] font-medium">{labels.anchorLabel}</label>
+                {/* rmdp-container class is intentional — e2e locates input via it. */}
+                <div data-testid="biweekly-anchor" className="w-[180px]">
+                  <DatePicker
+                    value={anchor}
+                    onChange={setAnchor}
+                    calendar={calendarPickerConfig(locale).calendar}
+                    locale={calendarPickerConfig(locale).calLocale}
+                    containerClassName="w-full"
+                    inputClass="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          {biweekly.length > 0 && (
+            <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
+          )}
+        </div>
+      </div>
 
       {/* Work-hours window + hourly cap — the bounds hourly requests validate against. */}
       <div className="space-y-3 border-t px-6 py-4">
