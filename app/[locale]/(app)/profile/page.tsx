@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { PageHeader } from '../_components/PageHeader';
+import { PageRefreshButton } from '../_components/PageRefreshButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SettingsForm } from './SettingsForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
@@ -58,7 +59,15 @@ export default async function ProfilePage({ params }: Props) {
 
   return (
     <main className="p-4 max-w-lg mx-auto space-y-4">
-      <PageHeader title={t('title')} />
+      {/* Mobile has no side panel, so its refresh control lives here. */}
+      <PageHeader
+        title={t('title')}
+        action={
+          <div className="md:hidden">
+            <PageRefreshButton />
+          </div>
+        }
+      />
 
       {/* Employee info */}
       <Card>

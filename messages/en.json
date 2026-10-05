@@ -9,7 +9,16 @@
     "request": "Request",
     "calendar": "Calendar",
     "profile": "Profile",
-    "manage": "Manage"
+    "manage": "Manage",
+    "employees": "Employees",
+    "departments": "Departments",
+    "approvals": "Approvals",
+    "requests": "Request archive",
+    "approvalSteps": "Approval steps",
+    "reports": "Reports",
+    "settings": "Settings",
+    "language": "Language",
+    "profileSubtitle": "{role}, profile"
   },
   "refresh": {
     "updated": "Updated {time}",
@@ -711,5 +720,12 @@
     "holidayImportDuplicate": "The file lists the same date twice.",
     "holidayNameTooLong": "A holiday name is too long.",
     "holidayImportNotSaved": "The holidays were not saved. Try again."
+  },
+  "roles": {
+    "admin": "Admin",
+    "hr": "HR",
+    "manager": "Manager",
+    "employee": "Employee",
+    "security": "Security"
   }
 }

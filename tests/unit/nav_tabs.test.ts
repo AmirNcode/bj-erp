@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { tabsForRoles } from '@/lib/nav/tabs';
+import { manageItemsForRoles, settingsItemForRoles, tabsForRoles } from '@/lib/nav/tabs';
 
 describe('tabsForRoles', () => {
-  it('employee: 3 base tabs, no manage (profile lives in the header)', () => {
+  it('employee: 3 base tabs, no manage', () => {
     expect(tabsForRoles(['employee']).map((t) => t.key)).toEqual([
       'home',
       'request',
@@ -29,8 +29,42 @@ describe('tabsForRoles', () => {
     expect(tabsForRoles(['hrx']).map((t) => t.key)).not.toContain('manage');
     expect(tabsForRoles(['HR']).map((t) => t.key)).not.toContain('manage');
   });
-  it('manage tab points at the employees hub', () => {
+  it('mobile manage tab opens the manage list page', () => {
     const manage = tabsForRoles(['admin']).find((t) => t.key === 'manage');
-    expect(manage?.href).toBe('/manage/employees');
+    expect(manage?.href).toBe('/manage');
+  });
+});
+
+describe('manageItemsForRoles', () => {
+  const keys = (roles: string[]) => manageItemsForRoles(roles).map((i) => i.key);
+
+  it('employee and security get no manage group', () => {
+    expect(keys(['employee'])).toEqual([]);
+    expect(keys(['security'])).toEqual([]);
+  });
+  it('manager: employees and approvals only', () => {
+    expect(keys(['employee', 'manager'])).toEqual(['employees', 'approvals']);
+  });
+  it('hr also reaches the request archive and reports', () => {
+    expect(keys(['hr'])).toEqual(['employees', 'approvals', 'requests', 'reports']);
+  });
+  it('admin reaches the whole group', () => {
+    expect(keys(['admin'])).toEqual(['employees', 'approvals', 'requests', 'reports']);
+  });
+  it('the employees hub keeps the nav-manage test id', () => {
+    expect(manageItemsForRoles(['manager'])[0]).toMatchObject({
+      key: 'employees',
+      href: '/manage/employees',
+      testId: 'nav-manage',
+    });
+  });
+});
+
+describe('settingsItemForRoles', () => {
+  it('is admin only', () => {
+    expect(settingsItemForRoles(['admin'])?.testId).toBe('nav-settings');
+    expect(settingsItemForRoles(['hr'])).toBeNull();
+    expect(settingsItemForRoles(['manager'])).toBeNull();
+    expect(settingsItemForRoles(['employee'])).toBeNull();
   });
 });

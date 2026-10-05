@@ -53,12 +53,12 @@ export function PageRefreshButton({ initialUpdatedAt }: Props) {
   return (
     <Button
       type="button"
-      variant="secondary"
+      variant="outline"
       size="xs"
       data-testid="page-refresh-button"
       onClick={handleRefresh}
       disabled={isRefreshing}
-      className="h-8 rounded-full border border-primary/15 bg-card px-3 text-xs font-medium text-muted-foreground shadow-sm hover:bg-primary/10 hover:text-primary"
+      className="h-[30px] self-start whitespace-nowrap rounded-full border bg-card px-3 text-[12.5px] font-semibold text-muted-foreground shadow-none hover:bg-primary/10 hover:text-primary"
     >
       <RefreshCw
         aria-hidden="true"

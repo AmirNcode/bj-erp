@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     // this, `npm run lint` recursively lints compiled third-party output.
     ".claude/**",
     ".codex/**",
+    // Design handoff bundles (reference HTML + vendored support.js), not app code.
+    "docs/design/**",
     ".superpowers/**",
     "coverage/**",
     "dist/**",

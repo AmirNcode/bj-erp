@@ -179,34 +179,8 @@ export default async function EmployeesPage({ params }: Props) {
             <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
               <Link href={`/${locale}/team`}>{tTeam('navLink')}</Link>
             </Button>
-            {isAdmin && (
-              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
-                <Link href={`/${locale}/manage/settings`} data-testid="nav-settings">
-                  {t('settingsLink')}
-                </Link>
-              </Button>
-            )}
-            <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
-              <Link href={`/${locale}/manage/approvals`}>{t('approvalsLink')}</Link>
-            </Button>
-            {/* FR-38 review screen. hr + admin only — a manager decides on their
-                own reports via Approvals and has no business browsing every
-                employee's private reason. */}
-            {(isAdmin || isHr) && (
-              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
-                <Link href={`/${locale}/manage/requests`} data-testid="nav-requests">
-                  {t('requestsLink')}
-                </Link>
-              </Button>
-            )}
-            {/* FR-37 reports. Same audience as the review screen. */}
-            {(isAdmin || isHr) && (
-              <Button variant="ghost" size="sm" className="px-0 sm:px-3" asChild>
-                <Link href={`/${locale}/manage/reports`} data-testid="nav-reports">
-                  {t('reportsLink')}
-                </Link>
-              </Button>
-            )}
+            {/* Settings, Approvals, Request archive and Reports moved to the
+                side panel (and the mobile Manage list) with the 2026-10 shell. */}
             {(isAdmin || isHr) && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/${locale}/manage/employees/import`} data-testid="import-link">

@@ -1,4 +1,13 @@
-import type { TabKey } from '@/lib/nav/tabs';
+import {
+  Archive,
+  ChartNoAxesColumn,
+  CircleCheck,
+  Network,
+  Settings,
+  Users,
+  Workflow,
+} from 'lucide-react';
+import type { NavItemKey, TabKey } from '@/lib/nav/tabs';
 
 function Svg({ children }: { children: React.ReactNode }) {
   return (
@@ -50,4 +59,17 @@ export const NAV_ICONS: Record<TabKey, React.ReactNode> = {
       <rect x="13" y="13" width="7" height="7" rx="1" />
     </Svg>
   ),
+};
+
+const itemIcon = { size: 20, strokeWidth: 1.8, 'aria-hidden': true } as const;
+
+/** Icons for the side panel's Manage group and Settings (lucide-react). */
+export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
+  employees: <Users {...itemIcon} />,
+  departments: <Network {...itemIcon} />,
+  approvals: <CircleCheck {...itemIcon} />,
+  requests: <Archive {...itemIcon} />,
+  approvalSteps: <Workflow {...itemIcon} />,
+  reports: <ChartNoAxesColumn {...itemIcon} />,
+  settings: <Settings {...itemIcon} />,
 };

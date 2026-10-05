@@ -9,7 +9,16 @@
     "request": "درخواست",
     "calendar": "تقویم",
     "profile": "پروفایل",
-    "manage": "مدیریت"
+    "manage": "مدیریت",
+    "employees": "کارکنان",
+    "departments": "واحدها",
+    "approvals": "تأییدها",
+    "requests": "بایگانی درخواست‌ها",
+    "approvalSteps": "مراحل تأیید",
+    "reports": "گزارش‌ها",
+    "settings": "تنظیمات",
+    "language": "زبان",
+    "profileSubtitle": "{role} ، پروفایل"
   },
   "refresh": {
     "updated": "به‌روزرسانی {time}",
@@ -711,5 +720,12 @@
     "holidayImportDuplicate": "یک تاریخ در فایل دو بار آمده است.",
     "holidayNameTooLong": "نام تعطیلی بیش از حد طولانی است.",
     "holidayImportNotSaved": "تعطیلات ذخیره نشد. دوباره تلاش کنید."
+  },
+  "roles": {
+    "admin": "ادمین",
+    "hr": "منابع انسانی",
+    "manager": "سرپرست",
+    "employee": "کارمند",
+    "security": "حراست"
   }
 }

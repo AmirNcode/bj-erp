@@ -17,6 +17,7 @@ describe('RoutePrefetcher', () => {
       expect(prefetch).toHaveBeenCalledWith('/en/request');
       expect(prefetch).toHaveBeenCalledWith('/en/calendar');
       expect(prefetch).toHaveBeenCalledWith('/en/profile');
+      expect(prefetch).toHaveBeenCalledWith('/en/manage');
       expect(prefetch).toHaveBeenCalledWith('/en/manage/employees');
     });
   });

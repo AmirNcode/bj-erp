@@ -16,6 +16,12 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: routerRefresh, prefetch: vi.fn() }),
 }));
 
+vi.mock('@/i18n/navigation', () => ({
+  usePathname: () => '/home',
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+vi.mock('@/lib/actions/profile', () => ({ updateMyPrefs: vi.fn() }));
+
 vi.mock('@/lib/actions/refresh', () => ({
   refreshRoute: vi.fn(async () => ({ ok: true, refreshedAt: '2026-06-30T21:00:00.000Z' })),
 }));
@@ -67,34 +73,52 @@ describe('PageHeader', () => {
   });
 });
 
-describe('AppShell header', () => {
+describe('AppShell side panel', () => {
   const labels = {
     home: 'Home',
     request: 'Request',
     calendar: 'Calendar',
     profile: 'Profile',
     manage: 'Manage',
+    manageGroup: 'Manage',
+    employees: 'Employees',
+    departments: 'Departments',
+    approvals: 'Approvals',
+    requests: 'Request archive',
+    approvalSteps: 'Approval steps',
+    reports: 'Reports',
+    settings: 'Settings',
+    language: 'Language',
+    langFa: 'فارسی',
+    langEn: 'English',
   };
 
-  it.each([
-    ['en', 'ltr'],
-    ['fa', 'rtl'],
-  ])('in %s, renders one refresh control just before the profile link (%s)', (locale, dir) => {
-    renderWithIntl(
-      <AppShell roles={['employee']} locale={locale} labels={labels} appName="BJ">
+  it.each(['en', 'fa'])('in %s, has no header and one refresh control just before the profile link', (locale) => {
+    const { container } = renderWithIntl(
+      <AppShell
+        roles={['employee']}
+        locale={locale}
+        labels={labels}
+        appName="BJ"
+        profile={{ name: 'Amir', subtitle: 'Employee, profile' }}
+      >
         <p>content</p>
       </AppShell>,
       locale
     );
 
+    expect(container.querySelector('header')).toBeNull();
     const refresh = screen.getAllByTestId('page-refresh-button');
     expect(refresh).toHaveLength(1);
     const profile = screen.getByTestId('nav-profile');
-    const group = profile.parentElement as HTMLElement;
-    expect(group.contains(refresh[0])).toBe(true);
+    expect(profile.textContent).toContain('Amir');
     expect(
       refresh[0].compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
-    expect(group.getAttribute('dir')).toBe(dir);
+    // The language switch sits directly below the profile link.
+    expect(
+      profile.compareDocumentPosition(screen.getByTestId('nav-lang-en')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });
