@@ -388,7 +388,8 @@ async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, pre
  * The input steps by half days, so the new figure is rounded to the nearest 0.5.
  */
 export async function allocate(page: Page, employeeCode: string, days: number): Promise<string> {
-  await page.goto('/manage/employees');
+  // The list is paginated (25/page): search for the row.
+  await page.goto(`/manage/employees?q=${encodeURIComponent(employeeCode)}`);
   const row = page.locator('tr', { hasText: employeeCode }).first();
   await expect(row).toBeVisible({ timeout: 20_000 });
   await row.locator('a[href*="/manage/employees/"]').first().click();

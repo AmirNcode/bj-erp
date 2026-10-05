@@ -83,8 +83,8 @@ test.skip('admin creates a department and hires an employee into it', async ({ p
 
 /**
  * The replacement for the test above (spec 2026-07-30 §7): Add Department now
- * lives in Manage → Settings, has no code field, and Cancel returns to
- * Settings. Creating a department still lets the admin hire into it, and the
+ * lives in Manage → Departments, has no code field, and Cancel returns to
+ * Departments. Creating a department still lets the admin hire into it, and the
  * generated login code is now the bare personnel number.
  *
  * The English name starts with a `zz####` token so the auto-generated code
@@ -92,7 +92,7 @@ test.skip('admin creates a department and hires an employee into it', async ({ p
  * by scripts/cleanup-e2e.mjs; the 999####### login code is reaped by
  * app_cleanup_e2e_users().
  */
-test('admin adds a department from Settings and hires into it', async ({ page }) => {
+test('admin adds a department from Manage › Departments and hires into it', async ({ page }) => {
   test.setTimeout(180_000); // cold `next dev` compiles each route on first hit
   const token = nextTestDepartmentCode();
   const pno = nextTestPersonnelNo();
@@ -110,9 +110,9 @@ test('admin adds a department from Settings and hires into it', async ({ page })
   await addDept.click();
   await expect(page).toHaveURL(/\/manage\/departments\/new$/, { timeout: 15_000 });
 
-  // Cancel returns to Settings (it used to go to the Employees list).
+  // Cancel returns to Manage › Departments, where the Add button lives.
   await page.click('[data-testid="dept-cancel"]');
-  await expect(page).toHaveURL(/\/manage\/settings$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/manage\/departments$/, { timeout: 15_000 });
 
   await page.locator('[data-testid="add-department-link"]').click();
   await expect(page).toHaveURL(/\/manage\/departments\/new$/, { timeout: 15_000 });
@@ -163,7 +163,7 @@ test('admin adds a department from Settings and hires into it', async ({ page })
 });
 
 /**
- * Settings → Departments card (spec 2026-07-30 §7 / D10): names only, each row
+ * Manage → Departments card (spec 2026-07-30 §7 / D10): names only, each row
  * opens a members panel grouped Managers then Workers, dismissable by the X,
  * an outside click, and Esc.
  */
