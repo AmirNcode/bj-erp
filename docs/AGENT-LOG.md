@@ -78,6 +78,30 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-05 — Local redeploy of c4decca (select chevrons, weekly days off)
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ c4decca
+
+- User reported Liara VM back and deploy rerun succeeded (not verified by me).
+- `./deploy/bj-deploy app local`, no new migrations, DB untouched. `/api/health` 200, `/login` 200.
+
+## 2026-10-05 — Follow-up: select chevrons, weekly days-off rows
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD:** main @ c4decca (not pushed)
+- `app/globals.css`: unlayered rule gives every single-line `<select>` an inset SVG chevron
+  (`appearance: none`, `padding-inline-end: 2.25rem`, flipped under `[dir='rtl']`).
+- `settings/WorkSettingsForm.tsx`: per-day 3-way selects replaced by two fixed rows ("Off every
+  week", "Off every other week"), each a list of day selects (`weekend-weekly-N`,
+  `weekend-biweekly-N`, with `-add` / `-remove-N` buttons; Amir chose "one day, add more"). A day
+  used anywhere is disabled elsewhere. Starting date inline on the biweekly row. `frequencyOf`
+  in `lib/leave/weekend.ts` is now used only by its unit test.
+- E2E `admin-settings` and `weekend-frequency` rewritten for the new ids. After Amir installed
+  the Playwright browser: full serial run 41 passed / 6 failed / 1 skipped. All 6 were test-side
+  misses from the redesign (`allocate()` in `_helpers.ts` still read an unpaginated list;
+  department Cancel now lands on `/manage/departments`). Fixed; re-run of the 4 affected specs:
+  13 passed, 1 skipped (pre-existing `test.skip`). Not pushed, per Amir. Unit 455 passed, lint + tsc clean, checked in browser (en + fa).
+  No settings were saved; local admin language toggled fa and back to en.
+
 ## 2026-10-05 — Local redeploy of HR admin redesign
 
 **Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ fd407bf
@@ -90,6 +114,9 @@ Copy this block verbatim and fill it in.
 - Run 37266101461 FAILED: build ok, deploy step `ssh: connect to host 62.60.191.132 port 32222:
   Connection timed out` before any file transfer. Mac probe 05:1x UTC: SSH 32222 and HTTPS 443 both
   time out too, so the VM is unreachable again (like 2026-10-04). Live release unchanged. No VM restart done.
+- VM came back (SSH open, health 200) after user action; user pushed c1325f3 → run 37324007112 also
+  FAILED with same SSH timeout at 14:23 UTC; Mac probes then timed out again. VM reachability is
+  intermittent — needs Liara support / root cause. Live release still old.
 
 ## 2026-10-05 — HR admin UI redesign (shell, Home, Employees, Settings, Reports)
 
