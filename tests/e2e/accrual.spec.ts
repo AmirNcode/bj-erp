@@ -23,14 +23,14 @@ test('accrual posts earned months once, and re-running changes nothing', async (
   const { code } = await createEmployee(page, { name: 'Accrual Probe', roles: ['employee'] });
 
   // Post accruals for everyone and capture the summary.
-  await page.goto('/manage/settings');
+  await page.goto('/manage/departments');
   await expect(page.locator('[data-testid="accrual-runner"]')).toBeVisible({ timeout: 20_000 });
   await page.click('[data-testid="accrual-run-btn"]');
   await expect(page.locator('[data-testid="accrual-result"]')).toBeVisible({ timeout: 30_000 });
   const firstRun = (await page.locator('[data-testid="accrual-result"]').textContent())?.trim() ?? '';
 
   // The employee's balance after the first run, as the admin sees it.
-  await page.goto('/manage/employees');
+  await page.goto(`/manage/employees?q=${code}`); // paginated list: search
   await page.click(`tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`);
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 20_000 });
   const balanceAfterFirst = await page
@@ -38,12 +38,12 @@ test('accrual posts earned months once, and re-running changes nothing', async (
     .inputValue();
 
   // Run it again. Every month is already posted, so nothing may change.
-  await page.goto('/manage/settings');
+  await page.goto('/manage/departments');
   await expect(page.locator('[data-testid="accrual-runner"]')).toBeVisible({ timeout: 20_000 });
   await page.click('[data-testid="accrual-run-btn"]');
   await expect(page.locator('[data-testid="accrual-result"]')).toBeVisible({ timeout: 30_000 });
 
-  await page.goto('/manage/employees');
+  await page.goto(`/manage/employees?q=${code}`); // paginated list: search
   await page.click(`tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`);
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 20_000 });
   const balanceAfterSecond = await page

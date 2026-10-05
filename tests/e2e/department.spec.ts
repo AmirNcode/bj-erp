@@ -100,7 +100,7 @@ test('admin adds a department from Settings and hires into it', async ({ page })
   const nameEn = `${token} E2E Department`;
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/manage/settings');
+  await page.goto('/manage/departments');
 
   // The button now lives at the bottom of the Departments card, not on the
   // Employees page.
@@ -171,7 +171,7 @@ test('the Departments card opens a members dialog and closes three ways', async 
   test.setTimeout(120_000);
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/manage/settings');
+  await page.goto('/manage/departments');
 
   const list = page.locator('[data-testid="dept-list"]');
   await expect(list).toBeVisible({ timeout: 15_000 });
@@ -224,9 +224,9 @@ test('a manager cannot reach the new-department page', async ({ page }) => {
 
   await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
 
-  // Settings (which now hosts the Add Department button) is admin-only.
-  await page.goto('/manage/settings');
-  await expect(page).toHaveURL(/\/home$/, { timeout: 15_000 });
+  // Manage › Departments (which hosts the Add Department button) is admin-only.
+  await page.goto('/manage/departments');
+  await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 15_000 });
 
   await page.goto('/manage/departments/new');
   await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 15_000 });

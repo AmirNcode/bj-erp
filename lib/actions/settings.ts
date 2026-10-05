@@ -24,6 +24,8 @@ export async function getCompanyHolidays(): Promise<
       workStart: string;
       workEnd: string;
       maxHourlyMinutesPerDay: number;
+      /** When work settings were last saved (null before the first save). */
+      updatedAt: string | null;
     }
   | { ok: false; error: string }
 > {
@@ -38,7 +40,7 @@ export async function getCompanyHolidays(): Promise<
     c.supabase
       .from('work_settings')
       .select(
-        'weekend_days, biweekly_weekend_days, biweekly_anchor, work_start, work_end, max_hourly_minutes_per_day'
+        'weekend_days, biweekly_weekend_days, biweekly_anchor, work_start, work_end, max_hourly_minutes_per_day, updated_at'
       )
       .eq('company_id', c.companyId)
       .maybeSingle(),
@@ -54,6 +56,7 @@ export async function getCompanyHolidays(): Promise<
     workStart: ws?.work_start ?? '07:00',
     workEnd: ws?.work_end ?? '15:00',
     maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
+    updatedAt: ws?.updated_at ?? null,
   };
 }
 

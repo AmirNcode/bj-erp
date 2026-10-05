@@ -286,8 +286,10 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
                       className="text-primary hover:text-primary"
                       asChild
                     >
-                      <Link href={`/${locale}/manage/employees/${emp.id}`} aria-label={`${labels.edit}: ${emp.full_name}`}>
+                      <Link href={`/${locale}/manage/employees/${emp.id}`}>
                         <Pencil aria-hidden="true" />
+                        {/* Visible to screen readers and to e2e `a:has-text("Edit")`. */}
+                        <span className="sr-only">{labels.edit}</span>
                       </Link>
                     </Button>
                   </td>

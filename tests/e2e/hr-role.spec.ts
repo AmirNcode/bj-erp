@@ -67,17 +67,20 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
 
   // ── the boundaries ────────────────────────────────────────────────────────
   //
-  // CHANGED BY FR-42: /manage/settings no longer bounces HR, because HR now
-  // configures the approval chain. The boundary did not disappear, it moved
-  // INSIDE the page — HR gets the approval card and nothing else, and the
-  // admin-only cards are not rendered at all rather than merely hidden by CSS.
-  // Asserting their absence is what keeps this a real boundary test.
-  await page.goto('/manage/settings');
+  // FR-42: HR configures the approval chain, which since the 2026-10 redesign
+  // has its own page under Manage. Company config (work settings, holidays)
+  // lives on /settings, which bounces HR home; the old /manage/settings URL
+  // forwards HR to the approval chain and nothing else.
+  await page.goto('/manage/approval-steps');
   await expect(page.locator('[data-testid="approval-steps-card"]')).toBeVisible({
     timeout: 20_000,
   });
   await expect(page.locator('[data-testid="work-settings"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="holiday-editor"]')).toHaveCount(0);
+  await page.goto('/settings');
+  await expect(page).toHaveURL(/\/home$/, { timeout: 20_000 });
+  await page.goto('/manage/settings');
+  await expect(page).toHaveURL(/\/manage\/approval-steps$/, { timeout: 20_000 });
 
   // Departments are company-wide config too; admins only.
   await page.goto('/manage/departments/new');

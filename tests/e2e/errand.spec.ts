@@ -52,7 +52,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   // monthly accrual may add another day. Only "it did not move" is our claim.
   const balanceField = page.locator('[data-testid="balance-days-annual"]');
   const openEmployee = async () => {
-    await page.goto('/manage/employees');
+    await page.goto(`/manage/employees?q=${code}`); // paginated list: search
     await page.click(
       `tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`
     );

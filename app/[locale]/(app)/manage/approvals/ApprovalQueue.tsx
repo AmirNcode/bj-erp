@@ -140,7 +140,7 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         {req.unit === 'hour'
                           ? formatTimeRange(req.start_time, req.end_time, locale)
                           : labels.dayPartLabels[req.day_part]}{' '}
-                        · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
+                        - {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
                       </div>
                       {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
                           which is the requester's personnel number (spec §5). */}

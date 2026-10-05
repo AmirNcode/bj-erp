@@ -413,10 +413,6 @@
     }
   },
   "manage": {
-    "approvalsLink": "تأیید درخواست‌ها",
-    "requestsLink": "بررسی درخواست‌ها",
-    "reportsLink": "گزارش‌ها",
-    "settingsLink": "تنظیمات",
     "employees": {
       "title": "مدیریت کارمندان",
       "newTitle": "افزودن کارمند جدید",
@@ -510,12 +506,11 @@
       "createdTitle": "واحد ایجاد شد",
       "createdHint": "اکنون می‌توانید برای این واحد کارمند تعریف کنید.",
       "addEmployee": "افزودن کارمند",
-      "backToSettings": "بازگشت به تنظیمات",
+      "backToSettings": "بازگشت به واحدها",
       "nameRequired": "نام فارسی و انگلیسی هر دو الزامی است.",
       "error": "خطا"
     },
     "settings": {
-      "title": "تنظیمات کاری",
       "weekendTitle": "روزهای تعطیل هفتگی",
       "weekendHint": "روزهایی که جزو روزهای کاری محسوب نمی‌شوند.",
       "frequencyWorking": "روز کاری",
@@ -641,7 +636,9 @@
           "dupInFile": "این تاریخ بیش از یک بار در فایل آمده است.",
           "noRows": "فایل هیچ سطر تعطیلی ندارد."
         }
-      }
+      },
+      "lastSaved": "آخرین ذخیره: {date}",
+      "holidaysCount": "{count} تعطیلی ثبت‌شده"
     },
     "import": {
       "title": "ورود گروهی کارکنان",

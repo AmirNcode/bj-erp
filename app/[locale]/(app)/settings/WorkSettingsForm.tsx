@@ -8,7 +8,11 @@ import { WEEKDAYS, frequencyOf, type WeekendFrequency } from '@/lib/leave/weeken
 import { dateObjectToGregorian, gregorianToPersianDateObject, type PickerDate } from '@/lib/leave/dateConvert';
 import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { nativeSelectClass } from '@/lib/native-select';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { todayInAppTz } from '@/lib/appDate';
+import { cn } from '@/lib/utils';
 
 type Labels = {
   weekendTitle: string;
@@ -19,6 +23,8 @@ type Labels = {
   workEnd: string;
   hourlyCap: string;
   save: string;
+  /** "Last saved: {date}" — substituted here. */
+  lastSaved: string;
   saved: string;
   errorLabel: string;
   days: Record<string, string>;
@@ -34,6 +40,7 @@ export function WorkSettingsForm({
   initial,
   initialBiweekly,
   initialAnchor,
+  initialUpdatedAt,
   initialWorkStart,
   initialWorkEnd,
   initialHourlyCapMinutes,
@@ -43,6 +50,8 @@ export function WorkSettingsForm({
   initial: number[];
   initialBiweekly: number[];
   initialAnchor: string | null;
+  /** work_settings.updated_at, for the footer's "last saved". */
+  initialUpdatedAt: string | null;
   initialWorkStart: string;
   initialWorkEnd: string;
   initialHourlyCapMinutes: number;
@@ -61,6 +70,7 @@ export function WorkSettingsForm({
   // The cap is stored in minutes and edited in hours — hours is what the client
   // says ("up to 4 hours"), minutes is what the ledger needs.
   const [capHours, setCapHours] = useState(initialHourlyCapMinutes / 60);
+  const [savedAt, setSavedAt] = useState<string | null>(initialUpdatedAt);
   const [okMsg, setOkMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -90,6 +100,7 @@ export function WorkSettingsForm({
         maxHourlyMinutesPerDay: Math.round(capHours * 60),
       });
       if (res.ok) {
+        setSavedAt(new Date().toISOString());
         setOkMsg(labels.saved);
         toast.success(labels.saved);
       } else {
@@ -99,34 +110,30 @@ export function WorkSettingsForm({
     });
   };
 
+  const inputClass =
+    'h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-[180px]';
+
+  // Save covers this card only (weekly days off + working hours).
   return (
-    <section className="space-y-4" data-testid="work-settings">
-      <div>
-        <p className="text-sm font-medium">{labels.weekendTitle}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{labels.weekendHint}</p>
+    <Card className="gap-0 py-0" data-testid="work-settings">
+      <div className="px-6 pt-5 pb-1">
+        <h2 className="text-base font-semibold">{labels.weekendTitle}</h2>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.weekendHint}</p>
       </div>
-      {okMsg && (
-        <p role="status" data-testid="work-settings-saved" className="text-sm text-success">
-          {okMsg}
-        </p>
-      )}
-      {errMsg && (
-        <p role="alert" data-testid="work-settings-error" className="text-sm text-destructive">
-          {labels.errorLabel}: {errMsg}
-        </p>
-      )}
-      <div className="grid gap-2 sm:grid-cols-2">
+
+      <div className="grid grid-cols-1 gap-2 px-6 py-3.5 sm:grid-cols-2 lg:grid-cols-4">
         {WEEKDAYS.map((d) => {
           const freq = frequencyOf(d.iso, selected, biweekly);
           return (
             <label
               key={d.iso}
               data-testid={`weekend-${d.key}`}
-              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
-                freq === 'working' ? 'border-input bg-background' : 'border-primary/40 bg-primary/5'
-              }`}
+              className={cn(
+                'flex items-center justify-between gap-2 rounded-[10px] border p-2.5',
+                freq === 'working' ? 'bg-card' : 'border-primary/40 bg-primary/5'
+              )}
             >
-              <span className="font-medium">{labels.days[d.key]}</span>
+              <span className="whitespace-nowrap text-[13.5px] font-semibold">{labels.days[d.key]}</span>
               {/* Native <select> — must stay native for Playwright selectOption. */}
               <select
                 value={freq}
@@ -134,7 +141,7 @@ export function WorkSettingsForm({
                 data-testid={`weekend-freq-${d.key}`}
                 aria-label={labels.days[d.key]}
                 onChange={(e) => setFrequency(d.iso, e.target.value as WeekendFrequency)}
-                className={`${nativeSelectClass} h-8 w-auto max-w-40 py-0 text-xs`}
+                className={cn(nativeSelectClass, 'h-8 w-auto min-w-[130px] rounded-[10px] bg-card py-0 text-[12.5px]')}
               >
                 <option value="working">{labels.frequencyWorking}</option>
                 <option value="weekly">{labels.frequencyWeekly}</option>
@@ -149,28 +156,29 @@ export function WorkSettingsForm({
           parity — WHICH Thursdays are off — is undefined, and the server refuses
           the save rather than guessing one. */}
       {biweekly.length > 0 && (
-        <div className="space-y-1.5 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5">
-          <label className="text-sm font-medium">{labels.anchorLabel}</label>
+        <div className="mx-6 mb-3.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-primary/40 bg-primary/5 px-3 py-2.5">
+          <label className="whitespace-nowrap text-sm font-medium">{labels.anchorLabel}</label>
           {/* rmdp-container class is intentional — e2e locates input via it. */}
-          <div data-testid="biweekly-anchor">
+          <div data-testid="biweekly-anchor" className="w-[200px]">
             <DatePicker
               value={anchor}
               onChange={setAnchor}
               calendar={calendarPickerConfig(locale).calendar}
               locale={calendarPickerConfig(locale).calLocale}
-              inputClass="border border-input rounded-lg px-3 py-2 text-sm w-full bg-background"
+              inputClass="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm"
             />
           </div>
           <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
         </div>
       )}
+
       {/* Work-hours window + hourly cap — the bounds hourly requests validate against. */}
-      <div className="space-y-3 border-t border-border pt-4">
+      <div className="space-y-3 border-t px-6 py-4">
         <div>
-          <p className="text-sm font-medium">{labels.hoursTitle}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{labels.hoursHint}</p>
+          <h3 className="text-sm font-semibold">{labels.hoursTitle}</h3>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.hoursHint}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-3">
           <label className="space-y-1 text-sm">
             <span className="block text-xs text-muted-foreground">{labels.workStart}</span>
             <input
@@ -180,7 +188,7 @@ export function WorkSettingsForm({
               disabled={isPending}
               dir="ltr"
               data-testid="work-start"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={inputClass}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -192,7 +200,7 @@ export function WorkSettingsForm({
               disabled={isPending}
               dir="ltr"
               data-testid="work-end"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={inputClass}
             />
           </label>
           <label className="space-y-1 text-sm">
@@ -206,20 +214,39 @@ export function WorkSettingsForm({
               onChange={(e) => setCapHours(Number(e.target.value))}
               disabled={isPending}
               data-testid="hourly-cap-hours"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className={inputClass}
             />
           </label>
         </div>
       </div>
 
-      <Button
-        type="button"
-        data-testid="work-settings-save"
-        onClick={onSave}
-        disabled={isPending}
-      >
-        {labels.save}
-      </Button>
-    </section>
+      {errMsg && (
+        <p role="alert" data-testid="work-settings-error" className="px-6 pb-3 text-sm text-destructive">
+          {labels.errorLabel}: {errMsg}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t bg-muted/30 px-6 py-3.5">
+        {okMsg && (
+          <p role="status" data-testid="work-settings-saved" className="text-[12.5px] text-success">
+            {okMsg}
+          </p>
+        )}
+        {savedAt && (
+          <p className="text-[12.5px] text-muted-foreground">
+            {labels.lastSaved.replace('{date}', formatCalendarDate(todayInAppTz(new Date(savedAt)), locale))}
+          </p>
+        )}
+        <Button
+          type="button"
+          data-testid="work-settings-save"
+          onClick={onSave}
+          disabled={isPending}
+          className="rounded-[10px]"
+        >
+          {labels.save}
+        </Button>
+      </div>
+    </Card>
   );
 }

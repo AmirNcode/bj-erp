@@ -23,7 +23,7 @@ test('admin sets a weekday off every other week, with a reference date', async (
   test.setTimeout(180_000);
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/en/manage/settings');
+  await page.goto('/en/settings');
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 30_000 });
 
   const thu = page.locator('[data-testid="weekend-freq-thu"]');

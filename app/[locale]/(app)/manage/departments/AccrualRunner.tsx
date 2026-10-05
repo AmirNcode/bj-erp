@@ -11,7 +11,7 @@ type Labels = {
   hint: string;
   run: string;
   resultTitle: string;
-  /** e.g. "{employees} employees · {rows} entries posted" — filled here, not by next-intl. */
+  /** e.g. "{employees} employees - {rows} entries posted" — filled here, not by next-intl. */
   employeesLabel: string;
   rowsLabel: string;
   nothingToDo: string;
@@ -66,7 +66,7 @@ export function AccrualRunner({ labels, locale }: { labels: Labels; locale: stri
             labels.nothingToDo
           ) : (
             <>
-              {formatNumber(result.employees, locale)} {labels.employeesLabel} ·{' '}
+              {formatNumber(result.employees, locale)} {labels.employeesLabel} -{' '}
               {formatNumber(result.rowsPosted, locale)} {labels.rowsLabel}
             </>
           )}

@@ -90,7 +90,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
               </a>
             </Button>
             <Button variant="outline" asChild>
-              <a href={`/${locale}/manage/settings`} data-testid="dept-back-to-settings">
+              <a href={`/${locale}/manage/departments`} data-testid="dept-back-to-settings">
                 {labels.backToSettings}
               </a>
             </Button>
@@ -158,7 +158,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
                 type="button"
                 variant="outline"
                 data-testid="dept-cancel"
-                onClick={() => router.push(`/${locale}/manage/settings`)}
+                onClick={() => router.push(`/${locale}/manage/departments`)}
               >
                 {labels.cancel}
               </Button>

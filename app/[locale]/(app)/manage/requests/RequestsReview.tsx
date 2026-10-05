@@ -176,11 +176,11 @@ export function RequestsReview({ requests, labels, locale, hoursPerDay }: Props)
                               locale
                             )
                           : '—'}{' '}
-                      ·{' '}
+                      -{' '}
                       {r.start_date === r.end_date
                         ? formatCalendarDate(r.start_date, locale)
                         : `${formatCalendarDate(r.start_date, locale)} — ${formatCalendarDate(r.end_date, locale)}`}
-                      {times ? ` · ${times}` : ''} ·{' '}
+                      {times ? ` - ${times}` : ''} -{' '}
                       {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
                     </div>
 

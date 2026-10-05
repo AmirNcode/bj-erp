@@ -9,18 +9,18 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   const ts = Date.now();
   const HOLIDAY_NAME = `تعطیلی آزمایشی ${ts}`; // unique per run → robust to any leaked row
 
-  // A non-admin is redirected away from /manage/settings (manage layout guard).
+  // A non-admin is redirected away from /settings (admin-only page guard).
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const { code, password } = await createEmployee(page, { name: 'Settings Outsider', roles: ['employee'] });
   await logout(page);
   await login(page, code, password);
-  await page.goto('/manage/settings');
+  await page.goto('/settings');
   await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
   await logout(page);
 
   // Admin: add a holiday and see it listed.
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/manage/settings');
+  await page.goto('/settings');
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 15_000 });
 
   const picker = page.locator('.rmdp-container input').first();

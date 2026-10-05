@@ -78,7 +78,7 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
   // test's claim.
   const balanceField = page.locator('[data-testid="balance-days-annual"]');
   const openEmployee = async () => {
-    await page.goto('/manage/employees');
+    await page.goto(`/manage/employees?q=${code}`); // paginated list: search
     await page.click(
       `tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`
     );

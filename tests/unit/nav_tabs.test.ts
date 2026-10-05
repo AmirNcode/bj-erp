@@ -46,10 +46,17 @@ describe('manageItemsForRoles', () => {
     expect(keys(['employee', 'manager'])).toEqual(['employees', 'approvals']);
   });
   it('hr also reaches the request archive and reports', () => {
-    expect(keys(['hr'])).toEqual(['employees', 'approvals', 'requests', 'reports']);
+    expect(keys(['hr'])).toEqual(['employees', 'approvals', 'requests', 'approvalSteps', 'reports']);
   });
   it('admin reaches the whole group', () => {
-    expect(keys(['admin'])).toEqual(['employees', 'approvals', 'requests', 'reports']);
+    expect(keys(['admin'])).toEqual([
+      'employees',
+      'departments',
+      'approvals',
+      'requests',
+      'approvalSteps',
+      'reports',
+    ]);
   });
   it('the employees hub keeps the nav-manage test id', () => {
     expect(manageItemsForRoles(['manager'])[0]).toMatchObject({
@@ -62,7 +69,7 @@ describe('manageItemsForRoles', () => {
 
 describe('settingsItemForRoles', () => {
   it('is admin only', () => {
-    expect(settingsItemForRoles(['admin'])?.testId).toBe('nav-settings');
+    expect(settingsItemForRoles(['admin'])).toMatchObject({ href: '/settings', testId: 'nav-settings' });
     expect(settingsItemForRoles(['hr'])).toBeNull();
     expect(settingsItemForRoles(['manager'])).toBeNull();
     expect(settingsItemForRoles(['employee'])).toBeNull();

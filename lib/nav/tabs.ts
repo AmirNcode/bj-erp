@@ -56,9 +56,12 @@ const MANAGE: ManageEntry[] = [
   // `nav-manage` stays the entry point into Manage on desktop: it is the first
   // item of the group and lands on the employees hub, as the old tab did.
   { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: canManage },
+  { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: isAdmin },
   { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: canManage },
   // FR-38 review screen: hr + admin only.
   { key: 'requests', href: '/manage/requests', labelKey: 'requests', testId: 'nav-requests', allowed: isAdminOrHr },
+  // FR-42: HR configures the approval chain too.
+  { key: 'approvalSteps', href: '/manage/approval-steps', labelKey: 'approvalSteps', testId: 'nav-approval-steps', allowed: isAdminOrHr },
   // FR-37 reports: same audience as the review screen.
   { key: 'reports', href: '/manage/reports', labelKey: 'reports', testId: 'nav-reports', allowed: isAdminOrHr },
 ];
@@ -77,6 +80,6 @@ export function manageItemsForRoles(roles: string[]): NavItem[] {
 /** Settings (weekly days off, official holidays) — company config, admin only. */
 export function settingsItemForRoles(roles: string[]): NavItem | null {
   return isAdmin(roles)
-    ? { key: 'settings', href: '/manage/settings', labelKey: 'settings', testId: 'nav-settings' }
+    ? { key: 'settings', href: '/settings', labelKey: 'settings', testId: 'nav-settings' }
     : null;
 }

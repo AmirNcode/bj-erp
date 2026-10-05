@@ -252,7 +252,7 @@ export function HolidayImportDialog({
                 </span>
                 {counts.updated > 0 && (
                   <>
-                    {' · '}
+                    {' - '}
                     <span data-testid="holiday-import-updated">
                       {labels.willUpdate.replace('{count}', formatNumber(counts.updated, locale))}
                     </span>

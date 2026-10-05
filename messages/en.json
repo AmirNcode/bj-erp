@@ -413,10 +413,6 @@
     }
   },
   "manage": {
-    "approvalsLink": "Approvals",
-    "requestsLink": "Request review",
-    "reportsLink": "Reports",
-    "settingsLink": "Settings",
     "employees": {
       "title": "Manage Employees",
       "newTitle": "Add New Employee",
@@ -510,12 +506,11 @@
       "createdTitle": "Department created",
       "createdHint": "You can now add employees to this department.",
       "addEmployee": "Add an employee",
-      "backToSettings": "Back to settings",
+      "backToSettings": "Back to departments",
       "nameRequired": "Both the Farsi and English names are required.",
       "error": "Error"
     },
     "settings": {
-      "title": "Work settings",
       "weekendTitle": "Weekly days off",
       "weekendHint": "Days that do not count as working days.",
       "frequencyWorking": "Working day",
@@ -641,7 +636,9 @@
           "dupInFile": "This date appears more than once in the file.",
           "noRows": "The file has no holiday rows."
         }
-      }
+      },
+      "lastSaved": "Last saved: {date}",
+      "holidaysCount": "{count} holidays recorded"
     },
     "import": {
       "title": "Bulk employee import",

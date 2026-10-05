@@ -28,7 +28,7 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   const subject = await createEmployee(page, { name: 'Chain Signer', roles: ['employee'] });
   const hrUser = await createEmployee(page, { name: 'Chain HR', roles: ['hr'] });
 
-  await page.goto('/en/manage/settings');
+  await page.goto('/en/manage/approval-steps');
   const card = page.locator('[data-testid="approval-steps-card"]');
   await expect(card).toBeVisible({ timeout: 30_000 });
 
@@ -61,10 +61,10 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
     page.locator('[data-testid="approval-steps-card"]').locator('li', { hasText: 'Chain Signer' })
   ).toBeVisible({ timeout: 20_000 });
 
-  // ── 2. HR reaches Settings, and sees ONLY the approval chain ──────────────
+  // ── 2. HR reaches the approval chain, and only that ───────────────────────
   await logout(page);
   await login(page, hrUser.code, hrUser.password);
-  await page.goto('/en/manage/settings');
+  await page.goto('/en/manage/approval-steps');
 
   await expect(page.locator('[data-testid="approval-steps-card"]')).toBeVisible({
     timeout: 30_000,
@@ -81,7 +81,7 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   // ── 3. Restore: remove the added step ─────────────────────────────────────
   await logout(page);
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/en/manage/settings');
+  await page.goto('/en/manage/approval-steps');
   const row = page
     .locator('[data-testid="approval-steps-card"]')
     .locator('li', { hasText: 'Chain Signer' });
