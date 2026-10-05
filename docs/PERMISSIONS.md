@@ -81,7 +81,7 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `departments`, `work_settings`, `holidays`, `leave_types`
 - **SELECT**: any active authenticated company member.
-- **WRITE**: `is_admin` only. The FR-24 admin editor (`/manage/settings`) writes `work_settings` /
+- **WRITE**: `is_admin` only. The FR-24 admin editor (`/settings`, admin-only since 2026-10-05) writes `work_settings` /
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
   unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
   admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs
@@ -151,10 +151,10 @@ employee who reached it would still read only their own rows.
 - **SELECT**: any active authenticated company member. Deliberately open: the requester is shown
   which steps their request is waiting on, so this is progress information, not privileged config.
 - **INSERT/UPDATE/DELETE**: `is_admin` **OR `has_role(hr)`** since 2026-08-18 (FR-42), through the
-  Manage → Settings card. Like `work_settings` and `holidays`, this is company configuration and
-  needs no SECURITY DEFINER wrapper. **This widens exactly one table**: HR still cannot edit work
-  settings, holidays, departments, leave types or roles, and `/manage/settings` renders only the
-  approval card for a non-admin. The order-enforcement switch stays admin-only because it writes
+  Manage → Approval steps page (`/manage/approval-steps`, admin + hr since 2026-10-05). Like
+  `work_settings` and `holidays`, this is company configuration and needs no SECURITY DEFINER
+  wrapper. **This widens exactly one table**: HR still cannot edit work settings, holidays,
+  departments, leave types or roles; `/settings` and `/manage/departments` redirect HR away. The order-enforcement switch stays admin-only because it writes
   `work_settings`.
 - **Who may fill a NAMED step (FR-42)**: only the person in `approver_id`, and only while their
   account is active. There is **no admin override** — unlike a role step, where FR-36 deliberately

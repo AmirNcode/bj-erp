@@ -49,7 +49,7 @@ Context7 before using them** — no training-data API details.
 ```
 CLAUDE.md                  ← you are here
 app/[locale]/              Next.js App Router — (auth)/login + (app)/* authed screens
-  (app)/                   home · request · calendar · profile · team · manage/* (RBAC layout guard)
+  (app)/                   home · request · calendar · profile · settings (admin) · manage/* (RBAC layout guard)
     _components/           AppShell, MainNav, PageHeader, nav-icons
     request/_components/   FormParts + useRequestForm: shared pieces of the four request forms
   (print)/print/request    printable paper form of a request

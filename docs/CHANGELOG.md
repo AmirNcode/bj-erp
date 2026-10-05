@@ -9,6 +9,31 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### HR admin redesign (2026-10-05)
+
+From the design handoff in `docs/design/design_handoff_hr_admin_redesign/README.md`:
+- **App shell:** the top header is gone. The side panel carries the logo, Home / Request /
+  Calendar, a labelled **Manage** group (Employees, Departments, Approvals with a pending-count
+  badge, Request archive, Approval steps, Reports; each role sees only what it can reach),
+  **Settings** on its own (admin), and a footer with refresh, the profile link and a fa/en switch.
+  Mobile keeps the bottom bar, now with a Profile tab; its Manage tab opens a `/manage` list.
+- **Home:** the four request buttons are removed. Approvers get a pulse band (present today, on
+  leave by type, on errand, awaiting approval with the oldest age) scoped to their team or the
+  company, and the top five pending requests with inline approve/reject, a short-staffed warning
+  and the balance after approval. Everyone sees entitled / used per leave type and the next
+  official holiday.
+- **Manage › Employees:** search by name or personnel number, an all / my direct reports /
+  inactive filter, a department filter, localized role chips, the next upcoming leave, lock hints
+  for managers, and server-side pagination at 25 per page. `/team` now redirects to the
+  direct-reports filter.
+- **Settings** moved to `/settings` (admin only) and holds only weekly days off with working hours
+  and official holidays, each card with its own save. Departments (with members and accrual) moved
+  to `/manage/departments`, the approval chain to `/manage/approval-steps` (admin + hr); the old
+  `/manage/settings` URL forwards each role.
+- **Reports** shows two bar cards (department capacity today, time off by department); the period
+  selects apply immediately and the five CSV reports sit behind one Excel export menu.
+- Middle-dot separators next to Persian digits in Home and Manage became hyphens.
+
 ### Codebase cleanup (2026-10-04) — no user-visible change
 
 Driven by `docs/CLEANUP-AUDIT-2026-10-04.md`, to cut what agents must read:

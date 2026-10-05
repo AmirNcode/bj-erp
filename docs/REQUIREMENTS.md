@@ -223,7 +223,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   whose preference is English cannot reach the Farsi UI by typing `/fa/…` — the preference wins,
   which is the point of the fix. *(2026-08-18.)*
 - **FR-24** ☑ Admin can edit **work settings** (weekend days; default `[Friday]`) and the
-  **holiday list** (add/edit/delete) at `/manage/settings`. Editor shipped in Phase 6; the
+  **holiday list** (add/edit/delete) at `/settings` (was `/manage/settings` until 2026-10-05). Editor shipped in Phase 6; the
   authoritative Iranian 1404–1405 dates are entered in-app (placeholder seed retained).
 
 ## Non-functional
