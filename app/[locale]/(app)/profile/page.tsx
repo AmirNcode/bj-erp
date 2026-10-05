@@ -9,7 +9,7 @@ import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { PageHeader } from '../_components/PageHeader';
 import { PageRefreshButton } from '../_components/PageRefreshButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SettingsForm } from './SettingsForm';
+import { LanguageSwitch } from '../_components/LanguageSwitch';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { LogoutButton } from './LogoutButton';
 
@@ -89,12 +89,15 @@ export default async function ProfilePage({ params }: Props) {
           <CardTitle>{t('preferences')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
-          <SettingsForm
-            current={{
-              languagePref: profile?.language_pref ?? 'fa',
-            }}
-            labels={formLabels}
-          />
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">{formLabels.language}</p>
+            <LanguageSwitch
+              locale={locale}
+              labels={{ label: formLabels.language, fa: formLabels.langFa, en: formLabels.langEn }}
+              testIdPrefix="settings-language"
+              className="max-w-xs"
+            />
+          </div>
         </CardContent>
       </Card>
 

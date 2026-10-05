@@ -17,7 +17,7 @@ test('profile settings persist, language switches locale, logout clears session'
   await expect(page.getByText(/Gregorian|میلادی/)).toHaveCount(0);
 
   // Language -> English: URL gains the /en prefix; <html> flips to en/ltr.
-  await page.locator('[data-testid="settings-language"]').selectOption('en');
+  await page.locator('[data-testid="settings-language-en"]').click();
   await expect(page).toHaveURL(/\/en\/profile$/, { timeout: 10_000 });
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
@@ -48,7 +48,7 @@ test('profile settings persist, language switches locale, logout clears session'
   // Switching back must be equally sticky, and must NOT leave the user stranded
   // on the /en prefix.
   await page.goto('/en/profile');
-  await page.locator('[data-testid="settings-language"]').selectOption('fa');
+  await page.locator('[data-testid="settings-language-fa"]').click();
   await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
   await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
   await page.goto('/');
@@ -59,7 +59,7 @@ test('profile settings persist, language switches locale, logout clears session'
   // Switching to English and back again, so the round trip is covered in both
   // directions.
   await page.goto('/profile');
-  await page.locator('[data-testid="settings-language"]').selectOption('en');
+  await page.locator('[data-testid="settings-language-en"]').click();
   await expect(page).toHaveURL(/\/en\/profile$/, { timeout: 10_000 });
 
   // ── Restore the shared account to Farsi before finishing ──────────────────
@@ -72,7 +72,7 @@ test('profile settings persist, language switches locale, logout clears session'
   // this way, expecting Farsi and getting English, with nothing in their own code
   // at fault. A `/fa/...` prefix is NOT an escape hatch either: next-intl
   // normalises it away before the app sees it, so the preference still wins.
-  await page.locator('[data-testid="settings-language"]').selectOption('fa');
+  await page.locator('[data-testid="settings-language-fa"]').click();
   await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
   await expect(page).not.toHaveURL(/\/en\//);
 

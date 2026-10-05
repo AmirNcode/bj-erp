@@ -8,13 +8,17 @@ import { cn } from '@/lib/utils';
 type Props = {
   locale: string;
   labels: { label: string; fa: string; en: string };
+  /** Test-id prefix for the two buttons (`${prefix}-fa`, `${prefix}-en`). */
+  testIdPrefix?: string;
+  className?: string;
 };
 
 /**
- * Side-panel language switch. Same save-then-switch logic as the Profile
- * page's select (profile/SettingsForm.tsx), which stays as the mobile path.
+ * fa / en segmented switch: saves the preference, then swaps the locale of the
+ * current page. Used in the side panel and on the Profile page (the mobile
+ * path, where there is no side panel).
  */
-export function LanguageSwitch({ locale, labels }: Props) {
+export function LanguageSwitch({ locale, labels, testIdPrefix = 'nav-lang', className }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
@@ -36,7 +40,10 @@ export function LanguageSwitch({ locale, labels }: Props) {
     <div
       role="group"
       aria-label={labels.label}
-      className="grid grid-cols-2 gap-0.5 rounded-[10px] border border-muted bg-background p-[3px]"
+      className={cn(
+        'grid grid-cols-2 gap-0.5 rounded-[10px] border border-muted bg-background p-[3px]',
+        className
+      )}
     >
       {options.map((opt) => {
         const active = opt.value === locale;
@@ -48,7 +55,7 @@ export function LanguageSwitch({ locale, labels }: Props) {
             dir={opt.dir}
             aria-pressed={active}
             disabled={isPending}
-            data-testid={`nav-lang-${opt.value}`}
+            data-testid={`${testIdPrefix}-${opt.value}`}
             onClick={() => choose(opt.value)}
             className={cn(
               'h-7 whitespace-nowrap rounded-lg text-[12.5px] transition-colors disabled:opacity-60',

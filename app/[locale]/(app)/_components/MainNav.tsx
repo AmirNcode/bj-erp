@@ -120,17 +120,16 @@ export function MainNav({
         'md:inset-y-0 md:end-auto md:start-0 md:flex md:w-60 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-t-0 md:border-e md:px-3 md:pt-4 md:shadow-none' // desktop side panel (logical: start/end)
       )}
     >
-      {/* Logo row — the old header's logo and app name. */}
-      <div className="hidden items-center gap-2 px-2 pt-1 pb-[18px] md:flex">
+      {/* Logo only, centred; the app name is its alt text. */}
+      <div className="hidden justify-center px-2 pt-1 pb-[18px] md:flex">
         <Image
           src="/bj-logo.png"
           alt={appName ?? ''}
           width={112}
           height={56}
           priority
-          className="h-8 w-auto object-contain"
+          className="h-[38px] w-auto object-contain"
         />
-        {appName && <span className="whitespace-nowrap font-bold text-primary">{appName}</span>}
       </div>
 
       <ul className="mx-auto flex max-w-2xl justify-around md:mx-0 md:max-w-none md:flex-col md:gap-0.5">
