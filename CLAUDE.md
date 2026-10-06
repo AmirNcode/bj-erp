@@ -21,7 +21,7 @@ Persian-only calendar, `hr` role, approval chain, reports, print, CSV import. Wh
 | Concern | Choice | Notes |
 |---|---|---|
 | Framework | **Next.js (App Router) + TypeScript** | Mobile-first, responsive, SSR. |
-| Hosting | **Liara** VM — testing since 2026-09-29 (client IT couldn't publish an on-prem subdomain) | Next.js + Postgres + GoTrue + PostgREST + Caddy, `deploy/docker-compose.yml` + `.liara.yml`. Runbook `docs/DEPLOY-LIARA.md`. |
+| Hosting | **Liara** VM — testing since 2026-09-29 (client IT couldn't publish an on-prem subdomain) | Public URL **`https://bjeng.app`** (since 2026-10-06; Let's Encrypt via Caddy, DNS on Liara NS, root A → VM). SSH/VM IP `62.60.191.132`. Next.js + Postgres + GoTrue + PostgREST + Caddy, `deploy/docker-compose.yml` + `.liara.yml`. Runbook `docs/DEPLOY-LIARA.md`. |
 | Hosting (retired 2026-10-04) | Vercel demo · client on-prem server | `./deploy/bj-deploy` now only runs the local Docker stack; its on-prem code paths remain. |
 | Backend | **Supabase** pieces (Postgres + GoTrue + PostgREST + RLS) | Self-hosted. No Storage service. No `service_role` in app. |
 | Auth | **Admin-issued username + password** | Labourers have no email. Long-lived/PWA session. |

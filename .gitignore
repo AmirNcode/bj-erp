@@ -50,3 +50,6 @@ backups/
 .bj-deploy/
 
 .bruin.yml
+
+# Real personnel data (client HR exports) — never commit
+docs/files/
