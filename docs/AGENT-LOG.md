@@ -90,7 +90,10 @@ Copy this block verbatim and fill it in.
 - CI mirror green: audit 0, lint, 521 unit, tsc, test:deploy + 3 deploy scripts.
 - CLAUDE.md: plan for separate per-company deploys; whole-push `[skip ci]` trap; migrations frozen once
   applied, forward-only, no hand SQL; local stack notes; never commit `docs/files/`.
-- Pushed main to deploy to Liara (outcome in the next entry if any).
+- Pushed main `9991e19` → run 37528604943 SUCCESS: applied `20261006120002` on Liara (update.sh
+  backup first), `Liara release verified: 9991e19`, https://bjeng.app/api/health 200.
+- Follow-up `4ab2f89` [skip ci]: bjeng.app noted in CLAUDE.md Hosting row; `docs/files/` added to
+  `.gitignore`. `docs/design/` still untracked by choice.
 
 ## 2026-10-06 — Tenant binding on app_create_employee (admin branch)
 
