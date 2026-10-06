@@ -1861,6 +1861,12 @@ begin
   v_hr := private.has_role(v_caller, 'hr');
 
   if v_admin then
+    -- Tenant binding: an admin names the company, but only their own.
+    if p_company_id is distinct from
+       (select company_id from public.profiles where id = v_caller) then
+      raise exception 'not allowed to create employees in another company'
+        using errcode = '42501';
+    end if;
     v_dept := p_department_id;
     v_mgr := p_manager_id;
     v_roles := p_roles;

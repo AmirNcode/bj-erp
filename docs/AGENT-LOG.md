@@ -78,6 +78,45 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Tenant binding on app_create_employee (admin branch)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/objective-kilby-c2fe28 @ c2c264e
+**Trigger:** close the follow-up flagged by the bulk-import tenant-binding entry below.
+
+**What changed**
+- `supabase/migrations/20261006120002_create_employee_tenant_binding.sql` (new): `create or replace`
+  of `public.app_create_employee`, with the body copied from `schema.sql` and the signature unchanged.
+  Only the admin branch changed: `p_company_id is distinct from` the caller's profile company now raises
+  42501 `'not allowed to create employees in another company'`. A NULL company is refused too. The
+  hr/manager branches already ignore the argument.
+- `lib/errors/db-error.ts`: unchanged. The generic `/not allowed to|…/` rule already maps the new
+  message to `dbErrors.notAllowed` (same as the bulk functions' message).
+- `compute_requested_minutes(p_company_id, …)`: deliberately **not** bound. It is a STABLE calculation
+  helper with EXECUTE granted only to postgres/service_role (checked live:
+  `has_function_privilege('authenticated'|'anon', …)` = false). Its only caller,
+  `private.submit_leave_impl`, passes `v_company` read from the caller's own profile. No client can
+  reach it with a foreign id, and it writes nothing. The migration header records this reasoning.
+- `supabase/schema.sql`: regenerated. The diff is only the 6 added lines.
+
+**Actions outside the repo**
+- Local DB only (`bj-erp-db-1`, as supabase_admin): applied the new migration with psql directly.
+  It is not recorded in the bj-deploy migration ledger yet. The next `bj-deploy update local` applies
+  it again, which is harmless because it is idempotent. Liara was not touched.
+
+**Verification**
+- Rolled-back transaction as an active admin (`set local role authenticated` + jwt claims), with a
+  temporary second company: foreign company → `not allowed to create employees in another company
+  (42501)`, NULL company → same error, own company + own dept → created, and the profile has the
+  own company. After rollback: 0 leftover profiles, 1 company.
+- `npx tsc --noEmit` OK. `npm run test:unit`: 49 files passed, 1 skipped; 516 tests passed, 5 skipped.
+
+**State left behind**
+- Uncommitted (migration + schema.sql + this log), on branch claude/objective-kilby-c2fe28. Not pushed.
+
+**For the next agent**
+- When pushed, Liara applies 20261006120002 together with the other unreleased migrations.
+
 ## 2026-10-06 — Commit org chart / import modes; local update
 
 **Agent:** Claude Opus 5.5 via Claude Code · **HEAD:** main @ 3012db0 (not pushed)
