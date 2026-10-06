@@ -78,6 +78,17 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Push check; CLAUDE.md gotchas from org-chart/import work
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD at start:** main @ `6974d88`
+
+- Checked: main == origin/main, nothing unpushed. Bulk-import tenant guard (both functions) is in
+  `3012db0` and live on Liara since run 37494052507 (the `3012db0` push itself ended in `[skip ci]`).
+- CLAUDE.md: status line → 2026-10-06 (org chart, import modes, department step); gotchas: admin JWT
+  claims for local `profiles` SQL, `jalaliMonths.ts` Node-only, approval steps keyed on `step_id`,
+  manual `cleanup:e2e` with `E2E_BASE_URL`.
+- Actions outside the repo: none. `docs/design/` still untracked (not mine).
+
 ## 2026-10-06 — Ship app_create_employee tenant binding; CLAUDE.md migration rules
 
 **Agent:** Claude Opus 5.5 via Claude Code · **Branch:** claude/objective-kilby-c2fe28 → main

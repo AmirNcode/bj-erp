@@ -11,9 +11,10 @@ database** spanning every department (HR, quality control, finance, procurement,
 manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
 separate servers** (not one shared DB); focus now is this one company.
 
-**Status (2026-10-04):** HR → leave module live for testing on Liara. Beyond v1: leave v2
+**Status (2026-10-06):** HR → leave module live for testing on Liara. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
-Persian-only calendar, `hr` role, approval chain, reports, print, CSV import. What shipped:
+Persian-only calendar, `hr` role, approval chain, reports, print, CSV import, org chart, bulk
+personnel import (add / update / replace), department-manager approval step. What shipped:
 `docs/CHANGELOG.md` · next: `docs/TASKS.md` · frozen designs: `docs/specs/`.
 
 ## Stack (decided)
@@ -134,6 +135,13 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
   `.bj-deploy/local` are untracked, absent in worktrees). LAN URL = `APP_ORIGIN` in `deploy/.env`;
   if the Mac IP changes, edit it and recreate all containers. After migrations, restart `bj-erp-rest-1`.
 - **`docs/files/` holds real personnel data. Never commit it.**
+- **Local SQL that updates `profiles` needs an admin JWT** (trigger `enforce_profile_update_scope`):
+  first `select set_config('request.jwt.claims','{"sub":"<admin uuid>","role":"authenticated"}',true)`.
+- **`lib/leave/jalaliMonths.ts` is Node-only** (`createRequire`); importing it from app code breaks
+  `npm run build`. Shared date helpers go in `lib/leave/dateConvert.ts`.
+- **Approval steps: key on `step_id`, not `step_role`.** The direct-manager and department-manager
+  steps both have `step_role='manager'` (`manager_scope` tells them apart).
+- **e2e with `E2E_BASE_URL`:** the teardown cleanup fails; run `npm run cleanup:e2e` by hand after.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements
