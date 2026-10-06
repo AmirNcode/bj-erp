@@ -78,6 +78,20 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Commit org chart / import modes; local update
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD:** main @ 3012db0 (not pushed)
+
+- Ran lint, 521 unit tests and tsc (all pass), then committed everything as `3012db0`, except
+  `docs/files/` (real personnel CSV/XLSX) and `docs/design/`, which stay untracked on purpose.
+- `bj-deploy update local` refused: `migration history changed: 20261005120004_bulk_import_v2.sql`
+  (edited in place by the tenant-binding entry below, and already re-applied locally). Confirmed both
+  bulk functions contain the 'another company' check, then set that ledger row's checksum to the
+  source file's sha256 (local DB only). Re-run: backup `20261006T151123Z-77488f`, applied
+  `20261006120001`, app rebuilt, PostgREST restarted. health/login/rest 200.
+- **Liara:** never had 120004, so the edit is safe there. The first push applies 120001–120005 and
+  20261006120001 to production; a backup runs first.
+
 ## 2026-10-06 — Tenant binding on bulk import functions (security review)
 
 **Agent:** Claude Opus 5.5 via Claude Code
