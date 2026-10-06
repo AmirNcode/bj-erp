@@ -7,7 +7,8 @@ PaaS app, DBaaS or Supabase one-click installation is used. Start with a fresh
 database; the client's existing installation and data are separate.
 
 - VM: `bj-vm` / `debian-bj-vm`, 1 vCPU, 2 GB RAM, 20 GB SSD.
-- Address: `https://62.60.191.132`; company subdomain comes later.
+- Public address: `https://bjeng.app` (configured 2026-10-06).
+- VM/SSH address remains `62.60.191.132`; root DNS A record points there.
 - Administrator SSH from BigMac: `ssh liara-bj-vm` (port **32222**).
 - Installation: `/opt/bj-erp`; backups: `/var/backups/bj-erp`.
 - Docker 29.8.1, Compose 5.5.1, 2 GiB swap, Chrony, log rotation and firewall
@@ -140,10 +141,14 @@ Builds run off the VM. Upgrade capacity if measured use warrants it. Release
 artifacts and old images also consume the small disk; retain recovery images
 and remove superseded artifacts deliberately rather than pruning all volumes.
 
-## Company subdomain later
+## Company domain
 
-IT supplies the exact hostname and creates its DNS A record for `62.60.191.132`.
-Then update `APP_HOST` and `APP_ORIGIN` in the protected server `.env`, recreate
-the URL-dependent app/Auth/gateway containers, verify public TLS and login, and
-update the workflow/public health-check address. The app and API share one origin;
-a separate `api.` subdomain is not required for this architecture.
+`bjeng.app` is delegated to Liara nameservers with a root A record for
+`62.60.191.132`. The live `.env` now sets `APP_HOST=bjeng.app` and
+`APP_ORIGIN=https://bjeng.app`. Auth/app/gateway were recreated, and Caddy issued
+a trusted domain certificate using the existing short-lived ACME profile and
+persistent storage. Deployment health checks use the domain; SSH retains the IP.
+The app and API share one origin; no separate API subdomain is needed. `www` is
+not configured. Existing IP-address browser sessions do not transfer to the domain.
+For future hostname changes, update these settings, recreate URL-dependent
+containers, verify TLS/login, and update both workflow and installed release health checks.

@@ -116,6 +116,83 @@ Copy this block verbatim and fill it in.
 
 **For the next agent**
 - When pushed, Liara applies 20261006120002 together with the other unreleased migrations.
+## 2026-10-06 — Domain deployment verification complete
+
+**Agent:** Codex · **Branch / HEAD:** main @ 9c75b37
+
+- GitHub build and deploy run 37494052507 succeeded end-to-end using bjeng.app health checks:
+  https://github.com/AmirNcode/bj-erp/actions/runs/37494052507.
+- Live DEPLOYED_RELEASE matches 9c75b37632f6df8d713a9e5035fd5cf0f1951351; normal DNS-based
+  HTTPS health succeeds from VM and GitHub. Both public resolvers now return the correct A record.
+- HTTP redirects 308 to https://bjeng.app; HTTPS login returns 200 with same-origin/domain CSP.
+- All cutover/deploy files committed and pushed; no personnel/design files included. The final
+  journal-only handoff uses [skip ci]. Private pre-cutover config remains available on the VM.
+- Saved initial admin credential returned invalid credentials. User confirmation of current login
+  still pending; no password reset or claim of successful authenticated smoke test.
+- Mac's home resolver retained a negative cache during testing; browser mapped only DNS to test
+  real trusted domain TLS. No system DNS settings or hosts file changed.
+- CI surfaced Node 20 action-runtime deprecation annotations, but all steps passed; unrelated
+  action upgrades deferred.
+
+## 2026-10-06 — bjeng.app domain cutover
+
+**Agent:** Codex · **Branch / HEAD:** main @ 8cf0ce9
+**Trigger:** User explicitly approved configuring the domain, HTTPS, application/Auth URLs and deployment checks.
+
+- Verified both authoritative Liara nameservers publish root A -> 62.60.191.132. Some recursive
+  resolvers retained the earlier negative response; Google DNS subsequently returned the record.
+- Live release already 8cf0ce9; latest CI 37491969122 succeeded. No active deploy during cutover.
+- Under the release lock, saved private `.env` and installed/stack apply scripts to
+  `/root/bj-liara/domain-before-20261006T160936Z`. A rollback trap was prepared but not needed.
+- Set APP_HOST=bjeng.app and APP_ORIGIN=https://bjeng.app. Recreated only auth/app/gateway with
+  --no-deps; database and REST containers/volumes untouched. Existing Caddy site template picked
+  up the domain; no infrastructure Caddyfile/Compose changes needed.
+- Caddy obtained trusted Let's Encrypt domain certificate, valid through Oct 13 07:11:19 UTC;
+  kept tested short-lived profile, HTTP/1.1 workaround and persistent certificate storage.
+- Updated workflow public URL/health endpoint and apply-release fresh-install host/health endpoint;
+  installed the matching root-owned script. SSH remains on IP port 32222. Checksums match.
+- Verified live Auth/app/gateway URL variables without exposing secrets, domain app health 200,
+  Auth health 200, trusted TLS via direct resolver mapping and real Compose configuration test.
+- Browser with mapped hostname (DNS bypass only; TLS verification enabled) loaded/hydrated login
+  and reached Auth at bjeng.app. Saved initial admin credential returned 400 and localized invalid
+  credentials error. No password changed/reset; asked user to verify with their current credentials.
+  Authenticated navigation/session check remains pending. No credentials/tokens printed.
+- Public ordinary resolution on this Mac was still negatively cached during checks; do not confuse
+  that with TLS/server failure. Updated domain runbook and removed completed DNS/domain task.
+- Preserved untracked docs/files and docs/design; not included in this change. No DB migration,
+  data import or application rebuild was performed for the live cutover.
+
+## 2026-10-06 — Owner added root DNS record
+
+**Agent:** Codex
+**Trigger:** User supplied screenshot of newly added bjeng.app A record.
+
+- Screenshot shows bjeng.app -> 62.60.191.132, TTL 3600.
+- Immediate live query: ns2.liara.zone publishes the correct A record; ns1.liara.zone and
+  Cloudflare resolver did not yet return an A answer. Publication is not consistent yet.
+- No DNS or server changes by this agent. Hostname/TLS/origin configuration remains pending.
+
+## 2026-10-06 — Read-only bjeng.app DNS and gateway diagnosis
+
+**Agent:** Codex · **Branch / HEAD:** main @ 3012db0
+**Trigger:** User reported new domain bjeng.app delegated to Liara but app only opens by IP; requested identification of cause.
+
+- Read current onboarding, newest journal and open tasks; preserved untracked docs/design and
+  docs/files without opening personnel files. No commit, push, deployment or DNS changes.
+- Public NS records are ns1.liara.zone and ns2.liara.zone. Direct authoritative A queries to
+  both returned NOERROR with zero answers and zone SOA; Cloudflare/Google public resolvers agree.
+  Root AAAA also absent; www.bjeng.app returned NXDOMAIN. Therefore delegation exists but no
+  root address record is currently published. This is not merely a stale local DNS cache.
+- Public domain curl fails name resolution. IP HTTPS /api/health returns status ok; all five
+  live containers up ~20 hours, DB healthy. Only safe domain settings read from server .env:
+  APP_HOST=62.60.191.132, APP_PORT=443, APP_ORIGIN=https://62.60.191.132.
+- Live Caddyfile matches that single IP site. Forced DNS bypass with curl --resolve for
+  bjeng.app at 62.60.191.132 fails TLS negotiation (alert internal error), confirming hostname
+  serving/certificate setup also remains incomplete independently of DNS.
+- Context7 Caddy docs confirm both DNS and configured hostname are prerequisites for automatic TLS.
+- Next: domain owner publishes root A -> 62.60.191.132 in active Liara DNS zone (verify exact
+  record name; @/root). Then configure gateway TLS/app/Auth origin and deployment health URLs
+  for bjeng.app, recreate URL-dependent containers and test login. Not performed in diagnosis.
 
 ## 2026-10-06 — Commit org chart / import modes; local update
 
@@ -128,6 +205,9 @@ Copy this block verbatim and fill it in.
   bulk functions contain the 'another company' check, then set that ledger row's checksum to the
   source file's sha256 (local DB only). Re-run: backup `20261006T151123Z-77488f`, applied
   `20261006120001`, app rebuilt, PostgREST restarted. health/login/rest 200.
+- Push: CI audit gate would fail on new GHSA-68fv-2mgg-jv7q (source-map-js 1.2.1) → `npm audit fix`,
+  lockfile only, commit 8cf0ce9; build + 521 unit pass. Run 37491969122 SUCCESS: applied 120001–120005 +
+  20261006120001 on Liara (update.sh backup first), `Liara release verified: 8cf0ce9`, live health 200.
 - **Liara:** never had 120004, so the edit is safe there. The first push applies 120001–120005 and
   20261006120001 to production; a backup runs first.
 

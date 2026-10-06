@@ -10,7 +10,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   certificate and active backup timer verified. User still needs to verify login and saved data.
   Original timeout cause remains unknown; investigate with Liara if it recurs.
 - ☐ Scheduled offsite backups. Daily backups currently stay on the VM.
-- ☐ Company subdomain from client IT, then update DNS, TLS and the origin.
 - ☐ Real data: enter the 1404–1405 official holidays (CSV upload in Settings) and import the
   employee roster (`docs/files/Personnel_CLEAN.csv` via Manage › Employees › Import — owner tests
   it locally first). After import: activate the **Department manager** approval step, give Meysam

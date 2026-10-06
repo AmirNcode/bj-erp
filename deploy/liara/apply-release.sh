@@ -56,7 +56,7 @@ if [ ! -f DEPLOYED_RELEASE ]; then
   if docker container inspect bj-liara-tls-preflight >/dev/null 2>&1; then
     docker rm -f bj-liara-tls-preflight >/dev/null
   fi
-  BJ_APP_HOST=62.60.191.132 BJ_APP_PORT=443 BJ_APP_VERSION="$VERSION" \
+  BJ_APP_HOST=bjeng.app BJ_APP_PORT=443 BJ_APP_VERSION="$VERSION" \
     BJ_ADMIN_PASSWORD_FILE=/root/bj-liara/admin-password bash ./install.sh
   rm "bj-erp-app-$VERSION.tar.gz"
 else
@@ -64,7 +64,7 @@ else
 fi
 # Public TLS and ingress are part of release success, not merely container startup.
 curl --fail --silent --show-error --retry 12 --retry-all-errors --retry-delay 5 \
-  --max-time 15 https://62.60.191.132/api/health
+  --max-time 15 https://bjeng.app/api/health
 printf '%s\n' "$VERSION" > "$ROOT/DEPLOYED_RELEASE"
 rm -f "$INCOMING/$VERSION.tar" "$INCOMING/$VERSION.sha256" "$RELEASE/release.tar"
 echo "Liara release verified: $VERSION"
