@@ -78,6 +78,24 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Domain deployment verification complete
+
+**Agent:** Codex · **Branch / HEAD:** main @ 9c75b37
+
+- GitHub build and deploy run 37494052507 succeeded end-to-end using bjeng.app health checks:
+  https://github.com/AmirNcode/bj-erp/actions/runs/37494052507.
+- Live DEPLOYED_RELEASE matches 9c75b37632f6df8d713a9e5035fd5cf0f1951351; normal DNS-based
+  HTTPS health succeeds from VM and GitHub. Both public resolvers now return the correct A record.
+- HTTP redirects 308 to https://bjeng.app; HTTPS login returns 200 with same-origin/domain CSP.
+- All cutover/deploy files committed and pushed; no personnel/design files included. The final
+  journal-only handoff uses [skip ci]. Private pre-cutover config remains available on the VM.
+- Saved initial admin credential returned invalid credentials. User confirmation of current login
+  still pending; no password reset or claim of successful authenticated smoke test.
+- Mac's home resolver retained a negative cache during testing; browser mapped only DNS to test
+  real trusted domain TLS. No system DNS settings or hosts file changed.
+- CI surfaced Node 20 action-runtime deprecation annotations, but all steps passed; unrelated
+  action upgrades deferred.
+
 ## 2026-10-06 — bjeng.app domain cutover
 
 **Agent:** Codex · **Branch / HEAD:** main @ 8cf0ce9
