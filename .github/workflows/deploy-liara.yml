@@ -44,7 +44,7 @@ jobs:
     timeout-minutes: 25
     environment:
       name: liara
-      url: https://62.60.191.132
+      url: https://bjeng.app
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
@@ -65,4 +65,4 @@ jobs:
           scp -P 32222 "${SSH_ARGS[@]}" release.tar "bj-deploy@62.60.191.132:/var/lib/bj-deploy/incoming/$GITHUB_SHA.tar"
           scp -P 32222 "${SSH_ARGS[@]}" release.sha256 "bj-deploy@62.60.191.132:/var/lib/bj-deploy/incoming/$GITHUB_SHA.sha256"
           ssh -p 32222 "${SSH_ARGS[@]}" bj-deploy@62.60.191.132 "sudo -n /usr/local/sbin/bj-liara-apply $GITHUB_SHA"
-          curl --fail --retry 3 --max-time 20 https://62.60.191.132/api/health
+          curl --fail --retry 3 --max-time 20 https://bjeng.app/api/health
