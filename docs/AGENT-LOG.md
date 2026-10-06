@@ -78,6 +78,20 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Ship app_create_employee tenant binding; CLAUDE.md migration rules
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch:** claude/objective-kilby-c2fe28 → main
+
+- Committed worktree work (`f7e4ae7`), merged main in (AGENT-LOG conflict: kept both sides),
+  fast-forwarded local main.
+- `bj-deploy update local`: backup `20261006T204049Z-5704f3`, applied `20261006120002`. `schema:dump`
+  produced no diff. Tests run as an admin user in transactions that were rolled back: a foreign company
+  is refused (`not allowed to create employees in another company`); own company + department creates.
+- CI mirror green: audit 0, lint, 521 unit, tsc, test:deploy + 3 deploy scripts.
+- CLAUDE.md: plan for separate per-company deploys; whole-push `[skip ci]` trap; migrations frozen once
+  applied, forward-only, no hand SQL; local stack notes; never commit `docs/files/`.
+- Pushed main to deploy to Liara (outcome in the next entry if any).
+
 ## 2026-10-06 — Tenant binding on app_create_employee (admin branch)
 
 **Agent:** Claude Opus 5.5 via Claude Code

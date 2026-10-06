@@ -8,7 +8,8 @@
 Unified web app for **Iranian manufacturing company**. Long-term goal: **one app, one central
 database** spanning every department (HR, quality control, finance, procurement, …). Built
 **module by module**, starting **HR → time-off (leave) management** — client's biggest pain is
-manual, paper-based time-off process.
+manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
+separate servers** (not one shared DB); focus now is this one company.
 
 **Status (2026-10-04):** HR → leave module live for testing on Liara. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
@@ -112,7 +113,8 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
 ## Gotchas
 
 - **Push to `main` deploys to Liara** (`LIARA_DEPLOY_ENABLED=true`): audit → lint → unit →
-  deploy tests → package → SSH apply. Docs-only commits: add `[skip ci]`.
+  deploy tests → package → SSH apply. Docs-only commits: add `[skip ci]`. GitHub skips the **whole
+  push** if its newest commit has `[skip ci]`, so never end a code push with one.
 - **Migrations: edit `supabase/migrations/` only.** `deploy/migrations` and `deploy/sql/seed.sql`
   are symlinks into `supabase/` (bind-mounted by `deploy/docker-compose.yml`).
 - **Current SQL lives in `supabase/schema.sql`**, not the migrations (one function can have 9
@@ -122,6 +124,16 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
   transaction (see `20260818130001_hr_role_enum.sql`).
 - **`lib/supabase/types.ts` is hand-edited.** `supabase gen types` image unreachable from Iran;
   verify with `tsc --noEmit` + `npm run build`.
+- **A migration is frozen once any DB has applied it, local included.** Fix with a new file;
+  an in-place edit makes `bj-deploy update local` refuse with `migration history changed`.
+- **Migrations are forward-only and run just before the app swap.** Rollback = restore the
+  pre-deploy dump; keep schema compatible with the still-running old app (add first, drop later).
+- **Never hand-run SQL on a server.** Only the migration ledger (`bj_deploy.schema_migrations`)
+  may change schema, so every deploy stays reproducible.
+- **Local stack:** run `./deploy/bj-deploy` from the main checkout (`deploy/.env` and
+  `.bj-deploy/local` are untracked, absent in worktrees). LAN URL = `APP_ORIGIN` in `deploy/.env`;
+  if the Mac IP changes, edit it and recreate all containers. After migrations, restart `bj-erp-rest-1`.
+- **`docs/files/` holds real personnel data. Never commit it.**
 - More: `docs/MEMORY.md`.
 
 ## Working agreements
