@@ -9,6 +9,33 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Org chart, personnel import v2, two-level sign-off (2026-10-05)
+
+Spec `docs/specs/2026-10-05-org-chart-and-personnel-import-design.md`, plan
+`docs/plans/2026-10-05-org-chart-and-personnel-import.md`. Migrations `20261005120001`–`…05`.
+- **Organization tab (FR-44):** every role browses the org chart — opens on your own card, the
+  chain above you and your direct reports below, click any card to move, Back to return, search by
+  name. Desktop side panel; on mobile a link on Profile.
+- **Bulk import v2 (FR-45):** the template now takes the client's personnel list as-is —
+  supervisor + manager numbers, department code or names (new departments are listed and must be
+  acknowledged), remaining leave as signed days + hours. Rows may be in any order. The uploader
+  picks the date the balances were counted to; accrual resumes the next Jalali month. Department
+  managers are derived from the file. Replaces `annual_days` / `sick_days`.
+- **Department codes (FR-46):** 2–4 uppercase letters/digits, shown on Manage › Departments.
+  Existing codes were uppercased (`qc` → `QC`).
+- **Two-level sign-off (FR-47):** new *Department manager* approval step (seeded **off** —
+  activate on Manage › Approval steps) plus a department manager picker on Manage › Departments.
+  The department manager's signature prints in the strip below the paper form's boxes.
+- **Negative balances (FR-48):** opening balances and HR corrections may go below zero; displayed
+  as «−۱ روز و ۴ ساعت».
+- **Import modes (FR-49):** Add new only · Add & update · Replace. Replace lists who the file
+  leaves out (deactivate/keep, per-person override), asks about conflicts, deletes unused empty
+  departments and confirms with the counts. Optional "also overwrite balances". A deactivated
+  department manager is now replaced by the file's manager in every mode.
+- Deactivating an employee (Edit Employee › Admin actions) now asks for confirmation first.
+- `docs/files/Personnel_CLEAN.csv` cleaned for upload (supervisor numbers rebuilt, two supervisor
+  names completed, `MKT` code, Mansour Kheiri to `EXEC`).
+
 ### HR admin redesign (2026-10-05)
 
 From the design handoff in `docs/design/design_handoff_hr_admin_redesign/README.md`:

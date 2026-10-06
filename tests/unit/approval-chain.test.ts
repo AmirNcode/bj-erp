@@ -4,6 +4,8 @@ import {
   fillableStep,
   outstandingSteps,
   filterApprovable,
+  departmentStepApplies,
+  stepLabel,
   type ApprovalStep,
   type SignedStep,
 } from '@/lib/leave/approvals';
@@ -414,5 +416,101 @@ describe('named-person steps (FR-42)', () => {
       fillableStep({ ...withPerson, signed: afterManager, callerId: NAMED, orderEnforced: true })
         ?.id
     ).toBe('named');
+  });
+});
+
+describe('department manager step (FR-47)', () => {
+  const direct: ApprovalStep = { id: 'm', role: 'manager', stepOrder: 1, appliesTo: ['leave', 'errand'], active: true };
+  const dept: ApprovalStep = {
+    id: 'd',
+    role: 'manager',
+    managerScope: 'department',
+    stepOrder: 2,
+    appliesTo: ['leave', 'errand'],
+    active: true,
+  };
+  const hr: ApprovalStep = { id: 'h', role: 'hr', stepOrder: 3, appliesTo: ['leave', 'errand'], active: true };
+  const chain = [direct, dept, hr];
+  const supervisorSigned: SignedStep[] = [{ stepId: 'm', stepRole: 'manager', decision: 'approved' }];
+  const input = {
+    ...base,
+    steps: chain,
+    callerRoles: ['manager', 'employee'],
+    departmentStepApplies: true,
+  };
+
+  it('labels the department step apart from the direct manager step', () => {
+    expect(stepLabel(direct)).toBe('manager');
+    expect(stepLabel(dept)).toBe('departmentManager');
+    expect(stepLabel(hr)).toBe('hr');
+  });
+
+  it('the department manager fills the department step', () => {
+    expect(fillableStep({ ...input, signed: supervisorSigned, isDepartmentManager: true })?.id).toBe('d');
+    expect(fillableStep({ ...input, isDepartmentManager: true })?.id).toBe('d');
+  });
+
+  it('the supervisor fills only the direct step', () => {
+    expect(fillableStep({ ...input, isDirectManager: true })?.id).toBe('m');
+    expect(fillableStep({ ...input, signed: supervisorSigned, isDirectManager: true })).toBeNull();
+  });
+
+  it('a department step that does not apply is neither fillable nor outstanding', () => {
+    expect(
+      fillableStep({ ...input, departmentStepApplies: false, signed: supervisorSigned, isDepartmentManager: true })
+    ).toBeNull();
+    expect(outstandingSteps(chain, supervisorSigned, 'leave', false)).toEqual(['hr']);
+    expect(outstandingSteps(chain, supervisorSigned, 'leave', true)).toEqual(['departmentManager', 'hr']);
+  });
+
+  it('order enforcement skips a department step that does not apply', () => {
+    expect(
+      fillableStep({ ...input, callerRoles: ['hr'], signed: supervisorSigned, orderEnforced: true, departmentStepApplies: false })?.id
+    ).toBe('h');
+    expect(
+      fillableStep({ ...input, callerRoles: ['hr'], signed: supervisorSigned, orderEnforced: true, departmentStepApplies: true })
+    ).toBeNull();
+  });
+
+  it('an admin may fill the department step', () => {
+    expect(fillableStep({ ...input, callerRoles: ['admin'], signed: supervisorSigned })?.id).toBe('d');
+  });
+
+  it('filterApprovable routes the request to the department manager', () => {
+    const rows = [
+      {
+        id: 'r',
+        kind: 'leave' as const,
+        employee_manager_id: 'SUP',
+        employee_id: 'E',
+        employee_department_manager_id: 'DM',
+        department_step_applies: true,
+        signed: supervisorSigned,
+      },
+    ];
+    expect(filterApprovable(rows, 'DM', ['manager'], chain, false).map((r) => r.id)).toEqual(['r']);
+    expect(filterApprovable(rows, 'SUP', ['manager'], chain, false)).toEqual([]);
+  });
+});
+
+describe('departmentStepApplies', () => {
+  const base = { employeeId: 'E', employeeManagerId: 'SUP', departmentManagerId: 'DM', departmentManagerActive: true };
+  it('applies when the department manager is someone else', () => {
+    expect(departmentStepApplies(base)).toBe(true);
+  });
+  it('is skipped when the department manager is the direct manager', () => {
+    expect(departmentStepApplies({ ...base, departmentManagerId: 'SUP' })).toBe(false);
+  });
+  it('is skipped for the department manager\'s own request', () => {
+    expect(departmentStepApplies({ ...base, departmentManagerId: 'E' })).toBe(false);
+  });
+  it('is skipped when there is no department manager', () => {
+    expect(departmentStepApplies({ ...base, departmentManagerId: null })).toBe(false);
+  });
+  it('department step skipped when department manager inactive', () => {
+    expect(departmentStepApplies({ ...base, departmentManagerActive: false })).toBe(false);
+  });
+  it('applies to someone with no direct manager', () => {
+    expect(departmentStepApplies({ ...base, employeeManagerId: null })).toBe(true);
   });
 });

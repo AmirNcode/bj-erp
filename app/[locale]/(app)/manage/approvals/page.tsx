@@ -64,6 +64,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
           signed: t('signed'),
           stepLabels: {
             manager: t('steps.manager'),
+            departmentManager: t('steps.departmentManager'),
             hr: t('steps.hr'),
             security: t('steps.security'),
             admin: t('steps.admin'),

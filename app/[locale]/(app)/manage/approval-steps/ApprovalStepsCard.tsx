@@ -55,6 +55,8 @@ type Labels = {
   removeConfirm: string;
   removed: string;
   orderAdminOnly: string;
+  /** FR-47: explains the department-manager step under its row. */
+  departmentHint: string;
 };
 
 type Props = {
@@ -100,123 +102,142 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
           <EmptyState message={labels.empty} />
         ) : (
           <ul className="divide-y divide-border" data-testid="approval-steps-list">
-            {steps.map((step) => (
-              <li
-                key={step.id}
-                className="flex flex-wrap items-center gap-3 py-3"
-                data-testid={
-                  step.approverId
-                    ? `approval-step-person-${step.approverId}`
-                    : `approval-step-${step.role}`
-                }
-              >
-                <span className="min-w-32 text-sm font-medium">
-                  {step.approverId ? (
-                    <>
-                      {step.approverName ?? '—'}
-                      <span className="ms-1 text-xs font-normal text-muted-foreground">
-                        ({labels.personStep})
-                      </span>
-                    </>
-                  ) : (
-                    (labels.steps[step.role] ?? step.role)
-                  )}
-                </span>
-
-                {/* A named approver whose account is disabled can never fill this
-                    step, so every request needing it is stuck. Say so here rather
-                    than leaving those requests silently pending. */}
-                {step.approverInactive && (
-                  <span
-                    className="rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
-                    data-testid={`approval-step-inactive-${step.id}`}
-                  >
-                    {labels.inactiveApprover}
+            {steps.map((step) => {
+              const isDepartment = step.managerScope === 'department';
+              // Test-id key: the department step shares role `manager` with the
+              // direct step, so it gets its own.
+              const key = step.approverId ?? (isDepartment ? 'department-manager' : step.role);
+              return (
+                <li
+                  key={step.id}
+                  className="flex flex-wrap items-center gap-3 py-3"
+                  data-testid={
+                    step.approverId
+                      ? `approval-step-person-${step.approverId}`
+                      : `approval-step-${key}`
+                  }
+                >
+                  <span className="min-w-32 text-sm font-medium">
+                    {step.approverId ? (
+                      <>
+                        {step.approverName ?? '—'}
+                        <span className="ms-1 text-xs font-normal text-muted-foreground">
+                          ({labels.personStep})
+                        </span>
+                      </>
+                    ) : isDepartment ? (
+                      labels.steps.departmentManager
+                    ) : (
+                      (labels.steps[step.role] ?? step.role)
+                    )}
                   </span>
-                )}
 
-                <div className="flex items-center gap-1.5">
-                  <Label htmlFor={`step-order-${step.id}`} className="text-xs text-muted-foreground">
-                    {labels.stepOrder}
-                  </Label>
-                  <Input
-                    id={`step-order-${step.id}`}
-                    type="number"
-                    min={1}
-                    max={99}
-                    defaultValue={step.stepOrder}
-                    disabled={isPending}
-                    className="h-8 w-16"
-                    data-testid={`approval-step-order-${step.approverId ?? step.role}`}
-                    // Commit on blur rather than per keystroke: each save is a
-                    // round-trip plus a router refresh.
-                    onBlur={(e) => {
-                      const next = Number(e.target.value);
-                      if (!Number.isFinite(next) || next === step.stepOrder) return;
-                      run(() => updateApprovalStep({ id: step.id, stepOrder: next }));
-                    }}
-                  />
-                </div>
-
-                <label className="flex cursor-pointer items-center gap-1.5 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={step.active}
-                    disabled={isPending}
-                    className="size-4 rounded border-input text-primary focus:ring-ring"
-                    data-testid={`approval-step-active-${step.approverId ?? step.role}`}
-                    onChange={(e) =>
-                      run(() => updateApprovalStep({ id: step.id, active: e.target.checked }))
-                    }
-                  />
-                  {labels.active}
-                </label>
-
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      size="xs"
-                      disabled={isPending}
-                      className="ms-auto"
-                      data-testid={`approval-step-delete-${step.approverId ?? step.role}`}
+                  {/* A named approver whose account is disabled can never fill this
+                      step, so every request needing it is stuck. Say so here rather
+                      than leaving those requests silently pending. */}
+                  {step.approverInactive && (
+                    <span
+                      className="rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+                      data-testid={`approval-step-inactive-${step.id}`}
                     >
-                      {labels.remove}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent size="sm">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{labels.remove}</AlertDialogTitle>
-                      {/* Signed decisions survive: leave_request_approvals has no
-                          foreign key here, precisely so history stays printable. */}
-                      <AlertDialogDescription>{labels.removeConfirm}</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{labels.addStep.cancel}</AlertDialogCancel>
-                      <AlertDialogAction
+                      {labels.inactiveApprover}
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor={`step-order-${step.id}`} className="text-xs text-muted-foreground">
+                      {labels.stepOrder}
+                    </Label>
+                    <Input
+                      id={`step-order-${step.id}`}
+                      type="number"
+                      min={1}
+                      max={99}
+                      defaultValue={step.stepOrder}
+                      disabled={isPending}
+                      className="h-8 w-16"
+                      data-testid={`approval-step-order-${key}`}
+                      // Commit on blur rather than per keystroke: each save is a
+                      // round-trip plus a router refresh.
+                      onBlur={(e) => {
+                        const next = Number(e.target.value);
+                        if (!Number.isFinite(next) || next === step.stepOrder) return;
+                        run(() => updateApprovalStep({ id: step.id, stepOrder: next }));
+                      }}
+                    />
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={step.active}
+                      disabled={isPending}
+                      className="size-4 rounded border-input text-primary focus:ring-ring"
+                      data-testid={`approval-step-active-${key}`}
+                      onChange={(e) =>
+                        run(() => updateApprovalStep({ id: step.id, active: e.target.checked }))
+                      }
+                    />
+                    {labels.active}
+                  </label>
+
+                  {/* The department step is seeded by migration and the Add dialog
+                      cannot recreate it, so it is switched off rather than removed. */}
+                  {!isDepartment && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
                         variant="destructive"
-                        data-testid={`approval-step-delete-confirm-${step.id}`}
-                        onClick={() =>
-                          run(async () => {
-                            const result = await deleteApprovalStep(step.id);
-                            if (result.ok) toast.success(labels.removed);
-                            return result;
-                          })
-                        }
+                        size="xs"
+                        disabled={isPending}
+                        className="ms-auto"
+                        data-testid={`approval-step-delete-${step.approverId ?? step.role}`}
                       >
                         {labels.remove}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </li>
-            ))}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent size="sm">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{labels.remove}</AlertDialogTitle>
+                        {/* Signed decisions survive: leave_request_approvals has no
+                            foreign key here, precisely so history stays printable. */}
+                        <AlertDialogDescription>{labels.removeConfirm}</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{labels.addStep.cancel}</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          data-testid={`approval-step-delete-confirm-${step.id}`}
+                          onClick={() =>
+                            run(async () => {
+                              const result = await deleteApprovalStep(step.id);
+                              if (result.ok) toast.success(labels.removed);
+                              return result;
+                            })
+                          }
+                        >
+                          {labels.remove}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  )}
+                  {isDepartment && (
+                    <p className="basis-full text-xs text-muted-foreground" data-testid="approval-step-department-hint">
+                      {labels.departmentHint}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
 
         <AddApprovalStepDialog
           labels={labels.addStep}
-          usedRoles={steps.filter((s) => !s.approverId).map((s) => s.role)}
+          usedRoles={steps
+            .filter((s) => !s.approverId && s.managerScope !== 'department')
+            .map((s) => s.role)}
           onAdded={() => router.refresh()}
         />
 

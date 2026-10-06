@@ -137,7 +137,14 @@ export function MainNav({
           const mobileOnly = tab.key === 'manage';
           const active = mobileOnly ? inManage : isActive(tab.href);
           return (
-            <li key={tab.key} className={cn('flex-1 md:flex-none', mobileOnly && 'md:hidden')}>
+            <li
+              key={tab.key}
+              className={cn(
+                'flex-1 md:flex-none',
+                mobileOnly && 'md:hidden',
+                tab.desktopOnly && 'hidden md:block'
+              )}
+            >
               <Link
                 href={`/${locale}${tab.href}`}
                 // The desktop Employees item owns `nav-manage`; the mobile tab

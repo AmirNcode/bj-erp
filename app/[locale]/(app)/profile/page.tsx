@@ -4,6 +4,7 @@
 
 export const dynamic = 'force-dynamic';
 
+import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { PageHeader } from '../_components/PageHeader';
@@ -22,6 +23,7 @@ export default async function ProfilePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('profile');
+  const tOrg = await getTranslations('org');
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -82,6 +84,22 @@ export default async function ProfilePage({ params }: Props) {
           </div>
         </CardContent>
       </Card>
+
+      {/* FR-44: on mobile the org chart is reached from here — the bottom bar
+          stays at 4/5 tabs. Desktop has it in the side panel. */}
+      <Link
+        href={`/${locale}/organization`}
+        data-testid="profile-org-link"
+        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
+      >
+        <span>
+          <span className="block text-sm font-semibold">{tOrg('openFromProfile')}</span>
+          <span className="block text-xs text-muted-foreground">{tOrg('openFromProfileHint')}</span>
+        </span>
+        <span aria-hidden className="text-muted-foreground rtl:rotate-180">
+          ›
+        </span>
+      </Link>
 
       {/* Preferences */}
       <Card>

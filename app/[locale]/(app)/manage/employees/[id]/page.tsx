@@ -124,6 +124,8 @@ export default async function EditEmployeePage({ params }: Props) {
           resetPwd: t('employees.resetPwd'),
           activate: t('employees.activate'),
           deactivate: t('employees.deactivate'),
+          deactivateConfirmTitle: t('employees.deactivateConfirmTitle'),
+          deactivateConfirmBody: t.raw('employees.deactivateConfirmBody') as string,
           tempPasswordLabel: t('employees.tempPasswordLabel'),
           tempPasswordHint: t('employees.tempPasswordHint'),
           errorLabel: t('employees.error'),

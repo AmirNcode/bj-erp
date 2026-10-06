@@ -135,6 +135,8 @@ const RULES: Rule[] = [
   { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
   { re: /replacement is on leave during this period/, key: 'replacementAway' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },
+  // FR-48: negative balances are allowed down to one year of workdays.
+  { re: /target balance is out of range/, key: 'balanceOutOfRange' },
   { re: /at least one working day is required/i, key: 'allWeekWeekend' },
   { re: /invalid weekend days/i, key: 'invalidWeekend' },
   { re: /a reference date is required for every-other-week days/i, key: 'weekendAnchorRequired' },
@@ -145,6 +147,33 @@ const RULES: Rule[] = [
   { re: /too many holidays in one import/i, key: 'holidayImportTooMany' },
   { re: /duplicate holiday date in import/i, key: 'holidayImportDuplicate' },
   { re: /holiday name is too long/i, key: 'holidayNameTooLong' },
+  // FR-45 bulk import v2. The validator catches these first; they surface only
+  // if the database disagrees with the preview (e.g. a concurrent edit).
+  { re: /balance date is required/, key: 'balanceDateRequired' },
+  // FR-49 import modes.
+  { re: /an import cannot deactivate an admin account/, key: 'importCannotDeactivateAdmin' },
+  { re: /deactivation and department deletion need replace mode|import mode must be/, key: 'importBadMode' },
+  { re: /balance date cannot be in the future/, key: 'balanceDateFuture' },
+  {
+    re: /department code "([A-Z0-9]*)" already exists/,
+    key: 'departmentCodeExists',
+    params: (m) => ({ code: m[1] }),
+  },
+  {
+    re: /row (\d+): unknown department code "([^"]*)"/,
+    key: 'bulkUnknownDepartment',
+    params: (m) => ({ row: m[1], code: m[2] }),
+  },
+  {
+    re: /row (\d+): manager with personnel number (\d+) not found/,
+    key: 'bulkManagerNotFound',
+    params: (m) => ({ row: m[1], personnelNo: m[2] }),
+  },
+  {
+    re: /row (\d+): opening balance is out of range/,
+    key: 'bulkBalanceOutOfRange',
+    params: (m) => ({ row: m[1] }),
+  },
   { re: /holidays were not saved/i, key: 'holidayImportNotSaved' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
   { re: /not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },

@@ -15,7 +15,12 @@ import { createClient } from '@/lib/supabase/server';
 import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import { todayInAppTz } from '@/lib/appDate';
-import { outstandingSteps, type SignedStep, type StepRole } from '@/lib/leave/approvals';
+import {
+  departmentStepApplies,
+  outstandingSteps,
+  type SignedStep,
+  type StepRole,
+} from '@/lib/leave/approvals';
 import { getApprovalConfig } from '@/lib/actions/leave/approvals';
 import type { EmployeeRow, LedgerRow, LeaveTypeRow, RequestRow } from '@/lib/reports/reports';
 
@@ -100,7 +105,7 @@ export async function getReportData(
       .from('profiles')
       .select(
         `id, full_name, employee_code, personnel_no, hire_date, active, manager_id,
-         departments!profiles_department_id_fkey(name_fa, name_en)`
+         departments!profiles_department_id_fkey(name_fa, name_en, manager_id)`
       )
       .eq('company_id', c.companyId)
       .order('full_name'),
@@ -135,7 +140,7 @@ export async function getReportData(
     hire_date: string | null;
     active: boolean;
     manager_id: string | null;
-    departments: { name_fa: string; name_en: string | null } | null;
+    departments: { name_fa: string; name_en: string | null; manager_id: string | null } | null;
   };
   type ReqRow = {
     id: string;
@@ -172,21 +177,35 @@ export async function getReportData(
       getApprovalConfig(),
       c.supabase
         .from('leave_request_approvals')
-        .select('request_id, step_role, decision')
+        .select('request_id, step_id, step_role, decision')
         .in('request_id', pendingIds),
     ]);
     const byRequest = new Map<string, SignedStep[]>();
     for (const a of approvals ?? []) {
       const list = byRequest.get(a.request_id) ?? [];
       list.push({
+        stepId: a.step_id ?? null,
         stepRole: a.step_role as StepRole,
         decision: a.decision as 'approved' | 'rejected',
       });
       byRequest.set(a.request_id, list);
     }
+    // FR-47: whether each requester's department-manager step applies. Every
+    // profile of the company is in `employees`, so this resolves in memory.
+    const empById = new Map(
+      ((employees ?? []) as unknown as EmpRow[]).map((e) => [e.id, e])
+    );
     for (const r of mappedRequests) {
       if (r.status !== 'pending') continue;
-      r.outstanding = outstandingSteps(steps, byRequest.get(r.id) ?? [], r.kind);
+      const emp = empById.get(r.employeeId);
+      const deptManagerId = emp?.departments?.manager_id ?? null;
+      const applies = departmentStepApplies({
+        employeeId: r.employeeId,
+        employeeManagerId: emp?.manager_id ?? null,
+        departmentManagerId: deptManagerId,
+        departmentManagerActive: deptManagerId ? (empById.get(deptManagerId)?.active ?? false) : false,
+      });
+      r.outstanding = outstandingSteps(steps, byRequest.get(r.id) ?? [], r.kind, applies);
     }
   }
 

@@ -120,6 +120,32 @@ export async function updateDepartmentCode(
   return { ok: true };
 }
 
+/**
+ * Sets (or clears) a department's manager — the second signer on every request
+ * from that department when the department-manager approval step is active
+ * (FR-47). Admin-only: RLS `departments_update_admin` enforces the write; the
+ * picker only offers active holders of the `manager` role.
+ */
+export async function setDepartmentManager(
+  departmentId: string,
+  managerId: string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
+
+  const { data, error } = await c.supabase
+    .from('departments')
+    .update({ manager_id: managerId })
+    .eq('id', departmentId)
+    .select('id');
+
+  if (error) return dbErr(error.message);
+  if (!data || data.length === 0) return dbErr('not allowed to update this department');
+
+  invalidateAppCache();
+  return { ok: true };
+}
+
 export type DepartmentMember = {
   id: string;
   fullName: string;

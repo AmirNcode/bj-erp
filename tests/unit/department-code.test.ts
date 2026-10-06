@@ -8,42 +8,42 @@ import {
 import { buildEmployeeCode } from '@/lib/employees/code';
 
 describe('normalizeDepartmentCode', () => {
-  it('trims and lowercases', () => {
-    expect(normalizeDepartmentCode('  PROD ')).toBe('prod');
+  it('trims and uppercases', () => {
+    expect(normalizeDepartmentCode('  prod ')).toBe('PROD');
   });
 
   it('converts Persian / Arabic-Indic digits', () => {
-    expect(normalizeDepartmentCode('t۱')).toBe('t1');
-    expect(normalizeDepartmentCode('t١')).toBe('t1');
+    expect(normalizeDepartmentCode('t۱')).toBe('T1');
+    expect(normalizeDepartmentCode('t١')).toBe('T1');
   });
 });
 
 describe('isValidDepartmentCode', () => {
-  it('accepts 2-6 latin letters or digits', () => {
-    expect(isValidDepartmentCode('qc')).toBe(true);
-    expect(isValidDepartmentCode('prod')).toBe(true);
-    expect(isValidDepartmentCode('mant12')).toBe(true);
+  it('accepts 2-4 uppercase latin letters or digits', () => {
+    expect(isValidDepartmentCode('QC')).toBe(true);
+    expect(isValidDepartmentCode('PROD')).toBe(true);
+    expect(isValidDepartmentCode('AS1')).toBe(true);
   });
 
-  it('rejects too short, too long, uppercase, and non-latin', () => {
-    expect(isValidDepartmentCode('q')).toBe(false);
-    expect(isValidDepartmentCode('toolong')).toBe(false);
-    expect(isValidDepartmentCode('PROD')).toBe(false);
+  it('rejects too short, too long, lowercase, and non-latin', () => {
+    expect(isValidDepartmentCode('Q')).toBe(false);
+    expect(isValidDepartmentCode('MANT1')).toBe(false);
+    expect(isValidDepartmentCode('prod')).toBe(false);
     expect(isValidDepartmentCode('تولید')).toBe(false);
-    expect(isValidDepartmentCode('pr od')).toBe(false);
-    expect(isValidDepartmentCode('pr-od')).toBe(false);
+    expect(isValidDepartmentCode('PR D')).toBe(false);
+    expect(isValidDepartmentCode('PR-D')).toBe(false);
     expect(isValidDepartmentCode('')).toBe(false);
   });
 });
 
 describe('suggestDepartmentCode', () => {
-  it('takes the first 4 latin characters, lowercased', () => {
-    expect(suggestDepartmentCode('Production Line B')).toBe('prod');
-    expect(suggestDepartmentCode('Finance')).toBe('fina');
+  it('takes the first 4 latin characters, uppercased', () => {
+    expect(suggestDepartmentCode('Production Line B')).toBe('PROD');
+    expect(suggestDepartmentCode('Finance')).toBe('FINA');
   });
 
   it('strips spaces and punctuation', () => {
-    expect(suggestDepartmentCode('R & D')).toBe('rd');
+    expect(suggestDepartmentCode('R & D')).toBe('RD');
   });
 
   it('returns empty when fewer than 2 usable characters remain', () => {
@@ -60,35 +60,35 @@ describe('suggestDepartmentCode', () => {
 
 describe('generateDepartmentCode', () => {
   it('uses the suggestion when nothing is taken', () => {
-    expect(generateDepartmentCode('Finance', [])).toBe('fina');
-    expect(generateDepartmentCode('R & D', [])).toBe('rd');
+    expect(generateDepartmentCode('Finance', [])).toBe('FINA');
+    expect(generateDepartmentCode('R & D', [])).toBe('RD');
   });
 
-  it('falls back to "dep" when the English name has fewer than 2 latin chars', () => {
-    expect(generateDepartmentCode('انبار', [])).toBe('dep');
-    expect(generateDepartmentCode('A', [])).toBe('dep');
-    expect(generateDepartmentCode('', [])).toBe('dep');
+  it('falls back to "DEP" when the English name has fewer than 2 latin chars', () => {
+    expect(generateDepartmentCode('انبار', [])).toBe('DEP');
+    expect(generateDepartmentCode('A', [])).toBe('DEP');
+    expect(generateDepartmentCode('', [])).toBe('DEP');
   });
 
-  it('appends an incrementing numeric suffix on collision', () => {
-    expect(generateDepartmentCode('Finance', ['fina'])).toBe('fina2');
-    expect(generateDepartmentCode('Finance', ['fina', 'fina2'])).toBe('fina3');
-    expect(generateDepartmentCode('انبار', ['dep'])).toBe('dep2');
+  it('appends an incrementing numeric suffix on collision, staying within 4 chars', () => {
+    expect(generateDepartmentCode('Finance', ['FINA'])).toBe('FIN2');
+    expect(generateDepartmentCode('Finance', ['FINA', 'FIN2'])).toBe('FIN3');
+    expect(generateDepartmentCode('انبار', ['DEP'])).toBe('DEP2');
   });
 
   it('ignores case and surrounding space in the taken set', () => {
-    expect(generateDepartmentCode('Finance', [' FINA '])).toBe('fina2');
+    expect(generateDepartmentCode('Finance', [' fina '])).toBe('FIN2');
   });
 
-  it('truncates the base so the suffix always fits in 6 characters', () => {
-    const taken = ['fina'];
+  it('truncates the base so the suffix always fits in 4 characters', () => {
+    const taken = ['FINA'];
     for (let n = 2; n <= 120; n++) {
       taken.push(generateDepartmentCode('Finance', taken));
     }
-    // fina2…fina9, then fina10…fina99, then fin100…
-    expect(taken).toContain('fina9');
-    expect(taken).toContain('fina10');
-    expect(taken).toContain('fin100');
+    // FIN2…FIN9, then FI10…FI99, then F100…
+    expect(taken).toContain('FIN9');
+    expect(taken).toContain('FI10');
+    expect(taken).toContain('F100');
     expect(new Set(taken).size).toBe(taken.length);
   });
 

@@ -48,8 +48,10 @@ export default async function ApprovalStepsPage({ params }: Props) {
     removeConfirm: tApproval('removeConfirm'),
     removed: tApproval('removed'),
     orderAdminOnly: tApproval('orderAdminOnly'),
+    departmentHint: tApproval('departmentHint'),
     steps: {
       manager: tSteps('manager'),
+      departmentManager: tSteps('departmentManager'),
       hr: tSteps('hr'),
       security: tSteps('security'),
       admin: tSteps('admin'),

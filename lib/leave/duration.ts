@@ -76,10 +76,13 @@ export function formatDuration(
 ): string {
   const { days, hours, minutes } = minutesToDaysHours(totalMinutes, hoursPerDay);
   const parts: string[] = [];
+  // A negative balance (FR-48) reads "-1 day and 4 hours": the sign goes on the
+  // first part only, or it would read as a sum of two debits.
+  const signed = (n: number) => (parts.length === 0 ? n : Math.abs(n));
 
-  if (days !== 0) parts.push(`${formatNumber(days, locale)} ${labels.days}`);
-  if (hours !== 0) parts.push(`${formatNumber(hours, locale)} ${labels.hours}`);
-  if (minutes !== 0) parts.push(`${formatNumber(minutes, locale)} ${labels.minutes}`);
+  if (days !== 0) parts.push(`${formatNumber(signed(days), locale)} ${labels.days}`);
+  if (hours !== 0) parts.push(`${formatNumber(signed(hours), locale)} ${labels.hours}`);
+  if (minutes !== 0) parts.push(`${formatNumber(signed(minutes), locale)} ${labels.minutes}`);
 
   if (parts.length === 0) return `${formatNumber(0, locale)} ${labels.days}`;
   return parts.join(` ${labels.and} `);

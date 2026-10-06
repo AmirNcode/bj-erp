@@ -179,16 +179,28 @@ export async function resetPassword(
 // Bulk import / credential regeneration (admin-only)
 // ---------------------------------------------------------------------------
 
+/** One validated CSV row (lib/csv/import-rows.ts ImportRow, FR-45). */
 export type BulkImportRow = {
   full_name: string;
   personnel_no: string;
-  hire_date: string | null;
-  department_code: string;
-  manager_personnel_no: string | null;
-  role: 'manager' | 'employee';
   job_title: string | null;
-  annual_days: number;
-  sick_days: number;
+  role: 'manager' | 'employee';
+  department_code: string;
+  supervisor_personnel_no: string | null;
+  manager_personnel_no: string | null;
+  hire_date: string | null;
+  /** Signed remaining annual leave in minutes (FR-48: may be negative). */
+  balance_minutes: number;
+};
+
+/** A department the rows use: created when `create`, renamed when `rename`, manager set when given. */
+export type BulkImportDepartment = {
+  code: string;
+  name_fa: string;
+  name_en: string;
+  create: boolean;
+  rename?: boolean;
+  manager_personnel_no: string | null;
 };
 
 export type IssuedCredential = {
@@ -197,38 +209,102 @@ export type IssuedCredential = {
   password: string;
 };
 
+export type ImportEmployeesInput = {
+  mode: 'add' | 'update' | 'replace';
+  /** Manager-first (validateImportRows sorts them). */
+  rows: (BulkImportRow & { existing?: boolean })[];
+  departments: BulkImportDepartment[];
+  /** Gregorian ISO date the balances were counted to. */
+  balanceAsOf: string;
+  overwriteBalances: boolean;
+  /** `replace` only — from lib/csv/import-plan.ts. */
+  deactivate: string[];
+  reassign: { id: string; managerPersonnelNo: string | null }[];
+  deleteDepartments: string[];
+};
+
+export type ImportEmployeesResult = {
+  credentials: IssuedCredential[];
+  updated: number;
+  deactivated: number;
+  deletedDepartments: string[];
+  notDeletedDepartments: string[];
+};
+
 /**
- * Imports employees from validated CSV rows in ONE transaction
- * (app_bulk_create_employees: the first bad row rolls everything back).
- * Generates a random password per row and returns the credentials once —
- * they are never logged or stored; passwords in the DB are bcrypt-hashed.
+ * Runs a bulk import plan (FR-45/FR-49) in ONE transaction
+ * (app_bulk_import_employees: the first failure rolls everything back).
+ * `update` and `replace` are admin-only in SQL too. A random password is
+ * generated for each NEW employee and returned once — never logged or stored;
+ * passwords in the DB are bcrypt-hashed. Updated employees keep theirs.
  */
-export async function bulkCreateEmployees(
-  rows: BulkImportRow[]
-): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
+export async function importEmployees(
+  input: ImportEmployeesInput
+): Promise<({ ok: true } & ImportEmployeesResult) | { ok: false; error: string }> {
   const c = await requireCaller({ anyOf: ['admin'], company: true });
   if (!c.ok) return c;
-  if (rows.length === 0) return dbErr('no rows to import');
+  if (input.rows.length === 0) return dbErr('no rows to import');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.balanceAsOf)) return dbErr('balance date is required');
 
-  const withPasswords = rows.map((row) => ({ ...row, password: generateTempPassword() }));
+  // Only the fields the RPC reads — the wizard's rows carry UI-only extras.
+  const rows = input.rows.map((row) => ({
+    full_name: row.full_name,
+    personnel_no: row.personnel_no,
+    job_title: row.job_title,
+    role: row.role,
+    department_code: row.department_code,
+    supervisor_personnel_no: row.supervisor_personnel_no,
+    manager_personnel_no: row.manager_personnel_no,
+    hire_date: row.hire_date,
+    balance_minutes: row.balance_minutes,
+    ...(row.existing ? {} : { password: generateTempPassword() }),
+  }));
+  const departments = input.departments.map((d) => ({
+    code: d.code,
+    name_fa: d.name_fa,
+    name_en: d.name_en,
+    create: d.create,
+    rename: d.rename ?? false,
+    manager_personnel_no: d.manager_personnel_no,
+  }));
+  type Json = import('@/lib/supabase/types').Json;
 
-  const { data, error } = await c.supabase.rpc('app_bulk_create_employees', {
+  const { data, error } = await c.supabase.rpc('app_bulk_import_employees', {
     p_company_id: c.companyId,
-    p_rows: withPasswords as unknown as import('@/lib/supabase/types').Json,
+    p_mode: input.mode,
+    p_rows: rows as unknown as Json,
+    p_departments: departments as unknown as Json,
+    p_balance_as_of: input.balanceAsOf,
+    p_overwrite_balances: input.overwriteBalances,
+    p_deactivate: input.deactivate,
+    p_reassign: input.reassign.map((r) => ({ id: r.id, manager_personnel_no: r.managerPersonnelNo })) as unknown as Json,
+    p_delete_departments: input.deleteDepartments,
   });
-
   if (error) return dbErr(error.message);
 
-  const created = (data ?? []) as { personnel_no: string; employee_code: string }[];
-  const byPno = new Map(withPasswords.map((r) => [r.personnel_no, r]));
-  const credentials: IssuedCredential[] = created.map((c) => ({
-    fullName: byPno.get(c.personnel_no)?.full_name ?? c.personnel_no,
-    employeeCode: c.employee_code,
-    password: byPno.get(c.personnel_no)?.password ?? '',
+  const out = (data ?? {}) as {
+    created?: { personnel_no: string; employee_code: string }[];
+    updated?: number;
+    deactivated?: number;
+    deleted_departments?: string[];
+    not_deleted_departments?: string[];
+  };
+  const byPno = new Map(rows.map((r) => [r.personnel_no, r]));
+  const credentials: IssuedCredential[] = (out.created ?? []).map((cr) => ({
+    fullName: byPno.get(cr.personnel_no)?.full_name ?? cr.personnel_no,
+    employeeCode: cr.employee_code,
+    password: (byPno.get(cr.personnel_no) as { password?: string } | undefined)?.password ?? '',
   }));
 
   invalidateAppCache();
-  return { ok: true, credentials };
+  return {
+    ok: true,
+    credentials,
+    updated: out.updated ?? 0,
+    deactivated: out.deactivated ?? 0,
+    deletedDepartments: out.deleted_departments ?? [],
+    notDeletedDepartments: out.not_deleted_departments ?? [],
+  };
 }
 
 /**

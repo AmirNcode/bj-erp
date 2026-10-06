@@ -142,6 +142,11 @@ export type PrintableRequest = ReviewRequestRow & {
    */
   approvals: {
     stepRole: StepRole;
+    /**
+     * FR-47: the department manager's signature. It carries role `manager` like
+     * the direct manager's, so only the step id tells them apart.
+     */
+    departmentStep: boolean;
     decision: 'approved' | 'rejected';
     approverName: string | null;
     signatureData: string | null;
@@ -231,14 +236,19 @@ export async function getRequestForPrint(
   };
 
   // Per-step signatures for the form's boxes. Same RLS as the request row.
-  const { data: approvalRows } = await c.supabase
-    .from('leave_request_approvals')
-    .select(
-      'step_role, decision, signature_data, signature_consent_at, approver:profiles!leave_request_approvals_approver_id_fkey(full_name)'
-    )
-    .eq('request_id', requestId);
+  const [{ data: approvalRows }, { data: departmentSteps }] = await Promise.all([
+    c.supabase
+      .from('leave_request_approvals')
+      .select(
+        'step_id, step_role, decision, signature_data, signature_consent_at, approver:profiles!leave_request_approvals_approver_id_fkey(full_name)'
+      )
+      .eq('request_id', requestId),
+    c.supabase.from('approval_steps').select('id').eq('manager_scope', 'department'),
+  ]);
+  const departmentStepIds = new Set((departmentSteps ?? []).map((s) => s.id));
 
   const approvals = ((approvalRows ?? []) as unknown as {
+    step_id: string | null;
     step_role: string;
     decision: string;
     signature_data: string | null;
@@ -246,6 +256,7 @@ export async function getRequestForPrint(
     approver: { full_name: string } | null;
   }[]).map((a) => ({
     stepRole: a.step_role as StepRole,
+    departmentStep: !!a.step_id && departmentStepIds.has(a.step_id),
     decision: a.decision as 'approved' | 'rejected',
     approverName: a.approver?.full_name ?? null,
     signatureData: a.signature_data,

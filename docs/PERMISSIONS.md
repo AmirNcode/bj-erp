@@ -97,10 +97,13 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `authenticated` only, exactly like the other helpers above. It reads `work_settings`, which every
   active member may already read.
 
-- **`departments_update_admin` is intentionally unreferenced (2026-07-30).** Admin editing of
-  department codes was deactivated at the client's request. The policy and the
-  `updateDepartmentCode` action stay so the feature can return without a migration — neither is
-  dead code to be removed.
+- **`departments_update_admin`** backs `setDepartmentManager` (FR-47, 2026-10-05): an admin picks
+  each department's manager on Manage › Departments. Code editing stays deactivated — the
+  `updateDepartmentCode` action is still intentionally unreferenced and is not dead code.
+- **Bulk import v2 (FR-45)** creates departments and sets their managers inside
+  `app_bulk_create_employees` (SECURITY DEFINER). That branch is **admin-only** in SQL: an `hr`
+  caller may still bulk-onboard plain employees but is refused if the file would create a
+  department or assign a department manager — department config stays admin-only.
 - **Department membership** is read by the admin-only `getDepartmentMembers` server action behind
   the Settings → Departments panel. It uses the existing `can_read_all` SELECT paths on `profiles`
   and `user_roles`; **no new policy and no new SECURITY DEFINER function** were added for it.
@@ -161,6 +164,11 @@ employee who reached it would still read only their own rows.
   lets an admin fill any slot so a company whose admin has no manager above them is not stuck. A
   deactivated named approver therefore blocks the step; the remedy is to change the configuration,
   which admin and HR can both now do.
+- **Department-manager step (FR-47)**: `manager_scope = 'department'` on a `manager` step. It is
+  filled by the requester's department manager (`departments.manager_id`, active) and applies only
+  when that person is neither the requester nor the requester's direct manager — otherwise it is
+  not required for that request. An admin may fill it like any role step; nobody signs their own
+  request. No read policy changes: managers already read company-wide (`can_read_all`).
 - `public.search_approver_candidates(text)` (SECURITY DEFINER, admin/hr-guarded, granted to
   `authenticated`, revoked from `anon`) backs the person picker. It **widens nothing** —
   `can_read_all` already gives both roles company-wide profile reads; it exists so the picker
@@ -193,6 +201,22 @@ employee who reached it would still read only their own rows.
   profile/config-table changes, and privileged RPCs append their own audit event inside the same
   transaction. This prevents clients from inventing events and keeps audit failure from being
   silently ignored.
+
+### Bulk import modes (FR-49)
+- `public.app_bulk_import_employees(...)` — SECURITY DEFINER, granted to `authenticated`. `add`
+  mode: admin or hr (hr clamped to plain employees, no department config, as v2). `update` /
+  `replace`: **admin only**, enforced in SQL. Never deactivates an admin or the caller; only the
+  `manager` role follows the file (admin/hr/security untouched); deletes a department only when no
+  profile, active or not, is in it. Every deactivation, reassignment, deletion and update is
+  audited. The server action `importEmployees` is admin-only.
+
+### Org chart (FR-44)
+- `public.get_org_chart()` — SECURITY DEFINER, granted to `authenticated`, revoked from `anon`,
+  scoped to the caller's company. Returns active profiles only: id, full name, job title,
+  department (id, fa, en), manager id (NULL when the manager is inactive) and whether the person
+  manages a department. Every role may call it (owner decision D8). **It widens names, titles,
+  departments and reporting lines to every employee — nothing else**: no personnel number, roles,
+  hire date, balances or leave data. Same pattern as `get_my_team_directory()`.
 
 ## Notes
 

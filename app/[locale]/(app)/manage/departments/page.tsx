@@ -30,11 +30,22 @@ export default async function DepartmentsPage({ params }: Props) {
     getTranslations('manage.settings'),
   ]);
   const supabase = await createClient();
-  // Names only — the card never shows a code (spec 2026-07-30, D13).
-  const { data: departments, error: departmentsError } = await supabase
-    .from('departments')
-    .select('id, name_fa, name_en')
-    .order('name_fa');
+  // The code is shown read-only since FR-46 (it is the bulk-import key); the
+  // manager is the department's second signer (FR-47).
+  const [{ data: departments, error: departmentsError }, { data: managerRows }] = await Promise.all([
+    supabase
+      .from('departments')
+      .select('id, name_fa, name_en, code, manager_id, manager:profiles!departments_manager_id_fkey(full_name)')
+      .order('name_fa'),
+    supabase
+      .from('user_roles')
+      .select('profiles!inner(id, full_name, active)')
+      .eq('role', 'manager')
+      .eq('profiles.active', true),
+  ]);
+  const managers = ((managerRows ?? []) as unknown as { profiles: { id: string; full_name: string } }[])
+    .map((r) => ({ id: r.profiles.id, fullName: r.profiles.full_name }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName, 'fa'));
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
@@ -43,7 +54,15 @@ export default async function DepartmentsPage({ params }: Props) {
       <Card>
         <CardContent>
           <DepartmentsCard
-            departments={departments ?? []}
+            departments={((departments ?? []) as unknown as {
+              id: string;
+              name_fa: string;
+              name_en: string;
+              code: string;
+              manager_id: string | null;
+              manager: { full_name: string } | null;
+            }[]).map(({ manager, ...d }) => ({ ...d, manager_name: manager?.full_name ?? null }))}
+            managers={managers}
             loadError={departmentsError?.message ?? null}
             locale={locale}
             labels={{
@@ -56,6 +75,9 @@ export default async function DepartmentsPage({ params }: Props) {
               noMembers: t('departments.noMembers'),
               loading: t('departments.loading'),
               close: t('departments.close'),
+              managerLabel: t('departments.managerLabel'),
+              noManager: t('departments.noManager'),
+              managerSaved: t('departments.managerSaved'),
               errorLabel: t('error'),
             }}
           />

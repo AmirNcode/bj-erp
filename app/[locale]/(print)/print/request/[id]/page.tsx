@@ -117,7 +117,11 @@ export default async function PrintRequestPage({ params }: Props) {
 
   // FR-36: each box resolves to either the request's own signature or one step
   // of the approval chain, so the HR box fills itself once HR has signed.
-  const stepByRole = new Map(r.approvals.map((a) => [a.stepRole, a]));
+  // FR-47: the department manager's signature also carries role `manager`; it
+  // prints in the strip below, never in the direct manager's box.
+  const stepByRole = new Map(
+    r.approvals.filter((a) => !a.departmentStep).map((a) => [a.stepRole, a])
+  );
 
   // FR-42: a step may be added beyond the four boxes the client's stationery
   // has — most obviously one naming a specific person, which carries the neutral
@@ -135,7 +139,9 @@ export default async function PrintRequestPage({ params }: Props) {
       .map((src) => src.role)
   );
   const extraApprovals = r.approvals.filter(
-    (a) => a.decision === 'approved' && !boxStepRoles.has(a.stepRole as 'manager' | 'hr' | 'security')
+    (a) =>
+      a.decision === 'approved' &&
+      (a.departmentStep || !boxStepRoles.has(a.stepRole as 'manager' | 'hr' | 'security'))
   );
   const resolveBox = (box: Parameters<typeof signatureSourceFor>[0]) => {
     const source = signatureSourceFor(box);
@@ -363,6 +369,11 @@ export default async function PrintRequestPage({ params }: Props) {
                   }`}
                   data-testid={`print-extra-approval-${i}`}
                 >
+                  {a.departmentStep ? (
+                    <div className="text-center text-[10px] font-semibold">
+                      {t('departmentManager')}
+                    </div>
+                  ) : null}
                   <div className="text-center text-[11px]">{a.approverName ?? '—'}</div>
                   {a.signatureData ? (
                     <>

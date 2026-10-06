@@ -18,19 +18,20 @@ on conflict (id) do nothing;
 -- `code` used to be the latin prefix of generated employee codes (prod-1042).
 -- Since 20260730130002 it prefixes nothing and no human types it; the column
 -- stays NOT NULL + unique, so these fixed values are still supplied here.
+-- Uppercase 2-4 chars since 20261005120001 (FR-46).
 insert into public.departments (id, company_id, name_fa, name_en, kind, code) values
-  ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c0', 'خط تولید الف',      'Production Line A', 'team',     'prod'),
-  ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000c0', 'کنترل کیفیت',        'Quality Control',   'team',     'qc'),
-  ('00000000-0000-0000-0000-0000000000d3', '00000000-0000-0000-0000-0000000000c0', 'نگهداری و تعمیرات', 'Maintenance',       'team',     'mant'),
-  ('00000000-0000-0000-0000-0000000000d4', '00000000-0000-0000-0000-0000000000c0', 'حراست',              'Security',          'security', 'sec')
+  ('00000000-0000-0000-0000-0000000000d1', '00000000-0000-0000-0000-0000000000c0', 'خط تولید الف',      'Production Line A', 'team',     'PROD'),
+  ('00000000-0000-0000-0000-0000000000d2', '00000000-0000-0000-0000-0000000000c0', 'کنترل کیفیت',        'Quality Control',   'team',     'QC'),
+  ('00000000-0000-0000-0000-0000000000d3', '00000000-0000-0000-0000-0000000000c0', 'نگهداری و تعمیرات', 'Maintenance',       'team',     'MANT'),
+  ('00000000-0000-0000-0000-0000000000d4', '00000000-0000-0000-0000-0000000000c0', 'حراست',              'Security',          'security', 'SEC')
 on conflict (id) do nothing;
 
 -- Older installs created these rows before `code` existed — align them.
 update public.departments set code = c.v
-from (values ('00000000-0000-0000-0000-0000000000d1','prod'),
-             ('00000000-0000-0000-0000-0000000000d2','qc'),
-             ('00000000-0000-0000-0000-0000000000d3','mant'),
-             ('00000000-0000-0000-0000-0000000000d4','sec')) as c(i,v)
+from (values ('00000000-0000-0000-0000-0000000000d1','PROD'),
+             ('00000000-0000-0000-0000-0000000000d2','QC'),
+             ('00000000-0000-0000-0000-0000000000d3','MANT'),
+             ('00000000-0000-0000-0000-0000000000d4','SEC')) as c(i,v)
 where id = c.i::uuid and code is distinct from c.v;
 
 -- Work settings: Friday weekend. Keyed on company (no unique constraint -> guard).

@@ -55,15 +55,16 @@ if (error) {
 console.log(`cleanup-e2e: deleted ${data} throwaway e2e user(s).`);
 
 // --- throwaway departments (department.spec) --------------------------------
-// Codes starting with `zz` are reserved for tests (tests/e2e/_helpers.ts
-// nextTestDepartmentCode); real departments use meaningful prefixes. Runs
+// Codes starting with `ZZ` are reserved for tests (tests/e2e/_helpers.ts
+// nextTestDepartmentCode — generated codes are uppercase since FR-46); real
+// departments use meaningful prefixes. Runs
 // after the user cleanup so no test account is left pointing at a deleted row.
 // Plain DELETE under the existing departments_delete_admin RLS policy — no
 // service_role, no new RPC.
 const { data: deletedDepts, error: deptErr } = await supa
   .from('departments')
   .delete()
-  .like('code', 'zz%')
+  .like('code', 'ZZ%')
   .select('id');
 if (deptErr) {
   console.warn('cleanup-e2e: department cleanup skipped:', deptErr.message);

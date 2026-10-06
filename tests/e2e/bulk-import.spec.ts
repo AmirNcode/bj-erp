@@ -2,8 +2,11 @@ import { test, expect, type Page } from '@playwright/test';
 import {
   ADMIN_CODE,
   ADMIN_PASSWORD,
+  fillPicker,
+  jalaliRangeFromGregorian,
   login,
   logout,
+  nextTestDepartmentCode,
   nextTestPersonnelNo,
   SEEDED_MANAGER_CODE,
   SEEDED_PASSWORD,
@@ -11,9 +14,10 @@ import {
 import { templateHeader } from '../../lib/csv/import-rows';
 
 /**
- * Admin bulk CSV import + one-time credentials export + bulk password
- * regeneration (spec 2026-07-13). Personnel numbers use the 999####### test
- * range so app_cleanup_e2e_users() removes everything afterwards.
+ * Admin bulk CSV import v2 (FR-45) + one-time credentials export + bulk
+ * password regeneration (spec 2026-07-13). Personnel numbers use the
+ * 999####### test range and the new department's English name starts with a
+ * `zz` token (code ZZ…), so cleanup-e2e removes everything afterwards.
  */
 
 function csvBuffer(rows: string[][]): Buffer {
@@ -58,13 +62,17 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   const empPno1 = nextTestPersonnelNo();
   const empPno2 = nextTestPersonnelNo();
 
+  const deptToken = nextTestDepartmentCode();
   const header = templateHeader();
   const dataRows = [
-    // full_name, personnel_no, hire_date, department_code, manager_personnel_no, role, job_title, annual, sick
-    [`Bulk Mgr ${mgrPno}`, mgrPno, '1404/04/22', 'prod', '', 'manager', 'Line Lead', '26', '10'],
-    [`Bulk Emp ${empPno1}`, empPno1, '2025-07-13', 'prod', mgrPno, 'employee', 'Welder', '26', '10'],
-    [`Bulk Emp ${empPno2}`, empPno2, '', 'qc', '', 'employee', '', '20', '5'],
+    // full_name, personnel_no, job_title, role, department_code, name_fa, name_en,
+    // supervisor_personnel_no, manager_personnel_no, hire_date, pto_days, pto_hours
+    // The employee comes BEFORE their supervisor: the importer sorts.
+    [`Bulk Emp ${empPno1}`, empPno1, 'Welder', 'employee', '', `بخش ${deptToken}`, `${deptToken} Bulk`, mgrPno, '', '2025-07-13', '-1', '-4'],
+    [`Bulk Mgr ${mgrPno}`, mgrPno, 'Line Lead', 'manager', '', `بخش ${deptToken}`, `${deptToken} Bulk`, '', '', '1404/04/22', '12', '3'],
+    [`Bulk Emp ${empPno2}`, empPno2, '', 'employee', 'qc', '', '', '', '', '', '0', '0'],
   ];
+  const balanceDate = jalaliRangeFromGregorian(new Date(), new Date()).split(' — ')[0];
 
   // ── import happy path ─────────────────────────────────────────────────────
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
@@ -79,6 +87,12 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   }).toPass({ timeout: 30_000 });
   await uploadCsv(page, [header, ...dataRows]);
   await expect(page.locator('[data-testid="import-errors"]')).toHaveCount(0);
+  // The new department is listed and must be acknowledged; the date is required.
+  await expect(page.locator('[data-testid="import-departments"]')).toContainText(`${deptToken} Bulk`);
+  await expect(page.locator('[data-testid="import-submit"]')).toBeDisabled();
+  await page.locator('[data-testid="import-ack-departments"]').check();
+  await fillPicker(page, balanceDate, '[data-testid="import-balance-date-field"]');
+  await expect(page.locator('[data-testid="import-accrual-start"]')).toBeVisible();
   await page.locator('[data-testid="import-submit"]').click();
 
   const creds = await readCredentials(page);
@@ -129,4 +143,81 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   await logout(page);
   await login(page, empCode, newPw);
   await expect(page.locator('[data-testid="home-board"]')).toBeVisible({ timeout: 10_000 });
+});
+
+test('import modes: add & update changes a title; replace deactivates who is not in the file', async ({ page }) => {
+  test.setTimeout(180_000);
+  const boss = nextTestPersonnelNo();
+  const keep = nextTestPersonnelNo();
+  const gone = nextTestPersonnelNo();
+  const token = nextTestDepartmentCode();
+  const header = templateHeader();
+  const balanceDate = jalaliRangeFromGregorian(new Date(), new Date()).split(' — ')[0];
+  const r = (name: string, pno: string, title: string, role: string, mgr: string) => [
+    name, pno, title, role, '', `بخش ${token}`, `${token} Modes`, '', mgr, '', '0', '0',
+  ];
+
+  await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+  const open = async () => {
+    await expect(async () => {
+      await page.goto('/manage/employees/import');
+      await expect(page.locator('[data-testid="template-download"]')).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 30_000 });
+  };
+
+  // ── 1. add: three people in a new department ──────────────────────────────
+  await open();
+  await uploadCsv(page, [
+    header,
+    r(`Modes Boss ${boss}`, boss, 'Head', 'manager', ''),
+    r(`Modes Keep ${keep}`, keep, 'Welder', 'employee', boss),
+    r(`Modes Gone ${gone}`, gone, 'Welder', 'employee', boss),
+  ]);
+  await page.locator('[data-testid="import-ack-departments"]').check();
+  await fillPicker(page, balanceDate, '[data-testid="import-balance-date-field"]');
+  await page.locator('[data-testid="import-submit"]').click();
+  await expect(page.locator('[data-testid="import-done"]')).toBeVisible({ timeout: 20_000 });
+
+  // ── 2. add & update: same people, a new title for one ─────────────────────
+  await open();
+  await page.locator('[data-testid="import-mode-update"]').check();
+  await uploadCsv(page, [
+    header,
+    r(`Modes Boss ${boss}`, boss, 'Head', 'manager', ''),
+    r(`Modes Keep ${keep}`, keep, 'Senior Welder', 'employee', boss),
+    r(`Modes Gone ${gone}`, gone, 'Welder', 'employee', boss),
+  ]);
+  await expect(page.locator('[data-testid="import-errors"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="import-plan-summary"]')).toBeVisible();
+  await fillPicker(page, balanceDate, '[data-testid="import-balance-date-field"]');
+  await page.locator('[data-testid="import-submit"]').click();
+  await expect(page.locator('[data-testid="import-done"]')).toContainText('3', { timeout: 20_000 });
+
+  // ── 3. replace: the file leaves one out → deactivated after confirming ─────
+  await open();
+  await page.locator('[data-testid="import-mode-replace"]').check();
+  await uploadCsv(page, [
+    header,
+    r(`Modes Boss ${boss}`, boss, 'Head', 'manager', ''),
+    r(`Modes Keep ${keep}`, keep, 'Senior Welder', 'employee', boss),
+  ]);
+  const missing = page.locator('[data-testid="import-missing"]');
+  await expect(missing).toContainText(`Modes Gone ${gone}`);
+  // Everyone else the local DB holds is listed too: keep them all, deactivate only ours.
+  await page.locator('[data-testid="import-missing-default-keep"]').check();
+  const goneRow = missing.locator('li', { hasText: `Modes Gone ${gone}` });
+  await goneRow.locator('select').selectOption('deactivate');
+  // Answer any conflicts the shared DB produces by keeping things as they are.
+  for (const radio of await page.locator('[data-testid$="-keepBoth"], [data-testid$="-noManager"], [data-testid$="-keepAsManager"]').all()) {
+    await radio.check();
+  }
+  await fillPicker(page, balanceDate, '[data-testid="import-balance-date-field"]');
+  await page.locator('[data-testid="import-submit"]').click();
+  await expect(page.locator('[data-testid="import-replace-confirm-body"]')).toBeVisible();
+  await page.locator('[data-testid="import-replace-confirm"]').click();
+  await expect(page.locator('[data-testid="import-done"]')).toBeVisible({ timeout: 20_000 });
+
+  // The deactivated person can no longer sign in? Check the list instead: inactive filter.
+  await page.goto(`/manage/employees?filter=inactive&q=${gone}`);
+  await expect(page.locator('body')).toContainText(`Modes Gone ${gone}`, { timeout: 10_000 });
 });

@@ -161,9 +161,9 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                       >
                         <span className="text-muted-foreground">{labels.chainTitle}:</span>
                         {(() => {
-                          const approved = new Set(
-                            req.signed.filter((x) => x.decision === 'approved').map((x) => x.stepRole)
-                          );
+                          // Labels, not roles: the department manager's
+                          // signature also carries role `manager` (FR-47).
+                          const approved = new Set(req.approved);
                           // Everyone required, in order: those already approved
                           // plus those still outstanding.
                           const all = [...approved, ...req.outstanding.filter((r) => !approved.has(r))];

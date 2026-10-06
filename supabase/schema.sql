@@ -356,6 +356,37 @@ end; $_$;
 
 
 --
+-- Name: department_manager_for(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.department_manager_for(p_emp uuid) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select d.manager_id
+    from public.profiles p
+    join public.departments d on d.id = p.department_id
+    join public.profiles m on m.id = d.manager_id and m.active
+   where p.id = p_emp;
+$$;
+
+
+--
+-- Name: department_step_applies(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.department_step_applies(p_emp uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select x.dm is not null
+     and x.dm <> p_emp
+     and x.dm is distinct from (select manager_id from public.profiles where id = p_emp)
+    from (select private.department_manager_for(p_emp) as dm) x;
+$$;
+
+
+--
 -- Name: enforce_profile_update_scope(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -512,6 +543,20 @@ COMMENT ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date) I
 
 
 --
+-- Name: is_department_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_uid is not null
+     and private.is_active(p_uid)
+     and private.department_manager_for(p_emp) = p_uid;
+$$;
+
+
+--
 -- Name: is_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -603,6 +648,18 @@ CREATE FUNCTION private.same_team(uid uuid, target uuid) RETURNS boolean
         where caller.id = uid
           and caller.department_id is not null
      );
+$$;
+
+
+--
+-- Name: step_applies(text, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.step_applies(p_scope text, p_emp uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_scope is distinct from 'department' or private.department_step_applies(p_emp);
 $$;
 
 
@@ -1082,51 +1139,101 @@ end; $$;
 
 
 --
--- Name: app_bulk_create_employees(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_bulk_create_employees(uuid, jsonb, jsonb, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb) RETURNS jsonb
+CREATE FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $$
+    AS $_$
 declare
-  v_caller  uuid := auth.uid();
-  v_row     jsonb;
-  v_i       integer := 0;
-  v_dept    uuid;
-  v_mgr     uuid;
-  v_role    text;
-  v_bulk_hr boolean;
-  v_uid     uuid;
-  v_code    text;
-  v_annual  numeric;
-  v_sick    numeric;
-  v_annual_type uuid;
-  v_sick_type   uuid;
-  v_result  jsonb := '[]'::jsonb;
-  v_ystart  date := date_trunc('year', current_date)::date;
-  v_yend    date := (date_trunc('year', current_date) + interval '1 year - 1 day')::date;
+  v_caller        uuid := auth.uid();
+  v_bulk_hr       boolean;
+  v_today         date := (now() at time zone 'Asia/Tehran')::date;
+  v_dep           jsonb;
+  v_row           jsonb;
+  v_i             integer := 0;
+  v_dept          uuid;
+  v_mgr_pno       text;
+  v_mgr           uuid;
+  v_role          text;
+  v_uid           uuid;
+  v_code          text;
+  v_minutes       int;
+  v_prev          int;
+  v_ledger        uuid;
+  v_annual_type   uuid;
+  v_rate          int;
+  v_cap           int;
+  v_carry         int;
+  v_accrual_start date;
+  v_dm            uuid;
+  v_result        jsonb := '[]'::jsonb;
 begin
   v_bulk_hr := private.has_role(v_caller, 'hr') and not private.is_admin(v_caller);
   if not (private.is_admin(v_caller) or v_bulk_hr) then
     raise exception 'admin or hr role required' using errcode = '42501';
   end if;
+  -- Tenant binding: the company comes from the request, so it must be the
+  -- caller's own. Without this an admin of one company could import into another.
+  if p_company_id is distinct from (select company_id from public.profiles where id = v_caller) then
+    raise exception 'not allowed to import into another company' using errcode = '42501';
+  end if;
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then
     raise exception 'no rows to import' using errcode = '22023';
   end if;
+  if p_departments is null or jsonb_typeof(p_departments) <> 'array' then
+    raise exception 'departments must be an array' using errcode = '22023';
+  end if;
+  if p_balance_as_of is null then
+    raise exception 'balance date is required' using errcode = '22023';
+  end if;
+  if p_balance_as_of > v_today then
+    raise exception 'balance date cannot be in the future' using errcode = '22023';
+  end if;
 
-  select id into v_annual_type from public.leave_types
+  -- First Jalali month after the one containing the balance date. Raises
+  -- through the join if the date is outside the seeded calendar.
+  select n.gregorian_start into v_accrual_start
+    from public.jalali_months m
+    join public.jalali_months n on n.gregorian_start = m.gregorian_end + 1
+   where p_balance_as_of between m.gregorian_start and m.gregorian_end;
+  if v_accrual_start is null then
+    raise exception 'date outside supported calendar range' using errcode = '22023';
+  end if;
+
+  select id, default_accrual_minutes_per_month, default_annual_cap_minutes, default_carryover_cap_minutes
+    into v_annual_type, v_rate, v_cap, v_carry
+    from public.leave_types
    where company_id = p_company_id and name_en = 'Annual Leave' and affects_balance;
-  select id into v_sick_type from public.leave_types
-   where company_id = p_company_id and name_en = 'Sick Leave' and affects_balance;
 
+  -- 1. Departments.
+  for v_dep in select * from jsonb_array_elements(p_departments) loop
+    v_code := upper(btrim(coalesce(v_dep->>'code', '')));
+    if v_code !~ '^[A-Z0-9]{2,4}$' then
+      raise exception 'invalid department code "%"', v_code using errcode = '22023';
+    end if;
+    if coalesce((v_dep->>'create')::boolean, false) then
+      if v_bulk_hr then
+        raise exception 'only admins can create departments' using errcode = '42501';
+      end if;
+      if exists (select 1 from public.departments where company_id = p_company_id and code = v_code) then
+        raise exception 'department code "%" already exists', v_code using errcode = '23505';
+      end if;
+      if coalesce(btrim(v_dep->>'name_fa'), '') = '' or coalesce(btrim(v_dep->>'name_en'), '') = '' then
+        raise exception 'department "%" needs a Farsi and an English name', v_code using errcode = '22023';
+      end if;
+      insert into public.departments (company_id, name_fa, name_en, kind, code)
+      values (p_company_id, btrim(v_dep->>'name_fa'), btrim(v_dep->>'name_en'), 'team', v_code);
+    end if;
+  end loop;
+
+  -- 2–4. Employees, opening balances, accrual policies.
   for v_row in select * from jsonb_array_elements(p_rows) loop
     v_i := v_i + 1;
 
     v_role := coalesce(v_row->>'role', 'employee');
-    -- FR-35 / spec D4: HR may bulk-onboard, but only ordinary employees. The
-    -- CSV carries a role column, so it is clamped HERE rather than trusted —
-    -- otherwise a spreadsheet could hand an HR account a manager.
+    -- FR-35 / spec D4: HR may bulk-onboard, but only ordinary employees.
     if v_bulk_hr then
       v_role := 'employee';
     end if;
@@ -1135,20 +1242,20 @@ begin
     end if;
 
     select id into v_dept from public.departments
-     where company_id = p_company_id and code = v_row->>'department_code';
+     where company_id = p_company_id and code = upper(btrim(coalesce(v_row->>'department_code', '')));
     if v_dept is null then
       raise exception 'row %: unknown department code "%"', v_i, v_row->>'department_code' using errcode = '22023';
     end if;
 
     v_mgr := null;
-    if coalesce(v_row->>'manager_personnel_no', '') <> '' then
-      -- Resolves against existing employees AND rows created earlier in this
-      -- same call (they are already in profiles inside this transaction).
+    v_mgr_pno := coalesce(nullif(btrim(coalesce(v_row->>'supervisor_personnel_no', '')), ''),
+                          nullif(btrim(coalesce(v_row->>'manager_personnel_no', '')), ''));
+    if v_mgr_pno is not null then
       select id into v_mgr from public.profiles
-       where company_id = p_company_id and personnel_no = v_row->>'manager_personnel_no';
+       where company_id = p_company_id and personnel_no = v_mgr_pno;
       if v_mgr is null then
         raise exception 'row %: manager with personnel number % not found (list managers before their team)',
-          v_i, v_row->>'manager_personnel_no' using errcode = '22023';
+          v_i, v_mgr_pno using errcode = '22023';
       end if;
     end if;
 
@@ -1158,21 +1265,35 @@ begin
       (case when v_role = 'manager' then array['manager','employee'] else array['employee'] end)::public.app_role[],
       nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
 
-    v_annual := coalesce(nullif(v_row->>'annual_days', ''), '0')::numeric;
-    v_sick   := coalesce(nullif(v_row->>'sick_days',   ''), '0')::numeric;
-    if v_annual > 0 then
+    v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    if v_minutes < -366 * private.company_minutes_per_day(p_company_id)
+       or v_minutes > 366 * private.company_minutes_per_day(p_company_id) then
+      raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
+    end if;
+    if v_minutes <> 0 then
       if v_annual_type is null then
         raise exception 'row %: leave type "Annual Leave" not found', v_i using errcode = '22023';
       end if;
-      perform private.allocate_leave_impl(v_caller, v_uid, v_annual_type, v_ystart, v_yend,
-        round(v_annual * private.company_minutes_per_day(p_company_id))::int);
+      perform pg_advisory_xact_lock(hashtextextended('leave:' || v_uid::text, 0));
+      v_prev := public.current_leave_balance(v_uid, v_annual_type);
+      insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
+      values (v_uid, v_annual_type, 'adjustment', v_minutes, v_prev + v_minutes,
+              'opening balance as of ' || p_balance_as_of::text)
+      returning id into v_ledger;
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (v_caller, 'opening_balance', 'leave_ledger', v_ledger,
+              jsonb_build_object('employee_id', v_uid, 'leave_type_id', v_annual_type,
+                                 'minutes', v_minutes, 'as_of', p_balance_as_of));
     end if;
-    if v_sick > 0 then
-      if v_sick_type is null then
-        raise exception 'row %: leave type "Sick Leave" not found', v_i using errcode = '22023';
-      end if;
-      perform private.allocate_leave_impl(v_caller, v_uid, v_sick_type, v_ystart, v_yend,
-        round(v_sick * private.company_minutes_per_day(p_company_id))::int);
+
+    if v_annual_type is not null and coalesce(v_rate, 0) > 0 then
+      insert into public.employee_leave_policies (
+        employee_id, leave_type_id, accrual_minutes_per_month,
+        annual_cap_minutes, carryover_cap_minutes, accrual_start_month, created_by
+      ) values (
+        v_uid, v_annual_type, v_rate, v_cap, coalesce(v_carry, 4320), v_accrual_start, v_caller
+      )
+      on conflict (employee_id, leave_type_id) do nothing;
     end if;
 
     select employee_code into v_code from public.profiles where id = v_uid;
@@ -1180,12 +1301,370 @@ begin
       'personnel_no', v_row->>'personnel_no', 'employee_code', v_code, 'user_id', v_uid);
   end loop;
 
+  -- 5. Department managers — only where the department has none yet.
+  for v_dep in select * from jsonb_array_elements(p_departments) loop
+    if coalesce(btrim(v_dep->>'manager_personnel_no'), '') = '' then
+      continue;
+    end if;
+    if v_bulk_hr then
+      raise exception 'only admins can assign department managers' using errcode = '42501';
+    end if;
+    select id into v_dm from public.profiles
+     where company_id = p_company_id and personnel_no = btrim(v_dep->>'manager_personnel_no');
+    if v_dm is null then
+      raise exception 'department manager with personnel number % not found',
+        v_dep->>'manager_personnel_no' using errcode = '22023';
+    end if;
+    update public.departments
+       set manager_id = v_dm
+     where company_id = p_company_id
+       and code = upper(btrim(v_dep->>'code'))
+       and manager_id is null;
+  end loop;
+
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
   values (v_caller, 'bulk_create_employees', 'profiles', null,
-          jsonb_build_object('count', jsonb_array_length(p_rows)));
+          jsonb_build_object('count', jsonb_array_length(p_rows),
+                             'departments_created',
+                             (select count(*) from jsonb_array_elements(p_departments) d
+                               where coalesce((d->>'create')::boolean, false)),
+                             'balance_as_of', p_balance_as_of));
 
   return v_result;
-end; $$;
+end;
+$_$;
+
+
+--
+-- Name: app_bulk_import_employees(uuid, text, jsonb, jsonb, date, boolean, uuid[], jsonb, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_caller        uuid := auth.uid();
+  v_is_admin      boolean;
+  v_bulk_hr       boolean;
+  v_today         date := (now() at time zone 'Asia/Tehran')::date;
+  v_dep           jsonb;
+  v_row           jsonb;
+  v_i             integer := 0;
+  v_dept          uuid;
+  v_mgr_pno       text;
+  v_mgr           uuid;
+  v_role          text;
+  v_uid           uuid;
+  v_existing      uuid;
+  v_code          text;
+  v_minutes       int;
+  v_prev          int;
+  v_ledger        uuid;
+  v_annual_type   uuid;
+  v_rate          int;
+  v_cap           int;
+  v_carry         int;
+  v_accrual_start date;
+  v_dm            uuid;
+  v_id            uuid;
+  v_created       jsonb := '[]'::jsonb;
+  v_updated       int := 0;
+  v_deactivated   int := 0;
+  v_deleted       text[] := '{}';
+  v_not_deleted   text[] := '{}';
+  v_mpd           int;
+begin
+  v_is_admin := private.is_admin(v_caller);
+  v_bulk_hr  := private.has_role(v_caller, 'hr') and not v_is_admin;
+  if not (v_is_admin or v_bulk_hr) then
+    raise exception 'admin or hr role required' using errcode = '42501';
+  end if;
+  -- Tenant binding: the company comes from the request, so it must be the
+  -- caller's own. Without this an admin of one company could import into another.
+  if p_company_id is distinct from (select company_id from public.profiles where id = v_caller) then
+    raise exception 'not allowed to import into another company' using errcode = '42501';
+  end if;
+  if p_mode is null or p_mode not in ('add', 'update', 'replace') then
+    raise exception 'import mode must be add, update or replace' using errcode = '22023';
+  end if;
+  if p_mode <> 'add' and not v_is_admin then
+    raise exception 'only admins can update or replace employees by import' using errcode = '42501';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then
+    raise exception 'no rows to import' using errcode = '22023';
+  end if;
+  if p_departments is null or jsonb_typeof(p_departments) <> 'array' then
+    raise exception 'departments must be an array' using errcode = '22023';
+  end if;
+  if p_mode <> 'replace' and (coalesce(cardinality(p_deactivate), 0) > 0
+       or coalesce(cardinality(p_delete_departments), 0) > 0
+       or coalesce(jsonb_array_length(p_reassign), 0) > 0) then
+    raise exception 'deactivation and department deletion need replace mode' using errcode = '22023';
+  end if;
+  if p_balance_as_of is null then
+    raise exception 'balance date is required' using errcode = '22023';
+  end if;
+  if p_balance_as_of > v_today then
+    raise exception 'balance date cannot be in the future' using errcode = '22023';
+  end if;
+
+  select n.gregorian_start into v_accrual_start
+    from public.jalali_months m
+    join public.jalali_months n on n.gregorian_start = m.gregorian_end + 1
+   where p_balance_as_of between m.gregorian_start and m.gregorian_end;
+  if v_accrual_start is null then
+    raise exception 'date outside supported calendar range' using errcode = '22023';
+  end if;
+
+  select id, default_accrual_minutes_per_month, default_annual_cap_minutes, default_carryover_cap_minutes
+    into v_annual_type, v_rate, v_cap, v_carry
+    from public.leave_types
+   where company_id = p_company_id and name_en = 'Annual Leave' and affects_balance;
+  v_mpd := private.company_minutes_per_day(p_company_id);
+
+  -- 1. Departments: create, or (update/replace) take the file's names.
+  for v_dep in select * from jsonb_array_elements(p_departments) loop
+    v_code := upper(btrim(coalesce(v_dep->>'code', '')));
+    if v_code !~ '^[A-Z0-9]{2,4}$' then
+      raise exception 'invalid department code "%"', v_code using errcode = '22023';
+    end if;
+    if coalesce((v_dep->>'create')::boolean, false) then
+      if v_bulk_hr then
+        raise exception 'only admins can create departments' using errcode = '42501';
+      end if;
+      if exists (select 1 from public.departments where company_id = p_company_id and code = v_code) then
+        raise exception 'department code "%" already exists', v_code using errcode = '23505';
+      end if;
+      if coalesce(btrim(v_dep->>'name_fa'), '') = '' or coalesce(btrim(v_dep->>'name_en'), '') = '' then
+        raise exception 'department "%" needs a Farsi and an English name', v_code using errcode = '22023';
+      end if;
+      insert into public.departments (company_id, name_fa, name_en, kind, code)
+      values (p_company_id, btrim(v_dep->>'name_fa'), btrim(v_dep->>'name_en'), 'team', v_code);
+    elsif p_mode <> 'add' and coalesce((v_dep->>'rename')::boolean, false) then
+      update public.departments
+         set name_fa = btrim(v_dep->>'name_fa'), name_en = btrim(v_dep->>'name_en')
+       where company_id = p_company_id and code = v_code
+         and coalesce(btrim(v_dep->>'name_fa'), '') <> '' and coalesce(btrim(v_dep->>'name_en'), '') <> '';
+    end if;
+  end loop;
+
+  -- 2. Employees: create or update.
+  for v_row in select * from jsonb_array_elements(p_rows) loop
+    v_i := v_i + 1;
+
+    v_role := coalesce(v_row->>'role', 'employee');
+    if v_bulk_hr then
+      v_role := 'employee';
+    end if;
+    if v_role not in ('manager', 'employee') then
+      raise exception 'row %: role must be manager or employee', v_i using errcode = '22023';
+    end if;
+
+    select id into v_dept from public.departments
+     where company_id = p_company_id and code = upper(btrim(coalesce(v_row->>'department_code', '')));
+    if v_dept is null then
+      raise exception 'row %: unknown department code "%"', v_i, v_row->>'department_code' using errcode = '22023';
+    end if;
+
+    v_mgr := null;
+    v_mgr_pno := coalesce(nullif(btrim(coalesce(v_row->>'supervisor_personnel_no', '')), ''),
+                          nullif(btrim(coalesce(v_row->>'manager_personnel_no', '')), ''));
+    if v_mgr_pno is not null then
+      select id into v_mgr from public.profiles
+       where company_id = p_company_id and personnel_no = v_mgr_pno;
+      if v_mgr is null then
+        raise exception 'row %: manager with personnel number % not found (list managers before their team)',
+          v_i, v_mgr_pno using errcode = '22023';
+      end if;
+    end if;
+
+    v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    if v_minutes < -366 * v_mpd or v_minutes > 366 * v_mpd then
+      raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
+    end if;
+
+    select id into v_existing from public.profiles
+     where company_id = p_company_id and personnel_no = btrim(coalesce(v_row->>'personnel_no', ''));
+
+    if v_existing is not null then
+      if p_mode = 'add' then
+        raise exception 'personnel number already exists' using errcode = '23505';
+      end if;
+      v_uid := v_existing;
+
+      update public.profiles
+         set full_name     = btrim(v_row->>'full_name'),
+             job_title     = nullif(btrim(coalesce(v_row->>'job_title', '')), ''),
+             department_id = v_dept,
+             manager_id    = v_mgr,
+             hire_date     = coalesce(nullif(v_row->>'hire_date', '')::date, hire_date),
+             active        = true
+       where id = v_uid;
+
+      -- Only the manager role follows the file; admin/hr/security are untouched.
+      if v_role = 'manager' then
+        insert into public.user_roles (user_id, role) values (v_uid, 'manager') on conflict do nothing;
+      else
+        delete from public.user_roles where user_id = v_uid and role = 'manager';
+      end if;
+
+      if coalesce(p_overwrite_balances, false) and v_annual_type is not null then
+        perform pg_advisory_xact_lock(hashtextextended('leave:' || v_uid::text, 0));
+        v_prev := public.current_leave_balance(v_uid, v_annual_type);
+        if v_prev <> v_minutes then
+          insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
+          values (v_uid, v_annual_type, 'adjustment', v_minutes - v_prev, v_minutes,
+                  'opening balance as of ' || p_balance_as_of::text)
+          returning id into v_ledger;
+          insert into public.audit_log (actor_id, action, entity, entity_id, after)
+          values (v_caller, 'opening_balance', 'leave_ledger', v_ledger,
+                  jsonb_build_object('employee_id', v_uid, 'previous_minutes', v_prev,
+                                     'minutes', v_minutes, 'as_of', p_balance_as_of));
+        end if;
+        if coalesce(v_rate, 0) > 0 then
+          insert into public.employee_leave_policies (
+            employee_id, leave_type_id, accrual_minutes_per_month,
+            annual_cap_minutes, carryover_cap_minutes, accrual_start_month, created_by
+          ) values (v_uid, v_annual_type, v_rate, v_cap, coalesce(v_carry, 4320), v_accrual_start, v_caller)
+          on conflict (employee_id, leave_type_id) do update
+             set accrual_start_month = excluded.accrual_start_month;
+        end if;
+      end if;
+
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (v_caller, 'bulk_update_employee', 'profiles', v_uid,
+              jsonb_build_object('personnel_no', v_row->>'personnel_no', 'mode', p_mode,
+                                 'department_code', v_row->>'department_code', 'role', v_role));
+      v_updated := v_updated + 1;
+    else
+      v_uid := private.create_employee_impl(
+        v_caller, case when v_bulk_hr then 'bulk_hr' else 'bulk' end, p_company_id, v_dept, v_mgr,
+        v_row->>'personnel_no', v_row->>'full_name', v_row->>'password',
+        (case when v_role = 'manager' then array['manager','employee'] else array['employee'] end)::public.app_role[],
+        nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
+
+      if v_minutes <> 0 then
+        if v_annual_type is null then
+          raise exception 'row %: leave type "Annual Leave" not found', v_i using errcode = '22023';
+        end if;
+        perform pg_advisory_xact_lock(hashtextextended('leave:' || v_uid::text, 0));
+        v_prev := public.current_leave_balance(v_uid, v_annual_type);
+        insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
+        values (v_uid, v_annual_type, 'adjustment', v_minutes, v_prev + v_minutes,
+                'opening balance as of ' || p_balance_as_of::text)
+        returning id into v_ledger;
+        insert into public.audit_log (actor_id, action, entity, entity_id, after)
+        values (v_caller, 'opening_balance', 'leave_ledger', v_ledger,
+                jsonb_build_object('employee_id', v_uid, 'leave_type_id', v_annual_type,
+                                   'minutes', v_minutes, 'as_of', p_balance_as_of));
+      end if;
+
+      if v_annual_type is not null and coalesce(v_rate, 0) > 0 then
+        insert into public.employee_leave_policies (
+          employee_id, leave_type_id, accrual_minutes_per_month,
+          annual_cap_minutes, carryover_cap_minutes, accrual_start_month, created_by
+        ) values (v_uid, v_annual_type, v_rate, v_cap, coalesce(v_carry, 4320), v_accrual_start, v_caller)
+        on conflict (employee_id, leave_type_id) do nothing;
+      end if;
+
+      select employee_code into v_code from public.profiles where id = v_uid;
+      v_created := v_created || jsonb_build_object(
+        'personnel_no', v_row->>'personnel_no', 'employee_code', v_code, 'user_id', v_uid);
+    end if;
+  end loop;
+
+  -- 3. Kept people whose manager changes (replace).
+  for v_dep in select * from jsonb_array_elements(coalesce(p_reassign, '[]'::jsonb)) loop
+    v_id := (v_dep->>'id')::uuid;
+    if not exists (select 1 from public.profiles where id = v_id and company_id = p_company_id) then
+      raise exception 'employee not found' using errcode = 'P0002';
+    end if;
+    v_mgr := null;
+    if coalesce(btrim(v_dep->>'manager_personnel_no'), '') <> '' then
+      select id into v_mgr from public.profiles
+       where company_id = p_company_id and personnel_no = btrim(v_dep->>'manager_personnel_no');
+      if v_mgr is null then
+        raise exception 'manager with personnel number % not found', v_dep->>'manager_personnel_no' using errcode = '22023';
+      end if;
+    end if;
+    update public.profiles set manager_id = v_mgr where id = v_id;
+    insert into public.audit_log (actor_id, action, entity, entity_id, after)
+    values (v_caller, 'bulk_reassign_manager', 'profiles', v_id, jsonb_build_object('manager_id', v_mgr));
+  end loop;
+
+  -- 4. Deactivations (replace). Never an admin, never the caller.
+  foreach v_id in array coalesce(p_deactivate, '{}'::uuid[]) loop
+    if not exists (select 1 from public.profiles where id = v_id and company_id = p_company_id) then
+      raise exception 'employee not found' using errcode = 'P0002';
+    end if;
+    if v_id = v_caller or exists (select 1 from public.user_roles where user_id = v_id and role = 'admin') then
+      raise exception 'an import cannot deactivate an admin account' using errcode = '42501';
+    end if;
+    update public.profiles set active = false where id = v_id and active;
+    if found then
+      v_deactivated := v_deactivated + 1;
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (v_caller, 'bulk_deactivate', 'profiles', v_id, jsonb_build_object('mode', p_mode));
+    end if;
+  end loop;
+
+  -- 5. Department managers.
+  for v_dep in select * from jsonb_array_elements(p_departments) loop
+    if coalesce(btrim(v_dep->>'manager_personnel_no'), '') = '' then
+      continue;
+    end if;
+    if v_bulk_hr then
+      raise exception 'only admins can assign department managers' using errcode = '42501';
+    end if;
+    select id into v_dm from public.profiles
+     where company_id = p_company_id and personnel_no = btrim(v_dep->>'manager_personnel_no');
+    if v_dm is null then
+      raise exception 'department manager with personnel number % not found',
+        v_dep->>'manager_personnel_no' using errcode = '22023';
+    end if;
+    update public.departments d
+       set manager_id = v_dm
+     where d.company_id = p_company_id
+       and d.code = upper(btrim(v_dep->>'code'))
+       and (p_mode <> 'add'
+            or d.manager_id is null
+            or not exists (select 1 from public.profiles m where m.id = d.manager_id and m.active));
+  end loop;
+
+  -- 6. Unused departments (replace): delete only if nobody, active or not, is in them.
+  foreach v_code in array coalesce(p_delete_departments, '{}'::text[]) loop
+    select id into v_dept from public.departments where company_id = p_company_id and code = upper(btrim(v_code));
+    if v_dept is null then
+      continue;
+    end if;
+    if exists (select 1 from public.profiles where department_id = v_dept) then
+      v_not_deleted := v_not_deleted || upper(btrim(v_code));
+    else
+      delete from public.departments where id = v_dept;
+      v_deleted := v_deleted || upper(btrim(v_code));
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (v_caller, 'bulk_delete_department', 'departments', v_dept, jsonb_build_object('code', upper(btrim(v_code))));
+    end if;
+  end loop;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_caller, 'bulk_import', 'profiles', null,
+          jsonb_build_object('mode', p_mode, 'rows', jsonb_array_length(p_rows),
+                             'created', jsonb_array_length(v_created), 'updated', v_updated,
+                             'deactivated', v_deactivated, 'departments_deleted', to_jsonb(v_deleted),
+                             'overwrite_balances', coalesce(p_overwrite_balances, false),
+                             'balance_as_of', p_balance_as_of));
+
+  return jsonb_build_object(
+    'created', v_created,
+    'updated', v_updated,
+    'deactivated', v_deactivated,
+    'deleted_departments', to_jsonb(v_deleted),
+    'not_deleted_departments', to_jsonb(v_not_deleted)
+  );
+end;
+$_$;
 
 
 --
@@ -1588,7 +2067,7 @@ begin
 
   select count(*) into v_total
     from public.approval_steps s
-   where s.company_id = v_company and s.active and v_kind = any(s.applies_to);
+   where s.company_id = v_company and s.active and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp);
 
   if v_total = 0 then
     -- No chain configured: behave exactly as before this migration.
@@ -1603,7 +2082,7 @@ begin
       from public.approval_steps s
      where s.company_id = v_company
        and s.active
-       and v_kind = any(s.applies_to)
+       and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
        and not exists (
              select 1 from public.leave_request_approvals a
               where a.request_id = p_id
@@ -1621,7 +2100,7 @@ begin
                     s.approver_id = v_uid and private.is_active(v_uid)
                   else
                     v_is_admin
-                    or (s.role = 'manager' and v_is_mgr)
+                    or ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
                     or (s.role <> 'manager' and private.has_role(v_uid, s.role))
              end
            )
@@ -1640,12 +2119,12 @@ begin
                 or exists (
                      select 1 from public.approval_steps s
                       where s.company_id = v_company and s.active
-                        and v_kind = any(s.applies_to)
+                        and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
                         and (a.step_id = s.id
                              or (a.step_id is null and a.step_role = s.role))
                         and case when s.approver_id is not null
                                  then s.approver_id = v_uid
-                                 else (s.role = 'manager' and v_is_mgr)
+                                 else ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
                                       or (s.role <> 'manager'
                                           and private.has_role(v_uid, s.role))
                             end))
@@ -1662,7 +2141,7 @@ begin
       if exists (
         select 1 from public.approval_steps s
          where s.company_id = v_company and s.active
-           and v_kind = any(s.applies_to)
+           and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
            and s.step_order < v_step_order
            and not exists (
                  select 1 from public.leave_request_approvals a
@@ -1687,7 +2166,7 @@ begin
   select count(*) into v_remaining
     from public.approval_steps s
    where s.company_id = v_company and s.active
-     and v_kind = any(s.applies_to)
+     and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
      and not exists (
            select 1 from public.leave_request_approvals a
             where a.request_id = p_id
@@ -2077,6 +2556,42 @@ $$;
 
 
 --
+-- Name: get_org_chart(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name text, job_title text, department_id uuid, department_name_fa text, department_name_en text, manager_id uuid, is_department_manager boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with me as (
+    select company_id
+      from public.profiles
+     where id = auth.uid()
+       and active
+  )
+  select
+    p.id,
+    p.full_name,
+    p.job_title,
+    p.department_id,
+    d.name_fa,
+    d.name_en,
+    case when m.active then p.manager_id end,
+    exists (
+      select 1 from public.departments dm
+       where dm.manager_id = p.id and dm.company_id = p.company_id
+    )
+  from me
+  join public.profiles p
+    on p.company_id = me.company_id
+   and p.active
+  left join public.departments d on d.id = p.department_id
+  left join public.profiles m on m.id = p.manager_id
+  order by p.full_name;
+$$;
+
+
+--
 -- Name: get_replacement_candidates(date, date, public.leave_unit, time without time zone, time without time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2191,7 +2706,7 @@ begin
 
   select count(*) into v_total
     from public.approval_steps s
-   where s.company_id = v_company and s.active and v_kind = any(s.applies_to);
+   where s.company_id = v_company and s.active and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp);
 
   if v_total = 0 then
     if not (v_is_mgr or v_is_admin) then
@@ -2202,7 +2717,7 @@ begin
     select s.role, s.id into v_step_role, v_step_id
       from public.approval_steps s
      where s.company_id = v_company and s.active
-       and v_kind = any(s.applies_to)
+       and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
        and not exists (
              select 1 from public.leave_request_approvals a
               where a.request_id = p_id
@@ -2220,7 +2735,7 @@ begin
                     s.approver_id = v_uid and private.is_active(v_uid)
                   else
                     v_is_admin
-                    or (s.role = 'manager' and v_is_mgr)
+                    or ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
                     or (s.role <> 'manager' and private.has_role(v_uid, s.role))
              end
            )
@@ -2378,8 +2893,12 @@ begin
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
 
-  if p_target_minutes is null or p_target_minutes < 0 then
-    raise exception 'target balance must be >= 0' using errcode = '22023';
+  -- FR-48: a balance may be negative (leave taken in advance). Bounded at one
+  -- year of workdays below zero so a typo cannot post an absurd debit.
+  if p_target_minutes is null
+     or p_target_minutes < -366 * private.company_minutes_per_day(
+          (select company_id from public.profiles where id = p_employee_id)) then
+    raise exception 'target balance is out of range' using errcode = '22023';
   end if;
 
   perform pg_advisory_xact_lock(hashtextextended('leave:' || p_employee_id::text, 0));
@@ -2540,8 +3059,10 @@ CREATE TABLE public.approval_steps (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     approver_id uuid,
+    manager_scope text DEFAULT 'direct'::text NOT NULL,
     CONSTRAINT approval_steps_applies_to_nonempty CHECK ((array_length(applies_to, 1) >= 1)),
     CONSTRAINT approval_steps_employee_needs_person CHECK (((role <> 'employee'::public.app_role) OR (approver_id IS NOT NULL))),
+    CONSTRAINT approval_steps_manager_scope_valid CHECK (((manager_scope = ANY (ARRAY['direct'::text, 'department'::text])) AND ((manager_scope = 'direct'::text) OR ((role = 'manager'::public.app_role) AND (approver_id IS NULL))))),
     CONSTRAINT approval_steps_role_allowed CHECK ((role = ANY (ARRAY['manager'::public.app_role, 'hr'::public.app_role, 'security'::public.app_role, 'admin'::public.app_role, 'employee'::public.app_role])))
 );
 
@@ -2600,7 +3121,7 @@ CREATE TABLE public.departments (
     manager_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     code text NOT NULL,
-    CONSTRAINT departments_code_format CHECK ((code ~ '^[a-z0-9]{2,6}$'::text))
+    CONSTRAINT departments_code_format CHECK ((code ~ '^[A-Z0-9]{2,4}$'::text))
 );
 
 
@@ -3138,10 +3659,10 @@ CREATE UNIQUE INDEX approval_steps_company_person_uniq ON public.approval_steps 
 
 
 --
--- Name: approval_steps_company_role_uniq; Type: INDEX; Schema: public; Owner: -
+-- Name: approval_steps_company_role_scope_uniq; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX approval_steps_company_role_uniq ON public.approval_steps USING btree (company_id, role) WHERE (approver_id IS NULL);
+CREATE UNIQUE INDEX approval_steps_company_role_scope_uniq ON public.approval_steps USING btree (company_id, role, manager_scope) WHERE (approver_id IS NULL);
 
 
 --
@@ -4126,6 +4647,20 @@ REVOKE ALL ON FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p
 
 
 --
+-- Name: FUNCTION department_manager_for(p_emp uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.department_manager_for(p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION department_step_applies(p_emp uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.department_step_applies(p_emp uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION has_role(uid uuid, r public.app_role); Type: ACL; Schema: private; Owner: -
 --
 
@@ -4158,6 +4693,13 @@ GRANT ALL ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date)
 
 
 --
+-- Name: FUNCTION is_department_manager_of(p_uid uuid, p_emp uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION is_manager_of(uid uuid, target uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -4185,6 +4727,13 @@ REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_star
 
 REVOKE ALL ON FUNCTION private.same_team(uid uuid, target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.same_team(uid uuid, target uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION step_applies(p_scope text, p_emp uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.step_applies(p_scope text, p_emp uuid) FROM PUBLIC;
 
 
 --
@@ -4245,13 +4794,23 @@ GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id 
 
 
 --
--- Name: FUNCTION app_bulk_create_employees(p_company_id uuid, p_rows jsonb); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb) TO postgres;
-GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb) TO authenticated;
-GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date) TO postgres;
+GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date) TO authenticated;
+GRANT ALL ON FUNCTION public.app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date) TO service_role;
+
+
+--
+-- Name: FUNCTION app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]) TO authenticated;
+GRANT ALL ON FUNCTION public.app_bulk_import_employees(p_company_id uuid, p_mode text, p_rows jsonb, p_departments jsonb, p_balance_as_of date, p_overwrite_balances boolean, p_deactivate uuid[], p_reassign jsonb, p_delete_departments text[]) TO service_role;
 
 
 --
@@ -4380,6 +4939,16 @@ REVOKE ALL ON FUNCTION public.get_my_team_directory() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.get_my_team_directory() TO postgres;
 GRANT ALL ON FUNCTION public.get_my_team_directory() TO authenticated;
 GRANT ALL ON FUNCTION public.get_my_team_directory() TO service_role;
+
+
+--
+-- Name: FUNCTION get_org_chart(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.get_org_chart() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.get_org_chart() TO postgres;
+GRANT ALL ON FUNCTION public.get_org_chart() TO authenticated;
+GRANT ALL ON FUNCTION public.get_org_chart() TO service_role;
 
 
 --

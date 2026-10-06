@@ -1,52 +1,53 @@
 /**
  * Department-code helpers — the client-side mirror of the DB check constraint
- * departments_code_format (migration 20260713120001):
- *   code ~ '^[a-z0-9]{2,6}$'
+ * departments_code_format (migration 20261005120001, FR-46):
+ *   code ~ '^[A-Z0-9]{2,4}$'
  *
  * The code used to be the latin prefix of every login code generated for the
- * department (prod → prod-1042). Since 20260730130002 it prefixes nothing:
- * nothing reads it, no human types it, and `createDepartment` generates it.
- * The column stays NOT NULL + unique so the feature can return without a
- * migration (spec 2026-07-30, §6.1 / D12). Keep the regex identical to the SQL.
+ * department (prod → prod-1042). Since 20260730130002 it prefixes nothing.
+ * Since 2026-10-05 it is the key the bulk employee import matches departments
+ * on, so it is short, uppercase and shown read-only on the Departments page.
+ * Nobody types it in the app: `createDepartment` and the import generate it
+ * when it is missing. Keep the regex identical to the SQL.
  */
 
 import { toAsciiDigits } from '@/lib/employees/code';
 
-export const DEPARTMENT_CODE_RE = /^[a-z0-9]{2,6}$/;
+export const DEPARTMENT_CODE_RE = /^[A-Z0-9]{2,4}$/;
 
-/** Trims, lowercases, and converts Persian / Arabic-Indic digits to ASCII. */
+/** Trims, uppercases, and converts Persian / Arabic-Indic digits to ASCII. */
 export function normalizeDepartmentCode(value: string): string {
-  return toAsciiDigits(value.trim()).toLowerCase();
+  return toAsciiDigits(value.trim()).toUpperCase();
 }
 
-/** Mirrors the SQL check: code ~ '^[a-z0-9]{2,6}$'. */
+/** Mirrors the SQL check: code ~ '^[A-Z0-9]{2,4}$'. */
 export function isValidDepartmentCode(value: string): boolean {
   return DEPARTMENT_CODE_RE.test(value);
 }
 
 /**
- * Suggests a code from the English name — same rule the migration used to
- * backfill pre-existing departments (first 4 latin chars, lowercased).
+ * Suggests a code from the English name — same rule the migration uses to
+ * regenerate codes that do not fit (first 4 latin chars, uppercased).
  * Returns '' when the name yields fewer than 2 usable characters, so the
  * form leaves the field empty rather than proposing an invalid code.
  */
 export function suggestDepartmentCode(nameEn: string): string {
-  const base = nameEn.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 4);
+  const base = nameEn.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
   return base.length >= 2 ? base : '';
 }
 
 /** Longest code the DB constraint accepts. */
-const MAX_CODE_LENGTH = 6;
+const MAX_CODE_LENGTH = 4;
 
 /**
  * Base used when the English name yields fewer than 2 latin characters, so a
  * Farsi-only "English" field still produces a valid code instead of failing.
  */
-const FALLBACK_BASE = 'dep';
+const FALLBACK_BASE = 'DEP';
 
 /**
- * Generates the code `createDepartment` stores. Nobody types it any more
- * (spec 2026-07-30 §6.1), so it must be derived and it must be unique.
+ * Generates the code `createDepartment` and the bulk import store when none is
+ * given, so it must be derived and it must be unique.
  *
  * `taken` is the set of codes already used in the company — passed in by the
  * caller, so this stays pure and unit-testable and does no I/O. It is only an
@@ -54,12 +55,12 @@ const FALLBACK_BASE = 'dep';
  * `createDepartment` retries on a 23505 race with the loser's code added to
  * `taken`.
  *
- * base = suggestDepartmentCode(nameEn) or 'dep'; on collision an incrementing
+ * base = suggestDepartmentCode(nameEn) or 'DEP'; on collision an incrementing
  * numeric suffix is appended, truncating the base so the total never exceeds
- * the `^[a-z0-9]{2,6}$` constraint (prod → prod2 … pro100 … pr1000).
+ * the `^[A-Z0-9]{2,4}$` constraint (FINA → FIN2 … FI10 … F100).
  */
 export function generateDepartmentCode(nameEn: string, taken: Iterable<string>): string {
-  const used = new Set(Array.from(taken, (code) => code.trim().toLowerCase()));
+  const used = new Set(Array.from(taken, (code) => code.trim().toUpperCase()));
   const base = suggestDepartmentCode(nameEn) || FALLBACK_BASE;
   if (!used.has(base)) return base;
 

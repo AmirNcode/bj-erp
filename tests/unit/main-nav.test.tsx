@@ -24,6 +24,7 @@ const labels = {
   home: 'خانه',
   request: 'درخواست',
   calendar: 'تقویم',
+  organization: 'سازمان',
   profile: 'پروفایل',
   manage: 'مدیریت',
   manageGroup: 'مدیریت',
@@ -52,6 +53,14 @@ function renderWithIntl(ui: React.ReactElement) {
 }
 
 describe('MainNav', () => {
+  it('shows Organization in the side panel only — mobile reaches it from Profile', () => {
+    renderWithIntl(<MainNav roles={['employee']} locale="fa" labels={labels} />);
+    const link = screen.getByTestId('nav-organization');
+    expect(link.getAttribute('href')).toBe('/fa/organization');
+    expect(link.closest('li')?.className).toContain('hidden');
+    expect(link.closest('li')?.className).toContain('md:block');
+  });
+
   it('renders a link per role-visible tab with its testid', () => {
     renderWithIntl(<MainNav roles={['employee']} locale="fa" labels={labels} />);
     expect(screen.getByTestId('nav-home')).toBeTruthy();

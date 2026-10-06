@@ -34,6 +34,27 @@ export function gregorianToPersianDateObject(iso: string, locale: string): DateO
 }
 
 /**
+ * Gregorian start of the first Jalali month AFTER the month containing `iso`.
+ * Mirrors app_bulk_create_employees (which joins jalali_months): an opening
+ * balance counted up to `iso` includes that month's accrual, so accrual resumes
+ * the following month (FR-45). Null for a malformed date.
+ *
+ * Lives here, not in lib/leave/jalaliMonths.ts, because that module is the
+ * Node-only migration generator and cannot be bundled for the browser.
+ */
+export function firstMonthStartAfter(iso: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  const [year, month, day] = iso.split('-').map(Number);
+  const lastOfMonth = new DateObject({ calendar: gregorian, locale: gregorian_en, year, month, day })
+    .convert(persian, persian_en)
+    .toLastOfMonth()
+    .convert(gregorian, gregorian_en)
+    .format('YYYY-MM-DD');
+  const next = Date.parse(`${lastOfMonth}T00:00:00Z`) + 24 * 60 * 60 * 1000;
+  return new Date(next).toISOString().slice(0, 10);
+}
+
+/**
  * Returns true if the given leave type allows half-day selection,
  * i.e. the type has allow_half_day=true AND exactly one day is selected (start===end).
  */

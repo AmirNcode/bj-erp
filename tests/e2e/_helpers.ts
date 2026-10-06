@@ -162,13 +162,13 @@ export function nextTestPersonnelNo(): string {
 }
 
 /**
- * Test department codes are zz#### — the `zz` prefix is reserved for throwaway
- * departments and is deleted after the run by scripts/cleanup-e2e.mjs.
+ * Test department name tokens are zz#### — the `ZZ` code prefix is reserved for
+ * throwaway departments and is deleted after the run by scripts/cleanup-e2e.mjs.
  *
- * Admins no longer type a code (spec 2026-07-30 §6.1): `createDepartment`
- * derives it from the first 4 latin characters of the English name. So this
- * value is used as the START of the English name a test types, which keeps the
- * generated code `zz`-prefixed and therefore still reapable.
+ * Admins do not type a code: `createDepartment` derives it from the first 4
+ * latin characters of the English name, uppercased (FR-46: `^[A-Z0-9]{2,4}$`).
+ * So this value is used as the START of the English name a test types, which
+ * keeps the generated code `ZZ`-prefixed (zz1a2b → ZZ1A) and therefore reapable.
  */
 export function nextTestDepartmentCode(): string {
   return `zz${Math.random().toString(36).slice(2, 6).padEnd(4, '0')}`;

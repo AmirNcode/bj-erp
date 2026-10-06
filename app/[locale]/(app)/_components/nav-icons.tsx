@@ -45,6 +45,15 @@ export const NAV_ICONS: Record<TabKey, React.ReactNode> = {
       <path d="M3 9h18M8 3v4M16 3v4" />
     </Svg>
   ),
+  // FR-44: one box over two — a reporting line.
+  organization: (
+    <Svg>
+      <rect x="9" y="3" width="6" height="5" rx="1" />
+      <rect x="3" y="16" width="6" height="5" rx="1" />
+      <rect x="15" y="16" width="6" height="5" rx="1" />
+      <path d="M12 8v4M6 16v-2h12v2" />
+    </Svg>
+  ),
   profile: (
     <Svg>
       <circle cx="12" cy="8" r="3.5" />

@@ -12,7 +12,12 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - ☐ Scheduled offsite backups. Daily backups currently stay on the VM.
 - ☐ Company subdomain from client IT, then update DNS, TLS and the origin.
 - ☐ Real data: enter the 1404–1405 official holidays (CSV upload in Settings) and import the
-  employee roster (CSV import).
+  employee roster (`docs/files/Personnel_CLEAN.csv` via Manage › Employees › Import — owner tests
+  it locally first). After import: activate the **Department manager** approval step, give Meysam
+  Ayasi the `hr` role if wanted, and hand out the credentials file.
+- ☐ Personnel list follow-ups (owner): hire a supervisor for «رنگ و بسته بندی» (PNP, 12 people;
+  Milad 490 left — until then they report to Sahraei); HR corrects the three balances counted to other dates (notes column: Fateme
+  Fouladi "to year end", Sousan Fouladi "incl. Mehr", Mousavi "incl. Shahrivar").
 
 ## Product backlog
 

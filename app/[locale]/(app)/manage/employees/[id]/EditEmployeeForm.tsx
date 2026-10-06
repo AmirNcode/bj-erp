@@ -12,6 +12,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { nativeSelectClass } from '@/lib/native-select';
 import { PersianDateField } from '@/components/PersianDateField';
 import {
@@ -87,6 +98,10 @@ type Props = {
     resetPwd: string;
     activate: string;
     deactivate: string;
+    /** Deactivation is confirmed first; activation is not (it is harmless to undo). */
+    deactivateConfirmTitle: string;
+    /** Raw: {name}. */
+    deactivateConfirmBody: string;
     tempPasswordLabel: string;
     tempPasswordHint: string;
     errorLabel: string;
@@ -400,7 +415,9 @@ export function EditEmployeeForm({
                           <Input
                             id={`balance-${balance.leaveTypeId}`}
                             type="number"
-                            min={0}
+                            // FR-48: a balance may be negative (leave taken in
+                            // advance); the database bounds it at -366 days.
+                            min={-366}
                             step="0.5"
                             value={(targets[balance.leaveTypeId] ?? 0) / (hoursPerDay * 60)}
                             onChange={(event) =>
@@ -484,19 +501,51 @@ export function EditEmployeeForm({
             >
               {labels.resetPwd}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleToggleActive}
-              disabled={pending}
-              className={
-                employee.active
-                  ? 'border-destructive/30 text-destructive hover:bg-destructive/10'
-                  : 'border-success/30 text-success hover:bg-success-foreground'
-              }
-            >
-              {employee.active ? labels.deactivate : labels.activate}
-            </Button>
+            {employee.active ? (
+              // Deactivating locks the person out at once, so it asks first.
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                    data-testid="employee-deactivate"
+                  >
+                    {labels.deactivate}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent size="sm">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{labels.deactivateConfirmTitle}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {labels.deactivateConfirmBody.replace('{name}', employee.full_name)}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel data-testid="employee-deactivate-cancel">{labels.cancel}</AlertDialogCancel>
+                    <AlertDialogAction
+                      variant="destructive"
+                      onClick={handleToggleActive}
+                      data-testid="employee-deactivate-confirm"
+                    >
+                      {labels.deactivate}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleActive}
+                disabled={pending}
+                className="border-success/30 text-success hover:bg-success-foreground"
+                data-testid="employee-activate"
+              >
+                {labels.activate}
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}

@@ -35,6 +35,8 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   // The seeded chain, and the Add button below it.
   await expect(page.locator('[data-testid="approval-step-manager"]')).toBeVisible();
   await expect(page.locator('[data-testid="approval-step-hr"]')).toBeVisible();
+  // FR-47: the department-manager step is seeded (inactive) between them.
+  await expect(page.locator('[data-testid="approval-step-department-manager"]')).toBeVisible();
 
   // ── 1. Add a step naming one specific person ──────────────────────────────
   await page.click('[data-testid="approval-step-add-open"]');
@@ -92,9 +94,10 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
     page.locator('[data-testid="approval-steps-card"]').locator('li', { hasText: 'Chain Signer' })
   ).toHaveCount(0, { timeout: 20_000 });
 
-  // The seeded chain is back to exactly what it was.
+  // The seeded chain is back to exactly what it was: manager, department
+  // manager (FR-47, seeded inactive), hr.
   await page.reload();
-  await expect(page.locator('[data-testid="approval-steps-card"] li')).toHaveCount(2, {
+  await expect(page.locator('[data-testid="approval-steps-card"] li')).toHaveCount(3, {
     timeout: 20_000,
   });
 

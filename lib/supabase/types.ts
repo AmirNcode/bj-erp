@@ -381,6 +381,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
           applies_to: Database["public"]["Enums"]["request_kind"][]
           step_order: number
+          manager_scope: string
           active: boolean
           created_at: string
           updated_at: string
@@ -392,6 +393,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
           applies_to?: Database["public"]["Enums"]["request_kind"][]
           step_order?: number
+          manager_scope?: string
           active?: boolean
           created_at?: string
           updated_at?: string
@@ -403,6 +405,7 @@ export type Database = {
           role?: Database["public"]["Enums"]["app_role"]
           applies_to?: Database["public"]["Enums"]["request_kind"][]
           step_order?: number
+          manager_scope?: string
           active?: boolean
           created_at?: string
           updated_at?: string
@@ -904,8 +907,22 @@ export type Database = {
         Args: { p_current: string; p_new: string }
         Returns: undefined
       }
+      app_bulk_import_employees: {
+        Args: {
+          p_company_id: string
+          p_mode: string
+          p_rows: Json
+          p_departments: Json
+          p_balance_as_of: string
+          p_overwrite_balances: boolean
+          p_deactivate: string[]
+          p_reassign: Json
+          p_delete_departments: string[]
+        }
+        Returns: Json
+      }
       app_bulk_create_employees: {
-        Args: { p_company_id: string; p_rows: Json }
+        Args: { p_company_id: string; p_rows: Json; p_departments: Json; p_balance_as_of: string }
         Returns: Json
       }
       app_create_employee: {
@@ -998,6 +1015,19 @@ export type Database = {
           profile_id: string
           unavailable: boolean
           unavailable_reason: string | null
+        }[]
+      }
+      get_org_chart: {
+        Args: never
+        Returns: {
+          department_id: string | null
+          department_name_en: string | null
+          department_name_fa: string | null
+          full_name: string
+          is_department_manager: boolean
+          job_title: string | null
+          manager_id: string | null
+          profile_id: string
         }[]
       }
       get_my_team_directory: {

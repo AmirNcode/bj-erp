@@ -63,12 +63,18 @@ Manage → **Settings → Departments → افزودن واحد** (`/manage/depa
 the Employees page on 2026-07-30). `kind` is descriptive — no app logic reads it, new departments
 default to `team`.
 
-**`code` is vestigial since 2026-07-30 (FR-31).** It used to prefix generated employee codes
-(`prod-1042`); nothing reads it now. It is kept `NOT NULL` and unique so the feature can return
-without a migration, but it is **auto-generated** from the English name (first 4 latin characters,
-`dep` as a fallback, a numeric suffix on collision) and has no form field. Admin editing is
-deactivated: `updateDepartmentCode` and the `departments_update_admin` policy are deliberately in
-place and unreferenced. Do not "clean up" either as dead code — the client intends to revisit this.
+**`code` is the bulk-import key since 2026-10-05 (FR-46).** Format `^[A-Z0-9]{2,4}$`, unique per
+company (migration `20261005120001` uppercased existing codes and regenerated any longer than 4).
+It stopped prefixing login codes on 2026-07-30 (FR-31). Nobody types it in the app: the Add
+Department form and the import generate it from the English name when missing (first 4 latin
+characters uppercased, `DEP` fallback, numeric suffix truncating the base: `FINA` → `FIN2` → `FI10`).
+Shown read-only on Manage › Departments. `updateDepartmentCode` stays deliberately unreferenced.
+
+**`manager_id` is the department manager since 2026-10-05 (FR-47)** — the second signer on every
+request from the department when the department-manager approval step is active. Set on Manage ›
+Departments (admin) or by the bulk import, which derives it from the file and never overwrites an
+existing one. It may point at someone outside the department (Warehouse is managed by the Planning
+manager).
 
 ### `profiles`
 `id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; **generated
@@ -179,6 +185,29 @@ The per-employee accrual rule (2026-07-29, FR-27), defaulted from
 admin); **no client write policies** — writes go through `set_employee_leave_policy`.
 *Opening balance is deliberately NOT here*: that is an `allocation` ledger row written by
 `allocate_leave`, and two records of one fact would drift.
+
+### Bulk import v2 (2026-10-05, FR-45)
+`app_bulk_create_employees(p_company_id, p_rows, p_departments, p_balance_as_of)` — one
+transaction. Creates flagged departments (admin only); creates employees in the caller's order
+(manager-first, sorted by `lib/csv/import-rows.ts`) with `manager_id` = supervisor if given, else
+manager; posts each non-zero `balance_minutes` as ONE signed `adjustment` ledger row noted
+`opening balance as of <date>` (no `leave_allocations` row — that retired v1's Gregorian Jan–Dec
+period); gives each employee the Annual Leave type's default accrual policy with
+`accrual_start_month` = the first Jalali month after the one containing `p_balance_as_of` (the
+balance includes that month); then sets `departments.manager_id` where it is NULL. TS mirror of the
+month rule: `firstMonthStartAfter` in `lib/leave/dateConvert.ts`.
+
+### Bulk import modes (2026-10-06, FR-49)
+`app_bulk_import_employees(p_company_id, p_mode, p_rows, p_departments, p_balance_as_of,
+p_overwrite_balances, p_deactivate, p_reassign, p_delete_departments)` executes the plan built by
+`lib/csv/import-plan.ts`. `add` = v2 behaviour (existing number → error) except a department whose
+manager is inactive gets the file's manager. `update`/`replace`: an existing personnel number is
+updated (name, title, department, `manager_id`, hire date if given, `manager` role, reactivated);
+departments in the file get the file's names (`rename`) and manager. With `p_overwrite_balances`
+the balance is SET to the file value (one `adjustment`) and `accrual_start_month` moves to the
+month after the balance date. `replace` also deactivates `p_deactivate`, reassigns `p_reassign`
+managers and deletes `p_delete_departments` that have no profiles (others returned as not
+deleted). v2 `app_bulk_create_employees` remains but is unused.
 
 ### `leave_allocations`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `period_start date` ·
@@ -308,6 +337,17 @@ deactivated — which is the app's model anyway. The one place that hard-deletes
 `app_cleanup_e2e_users()`, and `20260818180003` teaches it to remove the steps naming the accounts it
 is about to reap rather than weakening the constraint.
 
+**Manager scope (2026-10-05, FR-47):** `manager_scope text` (`'direct'` default | `'department'`),
+CHECK: only a `manager` step without a named approver may be `'department'`. The role partial
+unique index became `(company_id, role, manager_scope) where approver_id is null`, so the direct and
+department manager steps coexist. A department step applies to a request only when
+`private.department_step_applies(employee)` — the department has an ACTIVE manager who is neither
+the requester nor the requester's direct manager; otherwise it is not required. Helpers:
+`private.department_manager_for`, `private.step_applies`, `private.is_department_manager_of`.
+Seeded **inactive** at order 2 (later steps shifted down) so deploying changed no in-flight request.
+Both manager signatures carry `step_role = 'manager'` — tell them apart by `step_id`, never by role
+(the print form and the approvals queue do).
+
 ### `leave_request_approvals` (2026-08-18, FR-36)
 `id` · `request_id → leave_requests` · `step_role app_role` · `approver_id → profiles` ·
 `decision leave_status` (`approved|rejected`) · `signature_data text` ·
@@ -384,8 +424,10 @@ portion and sets `balance_after_minutes`; it never takes a paid balance below ze
 **Submit/approve rules (2026-07-02 hardening):** `submit_leave_request` rejects ranges longer than
 366 days and ranges overlapping the employee's own pending/approved requests;
 `approve_leave_request` re-checks overlap against approved requests and finalizes the paid/unpaid
-split under the ledger lock. Balance-affecting types can never go negative; an excess is recorded in
-`leave_requests.unpaid_minutes` rather than rejected. Error messages are stable English strings
+split under the ledger lock. **A balance goes negative only through an opening balance or an
+HR/admin adjustment (FR-48, 2026-10-05; `set_leave_balance` bounds it at -366 workdays)** — a
+request never pushes it lower: the paid part is `least(minutes, greatest(balance, 0))` and the
+excess is recorded in `leave_requests.unpaid_minutes` rather than rejected. Error messages are stable English strings
 mapped to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
 
 ## Monthly accrual (server-side, FR-27)

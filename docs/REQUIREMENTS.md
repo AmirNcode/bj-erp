@@ -186,6 +186,38 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   may, so a company whose admin is also its only HR person is not stuck. *(2026-08-19; extends
   FR-35.)*
 
+- **FR-44** ☑ **Organization chart.** An **Organization** tab (desktop side panel; on mobile a link
+  on Profile) shows every active colleague's reporting line, for **every** role. It opens on the
+  viewer's own card with the chain above them and their direct reports below; any card refocuses,
+  Back walks the path, and a name search jumps anywhere. It shows names, job titles, departments and
+  who reports to whom — nothing else. *(2026-10-05; spec
+  `2026-10-05-org-chart-and-personnel-import-design.md`.)*
+- **FR-45** ☑ **Bulk employee import v2.** The template carries the client's personnel list as-is:
+  supervisor **and** manager personnel numbers (an employee's manager is their supervisor if they
+  have one), department code or names (missing departments are created after the uploader
+  acknowledges them), and the remaining annual leave in signed days + hours. Rows may be in any
+  order. The uploader must pick the date the balances were counted to; each balance becomes one
+  opening ledger entry and monthly accrual resumes the following Jalali month. Each department's
+  manager is derived from the file. *(2026-10-05; replaces the `annual_days` / `sick_days` columns.)*
+- **FR-46** ☑ **Department codes** are 2–4 uppercase latin letters or digits, shown read-only on
+  Manage › Departments and generated when missing. *(2026-10-05; codes no longer feed login codes
+  since FR-31.)*
+- **FR-47** ☑ **Supervisor and department manager both sign.** A `department manager` approval
+  step (Manage › Approval steps, seeded **off**) requires the requester's department manager
+  (Manage › Departments) as well as their direct manager — unless the department manager is the
+  direct manager or the requester. *(2026-10-05; extends FR-36.)*
+- **FR-48** ☑ **Negative leave balances.** An opening balance or an HR/admin balance correction may
+  be below zero (bounded at one year of workdays); requests against a balance at or below zero are
+  recorded as unpaid, as overage already was. *(2026-10-05.)*
+
+- **FR-49** ☑ **Bulk import modes.** The uploader picks **Add new only** (default; HR gets only
+  this), **Add & update** (people already in the app are updated, the file overwrites the names and
+  manager of the departments it uses) or **Replace** (also: people not in the file are deactivated
+  or kept — one default plus per-person override — conflicts for kept people must be answered, and
+  unused empty departments are deleted; a confirmation shows the counts). "Also overwrite balances"
+  is a per-upload choice. A deactivated department manager counts as none in every mode. Admin
+  accounts are never touched. *(2026-10-06; spec `2026-10-06-bulk-import-modes-design.md`.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

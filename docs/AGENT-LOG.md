@@ -78,6 +78,181 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Tenant binding on bulk import functions (security review)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+- Automated security review: `app_bulk_import_employees` trusted the caller-supplied
+  `p_company_id`. Added `p_company_id is distinct from caller's profile company → 42501
+  'not allowed to import into another company'` to it AND to `app_bulk_create_employees`
+  (migrations `20261006120001`, `20261005120004` edited in place — neither has reached Liara;
+  both re-applied locally, idempotent). Verified in a rolled-back transaction: foreign company
+  refused on both; own-company add/replace test still passes. Schema dumped.
+- Same pre-existing pattern in `app_create_employee`'s admin branch — not changed here; flagged as
+  a separate task.
+
+## 2026-10-06 — Bulk import modes (Add new only · Add & update · Replace)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+- Trigger: QC kept its deactivated demo manager on import; Amir wanted "replace everything" →
+  spec `docs/specs/2026-10-06-bulk-import-modes-design.md` (Accepted, D1–D6, O1–O3), plan
+  `docs/plans/2026-10-06-bulk-import-modes.md`, FR-49.
+- `lib/csv/import-rows.ts`: `ImportMode`, `ImportRow.existing`, `ImportDepartment.rename/
+  managerChange`, inactive department manager counts as none (`managerActive`).
+  `lib/csv/import-plan.ts` (new, pure): missing people, conflicts (sameName / managerDeactivated /
+  deptManagerReplaced, fixed-point cascade), reassignments, dept delete/keep, pending-signer count.
+- Migration `20261006120001_bulk_import_modes.sql`: `app_bulk_import_employees` (applied twice
+  locally). Action `importEmployees` replaces `bulkCreateEmployees`. Wizard: mode radio (admin),
+  overwrite-balances checkbox, `ImportPlanPanel.tsx`, Replace confirm dialog, done summary.
+- Verification: unit 50 files / 521 tests; tsc, lint, build OK; rolled-back SQL test of add +
+  replace (update, demote, rename, negative overwrite, deactivations, non-empty dept kept, admin
+  refused); e2e new modes test passed on `next start -p 3001`. The older bulk-import e2e fails at
+  its "seeded manager 1001 can't reach import" step because Amir deactivated demo users — env, not
+  code. `npm run cleanup:e2e` run (6 users, 2 ZZ departments). Local DB otherwise untouched.
+
+## 2026-10-06 — Confirm before deactivating an employee
+
+**Agent:** Claude Opus 5.5 via Claude Code
+- `app/[locale]/(app)/manage/employees/[id]/EditEmployeeForm.tsx`: the Admin actions
+  *Deactivate* button now opens an AlertDialog (title + "{name} will no longer be able to sign in…",
+  Cancel / Deactivate). Activate stays one click. Test ids `employee-deactivate`, `-confirm`,
+  `-cancel`, `employee-activate`. Strings `manage.employees.deactivateConfirmTitle/Body` (fa/en).
+- Only place deactivation exists. HR still cannot deactivate (`setActive` + profile trigger are
+  admin-only) — not widened; Amir mentioned HR, told him.
+- Verified: tsc, lint, build; browser on `next start -p 3001` — dialog opens, Cancel leaves the
+  account active. No DB changes.
+
+## 2026-10-06 — Local DB: cleared personnel-number conflicts for the CSV import
+
+**Agent:** Claude Opus 5.5 via Claude Code
+- **Local Docker DB only** (`bj-erp-db-1`), at Amir's request. Three demo users held personnel
+  numbers used by `docs/files/Personnel_CLEAN.csv`; renumbered (not deleted, history kept):
+  101 Amir → 9101, 145 Mousavi → 9145, 201 HR Manager → 9201 — `profiles.personnel_no`,
+  `employee_code`, `auth.users.email`, `auth.identities.identity_data.email`. Ran as supabase_admin
+  with JWT claims of the local admin (the profile-scope trigger refuses otherwise).
+- After: 0 profiles collide with the CSV. Department codes: only QC exists, same names → reused.
+  Login codes for those three are now 9101 / 9145 / 9201, passwords unchanged.
+
+## 2026-10-06 — Personnel list update from HR (Oct 6) cleaned for import
+
+**Agent:** Claude Opus 5.5 via Claude Code
+- Source: `docs/files/BJ Personnel - Oct 6.csv` (from `BJ Personel List 22.xlsx`). Output overwrites
+  `docs/files/Personnel_CLEAN.csv`; previous version kept as `Personnel_CLEAN_2026-10-05.csv`.
+- Normalised: honorifics stripped (مهندس/آقای/خانم), spaces, 4 short supervisor/manager names →
+  full names; supervisor == manager → supervisor blank; balance text → signed pto_days/pto_hours;
+  numbers + roles recomputed.
+- Amir's decisions: CEO row (100) re-added from old file; 182, 429, 568 dropped (left); vacant
+  «سرپرست تست و رنگ، بسته بندی» row (Milad 490 left) dropped — his 12 people report to Sahraei
+  until a hire; HR's department structure accepted; Nima (185) → CEO and manages R&D + Design
+  (his 4 people now report to him only).
+- Department codes: ADM renamed «اداری و منابع انسانی»/Administration & HR; new PNP (رنگ و بسته
+  بندی), AS3 (مونتاژ 3, ex control-panel CPA), SENG, FTR; «کیوسی» kept as QC «کنترل کیفیت»;
+  «آرندی» → RD; MKT fa name fixed to «بازاریابی». Gone: AS, PROD, PNT, PKG, TPP, CPA.
+- Result: 138 rows, 23 departments, 7 negatives, validator 0 errors / 0 warnings.
+  `tests/unit/personnel-clean-csv.test.ts` updated. Nothing uploaded; no DB touched.
+
+## 2026-10-05 — Local update: org chart + bulk import v2 migrations
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ 333678d + ~65 uncommitted files
+
+- `./deploy/bj-deploy update local`: verified backup `backups/deploy-assistant/local/20261005T203846Z-de5b78/`,
+  applied untracked migrations 20261005120001–120005 (dept codes upper, negative balance, dept manager
+  step, bulk import v2, org chart), reseeded, rebuilt app from working tree. Restarted `bj-erp-rest-1`
+  for schema cache. health/login 200. Nothing committed/pushed; migrations still uncommitted.
+
+## 2026-10-05 — Org chart, personnel import v2, two-level sign-off, negative balances
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 333678d
+**Trigger:** Amir: build an Organization tab from the client's personnel list, make the bulk import
+take that list (supervisor + manager, dept codes, days+hours balances with an as-of date), both
+supervisor and department manager sign, negatives allowed. Do all app work; he uploads the CSV.
+
+**What changed**
+- Spec `docs/specs/2026-10-05-org-chart-and-personnel-import-design.md` (Accepted, FR-44..48) and
+  plan `docs/plans/2026-10-05-org-chart-and-personnel-import.md`.
+- Migrations (all idempotent, each applied twice locally): `20261005120001` dept codes
+  `^[A-Z0-9]{2,4}$` (uppercases, regenerates >4) · `…02` `set_leave_balance` negative bound ·
+  `…03` `approval_steps.manager_scope` + helpers + engine patch (approve/reject: every
+  `v_kind = any(s.applies_to)` gains `step_applies`, manager entitlement split direct/department)
+  + seeds the department step INACTIVE at order 2 · `…04` `app_bulk_create_employees` v2
+  (4 args; old 2-arg dropped) · `…05` `get_org_chart()`.
+- `lib/csv/import-rows.ts` rewritten (two-phase department resolution so rows are order-free;
+  manager-first sort; dept manager derivation; warnings). `lib/leave/approvals.ts` department step
+  mirror (`stepLabel`, `departmentStepApplies`). `lib/org/tree.ts` (new). `firstMonthStartAfter`
+  in `lib/leave/dateConvert.ts` — NOT in `jalaliMonths.ts`, which is Node-only (createRequire) and
+  broke `next build` when imported by the wizard.
+- UI: import wizard v2 (balance date picker + accrual line, departments panel + ack, warnings),
+  `/organization` page + desktop-only nav item + Profile link (mobile), Departments page code chip
+  + manager picker, Approval steps card department row (no delete), queue/reports labels by step,
+  print form department signature → strip. `formatDuration` signs negatives once.
+- `docs/files/Personnel_CLEAN.csv` (untracked, owner's file): Mansour Kheiri → EXEC; headers
+  `بخش (department_name_fa)`, `Department (department_name_en)`. Earlier in the session:
+  supervisor numbers rebuilt (all 87 held the manager's number), 2 names completed + promoted,
+  `MKT`. `docs/files/bj-employees-template.csv` regenerated from `templateHeader()`.
+- e2e: `bulk-import.spec.ts` rewritten for v2; `approval-step-person.spec.ts` expects 3 seeded
+  steps; cleanup reaps `ZZ%` codes; seed codes uppercase.
+
+**Actions outside the repo**
+- Local Docker DB (`bj-erp-db-1`) only: applied the 5 migrations as supabase_admin (not via
+  bj-deploy, so not in its ledger — they are idempotent and will re-apply cleanly). Ran
+  `npm run cleanup:e2e` (deleted 28 e2e users, 2 ZZ departments). A rollback-only SQL script
+  exercised import + two-signature approval with a synthetic 999-range fixture. **The client CSV
+  was NOT uploaded anywhere.** Nothing touched Liara.
+
+**Verification**
+- `npm run test:unit` 49 files / 505 tests pass (incl. the real CSV through the validator: 142
+  rows, 0 errors, 25 departments). `npm run lint` clean. `npx tsc --noEmit` clean. `npm run build` OK.
+- e2e against `next start -p 3001` (port 3000 held by another session): bulk-import, department,
+  approval, approval-step-person, hr-role, manage, manager-create-employee, nav → 17 passed,
+  1 skipped (pre-existing skip). Teardown cleanup fails under `E2E_BASE_URL` without a gateway on
+  that origin (pre-existing); ran cleanup manually.
+- Browser: org chart (focus, click-through, Back, search), mobile bar 5 items + Profile link,
+  departments picker, approval steps row, import preview + accrual line ("1 Aban 1405").
+
+**State left behind**
+- All uncommitted on main (Amir commits). `supabase/schema.sql` dumped.
+- Local DB conflicts for the CSV: personnel 101 (Amir), 145 (Mousavi, inactive), 201 (HR Manager)
+  already exist → 3 dupExisting errors block the import; existing `PROD`/`QC` (demo) would be reused
+  with their demo managers kept. Amir decides how to clear these.
+
+**For the next agent**
+- Department approvals share `step_role = 'manager'` with the direct step: key on `step_id`.
+- After the real import: activate the department step; it then applies to pending requests too.
+
+## 2026-10-05 — Review: client Personnel.csv vs bulk-import template (no code changed)
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD:** main @ 333678d
+- Amir wants an Organization tab with an org chart built from `docs/files/Personnel.csv`
+  (141 rows, untracked) and asked for a review before any code. Compared it with
+  `docs/files/bj-employees-template.csv` / `lib/csv/import-rows.ts` / `app_bulk_create_employees`.
+- Findings handed to Amir: CSV is name-referenced, not personnel_no; two-level chain (supervisor +
+  manager) vs single `profiles.manager_id`; 4 names don't match rows (`تیمور شیرانی`,
+  `علی اکبر علی جانی`, `نیما بهادری` = truncated full names; `سیروس نورافکن` CEO has no row);
+  7 balances are negative (`منفی …` in col 7) but PTO Days/Hours lost the sign, and ledger forbids
+  negative; PTO is a remaining balance not annual entitlement; max hours = 7 hints a 7h20m day
+  (check `hours_per_day`); 24 departments incl. duplicates (`Assembly` vs `Assembly 1/2`); no
+  hire_date. Bulk import allocates on a Gregorian Jan–Dec period — odd for a Jalali-year client.
+- Nothing decided or implemented. Next: Amir's answers → spec in `docs/specs/`.
+- **Re-review on `docs/files/Personnel_CLEAN.csv`** (Amir: `Personnel.csv` was the pre-clean
+  original). Fixed there: CEO row (pno 100), `manager_personnel_no` column (all resolve, match
+  names), `نیما بهادری` full name. Still open: CEO's manager `001` (nonexistent, should be blank),
+  supervisors `تیمور شیرانی` / `علی اکبر علی جانی` still truncated, same 7 lost negative signs,
+  mixed balance cut-offs, no role / department_code / hire_date. 4 rows precede their manager
+  (managers 184, 128, 185) — current importer requires manager rows first. File has no BOM (fine
+  for `file.text()`, garbles in Excel). `manager_personnel_no` = department manager, not supervisor.
+- **Round 3** — Amir answered (both sign, negatives allowed, 8h day, 2–4 uppercase dept codes,
+  balance as-of date picked at upload, manager_id = supervisor else manager, org chart for all) and
+  re-supplied `Personnel_CLEAN.csv` with role / dept code / supervisor columns. Cleaned it in place
+  (backup in session scratchpad only): `supervisor_personnel_no` held the MANAGER's number on all
+  87 supervised rows → recomputed from names; 2 truncated supervisor names fixed + promoted to
+  manager; `MAR` code clash → Marketing `MKT`; re-saved UTF-8 with BOM, CRLF. All checks green
+  (spec Appendix A).
+- Wrote `docs/specs/2026-10-05-org-chart-and-personnel-import-design.md` (FR-44..48, Draft).
+  Second signer = `departments.manager_id` (existing, unused column) via a new
+  `approval_steps.manager_scope='department'` step, seeded inactive. Matches CSV signers on
+  140/141 rows; exception منصور خیری = Q1. No code, no migration, nothing run on Liara.
+  REQUIREMENTS/TASKS not yet updated — do that when the spec is accepted.
+
 ## 2026-10-05 — Local redeploy of c4decca (select chevrons, weekly days off)
 
 **Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ c4decca

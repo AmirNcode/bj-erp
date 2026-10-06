@@ -7,15 +7,17 @@
  * - the desktop side panel: `tabsForRoles` minus the mobile-only Manage tab,
  *   then the labelled Manage group (`manageItemsForRoles`), then Settings
  *   (`settingsItemForRoles`) on its own.
- * - the mobile bottom bar: `tabsForRoles`. Its Manage tab opens /manage, a
- *   list page holding the same grouped items.
+ * - the mobile bottom bar: `tabsForRoles` minus `desktopOnly` tabs. Its Manage
+ *   tab opens /manage, a list page holding the same grouped items.
+ *   Organization is desktop-only: on mobile it is a link on the Profile screen,
+ *   keeping the bar at 4/5 items (owner decision 2026-10-05, FR-44).
  *
  * Who is OFFERED a link is decided here. What each role can actually do behind
  * it is still enforced per page (manage/layout.tsx + per-page guards) and by RLS.
  */
 
-export type TabKey = 'home' | 'request' | 'calendar' | 'profile' | 'manage';
-export type Tab = { key: TabKey; href: string; labelKey: string };
+export type TabKey = 'home' | 'request' | 'calendar' | 'organization' | 'profile' | 'manage';
+export type Tab = { key: TabKey; href: string; labelKey: string; desktopOnly?: boolean };
 
 export type ManageKey =
   | 'employees'
@@ -31,6 +33,8 @@ const BASE: Tab[] = [
   { key: 'home', href: '/home', labelKey: 'home' },
   { key: 'request', href: '/request', labelKey: 'request' },
   { key: 'calendar', href: '/calendar', labelKey: 'calendar' },
+  // FR-44: every role. Desktop side panel only; mobile opens it from Profile.
+  { key: 'organization', href: '/organization', labelKey: 'organization', desktopOnly: true },
 ];
 
 function canManage(roles: string[]) {

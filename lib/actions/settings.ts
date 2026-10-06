@@ -265,6 +265,8 @@ export type ApprovalStepRow = {
   active: boolean;
   /** FR-42: set when the step is reserved for one named person. */
   approverId: string | null;
+  /** FR-47: 'department' marks the department-manager step. */
+  managerScope: 'direct' | 'department';
   approverName: string | null;
   approverPersonnelNo: string | null;
   /**
@@ -285,7 +287,7 @@ export async function getApprovalSteps(): Promise<
     c.supabase
       .from('approval_steps')
       .select(
-        'id, role, step_order, applies_to, active, approver_id, approver:profiles!approval_steps_approver_id_fkey(full_name, personnel_no, active)'
+        'id, role, step_order, applies_to, active, approver_id, manager_scope, approver:profiles!approval_steps_approver_id_fkey(full_name, personnel_no, active)'
       )
       .eq('company_id', c.companyId)
       .order('step_order'),
@@ -309,6 +311,7 @@ export async function getApprovalSteps(): Promise<
         appliesTo: (s.applies_to ?? []) as string[],
         active: s.active,
         approverId: s.approver_id ?? null,
+        managerScope: s.manager_scope === 'department' ? 'department' : 'direct',
         approverName: approver?.full_name ?? null,
         approverPersonnelNo: approver?.personnel_no ?? null,
         approverInactive: !!s.approver_id && approver?.active === false,

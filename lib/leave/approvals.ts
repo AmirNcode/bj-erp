@@ -2,7 +2,8 @@
  * Pure approval-chain logic (FR-36). No Supabase, no I/O — unit-tested.
  *
  * MIRRORS the step-selection in `public.approve_leave_request`
- * (supabase/migrations/20260818160003_approval_chain_engine.sql). The database
+ * (supabase/migrations/20260818160003_approval_chain_engine.sql, department
+ * step since 20261005120003_department_manager_step.sql). The database
  * is authoritative at runtime and re-checks everything; this exists so the
  * approvals queue can show a person only what they can actually act on, and so
  * the rules can be tested exhaustively rather than hand-checked in psql.
@@ -18,6 +19,18 @@
 export type StepRole = 'manager' | 'hr' | 'security' | 'admin' | 'employee';
 export type RequestKind = 'leave' | 'errand';
 
+/**
+ * Which manager a `manager` step means (FR-47). `direct` = the requester's own
+ * manager (`profiles.manager_id` — their supervisor if they have one);
+ * `department` = the manager of the requester's department
+ * (`departments.manager_id`). Absent means `direct`, as on every step written
+ * before 2026-10-05.
+ */
+export type ManagerScope = 'direct' | 'department';
+
+/** What a step is called on screen: its role, or the department manager. */
+export type StepLabel = StepRole | 'departmentManager';
+
 export type ApprovalStep = {
   id: string;
   role: StepRole;
@@ -26,7 +39,38 @@ export type ApprovalStep = {
   active: boolean;
   /** FR-42: when set, ONLY this person may fill the step. */
   approverId?: string | null;
+  /** FR-47: only meaningful on a `manager` step with no named approver. */
+  managerScope?: ManagerScope;
 };
+
+const isDepartmentStep = (step: ApprovalStep) =>
+  step.role === 'manager' && step.managerScope === 'department' && !step.approverId;
+
+export function stepLabel(step: ApprovalStep): StepLabel {
+  return isDepartmentStep(step) ? 'departmentManager' : step.role;
+}
+
+/**
+ * Whether the department-manager step is required for one requester. Mirrors
+ * `private.department_step_applies`: only when the department has an ACTIVE
+ * manager who is neither the requester nor the requester's direct manager — the
+ * direct manager already signs, and nobody signs their own request. An inactive
+ * department manager skips the step rather than blocking it forever.
+ */
+export function departmentStepApplies(input: {
+  employeeId: string;
+  employeeManagerId: string | null;
+  departmentManagerId: string | null;
+  departmentManagerActive: boolean;
+}): boolean {
+  const { employeeId, employeeManagerId, departmentManagerId, departmentManagerActive } = input;
+  return (
+    !!departmentManagerId &&
+    departmentManagerActive &&
+    departmentManagerId !== employeeId &&
+    departmentManagerId !== employeeManagerId
+  );
+}
 
 export type SignedStep = {
   /** FR-42: which step this decision filled. Null for rows written before FR-42. */
@@ -56,6 +100,10 @@ export type FillableInput = {
   callerRoles: string[];
   /** Whether the caller is this requester's own direct manager. */
   isDirectManager: boolean;
+  /** FR-47: whether the caller is the manager of the requester's department. */
+  isDepartmentManager?: boolean;
+  /** FR-47: `departmentStepApplies(...)` for this requester. Default false. */
+  departmentStepApplies?: boolean;
   /** Whether the caller IS the requester. */
   isSelf: boolean;
   orderEnforced: boolean;
@@ -63,10 +111,18 @@ export type FillableInput = {
   callerId?: string | null;
 };
 
-/** Active steps that apply to this request kind, in order. */
-export function applicableSteps(steps: ApprovalStep[], kind: RequestKind): ApprovalStep[] {
+/**
+ * Active steps that apply to this request kind, in order. A department step is
+ * kept only when it applies to this requester (FR-47) — mirrors
+ * `private.step_applies` in every step query of the SQL.
+ */
+export function applicableSteps(
+  steps: ApprovalStep[],
+  kind: RequestKind,
+  departmentApplies = false
+): ApprovalStep[] {
   return steps
-    .filter((s) => s.active && s.appliesTo.includes(kind))
+    .filter((s) => s.active && s.appliesTo.includes(kind) && (!isDepartmentStep(s) || departmentApplies))
     // `id` is a third tiebreak the SQL does not have — it orders by
     // (step_order, role) and resolves a remaining tie arbitrarily. That cannot
     // change WHICH step a given caller fills: two steps tied on order and role
@@ -99,7 +155,7 @@ export function fillableStep(input: FillableInput): ApprovalStep | null {
   const { steps, signed, kind, callerRoles, isDirectManager, isSelf, orderEnforced, callerId } =
     input;
   const isAdmin = callerRoles.includes('admin');
-  const applicable = applicableSteps(steps, kind);
+  const applicable = applicableSteps(steps, kind, input.departmentStepApplies ?? false);
 
   // 1. Configuration emptied: exactly today's pre-chain behaviour. The synthetic
   //    step has no row behind it, which is why its id is empty — the SQL takes
@@ -125,6 +181,7 @@ export function fillableStep(input: FillableInput): ApprovalStep | null {
     // account cannot reach any authenticated screen.
     if (step.approverId) return !!callerId && step.approverId === callerId;
     if (isAdmin) return true;
+    if (isDepartmentStep(step)) return input.isDepartmentManager ?? false;
     if (step.role === 'manager') return isDirectManager;
     return callerRoles.includes(step.role);
   };
@@ -147,11 +204,12 @@ export function fillableStep(input: FillableInput): ApprovalStep | null {
 export function outstandingSteps(
   steps: ApprovalStep[],
   signed: SignedStep[],
-  kind: RequestKind
-): StepRole[] {
-  return applicableSteps(steps, kind)
+  kind: RequestKind,
+  departmentApplies = false
+): StepLabel[] {
+  return applicableSteps(steps, kind, departmentApplies)
     .filter((s) => !signed.some((d) => d.decision === 'approved' && fills(d, s)))
-    .map((s) => s.role);
+    .map(stepLabel);
 }
 
 /**
@@ -166,6 +224,9 @@ export function filterApprovable<
     kind: RequestKind;
     employee_manager_id: string | null;
     employee_id: string;
+    /** FR-47: manager of the requester's department, and whether that step applies. */
+    employee_department_manager_id?: string | null;
+    department_step_applies?: boolean;
     signed: SignedStep[];
   },
 >(
@@ -183,6 +244,8 @@ export function filterApprovable<
         kind: r.kind,
         callerRoles,
         isDirectManager: r.employee_manager_id === myProfileId,
+        isDepartmentManager: r.employee_department_manager_id === myProfileId,
+        departmentStepApplies: r.department_step_applies ?? false,
         isSelf: r.employee_id === myProfileId,
         orderEnforced,
         callerId: myProfileId,

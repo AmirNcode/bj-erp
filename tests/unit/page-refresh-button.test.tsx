@@ -78,6 +78,7 @@ describe('AppShell side panel', () => {
     home: 'Home',
     request: 'Request',
     calendar: 'Calendar',
+    organization: 'Organization',
     profile: 'Profile',
     manage: 'Manage',
     manageGroup: 'Manage',

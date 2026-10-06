@@ -57,6 +57,13 @@ describe('formatDuration', () => {
     const FA = { days: 'روز', hours: 'ساعت', minutes: 'دقیقه', and: 'و' };
     expect(formatDuration(4560, 8, 'fa', FA)).toBe('۹ روز و ۴ ساعت');
   });
+
+  it('signs a negative balance only once, on its first part (FR-48)', () => {
+    expect(formatDuration(-(8 + 4) * 60, 8, 'en', EN)).toBe('-1 days and 4 hours');
+    expect(formatDuration(-120, 8, 'en', EN)).toBe('-2 hours');
+    const fa = { days: 'روز', hours: 'ساعت', minutes: 'دقیقه', and: 'و' };
+    expect(formatDuration(-(8 + 4) * 60, 8, 'fa', fa)).toMatch(/^\u200e?−۱ روز و ۴ ساعت$/);
+  });
 });
 
 describe('daysToMinutes', () => {

@@ -2,12 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { manageItemsForRoles, settingsItemForRoles, tabsForRoles } from '@/lib/nav/tabs';
 
 describe('tabsForRoles', () => {
-  it('employee: 3 base tabs, no manage', () => {
+  it('employee: base tabs plus organization, no manage', () => {
     expect(tabsForRoles(['employee']).map((t) => t.key)).toEqual([
       'home',
       'request',
       'calendar',
+      'organization',
     ]);
+  });
+  it('every role reaches the organization chart, on desktop only (FR-44)', () => {
+    for (const roles of [['employee'], ['manager'], ['hr'], ['admin'], ['security']]) {
+      const org = tabsForRoles(roles).find((t) => t.key === 'organization');
+      expect(org).toMatchObject({ href: '/organization', desktopOnly: true });
+    }
   });
   it('manager gets the manage tab', () => {
     expect(tabsForRoles(['employee', 'manager']).map((t) => t.key)).toContain('manage');

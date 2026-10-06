@@ -10,10 +10,14 @@ import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
 import {
+  departmentStepApplies,
   filterApprovable,
   outstandingSteps,
+  stepLabel,
   type ApprovalStep,
+  type ManagerScope,
   type SignedStep,
+  type StepLabel,
   type StepRole,
 } from '@/lib/leave/approvals';
 import { leavePeriodsOverlap } from '@/lib/leave/hourly';
@@ -109,8 +113,13 @@ export type PendingApproval = {
   signature_consent_at: string | null;
   /** FR-36: who has signed so far, and who is still needed. */
   employee_id: string;
+  /** FR-47: manager of the requester's department, and whether that step applies. */
+  employee_department_manager_id: string | null;
+  department_step_applies: boolean;
   signed: SignedStep[];
-  outstanding: StepRole[];
+  /** Labels of the steps already approved — a department signature carries role `manager`. */
+  approved: StepLabel[];
+  outstanding: StepLabel[];
 };
 
 /**
@@ -130,7 +139,7 @@ export async function getApprovalConfig(): Promise<{
   const [{ data: steps }, { data: ws }] = await Promise.all([
     c.supabase
       .from('approval_steps')
-      .select('id, role, step_order, applies_to, active, approver_id')
+      .select('id, role, step_order, applies_to, active, approver_id, manager_scope')
       .eq('company_id', c.companyId)
       .order('step_order'),
     c.supabase
@@ -148,6 +157,7 @@ export async function getApprovalConfig(): Promise<{
       appliesTo: (r.applies_to ?? []) as ('leave' | 'errand')[],
       active: r.active,
       approverId: r.approver_id ?? null,
+      managerScope: (r.manager_scope ?? 'direct') as ManagerScope,
     })),
     orderEnforced: ws?.approval_order_enforced ?? false,
   };
@@ -172,7 +182,7 @@ export async function getPendingApprovals(): Promise<
     .select(
       `id, employee_id, kind, errand_location, created_at, leave_type_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id, signature_consent_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
-       profiles!leave_requests_employee_id_fkey(full_name, manager_id, department_id, departments!profiles_department_id_fkey(name_fa, name_en)),
+       profiles!leave_requests_employee_id_fkey(full_name, manager_id, department_id, departments!profiles_department_id_fkey(name_fa, name_en, manager_id, manager:profiles!departments_manager_id_fkey(active))),
        leave_types(name_fa, name_en, affects_balance)`
     )
     .eq('status', 'pending')
@@ -204,7 +214,12 @@ export async function getPendingApprovals(): Promise<
       full_name: string;
       manager_id: string | null;
       department_id: string | null;
-      departments: { name_fa: string; name_en: string | null } | null;
+      departments: {
+        name_fa: string;
+        name_en: string | null;
+        manager_id: string | null;
+        manager: { active: boolean } | null;
+      } | null;
     } | null;
     leave_types: { name_fa: string; name_en: string | null; affects_balance: boolean } | null;
   };
@@ -236,8 +251,18 @@ export async function getPendingApprovals(): Promise<
     serial_seq: r.serial_seq,
     signature_consent_at: r.signature_consent_at ?? null,
     employee_id: r.employee_id,
+    employee_department_manager_id: r.profiles?.departments?.manager_id ?? null,
+    department_step_applies: departmentStepApplies({
+      employeeId: r.employee_id,
+      employeeManagerId: r.profiles?.manager_id ?? null,
+      departmentManagerId: r.profiles?.departments?.manager_id ?? null,
+      // The embed is hidden only from callers who cannot read company-wide, and
+      // those are never approvers; the database decides on write regardless.
+      departmentManagerActive: r.profiles?.departments?.manager?.active ?? true,
+    }),
     signed: [] as SignedStep[],
-    outstanding: [] as StepRole[],
+    approved: [] as StepLabel[],
+    outstanding: [] as StepLabel[],
     // Filled below: a cover can book leave between submission and approval, and
     // the manager should see that before deciding (spec §2.1). approve_leave_request
     // also refuses it, so this is a heads-up rather than the guard.
@@ -262,9 +287,16 @@ export async function getPendingApprovals(): Promise<
       });
       byRequest.set(a.request_id, list);
     }
+    const stepById = new Map(steps.map((s) => [s.id, s]));
     for (const r of mapped) {
       r.signed = byRequest.get(r.id) ?? [];
-      r.outstanding = outstandingSteps(steps, r.signed, r.kind);
+      r.approved = r.signed
+        .filter((d) => d.decision === 'approved')
+        .map((d) => {
+          const step = d.stepId ? stepById.get(d.stepId) : undefined;
+          return step ? stepLabel(step) : d.stepRole;
+        });
+      r.outstanding = outstandingSteps(steps, r.signed, r.kind, r.department_step_applies);
     }
   }
 

@@ -42,6 +42,7 @@ export default async function AppLayout({ children, params }: Props) {
     home: t('home'),
     request: t('request'),
     calendar: t('calendar'),
+    organization: t('organization'),
     profile: t('profile'),
     manage: t('manage'),
     manageGroup: t('manage'),
