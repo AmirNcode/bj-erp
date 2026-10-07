@@ -135,7 +135,13 @@ admin-configurable roles with per-area permissions (now in TASKS; `has_permissio
   `ownDepartmentManager` / `managerOtherCompany`. SQL scenarios now 40 (3 new were red first); dry
   run 40/40, then `bj-deploy update local` (backup `20261007T062359Z-75c9e4`), REST restarted,
   schema dump, 40/40 on the migrated DB. Unit 557, tsc, lint, build, test:deploy clean; e2e
-  `hr-employee-admin` + `hr-role` 10 passed. Not yet committed: awaiting Amir's OK to push.
+  `hr-employee-admin` + `hr-role` 10 passed. Committed `36e64a3` with two CLAUDE.md gotchas, pushed.
+  Run 37635085044 SUCCESS: backup `pre-36e64a3…-2026-10-07-091729.dump` (492K), applied
+  `20261007130002`, `Liara release verified: 36e64a3`.
+- An automated commit review then reported an "authorization-bypass" in `20261007130002` with **no
+  details** (the notice body carried only connector warnings). Not reproduced or resolved; next
+  agent: re-review that migration (e.g. paths where hr's department-manager choice reaches hr's own
+  approvals indirectly).
 - `docs/design/` untracked from before.
 
 **For the next agent**
