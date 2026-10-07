@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { createEmployee } from '@/lib/actions/employees';
 import { allocateLeave, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
-import { daysToMinutes } from '@/lib/leave/duration';
+import { daysToMinutes, type DaysHoursError } from '@/lib/leave/duration';
 import { currentYearPeriod } from '@/lib/leave/allocations';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import {
@@ -20,9 +21,10 @@ import { nativeSelectClass } from '@/lib/native-select';
 import { PersianDateField } from '@/components/PersianDateField';
 import {
   AccrualPolicyFields,
+  DaysHoursField,
   RoleCheckboxes,
+  leaveAmountReader,
   leaveTypeSlug,
-  minutesToDaysInput,
   type Role,
 } from '../_components/EmployeeFormParts';
 
@@ -61,7 +63,7 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
-  /** Company day length: the inputs are days, the ledger stores minutes. */
+  /** Company day length: the inputs are days + hours, the ledger stores minutes. */
   hoursPerDay: number;
   /** Gregorian start of the current Jalali month — the accrual start default. */
   accrualStartMonth: string;
@@ -100,8 +102,8 @@ type Props = {
   };
 };
 
-function defaultDaysFor(type: InitialLeaveType) {
-  return type.default_annual_quota_days ?? 0;
+function defaultMinutesFor(type: InitialLeaveType, hoursPerDay: number) {
+  return daysToMinutes(type.default_annual_quota_days ?? 0, hoursPerDay);
 }
 
 export function NewEmployeeForm({
@@ -119,8 +121,10 @@ export function NewEmployeeForm({
   labels,
 }: Props) {
   const router = useRouter();
+  const tDuration = useTranslations('manage.employees.duration');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   // Errors the database attributes to one input (currently only the personnel
   // number) render beside that input instead of in the banner — a duplicate
   // personnel number used to arrive as a bare "unexpected error" at the top of
@@ -151,14 +155,26 @@ export function NewEmployeeForm({
     setPending(true);
 
     const fd = new FormData(e.currentTarget);
+    // Leave amounts are checked before the employee is created, so a bad entry
+    // cannot leave a half-set-up account behind.
+    const amounts = leaveAmountReader(fd, hoursPerDay);
     const requestedAllocations = canManageLeave
       ? leaveTypes
           .map((type) => ({
             typeId: type.id,
-            days: Number(fd.get(`alloc_${type.id}`) || 0),
+            minutes: amounts.read(`alloc_${type.id}`, false),
           }))
-          .filter((allocation) => allocation.days > 0)
+          .filter((allocation) => allocation.minutes > 0)
       : [];
+    const policyInputs = canManageLeave
+      ? leaveTypes.map((type) => ({ leaveTypeId: type.id, ...amounts.policy(type.id) }))
+      : [];
+    setAmountErrors(amounts.errors);
+    if (Object.keys(amounts.errors).length > 0) {
+      setPending(false);
+      setError(tDuration('invalid'));
+      return;
+    }
 
     const result = await createEmployee({
       personnel_no: normalizedPno,
@@ -187,7 +203,7 @@ export function NewEmployeeForm({
           leaveTypeId: allocation.typeId,
           periodStart: start,
           periodEnd: end,
-          minutes: daysToMinutes(allocation.days, hoursPerDay),
+          minutes: allocation.minutes,
         });
 
         if (!allocationResult.ok) {
@@ -201,17 +217,13 @@ export function NewEmployeeForm({
     // allocation above: that is a one-off starting position, this is the rule that
     // keeps adding to it every month.
     if (canManageLeave) {
-      for (const type of leaveTypes) {
-        const rateDays = Number(fd.get(`policy_rate_${type.id}`) || 0);
-        const capDays = Number(fd.get(`policy_cap_${type.id}`) || 0);
-        const carryDays = Number(fd.get(`policy_carry_${type.id}`) || 0);
-
+      for (const policy of policyInputs) {
         const policyResult = await setEmployeeLeavePolicy({
           employeeId: result.userId,
-          leaveTypeId: type.id,
-          accrualMinutesPerMonth: daysToMinutes(rateDays, hoursPerDay),
-          annualCapMinutes: capDays > 0 ? daysToMinutes(capDays, hoursPerDay) : null,
-          carryoverCapMinutes: daysToMinutes(carryDays, hoursPerDay),
+          leaveTypeId: policy.leaveTypeId,
+          accrualMinutesPerMonth: policy.rate,
+          annualCapMinutes: policy.cap > 0 ? policy.cap : null,
+          carryoverCapMinutes: policy.carry,
           accrualStartMonth,
         });
 
@@ -405,19 +417,21 @@ export function NewEmployeeForm({
               {leaveTypes.map((type) => {
                 const slug = leaveTypeSlug(type);
                 const label = locale === 'fa' ? type.name_fa : type.name_en ?? type.name_fa;
+                const name = `alloc_${type.id}`;
                 return (
-                  <div className="space-y-1.5" key={type.id}>
-                    <Label htmlFor={`alloc_${type.id}`}>{label}</Label>
-                    <Input
-                      id={`alloc_${type.id}`}
-                      name={`alloc_${type.id}`}
-                      type="number"
-                      min={0}
-                      step="0.5"
-                      defaultValue={defaultDaysFor(type)}
-                      data-testid={`alloc-days-${slug}`}
-                    />
-                  </div>
+                  <DaysHoursField
+                    key={type.id}
+                    name={name}
+                    label={label}
+                    minutes={defaultMinutesFor(type, hoursPerDay)}
+                    hoursPerDay={hoursPerDay}
+                    // A one-off credit (allocate_leave); a debt is set on the
+                    // Edit form after creation.
+                    allowNegative={false}
+                    testId={`alloc-days-${slug}`}
+                    hoursTestId={`alloc-hours-${slug}`}
+                    error={amountErrors[name]}
+                  />
                 );
               })}
             </div>
@@ -442,10 +456,12 @@ export function NewEmployeeForm({
                     slug={slug}
                     legend={label}
                     defaults={{
-                      rate: minutesToDaysInput(type.default_accrual_minutes_per_month, hoursPerDay),
-                      cap: minutesToDaysInput(type.default_annual_cap_minutes, hoursPerDay),
-                      carry: minutesToDaysInput(type.default_carryover_cap_minutes, hoursPerDay),
+                      rate: type.default_accrual_minutes_per_month ?? 0,
+                      cap: type.default_annual_cap_minutes ?? 0,
+                      carry: type.default_carryover_cap_minutes,
                     }}
+                    hoursPerDay={hoursPerDay}
+                    errors={amountErrors}
                     labels={labels}
                   />
                 );

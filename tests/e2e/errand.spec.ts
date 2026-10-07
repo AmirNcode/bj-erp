@@ -57,7 +57,8 @@ test('errand request: submit, manager approves, leave balance untouched', async 
       `tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`
     );
     await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 20_000 });
-    return Number(await balanceField.inputValue());
+    // The stored balance in minutes: the form shows whole days + whole hours.
+    return Number(await balanceField.getAttribute('data-minutes'));
   };
   const before = await openEmployee();
   await logout(page);
@@ -117,7 +118,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   // ── an errand is WORK: the balance must be exactly where it was ───────────
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const after = await openEmployee();
-  expect(after).toBeCloseTo(before, 2);
+  expect(after).toBe(before);
 });
 
 test('daily work errand: date range submission and signed manager approval', async ({ page }) => {

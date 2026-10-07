@@ -78,6 +78,57 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — Leave amounts as days + hours on the employee forms
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `751d4f3`
+**Trigger:** After loading the real roster on Liara, Amir could not save the HR manager's role
+change: the Edit Employee balance box showed «۳ روز و ۶ ساعت» as `3.75` with `step="0.5"`, and the
+browser blocked the submit. He asked for separate days and hours fields. He chose whole hours only,
+negatives allowed; leftover minutes kept with a note; policy fields converted too.
+
+**What changed**
+- Root cause: UI only. `lib/csv/import-rows.ts:299-305` already stores `days*minutesPerDay +
+  hours*60`, so the uploaded balances on Liara are correct. 116 of 138 CSV rows have hours, so most
+  employees were unsaveable from the Edit form. Nothing in the database or import changed.
+- `lib/leave/duration.ts`: `daysHoursToMinutes` (inverse of `minutesToDaysHours`), same rules as the
+  CSV import: whole numbers, same sign on both parts, |hours| < hours_per_day, |days| ≤ 366. Leftover
+  minutes take the typed sign (own sign when both parts are 0).
+- `app/[locale]/(app)/manage/employees/_components/EmployeeFormParts.tsx`: new `DaysHoursField`
+  (uncontrolled `<name>_days`/`_hours` + hidden `_rest`; uses `useTranslations`, audit D3),
+  `readDaysHours`, `leaveAmountReader` (collects errors per field), `policyFieldName`;
+  `AccrualPolicyFields` now takes minutes and uses a container query (`@3xl:grid-cols-3`) because three
+  pairs clipped at narrow widths. Removed `minutesToDaysInput` (rounded policies to 2 decimals → drift).
+- `EditEmployeeForm.tsx` / `NewEmployeeForm.tsx`: all leave amounts read and validated **before any
+  write**; `targets` state removed. Balances still written only when the minute total changed
+  (`balanceAdjustments`). New-employee opening balance stays ≥ 0 (`allocate_leave`).
+- `messages/{fa,en}.json`: `manage.employees.duration.*`; policy labels drop "(days)"; allocHint wording.
+- Test ids kept (`balance-days-<slug>`, `alloc-days-…`, `policy-rate-…`); added `…-hours-…` ids and
+  `data-minutes` (stored minutes) on the days input. e2e `allocate()` adds whole days;
+  `hourly.spec`/`errand.spec` compare `data-minutes`. New `tests/e2e/balance-days-hours.spec.ts`,
+  `tests/unit/days-hours-field.test.tsx`, extra cases in `tests/unit/duration.test.ts`.
+
+**Actions outside the repo**
+- None on Liara. Local DB: read-only `psql` counts. The e2e runs created and deleted throwaway `999…`
+  users, and global setup reset `work_settings` weekend to Friday-only and the demo admin's locale to fa
+  (its normal baseline step). Viewed (did not save) employee 126 in the browser pane.
+
+**Verification**
+- Unit tests written first and seen failing (`daysHoursToMinutes is not a function`, missing
+  component); a mutation check on `leaveAmountReader`. `npm run test:unit` 549 passed; `tsc --noEmit`,
+  `npm run lint`, `npm run build` clean.
+- e2e (local, `--workers=1`): `balance-days-hours`, `manage`, `hr-leave-setup`, `hourly`, `errand`,
+  `overlap-error` passed (8 tests). `manager-create-employee` failed at login: seeded manager `1001`
+  is **deactivated** in the local DB (roster import), unrelated; left as is. `accrual.spec` deliberately
+  NOT run: the local DB now holds the real roster and it posts accruals for everyone.
+- Browser pane: real imported balance shows 3 days 1 hour, `form.checkValidity()` true; Farsi RTL
+  and 375 px checked.
+
+**State left behind**
+- Uncommitted on `main`. Not pushed. `docs/design/` was already untracked before this session.
+
+**For the next agent**
+- The local DB now contains the real roster (codes 100–3xx) next to the demo accounts. Run only
+  specs that touch their own throwaway users there.
 ## 2026-10-07 — Refuse same-password change (follow-up to 22fe044)
 
 **Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `69b4c3d`

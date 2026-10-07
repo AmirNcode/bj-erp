@@ -466,15 +466,15 @@
       "noEmployees": "No employees found.",
       "saved": "Changes saved successfully.",
       "allocTitle": "Starting balance — one-off",
-      "allocHint": "Days this employee already has on day one, credited once. For a new hire this is normally 0 — the monthly accrual below builds the balance up. Use it to carry a balance over from the paper records. It is added on top of accrual and is not limited by the yearly cap below.",
+      "allocHint": "Leave this employee already has on day one, credited once. For a new hire this is normally 0 — the monthly accrual below builds the balance up. Use it to carry a balance over from the paper records. It is added on top of accrual and is not limited by the yearly cap below.",
       "allocWarn": "Employee created, but setting leave balance failed:",
       "policyTitle": "Monthly accrual policy",
       "policyHint": "What this employee earns each month, added to their current balance. Accrual starts from the current Jalali month — not the hire date — so someone added mid-year earns only the remaining months of that year.",
-      "policyRate": "Days per month",
+      "policyRate": "Earned per month",
       "policyRateHint": "0 turns accrual off.",
-      "policyAnnualCap": "Yearly cap (days)",
+      "policyAnnualCap": "Yearly cap",
       "policyAnnualCapHint": "The most that can be earned in one Jalali year — the employee's annual entitlement. 0 means no cap. Only monthly accrual counts toward it; balances set by hand do not.",
-      "policyCarryCap": "Carryover cap (days)",
+      "policyCarryCap": "Carryover cap",
       "policyCarryCapHint": "The most that survives into the next Jalali year. At Nowruz anything above this is forfeited. 0 means unused leave is lost each year.",
       "policyWarn": "Employee created, but saving the accrual policy failed:",
       "balancesTitle": "Leave balances",
@@ -509,6 +509,19 @@
         "prev": "Previous",
         "next": "Next",
         "pagination": "Pagination"
+      },
+      "duration": {
+        "days": "days",
+        "hours": "hours",
+        "restNote": "Plus {minutes} minutes (from hourly leave) not shown here. They are kept when you save.",
+        "invalid": "Fix the highlighted leave amounts.",
+        "errors": {
+          "notWhole": "Whole numbers only.",
+          "negative": "Cannot be negative.",
+          "mixedSign": "For a negative amount, put the minus sign on both days and hours.",
+          "hoursTooLarge": "Hours must be less than one working day ({max} at most).",
+          "tooLarge": "At most 366 days."
+        }
       }
     },
     "departments": {

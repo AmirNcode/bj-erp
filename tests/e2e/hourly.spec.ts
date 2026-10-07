@@ -83,7 +83,8 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
       `tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`
     );
     await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 20_000 });
-    return Number(await balanceField.inputValue());
+    // The stored balance in minutes: the form shows whole days + whole hours.
+    return Number(await balanceField.getAttribute('data-minutes'));
   };
   const before = await openEmployee();
 
@@ -111,9 +112,9 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
     timeout: 20_000,
   });
 
-  // 2 hours on an 8h day is exactly a quarter of a day.
+  // The approval debits exactly the 2 hours, in minutes.
   const after = await openEmployee();
-  expect(after).toBeCloseTo(before - 0.25, 2);
+  expect(after).toBe(before - 120);
 });
 
 test('sick leave is not offered hourly', async ({ page }) => {

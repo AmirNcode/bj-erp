@@ -424,9 +424,9 @@ async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, pre
 }
 
 /**
- * Add `days` to an employee's Annual balance on the Edit Employee form, as an admin.
- * Returns the leave type id, which is the value of the request form's type select.
- * The input steps by half days, so the new figure is rounded to the nearest 0.5.
+ * Add whole `days` to an employee's Annual balance on the Edit Employee form, as an
+ * admin. Returns the leave type id, which is the value of the request form's type
+ * select. The hours box is left as it is.
  */
 export async function allocate(page: Page, employeeCode: string, days: number): Promise<string> {
   // The list is paginated (25/page): search for the row.
@@ -439,7 +439,7 @@ export async function allocate(page: Page, employeeCode: string, days: number): 
   const field = page.locator('[data-testid="balance-days-annual"]');
   await expect(field).toBeVisible({ timeout: 20_000 });
   const current = Number(await field.inputValue());
-  await field.fill(String(Math.round((current + days) * 2) / 2));
+  await field.fill(String(current + Math.round(days)));
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 20_000 });
 

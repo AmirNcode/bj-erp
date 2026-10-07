@@ -9,6 +9,20 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave amounts as days + hours (2026-10-07)
+
+UI only, no migration.
+- **Fixed: Edit Employee refused to save balances with hours.** A balance was shown as decimal days
+  in a box that stepped by half days. An imported «۳ روز و ۶ ساعت» (3.75 days) failed the browser's
+  step check, so the whole form, roles included, would not submit. The stored balances were
+  always correct.
+- Balances, opening balances and the three accrual-policy fields on the Add and Edit Employee
+  forms are now **whole days + whole hours**. A balance may be negative (minus sign on both
+  parts; mixed signs refused, as in the CSV import). Hours stay below one working day.
+- Minutes below a whole hour (from 30-minute hourly leave) are kept on save, with a note under the
+  field. Policy values are no longer rounded to 2 decimal days on every save.
+- Policy labels drop "(days)": «تعلق در هر ماه», «سقف سالانه», «سقف انتقال به سال بعد».
+
 ### Pre-pilot hardening (2026-10-06)
 
 Migrations `20261006120003`–`…04`. Spec `docs/specs/2026-10-06-first-login-password-design.md`.

@@ -142,6 +142,7 @@ Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin passwo
 - **Approval steps: key on `step_id`, not `step_role`.** The direct-manager and department-manager
   steps both have `step_role='manager'` (`manager_scope` tells them apart).
 - **e2e with `E2E_BASE_URL`:** the teardown cleanup fails; run `npm run cleanup:e2e` by hand after.
+- **Local DB holds the real roster** (since 2026-10-07): run only e2e specs that use their own `999…` users; skip `accrual.spec` (posts accruals for everyone).
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

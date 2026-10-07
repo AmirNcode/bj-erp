@@ -92,3 +92,40 @@ export function formatDuration(
 export function daysToMinutes(days: number, hoursPerDay: number): number {
   return Math.round(days * hoursPerDay * 60);
 }
+
+export type DaysHoursParts = {
+  days: number;
+  hours: number;
+  /** Minutes below a whole hour the form keeps but does not show (from hourly leave). */
+  restMinutes: number;
+};
+
+export type DaysHoursError = 'notWhole' | 'negative' | 'mixedSign' | 'hoursTooLarge' | 'tooLarge';
+
+/** The database bounds a balance at ±366 days (FR-48); the CSV import uses the same limit. */
+const MAX_DAYS = 366;
+
+/**
+ * Joins the whole days and whole hours an admin typed, plus the leftover minutes
+ * the form carried along, back into minutes. The inverse of minutesToDaysHours.
+ *
+ * Same rules as the CSV import (lib/csv/import-rows.ts): a negative amount carries
+ * its sign on both parts, and the hours stay below one working day. The leftover
+ * minutes take the sign of what was typed, or keep their own when both parts are 0.
+ */
+export function daysHoursToMinutes(
+  { days, hours, restMinutes }: DaysHoursParts,
+  hoursPerDay: number,
+  { allowNegative }: { allowNegative: boolean }
+): { ok: true; minutes: number } | { ok: false; error: DaysHoursError } {
+  if (!Number.isInteger(days) || !Number.isInteger(hours)) return { ok: false, error: 'notWhole' };
+  if (!allowNegative && (days < 0 || hours < 0)) return { ok: false, error: 'negative' };
+  if ((days > 0 && hours < 0) || (days < 0 && hours > 0)) return { ok: false, error: 'mixedSign' };
+  if (Math.abs(hours) >= hoursPerDay) return { ok: false, error: 'hoursTooLarge' };
+  if (Math.abs(days) > MAX_DAYS) return { ok: false, error: 'tooLarge' };
+
+  const typedSign = Math.sign(days) || Math.sign(hours);
+  const rest = typedSign === 0 ? restMinutes : typedSign * Math.abs(restMinutes);
+  const minutesPerDay = Math.round(hoursPerDay * 60);
+  return { ok: true, minutes: days * minutesPerDay + hours * 60 + rest };
+}

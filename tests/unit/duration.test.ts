@@ -3,6 +3,7 @@ import {
   minutesToDaysHours,
   formatDuration,
   daysToMinutes,
+  daysHoursToMinutes,
   projectLeaveBalance,
 } from '@/lib/leave/duration';
 
@@ -101,6 +102,134 @@ describe('projectLeaveBalance', () => {
       requestingMinutes: 60,
       remainingMinutes: 0,
       unpaidMinutes: 60,
+    });
+  });
+});
+
+describe('daysHoursToMinutes', () => {
+  const pos = { allowNegative: false };
+  const neg = { allowNegative: true };
+
+  it('joins whole days and hours — the 3 days 6 hours upload case', () => {
+    expect(daysHoursToMinutes({ days: 3, hours: 6, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: true,
+      minutes: 1800,
+    });
+  });
+
+  it('round-trips every balance minutesToDaysHours splits', () => {
+    for (const total of [0, 1800, 4590, -510, -2160, 1000]) {
+      for (const perDay of [8, 7.5]) {
+        const { days, hours, minutes } = minutesToDaysHours(total, perDay);
+        expect(
+          daysHoursToMinutes({ days, hours, restMinutes: minutes }, perDay, neg)
+        ).toEqual({ ok: true, minutes: total });
+      }
+    }
+  });
+
+  it('keeps the hidden leftover minutes when days and hours change', () => {
+    // Stored 3d 5h 30m; the admin types 4 days 0 hours. The 30 minutes stay.
+    expect(daysHoursToMinutes({ days: 4, hours: 0, restMinutes: 30 }, 8, pos)).toEqual({
+      ok: true,
+      minutes: 4 * 480 + 30,
+    });
+  });
+
+  it('gives the leftover minutes the sign of what was typed', () => {
+    // Stored +2h 30m; the admin types -1 day: the balance is -1 day 30 minutes.
+    expect(daysHoursToMinutes({ days: -1, hours: 0, restMinutes: 30 }, 8, neg)).toEqual({
+      ok: true,
+      minutes: -510,
+    });
+  });
+
+  it('keeps the leftover sign when days and hours are both zero', () => {
+    expect(daysHoursToMinutes({ days: 0, hours: 0, restMinutes: -30 }, 8, neg)).toEqual({
+      ok: true,
+      minutes: -30,
+    });
+  });
+
+  it('accepts a negative balance when both parts carry the sign', () => {
+    expect(daysHoursToMinutes({ days: -1, hours: -4, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: true,
+      minutes: -720,
+    });
+    expect(daysHoursToMinutes({ days: 0, hours: -2, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: true,
+      minutes: -120,
+    });
+  });
+
+  it('refuses mixed signs, like the CSV import', () => {
+    expect(daysHoursToMinutes({ days: -1, hours: 4, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: false,
+      error: 'mixedSign',
+    });
+    expect(daysHoursToMinutes({ days: 2, hours: -3, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: false,
+      error: 'mixedSign',
+    });
+  });
+
+  it('refuses negatives where they are not allowed', () => {
+    expect(daysHoursToMinutes({ days: -1, hours: 0, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'negative',
+    });
+    expect(daysHoursToMinutes({ days: 0, hours: -1, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'negative',
+    });
+  });
+
+  it('refuses hours that make up a whole day or more', () => {
+    expect(daysHoursToMinutes({ days: 1, hours: 8, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'hoursTooLarge',
+    });
+    expect(daysHoursToMinutes({ days: 0, hours: -8, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: false,
+      error: 'hoursTooLarge',
+    });
+  });
+
+  it('allows the last whole hour of a non-integer workday', () => {
+    // 7.5h day: 7 hours is still less than a day.
+    expect(daysHoursToMinutes({ days: 0, hours: 7, restMinutes: 0 }, 7.5, pos)).toEqual({
+      ok: true,
+      minutes: 420,
+    });
+  });
+
+  it('refuses fractions', () => {
+    expect(daysHoursToMinutes({ days: 3.75, hours: 0, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'notWhole',
+    });
+    expect(daysHoursToMinutes({ days: 1, hours: 2.5, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'notWhole',
+    });
+    expect(daysHoursToMinutes({ days: Number.NaN, hours: 0, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'notWhole',
+    });
+  });
+
+  it('refuses more than 366 days either way, the database bound', () => {
+    expect(daysHoursToMinutes({ days: 367, hours: 0, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: false,
+      error: 'tooLarge',
+    });
+    expect(daysHoursToMinutes({ days: -367, hours: 0, restMinutes: 0 }, 8, neg)).toEqual({
+      ok: false,
+      error: 'tooLarge',
+    });
+    expect(daysHoursToMinutes({ days: 366, hours: 0, restMinutes: 0 }, 8, pos)).toEqual({
+      ok: true,
+      minutes: 366 * 480,
     });
   });
 });

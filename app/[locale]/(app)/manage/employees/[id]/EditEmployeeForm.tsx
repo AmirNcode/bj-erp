@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
 import { setLeaveBalance, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
 import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
-import { daysToMinutes } from '@/lib/leave/duration';
+import type { DaysHoursError } from '@/lib/leave/duration';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -27,10 +28,12 @@ import { nativeSelectClass } from '@/lib/native-select';
 import { PersianDateField } from '@/components/PersianDateField';
 import {
   AccrualPolicyFields,
+  DaysHoursField,
   RoleCheckboxes,
   ROLES,
+  leaveAmountReader,
   leaveTypeSlug,
-  minutesToDaysInput,
+  type PolicyMinutes,
   type Role,
 } from '../_components/EmployeeFormParts';
 import {
@@ -73,7 +76,7 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
-  /** Company day length: the inputs below are days, the ledger is minutes. */
+  /** Company day length: the inputs below are days + hours, the ledger is minutes. */
   hoursPerDay: number;
   /** Existing accrual policies; absent types fall back to the leave-type default. */
   policies: LeavePolicyRow[];
@@ -140,8 +143,10 @@ export function EditEmployeeForm({
   labels,
 }: Props) {
   const router = useRouter();
+  const tDuration = useTranslations('manage.employees.duration');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   const [success, setSuccess] = useState(false);
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<Role[]>(
@@ -150,22 +155,15 @@ export function EditEmployeeForm({
   const [hireDate, setHireDate] = useState<PickerDate | null>(() =>
     employee.hire_date ? gregorianToPersianDateObject(employee.hire_date, locale) : null
   );
-  // Kept in MINUTES, the stored unit. The input renders days for the admin and
-  // converts on change, so a rounded display can never produce a spurious
-  // one-minute adjustment row on save.
-  const [targets, setTargets] = useState<Record<string, number>>(
-    Object.fromEntries(balances.map((balance) => [balance.leaveTypeId, balance.balanceMinutes]))
-  );
-
-  // Policy fields are day-denominated for the admin; conversion happens on save.
-  const policyDaysFor = (leaveTypeId: string) => {
+  // The current policy in minutes, falling back to the leave-type default. A
+  // null cap ("no cap") shows as 0, which the save turns back into null.
+  const policyMinutesFor = (leaveTypeId: string): PolicyMinutes & { startMonth: string } => {
     const existing = policies.find((p) => p.leaveTypeId === leaveTypeId);
     const fallback = typeDefaults.find((t) => t.id === leaveTypeId);
-    const toDays = (m: number | null | undefined) => minutesToDaysInput(m, hoursPerDay);
     return {
-      rate: toDays(existing?.accrualMinutesPerMonth ?? fallback?.default_accrual_minutes_per_month),
-      cap: toDays(existing?.annualCapMinutes ?? fallback?.default_annual_cap_minutes),
-      carry: toDays(existing?.carryoverCapMinutes ?? fallback?.default_carryover_cap_minutes),
+      rate: existing?.accrualMinutesPerMonth ?? fallback?.default_accrual_minutes_per_month ?? 0,
+      cap: existing?.annualCapMinutes ?? fallback?.default_annual_cap_minutes ?? 0,
+      carry: existing?.carryoverCapMinutes ?? fallback?.default_carryover_cap_minutes ?? 0,
       startMonth: existing?.accrualStartMonth ?? accrualStartMonth,
     };
   };
@@ -177,6 +175,28 @@ export function EditEmployeeForm({
     setPending(true);
 
     const fd = new FormData(e.currentTarget);
+
+    // Leave amounts are read and checked before ANY write, so a bad entry cannot
+    // leave the profile and roles saved but the balances not.
+    const amounts = leaveAmountReader(fd, hoursPerDay);
+    const targets = canManageLeave
+      ? balances.map((balance) => ({
+          leaveTypeId: balance.leaveTypeId,
+          target: amounts.read(`balance_${balance.leaveTypeId}`, true),
+        }))
+      : [];
+    const policyInputs = canManageLeave
+      ? balances.map((balance) => ({
+          leaveTypeId: balance.leaveTypeId,
+          ...amounts.policy(balance.leaveTypeId),
+        }))
+      : [];
+    setAmountErrors(amounts.errors);
+    if (Object.keys(amounts.errors).length > 0) {
+      setPending(false);
+      setError(tDuration('invalid'));
+      return;
+    }
 
     // Basic fields — skipped entirely for a caller who may not change them, so an
     // HR user's save proceeds straight to the leave sections instead of failing
@@ -215,12 +235,14 @@ export function EditEmployeeForm({
     // above, which used to conflate "may assign roles" with "may administer
     // leave" — two different authorities that now belong to different people.
     if (canManageLeave) {
+      // Only balances whose minute total changed are written, so saving a role
+      // change never touches a balance.
       const changes = balanceAdjustments(
         balances.map((balance) => ({
           leaveTypeId: balance.leaveTypeId,
           balance: balance.balanceMinutes,
         })),
-        Object.entries(targets).map(([leaveTypeId, target]) => ({ leaveTypeId, target }))
+        targets
       );
 
       for (const change of changes) {
@@ -232,20 +254,15 @@ export function EditEmployeeForm({
         }
       }
 
-      // Accrual policy per balance-affecting type. Inputs are days; the ledger is
-      // minutes, so convert here at the boundary.
-      for (const balance of balances) {
-        const rateDays = Number(fd.get(`policy_rate_${balance.leaveTypeId}`) || 0);
-        const capDays = Number(fd.get(`policy_cap_${balance.leaveTypeId}`) || 0);
-        const carryDays = Number(fd.get(`policy_carry_${balance.leaveTypeId}`) || 0);
-
+      // Accrual policy per balance-affecting type, already in minutes.
+      for (const policy of policyInputs) {
         const policyResult = await setEmployeeLeavePolicy({
           employeeId: employee.id,
-          leaveTypeId: balance.leaveTypeId,
-          accrualMinutesPerMonth: daysToMinutes(rateDays, hoursPerDay),
-          annualCapMinutes: capDays > 0 ? daysToMinutes(capDays, hoursPerDay) : null,
-          carryoverCapMinutes: daysToMinutes(carryDays, hoursPerDay),
-          accrualStartMonth: policyDaysFor(balance.leaveTypeId).startMonth,
+          leaveTypeId: policy.leaveTypeId,
+          accrualMinutesPerMonth: policy.rate,
+          annualCapMinutes: policy.cap > 0 ? policy.cap : null,
+          carryoverCapMinutes: policy.carry,
+          accrualStartMonth: policyMinutesFor(policy.leaveTypeId).startMonth,
         });
 
         if (!policyResult.ok) {
@@ -409,30 +426,22 @@ export function EditEmployeeForm({
                         locale === 'fa'
                           ? balance.name_fa
                           : balance.name_en ?? balance.name_fa;
+                      const name = `balance_${balance.leaveTypeId}`;
                       return (
-                        <div className="space-y-1.5" key={balance.leaveTypeId}>
-                          <Label htmlFor={`balance-${balance.leaveTypeId}`}>{label}</Label>
-                          <Input
-                            id={`balance-${balance.leaveTypeId}`}
-                            type="number"
-                            // FR-48: a balance may be negative (leave taken in
-                            // advance); the database bounds it at -366 days.
-                            min={-366}
-                            step="0.5"
-                            value={(targets[balance.leaveTypeId] ?? 0) / (hoursPerDay * 60)}
-                            onChange={(event) =>
-                              setTargets((prev) => ({
-                                ...prev,
-                                [balance.leaveTypeId]: daysToMinutes(
-                                  Number(event.target.value),
-                                  hoursPerDay
-                                ),
-                              }))
-                            }
-                            data-testid={`balance-days-${slug}`}
-                            data-leave-type-id={balance.leaveTypeId}
-                          />
-                        </div>
+                        <DaysHoursField
+                          key={balance.leaveTypeId}
+                          name={name}
+                          label={label}
+                          minutes={balance.balanceMinutes}
+                          hoursPerDay={hoursPerDay}
+                          // FR-48: a balance may be negative (leave taken in
+                          // advance); the database bounds it at -366 days.
+                          allowNegative
+                          testId={`balance-days-${slug}`}
+                          hoursTestId={`balance-hours-${slug}`}
+                          leaveTypeId={balance.leaveTypeId}
+                          error={amountErrors[name]}
+                        />
                       );
                     })}
                   </div>
@@ -453,14 +462,15 @@ export function EditEmployeeForm({
                         locale === 'fa'
                           ? balance.name_fa
                           : balance.name_en ?? balance.name_fa;
-                      const p = policyDaysFor(balance.leaveTypeId);
                       return (
                         <AccrualPolicyFields
                           key={`policy-${balance.leaveTypeId}`}
                           leaveTypeId={balance.leaveTypeId}
                           slug={slug}
                           legend={label}
-                          defaults={p}
+                          defaults={policyMinutesFor(balance.leaveTypeId)}
+                          hoursPerDay={hoursPerDay}
+                          errors={amountErrors}
                           labels={labels}
                         />
                       );
