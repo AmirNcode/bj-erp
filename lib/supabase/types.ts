@@ -694,6 +694,7 @@ export type Database = {
           job_title: string | null
           language_pref: string
           manager_id: string | null
+          must_change_password: boolean
           personnel_no: string | null
         }
         Insert: {
@@ -709,6 +710,7 @@ export type Database = {
           job_title?: string | null
           language_pref?: string
           manager_id?: string | null
+          must_change_password?: boolean
           personnel_no?: string | null
         }
         Update: {
@@ -724,6 +726,7 @@ export type Database = {
           job_title?: string | null
           language_pref?: string
           manager_id?: string | null
+          must_change_password?: boolean
           personnel_no?: string | null
         }
         Relationships: [
@@ -905,6 +908,10 @@ export type Database = {
       }
       app_change_my_password: {
         Args: { p_current: string; p_new: string }
+        Returns: undefined
+      }
+      app_set_initial_password: {
+        Args: { p_new: string }
         Returns: undefined
       }
       app_bulk_import_employees: {

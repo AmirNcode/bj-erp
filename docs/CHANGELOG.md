@@ -9,6 +9,21 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Pre-pilot hardening (2026-10-06)
+
+Migrations `20261006120003`–`…04`. Spec `docs/specs/2026-10-06-first-login-password-design.md`.
+- **Fixed: unpaid leave counted as paid.** The seed marked «مرخصی بدون حقوق» as paid, so an approved
+  unpaid-leave request stored 0 unpaid minutes and the reports under-counted unpaid time. The type is
+  corrected and existing requests are backfilled.
+- **First-login password (FR-50):** new, imported and admin-reset accounts must choose their own
+  password before using the app. The issued password is refused.
+- **Login slips:** the one-time credentials screen (new employee import, password regeneration)
+  prints one cut-out slip per person: name, login code, temporary password, site address.
+- **Uptime check:** `.github/workflows/uptime.yml` checks app, Auth, database and certificate expiry
+  every 15 minutes; a failed run emails the committer of its schedule.
+- **Offsite backups:** `deploy/liara/pull-backups-to-mac.sh` copies the VM's daily dumps to the
+  owner's Mac (launchd, daily), verifies checksums, and warns on stale backups or a full VM disk.
+
 ### Org chart, personnel import v2, two-level sign-off (2026-10-05)
 
 Spec `docs/specs/2026-10-05-org-chart-and-personnel-import-design.md`, plan

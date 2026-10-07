@@ -87,7 +87,16 @@ async function ensureUser(code, fullName, deptId, roles, managerId) {
   });
   if (error) die(`create ${code} failed:`, error);
   console.log(`  created ${code} (${fullName})`);
+  await clearPasswordFlag(data, code);
   return data;
+}
+
+// New accounts must replace their issued password at first login (FR-50). Demo
+// accounts share a published password and are signed into by e2e, so the demo
+// org skips that step.
+async function clearPasswordFlag(id, code) {
+  const { error } = await supa.from('profiles').update({ must_change_password: false }).eq('id', id);
+  if (error) die(`clear password flag ${code} failed:`, error);
 }
 
 async function ensureAllocation(empId, leaveTypeId, days) {
@@ -113,12 +122,13 @@ async function ensureAllocation(empId, leaveTypeId, days) {
 }
 
 async function main() {
-  const { error: signErr } = await supa.auth.signInWithPassword({
+  const { data: signIn, error: signErr } = await supa.auth.signInWithPassword({
     email: codeToEmail(ADMIN_CODE),
     password: ADMIN_PASSWORD,
   });
   if (signErr) die('admin sign-in failed:', signErr);
   console.log('signed in as admin');
+  await clearPasswordFlag(signIn.user.id, ADMIN_CODE);
 
   // Leave type ids (by name, so this works on a fresh DB too).
   const { data: types, error: typesErr } = await supa

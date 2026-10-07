@@ -38,6 +38,15 @@
     "invalidCredentials": "Invalid employee code or password.",
     "inactiveAccount": "This account is inactive. Contact an administrator."
   },
+  "setPassword": {
+    "title": "Choose your own password",
+    "intro": "The password you were given is temporary. To continue, choose a new password that only you know.",
+    "hint": "At least 8 characters, using English letters and numbers.",
+    "new": "New password",
+    "confirm": "Confirm new password",
+    "submit": "Save and continue",
+    "signOut": "Sign out"
+  },
   "home": {
     "title": "Home",
     "balancesTitle": "My Balances",
@@ -783,7 +792,12 @@
         "download": "Download credentials (CSV)",
         "name": "Name",
         "code": "Login code",
-        "password": "Password"
+        "password": "Password",
+        "printSlips": "Print login slips",
+        "slipTitle": "Your login details",
+        "slipAddress": "Address",
+        "slipPassword": "Temporary password",
+        "slipNote": "At your first login you will be asked to choose your own password. Destroy this slip afterwards."
       }
     }
   },
@@ -866,7 +880,9 @@
     "holidayNameTooLong": "A holiday name is too long.",
     "holidayImportNotSaved": "The holidays were not saved. Try again.",
     "importCannotDeactivateAdmin": "An import cannot deactivate an admin account.",
-    "importBadMode": "This import mode cannot do that — check the mode and try again."
+    "importBadMode": "This import mode cannot do that — check the mode and try again.",
+    "passwordSameAsIssued": "The new password must be different from the one you were given.",
+    "passwordChangeNotRequired": "Your password has already been changed."
   },
   "roles": {
     "admin": "Admin",

@@ -31,6 +31,7 @@ export default async function PrintLayout({ children, params }: Props) {
 
   const profile = await getCachedProfile(user.id);
   if (!profile?.active) redirect(`/${locale}/login`);
+  if (profile.must_change_password) redirect(`/${locale}/set-password`);
 
   return <div className="min-h-dvh bg-white text-black">{children}</div>;
 }

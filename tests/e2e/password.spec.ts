@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_CODE, ADMIN_PASSWORD, login, logout, createEmployee } from './_helpers';
+import { ADMIN_CODE, ADMIN_PASSWORD, login, logout, createEmployee, firstLoginPassword } from './_helpers';
 
 // FR-7: a user changes their own password and can log in with the new one; a wrong
 // current password is rejected. Throwaway employee → no shared-state cleanup needed.
@@ -11,7 +11,9 @@ test('self-service password change', async ({ page }) => {
   const { code, password: tempPw } = await createEmployee(page, { name: 'Password Tester', roles: ['employee'] });
   await logout(page);
 
+  // `login` also clears the first-login screen (FR-50) with firstLoginPassword(tempPw).
   await login(page, code, tempPw);
+  const currentPw = firstLoginPassword(tempPw);
   await page.goto('/profile');
 
   // Wrong current password → error.
@@ -22,7 +24,7 @@ test('self-service password change', async ({ page }) => {
   await expect(page.locator('[data-testid="password-error"]')).toBeVisible({ timeout: 10_000 });
 
   // Correct current password → success.
-  await page.fill('#pwd-current', tempPw.trim());
+  await page.fill('#pwd-current', currentPw);
   await page.fill('#pwd-new', NEW_PW);
   await page.fill('#pwd-confirm', NEW_PW);
   await page.click('[data-testid="password-submit"]');

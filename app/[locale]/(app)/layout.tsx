@@ -32,6 +32,11 @@ export default async function AppLayout({ children, params }: Props) {
   if (!profile?.active) {
     redirect(`/${locale}/login`);
   }
+  // FR-50: an account still on its admin-issued password sees only the
+  // set-password screen until it chooses its own.
+  if (profile.must_change_password) {
+    redirect(`/${locale}/set-password`);
+  }
 
   const [t, tProfile, tRoles] = await Promise.all([
     getTranslations({ locale, namespace: 'nav' }),

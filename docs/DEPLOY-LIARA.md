@@ -136,7 +136,32 @@ sudo systemctl list-timers bj-liara-backup.timer
 sudo bash liara/backup.sh
 ```
 
-Monitor memory/swap, free disk and certificate expiry during the test rollout.
+### Offsite copies on the owner's Mac
+
+`deploy/liara/pull-backups-to-mac.sh` copies new daily dumps from the VM to
+`~/Backups/bj-erp` over the `liara-bj-vm` SSH alias, verifies each against the
+VM's `.sha256`, keeps 90 days (never fewer than the newest 14), and shows a macOS
+notification when a pull fails, the newest dump is over 36 hours old, or the VM
+disk is over 85% full. `install` sets up the launchd job `app.bjeng.backup-pull`
+(09:00 daily and at login; a missed run starts on wake). `status` shows its state.
+The copies hold personnel data and password hashes: FileVault on, not in a synced
+folder. Installed on BigMac 2026-10-06.
+
+```bash
+bash deploy/liara/pull-backups-to-mac.sh status
+```
+
+### Uptime
+
+`.github/workflows/uptime.yml` runs every 15 minutes from GitHub: app health, the
+login page, Auth health, an anonymous REST read (a real database query that RLS
+answers with no rows) and certificate expiry (fails under 36 hours, which means
+Caddy's renewal is failing). A failed run is the alert: GitHub emails whoever last
+committed the cron line. In a public repository GitHub pauses schedules after 60
+days without a commit; re-enable it on the Actions tab.
+
+Monitor memory/swap during the test rollout. The backup pull reports disk use, and
+the uptime check reports certificate expiry.
 Builds run off the VM. Upgrade capacity if measured use warrants it. Release
 artifacts and old images also consume the small disk; retain recovery images
 and remove superseded artifacts deliberately rather than pruning all volumes.

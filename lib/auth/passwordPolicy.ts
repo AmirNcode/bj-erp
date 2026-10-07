@@ -29,6 +29,14 @@ export type PasswordValidation =
 /** Client-side gate for the change-password form. The SQL fn re-checks length + current password. */
 export function validatePassword(current: string, next: string, confirm: string): PasswordValidation {
   if (!current) return { ok: false, reason: 'empty_current' };
+  return validateNewPassword(next, confirm);
+}
+
+/** The first-login form asks only for the new password (FR-50). */
+export function validateNewPassword(
+  next: string,
+  confirm: string
+): Exclude<PasswordValidation, { reason: 'empty_current' }> {
   if (next.length < MIN_PASSWORD_LENGTH) return { ok: false, reason: 'too_short' };
   if (next.length > MAX_PASSWORD_LENGTH) return { ok: false, reason: 'too_long' };
   if (next !== confirm) return { ok: false, reason: 'mismatch' };

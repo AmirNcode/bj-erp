@@ -125,21 +125,62 @@ export function jalaliCurrentMonthRange(): string {
   return `${toJalaliStr(today)} — ${toJalaliStr(end)}`;
 }
 
+/**
+ * Accounts a test creates start on an issued password and must choose their own
+ * at first login (FR-50). `login` completes that screen with a derived password
+ * and remembers it, so callers keep passing the issued one. Keyed on code AND
+ * issued password: a test that sets a new password itself logs in with that one.
+ */
+const chosenPasswords = new Map<string, string>();
+const chosenKey = (code: string, issued: string) => `${code}\n${issued}`;
+
+/** The password `login` picks on the first-login screen for an issued one. */
+export function firstLoginPassword(issued: string): string {
+  return `${issued}-own`;
+}
+
 export async function login(page: Page, code: string, password: string) {
+  const effective = chosenPasswords.get(chosenKey(code, password)) ?? password;
   await page.goto('/login');
   // Fill-and-verify, then click-and-verify, all inside one retry loop: on a
   // cold `next dev` the first fill can land before React hydrates (hydration
   // resets the controlled inputs) and the first submit click can hit a
   // not-yet-hydrated button (the form never submits). Retrying the whole
   // cycle covers both races.
+  const landed = /\/(home|set-password)$/;
   await expect(async () => {
-    if (/\/home$/.test(page.url())) return; // already navigated on a prior pass
+    if (landed.test(page.url())) return; // already navigated on a prior pass
     await page.fill('#code', code);
-    await page.fill('#password', password);
+    await page.fill('#password', effective);
     await expect(page.locator('#code')).toHaveValue(code, { timeout: 1_000 });
-    await expect(page.locator('#password')).toHaveValue(password, { timeout: 1_000 });
+    await expect(page.locator('#password')).toHaveValue(effective, { timeout: 1_000 });
     await page.click('button[type="submit"]');
-    await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
+    await expect(page).toHaveURL(landed, { timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
+
+  // The URL can read /home for a moment before the layout's redirect to
+  // /set-password lands, so wait for one of the two screens to render.
+  const setPasswordForm = page.locator('[data-testid="set-password-form"]');
+  await expect(page.locator('[data-testid="home-board"]').or(setPasswordForm)).toBeVisible({
+    timeout: 30_000,
+  });
+  if (await setPasswordForm.isVisible()) {
+    const chosen = firstLoginPassword(password);
+    await setFirstPassword(page, chosen);
+    chosenPasswords.set(chosenKey(code, password), chosen);
+  }
+}
+
+/** Fill the first-login screen (FR-50) and land on home. */
+export async function setFirstPassword(page: Page, chosen: string) {
+  await expect(async () => {
+    if (await page.locator('[data-testid="home-board"]').isVisible()) return;
+    await page.fill('#new-password', chosen);
+    await page.fill('#confirm-password', chosen);
+    await expect(page.locator('#new-password')).toHaveValue(chosen, { timeout: 1_000 });
+    await expect(page.locator('#confirm-password')).toHaveValue(chosen, { timeout: 1_000 });
+    await page.click('[data-testid="set-password-submit"]');
+    await expect(page.locator('[data-testid="home-board"]')).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 60_000 });
 }
 

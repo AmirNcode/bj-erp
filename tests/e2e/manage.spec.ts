@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_CODE, ADMIN_PASSWORD } from './_helpers';
+import { ADMIN_CODE, ADMIN_PASSWORD, login } from './_helpers';
 
 
 test.describe('Employee CRUD — admin flow', () => {
@@ -98,11 +98,8 @@ test.describe('Employee CRUD — admin flow', () => {
     await page.goto('/login');
     await expect(page).toHaveURL(/\/login$/);
 
-    // ── 9. Log in as the new employee ─────────────────────────────────────
-    await page.fill('#code', uniqueCode);
-    await page.fill('#password', tempPassword.trim());
-    await page.click('button[type="submit"]');
-
+    // ── 9. Log in as the new employee (sets their own password first) ─────
+    await login(page, uniqueCode, tempPassword.trim());
     await expect(page).toHaveURL(/\/home$/, { timeout: 15000 });
     // fa locale renders balances with Persian digits (7 → ۷, 3 → ۳).
     await expect(page.locator('[data-testid="home-board"]')).toContainText(/[7۷]/);

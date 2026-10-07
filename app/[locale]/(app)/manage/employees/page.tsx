@@ -53,11 +53,10 @@ async function EmployeesData({
   isAdmin: boolean;
   showLocks: boolean;
 }) {
-  const [t, tl, tr, tc, tRoles, tErrand] = await Promise.all([
+  const [t, tl, tr, tRoles, tErrand] = await Promise.all([
     getTranslations('manage.employees'),
     getTranslations('manage.employees.list'),
     getTranslations('manage.employees.regen'),
-    getTranslations('manage.import.credentials'),
     getTranslations('roles'),
     getTranslations('errand'),
   ]);
@@ -178,14 +177,6 @@ async function EmployeesData({
             confirmBody: tr.raw('confirmBody'),
             cancel: tr('cancel'),
             confirm: tr('confirm'),
-          },
-          credentials: {
-            title: tc('title'),
-            warn: tc('warn'),
-            download: tc('download'),
-            name: tc('name'),
-            code: tc('code'),
-            password: tc('password'),
           },
         }}
       />

@@ -417,6 +417,8 @@ begin
      or (new.department_id is distinct from old.department_id)
      or (new.manager_id    is distinct from old.manager_id)
      or (new.active        is distinct from old.active)
+     or (new.must_change_password is distinct from old.must_change_password
+         and coalesce(current_setting('bj.password_flag_write', true), '') <> 'on')
      or (new.full_name     is distinct from old.full_name     and not ('full_name'     = any (v_allowed)))
      or (new.hire_date     is distinct from old.hire_date     and not ('hire_date'     = any (v_allowed)))
      or (new.language_pref is distinct from old.language_pref and not ('language_pref' = any (v_allowed)))
@@ -1732,6 +1734,10 @@ begin
            updated_at = now()
      where id = v_row.user_id;
 
+    update public.profiles
+       set must_change_password = true
+     where id = v_row.user_id;
+
     insert into public.audit_log (actor_id, action, entity, entity_id)
     values (v_uid, 'reset_password', 'auth.users', v_row.user_id);
   end loop;
@@ -1776,6 +1782,12 @@ begin
      set encrypted_password = extensions.crypt(p_new, extensions.gen_salt('bf')),
          updated_at = now()
    where id = v_uid;
+
+  perform set_config('bj.password_flag_write', 'on', true);
+  update public.profiles
+     set must_change_password = false
+   where id = v_uid and must_change_password;
+  perform set_config('bj.password_flag_write', '', true);
 
   insert into public.audit_log(actor_id, action, entity, entity_id)
   values (v_uid, 'change_own_password', 'auth.users', v_uid);
@@ -1954,8 +1966,68 @@ begin
     raise exception 'employee not found' using errcode = 'P0002';
   end if;
 
+  -- An admin resetting their own password chose it themselves.
+  update public.profiles
+     set must_change_password = (p_user_id <> auth.uid())
+   where id = p_user_id;
+
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values (auth.uid(), 'reset_password', 'auth.users', p_user_id);
+end;
+$$;
+
+
+--
+-- Name: app_set_initial_password(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_initial_password(p_new text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid  uuid := auth.uid();
+  v_same boolean;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not private.is_active(v_uid) then
+    raise exception 'account is inactive' using errcode = '42501';
+  end if;
+  if not exists (
+    select 1 from public.profiles where id = v_uid and must_change_password
+  ) then
+    raise exception 'password change is not required' using errcode = '22023';
+  end if;
+  if length(coalesce(p_new, '')) < 8 then
+    raise exception 'new password must be at least 8 characters' using errcode = '22023';
+  end if;
+  if octet_length(coalesce(p_new, '')) > 72 then
+    raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
+  end if;
+
+  select encrypted_password = extensions.crypt(p_new, encrypted_password)
+    into v_same
+    from auth.users
+   where id = v_uid;
+  if coalesce(v_same, false) then
+    raise exception 'new password must differ from the issued password' using errcode = '22023';
+  end if;
+
+  update auth.users
+     set encrypted_password = extensions.crypt(p_new, extensions.gen_salt('bf')),
+         updated_at = now()
+   where id = v_uid;
+
+  perform set_config('bj.password_flag_write', 'on', true);
+  update public.profiles
+     set must_change_password = false
+   where id = v_uid;
+  perform set_config('bj.password_flag_write', '', true);
+
+  insert into public.audit_log(actor_id, action, entity, entity_id)
+  values (v_uid, 'set_initial_password', 'auth.users', v_uid);
 end;
 $$;
 
@@ -3393,6 +3465,7 @@ CREATE TABLE public.profiles (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     personnel_no text,
     job_title text,
+    must_change_password boolean DEFAULT true NOT NULL,
     CONSTRAINT profiles_calendar_pref_persian_only CHECK ((calendar_pref = 'jalali'::text)),
     CONSTRAINT profiles_manager_not_self CHECK (((manager_id IS NULL) OR (manager_id <> id))),
     CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (personnel_no ~ '^[0-9]{1,10}$'::text)))
@@ -3404,6 +3477,13 @@ CREATE TABLE public.profiles (
 --
 
 COMMENT ON COLUMN public.profiles.calendar_pref IS 'Compatibility column fixed to jalali; the application no longer exposes a calendar preference.';
+
+
+--
+-- Name: COLUMN profiles.must_change_password; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.must_change_password IS 'True while the account still uses an admin-issued password. Set on creation and by admin resets; cleared only by app_set_initial_password / app_change_my_password.';
 
 
 --
@@ -4867,6 +4947,16 @@ REVOKE ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_passwo
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_set_initial_password(p_new text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_initial_password(p_new text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO service_role;
 
 
 --

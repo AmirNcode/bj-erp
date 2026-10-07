@@ -84,7 +84,8 @@ users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
 `language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali` only, default `jalali`; retained
 as a compatibility column while the UI has no calendar setting) ·
-`active bool` · `created_at`.
+`active bool` · `must_change_password bool` (default **true** for new rows: the account still uses
+an admin-issued password, FR-50; rows that existed on 2026-10-06 were set false) · `created_at`.
 *Note*: no email required. National ID intentionally omitted unless a later requirement forces it.
 
 **`employee_code` formula changed on 2026-07-30 (FR-31).** It is now **`personnel_no` alone**;
@@ -171,7 +172,10 @@ Gregorian month-day); the editor UI says so.
 `id` · `company_id` · `name_fa` · `name_en` · `is_paid bool` · `affects_balance bool` ·
 `default_annual_quota_days numeric` · `allow_half_day bool` · `allow_hourly bool` (default false,
 **reserved**) · `color` · `active bool`.
-Seed: annual (paid, ~26d, half-day yes), sick (paid), unpaid (no balance).
+Seed: annual (paid, ~26d, half-day yes), sick (paid), unpaid (`is_paid = false`, no balance).
+A non-balance type with `is_paid = false` records every request as fully unpaid
+(`leave_requests.unpaid_minutes = requested_minutes`). The seed had `is_paid = true` for unpaid
+until `20261006120003`, which corrected it and backfilled those requests.
 
 ### `employee_leave_policies`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

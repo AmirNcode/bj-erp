@@ -1,0 +1,41 @@
+name: Uptime
+# Checks the live site every 15 minutes. A failed run is the alert: GitHub emails
+# the person who last changed the cron line below (docs/DEPLOY-LIARA.md, Uptime).
+# In a public repository GitHub pauses schedules after 60 days without a commit;
+# re-enable it on the Actions tab if that happens.
+on:
+  schedule:
+    # Off the top of the hour, when GitHub's scheduler is busiest and delays runs.
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: uptime
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SITE: bjeng.app
+      # Retries ride out a short international-link blip without paging anyone.
+      CURL: curl --fail --silent --show-error --max-time 20 --retry 4 --retry-delay 30 --retry-all-errors
+    steps:
+      - name: App
+        run: $CURL --output /dev/null "https://$SITE/api/health"
+      - name: Login page renders
+        run: $CURL --output /dev/null "https://$SITE/login"
+      - name: Auth
+        run: $CURL --output /dev/null "https://$SITE/auth/v1/health"
+      - name: Database (anonymous REST read; RLS returns no rows)
+        run: $CURL --output /dev/null "https://$SITE/rest/v1/leave_types?select=id&limit=1"
+      - name: TLS certificate renewed in time
+        # Certificates last about 6.7 days and Caddy renews them with about 2 days
+        # left. Under 36 hours means renewal is failing; outage follows at expiry.
+        run: |
+          cert="$(echo | openssl s_client -connect "$SITE:443" -servername "$SITE" 2>/dev/null)"
+          echo "$cert" | openssl x509 -noout -enddate
+          if ! echo "$cert" | openssl x509 -noout -checkend 129600; then
+            echo "::error::TLS certificate for $SITE expires within 36 hours; Caddy renewal is failing"
+            exit 1
+          fi

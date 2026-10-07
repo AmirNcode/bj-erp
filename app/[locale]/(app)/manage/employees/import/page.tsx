@@ -33,7 +33,6 @@ export default async function ImportPage({ params }: Props) {
   }
 
   const t = await getTranslations('manage.import');
-  const tc = await getTranslations('manage.import.credentials');
   const supabase = await createClient();
 
   // Validation context (FR-45): departments with their current manager, every
@@ -166,14 +165,6 @@ export default async function ImportPage({ params }: Props) {
           // Raw: templates with {placeholders} are filled in the wizard.
           modes: t.raw('modes') as WizardLabels['modes'],
           plan: t.raw('plan') as WizardLabels['plan'],
-          credentials: {
-            title: tc('title'),
-            warn: tc('warn'),
-            download: tc('download'),
-            name: tc('name'),
-            code: tc('code'),
-            password: tc('password'),
-          },
         }}
       />
     </main>

@@ -74,3 +74,19 @@ export async function changeMyPassword(
   if (error) return dbErr(error.message);
   return { ok: true };
 }
+
+/**
+ * First-login password (FR-50). Only for a flagged account; the RPC refuses
+ * otherwise and refuses the issued password itself. The caller then leaves the
+ * set-password screen, so drop the cached profile that still carries the flag.
+ */
+export async function setInitialPassword(next: string): Promise<ChangePasswordResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+
+  const { error } = await c.supabase.rpc('app_set_initial_password', { p_new: next });
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true };
+}

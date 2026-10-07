@@ -65,14 +65,6 @@ type Props = {
       cancel: string;
       confirm: string;
     };
-    credentials: {
-      title: string;
-      warn: string;
-      download: string;
-      name: string;
-      code: string;
-      password: string;
-    };
   };
 };
 
@@ -128,7 +120,7 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
     });
 
   if (credentials) {
-    return <CredentialsDownload credentials={credentials} labels={labels.credentials} />;
+    return <CredentialsDownload credentials={credentials} />;
   }
 
   const lock = showLocks ? (

@@ -65,7 +65,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   any column of a report via the anon key. Non-admins: self → `full_name`/`language_pref`/
   compatibility-only `calendar_pref` (database-constrained to `jalali`); manager-of-row →
   `full_name`/`hire_date`; `department_id`/`manager_id`/
-  `active`/`employee_code`/`company_id` are admin-only. Deactivating the last active admin is
+  `active`/`employee_code`/`company_id` are admin-only. `must_change_password` (FR-50) is
+  admin-only too, except that `app_set_initial_password` / `app_change_my_password` clear the
+  caller's own flag; they mark the transaction with `bj.password_flag_write`, a setting PostgREST
+  clients cannot set. Deactivating the last active admin is
   rejected by a database trigger, and `manager_id = id` is prohibited by a table constraint.
 - **INSERT**: no direct client path. Admin/manager creation must use `app_create_employee`, keeping
   Auth, profile, roles, allocations, and audit in one transaction.
@@ -255,6 +258,14 @@ user creation in-database and **identical on self-hosted Supabase** (portability
 `public.app_change_my_password(p_current, p_new)` (FR-7) follows the same pattern but **self-guards by
 `auth.uid()`** — any signed-in user changes *their own* password: it verifies the current password via
 `crypt` before updating `auth.users`, and is audited (`change_own_password`).
+
+**First-login password (FR-50).** New profiles start with `must_change_password = true`;
+`app_set_employee_password` and `app_bulk_set_employee_passwords` set it again (an admin resetting
+their own password is not flagged). The `(app)` and `(print)` layouts send a flagged account to
+`/set-password`. There `app_set_initial_password(p_new)` (authenticated only) requires the flag,
+refuses the issued password (`crypt` comparison), sets the new one, clears the flag and audits
+`set_initial_password`. The flag is a UI gate, not an RLS boundary: a flagged session's data access
+is unchanged, and RLS stays the authority.
 
 `public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin-only; self-guards via
 `private.is_admin(auth.uid())`, `42501` otherwise) sets an employee's **current** balance for a leave

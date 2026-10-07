@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   validatePassword,
+  validateNewPassword,
   toLatinPassword,
   MIN_PASSWORD_LENGTH,
   MAX_PASSWORD_LENGTH,
@@ -45,5 +46,18 @@ describe('validatePassword', () => {
   });
   it('accepts a valid change', () => {
     expect(validatePassword('old', 'longenough1', 'longenough1')).toEqual({ ok: true });
+  });
+});
+
+describe('validateNewPassword (first-login form, FR-50)', () => {
+  it('needs no current password', () => {
+    expect(validateNewPassword('abcdefgh', 'abcdefgh')).toEqual({ ok: true });
+  });
+  it('applies the same length and confirm rules', () => {
+    const short = 'a'.repeat(MIN_PASSWORD_LENGTH - 1);
+    const long = 'a'.repeat(MAX_PASSWORD_LENGTH + 1);
+    expect(validateNewPassword(short, short)).toEqual({ ok: false, reason: 'too_short' });
+    expect(validateNewPassword(long, long)).toEqual({ ok: false, reason: 'too_long' });
+    expect(validateNewPassword('abcdefgh', 'abcdefgX')).toEqual({ ok: false, reason: 'mismatch' });
   });
 });

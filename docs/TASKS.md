@@ -7,18 +7,43 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 - ◐ **Cold-start check:** after initial post-power-on timeouts, a provider restart restored access
   on 2026-10-04. New boot ID, all five services, persistent volume mounts, public HTTPS, renewed
-  certificate and active backup timer verified. User still needs to verify login and saved data.
-  Original timeout cause remains unknown; investigate with Liara if it recurs.
-- ☐ Scheduled offsite backups. Daily backups currently stay on the VM.
+  certificate and active backup timer verified. Owner confirmed login on bjeng.app (2026-10-06).
+  Original timeout cause remains unknown; investigate with Liara if it recurs (the uptime workflow
+  now emails on an outage).
 - ☐ Real data: enter the 1404–1405 official holidays (CSV upload in Settings) and import the
   employee roster (`docs/files/Personnel_CLEAN.csv` via Manage › Employees › Import — owner tests
   it locally first). After import: activate the **Department manager** approval step, give Meysam
-  Ayasi the `hr` role if wanted, and hand out the credentials file.
+  Ayasi the `hr` role if wanted, and hand out the login slips (Print login slips on the
+  credentials screen), then delete the CSV. Import only after the FR-50 release is live on Liara:
+  accounts created before it are not flagged for a first-login password (regenerating their
+  passwords flags them).
 - ☐ Personnel list follow-ups (owner): hire a supervisor for «رنگ و بسته بندی» (PNP, 12 people;
   Milad 490 left — until then they report to Sahraei); HR corrects the three balances counted to other dates (notes column: Fateme
   Fouladi "to year end", Sousan Fouladi "incl. Mehr", Mousavi "incl. Shahrivar").
 
+## Pilot launch (owner)
+
+- ☐ `www.bjeng.app`: add the DNS record; then the Caddy site needs the extra hostname and a redirect
+  to `bjeng.app`.
+- ☐ One-page Farsi user guide: login code = personnel number, install to home screen (Android
+  Chrome / iPhone Safari), submit a request, first-login password, whom to call for a forgotten
+  password.
+- ☐ Tell approvers to open the app daily until notifications exist.
+
+## Before expanding beyond the pilot group
+
+- ☐ **Login rate limit.** GoTrue's `/token` limiter allows a burst of 30, then about one login or
+  session refresh per second, **per public IP**, and the whole factory shares one. A company-wide
+  first login (training session) will hit it. Onboard in groups, or raise
+  `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` (default 300) in the VM `.env` and recreate `auth`. See the
+  comment in `deploy/docker-compose.yml`.
+- ☐ **Limited admin role** for on-site helpdesk: reset passwords (and maybe create employees)
+  without full admin. Today only `admin` can reset passwords.
+- ☐ **SMS notifications** for approvers (owner plans an SMS service). Replaces the generic
+  notifications item below once a provider is chosen.
+
 ## Product backlog
+
 
 - ☐ FR-8: leave types cannot be added or edited in the app. Only the seeded types exist.
 - ☐ Rejection reason: preset reasons in a dropdown, keeping free text as "other" (owner's plan).

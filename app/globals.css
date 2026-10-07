@@ -91,3 +91,18 @@ select:not([multiple]):not([size]) {
 [dir='rtl'] select:not([multiple]):not([size]) {
   background-position: left 0.75rem center;
 }
+
+/*
+ * Login slips (components/CredentialsDownload.tsx). The slips are portalled to
+ * <body> only while printing, and while <html> carries `print-slips` the
+ * printout holds the slips and nothing else from the page.
+ */
+@media print {
+  html.print-slips body > :not(#credential-slips) {
+    display: none !important;
+  }
+  html.print-slips,
+  html.print-slips body {
+    background: white;
+  }
+}

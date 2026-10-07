@@ -65,7 +65,7 @@ where not exists (
 );
 
 insert into public.leave_types (company_id, name_fa, name_en, is_paid, affects_balance, allow_half_day, allow_hourly, default_carryover_cap_minutes)
-select '00000000-0000-0000-0000-0000000000c0', 'مرخصی بدون حقوق', 'Unpaid Leave', true, false, true, true, 4320
+select '00000000-0000-0000-0000-0000000000c0', 'مرخصی بدون حقوق', 'Unpaid Leave', false, false, true, true, 4320
 where not exists (
   select 1 from public.leave_types
   where company_id = '00000000-0000-0000-0000-0000000000c0' and name_en = 'Unpaid Leave'

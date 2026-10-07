@@ -143,10 +143,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     expect(nonId).toBeTruthy();
 
     // ── 5. Log in as manager M ─────────────────────────────────────────────
-    await page.goto('/login');
-    await page.fill('#code', mgrCode);
-    await page.fill('#password', mgrPassword);
-    await page.click('button[type="submit"]');
+    await login(page, mgrCode, mgrPassword);
     await expect(page).toHaveURL(/\/home$/, { timeout: 15000 });
 
     // ── 6. /team (now Employees › my direct reports) — E but NOT X ─────────

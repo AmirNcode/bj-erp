@@ -218,6 +218,12 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   is a per-upload choice. A deactivated department manager counts as none in every mode. Admin
   accounts are never touched. *(2026-10-06; spec `2026-10-06-bulk-import-modes-design.md`.)*
 
+- **FR-50** ☑ **First-login password.** An account on an admin-issued password (new, imported,
+  or reset by an admin) sees only a set-password screen after signing in until its owner picks a
+  password of their own. That screen asks for the new password twice (8–72 latin characters), refuses
+  the issued one, and offers sign-out. The credentials screen also prints one cut-out login slip per
+  person. *(2026-10-06; spec `2026-10-06-first-login-password-design.md`.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

@@ -120,14 +120,6 @@ type Props = {
       doneNotDeleted: string;
     };
     plan: PlanLabels;
-    credentials: {
-      title: string;
-      warn: string;
-      download: string;
-      name: string;
-      code: string;
-      password: string;
-    };
   };
 };
 
@@ -248,7 +240,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
           </CardContent>
         </Card>
         {credentials.length > 0 && (
-          <CredentialsDownload credentials={credentials} labels={labels.credentials} />
+          <CredentialsDownload credentials={credentials} />
         )}
       </div>
     );

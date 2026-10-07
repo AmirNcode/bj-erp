@@ -78,6 +78,86 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-06 — Pre-pilot fixes: unpaid leave, first-login password, slips, uptime, Mac backups
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ `4ebc985`
+**Trigger:** Amir asked for items 1, 2, 6, 8 and 9 from the readiness review below. Item 2: back up
+to his Mac. Item 9: a forced first-login password plus printable slips (he chose slips).
+
+**What changed**
+- `supabase/migrations/20261006120003_unpaid_leave_not_paid.sql` + `supabase/seed.sql`: Unpaid Leave
+  `is_paid = false`; backfill `unpaid_minutes = requested_minutes` for unpaid non-balance types.
+- `supabase/migrations/20261006120004_must_change_password.sql`: `profiles.must_change_password`
+  (added false, then default true). The profile-scope trigger refuses changes to it unless
+  `bj.password_flag_write = on`. Reset RPCs set the flag; `app_change_my_password` clears it; new
+  `app_set_initial_password(p_new)` refuses the issued password. Spec
+  `docs/specs/2026-10-06-first-login-password-design.md`, FR-50.
+- App: `(app)` and `(print)` layouts redirect flagged users to the new `app/[locale]/(auth)/set-password/`.
+  New action `setInitialPassword`, `validateNewPassword`, two db-error rules, and the `setPassword`
+  messages. `components/CredentialsDownload.tsx` now uses `useTranslations` (audit D3; parents no longer
+  pass labels) and has **Print login slips** (portal + `html.print-slips` rule in `app/globals.css`).
+- `scripts/seed-demo.mjs`: clears the flag on demo accounts and the demo admin (shared published password).
+- e2e: `login` helper completes the first-login screen with `firstLoginPassword(issued)` and remembers
+  it; manage/team specs use the helper; password spec uses the chosen password; new
+  `first-login-password.spec.ts`.
+- `.github/workflows/uptime.yml` (every 15 min: app, /login, Auth, anon REST read, cert < 36 h).
+- `deploy/liara/pull-backups-to-mac.sh` (pull / install / status / uninstall).
+- Docs: REQUIREMENTS FR-50, DATA_MODEL, PERMISSIONS, CHANGELOG, DEPLOY-LIARA (offsite + uptime),
+  TASKS (closed offsite backups + bug; new "Pilot launch (owner)" and "Before expanding" sections
+  with the rate limit, limited admin role and SMS).
+
+**Actions outside the repo**
+- Local: `bj-deploy update local` (backup `20261007T010217Z-0fa06f`) applied `20261006120003` and
+  `…04`, rebuilt the app; `docker restart bj-erp-rest-1`; `npm run schema:dump`.
+- Liara VM, read-only: listed `/var/backups/bj-erp`, `df`, the backup timer. Copied 4 dumps to
+  `~/Backups/bj-erp` (sha256 verified; `pg_restore -l` of the newest lists 37 table-data entries).
+- This Mac: installed LaunchAgent `app.bjeng.backup-pull` (script copy in
+  `~/Library/Application Support/bj-erp/`). Its load run exited 0.
+- Nothing pushed; Liara has neither migration yet.
+
+**Verification**
+- Rolled-back SQL as admin/employee: admin and bulk reset flag; direct self-PATCH of the flag refused;
+  allowed self fields still update; issued and short passwords refused; valid one clears the flag and
+  logs in; second call refused; `app_change_my_password` clears; a new `app_create_employee` row is
+  flagged; anon cannot execute. Local DB after: Unpaid `is_paid=f`, 0 profiles flagged.
+- `tsc`, lint, `test:unit` (50 files, 523 tests), `test:deploy` + 3 deploy scripts, `npm run build` OK.
+- e2e `first-login-password` + `password` pass on `next dev`. Full suite (`--workers=1`): 42 passed,
+  1 skipped, 7 failed. All 7 are the local demo org being deactivated: seeded 1001/2001/1004 cannot log in
+  (bulk-import, department:222, manager-create-employee, seed-roles ×3), and Production Line A has 0 active
+  members (department:170). None of them involves this change.
+- Print check (temporary spec, deleted): slips PDF shows only the slips, 2 per row, RTL, black dashed
+  border. The first render showed a gray border because the unlayered `* { border-color }` beats
+  utilities, so the border color is now an inline style. The set-password screen was screenshotted at 390 px.
+- Uptime checks run by hand against bjeng.app: all 200; cert checkend OK (expires Oct 13 07:11 UTC).
+
+**State left behind**
+- All uncommitted on main. Pushing deploys both migrations to Liara.
+
+**For the next agent**
+- Pilot accounts created on Liara before this release are not flagged; regenerate their passwords.
+- The flag is a UI gate (D4), not RLS.
+- Scheduled workflows in this public repo pause after 60 days without a commit.
+
+## 2026-10-06 — Pre-pilot readiness review (read-only)
+
+**Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD:** main @ `4ebc985`
+**Trigger:** Amir asked what else must happen before real employees start testing.
+
+- Found a bug: `supabase/seed.sql:67-68` seeds «مرخصی بدون حقوق» / Unpaid Leave with `is_paid = true`.
+  The approve functions (latest: `20261005120003_department_manager_step.sql:383`) mark a request
+  fully unpaid only when `not is_paid`, so an approved unpaid-type request stores
+  `unpaid_minutes = 0`, and the reports (`lib/reports/reports.ts:145`) under-count unpaid time.
+  This was confirmed on the local DB (read-only query: `Unpaid Leave|t|f`). Liara was not queried,
+  but it was installed from the same seed. Not fixed; added to TASKS.
+- Read-only checks: the bjeng.app cert (Let's Encrypt YE2) runs Oct 6 15:11 → **Oct 13 07:11 UTC**,
+  and its first renewal has not been observed yet. `/api/health` returns 200. `www.bjeng.app` has
+  no DNS record.
+- Gaps reported to Amir: no offsite backup, no uptime alert, only admin can reset passwords,
+  no forced password change on first login, Auth /token limiter (burst 30, then 1/s per IP) shared
+  by the whole factory NAT, approvers get no notifications, admin login on bjeng.app still unconfirmed.
+- Actions outside the repo: none. No commits.
+
 ## 2026-10-06 — Push check; CLAUDE.md gotchas from org-chart/import work
 
 **Agent:** Claude Opus 5.5 via Claude Code · **Branch / HEAD at start:** main @ `6974d88`
