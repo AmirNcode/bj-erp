@@ -9,7 +9,7 @@ import {
   nextTestDepartmentCode,
   nextTestPersonnelNo,
   SEEDED_MANAGER_CODE,
-  SEEDED_PASSWORD,
+  SEEDED_MANAGER_PASSWORD,
 } from './_helpers';
 import { templateHeader } from '../../lib/csv/import-rows';
 
@@ -117,7 +117,7 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
 
   // ── manager cannot reach the import page ─────────────────────────────────
   await logout(page);
-  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_MANAGER_PASSWORD);
   await page.goto('/manage/employees/import');
   await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 10_000 });
 

@@ -1100,10 +1100,7 @@
   },
   "clearance": {
     "title": "Clearance forms",
-    "cardTitle": "Clearance forms",
-    "cardHint": "Departure clearance (تسویه حساب): sign-offs and finance settlement.",
-    "awaitingCount": "{count} awaiting your signature",
-    "back": "Back to Profile",
+    "back": "Back to Employees",
     "backToList": "Back to clearance forms",
     "newForm": "New clearance form",
     "defaultRows": "Default rows",
@@ -1173,8 +1170,6 @@
     "new": {
       "title": "New clearance form",
       "intro": "File this after the employee's written resignation (letter or email) or the dismissal decision. Every listed unit signs; finance signs last.",
-      "search": "Search by name or personnel no.",
-      "chooseEmployee": "Choose an employee…",
       "prefilledHint": "Taken from the employee's personal information.",
       "typedHint": "Missing from personal information; what you type here is saved there too.",
       "submit": "File clearance form",
@@ -1259,6 +1254,12 @@
     "home": {
       "awaiting": "{count} clearance form(s) await your signature",
       "open": "Open"
-    }
+    },
+    "employeesButton": "Clearance"
+  },
+  "personSearch": {
+    "placeholder": "Type a name or personnel no.",
+    "noResults": "No match.",
+    "clear": "Clear"
   }
 }

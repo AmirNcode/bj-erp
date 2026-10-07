@@ -13,7 +13,22 @@ const gregorian_en = require('react-date-object/locales/gregorian_en');
 
 export const ADMIN_CODE = process.env.E2E_ADMIN_CODE ?? 'admin';
 export const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'Admin!2026';
-export const SEEDED_MANAGER_CODE = '1001';
+// Local test accounts (git-ignored .env.test-accounts): on the local real-roster DB the demo
+// manager 1001 does not exist, so E2E_MANAGER_CODE / E2E_MANAGER_PASSWORD replace it there.
+(() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const text = require('fs').readFileSync(require('path').join(__dirname, '../../.env.test-accounts'), 'utf8') as string;
+    for (const line of text.split('\n')) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+    }
+  } catch {
+    /* no local accounts file: keep the demo-seed defaults */
+  }
+})();
+export const SEEDED_MANAGER_CODE = process.env.E2E_MANAGER_CODE ?? '1001';
+export const SEEDED_MANAGER_PASSWORD = process.env.E2E_MANAGER_PASSWORD ?? 'Demo!2026';
 export const SEEDED_EMPLOYEE_CODE = '2001';
 export const SEEDED_SECURITY_CODE = '1004';
 export const SEEDED_PASSWORD = 'Demo!2026';
@@ -311,21 +326,24 @@ export async function setManager(page: Page, employeeCode: string, managerCodeSu
   await row.first().locator('a').first().click();
   await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
 
-  const mgrSelect = page.locator('#manager_id');
-  await expect(mgrSelect).toBeVisible({ timeout: 20_000 });
-  let mgrValue = '';
-  for (const opt of await mgrSelect.locator('option').all()) {
-    const text = await opt.textContent();
-    if (text?.includes(managerCodeSubstring)) {
-      mgrValue = (await opt.getAttribute('value')) ?? '';
-      break;
-    }
-  }
-  expect(mgrValue).not.toBe('');
-  await mgrSelect.selectOption({ value: mgrValue });
+  await pickManager(page, managerCodeSubstring);
 
   await page.click('button[type="submit"]');
   await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 20_000 });
+}
+
+/**
+ * The Direct Manager field is a search box (PersonSearch): type at least two
+ * characters of the manager's code and click the matching suggestion.
+ */
+export async function pickManager(page: Page, managerCode: string) {
+  const box = page.locator('#manager_id');
+  await expect(box).toBeEditable({ timeout: 20_000 });
+  await box.fill(managerCode);
+  const option = page.locator('[data-testid="manager-search-option"]', { hasText: managerCode });
+  await expect(option.first()).toBeVisible({ timeout: 10_000 });
+  await option.first().click();
+  await expect(box).toHaveValue(new RegExp(managerCode));
 }
 
 /** Fill a single react-multi-date-picker input (hourly leave or errand). */

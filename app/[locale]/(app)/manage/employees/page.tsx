@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, IdCard, Lock, Plus, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ClipboardCheck, IdCard, Lock, Plus, Upload } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
@@ -276,10 +276,11 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [t, tl, tNav] = await Promise.all([
+  const [t, tl, tNav, tClr] = await Promise.all([
     getTranslations('manage'),
     getTranslations('manage.employees.list'),
     getTranslations('nav'),
+    getTranslations('clearance'),
   ]);
 
   const user = await getCachedUser();
@@ -328,6 +329,15 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
               <Link href={`${base}/personal-info`} data-testid="personal-info-link">
                 <IdCard aria-hidden="true" />
                 {tl('personalInfoLink')}
+              </Link>
+            </Button>
+          )}
+          {/* FR-54: clearance forms (فرم تسویه حساب), filed by admin and hr. */}
+          {(isAdmin || isHr) && (
+            <Button variant="outline" className="rounded-[10px]" asChild>
+              <Link href={`/${locale}/clearance`} data-testid="clearance-link">
+                <ClipboardCheck aria-hidden="true" />
+                {tClr('employeesButton')}
               </Link>
             </Button>
           )}

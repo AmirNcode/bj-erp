@@ -10,7 +10,7 @@ import { useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { nativeSelectClass } from '@/lib/native-select';
+import { PersonSearch } from '@/components/PersonSearch';
 import type { DraftRow } from '@/lib/clearance/model';
 import type { PersonOption } from '@/lib/actions/clearance';
 
@@ -25,6 +25,7 @@ type Props = {
 
 export function RowsEditor({ rows, onChange, people, leaverId, locale }: Props) {
   const t = useTranslations('clearance.rows');
+  const tSearch = useTranslations('personSearch');
   const nextKey = useRef(0);
   const signers = people.filter((p) => p.id !== leaverId);
 
@@ -91,23 +92,17 @@ export function RowsEditor({ rows, onChange, people, leaverId, locale }: Props) 
                   maxLength={100}
                   data-testid={`clearance-row-name-en-${index}`}
                 />
-                <label className="sm:col-span-2 space-y-1 text-xs text-muted-foreground">
-                  <span>{t('signer')}</span>
-                  <select
-                    className={nativeSelectClass}
-                    value={row.signerId ?? ''}
-                    onChange={(e) => update(row.key, { signerId: e.target.value || null })}
-                    data-testid={`clearance-row-signer-${index}`}
-                  >
-                    <option value="">{t('unassigned')}</option>
-                    {signers.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                        {p.personnelNo ? ` (${p.personnelNo})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="sm:col-span-2 space-y-1 text-xs text-muted-foreground">
+                  <label htmlFor={`clearance-row-signer-${index}`}>{t('signer')}</label>
+                  <PersonSearch
+                    id={`clearance-row-signer-${index}`}
+                    people={signers}
+                    value={row.signerId}
+                    onChange={(signerId) => update(row.key, { signerId })}
+                    placeholder={`${t('unassigned')} · ${tSearch('placeholder')}`}
+                    testId={`clearance-row-signer-${index}`}
+                  />
+                </div>
               </div>
             )}
             {!row.isHr && (

@@ -17,7 +17,7 @@ import { addDays, formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
-import { PageHeader } from '../../../_components/PageHeader';
+import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClearanceStatus } from '../_components/ClearanceStatus';
@@ -35,7 +35,7 @@ export default async function ClearanceDetailPage({ params }: Props) {
 
   const res = await getClearance(id);
   const back = (
-    <Link href={`/${locale}/profile/clearance`} className="block text-sm text-primary hover:underline">
+    <Link href={`/${locale}/clearance`} className="block text-sm text-primary hover:underline">
       {t('backToList')}
     </Link>
   );

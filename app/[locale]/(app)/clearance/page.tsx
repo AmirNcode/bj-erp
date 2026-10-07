@@ -1,6 +1,7 @@
 /**
- * Profile › Clearance forms (FR-54, فرم تسویه حساب). Lives under Profile for now
- * (spec D9), not beside the request forms: it is a one-time form HR files.
+ * Clearance forms (FR-54, فرم تسویه حساب). Admin and hr reach it from Manage ›
+ * Employees; signers and finance from the Home notice. Its own path, outside
+ * Manage, because signers, finance and the leaver may not enter Manage.
  *
  * Sections: what waits on the caller's signature, the caller's own form (as the
  * leaver), and every other form they may read (all of them for admin, hr and
@@ -14,7 +15,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getClearanceOverview, type ClearanceListItem } from '@/lib/actions/clearance';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber } from '@/lib/i18n/format';
-import { PageHeader } from '../../_components/PageHeader';
+import { PageHeader } from '../_components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ClearanceStatus } from './_components/ClearanceStatus';
@@ -49,7 +50,7 @@ export default async function ClearanceListPage({ params }: Props) {
         {items.map((f) => (
           <li key={f.id}>
             <Link
-              href={`/${locale}/profile/clearance/${f.id}`}
+              href={`/${locale}/clearance/${f.id}`}
               className="flex items-center justify-between gap-3 py-3 hover:bg-muted/40"
               data-testid={`clearance-item-${f.id}`}
             >
@@ -79,9 +80,11 @@ export default async function ClearanceListPage({ params }: Props) {
   return (
     <main className="p-4 max-w-2xl mx-auto space-y-4">
       <PageHeader title={t('title')} />
-      <Link href={`/${locale}/profile`} className="block text-sm text-primary hover:underline">
-        {t('back')}
-      </Link>
+      {res.ok && res.canManage && (
+        <Link href={`/${locale}/manage/employees`} className="block text-sm text-primary hover:underline">
+          {t('back')}
+        </Link>
+      )}
 
       {!res.ok ? (
         <p role="alert" className="text-sm text-destructive">
@@ -92,10 +95,10 @@ export default async function ClearanceListPage({ params }: Props) {
           {res.canManage && (
             <div className="flex flex-wrap gap-2">
               <Button asChild data-testid="clearance-new">
-                <Link href={`/${locale}/profile/clearance/new`}>{t('newForm')}</Link>
+                <Link href={`/${locale}/clearance/new`}>{t('newForm')}</Link>
               </Button>
               <Button asChild variant="outline" data-testid="clearance-units">
-                <Link href={`/${locale}/profile/clearance/units`}>{t('defaultRows')}</Link>
+                <Link href={`/${locale}/clearance/units`}>{t('defaultRows')}</Link>
               </Button>
             </div>
           )}

@@ -12,6 +12,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
   nextTestPersonnelNo,
+  pickManager,
   ADMIN_CODE,
   ADMIN_PASSWORD,
   login,
@@ -26,7 +27,7 @@ async function createEmployeeWithManager(
   opts: {
     name: string;
     role: string;
-    managerId?: string; // value of the manager <option>
+    managerCode?: string; // the manager's code, typed into the Direct Manager search
     deptFirst?: boolean;
   }
 ): Promise<{ code: string; password: string }> {
@@ -49,8 +50,8 @@ async function createEmployeeWithManager(
   }
 
   // If a manager option text was supplied, select it
-  if (opts.managerId) {
-    await page.locator('#manager_id').selectOption({ value: opts.managerId });
+  if (opts.managerCode) {
+    await pickManager(page, opts.managerCode);
   }
 
   // Ensure the desired role checkbox is checked (uncheck all others)
@@ -113,7 +114,7 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     const { code: empCode } = await createEmployeeWithManager(page, {
       name: `Employee Report ${ts}`,
       role: 'employee',
-      managerId: mgrId,
+      managerCode: mgrCode,
     });
 
     await page.click('[data-testid="done-link"]');

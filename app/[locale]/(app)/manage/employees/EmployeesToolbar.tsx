@@ -66,12 +66,12 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
 
   return (
     <div
-      className={cn('flex flex-wrap items-center gap-2.5 transition-opacity', isPending && 'opacity-70')}
+      className={cn('flex w-full flex-wrap items-center gap-2.5 transition-opacity lg:flex-nowrap', isPending && 'opacity-70')}
       aria-busy={isPending}
     >
       <nav
         aria-label={labels.filterLabel}
-        className="flex max-w-full overflow-x-auto rounded-[10px] bg-muted p-[3px]"
+        className="flex max-w-full shrink-0 overflow-x-auto rounded-[10px] bg-muted p-[3px]"
       >
         {segments.map((s) => {
           const active = query.filter === s.key;
@@ -103,7 +103,7 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
 
       <form
         role="search"
-        className="relative w-full sm:w-[280px]"
+        className="relative w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:flex-1"
         onSubmit={(e) => {
           e.preventDefault();
           lastPushed.current = q;
@@ -130,7 +130,7 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
         data-testid="emp-dept-filter"
         value={query.dept ?? ''}
         onChange={(e) => go({ dept: e.target.value || null })}
-        className={cn(nativeSelectClass, 'h-9 w-full rounded-[10px] sm:w-auto sm:min-w-44')}
+        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-[10px] sm:w-56')}
       >
         <option value="">{labels.allDepartments}</option>
         {departments.map((d) => (

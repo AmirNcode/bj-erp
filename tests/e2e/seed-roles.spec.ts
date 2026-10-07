@@ -3,6 +3,7 @@ import {
   login,
   SEEDED_EMPLOYEE_CODE,
   SEEDED_MANAGER_CODE,
+  SEEDED_MANAGER_PASSWORD,
   SEEDED_PASSWORD,
   SEEDED_SECURITY_CODE,
 } from './_helpers';
@@ -12,7 +13,7 @@ import {
 test.describe('Seeded demo roles', () => {
   test('seeded manager: Manage tab + approvals card + team reports', async ({ page }) => {
     test.setTimeout(60_000);
-    await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
+    await login(page, SEEDED_MANAGER_CODE, SEEDED_MANAGER_PASSWORD);
     await expect(page.locator('[data-testid="nav-manage"]')).toBeVisible();
     await expect(page.locator('[data-testid="home-approvals-card"]')).toBeVisible();
     await page.goto('/team');

@@ -258,7 +258,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   date. At 00:05 Tehran on the day after the last working day the account is deactivated and the
   person's pending requests are cancelled, whether or not the form is finished (pg_cron; a past
   date applies at once). The leaver sees their form read-only; signers see the whole form; admin,
-  hr and finance see all. Lives under Profile; printable like the paper form. *(2026-10-07; spec
+  hr and finance see all. Opened from Manage › Employees (admin, hr) and the Home notice; printable like the paper form. *(2026-10-07; spec
   `2026-10-07-clearance-form-design.md`.)*
 
 ## Functional — Visibility (see also PERMISSIONS.md)

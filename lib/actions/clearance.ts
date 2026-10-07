@@ -100,17 +100,13 @@ export async function getClearanceOverview(): Promise<ClearanceOverview | Fail> 
 }
 
 /**
- * What the Profile card and the Home reminder need: how many forms wait on the
- * caller, and whether the caller has any reason to open the section at all.
- * Never fails loudly — a broken count must not break Profile or Home.
+ * How many forms wait on the caller's signature, for the Home notice. Never fails
+ * loudly: a broken count must not break Home.
  */
-export async function getClearanceSummary(): Promise<{ awaiting: number; visible: boolean }> {
+export async function getClearanceSummary(): Promise<{ awaiting: number }> {
   const res = await listForms();
-  if (!res.ok) return { awaiting: 0, visible: false };
-  return {
-    awaiting: res.items.filter((f) => f.awaitingMe).length,
-    visible: res.items.length > 0 || res.roles.some((r) => VIEW_ROLES.includes(r)),
-  };
+  if (!res.ok) return { awaiting: 0 };
+  return { awaiting: res.items.filter((f) => f.awaitingMe).length };
 }
 
 export type ClearanceBalance = { leaveTypeId: string; nameFa: string; nameEn: string; minutes: number };

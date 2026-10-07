@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getClearanceSetup } from '@/lib/actions/clearance';
-import { PageHeader } from '../../../_components/PageHeader';
+import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { NewClearanceForm } from './NewClearanceForm';
 
@@ -23,7 +23,7 @@ export default async function NewClearancePage({ params }: Props) {
   return (
     <main className="p-4 max-w-2xl mx-auto space-y-4">
       <PageHeader title={t('new.title')} />
-      <Link href={`/${locale}/profile/clearance`} className="block text-sm text-primary hover:underline">
+      <Link href={`/${locale}/clearance`} className="block text-sm text-primary hover:underline">
         {t('backToList')}
       </Link>
       <p className="text-sm text-muted-foreground">{t('new.intro')}</p>

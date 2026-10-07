@@ -78,6 +78,85 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — Direct Manager field becomes a search box
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 27d59f5 (+ uncommitted)
+**Trigger:** Amir: the Add Employee Direct Manager dropdown lists the whole roster; use the
+clearance-style search.
+
+**What changed**
+- `components/PersonSearch.tsx`: optional `name` (hidden input, so `FormData` still carries
+  `manager_id`), `disabled`; strings moved to a shared `personSearch` namespace (from
+  `clearance.search`).
+- `manage/employees/new/NewEmployeeForm.tsx` and `[id]/EditEmployeeForm.tsx` (same dropdown there
+  too): `#manager_id` is now the search box (testid `manager-search`), controlled state.
+- e2e: new `pickManager(page, code)` in `_helpers.ts`; `setManager`, `hr-employee-admin`, `team`
+  use it (`selectOption` no longer applies). `#manager_id` keeps its id, so visibility/disabled
+  assertions are unchanged; value assertions now match the shown name/code.
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` (app rebuilt; no migrations).
+
+**Verification**
+- `tsc`, lint, unit 602. e2e hr-employee-admin, team, manage, hr-role, clearance, approval passed;
+  `manager-create-employee` fails at login because it uses the demo-seed manager `1001`, absent
+  from the local real-roster DB (pre-existing; CLAUDE.md gotcha).
+
+**State left behind**
+- Uncommitted on top of `27d59f5`.
+
+## 2026-10-07 — Clearance person pickers become a search box
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 27d59f5 (+ uncommitted move)
+**Trigger:** Amir: the person dropdowns list the whole roster. Asked: 2 letters or 2 digits start the
+search, same picker for form-row signers, 5 results.
+
+**What changed**
+- `components/PersonSearch.tsx` (new): combobox; suggestions from 2 characters (Persian digits
+  normalised), max 5, sorted by personnel number ascending, keyboard + click, × clears; exported
+  `searchPeople` + `tests/unit/person-search.test.ts`.
+- Used in `clearance/units/UnitsEditor.tsx` (Signer type and Person now on separate lines),
+  `clearance/_components/RowsEditor.tsx` (row signer), `clearance/new/NewClearanceForm.tsx` (one
+  employee box replaces search + select). Messages `clearance.search.*`; removed
+  `clearance.new.search/chooseEmployee`. e2e `clearance.spec` picks people by typing.
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` (app rebuilt; no migrations).
+
+**Verification**
+- `tsc`, lint, unit suite, e2e `clearance.spec` pass; screenshots of both screens checked.
+
+**State left behind**
+- Uncommitted on top of `27d59f5`, together with the move-to-Employees change.
+
+## 2026-10-07 — Clearance form moved to Employees; employees toolbar spans the width
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 27d59f5
+**Trigger:** Amir: move the clearance form from Profile to the Employees page; spread the
+employees filter/search/department row across the table width.
+
+**What changed**
+- `app/[locale]/(app)/profile/clearance/` → `app/[locale]/(app)/clearance/` (git mv; route
+  `/clearance`, outside `/manage` because signers, finance and the leaver may not enter Manage).
+  Every `/profile/clearance` link rewritten; Profile card removed; list page "back" goes to
+  Employees for admin/hr. Manage › Employees header: «تسویه حساب» button (admin, hr),
+  `data-testid="clearance-link"`. `getClearanceSummary` now returns only `awaiting` (Home notice).
+  Messages: `clearance.back`, `clearance.employeesButton`; removed `cardTitle/cardHint/awaitingCount`.
+- `EmployeesToolbar.tsx`: one row on `lg` (segments fixed, search `flex-1`, department select
+  `w-56`); wraps on smaller screens.
+- e2e `clearance.spec` reaches the form through the Employees button. Spec D9, CHANGELOG,
+  REQUIREMENTS, TASKS updated.
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` (no new migrations; app rebuilt).
+
+**Verification**
+- `tsc`, lint clean. e2e clearance, manage, hr-employee-admin, signature-personal-info: 5/5.
+  Screenshots of Employees at 1500 / 1100 / 400 px checked.
+
+**State left behind**
+- Uncommitted on top of `27d59f5` (Amir commits).
+
 ## 2026-10-07 — FR-54 clearance form (فرم تسویه حساب)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

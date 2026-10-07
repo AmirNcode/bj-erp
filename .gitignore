@@ -53,3 +53,6 @@ backups/
 
 # Real personnel data (client HR exports) — never commit
 docs/files/
+
+# Local test accounts (never commit)
+.env.test-accounts

@@ -38,8 +38,10 @@ app account also has to be deactivated by hand, and nobody remembers to.
 - **D8 — Father's name and birth-certificate number** come from the person's FR-53 personal info.
   If missing there, HR types them on the form and they are written back to the personal info.
   The form keeps its own copy (paper evidence does not change when the profile does).
-- **D9 — Place in the app:** a new section on **Profile**, not beside the request forms. May move
-  later.
+- **D9 — Place in the app:** its own path `/clearance`, opened from a «تسویه حساب» button on
+  Manage › Employees (admin, hr) and from the Home notice (signers, finance). Not beside the request
+  forms. *(Built under Profile first; moved the same day at Amir's request. Not under `/manage`,
+  because signers, finance and the leaver cannot enter Manage.)*
 - **D10 — Visibility.** The leaver sees their own form read-only. Every signer sees the whole form,
   all rows and remarks. Admin, hr and finance see every form.
 - **D11 — Cancel.** HR or admin may cancel a form until the account has been deactivated. After
@@ -194,20 +196,21 @@ user of the company. **No INSERT/UPDATE/DELETE policies**: every write goes thro
 
 All under Profile; strings in `messages/{fa,en}.json` under `clearance`.
 
-- **Profile page:** a "Clearance forms" card linking to `/profile/clearance`, shown
+- **Manage › Employees:** a «تسویه حساب» button (admin, hr) linking to `/clearance`. *(Was a Profile
+  card, removed.)* Formerly: a "Clearance forms" card linking to `/clearance`, shown
   to admin, hr, finance, anyone with a row to sign, and the leaver; it shows the "awaiting you"
   count.
-- **`/profile/clearance`** — sections: *Awaiting your signature* · *My clearance form* (leaver) ·
+- **`/clearance`** — sections: *Awaiting your signature* · *My clearance form* (leaver) ·
   *All forms* (view permission; status filter). "New form" and "Default rows" buttons for manage.
-- **`/profile/clearance/new`** — employee picker (active, same company, not self, hr: not admins),
+- **`/clearance/new`** — employee picker (active, same company, not self, hr: not admins),
   reason radios, last working day (`PersianDateField`), father's name / birth-cert no (pre-filled
   from personal info; editable only when empty there), note, rows (defaults pre-ticked, HR row
   locked, per-row signer picker, add a custom row). Warnings (D12) appear once an employee is picked.
-- **`/profile/clearance/[id]`** — header facts, unused leave (D13), the rows with status, remark,
+- **`/clearance/[id]`** — header facts, unused leave (D13), the rows with status, remark,
   signer, signed time and a lazy signature viewer; "Sign" for the caller's rows (dialog: remark +
   `RequestSignatureFields`); finance block (sign dialog adds settlement date); manage actions: edit
   reason / last day, edit rows, cancel; "Print".
-- **`/profile/clearance/units`** — default rows editor (manage): name fa/en, kind, department or
+- **`/clearance/units`** — default rows editor (manage): name fa/en, kind, department or
   person, order, active. HR row: rename only.
 - **`/print/clearance/[id]`** — the paper layout: title, company logo, name, father's name,
   birth-cert no, hire date, last day, reason ticks, the rows table (ردیف · نام واحد · شرح · نام و

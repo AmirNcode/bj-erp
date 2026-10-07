@@ -1,5 +1,6 @@
 'use client';
 
+import { PersonSearch } from '@/components/PersonSearch';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -139,6 +140,8 @@ export function EditEmployeeForm({
   const t = useTranslations('manage.employees');
   const canManageLeave = caps.leave;
   const [pending, setPending] = useState(false);
+  const [managerId, setManagerId] = useState<string | null>(employee.manager_id ?? null);
+  const managerOptions = managers.map((m) => ({ id: m.id, name: m.full_name, personnelNo: m.employee_code }));
   const [error, setError] = useState<string | null>(null);
   const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   const [success, setSuccess] = useState(false);
@@ -408,20 +411,15 @@ export function EditEmployeeForm({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="manager_id">{labels.manager}</Label>
-                  <select
+                  <PersonSearch
                     id="manager_id"
                     name="manager_id"
-                    defaultValue={employee.manager_id ?? ''}
+                    people={managerOptions}
+                    value={managerId}
+                    onChange={setManagerId}
                     disabled={!caps.org}
-                    className={nativeSelectClass}
-                  >
-                    <option value="">{labels.noneOption}</option>
-                    {managers.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.full_name} ({m.employee_code})
-                      </option>
-                    ))}
-                  </select>
+                    testId="manager-search"
+                  />
                 </div>
 
                 <RoleCheckboxes

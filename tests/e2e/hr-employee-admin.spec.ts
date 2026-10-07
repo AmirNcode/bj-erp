@@ -21,6 +21,7 @@ import {
   login,
   logout,
   createEmployee,
+  pickManager,
   nextTestDepartmentCode,
 } from './_helpers';
 
@@ -60,10 +61,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   const newDept = (await dept.locator('option').nth(2).getAttribute('value')) ?? '';
   expect(newDept).not.toBe('');
   await dept.selectOption(newDept);
-  const bossId =
-    (await page.locator('#manager_id option', { hasText: boss.code }).getAttribute('value')) ?? '';
-  expect(bossId).not.toBe('');
-  await page.locator('#manager_id').selectOption(bossId);
+  await pickManager(page, boss.code);
   await page.fill('[data-testid="job-title"]', 'Welder');
   await page.getByLabel('manager', { exact: true }).check();
   await save(page);
@@ -71,7 +69,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await page.reload();
   await expect(page.locator('[data-testid="job-title"]')).toHaveValue('Welder', { timeout: 30_000 });
   await expect(dept).toHaveValue(newDept);
-  await expect(page.locator('#manager_id')).toHaveValue(bossId);
+  await expect(page.locator('#manager_id')).toHaveValue(new RegExp(boss.code));
   await expect(page.getByLabel('manager', { exact: true })).toBeChecked();
 
   // ── 2. and the role comes off again ──────────────────────────────────────

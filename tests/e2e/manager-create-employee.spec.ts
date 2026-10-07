@@ -4,7 +4,7 @@ import {
   logout,
   nextTestPersonnelNo,
   SEEDED_MANAGER_CODE,
-  SEEDED_PASSWORD,
+  SEEDED_MANAGER_PASSWORD,
 } from './_helpers';
 
 /**
@@ -18,7 +18,7 @@ test('manager creates an employee scoped to their own team', async ({ page }) =>
   test.setTimeout(120_000);
   const pno = nextTestPersonnelNo();
 
-  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_MANAGER_PASSWORD);
   await page.goto('/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
@@ -50,7 +50,7 @@ test('manager creates an employee scoped to their own team', async ({ page }) =>
 
   // The new employee shows up on the manager's team page.
   await logout(page);
-  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_MANAGER_PASSWORD);
   await page.goto('/team');
   await expect(page.getByText(pno).first()).toBeVisible({ timeout: 10_000 });
 });

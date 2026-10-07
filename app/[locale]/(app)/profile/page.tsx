@@ -17,8 +17,6 @@ import { LogoutButton } from './LogoutButton';
 import { SavedSignatureCard } from './SavedSignatureCard';
 import { getMySavedSignature } from '@/lib/actions/signature';
 import { createClient } from '@/lib/supabase/server';
-import { getClearanceSummary } from '@/lib/actions/clearance';
-import { formatNumber } from '@/lib/i18n/format';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -34,13 +32,11 @@ export default async function ProfilePage({ params }: Props) {
   if (!user) return null;
 
   const supabase = await createClient();
-  const [profile, savedRes, { data: personalInfo }, clearance] = await Promise.all([
+  const [profile, savedRes, { data: personalInfo }] = await Promise.all([
     getCachedProfile(user.id),
     getMySavedSignature(),
     supabase.from('employee_personal_info').select('complete').eq('employee_id', user.id).maybeSingle(),
-    getClearanceSummary(),
   ]);
-  const tClr = await getTranslations('clearance');
   const tSig = await getTranslations('profile.signature');
   const tPi = await getTranslations('personalInfo');
 
@@ -132,28 +128,6 @@ export default async function ProfilePage({ params }: Props) {
           ›
         </span>
       </Link>
-
-      {/* FR-54: clearance forms live under Profile for now (spec D9). Shown to
-          admin, hr and finance, and to anyone a form names (signer or leaver). */}
-      {clearance.visible && (
-        <Link
-          href={`/${locale}/profile/clearance`}
-          data-testid="profile-clearance-link"
-          className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
-        >
-          <span>
-            <span className="block text-sm font-semibold">{tClr('cardTitle')}</span>
-            <span className="block text-xs text-muted-foreground">
-              {clearance.awaiting > 0
-                ? tClr('awaitingCount', { count: formatNumber(clearance.awaiting, locale) })
-                : tClr('cardHint')}
-            </span>
-          </span>
-          <span aria-hidden className="text-muted-foreground rtl:rotate-180">
-            ›
-          </span>
-        </Link>
-      )}
 
       {/* FR-52: saved signature */}
       <Card>

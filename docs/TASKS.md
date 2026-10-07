@@ -21,7 +21,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   Milad 490 left — until then they report to Sahraei); HR corrects the three balances counted to other dates (notes column: Fateme
   Fouladi "to year end", Sousan Fouladi "incl. Mehr", Mousavi "incl. Shahrivar").
 
-- ☐ **Clearance form setup (FR-54, after release):** in Profile › Clearance forms › Default rows,
+- ☐ **Clearance form setup (FR-54, after release):** in Manage › Employees › «تسویه حساب» › Default rows,
   assign a signer (person or department) to every row except HR, or untick the ones not used; give
   the finance manager the `finance` role. Until then new forms start with unassigned rows HR must
   assign or remove. Confirm with the client whether «مدیریت» stays a regular row (Amir: may change).

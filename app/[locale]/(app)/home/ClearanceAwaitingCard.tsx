@@ -16,7 +16,7 @@ export async function ClearanceAwaitingCard({ locale }: { locale: string }) {
 
   return (
     <Link
-      href={`/${locale}/profile/clearance`}
+      href={`/${locale}/clearance`}
       className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-foreground p-4 text-warning transition-colors hover:border-warning/50"
       data-testid="home-clearance-awaiting"
     >

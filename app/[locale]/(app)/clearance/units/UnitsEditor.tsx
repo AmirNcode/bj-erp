@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { nativeSelectClass } from '@/lib/native-select';
+import { PersonSearch } from '@/components/PersonSearch';
 import {
   saveClearanceUnits,
   type DepartmentOption,
@@ -103,8 +104,8 @@ export function UnitsEditor({ locale, initial, people, departments }: Props) {
               <p className="text-xs text-muted-foreground">{t('hrNote')}</p>
             ) : (
               <>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <label className="space-y-1 text-xs text-muted-foreground">
+                <div className="space-y-2">
+                  <label className="block space-y-1 text-xs text-muted-foreground">
                     <span>{t('kind')}</span>
                     <select
                       className={nativeSelectClass}
@@ -122,7 +123,7 @@ export function UnitsEditor({ locale, initial, people, departments }: Props) {
                     </select>
                   </label>
                   {u.kind === 'department' && (
-                    <label className="space-y-1 text-xs text-muted-foreground">
+                    <label className="block space-y-1 text-xs text-muted-foreground">
                       <span>{t('department')}</span>
                       <select
                         className={nativeSelectClass}
@@ -140,23 +141,16 @@ export function UnitsEditor({ locale, initial, people, departments }: Props) {
                     </label>
                   )}
                   {u.kind === 'person' && (
-                    <label className="space-y-1 text-xs text-muted-foreground">
-                      <span>{t('person')}</span>
-                      <select
-                        className={nativeSelectClass}
-                        value={u.signerId ?? ''}
-                        onChange={(e) => update(index, { signerId: e.target.value || null })}
-                        data-testid={`clearance-unit-person-${index}`}
-                      >
-                        <option value="">{t('nobody')}</option>
-                        {people.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                            {p.personnelNo ? ` (${p.personnelNo})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <label htmlFor={`clearance-unit-person-${index}`}>{t('person')}</label>
+                      <PersonSearch
+                        id={`clearance-unit-person-${index}`}
+                        people={people}
+                        value={u.signerId}
+                        onChange={(signerId) => update(index, { signerId })}
+                        testId={`clearance-unit-person-${index}`}
+                      />
+                    </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">

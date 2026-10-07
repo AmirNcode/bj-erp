@@ -1,5 +1,6 @@
 'use client';
 
+import { PersonSearch } from '@/components/PersonSearch';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -123,6 +124,8 @@ export function NewEmployeeForm({
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
   const [pending, setPending] = useState(false);
+  const [managerId, setManagerId] = useState<string | null>(null);
+  const managerOptions = managers.map((m) => ({ id: m.id, name: m.full_name, personnelNo: m.employee_code }));
   const [error, setError] = useState<string | null>(null);
   const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   // Errors the database attributes to one input (currently only the personnel
@@ -355,14 +358,14 @@ export function NewEmployeeForm({
           {canChooseScope ? (
             <div className="space-y-1.5">
               <Label htmlFor="manager_id">{labels.manager}</Label>
-              <select id="manager_id" name="manager_id" className={nativeSelectClass}>
-                <option value="">{labels.selectMgr}</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.full_name} ({m.employee_code})
-                  </option>
-                ))}
-              </select>
+              <PersonSearch
+                id="manager_id"
+                name="manager_id"
+                people={managerOptions}
+                value={managerId}
+                onChange={setManagerId}
+                testId="manager-search"
+              />
             </div>
           ) : (
             <div className="space-y-1.5">

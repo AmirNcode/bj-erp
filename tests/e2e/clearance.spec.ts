@@ -31,18 +31,27 @@ function jalaliDay(offset: number): string {
   return jalaliRangeFromGregorian(day, day).split(' — ')[0];
 }
 
-async function selectByText(page: Page, selector: string, text: string) {
-  const select = page.locator(selector);
-  const value = await select.locator('option', { hasText: text }).first().getAttribute('value');
-  expect(value).toBeTruthy();
-  await select.selectOption(value as string);
+/** Type into a person search box and click the suggestion carrying `code`. */
+async function pickPerson(page: Page, testId: string, code: string) {
+  await page.fill(`[data-testid="${testId}"]`, code);
+  const option = page.locator(`[data-testid="${testId}-option"]`, { hasText: code });
+  await expect(option).toHaveCount(1);
+  await option.click();
+  await expect(page.locator(`[data-testid="${testId}"]`)).toHaveValue(new RegExp(code));
 }
 
 async function fileForm(page: Page, leaverCode: string, lastDay: string, signerCode: string | null) {
-  await page.goto('/en/profile/clearance/new');
+  // Admin and hr reach clearance forms from Manage › Employees.
+  await page.goto('/en/manage/employees');
+  await page.click('[data-testid="clearance-link"]');
+  await expect(page).toHaveURL(/\/clearance$/);
+  await page.click('[data-testid="clearance-new"]');
+  await expect(page).toHaveURL(/\/clearance\/new$/);
   await page.waitForLoadState('networkidle');
-  await page.fill('[data-testid="clearance-employee-search"]', leaverCode);
-  await selectByText(page, '[data-testid="clearance-employee"]', leaverCode);
+  // One character is not enough to search.
+  await page.fill('[data-testid="clearance-employee"]', '9');
+  await expect(page.locator('[data-testid="clearance-employee-results"]')).toHaveCount(0);
+  await pickPerson(page, 'clearance-employee', leaverCode);
   // A new account has no personal info, so the father's name is typed here.
   await expect(page.locator('[data-testid="clearance-father"]')).toBeEditable({ timeout: 20_000 });
   await page.fill('[data-testid="clearance-father"]', 'Karim');
@@ -56,13 +65,13 @@ async function fileForm(page: Page, leaverCode: string, lastDay: string, signerC
     await page.click('[data-testid="clearance-row-add"]');
     await page.fill('[data-testid="clearance-row-name-fa-1"]', 'فناوری اطلاعات');
     await page.fill('[data-testid="clearance-row-name-en-1"]', 'IT');
-    await selectByText(page, '[data-testid="clearance-row-signer-1"]', signerCode);
+    await pickPerson(page, 'clearance-row-signer-1', signerCode);
   }
 
   await page.check('[data-testid="clearance-reason-resignation"]');
   await fillPicker(page, lastDay, '[data-testid="clearance-last-day"]');
   await page.click('[data-testid="clearance-submit"]');
-  await expect(page).toHaveURL(/\/profile\/clearance\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/clearance\/[0-9a-f-]{36}$/, { timeout: 30_000 });
   await expect(page.locator('[data-testid="clearance-detail"]')).toBeVisible();
 }
 
@@ -122,7 +131,7 @@ test('hr files a clearance form; units and finance sign; a past last day deactiv
   await logout(page);
 
   await login(page, fin.code, fin.password);
-  await page.goto(`/en/profile/clearance/${formId}`);
+  await page.goto(`/en/clearance/${formId}`);
   await sign(page, '[data-testid="clearance-finance"]');
   await expect(page.locator('[data-testid="clearance-detail"]')).toHaveAttribute('data-status', 'completed', {
     timeout: 30_000,

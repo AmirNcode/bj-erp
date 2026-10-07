@@ -12,7 +12,7 @@ was deployed; semantic versioning starts at the first tag.
 ### Clearance form — FR-54 (2026-10-07)
 
 Migrations `20261007150001`–`20261007150003`. Spec `docs/specs/2026-10-07-clearance-form-design.md`.
-- **Profile › فرم‌های تسویه حساب:** hr or admin files a departure clearance form: reason, last
+- **Manage › Employees › «تسویه حساب»:** hr or admin files a departure clearance form: reason, last
   working day, father's name and birth certificate number (taken from personal info, or typed and
   saved there), and the sign-off rows.
 - **Rows:** start from a default list (Profile › Clearance forms › Default rows): HR (always),
@@ -25,6 +25,10 @@ Migrations `20261007150001`–`20261007150003`. Spec `docs/specs/2026-10-07-clea
 - **Deactivation:** the account switches itself off at 00:05 on the day after the last working day
   (immediately if that day is already past), and the person's pending requests are cancelled.
 - Printable sheet matching the paper form. hr can cancel a form until the account is switched off.
+- **Employees page:** the filter, search and department picker now span the table's width.
+- **Person pickers** on clearance forms (employee, row signers, default-row people) are a search box:
+  type 2+ characters of a name or personnel number and pick from up to 5 suggestions, sorted by
+  personnel number. The **Direct Manager** field on Add Employee and Edit Employee works the same way.
 
 ### Saved signature and personal information — FR-52, FR-53 (2026-10-07)
 

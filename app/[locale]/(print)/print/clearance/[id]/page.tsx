@@ -65,7 +65,7 @@ export default async function PrintClearancePage({ params }: Props) {
     <>
       <PrintToolbar
         labels={{ print: tp('printButton'), back: tp('back') }}
-        backHref={`/${locale}/profile/clearance/${f.id}`}
+        backHref={`/${locale}/clearance/${f.id}`}
       />
       <main
         dir={locale === 'fa' ? 'rtl' : 'ltr'}

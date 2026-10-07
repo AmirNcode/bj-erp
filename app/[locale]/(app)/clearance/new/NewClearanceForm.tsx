@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PersianDateField } from '@/components/PersianDateField';
-import { nativeSelectClass } from '@/lib/native-select';
+import { PersonSearch } from '@/components/PersonSearch';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { todayInAppTz } from '@/lib/appDate';
 import { toAsciiDigits } from '@/lib/employees/code';
@@ -48,7 +48,6 @@ export function NewClearanceForm({ locale, people, allPeople, units, departmentM
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const [query, setQuery] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [prefill, setPrefill] = useState<Prefill | null>(null);
   const [reason, setReason] = useState<SeparationReason | ''>('');
@@ -69,16 +68,9 @@ export function NewClearanceForm({ locale, people, allPeople, units, departmentM
     redundancy: t('reasons.redundancy'),
   };
   const managers = useMemo(() => new Map(Object.entries(departmentManagers)), [departmentManagers]);
-  const shown = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return people;
-    return people.filter(
-      (p) => p.name.toLowerCase().includes(q) || (p.personnelNo ?? '').includes(q) || p.id === employeeId
-    );
-  }, [people, query, employeeId]);
 
-  const pickEmployee = (id: string) => {
-    setEmployeeId(id);
+  const pickEmployee = (id: string | null) => {
+    setEmployeeId(id ?? '');
     setPrefill(null);
     setError('');
     if (!id) {
@@ -137,7 +129,7 @@ export function NewClearanceForm({ locale, people, allPeople, units, departmentM
         setError(res.error);
         return;
       }
-      router.push(`/${locale}/profile/clearance/${res.id}`);
+      router.push(`/${locale}/clearance/${res.id}`);
     });
   };
 
@@ -145,28 +137,13 @@ export function NewClearanceForm({ locale, people, allPeople, units, departmentM
     <form onSubmit={submit} className="space-y-5" data-testid="clearance-new-form">
       <div className="space-y-1.5">
         <Label htmlFor="clearance-employee">{t('fields.employee')}</Label>
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('new.search')}
-          aria-label={t('new.search')}
-          data-testid="clearance-employee-search"
-        />
-        <select
+        <PersonSearch
           id="clearance-employee"
-          className={nativeSelectClass}
-          value={employeeId}
-          onChange={(e) => pickEmployee(e.target.value)}
-          data-testid="clearance-employee"
-        >
-          <option value="">{t('new.chooseEmployee')}</option>
-          {shown.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-              {p.personnelNo ? ` (${p.personnelNo})` : ''}
-            </option>
-          ))}
-        </select>
+          people={people}
+          value={employeeId || null}
+          onChange={pickEmployee}
+          testId="clearance-employee"
+        />
       </div>
 
       {warnings.length > 0 && (

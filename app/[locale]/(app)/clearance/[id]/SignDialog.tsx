@@ -23,7 +23,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { RequestSignatureFields } from '../../../request/_components/RequestSignature';
+import { RequestSignatureFields } from '../../request/_components/RequestSignature';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import {
   dateObjectToGregorian,

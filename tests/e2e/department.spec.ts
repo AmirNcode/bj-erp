@@ -7,7 +7,7 @@ import {
   nextTestDepartmentCode,
   nextTestPersonnelNo,
   SEEDED_MANAGER_CODE,
-  SEEDED_PASSWORD,
+  SEEDED_MANAGER_PASSWORD,
 } from './_helpers';
 
 /**
@@ -222,7 +222,7 @@ test('the Departments card opens a members dialog and closes three ways', async 
 test('a manager cannot reach the new-department page', async ({ page }) => {
   test.setTimeout(120_000);
 
-  await login(page, SEEDED_MANAGER_CODE, SEEDED_PASSWORD);
+  await login(page, SEEDED_MANAGER_CODE, SEEDED_MANAGER_PASSWORD);
 
   // Manage › Departments (which hosts the Add Department button) is admin-only.
   await page.goto('/manage/departments');
