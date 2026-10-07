@@ -132,7 +132,14 @@ to his Mac. Item 9: a forced first-login password plus printable slips (he chose
 - Uptime checks run by hand against bjeng.app: all 200; cert checkend OK (expires Oct 13 07:11 UTC).
 
 **State left behind**
-- All uncommitted on main. Pushing deploys both migrations to Liara.
+- Committed `22fe044`, pushed. Run 37558958936 SUCCESS: pre-deploy backup
+  `pre-22fe044…-2026-10-06-205144.dump` (388K), applied `20261006120003` and `…04` on Liara,
+  `Liara release verified: 22fe044`, health ok. Uptime run 37559321634 (manual dispatch): all steps green.
+- A background commit security review flagged `20261006120004` ("authentication") without detail. My own
+  review found only the accepted D4 trade-off: the flag is a UI gate. A flagged account holding the issued
+  password can still use the API, and could clear the flag via `app_change_my_password(issued, issued)`.
+  If wanted: refuse new = current there, or check the flag in `private.is_active` (wide blast radius, every
+  policy uses it). Not done; reported to Amir.
 
 **For the next agent**
 - Pilot accounts created on Liara before this release are not flagged; regenerate their passwords.
