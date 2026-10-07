@@ -49,7 +49,8 @@ CREATE TYPE public.app_role AS ENUM (
     'manager',
     'employee',
     'security',
-    'hr'
+    'hr',
+    'finance'
 );
 
 
@@ -152,6 +153,57 @@ end; $$;
 
 
 --
+-- Name: apply_due_separations(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.apply_due_separations(p_id uuid DEFAULT NULL::uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_today     date := (now() at time zone 'Asia/Tehran')::date;
+  v_count     integer := 0;
+  v_cancelled integer;
+  r           record;
+begin
+  perform set_config('bj.separation_apply', 'on', true);
+  for r in
+    select s.id, s.employee_id
+      from public.separations s
+     where s.status <> 'cancelled'
+       and s.deactivated_at is null
+       and s.last_working_day < v_today
+       and (p_id is null or s.id = p_id)
+     order by s.last_working_day
+       for update
+  loop
+    begin
+      update public.profiles set active = false where id = r.employee_id and active;
+      -- Pending requests die with the account; approved leave is left alone (A9).
+      update public.leave_requests
+         set status = 'cancelled', decided_at = now()
+       where employee_id = r.employee_id and status = 'pending';
+      get diagnostics v_cancelled = row_count;
+      update public.separations set deactivated_at = now() where id = r.id;
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (auth.uid(), 'separation.deactivate', 'separations', r.id,
+              jsonb_build_object('employee_id', r.employee_id, 'pending_cancelled', v_cancelled));
+      v_count := v_count + 1;
+    exception when others then
+      if p_id is not null then
+        raise;
+      end if;
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (null, 'separation.deactivate_failed', 'separations', r.id,
+              jsonb_build_object('employee_id', r.employee_id, 'error', sqlerrm));
+    end;
+  end loop;
+  perform set_config('bj.separation_apply', 'off', true);
+  return v_count;
+end; $$;
+
+
+--
 -- Name: attach_request_signature(uuid, text, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -185,6 +237,32 @@ begin
   end if;
 end;
 $_$;
+
+
+--
+-- Name: audit_personal_info(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.audit_personal_info() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_fields text[];
+begin
+  if auth.uid() is null then return new; end if;
+  select coalesce(array_agg(n.key order by n.key), '{}')
+    into v_fields
+    from jsonb_each(to_jsonb(new)) n
+    join jsonb_each(to_jsonb(old)) o using (key)
+   where n.value is distinct from o.value
+     and n.key not in ('updated_at', 'updated_by', 'complete');
+  if cardinality(v_fields) = 0 then return new; end if;
+  insert into public.audit_log(actor_id, action, entity, entity_id, after)
+  values (auth.uid(), 'personal_info.update', 'employee_personal_info', new.employee_id,
+          jsonb_build_object('fields', to_jsonb(v_fields)));
+  return new;
+end; $$;
 
 
 --
@@ -233,6 +311,30 @@ $$;
 
 
 --
+-- Name: audit_user_signature(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.audit_user_signature() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if auth.uid() is null then
+    return coalesce(new, old);
+  end if;
+  insert into public.audit_log(actor_id, action, entity, entity_id, after)
+  values (
+    auth.uid(),
+    case when tg_op = 'DELETE' then 'signature.deleted' else 'signature.saved' end,
+    'user_signatures',
+    coalesce(new.user_id, old.user_id),
+    case when tg_op = 'DELETE' then null else jsonb_build_object('source', new.source) end
+  );
+  return coalesce(new, old);
+end; $$;
+
+
+--
 -- Name: can_read_all(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -252,6 +354,28 @@ $$;
 --
 
 COMMENT ON FUNCTION private.can_read_all(uid uuid) IS 'Broad-read predicate: admin, manager, security, or hr. Write access is never implied — managers write only to direct reports, and hr writes only through guarded RPCs. FR-17/FR-18/FR-35.';
+
+
+--
+-- Name: can_read_separation(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_read_separation(uid uuid, p_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.is_active(uid)
+     and exists (
+       select 1
+         from public.separations s
+         join public.profiles c on c.id = uid and c.company_id = s.company_id
+        where s.id = p_id
+          and (private.has_permission(uid, 'separations.view')
+               or s.employee_id = uid
+               or exists (select 1 from public.separation_signoffs o
+                           where o.separation_id = s.id and o.signer_id = uid))
+     );
+$$;
 
 
 --
@@ -441,6 +565,13 @@ declare
   v_uid     uuid := auth.uid();
   v_allowed text[];
 begin
+  if coalesce(current_setting('bj.separation_apply', true), '') = 'on'
+     and old.active and not new.active
+     and (to_jsonb(new) - 'active') = (to_jsonb(old) - 'active')
+  then
+    return new;
+  end if;
+
   if private.is_admin(v_uid) then
     return new;  -- admins may change anything
   end if;
@@ -492,10 +623,15 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     SET search_path TO ''
     AS $$
   select case p_permission
-    when 'employees.edit'   then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'departments.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'accruals.run'     then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'roles.manager'    then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'employees.edit'     then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'departments.edit'   then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'accruals.run'       then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'roles.manager'      then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'personal_info.view' then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'personal_info.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'separations.manage' then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'separations.view'   then private.is_admin(uid) or private.has_role(uid, 'hr')
+                                   or private.has_role(uid, 'finance')
     else false
   end;
 $$;
@@ -650,6 +786,96 @@ $$;
 
 
 --
+-- Name: is_valid_card_no(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_valid_card_no(p text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+declare
+  v_sum int := 0;
+  v_d   int;
+begin
+  if p is null or p !~ '^[0-9]{16}$' then return false; end if;
+  for i in 1..16 loop
+    v_d := substr(p, i, 1)::int;
+    if i % 2 = 1 then            -- 16 digits: odd positions from the left are doubled
+      v_d := v_d * 2;
+      if v_d > 9 then v_d := v_d - 9; end if;
+    end if;
+    v_sum := v_sum + v_d;
+  end loop;
+  return v_sum % 10 = 0;
+end; $_$;
+
+
+--
+-- Name: is_valid_national_id(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_valid_national_id(p text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+declare
+  v_sum int := 0;
+  v_rem int;
+  v_chk int;
+begin
+  if p is null or p !~ '^[0-9]{10}$' then return false; end if;
+  -- All-same-digit numbers pass the arithmetic but are never issued.
+  if p ~ '^(.)\1{9}$' then return false; end if;
+  for i in 1..9 loop
+    v_sum := v_sum + substr(p, i, 1)::int * (11 - i);
+  end loop;
+  v_rem := v_sum % 11;
+  v_chk := substr(p, 10, 1)::int;
+  return (v_rem < 2 and v_chk = v_rem) or (v_rem >= 2 and v_chk = 11 - v_rem);
+end; $_$;
+
+
+--
+-- Name: is_valid_sheba(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_valid_sheba(p text) RETURNS boolean
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+declare
+  v_digits text;
+  v_rem    int := 0;
+begin
+  if p is null or p !~ '^IR[0-9]{24}$' then return false; end if;
+  v_digits := substr(p, 5) || '1827' || substr(p, 3, 2);
+  for i in 1..length(v_digits) loop
+    v_rem := (v_rem * 10 + substr(v_digits, i, 1)::int) % 97;
+  end loop;
+  return v_rem = 1;
+end; $_$;
+
+
+--
+-- Name: personal_info_before_update(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.personal_info_before_update() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.employee_id is distinct from old.employee_id
+     or new.company_id is distinct from old.company_id then
+    raise exception 'not permitted to modify restricted personal info fields' using errcode = '42501';
+  end if;
+  new.updated_at := now();
+  new.updated_by := auth.uid();
+  return new;
+end; $$;
+
+
+--
 -- Name: preserve_active_admin(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -676,6 +902,39 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: profiles_create_personal_info(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.profiles_create_personal_info() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  insert into public.employee_personal_info (employee_id, company_id)
+  values (new.id, new.company_id)
+  on conflict (employee_id) do nothing;
+  return new;
+end; $$;
+
+
+--
+-- Name: refresh_separation_status(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.refresh_separation_status(p_id uuid) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  update public.separations s
+     set status = 'awaiting_finance'
+   where s.id = p_id
+     and s.status = 'in_progress'
+     and not exists (select 1 from public.separation_signoffs o
+                      where o.separation_id = s.id and o.signed_at is null);
 $$;
 
 
@@ -721,6 +980,137 @@ CREATE FUNCTION private.same_team(uid uuid, target uuid) RETURNS boolean
           and caller.department_id is not null
      );
 $$;
+
+
+--
+-- Name: separation_caller_company(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.separation_caller_company(p_uid uuid) RETURNS uuid
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if p_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not private.is_active(p_uid) then
+    raise exception 'account is inactive' using errcode = '42501';
+  end if;
+  return (select company_id from public.profiles where id = p_uid);
+end; $$;
+
+
+--
+-- Name: separation_check_fields(text, date, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.separation_check_fields(p_reason text, p_last_day date, p_note text) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+begin
+  if p_reason is null
+     or p_reason not in ('resignation', 'dismissal', 'contract_end', 'abandonment', 'redundancy') then
+    raise exception 'invalid reason' using errcode = '22023';
+  end if;
+  if p_last_day is null then
+    raise exception 'last working day is required' using errcode = '22023';
+  end if;
+  if p_note is not null and length(p_note) > 500 then
+    raise exception 'note is too long' using errcode = '22023';
+  end if;
+end; $$;
+
+
+--
+-- Name: separation_check_signature(text, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.separation_check_signature(p_data text, p_authorized boolean) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+begin
+  if not coalesce(p_authorized, false) then
+    raise exception 'signature authorization is required' using errcode = '22023';
+  end if;
+  if p_data is null or p_data = '' then
+    raise exception 'signature is required' using errcode = '22023';
+  end if;
+  if length(p_data) not between 100 and 350000
+     or mod(length(p_data), 4) <> 2
+     or p_data !~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$' then
+    raise exception 'signature data is invalid' using errcode = '22023';
+  end if;
+end; $_$;
+
+
+--
+-- Name: separation_manageable(uuid, uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.separation_manageable(p_uid uuid, p_company uuid, p_employee uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.has_permission(p_uid, 'separations.manage') then
+    raise exception 'not allowed to manage clearance forms' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_employee and company_id = p_company) then
+    raise exception 'employee not found' using errcode = '42501';
+  end if;
+  if not private.is_admin(p_uid)
+     and exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
+    raise exception 'not allowed to file a clearance form for this employee' using errcode = '42501';
+  end if;
+end; $$;
+
+
+--
+-- Name: separation_row_signer(uuid, uuid, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.separation_row_signer(p_company uuid, p_employee uuid, p_row jsonb) RETURNS uuid
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_dept   uuid := nullif(p_row->>'department_id', '')::uuid;
+  v_signer uuid := nullif(p_row->>'signer_id', '')::uuid;
+begin
+  if jsonb_typeof(p_row) <> 'object'
+     or coalesce(char_length(btrim(p_row->>'name_fa')), 0) not between 1 and 100
+     or coalesce(char_length(btrim(p_row->>'name_en')), 0) not between 1 and 100 then
+    raise exception 'invalid rows' using errcode = '22023';
+  end if;
+  if v_dept is not null
+     and not exists (select 1 from public.departments where id = v_dept and company_id = p_company) then
+    raise exception 'invalid rows' using errcode = '22023';
+  end if;
+  if v_signer is not null then
+    if v_signer = p_employee then
+      raise exception 'the departing employee cannot sign their own form' using errcode = '22023';
+    end if;
+    if not exists (select 1 from public.profiles
+                    where id = v_signer and company_id = p_company and active) then
+      raise exception 'invalid rows' using errcode = '22023';
+    end if;
+    return v_signer;
+  end if;
+  if v_dept is not null then
+    select d.manager_id into v_signer
+      from public.departments d
+      join public.profiles m on m.id = d.manager_id and m.active
+     where d.id = v_dept;
+    if v_signer = p_employee then
+      return null;
+    end if;
+    return v_signer;
+  end if;
+  return null;
+end; $$;
 
 
 --
@@ -936,6 +1326,20 @@ begin
   return v_req;
 end;
 $$;
+
+
+--
+-- Name: user_signatures_touch(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.user_signatures_touch() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  new.updated_at := now();
+  return new;
+end; $$;
 
 
 --
@@ -1816,6 +2220,37 @@ $$;
 
 
 --
+-- Name: app_cancel_separation(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_cancel_separation(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  s         record;
+begin
+  select * into s from public.separations where id = p_id and company_id = v_company for update;
+  if not found then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  perform private.separation_manageable(v_uid, v_company, s.employee_id);
+  if s.status = 'cancelled' then
+    raise exception 'form is not open for changes' using errcode = '22023';
+  end if;
+  if s.deactivated_at is not null then
+    raise exception 'form already applied' using errcode = '22023';
+  end if;
+  update public.separations set status = 'cancelled', cancelled_by = v_uid, cancelled_at = now()
+   where id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.cancel', 'separations', p_id, null);
+end; $$;
+
+
+--
 -- Name: app_change_my_password(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2010,6 +2445,439 @@ end; $$;
 
 
 --
+-- Name: app_create_separation(uuid, text, date, text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  v_father  text := nullif(btrim(p_father_name), '');
+  v_cert    text := nullif(btrim(p_birth_cert_no), '');
+  v_note    text := nullif(btrim(p_note), '');
+  v_hr_fa   text;
+  v_hr_en   text;
+  v_id      uuid;
+  v_row     jsonb;
+  v_i       integer := 0;
+begin
+  if p_employee_id = v_uid then
+    raise exception 'cannot file a clearance form for yourself' using errcode = '42501';
+  end if;
+  perform private.separation_manageable(v_uid, v_company, p_employee_id);
+  perform private.separation_check_fields(p_reason, p_last_working_day, v_note);
+  if v_father is not null and char_length(v_father) > 100 then
+    raise exception 'invalid father name' using errcode = '22023';
+  end if;
+  if v_cert is not null and v_cert !~ '^[0-9]{1,10}$' then
+    raise exception 'invalid birth certificate number' using errcode = '22023';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'invalid rows' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('separation:' || p_employee_id::text, 0));
+  if exists (select 1 from public.separations
+              where employee_id = p_employee_id and status <> 'cancelled' and deactivated_at is null) then
+    raise exception 'employee already has an open clearance form' using errcode = '23505';
+  end if;
+  -- The last active admin can never be switched off; refuse the form up front.
+  if exists (select 1 from public.user_roles where user_id = p_employee_id and role = 'admin')
+     and not exists (select 1 from public.profiles p
+                       join public.user_roles r on r.user_id = p.id and r.role = 'admin'
+                      where p.active and p.id <> p_employee_id) then
+    raise exception 'cannot deactivate the last active admin' using errcode = '22023';
+  end if;
+
+  -- D8: personal info wins; what HR typed fills only what is missing there, and is
+  -- written back so the profile is complete next time.
+  update public.employee_personal_info
+     set father_name   = coalesce(father_name, v_father),
+         birth_cert_no = coalesce(birth_cert_no, v_cert)
+   where employee_id = p_employee_id
+     and ((father_name is null and v_father is not null)
+          or (birth_cert_no is null and v_cert is not null));
+  select coalesce(i.father_name, v_father), coalesce(i.birth_cert_no, v_cert)
+    into v_father, v_cert
+    from (select 1) one
+    left join public.employee_personal_info i on i.employee_id = p_employee_id;
+
+  insert into public.separations (company_id, employee_id, reason, last_working_day, hire_date,
+                                  father_name, birth_cert_no, note, created_by)
+  select v_company, p_employee_id, p_reason, p_last_working_day, p.hire_date,
+         v_father, v_cert, v_note, v_uid
+    from public.profiles p where p.id = p_employee_id
+  returning id into v_id;
+
+  select name_fa, name_en into v_hr_fa, v_hr_en
+    from public.separation_units where company_id = v_company and kind = 'hr';
+  insert into public.separation_signoffs (separation_id, is_hr, name_fa, name_en, sort_order)
+  values (v_id, true, coalesce(v_hr_fa, 'مدیر اداری و منابع انسانی'),
+          coalesce(v_hr_en, 'HR & administration'), 0);
+
+  for v_row in select value from jsonb_array_elements(p_rows) loop
+    v_i := v_i + 1;
+    insert into public.separation_signoffs (separation_id, name_fa, name_en, department_id, signer_id, sort_order)
+    values (v_id, btrim(v_row->>'name_fa'), btrim(v_row->>'name_en'),
+            nullif(v_row->>'department_id', '')::uuid,
+            private.separation_row_signer(v_company, p_employee_id, v_row), v_i);
+  end loop;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.create', 'separations', v_id,
+          jsonb_build_object('employee_id', p_employee_id, 'reason', p_reason,
+                             'last_working_day', p_last_working_day, 'rows', v_i + 1));
+
+  perform private.apply_due_separations(v_id);
+  return v_id;
+end; $_$;
+
+
+--
+-- Name: app_export_personal_info(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_export_personal_info() RETURNS TABLE(personnel_no text, employee_code text, full_name text, active boolean, national_id text, birth_cert_no text, father_name text, birth_date date, birth_place text, gender text, marital_status text, bank_name text, bank_account_no text, sheba text, card_no text, mobile text, home_phone text, address text, postal_code text, emergency_name text, emergency_phone text, insurance_no text, education text, military_status text, children_count smallint)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid;
+  v_count   int;
+begin
+  if not private.has_permission(v_uid, 'personal_info.view') then
+    raise exception 'not permitted to export personal info' using errcode = '42501';
+  end if;
+  select company_id into v_company from public.profiles where id = v_uid;
+
+  select count(*) into v_count from public.employee_personal_info where company_id = v_company;
+  insert into public.audit_log(actor_id, action, entity, entity_id, after)
+  values (v_uid, 'personal_info.export', 'employee_personal_info', null,
+          jsonb_build_object('rows', v_count));
+
+  return query
+    select p.personnel_no, p.employee_code, p.full_name, p.active,
+           i.national_id, i.birth_cert_no, i.father_name, i.birth_date, i.birth_place,
+           i.gender, i.marital_status, i.bank_name, i.bank_account_no, i.sheba,
+           i.card_no, i.mobile, i.home_phone, i.address, i.postal_code,
+           i.emergency_name, i.emergency_phone, i.insurance_no, i.education,
+           i.military_status, i.children_count
+      from public.employee_personal_info i
+      join public.profiles p on p.id = i.employee_id
+     where i.company_id = v_company
+     order by p.active desc, p.personnel_no nulls last, p.full_name;
+end; $$;
+
+
+--
+-- Name: app_get_separation(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_get_separation(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v jsonb;
+begin
+  if not private.can_read_separation(auth.uid(), p_id) then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  select jsonb_build_object(
+           'id', s.id, 'status', s.status, 'reason', s.reason,
+           'last_working_day', s.last_working_day, 'hire_date', s.hire_date,
+           'father_name', s.father_name, 'birth_cert_no', s.birth_cert_no, 'note', s.note,
+           'settlement_date', s.settlement_date, 'finance_note', s.finance_note,
+           'finance_signed_at', s.finance_signed_at, 'finance_signed_by_name', fs.full_name,
+           'deactivated_at', s.deactivated_at, 'created_at', s.created_at,
+           'created_by_name', cb.full_name, 'cancelled_at', s.cancelled_at,
+           'employee', jsonb_build_object(
+             'id', p.id, 'name', p.full_name, 'personnel_no', p.personnel_no,
+             'department_id', p.department_id, 'department_name_fa', d.name_fa,
+             'department_name_en', d.name_en, 'active', p.active),
+           'rows', coalesce((
+             select jsonb_agg(jsonb_build_object(
+                      'id', o.id, 'is_hr', o.is_hr, 'name_fa', o.name_fa, 'name_en', o.name_en,
+                      'department_id', o.department_id, 'signer_id', o.signer_id,
+                      'signer_name', sp.full_name, 'sort_order', o.sort_order,
+                      'signed_by', o.signed_by, 'signed_by_name', sb.full_name,
+                      'signed_at', o.signed_at, 'note', o.note)
+                    order by o.is_hr desc, o.sort_order)
+               from public.separation_signoffs o
+               left join public.profiles sp on sp.id = o.signer_id
+               left join public.profiles sb on sb.id = o.signed_by
+              where o.separation_id = s.id), '[]'::jsonb))
+    into v
+    from public.separations s
+    join public.profiles p on p.id = s.employee_id
+    left join public.departments d on d.id = p.department_id
+    left join public.profiles fs on fs.id = s.finance_signed_by
+    left join public.profiles cb on cb.id = s.created_by
+   where s.id = p_id;
+  return v;
+end; $$;
+
+
+--
+-- Name: app_import_personal_info(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_import_personal_info(p_rows jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid      uuid := auth.uid();
+  v_company  uuid;
+  v_is_admin boolean := private.is_admin(auth.uid());
+  v_row      jsonb;
+  v_pno      text;
+  v_target   uuid;
+  v_updated  int := 0;
+  v_fields   constant text[] := array[
+    'national_id','birth_cert_no','father_name','birth_date','birth_place','gender',
+    'marital_status','bank_name','bank_account_no','sheba','card_no','mobile','home_phone',
+    'address','postal_code','emergency_name','emergency_phone','insurance_no','education',
+    'military_status','children_count'];
+  v_key      text;
+begin
+  if not private.has_permission(v_uid, 'personal_info.edit') then
+    raise exception 'not permitted to import personal info' using errcode = '42501';
+  end if;
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then
+    raise exception 'no rows to import' using errcode = '22023';
+  end if;
+  if jsonb_array_length(p_rows) > 2000 then
+    raise exception 'too many rows (max 2000)' using errcode = '22023';
+  end if;
+  select company_id into v_company from public.profiles where id = v_uid;
+
+  if (select count(distinct r->>'personnel_no') <> count(*) from jsonb_array_elements(p_rows) r) then
+    raise exception 'duplicate personnel number in file' using errcode = '22023';
+  end if;
+
+  for v_row in select * from jsonb_array_elements(p_rows) loop
+    v_pno := v_row->>'personnel_no';
+    select id into v_target from public.profiles
+     where company_id = v_company and personnel_no = v_pno;
+    if v_target is null then
+      raise exception 'unknown personnel number: %', coalesce(v_pno, '(empty)') using errcode = '22023';
+    end if;
+    if not v_is_admin and exists (select 1 from public.user_roles
+                                   where user_id = v_target and role = 'admin') then
+      raise exception 'not permitted to edit an admin''s personal info: %', v_pno using errcode = '42501';
+    end if;
+    for v_key in select jsonb_object_keys(v_row) loop
+      if v_key <> 'personnel_no' and not (v_key = any (v_fields)) then
+        raise exception 'unknown field: %', v_key using errcode = '22023';
+      end if;
+    end loop;
+
+    update public.employee_personal_info i set
+      national_id     = coalesce(v_row->>'national_id', i.national_id),
+      birth_cert_no   = coalesce(v_row->>'birth_cert_no', i.birth_cert_no),
+      father_name     = coalesce(v_row->>'father_name', i.father_name),
+      birth_date      = coalesce((v_row->>'birth_date')::date, i.birth_date),
+      birth_place     = coalesce(v_row->>'birth_place', i.birth_place),
+      gender          = coalesce(v_row->>'gender', i.gender),
+      marital_status  = coalesce(v_row->>'marital_status', i.marital_status),
+      bank_name       = coalesce(v_row->>'bank_name', i.bank_name),
+      bank_account_no = coalesce(v_row->>'bank_account_no', i.bank_account_no),
+      sheba           = coalesce(v_row->>'sheba', i.sheba),
+      card_no         = coalesce(v_row->>'card_no', i.card_no),
+      mobile          = coalesce(v_row->>'mobile', i.mobile),
+      home_phone      = coalesce(v_row->>'home_phone', i.home_phone),
+      address         = coalesce(v_row->>'address', i.address),
+      postal_code     = coalesce(v_row->>'postal_code', i.postal_code),
+      emergency_name  = coalesce(v_row->>'emergency_name', i.emergency_name),
+      emergency_phone = coalesce(v_row->>'emergency_phone', i.emergency_phone),
+      insurance_no    = coalesce(v_row->>'insurance_no', i.insurance_no),
+      education       = coalesce(v_row->>'education', i.education),
+      military_status = coalesce(v_row->>'military_status', i.military_status),
+      children_count  = coalesce((v_row->>'children_count')::smallint, i.children_count)
+     where i.employee_id = v_target;
+    v_updated := v_updated + 1;
+  end loop;
+
+  insert into public.audit_log(actor_id, action, entity, entity_id, after)
+  values (v_uid, 'personal_info.import', 'employee_personal_info', null,
+          jsonb_build_object('rows', v_updated));
+
+  return jsonb_build_object('updated', v_updated);
+end; $$;
+
+
+--
+-- Name: app_list_separations(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_list_separations() RETURNS TABLE(id uuid, employee_id uuid, employee_name text, personnel_no text, department_name_fa text, department_name_en text, status text, reason text, last_working_day date, deactivated_at timestamp with time zone, created_at timestamp with time zone, rows_total integer, rows_signed integer, awaiting_me boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select s.id, s.employee_id, p.full_name, p.personnel_no, d.name_fa, d.name_en,
+         s.status, s.reason, s.last_working_day, s.deactivated_at, s.created_at,
+         (select count(*)::int from public.separation_signoffs o where o.separation_id = s.id),
+         (select count(*)::int from public.separation_signoffs o where o.separation_id = s.id and o.signed_at is not null),
+         s.employee_id <> auth.uid() and (
+           (s.status = 'in_progress' and exists (
+              select 1 from public.separation_signoffs o
+               where o.separation_id = s.id and o.signed_at is null
+                 and ((not o.is_hr and o.signer_id = auth.uid())
+                      or (o.is_hr and (private.has_role(auth.uid(), 'hr') or private.is_admin(auth.uid()))))))
+           or (s.status = 'awaiting_finance' and private.has_role(auth.uid(), 'finance')))
+    from public.separations s
+    join public.profiles p on p.id = s.employee_id
+    left join public.departments d on d.id = p.department_id
+   where private.can_read_separation(auth.uid(), s.id)
+   order by s.created_at desc
+   limit 500;
+$$;
+
+
+--
+-- Name: app_save_separation_units(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_save_separation_units(p_units jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  v_unit    jsonb;
+  v_id      uuid;
+  v_kind    text;
+  v_dept    uuid;
+  v_signer  uuid;
+  v_keep    uuid[] := '{}';
+  v_i       integer := 0;
+begin
+  if not private.has_permission(v_uid, 'separations.manage') then
+    raise exception 'not allowed to manage clearance forms' using errcode = '42501';
+  end if;
+  if p_units is null or jsonb_typeof(p_units) <> 'array' then
+    raise exception 'invalid rows' using errcode = '22023';
+  end if;
+  insert into public.separation_units (company_id, kind, name_fa, name_en, sort_order)
+  values (v_company, 'hr', 'مدیر اداری و منابع انسانی', 'HR & administration', 0)
+  on conflict (company_id) where kind = 'hr' do nothing;
+
+  for v_unit in select value from jsonb_array_elements(p_units) loop
+    v_kind := v_unit->>'kind';
+    if jsonb_typeof(v_unit) <> 'object'
+       or coalesce(char_length(btrim(v_unit->>'name_fa')), 0) not between 1 and 100
+       or coalesce(char_length(btrim(v_unit->>'name_en')), 0) not between 1 and 100 then
+      raise exception 'invalid rows' using errcode = '22023';
+    end if;
+    if v_kind = 'hr' then
+      update public.separation_units
+         set name_fa = btrim(v_unit->>'name_fa'), name_en = btrim(v_unit->>'name_en')
+       where company_id = v_company and kind = 'hr';
+      continue;
+    end if;
+    if v_kind is null or v_kind not in ('department', 'own_department', 'person') then
+      raise exception 'invalid rows' using errcode = '22023';
+    end if;
+    v_i := v_i + 1;
+    v_dept   := case when v_kind = 'department' then nullif(v_unit->>'department_id', '')::uuid end;
+    v_signer := case when v_kind = 'person' then nullif(v_unit->>'signer_id', '')::uuid end;
+    if v_kind = 'department' and (v_dept is null or not exists (
+         select 1 from public.departments where id = v_dept and company_id = v_company)) then
+      raise exception 'invalid rows' using errcode = '22023';
+    end if;
+    if v_signer is not null and not exists (
+         select 1 from public.profiles where id = v_signer and company_id = v_company and active) then
+      raise exception 'invalid rows' using errcode = '22023';
+    end if;
+    v_id := nullif(v_unit->>'id', '')::uuid;
+    if v_id is not null and exists (select 1 from public.separation_units
+                                     where id = v_id and company_id = v_company and kind <> 'hr') then
+      update public.separation_units
+         set kind = v_kind, name_fa = btrim(v_unit->>'name_fa'), name_en = btrim(v_unit->>'name_en'),
+             department_id = v_dept, signer_id = v_signer, sort_order = v_i,
+             active = coalesce((v_unit->>'active')::boolean, true)
+       where id = v_id;
+    else
+      insert into public.separation_units (company_id, kind, name_fa, name_en, department_id, signer_id, sort_order, active)
+      values (v_company, v_kind, btrim(v_unit->>'name_fa'), btrim(v_unit->>'name_en'), v_dept, v_signer, v_i,
+              coalesce((v_unit->>'active')::boolean, true))
+      returning id into v_id;
+    end if;
+    v_keep := v_keep || v_id;
+  end loop;
+
+  delete from public.separation_units
+   where company_id = v_company and kind <> 'hr' and not (id = any (v_keep));
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.units', 'separation_units', null, jsonb_build_object('units', v_i + 1));
+end; $$;
+
+
+--
+-- Name: app_separation_balances(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_separation_balances(p_id uuid) RETURNS TABLE(leave_type_id uuid, name_fa text, name_en text, balance_minutes integer)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_emp uuid;
+begin
+  if not private.can_read_separation(v_uid, p_id) then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  select employee_id into v_emp from public.separations where id = p_id;
+  return query
+    select t.id, t.name_fa, t.name_en,
+           coalesce((select l.balance_after_minutes from public.leave_ledger l
+                      where l.employee_id = v_emp and l.leave_type_id = t.id
+                      order by l.seq desc limit 1), 0)
+      from public.leave_types t
+      join public.profiles p on p.id = v_emp and p.company_id = t.company_id
+     where t.active and t.affects_balance
+     order by t.name_fa;
+end; $$;
+
+
+--
+-- Name: app_separation_warnings(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_separation_warnings(p_employee_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+begin
+  if not private.has_permission(v_uid, 'separations.manage') then
+    raise exception 'not allowed to manage clearance forms' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_employee_id and company_id = v_company) then
+    raise exception 'employee not found' using errcode = '42501';
+  end if;
+  return jsonb_build_object(
+    'pending_requests', (select count(*) from public.leave_requests
+                          where employee_id = p_employee_id and status = 'pending'),
+    'direct_reports', (select count(*) from public.profiles
+                        where manager_id = p_employee_id and active),
+    'departments_managed', (select count(*) from public.departments
+                             where manager_id = p_employee_id),
+    'approval_steps', (select count(*) from public.approval_steps
+                        where approver_id = p_employee_id and active));
+end; $$;
+
+
+--
 -- Name: app_set_employee_password(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2106,6 +2974,78 @@ $$;
 
 
 --
+-- Name: app_set_separation_signoffs(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  s         record;
+  v_row     jsonb;
+  v_row_id  uuid;
+  v_keep    uuid[] := '{}';
+  v_i       integer := 0;
+  o         record;
+begin
+  select * into s from public.separations where id = p_id and company_id = v_company for update;
+  if not found then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  perform private.separation_manageable(v_uid, v_company, s.employee_id);
+  if s.status <> 'in_progress' then
+    raise exception 'form is not open for changes' using errcode = '22023';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'invalid rows' using errcode = '22023';
+  end if;
+
+  for v_row in select value from jsonb_array_elements(p_rows) loop
+    v_i := v_i + 1;
+    v_row_id := nullif(v_row->>'id', '')::uuid;
+    if v_row_id is null then
+      insert into public.separation_signoffs (separation_id, name_fa, name_en, department_id, signer_id, sort_order)
+      values (p_id, btrim(v_row->>'name_fa'), btrim(v_row->>'name_en'),
+              nullif(v_row->>'department_id', '')::uuid,
+              private.separation_row_signer(v_company, s.employee_id, v_row), v_i)
+      returning id into v_row_id;
+    else
+      select * into o from public.separation_signoffs where id = v_row_id and separation_id = p_id;
+      if not found or o.is_hr then
+        raise exception 'invalid rows' using errcode = '22023';
+      end if;
+      if o.signed_at is not null then
+        update public.separation_signoffs set sort_order = v_i where id = v_row_id;
+      else
+        update public.separation_signoffs
+           set name_fa = btrim(v_row->>'name_fa'), name_en = btrim(v_row->>'name_en'),
+               department_id = nullif(v_row->>'department_id', '')::uuid,
+               signer_id = private.separation_row_signer(v_company, s.employee_id, v_row),
+               sort_order = v_i
+         where id = v_row_id;
+      end if;
+    end if;
+    v_keep := v_keep || v_row_id;
+  end loop;
+
+  if exists (select 1 from public.separation_signoffs
+              where separation_id = p_id and not is_hr and signed_at is not null
+                and not (id = any (v_keep))) then
+    raise exception 'signed rows cannot be changed' using errcode = '22023';
+  end if;
+  delete from public.separation_signoffs
+   where separation_id = p_id and not is_hr and signed_at is null and not (id = any (v_keep));
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.rows', 'separations', p_id, jsonb_build_object('rows', v_i + 1));
+  perform private.refresh_separation_status(p_id);
+end; $$;
+
+
+--
 -- Name: app_set_user_roles(uuid, public.app_role[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2161,6 +3101,147 @@ begin
   values (v_uid, 'set_roles', 'user_roles', p_user_id,
           jsonb_build_object('roles', to_jsonb(v_before)),
           jsonb_build_object('roles', to_jsonb(v_after)));
+end; $$;
+
+
+--
+-- Name: app_sign_separation_finance(uuid, text, boolean, text, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  v_note    text := nullif(btrim(p_note), '');
+  s         record;
+begin
+  if not private.has_role(v_uid, 'finance') then
+    raise exception 'not allowed to sign as finance' using errcode = '42501';
+  end if;
+  perform private.separation_check_signature(p_signature_data, p_signature_authorized);
+  if v_note is not null and length(v_note) > 500 then
+    raise exception 'note is too long' using errcode = '22023';
+  end if;
+  select * into s from public.separations where id = p_id and company_id = v_company for update;
+  if not found then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  if s.employee_id = v_uid then
+    raise exception 'you cannot sign your own clearance form' using errcode = '42501';
+  end if;
+  if s.status <> 'awaiting_finance' then
+    raise exception 'form is not awaiting finance' using errcode = '22023';
+  end if;
+
+  update public.separations
+     set status = 'completed', finance_signed_by = v_uid, finance_signed_at = now(),
+         finance_signature_data = p_signature_data, finance_signature_consent_at = now(),
+         finance_note = v_note,
+         settlement_date = coalesce(p_settlement_date, (now() at time zone 'Asia/Tehran')::date)
+   where id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.finance', 'separations', p_id, null);
+end; $$;
+
+
+--
+-- Name: app_sign_separation_row(uuid, text, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  v_note    text := nullif(btrim(p_note), '');
+  o         record;
+  s         record;
+begin
+  perform private.separation_check_signature(p_signature_data, p_signature_authorized);
+  if v_note is not null and length(v_note) > 500 then
+    raise exception 'note is too long' using errcode = '22023';
+  end if;
+
+  select * into s from public.separations
+   where id = (select separation_id from public.separation_signoffs where id = p_row_id)
+     and company_id = v_company
+     for update;
+  if not found then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  if s.employee_id = v_uid then
+    raise exception 'you cannot sign your own clearance form' using errcode = '42501';
+  end if;
+  if s.status <> 'in_progress' then
+    raise exception 'form is not open for signing' using errcode = '22023';
+  end if;
+  -- Re-read under the form lock: a concurrent signer may have just signed it.
+  select * into o from public.separation_signoffs where id = p_row_id;
+  if o.signed_at is not null then
+    raise exception 'row already signed' using errcode = '22023';
+  end if;
+  if o.is_hr then
+    -- A5: any hr holder or an admin signs the HR row.
+    if not (private.has_role(v_uid, 'hr') or private.is_admin(v_uid)) then
+      raise exception 'row is not yours to sign' using errcode = '42501';
+    end if;
+  elsif o.signer_id is null then
+    raise exception 'row has no signer yet' using errcode = '22023';
+  elsif o.signer_id <> v_uid then
+    raise exception 'row is not yours to sign' using errcode = '42501';
+  end if;
+
+  update public.separation_signoffs
+     set signed_by = v_uid, signed_at = now(), signature_data = p_signature_data,
+         signature_consent_at = now(), note = v_note
+   where id = p_row_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'separation.sign', 'separation_signoffs', p_row_id,
+          jsonb_build_object('separation_id', s.id));
+  perform private.refresh_separation_status(s.id);
+end; $$;
+
+
+--
+-- Name: app_update_separation(uuid, text, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.separation_caller_company(v_uid);
+  v_note    text := nullif(btrim(p_note), '');
+  s         record;
+begin
+  select * into s from public.separations where id = p_id and company_id = v_company for update;
+  if not found then
+    raise exception 'clearance form not found' using errcode = 'P0002';
+  end if;
+  perform private.separation_manageable(v_uid, v_company, s.employee_id);
+  if s.status = 'cancelled' then
+    raise exception 'form is not open for changes' using errcode = '22023';
+  end if;
+  if s.deactivated_at is not null then
+    raise exception 'form already applied' using errcode = '22023';
+  end if;
+  perform private.separation_check_fields(p_reason, p_last_working_day, v_note);
+
+  update public.separations
+     set reason = p_reason, last_working_day = p_last_working_day, note = v_note
+   where id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'separation.update', 'separations', p_id,
+          jsonb_build_object('reason', s.reason, 'last_working_day', s.last_working_day),
+          jsonb_build_object('reason', p_reason, 'last_working_day', p_last_working_day));
+  perform private.apply_due_separations(p_id);
 end; $$;
 
 
@@ -3322,6 +4403,68 @@ CREATE TABLE public.employee_leave_policies (
 
 
 --
+-- Name: employee_personal_info; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_personal_info (
+    employee_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    national_id text,
+    birth_cert_no text,
+    father_name text,
+    birth_date date,
+    birth_place text,
+    gender text,
+    marital_status text,
+    bank_name text,
+    bank_account_no text,
+    sheba text,
+    card_no text,
+    mobile text,
+    home_phone text,
+    address text,
+    postal_code text,
+    emergency_name text,
+    emergency_phone text,
+    insurance_no text,
+    education text,
+    military_status text,
+    children_count smallint,
+    complete boolean GENERATED ALWAYS AS (((national_id IS NOT NULL) AND (father_name IS NOT NULL) AND (birth_date IS NOT NULL) AND (sheba IS NOT NULL) AND (mobile IS NOT NULL))) STORED,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT epi_address CHECK (((address IS NULL) OR ((char_length(btrim(address)) >= 1) AND (char_length(btrim(address)) <= 500)))),
+    CONSTRAINT epi_bank_account_no CHECK (((bank_account_no IS NULL) OR (bank_account_no ~ '^[0-9]{5,20}$'::text))),
+    CONSTRAINT epi_bank_name CHECK (((bank_name IS NULL) OR ((char_length(btrim(bank_name)) >= 1) AND (char_length(btrim(bank_name)) <= 100)))),
+    CONSTRAINT epi_birth_cert_no CHECK (((birth_cert_no IS NULL) OR (birth_cert_no ~ '^[0-9]{1,10}$'::text))),
+    CONSTRAINT epi_birth_date CHECK (((birth_date IS NULL) OR ((birth_date >= '1920-01-01'::date) AND (birth_date <= '2020-12-31'::date)))),
+    CONSTRAINT epi_birth_place CHECK (((birth_place IS NULL) OR ((char_length(btrim(birth_place)) >= 1) AND (char_length(btrim(birth_place)) <= 100)))),
+    CONSTRAINT epi_card_no CHECK (((card_no IS NULL) OR private.is_valid_card_no(card_no))),
+    CONSTRAINT epi_children_count CHECK (((children_count IS NULL) OR ((children_count >= 0) AND (children_count <= 20)))),
+    CONSTRAINT epi_education CHECK (((education IS NULL) OR (education = ANY (ARRAY['below_diploma'::text, 'diploma'::text, 'associate'::text, 'bachelor'::text, 'master'::text, 'doctorate'::text])))),
+    CONSTRAINT epi_emergency_name CHECK (((emergency_name IS NULL) OR ((char_length(btrim(emergency_name)) >= 1) AND (char_length(btrim(emergency_name)) <= 100)))),
+    CONSTRAINT epi_emergency_phone CHECK (((emergency_phone IS NULL) OR (emergency_phone ~ '^0[0-9]{10}$'::text))),
+    CONSTRAINT epi_father_name CHECK (((father_name IS NULL) OR ((char_length(btrim(father_name)) >= 1) AND (char_length(btrim(father_name)) <= 100)))),
+    CONSTRAINT epi_gender CHECK (((gender IS NULL) OR (gender = ANY (ARRAY['male'::text, 'female'::text])))),
+    CONSTRAINT epi_home_phone CHECK (((home_phone IS NULL) OR (home_phone ~ '^0[0-9]{10}$'::text))),
+    CONSTRAINT epi_insurance_no CHECK (((insurance_no IS NULL) OR (insurance_no ~ '^[0-9]{6,12}$'::text))),
+    CONSTRAINT epi_marital_status CHECK (((marital_status IS NULL) OR (marital_status = ANY (ARRAY['single'::text, 'married'::text])))),
+    CONSTRAINT epi_military_status CHECK (((military_status IS NULL) OR (military_status = ANY (ARRAY['completed'::text, 'exempt'::text, 'educational_exempt'::text, 'eligible'::text, 'not_applicable'::text])))),
+    CONSTRAINT epi_mobile CHECK (((mobile IS NULL) OR (mobile ~ '^09[0-9]{9}$'::text))),
+    CONSTRAINT epi_national_id CHECK (((national_id IS NULL) OR private.is_valid_national_id(national_id))),
+    CONSTRAINT epi_postal_code CHECK (((postal_code IS NULL) OR (postal_code ~ '^[0-9]{10}$'::text))),
+    CONSTRAINT epi_sheba CHECK (((sheba IS NULL) OR private.is_valid_sheba(sheba)))
+);
+
+
+--
+-- Name: TABLE employee_personal_info; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.employee_personal_info IS 'FR-53: identity, bank, contact and employment details. Owner + hr/admin of the company (RLS). Never join into profile views.';
+
+
+--
 -- Name: holidays; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3585,6 +4728,90 @@ COMMENT ON COLUMN public.profiles.must_change_password IS 'True while the accoun
 
 
 --
+-- Name: separation_signoffs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.separation_signoffs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    separation_id uuid NOT NULL,
+    is_hr boolean DEFAULT false NOT NULL,
+    name_fa text NOT NULL,
+    name_en text NOT NULL,
+    department_id uuid,
+    signer_id uuid,
+    sort_order integer DEFAULT 0 NOT NULL,
+    signed_by uuid,
+    signed_at timestamp with time zone,
+    signature_data text,
+    signature_consent_at timestamp with time zone,
+    note text,
+    CONSTRAINT separation_signoffs_hr_no_signer CHECK (((NOT is_hr) OR (signer_id IS NULL))),
+    CONSTRAINT separation_signoffs_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_signoffs_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
+    CONSTRAINT separation_signoffs_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
+    CONSTRAINT separation_signoffs_signed_shape CHECK (((signed_at IS NULL) = (signature_data IS NULL)))
+);
+
+
+--
+-- Name: separation_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.separation_units (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    kind text NOT NULL,
+    name_fa text NOT NULL,
+    name_en text NOT NULL,
+    department_id uuid,
+    signer_id uuid,
+    sort_order integer DEFAULT 0 NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    CONSTRAINT separation_units_kind CHECK ((kind = ANY (ARRAY['hr'::text, 'department'::text, 'own_department'::text, 'person'::text]))),
+    CONSTRAINT separation_units_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_units_shape CHECK ((((kind = 'hr'::text) AND (department_id IS NULL) AND (signer_id IS NULL) AND active) OR ((kind = 'department'::text) AND (signer_id IS NULL)) OR ((kind = 'own_department'::text) AND (department_id IS NULL) AND (signer_id IS NULL)) OR ((kind = 'person'::text) AND (department_id IS NULL))))
+);
+
+
+--
+-- Name: separations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.separations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    reason text NOT NULL,
+    last_working_day date NOT NULL,
+    hire_date date,
+    father_name text,
+    birth_cert_no text,
+    note text,
+    status text DEFAULT 'in_progress'::text NOT NULL,
+    finance_signed_by uuid,
+    finance_signed_at timestamp with time zone,
+    finance_signature_data text,
+    finance_signature_consent_at timestamp with time zone,
+    finance_note text,
+    settlement_date date,
+    deactivated_at timestamp with time zone,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    cancelled_by uuid,
+    cancelled_at timestamp with time zone,
+    CONSTRAINT separations_birth_cert_no CHECK (((birth_cert_no IS NULL) OR (birth_cert_no ~ '^[0-9]{1,10}$'::text))),
+    CONSTRAINT separations_cancelled_shape CHECK (((status = 'cancelled'::text) = (cancelled_at IS NOT NULL))),
+    CONSTRAINT separations_completed_shape CHECK (((status = 'completed'::text) = ((finance_signed_at IS NOT NULL) AND (settlement_date IS NOT NULL)))),
+    CONSTRAINT separations_father_name CHECK (((father_name IS NULL) OR ((char_length(btrim(father_name)) >= 1) AND (char_length(btrim(father_name)) <= 100)))),
+    CONSTRAINT separations_finance_note_len CHECK (((finance_note IS NULL) OR (length(finance_note) <= 500))),
+    CONSTRAINT separations_finance_signature_shape CHECK ((((finance_signature_data IS NULL) AND (finance_signature_consent_at IS NULL)) OR ((finance_signature_data IS NOT NULL) AND (finance_signature_consent_at IS NOT NULL) AND ((length(finance_signature_data) >= 100) AND (length(finance_signature_data) <= 350000)) AND (mod(length(finance_signature_data), 4) = 2) AND (finance_signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
+    CONSTRAINT separations_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
+    CONSTRAINT separations_reason CHECK ((reason = ANY (ARRAY['resignation'::text, 'dismissal'::text, 'contract_end'::text, 'abandonment'::text, 'redundancy'::text]))),
+    CONSTRAINT separations_status CHECK ((status = ANY (ARRAY['in_progress'::text, 'awaiting_finance'::text, 'completed'::text, 'cancelled'::text])))
+);
+
+
+--
 -- Name: team_leave_calendar; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -3621,6 +4848,27 @@ CREATE TABLE public.user_roles (
     user_id uuid NOT NULL,
     role public.app_role NOT NULL
 );
+
+
+--
+-- Name: user_signatures; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_signatures (
+    user_id uuid NOT NULL,
+    signature_data text NOT NULL,
+    source text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_signatures_shape CHECK ((((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text))),
+    CONSTRAINT user_signatures_source CHECK ((source = ANY (ARRAY['drawn'::text, 'upload'::text])))
+);
+
+
+--
+-- Name: TABLE user_signatures; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.user_signatures IS 'FR-52: one saved signature per user. Owner-only by RLS (no admin path). Requests keep their own copy.';
 
 
 --
@@ -3725,6 +4973,14 @@ ALTER TABLE ONLY public.employee_leave_policies
 
 
 --
+-- Name: employee_personal_info employee_personal_info_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_personal_info
+    ADD CONSTRAINT employee_personal_info_pkey PRIMARY KEY (employee_id);
+
+
+--
 -- Name: holidays holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3805,6 +5061,30 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: separation_signoffs separation_signoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_signoffs
+    ADD CONSTRAINT separation_signoffs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: separation_units separation_units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_units
+    ADD CONSTRAINT separation_units_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: separations separations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: user_roles user_roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3818,6 +5098,14 @@ ALTER TABLE ONLY public.user_roles
 
 ALTER TABLE ONLY public.user_roles
     ADD CONSTRAINT user_roles_user_id_role_key UNIQUE (user_id, role);
+
+
+--
+-- Name: user_signatures user_signatures_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_signatures
+    ADD CONSTRAINT user_signatures_pkey PRIMARY KEY (user_id);
 
 
 --
@@ -3882,6 +5170,13 @@ CREATE INDEX departments_manager_id_idx ON public.departments USING btree (manag
 --
 
 CREATE INDEX employee_leave_policies_employee_idx ON public.employee_leave_policies USING btree (employee_id);
+
+
+--
+-- Name: employee_personal_info_company_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX employee_personal_info_company_idx ON public.employee_personal_info USING btree (company_id, complete);
 
 
 --
@@ -4081,6 +5376,62 @@ CREATE INDEX profiles_manager_id_idx ON public.profiles USING btree (manager_id)
 
 
 --
+-- Name: separation_signoffs_one_hr; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX separation_signoffs_one_hr ON public.separation_signoffs USING btree (separation_id) WHERE is_hr;
+
+
+--
+-- Name: separation_signoffs_open_signer_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX separation_signoffs_open_signer_idx ON public.separation_signoffs USING btree (signer_id) WHERE (signed_at IS NULL);
+
+
+--
+-- Name: separation_signoffs_separation_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX separation_signoffs_separation_idx ON public.separation_signoffs USING btree (separation_id, sort_order);
+
+
+--
+-- Name: separation_units_company_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX separation_units_company_idx ON public.separation_units USING btree (company_id, sort_order);
+
+
+--
+-- Name: separation_units_one_hr; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX separation_units_one_hr ON public.separation_units USING btree (company_id) WHERE (kind = 'hr'::text);
+
+
+--
+-- Name: separations_company_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX separations_company_idx ON public.separations USING btree (company_id, created_at DESC);
+
+
+--
+-- Name: separations_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX separations_due_idx ON public.separations USING btree (last_working_day) WHERE ((status <> 'cancelled'::text) AND (deactivated_at IS NULL));
+
+
+--
+-- Name: separations_one_live; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX separations_one_live ON public.separations USING btree (employee_id) WHERE ((status <> 'cancelled'::text) AND (deactivated_at IS NULL));
+
+
+--
 -- Name: user_roles_user_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4137,6 +5488,20 @@ CREATE TRIGGER employee_leave_policies_set_updated_at BEFORE UPDATE ON public.em
 
 
 --
+-- Name: employee_personal_info employee_personal_info_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER employee_personal_info_audit AFTER UPDATE ON public.employee_personal_info FOR EACH ROW EXECUTE FUNCTION private.audit_personal_info();
+
+
+--
+-- Name: employee_personal_info employee_personal_info_before_update; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER employee_personal_info_before_update BEFORE UPDATE ON public.employee_personal_info FOR EACH ROW EXECUTE FUNCTION private.personal_info_before_update();
+
+
+--
 -- Name: holidays holidays_audit_change; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4158,6 +5523,13 @@ CREATE TRIGGER profiles_audit_update AFTER UPDATE ON public.profiles FOR EACH RO
 
 
 --
+-- Name: profiles profiles_create_personal_info; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER profiles_create_personal_info AFTER INSERT ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.profiles_create_personal_info();
+
+
+--
 -- Name: profiles profiles_enforce_update_scope; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4169,6 +5541,20 @@ CREATE TRIGGER profiles_enforce_update_scope BEFORE UPDATE ON public.profiles FO
 --
 
 CREATE TRIGGER profiles_preserve_active_admin BEFORE UPDATE OF active ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.preserve_active_admin();
+
+
+--
+-- Name: user_signatures user_signatures_audit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER user_signatures_audit AFTER INSERT OR DELETE OR UPDATE ON public.user_signatures FOR EACH ROW EXECUTE FUNCTION private.audit_user_signature();
+
+
+--
+-- Name: user_signatures user_signatures_touch; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER user_signatures_touch BEFORE INSERT OR UPDATE ON public.user_signatures FOR EACH ROW EXECUTE FUNCTION private.user_signatures_touch();
 
 
 --
@@ -4247,6 +5633,30 @@ ALTER TABLE ONLY public.employee_leave_policies
 
 ALTER TABLE ONLY public.employee_leave_policies
     ADD CONSTRAINT employee_leave_policies_leave_type_id_fkey FOREIGN KEY (leave_type_id) REFERENCES public.leave_types(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: employee_personal_info employee_personal_info_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_personal_info
+    ADD CONSTRAINT employee_personal_info_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: employee_personal_info employee_personal_info_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_personal_info
+    ADD CONSTRAINT employee_personal_info_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: employee_personal_info employee_personal_info_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_personal_info
+    ADD CONSTRAINT employee_personal_info_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -4410,11 +5820,115 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: separation_signoffs separation_signoffs_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_signoffs
+    ADD CONSTRAINT separation_signoffs_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separation_signoffs separation_signoffs_separation_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_signoffs
+    ADD CONSTRAINT separation_signoffs_separation_id_fkey FOREIGN KEY (separation_id) REFERENCES public.separations(id) ON DELETE CASCADE;
+
+
+--
+-- Name: separation_signoffs separation_signoffs_signed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_signoffs
+    ADD CONSTRAINT separation_signoffs_signed_by_fkey FOREIGN KEY (signed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separation_signoffs separation_signoffs_signer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_signoffs
+    ADD CONSTRAINT separation_signoffs_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separation_units separation_units_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_units
+    ADD CONSTRAINT separation_units_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: separation_units separation_units_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_units
+    ADD CONSTRAINT separation_units_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separation_units separation_units_signer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separation_units
+    ADD CONSTRAINT separation_units_signer_id_fkey FOREIGN KEY (signer_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separations separations_cancelled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_cancelled_by_fkey FOREIGN KEY (cancelled_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separations separations_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: separations separations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: separations separations_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: separations separations_finance_signed_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.separations
+    ADD CONSTRAINT separations_finance_signed_by_fkey FOREIGN KEY (finance_signed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.user_roles
     ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_signatures user_signatures_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_signatures
+    ADD CONSTRAINT user_signatures_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -4544,6 +6058,34 @@ ALTER TABLE public.employee_leave_policies ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY employee_leave_policies_select ON public.employee_leave_policies FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.can_read_all(( SELECT auth.uid() AS uid)))));
+
+
+--
+-- Name: employee_personal_info; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.employee_personal_info ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: employee_personal_info employee_personal_info_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY employee_personal_info_select ON public.employee_personal_info FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.view'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
+
+
+--
+-- Name: employee_personal_info employee_personal_info_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR (NOT (EXISTS ( SELECT 1
+   FROM public.user_roles r
+  WHERE ((r.user_id = employee_personal_info.employee_id) AND (r.role = 'admin'::public.app_role)))))))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 
 
 --
@@ -4729,6 +6271,47 @@ CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USI
 
 
 --
+-- Name: separation_signoffs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.separation_signoffs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: separation_signoffs separation_signoffs_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY separation_signoffs_select ON public.separation_signoffs FOR SELECT TO authenticated USING (private.can_read_separation(( SELECT auth.uid() AS uid), separation_id));
+
+
+--
+-- Name: separation_units; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.separation_units ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: separation_units separation_units_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY separation_units_select ON public.separation_units FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
+
+
+--
+-- Name: separations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.separations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: separations separations_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY separations_select ON public.separations FOR SELECT TO authenticated USING (private.can_read_separation(( SELECT auth.uid() AS uid), id));
+
+
+--
 -- Name: user_roles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -4746,6 +6329,19 @@ CREATE POLICY user_roles_select ON public.user_roles FOR SELECT TO authenticated
 --
 
 CREATE POLICY user_roles_select_auth_admin ON public.user_roles FOR SELECT TO supabase_auth_admin USING (true);
+
+
+--
+-- Name: user_signatures; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_signatures ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_signatures user_signatures_owner; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY user_signatures_owner ON public.user_signatures TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) AND private.is_active(( SELECT auth.uid() AS uid)))) WITH CHECK (((user_id = ( SELECT auth.uid() AS uid)) AND private.is_active(( SELECT auth.uid() AS uid))));
 
 
 --
@@ -4808,6 +6404,13 @@ REVOKE ALL ON FUNCTION private.allocate_leave_impl(p_actor uuid, p_employee_id u
 
 
 --
+-- Name: FUNCTION apply_due_separations(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.apply_due_separations(p_id uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attach_request_signature(p_request_id uuid, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: private; Owner: -
 --
 
@@ -4827,6 +6430,14 @@ REVOKE ALL ON FUNCTION private.audit_row_change() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION private.can_read_all(uid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.can_read_all(uid uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION can_read_separation(uid uuid, p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_read_separation(uid uuid, p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.can_read_separation(uid uuid, p_id uuid) TO authenticated;
 
 
 --
@@ -4913,10 +6524,38 @@ GRANT ALL ON FUNCTION private.is_manager_of(uid uuid, target uuid) TO authentica
 
 
 --
+-- Name: FUNCTION is_valid_card_no(p text); Type: ACL; Schema: private; Owner: -
+--
+
+GRANT ALL ON FUNCTION private.is_valid_card_no(p text) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_valid_national_id(p text); Type: ACL; Schema: private; Owner: -
+--
+
+GRANT ALL ON FUNCTION private.is_valid_national_id(p text) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_valid_sheba(p text); Type: ACL; Schema: private; Owner: -
+--
+
+GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
+
+
+--
 -- Name: FUNCTION preserve_active_admin(); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.preserve_active_admin() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION refresh_separation_status(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 
 
 --
@@ -4932,6 +6571,41 @@ REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_star
 
 REVOKE ALL ON FUNCTION private.same_team(uid uuid, target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.same_team(uid uuid, target uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION separation_caller_company(p_uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.separation_caller_company(p_uid uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION separation_check_fields(p_reason text, p_last_day date, p_note text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.separation_check_fields(p_reason text, p_last_day date, p_note text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION separation_check_signature(p_data text, p_authorized boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.separation_check_signature(p_data text, p_authorized boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION separation_manageable(p_uid uuid, p_company uuid, p_employee uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.separation_manageable(p_uid uuid, p_company uuid, p_employee uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION separation_row_signer(p_company uuid, p_employee uuid, p_row jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.separation_row_signer(p_company uuid, p_employee uuid, p_row jsonb) FROM PUBLIC;
 
 
 --
@@ -5029,6 +6703,16 @@ GRANT ALL ON FUNCTION public.app_bulk_set_employee_passwords(p_resets jsonb) TO 
 
 
 --
+-- Name: FUNCTION app_cancel_separation(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_cancel_separation(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_cancel_separation(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_cancel_separation(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_cancel_separation(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_change_my_password(p_current text, p_new text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -5059,6 +6743,86 @@ GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_nam
 
 
 --
+-- Name: FUNCTION app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_export_personal_info(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_export_personal_info() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_export_personal_info() TO postgres;
+GRANT ALL ON FUNCTION public.app_export_personal_info() TO authenticated;
+GRANT ALL ON FUNCTION public.app_export_personal_info() TO service_role;
+
+
+--
+-- Name: FUNCTION app_get_separation(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_get_separation(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_import_personal_info(p_rows jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_import_personal_info(p_rows jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_import_personal_info(p_rows jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_import_personal_info(p_rows jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_import_personal_info(p_rows jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_list_separations(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_list_separations() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_list_separations() TO postgres;
+GRANT ALL ON FUNCTION public.app_list_separations() TO authenticated;
+GRANT ALL ON FUNCTION public.app_list_separations() TO service_role;
+
+
+--
+-- Name: FUNCTION app_save_separation_units(p_units jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_separation_balances(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_separation_balances(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_separation_balances(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_separation_balances(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_separation_balances(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_separation_warnings(p_employee_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_employee_password(p_user_id uuid, p_password text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -5079,6 +6843,16 @@ GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO service_rol
 
 
 --
+-- Name: FUNCTION app_set_separation_signoffs(p_id uuid, p_rows jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_user_roles(p_user_id uuid, p_roles public.app_role[]); Type: ACL; Schema: public; Owner: -
 --
 
@@ -5086,6 +6860,36 @@ REVOKE ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date) TO postgres;
+GRANT ALL ON FUNCTION public.app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sign_separation_finance(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text, p_settlement_date date) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO service_role;
 
 
 --
@@ -5335,6 +7139,15 @@ GRANT ALL ON TABLE public.employee_leave_policies TO service_role;
 
 
 --
+-- Name: TABLE employee_personal_info; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.employee_personal_info TO postgres;
+GRANT ALL ON TABLE public.employee_personal_info TO service_role;
+GRANT SELECT,UPDATE ON TABLE public.employee_personal_info TO authenticated;
+
+
+--
 -- Name: TABLE holidays; Type: ACL; Schema: public; Owner: -
 --
 
@@ -5436,6 +7249,33 @@ GRANT SELECT(language_pref) ON TABLE public.profiles TO supabase_auth_admin;
 
 
 --
+-- Name: TABLE separation_signoffs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.separation_signoffs TO postgres;
+GRANT ALL ON TABLE public.separation_signoffs TO service_role;
+GRANT SELECT ON TABLE public.separation_signoffs TO authenticated;
+
+
+--
+-- Name: TABLE separation_units; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.separation_units TO postgres;
+GRANT ALL ON TABLE public.separation_units TO service_role;
+GRANT SELECT ON TABLE public.separation_units TO authenticated;
+
+
+--
+-- Name: TABLE separations; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.separations TO postgres;
+GRANT ALL ON TABLE public.separations TO service_role;
+GRANT SELECT ON TABLE public.separations TO authenticated;
+
+
+--
 -- Name: TABLE team_leave_calendar; Type: ACL; Schema: public; Owner: -
 --
 
@@ -5453,6 +7293,15 @@ GRANT ALL ON TABLE public.user_roles TO anon;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE ON TABLE public.user_roles TO authenticated;
 GRANT ALL ON TABLE public.user_roles TO service_role;
 GRANT SELECT ON TABLE public.user_roles TO supabase_auth_admin;
+
+
+--
+-- Name: TABLE user_signatures; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.user_signatures TO postgres;
+GRANT ALL ON TABLE public.user_signatures TO service_role;
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_signatures TO authenticated;
 
 
 --

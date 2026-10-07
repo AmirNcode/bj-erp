@@ -32,6 +32,9 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { HomeBoard, type PulseCards } from './HomeBoard';
+import { ProfileReminderCard } from './ProfileReminderCard';
+import { ClearanceAwaitingCard } from './ClearanceAwaitingCard';
+import { createClient } from '@/lib/supabase/server';
 import type { PendingRow } from './PendingApprovalsCard';
 import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -203,18 +206,18 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
   });
 
   // ── my balance ───────────────────────────────────────────────────────────
-  const usage = (usageRes.ok ? usageRes.usage : []).map((u) => ({
-    id: u.leaveTypeId,
-    name: localizedLeaveTypeName(u, locale),
-    hasBalance: u.hasBalance,
-    leftOf: t.rich('balanceLeftOf', {
-      left: duration(u.leftMinutes),
-      entitled: duration(u.entitledMinutes),
-      b: (chunks) => <b className="font-bold text-foreground">{chunks}</b>,
-    }),
-    used: t('balanceUsed', { used: duration(u.usedMinutes) }),
-    ratio: u.entitledMinutes > 0 ? u.leftMinutes / u.entitledMinutes : 0,
-  }));
+  // Only the remaining amount (owner, 2026-10-07). Types without a balance
+  // (unpaid leave) have nothing to show, so they are left out.
+  const usage = (usageRes.ok ? usageRes.usage : [])
+    .filter((u) => u.hasBalance)
+    .map((u) => ({
+      id: u.leaveTypeId,
+      name: localizedLeaveTypeName(u, locale),
+      remaining: t.rich('balanceRemaining', {
+        left: duration(u.leftMinutes),
+        b: (chunks) => <b className="font-bold text-foreground">{chunks}</b>,
+      }),
+    }));
 
   // ── next holiday ─────────────────────────────────────────────────────────
   const nextHoliday = holiday
@@ -319,6 +322,19 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
   );
 }
 
+// ── FR-52/53 nudge: two tiny own-row reads, streamed separately ─────────────
+async function ProfileReminder({ locale, userId }: { locale: string; userId: string }) {
+  const supabase = await createClient();
+  const [{ data: info }, { count }] = await Promise.all([
+    supabase.from('employee_personal_info').select('complete').eq('employee_id', userId).maybeSingle(),
+    supabase.from('user_signatures').select('user_id', { count: 'exact', head: true }).eq('user_id', userId),
+  ]);
+  const needsInfo = info ? !info.complete : false;
+  const needsSignature = count === 0;
+  if (!needsInfo && !needsSignature) return null;
+  return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;
+}
+
 // ── page shell: paints instantly, all data streams in via Suspense ─────────
 export default async function HomePage({ params }: Props) {
   const { locale } = await params;
@@ -330,15 +346,23 @@ export default async function HomePage({ params }: Props) {
   if (!user) return null;
 
   return (
-    <Suspense
-      fallback={
-        <div className="space-y-5">
-          <Skeleton className="h-8 w-44" />
-          <BoardSkeleton />
-        </div>
-      }
-    >
-      <HomeBoardData locale={locale} userId={user.id} />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <ProfileReminder locale={locale} userId={user.id} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ClearanceAwaitingCard locale={locale} />
+      </Suspense>
+      <Suspense
+        fallback={
+          <div className="space-y-5">
+            <Skeleton className="h-8 w-44" />
+            <BoardSkeleton />
+          </div>
+        }
+      >
+        <HomeBoardData locale={locale} userId={user.id} />
+      </Suspense>
+    </>
   );
 }

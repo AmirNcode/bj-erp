@@ -188,6 +188,99 @@ export type Database = {
           },
         ]
       }
+      employee_personal_info: {
+        Row: {
+          address: string | null
+          bank_account_no: string | null
+          bank_name: string | null
+          birth_cert_no: string | null
+          birth_date: string | null
+          birth_place: string | null
+          card_no: string | null
+          children_count: number | null
+          company_id: string
+          complete: boolean
+          education: string | null
+          emergency_name: string | null
+          emergency_phone: string | null
+          employee_id: string
+          father_name: string | null
+          gender: string | null
+          home_phone: string | null
+          insurance_no: string | null
+          marital_status: string | null
+          military_status: string | null
+          mobile: string | null
+          national_id: string | null
+          postal_code: string | null
+          sheba: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          address?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
+          birth_cert_no?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          card_no?: string | null
+          children_count?: number | null
+          company_id: string
+          education?: string | null
+          emergency_name?: string | null
+          emergency_phone?: string | null
+          employee_id: string
+          father_name?: string | null
+          gender?: string | null
+          home_phone?: string | null
+          insurance_no?: string | null
+          marital_status?: string | null
+          military_status?: string | null
+          mobile?: string | null
+          national_id?: string | null
+          postal_code?: string | null
+          sheba?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          address?: string | null
+          bank_account_no?: string | null
+          bank_name?: string | null
+          birth_cert_no?: string | null
+          birth_date?: string | null
+          birth_place?: string | null
+          card_no?: string | null
+          children_count?: number | null
+          company_id?: string
+          education?: string | null
+          emergency_name?: string | null
+          emergency_phone?: string | null
+          employee_id?: string
+          father_name?: string | null
+          gender?: string | null
+          home_phone?: string | null
+          insurance_no?: string | null
+          marital_status?: string | null
+          military_status?: string | null
+          mobile?: string | null
+          national_id?: string | null
+          postal_code?: string | null
+          sheba?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_personal_info_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holidays: {
         Row: {
           company_id: string
@@ -753,6 +846,228 @@ export type Database = {
           },
         ]
       }
+      separation_signoffs: {
+        Row: {
+          department_id: string | null
+          id: string
+          is_hr: boolean
+          name_en: string
+          name_fa: string
+          note: string | null
+          separation_id: string
+          signature_consent_at: string | null
+          signature_data: string | null
+          signed_at: string | null
+          signed_by: string | null
+          signer_id: string | null
+          sort_order: number
+        }
+        Insert: {
+          department_id?: string | null
+          id?: string
+          is_hr?: boolean
+          name_en: string
+          name_fa: string
+          note?: string | null
+          separation_id: string
+          signature_consent_at?: string | null
+          signature_data?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
+          signer_id?: string | null
+          sort_order?: number
+        }
+        Update: {
+          department_id?: string | null
+          id?: string
+          is_hr?: boolean
+          name_en?: string
+          name_fa?: string
+          note?: string | null
+          separation_id?: string
+          signature_consent_at?: string | null
+          signature_data?: string | null
+          signed_at?: string | null
+          signed_by?: string | null
+          signer_id?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "separation_signoffs_separation_id_fkey"
+            columns: ["separation_id"]
+            isOneToOne: false
+            referencedRelation: "separations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separation_signoffs_signer_id_fkey"
+            columns: ["signer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separation_signoffs_signed_by_fkey"
+            columns: ["signed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separation_signoffs_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      separation_units: {
+        Row: {
+          active: boolean
+          company_id: string
+          department_id: string | null
+          id: string
+          kind: string
+          name_en: string
+          name_fa: string
+          signer_id: string | null
+          sort_order: number
+        }
+        Insert: {
+          active?: boolean
+          company_id: string
+          department_id?: string | null
+          id?: string
+          kind: string
+          name_en: string
+          name_fa: string
+          signer_id?: string | null
+          sort_order?: number
+        }
+        Update: {
+          active?: boolean
+          company_id?: string
+          department_id?: string | null
+          id?: string
+          kind?: string
+          name_en?: string
+          name_fa?: string
+          signer_id?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "separation_units_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separation_units_signer_id_fkey"
+            columns: ["signer_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      separations: {
+        Row: {
+          birth_cert_no: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          deactivated_at: string | null
+          employee_id: string
+          father_name: string | null
+          finance_note: string | null
+          finance_signature_consent_at: string | null
+          finance_signature_data: string | null
+          finance_signed_at: string | null
+          finance_signed_by: string | null
+          hire_date: string | null
+          id: string
+          last_working_day: string
+          note: string | null
+          reason: string
+          settlement_date: string | null
+          status: string
+        }
+        Insert: {
+          birth_cert_no?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          employee_id: string
+          father_name?: string | null
+          finance_note?: string | null
+          finance_signature_consent_at?: string | null
+          finance_signature_data?: string | null
+          finance_signed_at?: string | null
+          finance_signed_by?: string | null
+          hire_date?: string | null
+          id?: string
+          last_working_day: string
+          note?: string | null
+          reason: string
+          settlement_date?: string | null
+          status?: string
+        }
+        Update: {
+          birth_cert_no?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          deactivated_at?: string | null
+          employee_id?: string
+          father_name?: string | null
+          finance_note?: string | null
+          finance_signature_consent_at?: string | null
+          finance_signature_data?: string | null
+          finance_signed_at?: string | null
+          finance_signed_by?: string | null
+          hire_date?: string | null
+          id?: string
+          last_working_day?: string
+          note?: string | null
+          reason?: string
+          settlement_date?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "separations_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separations_finance_signed_by_fkey"
+            columns: ["finance_signed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "separations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -774,6 +1089,35 @@ export type Database = {
             foreignKeyName: "user_roles_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_signatures: {
+        Row: {
+          signature_data: string
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          signature_data: string
+          source: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          signature_data?: string
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_signatures_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -956,6 +1300,118 @@ export type Database = {
         Args: { p_resets: Json }
         Returns: undefined
       }
+      app_export_personal_info: {
+        Args: never
+        Returns: {
+          personnel_no: string | null
+          employee_code: string
+          full_name: string
+          active: boolean
+          national_id: string | null
+          birth_cert_no: string | null
+          father_name: string | null
+          birth_date: string | null
+          birth_place: string | null
+          gender: string | null
+          marital_status: string | null
+          bank_name: string | null
+          bank_account_no: string | null
+          sheba: string | null
+          card_no: string | null
+          mobile: string | null
+          home_phone: string | null
+          address: string | null
+          postal_code: string | null
+          emergency_name: string | null
+          emergency_phone: string | null
+          insurance_no: string | null
+          education: string | null
+          military_status: string | null
+          children_count: number | null
+        }[]
+      }
+      app_import_personal_info: {
+        Args: {
+          p_rows: Json
+        }
+        Returns: Json
+      }
+      app_cancel_separation: { Args: { p_id: string }; Returns: undefined }
+      app_create_separation: {
+        Args: {
+          p_birth_cert_no: string | null
+          p_employee_id: string
+          p_father_name: string | null
+          p_last_working_day: string
+          p_note: string | null
+          p_reason: string
+          p_rows: Json
+        }
+        Returns: string
+      }
+      app_get_separation: { Args: { p_id: string }; Returns: Json }
+      app_list_separations: {
+        Args: never
+        Returns: {
+          awaiting_me: boolean
+          created_at: string
+          deactivated_at: string | null
+          department_name_en: string | null
+          department_name_fa: string | null
+          employee_id: string
+          employee_name: string
+          id: string
+          last_working_day: string
+          personnel_no: string | null
+          reason: string
+          rows_signed: number
+          rows_total: number
+          status: string
+        }[]
+      }
+      app_save_separation_units: { Args: { p_units: Json }; Returns: undefined }
+      app_separation_balances: {
+        Args: { p_id: string }
+        Returns: {
+          balance_minutes: number
+          leave_type_id: string
+          name_en: string
+          name_fa: string
+        }[]
+      }
+      app_separation_warnings: { Args: { p_employee_id: string }; Returns: Json }
+      app_set_separation_signoffs: {
+        Args: { p_id: string; p_rows: Json }
+        Returns: undefined
+      }
+      app_sign_separation_finance: {
+        Args: {
+          p_id: string
+          p_note: string | null
+          p_settlement_date: string | null
+          p_signature_authorized: boolean
+          p_signature_data: string
+        }
+        Returns: undefined
+      }
+      app_sign_separation_row: {
+        Args: {
+          p_note: string | null
+          p_row_id: string
+          p_signature_authorized: boolean
+          p_signature_data: string
+        }
+        Returns: undefined
+      }
+      app_update_separation: {
+        Args: {
+          p_id: string
+          p_last_working_day: string
+          p_note: string | null
+          p_reason: string
+        }
+        Returns: undefined
+      }
       app_set_user_roles: {
         Args: {
           p_roles: Database["public"]["Enums"]["app_role"][]
@@ -1133,7 +1589,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "security" | "hr"
+      app_role: "admin" | "manager" | "employee" | "security" | "hr" | "finance"
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
       leave_unit: "day" | "hour"
@@ -1272,7 +1728,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "security", "hr"],
+      app_role: ["admin", "manager", "employee", "security", "hr", "finance"],
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
       leave_unit: ["day", "hour"],

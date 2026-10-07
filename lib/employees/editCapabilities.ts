@@ -9,7 +9,7 @@
 // Rendered as raw slugs. The e2e `createEmployee` helper picks these checkboxes
 // by their exact label text, so translating them is a separate, deliberate
 // change (docs/TASKS.md).
-export const ROLES = ['admin', 'manager', 'employee', 'security', 'hr'] as const;
+export const ROLES = ['admin', 'manager', 'employee', 'security', 'hr', 'finance'] as const;
 export type Role = (typeof ROLES)[number];
 
 export type EditCapabilities = {
@@ -24,6 +24,8 @@ export type EditCapabilities = {
   leave: boolean;
   /** Why an hr caller sees the org fields read-only. */
   lockedReason: 'admin' | 'self' | null;
+  /** Personal information (FR-53): hr reads an admin's but may not change it. */
+  personalInfo: 'edit' | 'view' | null;
 };
 
 export function employeeEditCapabilities({
@@ -45,6 +47,7 @@ export function employeeEditCapabilities({
       resetPassword: true,
       leave: true,
       lockedReason: null,
+      personalInfo: 'edit',
     };
   }
 
@@ -68,5 +71,6 @@ export function employeeEditCapabilities({
     resetPassword: false,
     leave: isHr,
     lockedReason,
+    personalInfo: !isHr ? null : lockedReason === 'admin' ? 'view' : 'edit',
   };
 }

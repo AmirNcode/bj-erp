@@ -14,6 +14,9 @@ export type SignatureLabels = {
   hide: string;
   loading: string;
   authorizedAt: string;
+  /** Shown instead of `instructions` while the saved signature (FR-52) fills the box. */
+  savedNote: string;
+  useSaved: string;
 };
 
 const PNG_DATA_URL_RE = /^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;

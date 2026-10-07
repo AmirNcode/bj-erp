@@ -11,6 +11,10 @@ export type DurationLabels = {
   hours: string;
   minutes: string;
   and: string;
+  /** Singular forms for a count of exactly 1 ("1 hour"); fall back to the plural. */
+  day?: string;
+  hour?: string;
+  minute?: string;
 };
 
 export type DurationParts = {
@@ -80,9 +84,13 @@ export function formatDuration(
   // first part only, or it would read as a sum of two debits.
   const signed = (n: number) => (parts.length === 0 ? n : Math.abs(n));
 
-  if (days !== 0) parts.push(`${formatNumber(signed(days), locale)} ${labels.days}`);
-  if (hours !== 0) parts.push(`${formatNumber(signed(hours), locale)} ${labels.hours}`);
-  if (minutes !== 0) parts.push(`${formatNumber(signed(minutes), locale)} ${labels.minutes}`);
+  const unit = (n: number, plural: string, singular?: string) =>
+    Math.abs(n) === 1 && singular ? singular : plural;
+
+  if (days !== 0) parts.push(`${formatNumber(signed(days), locale)} ${unit(days, labels.days, labels.day)}`);
+  if (hours !== 0) parts.push(`${formatNumber(signed(hours), locale)} ${unit(hours, labels.hours, labels.hour)}`);
+  if (minutes !== 0)
+    parts.push(`${formatNumber(signed(minutes), locale)} ${unit(minutes, labels.minutes, labels.minute)}`);
 
   if (parts.length === 0) return `${formatNumber(0, locale)} ${labels.days}`;
   return parts.join(` ${labels.and} `);

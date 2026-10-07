@@ -6,31 +6,30 @@ import type { SignatureLabels } from '@/lib/leave/signature';
 import { formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { useSavedSignature } from '@/lib/signature/useSavedSignature';
 
 export type { SignatureLabels } from '@/lib/leave/signature';
-
-type SignatureFieldsProps = {
-  idPrefix: string;
-  value: string;
-  onChange: (value: string) => void;
-  authorized: boolean;
-  onAuthorizedChange: (value: boolean) => void;
-  labels: SignatureLabels;
-};
 
 type Point = { x: number; y: number };
 
 const CANVAS_HEIGHT = 160;
 
-/** Mouse, stylus, and touch signature capture through one Pointer Events path. */
-export function RequestSignatureFields({
-  idPrefix,
-  value,
-  onChange,
-  authorized,
-  onAuthorizedChange,
-  labels,
-}: SignatureFieldsProps) {
+type SignatureCanvasProps = {
+  /** PNG data URL shown on the canvas ('' = blank). */
+  value: string;
+  /** Called after each stroke with the canvas exported as PNG. */
+  onChange: (value: string) => void;
+  label: string;
+  describedBy?: string;
+  testId: string;
+};
+
+/**
+ * Mouse, stylus, and touch signature capture through one Pointer Events path.
+ * A stored image is drawn aspect-fit, so a saved 3:1 signature (FR-52) is not
+ * stretched to the box.
+ */
+export function SignatureCanvas({ value, onChange, label, describedBy, testId }: SignatureCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
@@ -49,17 +48,28 @@ export function RequestSignatureFields({
     return context;
   }, []);
 
+  // Bumped on every redraw, so an image that finishes loading after the value
+  // changed (e.g. cleared) does not paint itself back.
+  const drawTokenRef = useRef(0);
+
   const drawStoredValue = useCallback(
     (canvas: HTMLCanvasElement, source: string) => {
+      const token = ++drawTokenRef.current;
       const context = configureContext(canvas);
       if (!context) return;
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      context.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
+      const width = canvas.width / ratio;
+      const height = canvas.height / ratio;
+      context.clearRect(0, 0, width, height);
       if (!source) return;
 
       const image = new Image();
       image.onload = () => {
-        context.drawImage(image, 0, 0, canvas.width / ratio, canvas.height / ratio);
+        if (token !== drawTokenRef.current) return;
+        const scale = Math.min(width / (image.width || width), height / (image.height || height));
+        const w = (image.width || width) * scale;
+        const h = (image.height || height) * scale;
+        context.drawImage(image, (width - w) / 2, (height - h) / 2, w, h);
       };
       image.src = source;
     },
@@ -90,10 +100,13 @@ export function RequestSignatureFields({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    if (value === lastExportRef.current) {
+    // The value is what the canvas just exported: it already shows it. Only a
+    // real export counts; an empty value (Clear) must always wipe the canvas.
+    if (value && value === lastExportRef.current) {
       lastExportRef.current = '';
       return;
     }
+    lastExportRef.current = '';
     drawStoredValue(canvas, value);
   }, [drawStoredValue, value]);
 
@@ -152,15 +165,59 @@ export function RequestSignatureFields({
     if (strokeDistanceRef.current >= 2) exportPng(event.currentTarget);
   };
 
+  return (
+    <canvas
+      ref={canvasRef}
+      role="img"
+      aria-label={label}
+      aria-describedby={describedBy}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishStroke}
+      onPointerCancel={finishStroke}
+      className="h-40 w-full cursor-crosshair rounded-md border border-input bg-white shadow-inner"
+      style={{ touchAction: 'none' }}
+      data-testid={testId}
+    />
+  );
+}
+
+type SignatureFieldsProps = {
+  idPrefix: string;
+  value: string;
+  onChange: (value: string) => void;
+  authorized: boolean;
+  onAuthorizedChange: (value: boolean) => void;
+  labels: SignatureLabels;
+};
+
+/**
+ * A signature box with its per-signing authorization checkbox. When the caller
+ * has a saved signature (FR-52) the box opens with it; consent is still asked
+ * every time, and clearing it lets them draw a new one for this signing only.
+ */
+export function RequestSignatureFields({
+  idPrefix,
+  value,
+  onChange,
+  authorized,
+  onAuthorizedChange,
+  labels,
+}: SignatureFieldsProps) {
+  const saved = useSavedSignature();
+  // Set once the person clears the box, so an empty value is not refilled.
+  const [declinedSaved, setDeclinedSaved] = useState(false);
+
+  useEffect(() => {
+    if (saved && !value && !declinedSaved) onChange(saved);
+  }, [saved, value, declinedSaved, onChange]);
+
   const clear = () => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ratio = Math.min(window.devicePixelRatio || 1, 2);
-      canvas.getContext('2d')?.clearRect(0, 0, canvas.width / ratio, canvas.height / ratio);
-    }
+    setDeclinedSaved(true);
     onChange('');
   };
 
+  const usingSaved = !!saved && value === saved;
   const instructionsId = `${idPrefix}-signature-instructions`;
   const authorizationId = `${idPrefix}-signature-authorization`;
 
@@ -168,22 +225,27 @@ export function RequestSignatureFields({
     <fieldset className="space-y-3 rounded-lg border border-border p-4">
       <legend className="px-1 text-sm font-semibold">{labels.title}</legend>
       <p id={instructionsId} className="text-xs text-muted-foreground">
-        {labels.instructions}
+        {usingSaved ? labels.savedNote : labels.instructions}
       </p>
-      <canvas
-        ref={canvasRef}
-        role="img"
-        aria-label={labels.canvasLabel}
-        aria-describedby={instructionsId}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={finishStroke}
-        onPointerCancel={finishStroke}
-        className="h-40 w-full cursor-crosshair rounded-md border border-input bg-white shadow-inner"
-        style={{ touchAction: 'none' }}
-        data-testid={`${idPrefix}-signature-canvas`}
+      <SignatureCanvas
+        value={value}
+        onChange={onChange}
+        label={labels.canvasLabel}
+        describedBy={instructionsId}
+        testId={`${idPrefix}-signature-canvas`}
       />
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        {saved && !usingSaved && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange(saved)}
+            data-testid={`${idPrefix}-signature-use-saved`}
+          >
+            {labels.useSaved}
+          </Button>
+        )}
         <Button
           type="button"
           variant="outline"

@@ -12,14 +12,15 @@ type Props = {
   /** Locale-prefixed list path, e.g. /fa/manage/employees. */
   base: string;
   query: EmployeesQuery;
-  /** Pre-formatted segment counts; `reports` is null for non-managers. */
-  counts: { all: string; reports: string | null; inactive: string };
+  /** Pre-formatted segment counts; `reports` is null for non-managers, `incomplete` for non-hr/admin. */
+  counts: { all: string; reports: string | null; inactive: string; incomplete: string | null };
   departments: { id: string; name: string }[];
   labels: {
     filterLabel: string;
     filterAll: string;
     filterReports: string;
     filterInactive: string;
+    filterIncomplete: string;
     search: string;
     department: string;
     allDepartments: string;
@@ -58,6 +59,9 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
       ? [{ key: 'reports' as const, label: labels.filterReports, count: counts.reports }]
       : []),
     { key: 'inactive', label: labels.filterInactive, count: counts.inactive },
+    ...(counts.incomplete !== null
+      ? [{ key: 'incomplete' as const, label: labels.filterIncomplete, count: counts.incomplete }]
+      : []),
   ];
 
   return (

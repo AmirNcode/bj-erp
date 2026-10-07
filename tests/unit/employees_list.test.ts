@@ -15,6 +15,10 @@ describe('parseEmployeesQuery', () => {
     expect(parseEmployeesQuery({ filter: 'reports' }, { isManager: false }).filter).toBe('all');
     expect(parseEmployeesQuery({ filter: 'inactive' }, { isManager: false }).filter).toBe('inactive');
     expect(parseEmployeesQuery({ filter: 'bogus' }, { isManager: true }).filter).toBe('all');
+    expect(parseEmployeesQuery({ filter: 'incomplete' }, { isManager: true }).filter).toBe('all');
+    expect(
+      parseEmployeesQuery({ filter: 'incomplete' }, { isManager: false, canSeePersonalInfo: true }).filter
+    ).toBe('incomplete');
   });
   it('rejects a non-uuid department and a bad page', () => {
     const q = parseEmployeesQuery({ dept: "x' or 1=1", page: '-3' }, { isManager: false });

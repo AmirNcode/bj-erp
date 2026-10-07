@@ -11,10 +11,11 @@ describe('employeeEditCapabilities', () => {
     expect(caps(['admin'], ['admin'])).toEqual({
       profile: true,
       org: true,
-      editableRoles: ['admin', 'manager', 'employee', 'security', 'hr'],
+      editableRoles: ['admin', 'manager', 'employee', 'security', 'hr', 'finance'],
       resetPassword: true,
       leave: true,
       lockedReason: null,
+      personalInfo: 'edit',
     });
   });
 
@@ -26,6 +27,7 @@ describe('employeeEditCapabilities', () => {
       resetPassword: false,
       leave: true,
       lockedReason: null,
+      personalInfo: 'edit',
     });
   });
 
@@ -40,6 +42,7 @@ describe('employeeEditCapabilities', () => {
       org: false,
       editableRoles: [],
       lockedReason: 'admin',
+      personalInfo: 'view',
     });
   });
 
@@ -60,6 +63,7 @@ describe('employeeEditCapabilities', () => {
       resetPassword: false,
       leave: false,
       lockedReason: null,
+      personalInfo: null,
     });
   });
 

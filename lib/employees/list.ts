@@ -6,7 +6,8 @@
 
 export const EMPLOYEES_PAGE_SIZE = 25;
 
-export type EmployeesFilter = 'all' | 'reports' | 'inactive';
+/** `incomplete`: active people whose personal info (FR-53) lacks a core field; hr/admin only. */
+export type EmployeesFilter = 'all' | 'reports' | 'inactive' | 'incomplete';
 
 export type EmployeesQuery = {
   q: string;
@@ -23,13 +24,21 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Parses the search params. `reports` is only honoured for managers; anything
- * unknown falls back to the default, so a hand-edited URL never errors.
+ * Parses the search params. `reports` is only honoured for managers and
+ * `incomplete` for personal-info readers; anything unknown falls back to the
+ * default, so a hand-edited URL never errors.
  */
-export function parseEmployeesQuery(params: Params, opts: { isManager: boolean }): EmployeesQuery {
+export function parseEmployeesQuery(
+  params: Params,
+  opts: { isManager: boolean; canSeePersonalInfo?: boolean }
+): EmployeesQuery {
   const rawFilter = one(params.filter);
   const filter: EmployeesFilter =
-    rawFilter === 'inactive' || (rawFilter === 'reports' && opts.isManager) ? rawFilter : 'all';
+    rawFilter === 'inactive' ||
+    (rawFilter === 'reports' && opts.isManager) ||
+    (rawFilter === 'incomplete' && opts.canSeePersonalInfo)
+      ? rawFilter
+      : 'all';
   const dept = one(params.dept);
   const page = Number.parseInt(one(params.page), 10);
   return {

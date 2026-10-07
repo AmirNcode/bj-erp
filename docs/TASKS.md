@@ -21,6 +21,13 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   Milad 490 left — until then they report to Sahraei); HR corrects the three balances counted to other dates (notes column: Fateme
   Fouladi "to year end", Sousan Fouladi "incl. Mehr", Mousavi "incl. Shahrivar").
 
+- ☐ **Clearance form setup (FR-54, after release):** in Profile › Clearance forms › Default rows,
+  assign a signer (person or department) to every row except HR, or untick the ones not used; give
+  the finance manager the `finance` role. Until then new forms start with unassigned rows HR must
+  assign or remove. Confirm with the client whether «مدیریت» stays a regular row (Amir: may change).
+- ☐ **After the first FR-54 deploy on Liara:** check `select jobname, schedule from cron.job` shows
+  `bj-apply-separations`, and after the first night `cron.job_run_details` shows a succeeded run.
+
 ## Pilot launch (owner)
 
 - ☐ `www.bjeng.app`: add the DNS record; then the Caddy site needs the extra hostname and a redirect
@@ -43,6 +50,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   notifications item below once a provider is chosen.
 
 ## Product backlog
+
+- ☐ **Encrypt backups** now that they hold national IDs and bank details (FR-53): the Liara backup
+  copies on the owner's Mac belong on an encrypted disk (owner action), or encrypt the dump files.
 
 - ☐ **Admin-configurable roles and permissions** (owner, 2026-10-07). Admin creates a role (name),
   ticks a permission level per area (not allowed / read only / edit), and the role appears in the

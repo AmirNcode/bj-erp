@@ -17,5 +17,8 @@ export function durationLabelsFrom(t: (key: string) => string): DurationLabels {
     hours: t('hours'),
     minutes: t('minutes'),
     and: t('and'),
+    day: t('day'),
+    hour: t('hour'),
+    minute: t('minute'),
   };
 }

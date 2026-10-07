@@ -329,6 +329,25 @@ repository's minimal Docker stack. Use `docs/DEPLOY-LIARA.md` and the latest AGE
 - Public values are substituted into a placeholder-built Linux image at container startup.
   Never build/send actual private configuration or database backups.
 
+### Scheduled SQL runs with no user; the profile guard refuses it (FR-54)
+pg_cron (in the db image, `cron.job`) runs jobs as `supabase_admin` with no `auth.uid()`, and
+`enforce_profile_update_scope` refuses any profile update without one. The clearance job sets a
+transaction-local GUC (`bj.separation_apply`) that the guard honours for `active` true→false only,
+the same pattern as `bj.password_flag_write`. A new scheduled job that writes guarded tables needs
+its own narrow flag; never make the guard trust a null uid. Jobs are not in `schema.sql` (it dumps
+public/private only): check `cron.job` / `cron.job_run_details`.
+
+### SQL scenario files: a check in the same statement reads the old snapshot
+`select expect(..., try_as(... rpc ...) || (select status from t))` reads `t` as of the statement
+start, before the RPC wrote. Assert the RPC and its effect in separate statements. Same for
+`expect('x', file(...), (select id from fx ...))`: the expected value is computed before `file()`
+stores it.
+
+### next-intl: a key can't be both a string and a namespace
+`clearance.print` was a button label and the print sheet's namespace; the JSON object silently won
+and `t('print')` threw `INSUFFICIENT_PATH` at render, logged by the server while the page still
+rendered. Grep server output after an e2e run, and give namespaces names no string uses.
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

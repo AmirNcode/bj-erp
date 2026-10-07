@@ -86,7 +86,8 @@ users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) ·
 as a compatibility column while the UI has no calendar setting) ·
 `active bool` · `must_change_password bool` (default **true** for new rows: the account still uses
 an admin-issued password, FR-50; rows that existed on 2026-10-06 were set false) · `created_at`.
-*Note*: no email required. National ID intentionally omitted unless a later requirement forces it.
+*Note*: no email required. National ID and other personal details live in `employee_personal_info`
+(FR-53), never on `profiles`, so the views and policies that expose profiles cannot leak them.
 
 **`employee_code` formula changed on 2026-07-30 (FR-31).** It is now **`personnel_no` alone**;
 before that it was `departments.code || '-' || personnel_no`. Accounts created earlier were **not
@@ -102,6 +103,56 @@ Two consequences worth knowing before touching this:
   range; the cleanup function matches both the legacy `^[a-z0-9]{2,6}-999[0-9]{7}$` and the current
   `^999[0-9]{7}$`. Dropping either leaves test rows behind on the client's own database, which is
   where e2e runs.
+
+### `employee_personal_info` (2026-10-07, FR-53)
+One row per profile, inserted by the `profiles_create_personal_info` trigger (backfilled for
+existing profiles), deleted by FK cascade; users only UPDATE. `employee_id` PK → profiles ·
+`company_id` (from the profile, pinned) · `national_id` (10 digits, `private.is_valid_national_id`) ·
+`birth_cert_no` · `father_name` · `birth_date date` (1920–2020) · `birth_place` · `gender`
+(`male|female`) · `marital_status` (`single|married`) · `bank_name` · `bank_account_no` · `sheba`
+(`IR`+24 digits, mod-97 `private.is_valid_sheba`) · `card_no` (16 digits, Luhn
+`private.is_valid_card_no`) · `mobile` (`09`+9 digits) · `home_phone` · `postal_code` (10 digits) ·
+`address` · `emergency_name` · `emergency_phone` · `insurance_no` (6–12 digits) · `education`
+(`below_diploma|diploma|associate|bachelor|master|doctorate`) · `military_status`
+(`completed|exempt|educational_exempt|eligible|not_applicable`) · `children_count` (0–20) ·
+`complete` (generated: national ID, father's name, birth date, Sheba and mobile all present) ·
+`updated_at` · `updated_by → profiles`. Every field nullable; digits stored ASCII. The UI mirror of
+every rule is `lib/personal-info/fields.ts`. An update writes `audit_log`
+`personal_info.update` with `after = {"fields": [...]}` (names only, never values).
+`app_export_personal_info()` / `app_import_personal_info(jsonb)` are the bulk paths (see
+PERMISSIONS.md); import writes only non-null keys, so an empty CSV cell never erases.
+
+### `user_signatures` (2026-10-07, FR-52)
+`user_id` PK → profiles (cascade) · `signature_data` (same bounded PNG check as
+`leave_requests.signature_data`) · `source` (`drawn|upload`) · `updated_at`. One saved signature per
+user. The client copies it into a request through the existing signed RPCs, so every request still
+holds its own image and consent timestamp; replacing or deleting the saved one changes nothing
+already signed. Audit rows `signature.saved` / `signature.deleted` carry only `source`.
+
+### Clearance form (2026-10-07, FR-54)
+Spec `docs/specs/2026-10-07-clearance-form-design.md`. Writes only through RPCs; reads RLS +
+`app_list_separations()` / `app_get_separation(id)` (names included).
+- **`separation_units`** — company default rows: `kind` (`hr|department|own_department|person`),
+  `name_fa`, `name_en`, `department_id` (department kind), `signer_id` (person kind; null =
+  unassigned), `sort_order`, `active`. One `hr` row per company (partial unique), always active.
+- **`separations`** — one form: `employee_id` (cascade), `reason`
+  (`resignation|dismissal|contract_end|abandonment|redundancy`), `last_working_day date`, copies of
+  `hire_date`, `father_name`, `birth_cert_no`, `note`; `status`
+  (`in_progress → awaiting_finance → completed`, or `cancelled`); finance signature, remark,
+  `settlement_date`, signer and time; `deactivated_at` (set when the account was switched off);
+  `created_by`, `cancelled_by/at`. One live form per person: partial unique on `employee_id` where
+  not cancelled and not yet applied.
+- **`separation_signoffs`** — the rows of one form: `is_hr` (one per form), names, `department_id`,
+  `signer_id` (null for the HR row and for unassigned rows), `sort_order`, `signed_by`, `signed_at`,
+  signature PNG + consent time, `note` (remark ≤ 500). A department row is signed by that
+  department's active manager at filing (snapshot); a row never names the leaver.
+- **Deactivation:** `private.apply_due_separations(p_id default null)` switches off every form not
+  cancelled, not applied, whose `last_working_day < today (Tehran)`: `profiles.active = false`,
+  pending `leave_requests` → `cancelled`, `deactivated_at`, audit `separation.deactivate`. pg_cron
+  job **`bj-apply-separations`** runs it at `35 20 * * *` UTC (00:05 Tehran). The job lives in
+  `cron.job`, not `supabase/schema.sql`. It sets the transaction-local GUC
+  `bj.separation_apply = on`, which `enforce_profile_update_scope` honours for an `active`
+  true→false change only (the cron run has no `auth.uid()`).
 
 ### `user_roles`
 `id` · `user_id → profiles` · `role app_role` · unique(`user_id`,`role`).

@@ -78,6 +78,164 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — FR-54 clearance form (فرم تسویه حساب)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ a561a42 (with the FR-52/53 work still uncommitted in the tree)
+**Trigger:** Amir asked for a leaving-the-company process from the paper form
+`docs/forms/leave-company-form.jpeg`; clarifying questions in chat (defaults accepted, new
+`finance` role, management row regular, HR files the form, add an IT row, put it under Profile),
+waited for the FR-53 personal-info work, then "write the plan and spec, then build it".
+
+**What changed**
+- Spec `docs/specs/2026-10-07-clearance-form-design.md` (D1–D14, A1–A9); plan
+  `docs/plans/2026-10-07-clearance-form.md` (status + deviations at the top).
+- Migrations: `20261007150001_finance_role.sql` (enum value); `20261007150002_clearance_form.sql`
+  (pg_cron extension, `separation_units` / `separations` / `separation_signoffs`, RLS via
+  `private.can_read_separation`, `has_permission` keys `separations.manage` / `.view`,
+  `enforce_profile_update_scope` re-created verbatim plus the `bj.separation_apply` GUC branch,
+  `private.apply_due_separations`, write RPCs, warnings, balances, seed of 10 default rows per
+  company, cron job `bj-apply-separations` at `35 20 * * *` UTC); `20261007150003_clearance_read.sql`
+  (`app_list_separations`, `app_get_separation`, added mid-build because a signer cannot read the
+  leaver's profile and the org chart drops inactive people). `schema.sql` re-dumped, `types.ts`
+  hand-edited.
+- `lib/clearance/model.ts` (pure: reasons, draft rows from units, payload, can-sign mirrors),
+  `lib/actions/clearance.ts`, db-error keys, `messages/*` (`clearance`, `roles.finance`,
+  `dbErrors.clearance*`).
+- UI: `/profile/clearance` (list), `/new`, `/[id]` (sign dialogs reuse `RequestSignatureFields`,
+  lazy signature viewer, edit details / rows / cancel), `/units` (default rows),
+  `/print/clearance/[id]`; Profile link card; Home `ClearanceAwaitingCard`. `finance` added to
+  `ROLES` (employee role checkboxes), `ROLE_ORDER`, `ROLE_PRIORITY`.
+- Tests: `tests/sql/fr54-clearance.sql` (82 scenarios), `tests/unit/clearance-model.test.ts`,
+  `tests/e2e/clearance.spec.ts`, `edit-capabilities` test updated.
+- Docs: REQUIREMENTS FR-54, DATA_MODEL, PERMISSIONS (finance role + section), CHANGELOG, TASKS (row
+  setup + check the cron job after the Liara deploy), MEMORY (three lessons).
+
+**Actions outside the repo**
+- Local DB only. Ran migration 1's single `alter type … add value if not exists 'finance'` by hand
+  before the dry run (an enum value cannot be used in the transaction that adds it); idempotent,
+  and `bj-deploy update local` then applied and recorded `20261007150001`–`…0002`, later `…0003`
+  (each run took its verified backup and rebuilt the local app image; health OK). Restarted
+  `bj-erp-rest-1`; `npm run schema:dump`.
+- pg_cron probe: scheduled `bj-cron-probe` (`* * * * *`, calls the apply function), confirmed one
+  `succeeded` run in `cron.job_run_details` at 17:02 UTC, then `cron.unschedule('bj-cron-probe')`.
+  Only `bj-apply-separations` remains.
+- A temporary Playwright file (`tests/e2e/zz-clearance-screens.spec.ts`, deleted) captured Farsi
+  screenshots with throwaway users; teardown reaped them. Final check: 0 separations, 10 units,
+  no deactivation audit on a real profile. Nothing on Liara.
+
+**Verification**
+- SQL: dry run (migration + scenarios, rolled back) 74/74, then 82/82 with the read RPCs; on the
+  migrated DB 82/82; `fr51` 40/40 and `fr52-53` 53/53 still pass.
+- Unit 598 passed; `tsc`, lint, `npm run build`, `npm run test:deploy` clean.
+- e2e (`--workers=1`, `next dev`): clearance, hr-employee-admin, signature-personal-info, approval,
+  home, hr-role, nav, auth: 21/21. The first clearance run passed but the server log showed
+  `INSUFFICIENT_PATH` for `clearance.print` (string and namespace on one key); fixed, all message
+  keys used by the clearance screens checked to resolve in fa and en.
+- Not run: the full e2e suite; `accrual.spec`.
+
+**State left behind**
+- Uncommitted on `main`, together with the FR-52/53 work (Amir commits). Untracked `docs/design/`
+  and `docs/forms/leave-company-form.jpeg` were there before.
+
+**For the next agent**
+- Release order matters: migrations `150001` before `150002` (CI applies them in filename order).
+  After the Liara deploy, check `cron.job` and, the next morning, `cron.job_run_details` (TASKS).
+- The seeded default rows are unassigned `person` rows; until admin/hr assigns them in Default
+  rows, every new form needs HR to assign or remove those rows (unassigned rows cannot be signed).
+- Deactivation runs regardless of form status; reactivating via Edit Employee is safe
+  (`deactivated_at` stops the job re-applying).
+- "Who fills the form" was confirmed as HR; employees filing their own resignation is out of scope.
+
+## 2026-10-07 — FR-52 saved signature + FR-53 personal information
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ a561a42
+**Trigger:** Amir asked for two new per-account settings: a saved signature (drawn or uploaded,
+cropped + compressed) and personal information (ID, bank, father's name, …). Clarifying questions
+in chat, then "write the spec then build". No separate plan document (build order is spec §8).
+
+**What changed**
+- Spec `docs/specs/2026-10-07-saved-signature-and-personal-info-design.md` (decisions D1–D6 from
+  chat, A1–A7 assumptions).
+- Migration `supabase/migrations/20261007140001_saved_signature_personal_info.sql`: validators
+  `private.is_valid_national_id` / `is_valid_sheba` / `is_valid_card_no`; `has_permission` keys
+  `personal_info.view` / `.edit`; tables `user_signatures` (owner-only RLS) and
+  `employee_personal_info` (row per profile via insert trigger + backfill, owner + hr/admin RLS,
+  field-name audit trigger, generated `complete`); RPCs `app_export_personal_info`,
+  `app_import_personal_info`. `supabase/schema.sql` re-dumped; `lib/supabase/types.ts` hand-edited.
+- `lib/personal-info/fields.ts` (field list, normalise + validate, mirrors the SQL CHECKs),
+  `lib/personal-info/csv.ts` (export rows / import validation, Farsi choice words),
+  `lib/signature/process.ts` (crop to ink, 3:1 fit, greyscale 16 levels, shrink until ≤300k chars),
+  `lib/signature/useSavedSignature.ts` (module-cached fetch).
+- Actions `lib/actions/signature.ts`, `lib/actions/personal-info.ts`; `lib/errors/db-error.ts` keys.
+- `request/_components/RequestSignature.tsx`: canvas extracted as `SignatureCanvas` (stored images
+  drawn aspect-fit, were stretched); `RequestSignatureFields` pre-fills the saved signature, adds
+  "Use saved signature" after a clear. No call sites or RPCs changed.
+- UI: Profile signature card + personal-info link; `/profile/personal-info`;
+  `components/personal-info/PersonalInfoForm.tsx` (also on Manage › Employees › Edit for hr/admin,
+  read-only for hr on an admin via `editCapabilities.personalInfo`); employees list «اطلاعات ناقص»
+  filter (embed needs the FK hint `employee_personal_info_employee_id_fkey`, since `updated_by` also
+  points at profiles) + «اطلاعات شخصی» link; `/manage/employees/personal-info` CSV export/import;
+  Home `ProfileReminderCard` (localStorage snooze 14 days). fa + en messages.
+- Docs: REQUIREMENTS (FR-52, FR-53, NFR-5 reworded), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS
+  (encrypt backups).
+- Tests: `tests/sql/fr52-53-signature-personal-info.sql` (53 scenarios), unit
+  `personal-info.test.ts`, `signature-process.test.ts`, prefill cases in
+  `request-signature.test.tsx`, `edit-capabilities` / `employees_list` updates, e2e
+  `tests/e2e/signature-personal-info.spec.ts`.
+
+**Actions outside the repo**
+- Local only: `./deploy/bj-deploy update local` applied `20261007140001` (tool took its verified
+  backup, rebuilt the local app image); restarted `bj-erp-rest-1`; `npm run schema:dump`. Backfill
+  made 156 empty personal-info rows. SQL scenario runs as `supabase_admin`, rolled back. e2e runs
+  created and reaped throwaway `999…` users. Browser pane: logged in as local `admin`, viewed
+  Profile, personal-info, employees list and the bulk page; saved nothing. Nothing on Liara.
+- Later, on Amir's request: `./deploy/bj-deploy app local` rebuilt the local app with this code
+  (https://192.168.2.80:3500, health 200) for his manual testing.
+- Amir's manual test found two bugs, both fixed and the local app rebuilt again (health 200):
+  1. Upload crop kept the whole page on a scanned JPEG: `inkBoundingBox` counted every dark row and
+     column, so dust specks and scanner-edge marks set the box. Now ink is binned into cells, merged
+     by a ~3% dilation, and the cluster with the most ink wins, preferring clusters off the image
+     border. Checked on his sample with a Playwright + `typescript.transpileModule` harness in the
+     scratchpad: box went from 783×599 (whole page) to 137×96 (the signature).
+  2. Clear on a pre-filled signature left the saved image on the canvas, so new strokes were
+     exported on top of it. `SignatureCanvas` skipped the redraw when `value === lastExportRef`
+     and both were `''`; the refactor had dropped the old direct canvas wipe. Now only a non-empty
+     export is skipped, and a draw token stops a late image load from repainting.
+  Tests: unit 584 (new speck/edge-smear crop cases, red-then-green Clear test), e2e
+  `signature-personal-info` (+ canvas blank after Clear), `errand`, `approval` 4/4.
+- Home › My Balances (Amir, from a screenshot where "52 days and 1 hours of 52 days and 1 hours"
+  overflowed the card): each row now shows only the bold remaining amount ("… remaining" /
+  «… مانده»), wrapping under the name when narrow; bar and "used" line removed; types without a
+  balance (unpaid) are hidden. `formatDuration` uses singular units for exactly 1 ("1 hour") via
+  new optional `day/hour/minute` labels (`leave.day` etc.). Messages `home.balanceLeftOf` /
+  `balanceUsed` replaced by `balanceRemaining`. Unit 585; checked in the browser (wraps inside the
+  card); local app rebuilt.
+
+**Verification**
+- SQL: 53/53 PASS in a dry run (`begin` + migration + scenarios) and again on the migrated DB;
+  `fr51-hr-employee-admin.sql` still all PASS.
+- Unit 582 passed; `tsc`, lint, `npm run build`, `npm run test:deploy` clean.
+- e2e local (`--workers=1`, `next dev`): new spec passes (drawn save, pre-fill, submit a daily
+  errand with the saved signature, photo upload, personal info with a typo, hr view/edit,
+  incomplete filter, CSV export + import). Regression: errand, approval, hourly, home, manage,
+  hr-employee-admin, password, leave — 13/13 passed.
+- Not run: the full e2e suite; `accrual.spec` (posts for the real roster).
+
+**State left behind**
+- All uncommitted on `main` (Amir commits). Untracked `docs/design/` and
+  `docs/forms/leave-company-form.jpeg` were there before and are not part of this work.
+
+**For the next agent**
+- The 2026-08-05 rule "a prior signature is never reused" is deliberately relaxed (spec D1):
+  per-signing consent stays; the drawing is reused.
+- A file input's `onChange` needs React hydrated: in e2e, `waitForLoadState('networkidle')` before
+  `setInputFiles`, or the upload silently does nothing.
+- Backups now contain national IDs and bank data (TASKS item).
+- Personal-info import is its own screen keyed by personnel number (spec A3), not part of the
+  roster import, because that one is admin-only and restructures departments.
+
 ## 2026-10-07 — FR-51: HR administers employees and departments
 
 **Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `119800a`

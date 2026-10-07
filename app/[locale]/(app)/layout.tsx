@@ -10,7 +10,7 @@ import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { AppShell } from './_components/AppShell';
 
 // The role shown under the name in the side panel: the most senior one held.
-const ROLE_PRIORITY = ['admin', 'hr', 'manager', 'security', 'employee'] as const;
+const ROLE_PRIORITY = ['admin', 'hr', 'finance', 'manager', 'security', 'employee'] as const;
 
 type Props = {
   children: React.ReactNode;

@@ -11,7 +11,8 @@ only mirrors it. Every table holding employee data has policies.
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar. |
-| **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. |
+| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Nothing else. *(FR-54; added 2026-10-07.)* |
+| **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
 
 A user may hold multiple roles (`user_roles` table). Highest applicable permission wins. An
 inactive profile retains only read access to its own profile shell so the login flow can explain
@@ -226,6 +227,40 @@ employee who reached it would still read only their own rows.
   profile/config-table changes, and privileged RPCs append their own audit event inside the same
   transaction. This prevents clients from inventing events and keeps audit failure from being
   silently ignored.
+
+### `employee_personal_info` (FR-53)
+- **SELECT**: own row, or `has_permission(uid, 'personal_info.view')` (admin or hr) on a row of the
+  caller's company. Managers, security and peers see nothing.
+- **UPDATE**: own row, or `personal_info.edit` (admin or hr) in the caller's company, but hr never
+  on a holder of the `admin` role (checked on the role row, like FR-51 D2).
+- **INSERT / DELETE**: no client grant. The profile trigger inserts; the FK cascade deletes.
+- A before-update trigger pins `employee_id` / `company_id`; an after-update trigger audits field
+  names only.
+- `public.app_export_personal_info()` — SECURITY DEFINER, `personal_info.view`, caller's company,
+  writes `personal_info.export` (row count) to `audit_log` before returning.
+- `public.app_import_personal_info(jsonb)` — SECURITY DEFINER, `personal_info.edit`; rows matched by
+  personnel number in the caller's company; unknown number, duplicate, unknown field or (for hr)
+  an admin target fails the whole call; one transaction; `personal_info.import` audit row.
+
+### `user_signatures` (FR-52)
+- **ALL**: owner only (`user_id = auth.uid()`, active). No other policy: admin, hr and managers
+  cannot read or write anyone's saved signature.
+
+### Clearance form (FR-54)
+- `has_permission` keys: `separations.manage` (admin, hr) — file, edit, edit rows, cancel, default
+  rows; `separations.view` (admin, hr, finance) — read every form of the company.
+- **SELECT** on `separations` / `separation_signoffs`: `private.can_read_separation(uid, id)` —
+  active, same company, and `separations.view`, or the leaver, or a signer named on a row.
+  `separation_units`: any active user of the company. **No INSERT/UPDATE/DELETE grants.**
+- RPCs (SECURITY DEFINER, `authenticated` only): `app_create_separation` (manage; not yourself; hr
+  not on an admin; not the last active admin; one live form), `app_update_separation` /
+  `app_cancel_separation` (manage; until the account is switched off), `app_set_separation_signoffs`
+  (manage; in progress; signed rows only move), `app_sign_separation_row` (the row's signer; HR row:
+  any hr or admin; never the leaver), `app_sign_separation_finance` (`finance` role; never the
+  leaver; after every row), `app_save_separation_units` (manage; HR row rename only),
+  `app_separation_warnings` (manage), `app_separation_balances` / `app_get_separation` /
+  `app_list_separations` (whoever may read the form).
+- The apply job's GUC bypass in `enforce_profile_update_scope` admits only `active` true→false.
 
 ### Bulk import modes (FR-49)
 - `public.app_bulk_import_employees(...)` — SECURITY DEFINER, granted to `authenticated`. `add`

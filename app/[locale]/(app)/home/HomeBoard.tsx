@@ -60,12 +60,8 @@ export type PulseCards = {
 type UsageRow = {
   id: string;
   name: string;
-  hasBalance: boolean;
-  /** "<b>{left}</b> از {entitled}" */
-  leftOf: ReactNode;
-  used: string;
-  /** left / entitled, 0..1. */
-  ratio: number;
+  /** "<b>{left}</b> remaining" */
+  remaining: ReactNode;
 };
 
 type Props = {
@@ -353,15 +349,14 @@ export function HomeBoard({
             ) : (
               <ul className="space-y-4">
                 {usage.map((u) => (
-                  <li key={u.id} data-testid={`home-balance-${u.id}`}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="whitespace-nowrap text-sm text-muted-foreground">{u.name}</span>
-                      {u.hasBalance && (
-                        <span className="whitespace-nowrap text-sm text-muted-foreground">{u.leftOf}</span>
-                      )}
-                    </div>
-                    {u.hasBalance && <Bar ratio={u.ratio} className="mt-2" />}
-                    <p className="mt-1.5 text-xs text-muted-foreground">{u.used}</p>
+                  <li
+                    key={u.id}
+                    data-testid={`home-balance-${u.id}`}
+                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
+                  >
+                    <span className="text-sm text-muted-foreground">{u.name}</span>
+                    {/* Wraps under the name when the card is too narrow for one line. */}
+                    <span className="min-w-0 text-sm text-muted-foreground">{u.remaining}</span>
                   </li>
                 ))}
               </ul>

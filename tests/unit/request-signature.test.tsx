@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -7,11 +8,17 @@ import {
   type SignatureLabels,
 } from '@/app/[locale]/(app)/request/_components/RequestSignature';
 import { getApproverSignature, getRequestSignature } from '@/lib/actions/leave/signatures';
+import { getMySavedSignature } from '@/lib/actions/signature';
+import { clearSavedSignatureCache } from '@/lib/signature/useSavedSignature';
 import {
   isValidSignatureData,
   MAX_SIGNATURE_DATA_LENGTH,
   MIN_SIGNATURE_DATA_LENGTH,
 } from '@/lib/leave/signature';
+
+vi.mock('@/lib/actions/signature', () => ({
+  getMySavedSignature: vi.fn(),
+}));
 
 vi.mock('@/lib/actions/leave/signatures', () => ({
   getApproverSignature: vi.fn(),
@@ -33,6 +40,8 @@ const labels: SignatureLabels = {
   hide: 'Hide signature',
   loading: 'Loading signature…',
   authorizedAt: 'Authorization recorded at:',
+  savedNote: 'Your saved signature. Clear it to draw a new one.',
+  useSaved: 'Use saved signature',
 };
 
 const context = {
@@ -52,6 +61,8 @@ const context = {
 };
 
 beforeEach(() => {
+  clearSavedSignatureCache();
+  vi.mocked(getMySavedSignature).mockReset().mockResolvedValue({ ok: true, signature: null });
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -128,6 +139,69 @@ describe('RequestSignatureFields', () => {
     expect(onChange).toHaveBeenCalledWith(PNG);
     fireEvent.click(screen.getByRole('checkbox', { name: labels.authorization }));
     expect(onAuthorizedChange).toHaveBeenCalledWith(true);
+  });
+});
+
+const SAVED = `${PNG}AAAA`;
+
+/** Controlled host, like the request forms' useSignature state. */
+function Host() {
+  const [value, setValue] = useState('');
+  const [authorized, setAuthorized] = useState(false);
+  return (
+    <>
+      <RequestSignatureFields
+        idPrefix="saved"
+        value={value}
+        onChange={setValue}
+        authorized={authorized}
+        onAuthorizedChange={setAuthorized}
+        labels={labels}
+      />
+      <output data-testid="value">{value}</output>
+    </>
+  );
+}
+
+describe('RequestSignatureFields with a saved signature (FR-52)', () => {
+  it('opens pre-filled, consent still unticked; clear draws fresh; the saved one can come back', async () => {
+    vi.mocked(getMySavedSignature).mockResolvedValue({
+      ok: true,
+      signature: { signatureData: SAVED, source: 'drawn', updatedAt: '2026-10-07T00:00:00Z' },
+    });
+    render(<Host />);
+
+    await waitFor(() => expect(screen.getByTestId('value').textContent).toBe(SAVED));
+    expect(screen.getByText(labels.savedNote)).toBeTruthy();
+    expect((screen.getByTestId('saved-signature-authorized') as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(screen.getByTestId('saved-signature-clear'));
+    expect(screen.getByTestId('value').textContent).toBe('');
+    expect(screen.getByText(labels.instructions)).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('saved-signature-use-saved'));
+    expect(screen.getByTestId('value').textContent).toBe(SAVED);
+    expect(getMySavedSignature).toHaveBeenCalledTimes(1);
+  });
+
+  it('clearing wipes the saved image off the canvas, so new strokes are not drawn over it', async () => {
+    vi.mocked(getMySavedSignature).mockResolvedValue({
+      ok: true,
+      signature: { signatureData: SAVED, source: 'drawn', updatedAt: '2026-10-07T00:00:00Z' },
+    });
+    render(<Host />);
+    await waitFor(() => expect(screen.getByTestId('value').textContent).toBe(SAVED));
+
+    context.clearRect.mockClear();
+    fireEvent.click(screen.getByTestId('saved-signature-clear'));
+    expect(context.clearRect).toHaveBeenCalled();
+  });
+
+  it('stays blank without a saved signature', async () => {
+    render(<Host />);
+    await waitFor(() => expect(getMySavedSignature).toHaveBeenCalled());
+    expect(screen.getByTestId('value').textContent).toBe('');
+    expect(screen.queryByTestId('saved-signature-use-saved')).toBeNull();
   });
 });
 

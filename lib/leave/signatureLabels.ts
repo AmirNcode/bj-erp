@@ -17,5 +17,7 @@ export function signatureLabelsFrom(
     hide: t('hide'),
     loading: t('loading'),
     authorizedAt: t('authorizedAt'),
+    savedNote: t('savedNote'),
+    useSaved: t('useSaved'),
   };
 }

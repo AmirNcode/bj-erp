@@ -9,6 +9,45 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Clearance form — FR-54 (2026-10-07)
+
+Migrations `20261007150001`–`20261007150003`. Spec `docs/specs/2026-10-07-clearance-form-design.md`.
+- **Profile › فرم‌های تسویه حساب:** hr or admin files a departure clearance form: reason, last
+  working day, father's name and birth certificate number (taken from personal info, or typed and
+  saved there), and the sign-off rows.
+- **Rows:** start from a default list (Profile › Clearance forms › Default rows): HR (always),
+  warehouses, maintenance, QC, the employee's department, cashier, asset custody, IT, executive
+  manager, management. Each row is a department's manager or a named person; HR adds, removes or
+  reassigns rows on each form.
+- **Signing:** every row signs in any order with a remark and a signature (the saved one is
+  offered); then **finance**, a new role, signs last with the settlement date. Signers see what
+  waits for them on Profile and on Home.
+- **Deactivation:** the account switches itself off at 00:05 on the day after the last working day
+  (immediately if that day is already past), and the person's pending requests are cancelled.
+- Printable sheet matching the paper form. hr can cancel a form until the account is switched off.
+
+### Saved signature and personal information — FR-52, FR-53 (2026-10-07)
+
+Migration `20261007140001`. Spec `docs/specs/2026-10-07-saved-signature-and-personal-info-design.md`.
+- **Saved signature (Profile):** draw it, or upload a photo that is cropped to the signature,
+  fitted to the box and compressed. Request forms and approve dialogs open with it filled in; the
+  consent box is still ticked every time, and «پاک کردن امضا» draws a one-off instead. Only the
+  owner can see it.
+- **Personal information (Profile › Personal information):** identity, bank, contact and
+  employment details, all optional. National ID, Sheba and card numbers are checksum-validated;
+  Persian digits and spaces are accepted.
+- **HR and admin** see and correct it on the employee's edit page (HR read-only on an admin), filter
+  Manage › Employees by «اطلاعات ناقص», and export or import it as CSV under «اطلاعات شخصی».
+  Every change, export and import is audit-logged without the values.
+- **Home** shows a dismissible reminder until personal information and a signature are saved.
+- Signature images on request forms are drawn aspect-fit instead of stretched.
+
+### Home balances (2026-10-07)
+
+- **My Balances** shows only what remains, in bold («۵۲ روز و ۱ ساعت مانده»), and wraps instead of
+  running out of the card. The progress bar, the "used" line and unpaid leave (no balance) are gone.
+- Durations say "1 hour" / "1 day" instead of "1 hours" / "1 days" in English.
+
 ### HR administers employees and departments — FR-51 (2026-10-07)
 
 Migration `20261007130001`. Spec `docs/specs/2026-10-07-hr-employee-admin-design.md`.

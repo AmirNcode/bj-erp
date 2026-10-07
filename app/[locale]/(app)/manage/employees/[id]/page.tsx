@@ -14,6 +14,9 @@ import { notFound } from 'next/navigation';
 import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
+import { getPersonalInfo } from '@/lib/actions/personal-info';
+import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type Props = {
   params: Promise<{ locale: string; id: string }>;
@@ -89,8 +92,12 @@ export default async function EditEmployeePage({ params }: Props) {
         .eq('affects_balance', true)
     : { data: [] };
 
+  // FR-53: hr/admin only; managers never see personal information.
+  const personalInfoRes = caps.personalInfo ? await getPersonalInfo(id) : null;
+  const tPi = await getTranslations('personalInfo');
+
   return (
-    <main className="p-6 max-w-2xl mx-auto">
+    <main className="p-6 max-w-2xl mx-auto space-y-6">
       <PageHeader
         title={t('employees.editTitle')}
         action={
@@ -144,6 +151,20 @@ export default async function EditEmployeePage({ params }: Props) {
           policyWarn: t('employees.policyWarn'),
         }}
       />
+      {personalInfoRes?.ok && (
+        <Card data-testid="employee-personal-info">
+          <CardHeader className="border-b pb-4">
+            <CardTitle>{tPi('title')}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <PersonalInfoForm
+              employeeId={id}
+              initial={personalInfoRes.info}
+              readOnly={caps.personalInfo === 'view'}
+            />
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }

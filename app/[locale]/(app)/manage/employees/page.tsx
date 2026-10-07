@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Lock, Plus, Upload } from 'lucide-react';
+import { ChevronLeft, ChevronRight, IdCard, Lock, Plus, Upload } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
@@ -39,7 +39,11 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const ROLE_ORDER = ['admin', 'hr', 'manager', 'security', 'employee'] as const;
+const ROLE_ORDER = ['admin', 'hr', 'finance', 'manager', 'security', 'employee'] as const;
+const LIST_SELECT = `id, employee_code, full_name, active, hire_date,
+       departments!profiles_department_id_fkey (name_fa, name_en),
+       user_roles (role)`;
+const INCOMPLETE_EMBED = 'employee_personal_info!employee_personal_info_employee_id_fkey!inner(complete)';
 
 // ── async child that owns the list query ───────────────────────────────────
 async function EmployeesData({
@@ -64,16 +68,19 @@ async function EmployeesData({
   const user = await getCachedUser();
   const base = `/${locale}/manage/employees`;
 
-  // '!profiles_department_id_fkey' disambiguates from the manager_id FK.
+  // '!profiles_department_id_fkey' disambiguates from the manager_id FK; the
+  // personal-info embed (FR-53, `incomplete` only) names its FK because
+  // updated_by also points at profiles.
+  const incomplete = query.filter === 'incomplete';
   let list = supabase
     .from('profiles')
     .select(
-      `id, employee_code, full_name, active, hire_date,
-       departments!profiles_department_id_fkey (name_fa, name_en),
-       user_roles (role)`,
+      // Same columns either way; the embed only narrows the rows.
+      (incomplete ? `${LIST_SELECT}, ${INCOMPLETE_EMBED}` : LIST_SELECT) as typeof LIST_SELECT,
       { count: 'exact' }
     )
     .eq('active', query.filter !== 'inactive');
+  if (incomplete) list = list.eq('employee_personal_info.complete', false);
   if (query.filter === 'reports' && user) list = list.eq('manager_id', user.id);
   if (query.dept) list = list.eq('department_id', query.dept);
   const term = ilikeTerm(query.q);
@@ -280,7 +287,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   const isAdmin = myRoles.includes('admin');
   const isHr = myRoles.includes('hr');
   const isManager = myRoles.includes('manager');
-  const query = parseEmployeesQuery(sp, { isManager });
+  const canSeePersonalInfo = isAdmin || isHr;
+  const query = parseEmployeesQuery(sp, { isManager, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
   // Segment counts and the department list: head-only counts, cheap enough to
@@ -288,12 +296,19 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   const supabase = await createClient();
   const profilesHead = () =>
     supabase.from('profiles').select('id', { count: 'exact', head: true });
-  const [allRes, reportsRes, inactiveRes, { data: departments }] = await Promise.all([
+  const [allRes, reportsRes, inactiveRes, incompleteRes, { data: departments }] = await Promise.all([
     profilesHead().eq('active', true),
     isManager && user
       ? profilesHead().eq('active', true).eq('manager_id', user.id)
       : Promise.resolve(null),
     profilesHead().eq('active', false),
+    canSeePersonalInfo
+      ? supabase
+          .from('profiles')
+          .select(`id, ${INCOMPLETE_EMBED}`, { count: 'exact', head: true })
+          .eq('active', true)
+          .eq('employee_personal_info.complete', false)
+      : Promise.resolve(null),
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
   ]);
   const allCount = allRes.count ?? 0;
@@ -308,6 +323,14 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           <h1 className="text-2xl font-bold tracking-tight">{tl('title')}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {canSeePersonalInfo && (
+            <Button variant="outline" className="rounded-[10px]" asChild>
+              <Link href={`${base}/personal-info`} data-testid="personal-info-link">
+                <IdCard aria-hidden="true" />
+                {tl('personalInfoLink')}
+              </Link>
+            </Button>
+          )}
           {(isAdmin || isHr) && (
             <Button variant="outline" className="rounded-[10px]" asChild>
               <Link href={`${base}/import`} data-testid="import-link">
@@ -333,6 +356,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           all: formatNumber(allCount, locale),
           reports: reportsCount === null ? null : formatNumber(reportsCount, locale),
           inactive: formatNumber(inactiveCount, locale),
+          incomplete: incompleteRes ? formatNumber(incompleteRes.count ?? 0, locale) : null,
         }}
         departments={(departments ?? []).map((d) => ({
           id: d.id,
@@ -343,6 +367,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           filterAll: tl('filterAll'),
           filterReports: tl('filterReports'),
           filterInactive: tl('filterInactive'),
+          filterIncomplete: tl('filterIncomplete'),
           search: tl('search'),
           department: tl('department'),
           allDepartments: tl('allDepartments'),

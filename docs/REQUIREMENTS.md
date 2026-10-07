@@ -231,6 +231,36 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   other roles and department codes stay admin-only. *(2026-10-07; spec
   `2026-10-07-hr-employee-admin-design.md`.)*
 
+- **FR-52** ☑ **Saved signature.** Every account may save one signature on Profile, drawn on the
+  canvas or uploaded as a photo (cropped to the ink, fitted to a 3:1 box, greyscale, compressed).
+  Every signature box (four request forms, both approve dialogs) opens pre-filled with it; consent
+  is still ticked per signing, and the box can be cleared to draw a one-off signature. Each request
+  keeps its own copy, so changing the saved one never alters past evidence. Owner-only: no hr or
+  admin access. *(2026-10-07; spec `2026-10-07-saved-signature-and-personal-info-design.md`.)*
+
+- **FR-53** ☑ **Personal information.** Identity (national ID, birth-certificate number, father's
+  name, birth date and place, gender, marital status), bank (bank, account, Sheba, card), contact
+  (mobile, home phone, address, postal code, emergency contact) and employment extras
+  (social-security number, education, military service, children). All optional, checksums
+  enforced. The employee edits their own; hr and admin read and correct anyone's in the company (hr
+  read-only on an admin); managers, security and peers never see it. Changes are audited by field
+  name only. Home nudges until the core five (national ID, father's name, birth date, Sheba,
+  mobile) and a saved signature exist; Manage › Employees has an "Info incomplete" filter and a
+  CSV export (audited) and import (empty cell = unchanged). *(2026-10-07; same spec.)*
+
+- **FR-54** ☑ **Clearance form (فرم تسویه حساب).** When someone leaves, hr or admin files the form
+  (after the written resignation or the dismissal decision): reason (resignation, dismissal, end of
+  contract, job abandonment, no longer needed), last working day, father's name and birth
+  certificate number (from personal info; typed and saved back when missing). Sign-off rows come
+  from a company default list that admin and hr edit (HR row always present; department, the
+  leaver's own department, or a named person), adjustable per form. Rows sign in parallel with a
+  remark and a signature; then a holder of the new `finance` role signs last with a settlement
+  date. At 00:05 Tehran on the day after the last working day the account is deactivated and the
+  person's pending requests are cancelled, whether or not the form is finished (pg_cron; a past
+  date applies at once). The leaver sees their form read-only; signers see the whole form; admin,
+  hr and finance see all. Lives under Profile; printable like the paper form. *(2026-10-07; spec
+  `2026-10-07-clearance-form-design.md`.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.
@@ -281,8 +311,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   Supabase + Next.js with config-only changes. Since 2026-09-29 the host is Liara (self-hosted
   Supabase on a cloud VM). The on-prem target was retired on 2026-10-04.
 - **NFR-5** ☑ **Security**: RLS on all employee-data tables; passwords hashed by Supabase Auth;
-  **audit log** of admin/manager changes; minimize sensitive PII (avoid storing national ID unless
-  required).
+  **audit log** of admin/manager changes; minimize sensitive PII. National ID and bank details are
+  stored since FR-53 (2026-10-07), in their own table (`employee_personal_info`) readable only by
+  the owner, hr and admin; database backups therefore hold them and belong on encrypted storage.
 - **NFR-6** ☑ **Performance**: target a few hundred employees comfortably; list/calendar queries
   indexed. App-tab routes are prefetched after login and each page exposes a manual update pill for
   explicit refresh when fresher data is needed.

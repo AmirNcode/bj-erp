@@ -37,6 +37,15 @@ describe('minutesToDaysHours', () => {
 });
 
 describe('formatDuration', () => {
+  it('uses the singular for exactly one of a unit', () => {
+    const labels = { ...EN, day: 'day', hour: 'hour', minute: 'minute' };
+    expect(formatDuration(8 * 60 * 52 + 60, 8, 'en', labels)).toBe('52 days and 1 hour');
+    expect(formatDuration(8 * 60 + 61, 8, 'en', labels)).toBe('1 day and 1 hour and 1 minute');
+    expect(formatDuration(-480, 8, 'en', labels)).toBe('-1 day');
+    // Without singular labels (callers that do not pass them) nothing changes.
+    expect(formatDuration(60, 8, 'en', EN)).toBe('1 hours');
+  });
+
   it('omits zero parts', () => {
     expect(formatDuration(4320, 8, 'en', EN)).toBe('9 days');
     expect(formatDuration(240, 8, 'en', EN)).toBe('4 hours');
