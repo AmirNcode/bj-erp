@@ -4,8 +4,8 @@
  * Everyone else is redirected to /home.
  *
  * This is the outer door only. The pages behind it guard themselves further:
- * Settings and Add-Department redirect anyone who is not an admin,
- * so `hr` reaching /manage does not reach company configuration (FR-35).
+ * Settings redirects anyone who is not an admin; Departments and Add-Department
+ * admit admin and hr (FR-51) and redirect everyone else.
  */
 
 import { redirect } from 'next/navigation';

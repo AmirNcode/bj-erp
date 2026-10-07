@@ -1,7 +1,8 @@
 /**
  * Manage › Departments (spec 2026-07-30 §7): the department list with its
- * members panel and Add Department, plus the monthly accrual runner. Company
- * configuration — admin only; everyone else goes back to the employees hub.
+ * members panel, rename and Add Department, plus the monthly accrual runner.
+ * Admin and hr (FR-51); everyone else goes back to the employees hub. The
+ * department code stays admin-only in the database.
  */
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +24,7 @@ export default async function DepartmentsPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
   const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) redirect(`/${locale}/manage/employees`);
+  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/manage/employees`);
 
   const [tNav, t] = await Promise.all([
     getTranslations('nav'),
@@ -78,6 +79,12 @@ export default async function DepartmentsPage({ params }: Props) {
               managerLabel: t('departments.managerLabel'),
               noManager: t('departments.noManager'),
               managerSaved: t('departments.managerSaved'),
+              rename: t('departments.rename'),
+              nameFa: t('departments.nameFa'),
+              nameEn: t('departments.nameEn'),
+              save: t('departments.save'),
+              cancel: t('departments.cancel'),
+              renamed: t('departments.renamed'),
               errorLabel: t('error'),
             }}
           />

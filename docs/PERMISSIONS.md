@@ -11,7 +11,7 @@ only mirrors it. Every table holding employee data has policies.
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar. |
-| **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* |
+| **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. |
 
 A user may hold multiple roles (`user_roles` table). Highest applicable permission wins. An
 inactive profile retains only read access to its own profile shell so the login flow can explain
@@ -39,7 +39,13 @@ same_team(uid, target)     := (SELECT department_id FROM profiles WHERE id=uid)
                               = (SELECT department_id FROM profiles WHERE id=target)
 can_read_all(uid)    := is_admin(uid) OR has_role(uid,'manager')
                         OR has_role(uid,'security') OR has_role(uid,'hr')
+has_permission(uid, key) -- FR-51 seam. Today: is_admin(uid) OR has_role(uid,'hr') for
+                         -- 'employees.edit' | 'departments.edit' | 'accruals.run' | 'roles.manager';
+                         -- any other key is false
 ```
+**New grants go through `has_permission`** (FR-51), so the planned admin-configurable roles can
+replace its body with a table lookup instead of rewriting each policy. Older hr grants (FR-38, FR-42,
+FR-43) still name `has_role(uid,'hr')` directly; they move onto it with that feature.
 Widening `can_read_all` is the **entire** grant that gives `hr` company-wide read (migration
 `20260818130002`). Every read path HR needs — `profiles`, `user_roles`, `leave_ledger`,
 `leave_allocations`, `employee_leave_policies`, and the `team_leave_calendar` view — already routes
@@ -58,14 +64,18 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 ### `profiles`
 - **SELECT**: self · active caller + (`same_team` · `can_read_all`). The self-only inactive row is
   deliberate: it lets the app detect the disabled account and clear its Auth session.
-- **UPDATE**: `is_admin` (all fields) · `is_manager_of(target)` (managed subset) · self (own
-  limited subset: language preference, password handled by Auth, contact fields).
+- **UPDATE**: `is_admin` (all fields) · `has_permission(employees.edit)` (editor subset, FR-51) ·
+  `is_manager_of(target)` (managed subset) · self (own limited subset: language preference,
+  password handled by Auth, contact fields).
   **Column scope is enforced in the DB** by the `profiles_enforce_update_scope` BEFORE-UPDATE
-  trigger (migration 0007) — RLS is row-level only, so without the trigger a manager could PATCH
-  any column of a report via the anon key. Non-admins: self → `full_name`/`language_pref`/
-  compatibility-only `calendar_pref` (database-constrained to `jalali`); manager-of-row →
-  `full_name`/`hire_date`; `department_id`/`manager_id`/
-  `active`/`employee_code`/`company_id` are admin-only. `must_change_password` (FR-50) is
+  trigger (migration 0007, rewritten by `20261007130001`) — RLS is row-level only, so without the
+  trigger a manager could PATCH any column of a report via the anon key. Branches, first match wins:
+  admin → anything; self → `full_name`/`language_pref`/compatibility-only `calendar_pref`
+  (database-constrained to `jalali`); editor on a same-company target that holds **no** `admin`
+  role row (even a deactivated admin) → `full_name`/`hire_date`/`department_id`/`manager_id`/
+  `job_title`/`active`; manager-of-row → `full_name`/`hire_date`. `employee_code`/`personnel_no`/
+  `company_id` are admin-only. (Before FR-51 the trigger never compared `job_title` or
+  `personnel_no`, so a self or manager update could change them.) `must_change_password` (FR-50) is
   admin-only too, except that `app_set_initial_password` / `app_change_my_password` clear the
   caller's own flag; they mark the transaction with `bj.password_flag_write`, a setting PostgREST
   clients cannot set. Deactivating the last active admin is
@@ -84,7 +94,11 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `departments`, `work_settings`, `holidays`, `leave_types`
 - **SELECT**: any active authenticated company member.
-- **WRITE**: `is_admin` only. The FR-24 admin editor (`/settings`, admin-only since 2026-10-05) writes `work_settings` /
+- **WRITE**: `is_admin` only — except `departments` INSERT/UPDATE, which admit
+  `has_permission(departments.edit)` since FR-51 (`departments_insert_editor` /
+  `departments_update_editor`; DELETE stays `departments_delete_admin`). The
+  `departments_enforce_update_scope` trigger lets a non-admin change only `name_fa`, `name_en` and
+  `manager_id`; `code` (the bulk-import key), `kind` and `company_id` stay admin-only. The FR-24 admin editor (`/settings`, admin-only since 2026-10-05) writes `work_settings` /
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
   unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
   admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs
@@ -100,15 +114,16 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `authenticated` only, exactly like the other helpers above. It reads `work_settings`, which every
   active member may already read.
 
-- **`departments_update_admin`** backs `setDepartmentManager` (FR-47, 2026-10-05): an admin picks
-  each department's manager on Manage › Departments. Code editing stays deactivated — the
+- **`departments_update_editor`** (was `departments_update_admin` until FR-51) backs
+  `setDepartmentManager` (FR-47) and `renameDepartment` (FR-51): an admin or hr picks each
+  department's manager and renames it on Manage › Departments. Code editing stays deactivated — the
   `updateDepartmentCode` action is still intentionally unreferenced and is not dead code.
 - **Bulk import v2 (FR-45)** creates departments and sets their managers inside
   `app_bulk_create_employees` (SECURITY DEFINER). That branch is **admin-only** in SQL: an `hr`
   caller may still bulk-onboard plain employees but is refused if the file would create a
   department or assign a department manager — department config stays admin-only.
-- **Department membership** is read by the admin-only `getDepartmentMembers` server action behind
-  the Settings → Departments panel. It uses the existing `can_read_all` SELECT paths on `profiles`
+- **Department membership** is read by the `getDepartmentMembers` server action (admin or hr since
+  FR-51) behind the Manage › Departments panel. It uses the existing `can_read_all` SELECT paths on `profiles`
   and `user_roles`; **no new policy and no new SECURITY DEFINER function** were added for it.
 
 ### `leave_allocations`
@@ -197,6 +212,9 @@ employee who reached it would still read only their own rows.
   on approval, paid-portion `reversal` on approved-future cancel, and `adjustment` when an admin sets
   an absolute balance via `set_leave_balance`). No direct client writes — clients must not fabricate
   balances.
+- **Monthly accrual for everyone** (`accrue_all_leave`, the Departments page button) requires
+  `has_permission(accruals.run)`: admin or hr since FR-51. It posts only months each policy has
+  already earned.
 
 ### `audit_log`
 - **SELECT**: `is_admin`.
@@ -276,8 +294,10 @@ admin employee create/edit forms.
 
 `public.app_set_user_roles(p_user_id, p_roles)` (2026-07-02 hardening) **atomically replaces** a
 user's roles in one transaction (the app previously did delete-then-insert as two client
-statements — a failed insert lost all roles). Admin-only (`42501` otherwise) and refuses to remove
-the **caller's own** `admin` role (lockout guard, `22023`). Audited (`set_roles`). Granted to
+statements — a failed insert lost all roles). Admin, who may not remove the **caller's own**
+`admin` role (lockout guard, `22023`). Since FR-51 also a `has_permission(roles.manager)` holder (hr),
+only to add or remove `manager`, on a same-company target that holds no `admin` and is not the
+caller (`42501` otherwise). Anyone else `42501`. Audited (`set_roles`). Granted to
 `authenticated`, revoked from `anon`. The app's `setRoles` server action calls this RPC.
 
 The Supabase security advisor flags these as exposed `SECURITY DEFINER` functions (lint 0029).

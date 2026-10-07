@@ -60,7 +60,8 @@ const MANAGE: ManageEntry[] = [
   // `nav-manage` stays the entry point into Manage on desktop: it is the first
   // item of the group and lands on the employees hub, as the old tab did.
   { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: canManage },
-  { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: isAdmin },
+  // FR-51: HR creates and renames departments and sets their managers.
+  { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: isAdminOrHr },
   { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: canManage },
   // FR-38 review screen: hr + admin only.
   { key: 'requests', href: '/manage/requests', labelKey: 'requests', testId: 'nav-requests', allowed: isAdminOrHr },

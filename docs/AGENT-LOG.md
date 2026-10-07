@@ -78,6 +78,56 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — FR-51: HR administers employees and departments
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `119800a`
+**Trigger:** HR started testing and could not deactivate people, change department / direct manager
+/ title, or create and rename departments. Amir answered the scoping questions (not on admins, not on
+self, `manager` role only, dept manager + accrual + members too), picked approach 1 (widen existing
+guards), and chose to skip separate spec/plan review gates. He also described a later feature:
+admin-configurable roles with per-area permissions (now in TASKS; `has_permission` is its seam).
+
+**What changed**
+- `supabase/migrations/20261007130001_hr_employee_admin.sql`: `private.has_permission`; profiles
+  update policy + `enforce_profile_update_scope` editor branch (also guards `job_title` and
+  `personnel_no`, which were unchecked before — an employee could retitle themselves or change their
+  own personnel number via PostgREST); `departments_insert_editor` / `departments_update_editor`
+  (replace `_admin`) + new `departments_enforce_update_scope` trigger (code stays admin-only);
+  `app_set_user_roles` hr branch (manager only); `accrue_all_leave` guard.
+- `lib/employees/editCapabilities.ts` (pure) drives `EditEmployeeForm` (job title field, read-only
+  org fields + note on admin/self, disabled role boxes, roles written only when changed, "Account"
+  card). `allowedProfileFields(roles)`. Server actions admit hr; new `renameDepartment`; inline
+  rename in `DepartmentsCard`; departments nav/page/new page admit hr. db-error keys for the new role
+  errors; fa/en strings.
+- Tests: `tests/sql/fr51-hr-employee-admin.sql` (35 scenarios, rolled back),
+  `tests/unit/edit-capabilities.test.ts`, updated `employees_action` / `nav_tabs` unit tests,
+  `tests/e2e/hr-employee-admin.spec.ts`, `hr-role.spec` boundary flipped (hr reaches Add Department).
+- Docs: spec `docs/specs/2026-10-07-hr-employee-admin-design.md` (records design + what was built;
+  no separate plan file, by Amir's choice), PERMISSIONS, REQUIREMENTS FR-51, CHANGELOG, TASKS.
+
+**Actions outside the repo**
+- Local only: `./deploy/bj-deploy update local` applied `20261007130001` (verified backup taken by
+  the tool; rebuilt the local app image), restarted `bj-erp-rest-1`, `npm run schema:dump`. SQL
+  scenario runs as `supabase_admin` (rolled back). e2e created/deleted throwaway users and one `ZZ…`
+  department. Browser pane: opened (did not save) a department rename as admin. Nothing on Liara yet.
+
+**Verification**
+- SQL scenarios: red before (HR writes ok:0/42501; the job_title/personnel_no gap reproduced), 35/35
+  PASS in a dry run with the migration and again on the migrated local DB.
+- Unit 557 passed; `tsc`, lint, `npm run build`, `npm run test:deploy` clean.
+- e2e local: `hr-employee-admin` 2/2; `hr-role`, `manage`, `hr-leave-setup`, `balance-days-hours`,
+  `nav`, `department` 14 passed, 1 skipped (pre-existing skip), 2 failed for local-data reasons:
+  `department.spec` members dialog (seeded Production Line A has 0 active members locally) and
+  "manager cannot reach new-department page" (seeded manager `1001` deactivated). Not run:
+  `accrual.spec` (company-wide posting on the real roster).
+
+**State left behind**
+- Uncommitted on `main`, not pushed (awaiting Amir). `docs/design/` untracked from before.
+
+**For the next agent**
+- `postgres` is not a superuser in the db image (no CREATE on `private`, cannot write auth.users):
+  run migration dry-runs and `tests/sql/*` as `supabase_admin` with `PGPASSWORD` from `deploy/.env`.
+- Grant new capabilities through `private.has_permission`, not a fresh `has_role(uid,'hr')`.
 ## 2026-10-07 — Leave amounts as days + hours on the employee forms
 
 **Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `751d4f3`

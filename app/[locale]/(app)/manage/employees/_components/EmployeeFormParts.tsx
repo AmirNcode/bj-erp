@@ -11,12 +11,9 @@ import {
   minutesToDaysHours,
   type DaysHoursError,
 } from '@/lib/leave/duration';
+import { ROLES, type Role } from '@/lib/employees/editCapabilities';
 
-// Rendered as raw slugs. The e2e `createEmployee` helper picks these checkboxes
-// by their exact label text, so translating them is a separate, deliberate
-// change (docs/TASKS.md).
-export const ROLES = ['admin', 'manager', 'employee', 'security', 'hr'] as const;
-export type Role = (typeof ROLES)[number];
+export { ROLES, type Role };
 
 /** Stable test-id slug for a leave type: `annual`, `sick`, or its English name. */
 export function leaveTypeSlug(type: { name_en: string | null; name_fa: string }) {
@@ -151,25 +148,34 @@ export function readDaysHours(
   );
 }
 
-/** Native checkboxes: the e2e suite checks them through their label text. */
+/**
+ * Native checkboxes: the e2e suite checks them through their label text. Roles
+ * outside `editable` render disabled (FR-51: hr toggles `manager` only).
+ */
 export function RoleCheckboxes({
   label,
   selected,
   onChange,
+  editable = ROLES,
 }: {
   label: string;
   selected: Role[];
   onChange: (roles: Role[]) => void;
+  editable?: readonly Role[];
 }) {
   return (
     <div className="space-y-2">
       <span className="block text-sm font-medium leading-none">{label}</span>
       <div className="flex flex-wrap gap-3">
         {ROLES.map((role) => (
-          <label key={role} className="flex items-center gap-2 cursor-pointer">
+          <label
+            key={role}
+            className={`flex items-center gap-2 ${editable.includes(role) ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+          >
             <input
               type="checkbox"
               checked={selected.includes(role)}
+              disabled={!editable.includes(role)}
               onChange={() =>
                 onChange(
                   selected.includes(role) ? selected.filter((r) => r !== role) : [...selected, role]

@@ -387,6 +387,30 @@ $$;
 
 
 --
+-- Name: enforce_department_update_scope(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.enforce_department_update_scope() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if private.is_admin(auth.uid()) then
+    return new;
+  end if;
+  if (new.id         is distinct from old.id)
+     or (new.company_id is distinct from old.company_id)
+     or (new.code       is distinct from old.code)
+     or (new.kind       is distinct from old.kind)
+     or (new.created_at is distinct from old.created_at)
+  then
+    raise exception 'not permitted to modify restricted department fields' using errcode = '42501';
+  end if;
+  return new;
+end; $$;
+
+
+--
 -- Name: enforce_profile_update_scope(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -404,6 +428,13 @@ begin
 
   if new.id = v_uid then
     v_allowed := array['full_name', 'language_pref', 'calendar_pref'];
+  elsif private.has_permission(v_uid, 'employees.edit')
+        and old.company_id = (select company_id from public.profiles where id = v_uid)
+        -- An admin's record is admin-only, even while that admin is deactivated
+        -- (so an editor cannot reactivate one): check the role row, not is_admin.
+        and not exists (select 1 from public.user_roles where user_id = old.id and role = 'admin')
+  then
+    v_allowed := array['full_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
   elsif private.is_manager_of(v_uid, new.id) then
     v_allowed := array['full_name', 'hire_date'];
   else
@@ -413,14 +444,16 @@ begin
   if (new.id            is distinct from old.id)
      or (new.company_id    is distinct from old.company_id)
      or (new.employee_code is distinct from old.employee_code)
+     or (new.personnel_no  is distinct from old.personnel_no)
      or (new.created_at    is distinct from old.created_at)
-     or (new.department_id is distinct from old.department_id)
-     or (new.manager_id    is distinct from old.manager_id)
-     or (new.active        is distinct from old.active)
      or (new.must_change_password is distinct from old.must_change_password
          and coalesce(current_setting('bj.password_flag_write', true), '') <> 'on')
      or (new.full_name     is distinct from old.full_name     and not ('full_name'     = any (v_allowed)))
      or (new.hire_date     is distinct from old.hire_date     and not ('hire_date'     = any (v_allowed)))
+     or (new.department_id is distinct from old.department_id and not ('department_id' = any (v_allowed)))
+     or (new.manager_id    is distinct from old.manager_id    and not ('manager_id'    = any (v_allowed)))
+     or (new.job_title     is distinct from old.job_title     and not ('job_title'     = any (v_allowed)))
+     or (new.active        is distinct from old.active        and not ('active'        = any (v_allowed)))
      or (new.language_pref is distinct from old.language_pref and not ('language_pref' = any (v_allowed)))
      or (new.calendar_pref is distinct from old.calendar_pref and not ('calendar_pref' = any (v_allowed)))
   then
@@ -429,6 +462,24 @@ begin
 
   return new;
 end; $$;
+
+
+--
+-- Name: has_permission(uuid, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select case p_permission
+    when 'employees.edit'   then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'departments.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'accruals.run'     then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'roles.manager'    then private.is_admin(uid) or private.has_role(uid, 'hr')
+    else false
+  end;
+$$;
 
 
 --
@@ -883,8 +934,8 @@ declare
   v_rows_after   int;
   v_last_emp     uuid;
 begin
-  if not private.is_admin(auth.uid()) then
-    raise exception 'only admins can post accruals' using errcode = '42501';
+  if not private.has_permission(auth.uid(), 'accruals.run') then
+    raise exception 'not allowed to post accruals' using errcode = '42501';
   end if;
 
   select count(*) into v_rows_before from public.leave_ledger where period_month is not null;
@@ -2046,26 +2097,51 @@ CREATE FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_rol
 declare
   v_uid    uuid := auth.uid();
   v_before public.app_role[];
+  v_after  public.app_role[] := coalesce(p_roles, '{}');
 begin
-  if not private.is_admin(v_uid) then
-    raise exception 'only admins can set roles' using errcode = '42501';
-  end if;
-  if p_user_id = v_uid and not ('admin' = any (coalesce(p_roles, '{}'))) then
-    raise exception 'cannot remove your own admin role' using errcode = '22023';
-  end if;
-
   select coalesce(array_agg(role order by role), '{}') into v_before
     from public.user_roles where user_id = p_user_id;
 
+  if private.is_admin(v_uid) then
+    if p_user_id = v_uid and not ('admin' = any (v_after)) then
+      raise exception 'cannot remove your own admin role' using errcode = '22023';
+    end if;
+  elsif private.has_permission(v_uid, 'roles.manager') then
+    if p_user_id = v_uid then
+      raise exception 'you cannot change your own roles' using errcode = '42501';
+    end if;
+    if not exists (
+      select 1
+        from public.profiles t
+        join public.profiles c on c.id = v_uid and c.company_id = t.company_id
+       where t.id = p_user_id
+    ) then
+      raise exception 'employee not found' using errcode = '42501';
+    end if;
+    if 'admin' = any (v_before) then
+      raise exception 'only admins can change an admin''s roles' using errcode = '42501';
+    end if;
+    if exists (
+      (select r from unnest(v_before) r except select r from unnest(v_after) r)
+      union
+      (select r from unnest(v_after) r except select r from unnest(v_before) r)
+      except select 'manager'::public.app_role
+    ) then
+      raise exception 'only the manager role may be added or removed' using errcode = '42501';
+    end if;
+  else
+    raise exception 'only admins can set roles' using errcode = '42501';
+  end if;
+
   delete from public.user_roles where user_id = p_user_id;
   insert into public.user_roles (user_id, role)
-    select p_user_id, unnest(p_roles)
+    select p_user_id, unnest(v_after)
     on conflict do nothing;
 
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (v_uid, 'set_roles', 'user_roles', p_user_id,
           jsonb_build_object('roles', to_jsonb(v_before)),
-          jsonb_build_object('roles', to_jsonb(coalesce(p_roles, '{}'))));
+          jsonb_build_object('roles', to_jsonb(v_after)));
 end; $$;
 
 
@@ -4028,6 +4104,13 @@ CREATE TRIGGER departments_audit_change AFTER INSERT OR DELETE OR UPDATE ON publ
 
 
 --
+-- Name: departments departments_enforce_update_scope; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER departments_enforce_update_scope BEFORE UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION private.enforce_department_update_scope();
+
+
+--
 -- Name: employee_leave_policies employee_leave_policies_set_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4405,10 +4488,10 @@ CREATE POLICY departments_delete_admin ON public.departments FOR DELETE TO authe
 
 
 --
--- Name: departments departments_insert_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: departments departments_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_insert_admin ON public.departments FOR INSERT TO authenticated WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY departments_insert_editor ON public.departments FOR INSERT TO authenticated WITH CHECK (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text));
 
 
 --
@@ -4419,10 +4502,10 @@ CREATE POLICY departments_select_authenticated ON public.departments FOR SELECT 
 
 
 --
--- Name: departments departments_update_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: departments departments_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_update_admin ON public.departments FOR UPDATE TO authenticated USING (private.is_admin(( SELECT auth.uid() AS uid))) WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY departments_update_editor ON public.departments FOR UPDATE TO authenticated USING (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text)) WITH CHECK (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text));
 
 
 --
@@ -4617,7 +4700,7 @@ COMMENT ON POLICY profiles_select_auth_admin ON public.profiles IS 'Lets the GoT
 -- Name: profiles profiles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid)))));
+CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_permission(( SELECT auth.uid() AS uid), 'employees.edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_permission(( SELECT auth.uid() AS uid), 'employees.edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -4747,6 +4830,14 @@ REVOKE ALL ON FUNCTION private.department_manager_for(p_emp uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.department_step_applies(p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION has_permission(uid uuid, p_permission text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.has_permission(uid uuid, p_permission text) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.has_permission(uid uuid, p_permission text) TO authenticated;
 
 
 --

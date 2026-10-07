@@ -44,12 +44,18 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ☐ **Admin-configurable roles and permissions** (owner, 2026-10-07). Admin creates a role (name),
+  ticks a permission level per area (not allowed / read only / edit), and the role appears in the
+  Edit Employee role checkboxes, so granting access no longer needs a migration. Seam already in
+  place: `private.has_permission(uid, key)` (FR-51) — replace its body with a table lookup, move the
+  older hard-coded `has_role(uid,'hr')` grants onto it, and replace the fixed `app_role` enum with a
+  roles table.
 
 - ☐ FR-8: leave types cannot be added or edited in the app. Only the seeded types exist.
 - ☐ Rejection reason: preset reasons in a dropdown, keeping free text as "other" (owner's plan).
 - ☐ The role checkboxes on both employee forms show raw English slugs (`admin`, `hr`, …) even in
-  Farsi. The e2e `createEmployee` helper selects them by label text, so add `data-testid`s before
-  translating them. The Edit Employee "Admin actions" card title is hard-coded English too.
+  Farsi. The e2e `createEmployee` helper and `hr-employee-admin.spec` select them by label text, so
+  add `data-testid`s before translating them.
 - ☐ Ask the client whether the daily work errand has its own paper form. It reuses BJ-F 50207
   today.
 - ☐ Optional: extend `jalali_months` below 1400 for historical leave records. Regenerate with

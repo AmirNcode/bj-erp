@@ -70,6 +70,7 @@ export type UpdateEmployeeFields = Partial<{
   department_id: string | null;
   manager_id: string | null;
   hire_date: string | null;
+  job_title: string | null;
   active: boolean;
   language_pref: string;
 }>;
@@ -82,11 +83,10 @@ export async function updateEmployee(
   id: string,
   fields: UpdateEmployeeFields
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'manager'] });
+  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'] });
   if (!c.ok) return c;
-  const isAdmin = c.roles.includes('admin');
 
-  const allowed = allowedProfileFields(isAdmin);
+  const allowed = allowedProfileFields(c.roles);
   const filtered = Object.fromEntries(
     Object.entries(fields).filter(([key]) => allowed.includes(key))
   ) as UpdateEmployeeFields;
@@ -110,14 +110,16 @@ export async function updateEmployee(
 
 /**
  * Replaces the target user's roles entirely via the atomic
- * app_set_user_roles RPC (transactional delete+insert, admin-guarded in-DB,
- * refuses to strip your own admin role, writes its own audit row).
+ * app_set_user_roles RPC (transactional delete+insert, guarded in-DB,
+ * refuses to strip your own admin role, writes its own audit row). An hr
+ * caller may only add or remove `manager`, on a non-admin other than
+ * themselves (FR-51) — the RPC refuses anything else.
  */
 export async function setRoles(
   id: string,
   roles: AppRole[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('app_set_user_roles', {
@@ -131,13 +133,14 @@ export async function setRoles(
 }
 
 /**
- * Activates or deactivates an employee. Admin-only.
+ * Activates or deactivates an employee. Admin, or hr on a non-admin other than
+ * themselves (FR-51; the profile guard trigger enforces the target rule).
  */
 export async function setActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase

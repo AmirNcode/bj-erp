@@ -9,6 +9,7 @@ import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
 import type { DaysHoursError } from '@/lib/leave/duration';
+import type { EditCapabilities } from '@/lib/employees/editCapabilities';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ type Profile = {
   department_id: string | null;
   manager_id: string | null;
   hire_date: string | null;
+  job_title: string | null;
   active: boolean;
   language_pref: string;
 };
@@ -58,21 +60,12 @@ type Profile = {
 type Props = {
   employee: Profile;
   empRoles: string[];
-  isAdmin: boolean;
   /**
-   * FR-43: may edit the leave balance and accrual policy. Admin or hr.
-   * `isAdmin` still gates roles and the department/manager pickers.
+   * What this caller may change on this employee (FR-51), from
+   * employeeEditCapabilities. The database enforces the same rules; a section
+   * the caller cannot save renders read-only, or not at all.
    */
-  canManageLeave: boolean;
-  /**
-   * May change the basic profile fields (name, hire date, and — for an admin —
-   * department, manager and roles). Admin or manager.
-   *
-   * HR is deliberately NOT included: `updateEmployee` requires admin or manager,
-   * so submitting those fields as HR fails the whole save before the balance and
-   * policy writes are reached.
-   */
-  canEditProfile: boolean;
+  caps: EditCapabilities;
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
@@ -96,6 +89,7 @@ type Props = {
     manager: string;
     roles: string;
     hireDate: string;
+    jobTitle: string;
     save: string;
     cancel: string;
     resetPwd: string;
@@ -129,9 +123,7 @@ type Props = {
 export function EditEmployeeForm({
   employee,
   empRoles,
-  isAdmin,
-  canManageLeave,
-  canEditProfile,
+  caps,
   departments,
   managers,
   balances,
@@ -144,6 +136,8 @@ export function EditEmployeeForm({
 }: Props) {
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
+  const t = useTranslations('manage.employees');
+  const canManageLeave = caps.leave;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
@@ -198,17 +192,18 @@ export function EditEmployeeForm({
       return;
     }
 
-    // Basic fields — skipped entirely for a caller who may not change them, so an
-    // HR user's save proceeds straight to the leave sections instead of failing
-    // here on a write they were never allowed to make.
-    if (canEditProfile) {
+    // Basic fields — skipped entirely for a caller who may not change them (hr
+    // on an admin or on themselves), so the save proceeds straight to the leave
+    // sections instead of failing here on a write they were never allowed to make.
+    if (caps.profile) {
       const result = await updateEmployee(employee.id, {
         full_name: (fd.get('full_name') as string).trim(),
         hire_date: hireDate ? dateObjectToGregorian(hireDate) : null,
-        ...(isAdmin
+        ...(caps.org
           ? {
               department_id: (fd.get('department_id') as string) || null,
               manager_id: (fd.get('manager_id') as string) || null,
+              job_title: ((fd.get('job_title') as string) ?? '').trim() || null,
             }
           : {}),
       });
@@ -220,9 +215,13 @@ export function EditEmployeeForm({
       }
     }
 
-    // Roles are admin-only — HR creating or promoting a role holder is refused
-    // in the database (FR-35 D4), so this branch must NOT follow canManageLeave.
-    if (isAdmin) {
+    // Roles: admin sets any; hr may only add or remove `manager` (FR-51) — the
+    // other boxes are disabled and app_set_user_roles refuses anything else.
+    // Written only when the set changed, so a plain save adds no audit row.
+    const rolesChanged =
+      [...selectedRoles].sort().join(',') !==
+      (empRoles as Role[]).filter((r) => ROLES.includes(r)).sort().join(',');
+    if (caps.editableRoles.length > 0 && rolesChanged) {
       const rolesResult = await setRoles(employee.id, selectedRoles);
       if (!rolesResult.ok) {
         setPending(false);
@@ -303,9 +302,16 @@ export function EditEmployeeForm({
 
   return (
     <div className="space-y-6">
-      {!isAdmin && labels.managerNote && (
-        <p className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm">
-          {labels.managerNote}
+      {(caps.lockedReason || (!caps.org && labels.managerNote)) && (
+        <p
+          className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm"
+          data-testid="edit-scope-note"
+        >
+          {caps.lockedReason === 'admin'
+            ? t('lockedAdmin')
+            : caps.lockedReason === 'self'
+              ? t('lockedSelf')
+              : labels.managerNote}
         </p>
       )}
       {error && (
@@ -348,9 +354,9 @@ export function EditEmployeeForm({
                 name="full_name"
                 required
                 defaultValue={employee.full_name}
-                // Read-only for a caller who cannot save it (HR): an editable box
+                // Read-only for a caller who cannot save it: an editable box
                 // whose value is silently discarded is worse than a disabled one.
-                disabled={!canEditProfile}
+                disabled={!caps.profile}
               />
             </div>
 
@@ -365,8 +371,22 @@ export function EditEmployeeForm({
               />
             </div>
 
-            {isAdmin && (
+            {/* Department, manager, title and roles: admin, or hr on a non-admin
+                other than themselves (FR-51). hr sees them read-only on an admin's
+                record or their own; a manager does not see them. */}
+            {(caps.org || caps.lockedReason) && (
               <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="job_title">{labels.jobTitle}</Label>
+                  <Input
+                    id="job_title"
+                    name="job_title"
+                    defaultValue={employee.job_title ?? ''}
+                    disabled={!caps.org}
+                    data-testid="job-title"
+                  />
+                </div>
+
                 {/* Native <select> — must stay native for Playwright selectOption e2e */}
                 <div className="space-y-1.5">
                   <Label htmlFor="department_id">{labels.department}</Label>
@@ -374,6 +394,7 @@ export function EditEmployeeForm({
                     id="department_id"
                     name="department_id"
                     defaultValue={employee.department_id ?? ''}
+                    disabled={!caps.org}
                     className={nativeSelectClass}
                   >
                     <option value="">{labels.selectDept}</option>
@@ -391,6 +412,7 @@ export function EditEmployeeForm({
                     id="manager_id"
                     name="manager_id"
                     defaultValue={employee.manager_id ?? ''}
+                    disabled={!caps.org}
                     className={nativeSelectClass}
                   >
                     <option value="">{labels.noneOption}</option>
@@ -402,7 +424,12 @@ export function EditEmployeeForm({
                   </select>
                 </div>
 
-                <RoleCheckboxes label={labels.roles} selected={selectedRoles} onChange={setSelectedRoles} />
+                <RoleCheckboxes
+                  label={labels.roles}
+                  selected={selectedRoles}
+                  onChange={setSelectedRoles}
+                  editable={caps.editableRoles}
+                />
               </>
             )}
 
@@ -496,22 +523,24 @@ export function EditEmployeeForm({
         </CardContent>
       </Card>
 
-      {isAdmin && (
+      {(caps.resetPassword || caps.org) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Admin actions</CardTitle>
+            <CardTitle className="text-sm text-muted-foreground">{t('accountActions')}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleResetPassword}
-              disabled={pending}
-              className="border-orange-300 text-orange-700 hover:bg-orange-50"
-            >
-              {labels.resetPwd}
-            </Button>
-            {employee.active ? (
+            {caps.resetPassword && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetPassword}
+                disabled={pending}
+                className="border-orange-300 text-orange-700 hover:bg-orange-50"
+              >
+                {labels.resetPwd}
+              </Button>
+            )}
+            {!caps.org ? null : employee.active ? (
               // Deactivating locks the person out at once, so it asks first.
               <AlertDialog>
                 <AlertDialogTrigger asChild>

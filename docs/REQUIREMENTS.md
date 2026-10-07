@@ -224,6 +224,13 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   the issued one, and offers sign-out. The credentials screen also prints one cut-out login slip per
   person. *(2026-10-06; spec `2026-10-06-first-login-password-design.md`.)*
 
+- **FR-51** ☑ **HR administers employees and departments.** On anyone except an admin, and never on
+  their own record, hr edits name, hire date, department, direct manager and job title, deactivates
+  and reactivates, and adds or removes the `manager` role. hr also creates departments, renames them,
+  sets their manager, views members and posts monthly accruals. Personnel number, password resets,
+  other roles and department codes stay admin-only. *(2026-10-07; spec
+  `2026-10-07-hr-employee-admin-design.md`.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

@@ -6,20 +6,26 @@
 import { randomInt } from 'node:crypto';
 
 /**
- * Returns the profile columns a caller may update.
- * Admin gets all writable columns; a non-admin manager gets a restricted subset.
- * RLS already restricts WHICH rows each role can update — this restricts WHICH columns.
+ * Returns the profile columns a caller may send through `updateEmployee`.
+ * Admin: every writable column. hr (FR-51): name, hire date, department,
+ * manager, job title — `active` goes through `setActive`. Manager: name and hire
+ * date. The profile guard trigger enforces the same per target row (an hr caller
+ * gets nothing on an admin or on themselves); this restricts WHICH columns.
  */
-export function allowedProfileFields(isAdmin: boolean): string[] {
-  if (isAdmin) {
+export function allowedProfileFields(roles: string[]): string[] {
+  if (roles.includes('admin')) {
     return [
       'full_name',
       'department_id',
       'manager_id',
       'hire_date',
+      'job_title',
       'active',
       'language_pref',
     ];
+  }
+  if (roles.includes('hr')) {
+    return ['full_name', 'department_id', 'manager_id', 'hire_date', 'job_title'];
   }
   return ['full_name', 'hire_date'];
 }

@@ -117,6 +117,10 @@ const RULES: Rule[] = [
   { re: /invalid department code|departments_code_format/, key: 'invalidDepartmentCode' },
   { re: /department name is required/, key: 'departmentNameRequired' },
   { re: /cannot remove your own admin role/, key: 'cannotRemoveOwnAdmin' },
+  // FR-51: an hr caller in app_set_user_roles.
+  { re: /only the manager role may be added or removed/, key: 'hrManagerRoleOnly' },
+  { re: /you cannot change your own roles/, key: 'cannotChangeOwnRoles' },
+  { re: /only admins can change an admin's roles/, key: 'adminRolesAdminOnly' },
   { re: /cannot deactivate the last active admin/, key: 'cannotDeactivateLastAdmin' },
   { re: /employee cannot be their own manager|profiles_manager_not_self/i, key: 'managerCannotBeSelf' },
   { re: /no profile for caller/, key: 'noProfile' },

@@ -66,7 +66,8 @@ export default async function NewDepartmentPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
   const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) redirect(`/${locale}/manage/employees`);
+  // FR-51: hr creates departments too (RLS departments_insert_editor).
+  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/manage/employees`);
 
   const t = await getTranslations('manage.departments');
 

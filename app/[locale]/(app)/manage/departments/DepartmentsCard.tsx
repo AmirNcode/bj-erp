@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { setDepartmentManager } from '@/lib/actions/departments';
+import { Input } from '@/components/ui/input';
+import { renameDepartment, setDepartmentManager } from '@/lib/actions/departments';
 import { DepartmentMembersDialog, type DialogDepartment } from './DepartmentMembersDialog';
 
 type Department = {
@@ -37,6 +38,12 @@ type Props = {
     managerLabel: string;
     noManager: string;
     managerSaved: string;
+    rename: string;
+    nameFa: string;
+    nameEn: string;
+    save: string;
+    cancel: string;
+    renamed: string;
     errorLabel: string;
   };
 };
@@ -50,13 +57,31 @@ function slug(nameEn: string): string {
  * Settings → Departments (spec 2026-07-30 §7). Each row shows the name, the
  * read-only code (the bulk-import key since FR-46) and the department manager
  * picker (FR-47 — the second signer on the department's requests). The name
- * opens the members panel; *Add Department* lives here, not on the Employees
- * page (D9).
+ * opens the members panel; *Rename* edits both names in place (FR-51); *Add
+ * Department* lives here, not on the Employees page (D9).
  */
 export function DepartmentsCard({ departments, managers, loadError = null, locale, labels }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState<DialogDepartment | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [editing, setEditing] = useState<{ id: string; nameFa: string; nameEn: string } | null>(null);
+
+  const saveName = () => {
+    if (!editing) return;
+    startTransition(async () => {
+      const result = await renameDepartment(editing.id, {
+        name_fa: editing.nameFa,
+        name_en: editing.nameEn,
+      });
+      if (!result.ok) {
+        toast.error(`${labels.errorLabel}: ${result.error}`);
+        return;
+      }
+      toast.success(labels.renamed);
+      setEditing(null);
+      router.refresh();
+    });
+  };
 
   const changeManager = (departmentId: string, managerId: string) => {
     startTransition(async () => {
@@ -91,6 +116,46 @@ export function DepartmentsCard({ departments, managers, loadError = null, local
         <ul className="divide-y divide-border rounded-lg border border-border" data-testid="dept-list">
           {departments.map((d) => {
             const name = locale === 'fa' ? d.name_fa : d.name_en;
+            if (editing?.id === d.id) {
+              return (
+                <li key={d.id} className="px-3 py-2">
+                  <form
+                    className="flex flex-wrap items-end gap-2"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      saveName();
+                    }}
+                  >
+                    <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+                      {labels.nameFa}
+                      <Input
+                        value={editing.nameFa}
+                        onChange={(e) => setEditing({ ...editing, nameFa: e.target.value })}
+                        required
+                        dir="rtl"
+                        data-testid="dept-name-fa-input"
+                      />
+                    </label>
+                    <label className="flex min-w-40 flex-1 flex-col gap-1 text-xs text-muted-foreground">
+                      {labels.nameEn}
+                      <Input
+                        value={editing.nameEn}
+                        onChange={(e) => setEditing({ ...editing, nameEn: e.target.value })}
+                        required
+                        dir="ltr"
+                        data-testid="dept-name-en-input"
+                      />
+                    </label>
+                    <Button type="submit" size="sm" disabled={isPending} data-testid="dept-rename-save">
+                      {labels.save}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setEditing(null)}>
+                      {labels.cancel}
+                    </Button>
+                  </form>
+                </li>
+              );
+            }
             return (
               <li key={d.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
                 <button
@@ -130,6 +195,16 @@ export function DepartmentsCard({ departments, managers, loadError = null, local
                     ))}
                   </select>
                 </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => setEditing({ id: d.id, nameFa: d.name_fa, nameEn: d.name_en })}
+                  data-testid={`dept-rename-${slug(d.name_en)}`}
+                >
+                  {labels.rename}
+                </Button>
               </li>
             );
           })}

@@ -522,7 +522,10 @@
           "hoursTooLarge": "Hours must be less than one working day ({max} at most).",
           "tooLarge": "At most 366 days."
         }
-      }
+      },
+      "lockedAdmin": "Only an admin can change an admin's department, manager, title, roles or status.",
+      "lockedSelf": "Ask an admin to change your own department, manager, title, roles or status.",
+      "accountActions": "Account"
     },
     "departments": {
       "title": "Departments",
@@ -589,7 +592,13 @@
         "workersLabel": "Workers",
         "noMembers": "No one is assigned to this department.",
         "loading": "Loading…",
-        "close": "Close"
+        "close": "Close",
+        "rename": "Rename",
+        "nameFa": "Name (Farsi)",
+        "nameEn": "Name (English)",
+        "save": "Save",
+        "cancel": "Cancel",
+        "renamed": "Department renamed."
       },
       "accrual": {
         "title": "Monthly leave accrual",
@@ -859,6 +868,9 @@
     "invalidDepartmentCode": "The department code must be 2-6 latin letters or digits.",
     "departmentNameRequired": "The Farsi and English department names are required.",
     "cannotRemoveOwnAdmin": "You cannot remove the admin role from your own account.",
+    "hrManagerRoleOnly": "HR can only add or remove the manager role.",
+    "cannotChangeOwnRoles": "You cannot change your own roles. Ask an admin.",
+    "adminRolesAdminOnly": "Only an admin can change an admin's roles.",
     "cannotDeactivateLastAdmin": "The last active administrator cannot be deactivated.",
     "managerCannotBeSelf": "An employee cannot be assigned as their own manager.",
     "noProfile": "Your profile could not be found. Contact the administrator.",

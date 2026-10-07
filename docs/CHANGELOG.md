@@ -9,6 +9,21 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### HR administers employees and departments — FR-51 (2026-10-07)
+
+Migration `20261007130001`. Spec `docs/specs/2026-10-07-hr-employee-admin-design.md`.
+- **HR edits employees:** name, hire date, department, direct manager and the new **job title**
+  field; deactivate and reactivate; add or remove the **manager** role. Not on admins, and not on
+  their own record (shown read-only with a note). Personnel number, password reset and other roles
+  stay admin-only.
+- **HR manages departments:** the Departments page is open to HR. Add, **rename** (new inline
+  Farsi + English edit, also for admins), set the department manager, view members, post monthly
+  accrual. The department code stays admin-only.
+- **Fixed (security):** the database never checked `job_title` or `personnel_no` on profile updates,
+  so an employee could change their own (and a manager a report's title) through the API.
+- New grants go through `private.has_permission`, the seam for admin-configurable roles later.
+- The Edit Employee "Admin actions" card is now "Account" / «حساب کاربری».
+
 ### Leave amounts as days + hours (2026-10-07)
 
 UI only, no migration.

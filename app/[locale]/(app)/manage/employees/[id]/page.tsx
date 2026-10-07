@@ -1,7 +1,8 @@
 /**
- * Edit employee page — fields available depend on caller's role.
- * Admin gets full editor + roles + reset-password + activate/deactivate.
- * Manager gets limited field subset.
+ * Edit employee page — fields available depend on the caller's roles and the
+ * target (employeeEditCapabilities, FR-51). Admin: everything. hr: profile,
+ * department, manager, title, activate/deactivate and the manager role, except
+ * on an admin or themselves; plus leave (FR-43). Manager: name and hire date.
  */
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
@@ -10,6 +11,7 @@ import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getEmployeeBalances, getEmployeePolicies, getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { notFound } from 'next/navigation';
+import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
 
@@ -29,18 +31,7 @@ export default async function EditEmployeePage({ params }: Props) {
 
   if (!user) return notFound();
 
-  // Fetch caller's roles
   const callerRoles = await getCachedRoles(user.id);
-  const isAdmin = callerRoles.includes('admin');
-  // FR-43: HR administers leave, so it reads and writes the balance and accrual
-  // sections here too. Role assignment and the department/manager pickers stay
-  // admin-only above.
-  const canManageLeave = isAdmin || callerRoles.includes('hr');
-  // `updateEmployee` requires admin or manager (and RLS narrows a manager to
-  // their own reports). HR is neither, so the form must NOT call it for them —
-  // otherwise every HR save fails on the profile write before ever reaching the
-  // leave sections, which is exactly what happened when FR-43 was first wired up.
-  const canEditProfile = isAdmin || callerRoles.includes('manager');
 
   // Fetch target employee
   const { data: employee } = await supabase
@@ -57,6 +48,14 @@ export default async function EditEmployeePage({ params }: Props) {
     .select('role')
     .eq('user_id', id);
   const empRoles = (empRolesData ?? []).map((r) => r.role);
+
+  const caps = employeeEditCapabilities({
+    callerId: user.id,
+    callerRoles,
+    targetId: id,
+    targetRoles: empRoles,
+  });
+  const canManageLeave = caps.leave;
 
   // Fetch departments and potential managers
   const [{ data: departments }, { data: managers }] = await Promise.all([
@@ -101,9 +100,7 @@ export default async function EditEmployeePage({ params }: Props) {
       <EditEmployeeForm
         employee={employee}
         empRoles={empRoles as string[]}
-        isAdmin={isAdmin}
-        canManageLeave={canManageLeave}
-        canEditProfile={canEditProfile}
+        caps={caps}
         departments={departments ?? []}
         managers={managers ?? []}
         balances={balances}
@@ -119,6 +116,7 @@ export default async function EditEmployeePage({ params }: Props) {
           manager: t('employees.manager'),
           roles: t('employees.roles'),
           hireDate: t('employees.hireDate'),
+          jobTitle: t('employees.jobTitle'),
           save: t('employees.save'),
           cancel: t('employees.cancel'),
           resetPwd: t('employees.resetPwd'),

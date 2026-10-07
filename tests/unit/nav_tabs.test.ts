@@ -52,8 +52,15 @@ describe('manageItemsForRoles', () => {
   it('manager: employees and approvals only', () => {
     expect(keys(['employee', 'manager'])).toEqual(['employees', 'approvals']);
   });
-  it('hr also reaches the request archive and reports', () => {
-    expect(keys(['hr'])).toEqual(['employees', 'approvals', 'requests', 'approvalSteps', 'reports']);
+  it('hr also reaches departments (FR-51), the request archive and reports', () => {
+    expect(keys(['hr'])).toEqual([
+      'employees',
+      'departments',
+      'approvals',
+      'requests',
+      'approvalSteps',
+      'reports',
+    ]);
   });
   it('admin reaches the whole group', () => {
     expect(keys(['admin'])).toEqual([

@@ -82,9 +82,9 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   await page.goto('/manage/settings');
   await expect(page).toHaveURL(/\/manage\/approval-steps$/, { timeout: 20_000 });
 
-  // Departments are company-wide config too; admins only.
+  // FR-51: HR creates departments (the code stays admin-only in the database).
   await page.goto('/manage/departments/new');
-  await expect(page).toHaveURL(/\/manage\/employees$/, { timeout: 20_000 });
+  await expect(page.locator('[data-testid="dept-name-fa"]')).toBeVisible({ timeout: 20_000 });
 
   // Onboarding controls ARE offered to hr (FR-35 D4). Asserted on real testids:
   // an earlier version of this test looked for `dept-add-employee`, which does

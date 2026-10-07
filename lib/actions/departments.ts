@@ -27,8 +27,8 @@ export type CreateDepartmentInput = {
 const CODE_ATTEMPTS = 5;
 
 /**
- * Creates a department in the caller's company. Admin-only: RLS
- * (departments_insert_admin) is the enforcement layer, the role check here
+ * Creates a department in the caller's company. Admin or hr (FR-51): RLS
+ * (departments_insert_editor) is the enforcement layer, the role check here
  * exists to give a fast localized error instead of an empty-result insert.
  *
  * The caller does NOT supply a code. Since 20260730130002 the code prefixes
@@ -40,7 +40,7 @@ const CODE_ATTEMPTS = 5;
 export async function createDepartment(
   input: CreateDepartmentInput
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
 
   const nameFa = input.name_fa.trim();
@@ -94,8 +94,8 @@ export async function createDepartment(
  * docs/specs/2026-07-30-work-errand-and-login-codes-design.md); the UI that
  * called this is gone. It and the `departments_update_admin` RLS policy stay
  * in place so the feature can return without a migration — this is not dead
- * code to be deleted. Admin-only; RLS enforces the write, this gives fast
- * localized errors.
+ * code to be deleted. Admin-only: `departments_update_editor` admits hr too,
+ * but the department guard trigger keeps `code` admin-only (FR-51).
  */
 export async function updateDepartmentCode(
   id: string,
@@ -123,19 +123,48 @@ export async function updateDepartmentCode(
 /**
  * Sets (or clears) a department's manager — the second signer on every request
  * from that department when the department-manager approval step is active
- * (FR-47). Admin-only: RLS `departments_update_admin` enforces the write; the
- * picker only offers active holders of the `manager` role.
+ * (FR-47). Admin or hr (FR-51): RLS `departments_update_editor` enforces the
+ * write; the picker only offers active holders of the `manager` role.
  */
 export async function setDepartmentManager(
   departmentId: string,
   managerId: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
     .from('departments')
     .update({ manager_id: managerId })
+    .eq('id', departmentId)
+    .select('id');
+
+  if (error) return dbErr(error.message);
+  if (!data || data.length === 0) return dbErr('not allowed to update this department');
+
+  invalidateAppCache();
+  return { ok: true };
+}
+
+/**
+ * Renames a department (FR-51). Admin or hr: RLS `departments_update_editor`
+ * enforces the write and the department guard trigger lets a non-admin change
+ * only the names and the manager — never the code, the bulk-import key.
+ */
+export async function renameDepartment(
+  departmentId: string,
+  input: { name_fa: string; name_en: string }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  if (!c.ok) return c;
+
+  const nameFa = input.name_fa.trim();
+  const nameEn = input.name_en.trim();
+  if (!nameFa || !nameEn) return dbErr('department name is required');
+
+  const { data, error } = await c.supabase
+    .from('departments')
+    .update({ name_fa: nameFa, name_en: nameEn })
     .eq('id', departmentId)
     .select('id');
 
@@ -165,7 +194,7 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
 /**
  * Who works in a department, split into Managers then Workers (D10).
  *
- * Admin-only, and deliberately built out of the *existing* `can_read_all`
+ * Admin or hr (FR-51), and deliberately built out of the *existing* `can_read_all`
  * SELECT paths on `profiles` and `user_roles` — no new RLS policy and no new
  * SECURITY DEFINER function were added for this panel.
  *
@@ -177,7 +206,7 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
 export async function getDepartmentMembers(
   departmentId: string
 ): Promise<{ ok: true; members: DepartmentMembers } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
 
   const { data: department, error: departmentError } = await c.supabase

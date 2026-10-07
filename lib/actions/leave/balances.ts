@@ -251,7 +251,8 @@ export async function getEmployeePolicies(
 export async function runAllAccruals(): Promise<
   { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
 > {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  // FR-51: hr posts accruals too (accrue_all_leave checks accruals.run).
+  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase.rpc('accrue_all_leave');

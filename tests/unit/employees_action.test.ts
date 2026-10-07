@@ -6,28 +6,34 @@ import { describe, it, expect } from 'vitest';
 import { allowedProfileFields, generateTempPassword } from '@/lib/actions/employees-helpers';
 
 describe('allowedProfileFields', () => {
-  it('returns full admin field list when isAdmin=true', () => {
-    const fields = allowedProfileFields(true);
-    expect(fields).toEqual([
+  it('admin may send every editable column, job title included', () => {
+    expect(allowedProfileFields(['admin'])).toEqual([
       'full_name',
       'department_id',
       'manager_id',
       'hire_date',
+      'job_title',
       'active',
       'language_pref',
     ]);
   });
 
-  it('returns restricted manager field list when isAdmin=false', () => {
-    const fields = allowedProfileFields(false);
-    expect(fields).toEqual(['full_name', 'hire_date']);
+  it('hr may send the FR-51 set: no language, and active goes through setActive', () => {
+    expect(allowedProfileFields(['hr', 'employee'])).toEqual([
+      'full_name',
+      'department_id',
+      'manager_id',
+      'hire_date',
+      'job_title',
+    ]);
   });
 
-  it('manager subset is exactly [full_name, hire_date]', () => {
-    const fields = allowedProfileFields(false);
-    expect(fields).toHaveLength(2);
-    expect(fields).toContain('full_name');
-    expect(fields).toContain('hire_date');
+  it('a manager keeps exactly name and hire date', () => {
+    expect(allowedProfileFields(['manager', 'employee'])).toEqual(['full_name', 'hire_date']);
+  });
+
+  it('admin wins over any other role it is combined with', () => {
+    expect(allowedProfileFields(['manager', 'admin'])).toContain('language_pref');
   });
 });
 
