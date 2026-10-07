@@ -40,7 +40,14 @@ was admin-only in the app and in the database.
   manager a report's title, through PostgREST. Both are now guarded: job title for admin and hr
   editors, personnel number admin-only.
 
-## Database (`20261007130001_hr_employee_admin.sql`)
+- **D9 — Not your own department's manager** (added after the commit security review,
+  `20261007130002`). hr can grant `manager` and set department managers, so hr could otherwise make
+  a friend the manager of hr's own department and have them sign the department-manager step on
+  hr's leave. A non-admin may not change the manager of the department they belong to; the picker
+  is disabled there. Also: a department manager must be from the same company, and the department
+  editor policies are scoped to the caller's company (defence in depth; one company per deploy).
+
+## Database (`20261007130001_hr_employee_admin.sql`, `20261007130002_hr_department_scope.sql`)
 
 - `private.has_permission(uid, text)`, `EXECUTE` to `authenticated` only.
 - `profiles_update` adds `has_permission(employees.edit)`. `enforce_profile_update_scope`: admin →

@@ -121,6 +121,10 @@ test('hr creates a department, renames it and sets its manager', async ({ page }
   await page.goto('/en/manage/departments');
   await expect(page.locator('[data-testid="dept-list"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="accrual-runner"]')).toBeVisible();
+  // hr may not pick the manager of their own department: that person would sign
+  // the department-manager step on hr's own requests.
+  await expect(page.locator('select[data-own-department="true"]')).toHaveCount(1);
+  await expect(page.locator('select[data-own-department="true"]')).toBeDisabled();
   await page.locator('[data-testid="add-department-link"]').click();
   await page.fill('[data-testid="dept-name-fa"]', `واحد ${token}`);
   await page.fill('[data-testid="dept-name-en"]', nameEn);

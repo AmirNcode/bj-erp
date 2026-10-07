@@ -598,7 +598,8 @@
         "nameEn": "Name (English)",
         "save": "Save",
         "cancel": "Cancel",
-        "renamed": "Department renamed."
+        "renamed": "Department renamed.",
+        "ownDepartmentManager": "Only an admin can change the manager of your own department."
       },
       "accrual": {
         "title": "Monthly leave accrual",
@@ -908,7 +909,9 @@
     "importBadMode": "This import mode cannot do that — check the mode and try again.",
     "passwordSameAsIssued": "The new password must be different from the one you were given.",
     "passwordChangeNotRequired": "Your password has already been changed.",
-    "passwordSameAsCurrent": "The new password must be different from the current one."
+    "passwordSameAsCurrent": "The new password must be different from the current one.",
+    "ownDepartmentManager": "Only an admin can change the manager of your own department.",
+    "managerOtherCompany": "The department manager must be someone in this company."
   },
   "roles": {
     "admin": "Admin",

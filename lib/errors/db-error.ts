@@ -121,6 +121,8 @@ const RULES: Rule[] = [
   { re: /only the manager role may be added or removed/, key: 'hrManagerRoleOnly' },
   { re: /you cannot change your own roles/, key: 'cannotChangeOwnRoles' },
   { re: /only admins can change an admin's roles/, key: 'adminRolesAdminOnly' },
+  { re: /you cannot change the manager of your own department/, key: 'ownDepartmentManager' },
+  { re: /department manager must belong to the same company/, key: 'managerOtherCompany' },
   { re: /cannot deactivate the last active admin/, key: 'cannotDeactivateLastAdmin' },
   { re: /employee cannot be their own manager|profiles_manager_not_self/i, key: 'managerCannotBeSelf' },
   { re: /no profile for caller/, key: 'noProfile' },

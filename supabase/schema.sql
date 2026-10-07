@@ -394,10 +394,22 @@ CREATE FUNCTION private.enforce_department_update_scope() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
+declare
+  v_uid uuid := auth.uid();
 begin
-  if private.is_admin(auth.uid()) then
+  if new.manager_id is not null
+     and (tg_op = 'INSERT' or new.manager_id is distinct from old.manager_id)
+     and not exists (
+       select 1 from public.profiles where id = new.manager_id and company_id = new.company_id
+     )
+  then
+    raise exception 'department manager must belong to the same company' using errcode = '22023';
+  end if;
+
+  if tg_op = 'INSERT' or private.is_admin(v_uid) then
     return new;
   end if;
+
   if (new.id         is distinct from old.id)
      or (new.company_id is distinct from old.company_id)
      or (new.code       is distinct from old.code)
@@ -406,6 +418,13 @@ begin
   then
     raise exception 'not permitted to modify restricted department fields' using errcode = '42501';
   end if;
+
+  if new.manager_id is distinct from old.manager_id
+     and exists (select 1 from public.profiles where id = v_uid and department_id = old.id)
+  then
+    raise exception 'you cannot change the manager of your own department' using errcode = '42501';
+  end if;
+
   return new;
 end; $$;
 
@@ -4107,7 +4126,7 @@ CREATE TRIGGER departments_audit_change AFTER INSERT OR DELETE OR UPDATE ON publ
 -- Name: departments departments_enforce_update_scope; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER departments_enforce_update_scope BEFORE UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION private.enforce_department_update_scope();
+CREATE TRIGGER departments_enforce_update_scope BEFORE INSERT OR UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION private.enforce_department_update_scope();
 
 
 --
@@ -4491,7 +4510,9 @@ CREATE POLICY departments_delete_admin ON public.departments FOR DELETE TO authe
 -- Name: departments departments_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_insert_editor ON public.departments FOR INSERT TO authenticated WITH CHECK (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text));
+CREATE POLICY departments_insert_editor ON public.departments FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -4505,7 +4526,11 @@ CREATE POLICY departments_select_authenticated ON public.departments FOR SELECT 
 -- Name: departments departments_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_update_editor ON public.departments FOR UPDATE TO authenticated USING (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text)) WITH CHECK (private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text));
+CREATE POLICY departments_update_editor ON public.departments FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --

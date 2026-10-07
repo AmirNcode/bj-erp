@@ -122,7 +122,21 @@ admin-configurable roles with per-area permissions (now in TASKS; `has_permissio
   `accrual.spec` (company-wide posting on the real roster).
 
 **State left behind**
-- Uncommitted on `main`, not pushed (awaiting Amir). `docs/design/` untracked from before.
+- Committed `3e6a1b8`, pushed. Run 37580903046 SUCCESS: backup
+  `pre-3e6a1b8…-2026-10-07-012224.dump` (460K), applied `20261007130001` on Liara, `Liara release
+  verified: 3e6a1b8`, health 200.
+- **Follow-up from the commit security review** (two automated findings: departments editor
+  policies had no company scope; and a "self-approval" route): hr could grant `manager` to someone
+  and make them manager of hr's own department, who then signs the department-manager step on hr's
+  requests. `supabase/migrations/20261007130002_hr_department_scope.sql`: company-scoped editor
+  policies; trigger now BEFORE INSERT OR UPDATE — same-company manager (admins too), and a non-admin
+  may not change the manager of their own department. `DepartmentsCard` disables that picker
+  (`data-own-department`), page reads the caller's department; db-error keys
+  `ownDepartmentManager` / `managerOtherCompany`. SQL scenarios now 40 (3 new were red first); dry
+  run 40/40, then `bj-deploy update local` (backup `20261007T062359Z-75c9e4`), REST restarted,
+  schema dump, 40/40 on the migrated DB. Unit 557, tsc, lint, build, test:deploy clean; e2e
+  `hr-employee-admin` + `hr-role` 10 passed. Not yet committed: awaiting Amir's OK to push.
+- `docs/design/` untracked from before.
 
 **For the next agent**
 - `postgres` is not a superuser in the db image (no CREATE on `private`, cannot write auth.users):

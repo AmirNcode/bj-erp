@@ -21,6 +21,9 @@ Migration `20261007130001`. Spec `docs/specs/2026-10-07-hr-employee-admin-design
   accrual. The department code stays admin-only.
 - **Fixed (security):** the database never checked `job_title` or `personnel_no` on profile updates,
   so an employee could change their own (and a manager a report's title) through the API.
+- **HR cannot set the manager of their own department** (`20261007130002`, from the security
+  review): that person signs the department-manager step on HR's own requests. The picker is
+  disabled on HR's own department. Department managers must be from the same company.
 - New grants go through `private.has_permission`, the seam for admin-configurable roles later.
 - The Edit Employee "Admin actions" card is now "Account" / «حساب کاربری».
 

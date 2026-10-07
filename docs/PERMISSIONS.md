@@ -98,7 +98,11 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `has_permission(departments.edit)` since FR-51 (`departments_insert_editor` /
   `departments_update_editor`; DELETE stays `departments_delete_admin`). The
   `departments_enforce_update_scope` trigger lets a non-admin change only `name_fa`, `name_en` and
-  `manager_id`; `code` (the bulk-import key), `kind` and `company_id` stay admin-only. The FR-24 admin editor (`/settings`, admin-only since 2026-10-05) writes `work_settings` /
+  `manager_id`; `code` (the bulk-import key), `kind` and `company_id` stay admin-only. Since
+  `20261007130002`: a non-admin may **not** change the manager of the department they belong to
+  (that person signs the department-manager step on the caller's own requests, and hr can grant the
+  manager role); a department manager must be a same-company profile (checked on insert and update,
+  admins included); both editor policies require `company_id` = the caller's company. The FR-24 admin editor (`/settings`, admin-only since 2026-10-05) writes `work_settings` /
   `holidays` **directly** through these policies — no SECURITY DEFINER RPC needed (config tables,
   unlike transactional `leave_*`, are admin-writable by design). Same for departments: the
   admin-only *Add Department* page (`/manage/departments/new`, `createDepartment`) INSERTs

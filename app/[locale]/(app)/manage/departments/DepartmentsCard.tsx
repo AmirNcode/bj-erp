@@ -22,6 +22,11 @@ type Props = {
   departments: Department[];
   /** Active holders of the `manager` role — the department-manager picker's options. */
   managers: { id: string; fullName: string }[];
+  /**
+   * The non-admin caller's own department, whose manager picker is disabled
+   * (the database refuses the change too). Null for admins.
+   */
+  ownDepartmentId?: string | null;
   /** Non-null when the read FAILED — distinct from "there are none". */
   loadError?: string | null;
   locale: string;
@@ -44,6 +49,7 @@ type Props = {
     save: string;
     cancel: string;
     renamed: string;
+    ownDepartmentManager: string;
     errorLabel: string;
   };
 };
@@ -60,7 +66,14 @@ function slug(nameEn: string): string {
  * opens the members panel; *Rename* edits both names in place (FR-51); *Add
  * Department* lives here, not on the Employees page (D9).
  */
-export function DepartmentsCard({ departments, managers, loadError = null, locale, labels }: Props) {
+export function DepartmentsCard({
+  departments,
+  managers,
+  ownDepartmentId = null,
+  loadError = null,
+  locale,
+  labels,
+}: Props) {
   const router = useRouter();
   const [open, setOpen] = useState<DialogDepartment | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -177,7 +190,9 @@ export function DepartmentsCard({ departments, managers, loadError = null, local
                   <span>{labels.managerLabel}</span>
                   <select
                     value={d.manager_id ?? ''}
-                    disabled={isPending}
+                    disabled={isPending || d.id === ownDepartmentId}
+                    title={d.id === ownDepartmentId ? labels.ownDepartmentManager : undefined}
+                    data-own-department={d.id === ownDepartmentId ? 'true' : undefined}
                     onChange={(e) => changeManager(d.id, e.target.value)}
                     className="h-8 max-w-48 rounded-md border border-input bg-background ps-2 text-sm text-foreground"
                     data-testid={`dept-manager-${slug(d.name_en)}`}

@@ -31,6 +31,11 @@ export default async function DepartmentsPage({ params }: Props) {
     getTranslations('manage.settings'),
   ]);
   const supabase = await createClient();
+  // A non-admin may not pick the manager of their own department: that person
+  // signs the department-manager step on the caller's own requests.
+  const { data: me } = roles.includes('admin')
+    ? { data: null }
+    : await supabase.from('profiles').select('department_id').eq('id', user.id).maybeSingle();
   // The code is shown read-only since FR-46 (it is the bulk-import key); the
   // manager is the department's second signer (FR-47).
   const [{ data: departments, error: departmentsError }, { data: managerRows }] = await Promise.all([
@@ -64,6 +69,7 @@ export default async function DepartmentsPage({ params }: Props) {
               manager: { full_name: string } | null;
             }[]).map(({ manager, ...d }) => ({ ...d, manager_name: manager?.full_name ?? null }))}
             managers={managers}
+            ownDepartmentId={me?.department_id ?? null}
             loadError={departmentsError?.message ?? null}
             locale={locale}
             labels={{
@@ -85,6 +91,7 @@ export default async function DepartmentsPage({ params }: Props) {
               save: t('departments.save'),
               cancel: t('departments.cancel'),
               renamed: t('departments.renamed'),
+              ownDepartmentManager: t('departments.ownDepartmentManager'),
               errorLabel: t('error'),
             }}
           />

@@ -80,6 +80,15 @@ begin
   insert into fx values ('dept', v_dept);
   insert into fx values ('dept2', (select id from public.departments where company_id = v_company and id <> v_dept order by code limit 1));
   insert into fx values ('company', v_company);
+
+  -- Another company with one profile, for the tenant-scoping scenarios.
+  insert into public.companies (name) values ('FR51 Other Co') returning id into v_dept;
+  insert into fx values ('other_company', v_dept);
+  insert into fx values ('outsider', gen_random_uuid());
+  insert into auth.users (id, email) values ((select id from fx where k = 'outsider'), '9990000906@fixture.invalid');
+  insert into public.profiles (id, company_id, employee_code, full_name, active, personnel_no, must_change_password)
+  values ((select id from fx where k = 'outsider'), v_dept, '9990000906', 'FR51 outsider', true, '9990000906', false);
+  insert into public.user_roles (user_id, role) values ((select id from fx where k = 'outsider'), 'manager');
 end $$;
 
 -- ── hr on an ordinary employee ──────────────────────────────────────────────
@@ -141,6 +150,17 @@ select pg_temp.expect('hr may not change a department code',
   pg_temp.try_as('hr', format('update public.departments set code = %s where code = %s', quote_literal('ZZ8'), quote_literal('ZZ9'))), '42501');
 select pg_temp.expect('hr may not delete a department',
   pg_temp.try_as('hr', format('delete from public.departments where code = %s', quote_literal('ZZ9'))), 'ok:0');
+select pg_temp.expect('hr may not choose the manager of their own department',
+  pg_temp.try_as('hr', format('update public.departments set manager_id = %s where id = %s', pg_temp.id('mgr'), pg_temp.id('dept'))), '42501');
+select pg_temp.expect('hr may still rename their own department',
+  pg_temp.try_as('hr', format('update public.departments set name_en = name_en || %s where id = %s', quote_literal(' '), pg_temp.id('dept'))), 'ok:1');
+select pg_temp.expect('a department manager must be in the same company',
+  pg_temp.try_as('hr', format('update public.departments set manager_id = %s where code = %s', pg_temp.id('outsider'), quote_literal('ZZ9'))), '22023');
+select pg_temp.expect('hr may not create a department in another company',
+  pg_temp.try_as('hr', format(
+    'insert into public.departments (company_id, name_fa, name_en, kind, code) values (%s, %s, %s, %s, %s)',
+    pg_temp.id('other_company'), quote_literal('بیرون'), quote_literal('FR51 Outside'),
+    quote_literal((select kind::text from public.departments limit 1)), quote_literal('ZZ6'))), '42501');
 select pg_temp.expect('employee may not rename a department',
   pg_temp.try_as('emp', format('update public.departments set name_en = %s where code = %s', quote_literal('x'), quote_literal('ZZ9'))), 'ok:0');
 
@@ -171,6 +191,8 @@ select pg_temp.expect('employee may not post accruals',
 -- ── admin unchanged ─────────────────────────────────────────────────────────
 select pg_temp.expect('admin still changes a personnel number',
   pg_temp.try_as('adm2', format('update public.profiles set personnel_no = %s where id = %s', quote_literal('9990000997'), pg_temp.id('emp'))), 'ok:1');
+select pg_temp.expect('admin still sets the manager of their own department',
+  pg_temp.try_as('adm2', format('update public.departments set manager_id = %s where id = %s', pg_temp.id('mgr'), pg_temp.id('dept'))), 'ok:1');
 select pg_temp.expect('admin still changes a department code',
   pg_temp.try_as('adm2', format('update public.departments set code = %s where code = %s', quote_literal('ZZ7'), quote_literal('ZZ9'))), 'ok:1');
 
