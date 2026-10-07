@@ -90,6 +90,8 @@ Copy this block verbatim and fill it in.
   `schema:dump` (+3 lines).
 - Verified in a rolled-back transaction: the same-password call is refused and the flag stays true; a
   real change clears it. tsc, lint and unit tests (523) pass. e2e not re-run (no UI change).
+- Committed `11ddf99`, pushed. Run 37562979552 SUCCESS: backup `pre-11ddf99…-2026-10-06-214119.dump`,
+  applied `20261007120001` on Liara, `Liara release verified: 11ddf99`.
 
 ## 2026-10-06 — Pre-pilot fixes: unpaid leave, first-login password, slips, uptime, Mac backups
 
