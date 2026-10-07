@@ -124,7 +124,10 @@ negatives allowed; leftover minutes kept with a note; policy fields converted to
   and 375 px checked.
 
 **State left behind**
-- Uncommitted on `main`. Not pushed. `docs/design/` was already untracked before this session.
+- Committed `6585c8c` (with a CLAUDE.md gotcha line on the local roster), pushed. Run 37570995459
+  SUCCESS: backup `pre-6585c8c…-2026-10-06-232334.dump` (460K), no pending migrations, `Liara release
+  verified: 6585c8c`; `https://bjeng.app/api/health` 200. `docs/design/` was already untracked before
+  this session and is left alone.
 
 **For the next agent**
 - The local DB now contains the real roster (codes 100–3xx) next to the demo accounts. Run only
