@@ -78,6 +78,19 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — Refuse same-password change (follow-up to 22fe044)
+
+**Agent:** Claude Opus 5.5 via Claude Code · **HEAD at start:** main @ `69b4c3d`
+**Trigger:** Amir chose the small fix for the review finding logged below.
+
+- `supabase/migrations/20261007120001_change_password_must_differ.sql`: `app_change_my_password`
+  raises `new password must differ from the current password` (22023) when new = current. Mapped in
+  `lib/errors/db-error.ts` → `dbErrors.passwordSameAsCurrent` (fa/en). CHANGELOG and PERMISSIONS updated.
+- Local: `bj-deploy update local` (backup `20261007T022739Z-d3294d`) applied it; REST restarted;
+  `schema:dump` (+3 lines).
+- Verified in a rolled-back transaction: the same-password call is refused and the flag stays true; a
+  real change clears it. tsc, lint and unit tests (523) pass. e2e not re-run (no UI change).
+
 ## 2026-10-06 — Pre-pilot fixes: unpaid leave, first-login password, slips, uptime, Mac backups
 
 **Agent:** Claude Opus 5.5 via Claude Code

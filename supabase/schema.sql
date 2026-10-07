@@ -1769,6 +1769,9 @@ begin
   if octet_length(coalesce(p_new, '')) > 72 then
     raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
   end if;
+  if p_new = p_current then
+    raise exception 'new password must differ from the current password' using errcode = '22023';
+  end if;
 
   select encrypted_password = extensions.crypt(p_current, encrypted_password)
     into v_ok

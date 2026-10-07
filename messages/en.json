@@ -882,7 +882,8 @@
     "importCannotDeactivateAdmin": "An import cannot deactivate an admin account.",
     "importBadMode": "This import mode cannot do that — check the mode and try again.",
     "passwordSameAsIssued": "The new password must be different from the one you were given.",
-    "passwordChangeNotRequired": "Your password has already been changed."
+    "passwordChangeNotRequired": "Your password has already been changed.",
+    "passwordSameAsCurrent": "The new password must be different from the current one."
   },
   "roles": {
     "admin": "Admin",

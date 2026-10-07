@@ -82,6 +82,7 @@ const RULES: Rule[] = [
   { re: /new password must be at least 8 characters/, key: 'passwordTooShort' },
   { re: /new password must be at most 72 ASCII characters/, key: 'passwordTooLong' },
   { re: /new password must differ from the issued password/, key: 'passwordSameAsIssued' },
+  { re: /new password must differ from the current password/, key: 'passwordSameAsCurrent' },
   { re: /password change is not required/, key: 'passwordChangeNotRequired' },
   { re: /invalid employee code/, key: 'invalidEmployeeCode' },
   { re: /employee code already exists/, key: 'duplicateEmployeeCode' },

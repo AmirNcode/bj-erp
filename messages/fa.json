@@ -882,7 +882,8 @@
     "importCannotDeactivateAdmin": "ورود گروهی نمی‌تواند حساب مدیر سیستم را غیرفعال کند.",
     "importBadMode": "این نوع ورود چنین کاری نمی‌کند — نوع ورود را بررسی و دوباره تلاش کنید.",
     "passwordSameAsIssued": "رمز عبور جدید نباید با رمز عبور دریافتی یکسان باشد.",
-    "passwordChangeNotRequired": "رمز عبور شما قبلاً تغییر کرده است."
+    "passwordChangeNotRequired": "رمز عبور شما قبلاً تغییر کرده است.",
+    "passwordSameAsCurrent": "رمز عبور جدید باید با رمز عبور فعلی متفاوت باشد."
   },
   "roles": {
     "admin": "ادمین",

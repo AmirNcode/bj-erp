@@ -264,7 +264,8 @@ user creation in-database and **identical on self-hosted Supabase** (portability
 their own password is not flagged). The `(app)` and `(print)` layouts send a flagged account to
 `/set-password`. There `app_set_initial_password(p_new)` (authenticated only) requires the flag,
 refuses the issued password (`crypt` comparison), sets the new one, clears the flag and audits
-`set_initial_password`. The flag is a UI gate, not an RLS boundary: a flagged session's data access
+`set_initial_password`. `app_change_my_password` also refuses new = current (`20261007120001`), so
+neither RPC clears the flag without a real change. The flag is a UI gate, not an RLS boundary: a flagged session's data access
 is unchanged, and RLS stays the authority.
 
 `public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin-only; self-guards via

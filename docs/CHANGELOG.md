@@ -17,6 +17,8 @@ Migrations `20261006120003`–`…04`. Spec `docs/specs/2026-10-06-first-login-p
   corrected and existing requests are backfilled.
 - **First-login password (FR-50):** new, imported and admin-reset accounts must choose their own
   password before using the app. The issued password is refused.
+- **Same-password change refused** (`20261007120001`): `app_change_my_password` rejects a new
+  password equal to the current one, so the first-login flag cannot be cleared without a real change.
 - **Login slips:** the one-time credentials screen (new employee import, password regeneration)
   prints one cut-out slip per person: name, login code, temporary password, site address.
 - **Uptime check:** `.github/workflows/uptime.yml` checks app, Auth, database and certificate expiry
