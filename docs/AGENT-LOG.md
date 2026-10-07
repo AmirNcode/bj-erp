@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-07 — Released 27d59f5 + 6240e3c to Liara (FR-52/53/54 and follow-ups)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 6240e3c
+**Trigger:** Amir tested locally ("working correctly"): commit and push to deploy; use Ayasi's
+account for local testing.
+
+**What changed**
+- Commit `6240e3c` (clearance under Employees, PersonSearch, Direct Manager search, toolbar width).
+- `.env.test-accounts` (git-ignored, explicit `.gitignore` line, mode 600): local-only manager
+  login. Amir gave code `145`, but 145 is «سید محمد شریف موسوی» locally and the password fails
+  there; it succeeds on `124` = «میثم ایاسی» (manager + hr), so 124 is stored. `_helpers.ts` reads
+  it into `SEEDED_MANAGER_CODE` / `SEEDED_MANAGER_PASSWORD` (demo defaults otherwise); four specs use
+  the new password constant.
+
+**Actions outside the repo**
+- `git push origin main` → GitHub Actions "Deploy Liara" run 37673489201: build + deploy success.
+  Migrations `20261007140001`, `20261007150001`–`150003` applied by the pipeline.
+  `https://bjeng.app/api/health` → ok.
+
+**Verification**
+- Unit 602 before push. `manager-create-employee.spec` now logs in but still fails: it expects a
+  manager-only account (locked department/manager); Ayasi also holds hr. Not changed.
+
+**For the next agent**
+- Not yet checked on Liara: `cron.job` lists `bj-apply-separations` and its first nightly run
+  (TASKS). Open security-review findings (not fixed, Amir not yet answered): CSV formula injection in
+  the personal-info export; clearance form copies father's name / birth-cert no. visible to every
+  signer on that form.
+
 ## 2026-10-07 — Direct Manager field becomes a search box
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 27d59f5 (+ uncommitted)
