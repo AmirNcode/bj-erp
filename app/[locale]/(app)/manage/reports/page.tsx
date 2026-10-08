@@ -1,5 +1,5 @@
 /**
- * HR reports (FR-37) — `hr` and `admin` only.
+ * HR reports (FR-37) — needs the reports permission (FR-55).
  *
  * The period is a URL parameter rather than client state, so a report can be
  * linked, bookmarked and reloaded, and so changing it re-queries the server
@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { getReportData, getReportMonths } from '@/lib/actions/reports';
 import { getTodayPulse } from '@/lib/actions/home';
 import { createClient } from '@/lib/supabase/server';
@@ -188,8 +189,8 @@ export default async function ReportsPage({ params, searchParams }: Props) {
   if (!user) redirect(`/${locale}/login`);
 
   // Narrower than the /manage layout, which also admits managers.
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('hr') && !roles.includes('admin')) {
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'reports', 'read')) {
     redirect(`/${locale}/home`);
   }
 

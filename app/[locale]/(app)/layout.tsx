@@ -5,7 +5,7 @@
 
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
 import { AppShell } from './_components/AppShell';
@@ -26,9 +26,10 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const [roles, profile] = await Promise.all([
+  const [roles, profile, perms] = await Promise.all([
     getCachedRoles(user.id),
     getCachedProfile(user.id),
+    getCachedPermissions(user.id),
   ]);
   if (!profile?.active) {
     redirect(`/${locale}/login`);
@@ -90,6 +91,7 @@ export default async function AppLayout({ children, params }: Props) {
   return (
     <AppShell
       roles={roles}
+      perms={perms}
       locale={locale}
       labels={labels}
       appName={t('appName')}

@@ -1,15 +1,19 @@
 /**
  * Settings (FR-24): weekly days off with working hours, and official holidays.
- * Company configuration — admin and, since FR-59 (2026-10-12), hr; everyone else
- * is sent home. Writes go through lib/actions/settings under the
- * `settings.edit` RLS policies on work_settings / holidays. Departments,
- * approval steps and accrual live under Manage.
+ * Company configuration — admin and, since FR-59 (2026-10-12), hr; or a caller
+ * with work_settings / holidays permission (FR-55). Everyone else is sent home.
+ * Read-only without the edit level (admin and hr always edit, per FR-59, until
+ * FR-55 R3 moves that to `settings.edit`). Writes go through
+ * lib/actions/settings under the `settings.edit` RLS policies on work_settings /
+ * holidays. Departments, approval steps and accrual live under Manage.
  */
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
+import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { getCompanyHolidays } from '@/lib/actions/settings';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
@@ -22,8 +26,12 @@ export default async function SettingsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/home`);
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
+  if (!settingsItemForRoles(roles, perms)) redirect(`/${locale}/home`);
+  // FR-59: admin and hr edit company settings (main's literal check, kept until R3).
+  const settingsEditor = roles.includes('admin') || roles.includes('hr');
+  const canEditWork = settingsEditor || can(perms, 'work_settings');
+  const canEditHolidays = settingsEditor || can(perms, 'holidays');
 
   const [tNav, t, tImport] = await Promise.all([
     getTranslations('nav'),
@@ -63,6 +71,7 @@ export default async function SettingsPage({ params }: Props) {
         initialWorkStart={workStart}
         initialWorkEnd={workEnd}
         initialHourlyCapMinutes={hourlyCapMinutes}
+        readOnly={!canEditWork}
         labels={{
           weekendTitle: t('weekendTitle'),
           weekendHint: t('weekendHint'),
@@ -89,6 +98,7 @@ export default async function SettingsPage({ params }: Props) {
 
       <HolidayEditor
         initial={holidays}
+        readOnly={!canEditHolidays}
         locale={locale}
         labels={{
           holidaysTitle: t('holidaysTitle'),

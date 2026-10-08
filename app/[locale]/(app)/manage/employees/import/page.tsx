@@ -1,6 +1,6 @@
 /**
- * Bulk CSV import v2 (FR-45) — admin and hr reach the page (managers are
- * bounced to the employees list); the RPC re-checks in-DB regardless. Stages,
+ * Bulk CSV import v2 (FR-45) — callers with people_create reach the page (everyone
+ * else is bounced to the employees list); the RPC re-checks in-DB regardless. Stages,
  * all in ImportWizard: template download → upload + validation preview
  * (departments, managers, balance date) → import + one-time credentials.
  */
@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { todayInAppTz } from '@/lib/appDate';
 import { PageHeader } from '../../../_components/PageHeader';
 import { ImportWizard } from './ImportWizard';
@@ -25,10 +26,10 @@ export default async function ImportPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
   // hr bulk-onboards too (FR-35 D4). app_bulk_create_employees clamps every
-  // row's role to 'employee' for an hr caller, so the CSV cannot smuggle one in.
-  if (!roles.includes('admin') && !roles.includes('hr')) {
+  // row's role to 'employee' for a non-admin caller, so the CSV cannot smuggle one in.
+  if (!can(perms, 'people_create')) {
     redirect(`/${locale}/manage/employees`);
   }
 

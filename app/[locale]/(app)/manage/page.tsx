@@ -1,13 +1,13 @@
 /**
  * Manage list — the mobile bottom bar's Manage tab lands here. Holds the same
- * grouped links as the desktop side panel (lib/nav/tabs.ts), so each role sees
- * only what it can reach. The /manage layout already admits admin|manager|hr.
+ * grouped links as the desktop side panel (lib/nav/tabs.ts), so each caller sees
+ * only what their permissions reach. The /manage layout admits anyone with at least one item.
  */
 
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
 import { manageItemsForRoles, settingsItemForRoles, type NavItem } from '@/lib/nav/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '../_components/PageHeader';
@@ -20,10 +20,12 @@ export default async function ManageIndexPage({ params }: Props) {
   setRequestLocale(locale);
 
   const user = await getCachedUser();
-  const roles = user ? await getCachedRoles(user.id) : [];
+  const [roles, perms] = user
+    ? await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)])
+    : [[], {}];
   const t = await getTranslations('nav');
-  const items = manageItemsForRoles(roles);
-  const settings = settingsItemForRoles(roles);
+  const items = manageItemsForRoles(roles, perms);
+  const settings = settingsItemForRoles(roles, perms);
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
   // Explicit map, not t(item.labelKey): a dynamic message key has already
   // caused a production-only failure here (docs/MEMORY.md).

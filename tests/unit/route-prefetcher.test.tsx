@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
 
 describe('RoutePrefetcher', () => {
   it('prefetches each role-visible tab after the app shell mounts', async () => {
-    render(<RoutePrefetcher roles={['manager']} locale="en" />);
+    render(<RoutePrefetcher roles={['manager']} perms={{}} locale="en" />);
 
     await waitFor(() => {
       expect(prefetch).toHaveBeenCalledWith('/en/home');

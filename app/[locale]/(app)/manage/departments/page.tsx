@@ -1,14 +1,15 @@
 /**
  * Manage › Departments (spec 2026-07-30 §7): the department list with its
  * members panel, rename and Add Department, plus the monthly accrual runner.
- * Admin and hr (FR-51); everyone else goes back to the employees hub. The
+ * Needs the departments permission (FR-55); everyone else goes back to the employees hub. The
  * department code stays admin-only in the database.
  */
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageHeader } from '../../_components/PageHeader';
@@ -23,8 +24,8 @@ export default async function DepartmentsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/manage/employees`);
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
+  if (!can(perms, 'departments', 'read')) redirect(`/${locale}/manage/employees`);
 
   const [tNav, t] = await Promise.all([
     getTranslations('nav'),
