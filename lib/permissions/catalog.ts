@@ -153,3 +153,19 @@ export function isWithin(rolePerms: Perms, callerPerms: Perms): boolean {
 export function fullPerms(): Perms {
   return Object.fromEntries(ALL_KEYS.map((k) => [k, highest(k)])) as Perms;
 }
+
+export function can(perms: Perms, key: PermKey, level: Level = 'edit'): boolean {
+  return levelValue(perms[key]) >= levelValue(level);
+}
+
+/** The `app_perms` JWT claim, sanitised: unknown keys and impossible levels dropped. */
+export function parsePermsClaim(raw: unknown): Perms | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Perms = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if ((ALL_KEYS as string[]).includes(k) && (v === 'read' || v === 'edit') && allows(k as PermKey, v)) {
+      out[k as PermKey] = v;
+    }
+  }
+  return out;
+}
