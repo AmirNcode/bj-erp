@@ -432,6 +432,46 @@ CSV · local data = fresh demo seed · retire existing security/admin steps.
 - The calendar's approve dialog has no override/per-diem UI (the SQL still auto-overrides for an admin
   without a natural step).
 - Local e2e specs that use demo users 1001/2001 should work again (demo data, not the real roster).
+## 2026-10-07 — FR-55 configurable roles: design + spec (no code yet)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
+**Trigger:** Amir: build admin create/edit roles with a three-way toggle per access item (Claude
+desktop connector-permissions UI), and work out which admin operations must never be delegable so
+no second admin can exist. Spec-driven: plan → spec → implementation plan → build.
+
+**What changed**
+- `docs/specs/2026-10-07-configurable-roles-design.md` (new, draft): decisions D1–D12, 17-item
+  catalog, preset seeds (parity with today), DB/app/UI/test design. Every decision was answered by
+  Amir in chat (exactly one admin, transfer only with password; locked list incl. approval override
+  and bulk update/replace; subset rule incl. manager / department-manager relationship powers;
+  presets editable; company-wide scope; no custom approval-step roles; role names English only;
+  delete dialog lists holders' personnel numbers with a copy button; data model "one roles table +
+  user_roles.role_id"; permissions via `app_perms` JWT claim; no admin recovery script).
+- Session plan: `~/.claude/plans/lets-start-working-on-bright-snowglobe.md` (outside the repo).
+
+**Actions outside the repo**
+- Read-only query on the local DB: role holder counts (admin 1, hr 2, security 3 of which 0
+  active, manager 21).
+
+**Verification**
+- None (documents only).
+
+**State left behind**
+- Spec approved by Amir. Implementation plan written: `docs/plans/2026-10-07-configurable-roles.md`
+  (13 tasks: 4 migrations + SQL scenarios, TS catalog, plumbing, nav/guards, actions,
+  capabilities/forms, toggle components, Settings › Roles, e2e, hr parity, docs). It amends the
+  spec in two places, to be confirmed by Amir and then applied to the spec in Task 13:
+  `personnel_no` dropped from the catalog (no screen changes a personnel number; the login email
+  derives from it), and the new assignment RPC is named `app_set_user_role_ids` (overloading
+  `app_set_user_roles` would break PostgREST name resolution). Both files uncommitted; no code yet.
+
+**For the next agent**
+- Found during the inventory, not fixed: `public.accrue_leave(uuid, uuid)` has no caller check and
+  is granted to `authenticated` → any user reads any employee's balance (offered as a separate task).
+  Also: hr can open the employee import page but `importEmployees` is admin-only; calendar
+  approve buttons exclude hr; admin cannot sign the clearance finance box.
+- `tests/sql/fr51*`, `fr52-53*`, `fr54*` insert a second admin fixture; the FR-55 one-admin index
+  will break them until rewritten.
 
 ## 2026-10-07 — Released 27d59f5 + 6240e3c to Liara (FR-52/53/54 and follow-ups)
 
