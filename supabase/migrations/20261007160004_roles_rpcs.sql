@@ -2,7 +2,9 @@
 -- employee with role ids. Spec: docs/specs/2026-10-07-configurable-roles-design.md
 -- (D1, D2, D5, D6, D11, D12, "RPCs"). Also two follow-ups from reviewing
 -- 20261007160002/160003: has_perm with an unknown level, and the admin branch of
--- the personal-info update policy.
+-- the personal-info update policy. Review fixes: identity presets need the
+-- matching edit power to assign, role_manager depends on leave_balances and
+-- calendar (D6), and assignment and transfer lock the same profile rows.
 
 -- ── Task 2 follow-ups ───────────────────────────────────────────────────────
 -- An unknown or NULL level is false, never "read". coalesce: a NULL here would
@@ -28,6 +30,22 @@ create policy employee_personal_info_update on public.employee_personal_info for
                   and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
               or (private.has_perm((select auth.uid()), 'personal_info', 'edit')
                   and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))));
+
+-- D6 amendment: a Manager reads every profile, balance and the calendar
+-- (private.reads_*), so whoever can make someone a Manager must already read them.
+-- Same signature, volatility and grants as 20261007160001; two rows added.
+create or replace function private.permission_deps() returns table (key text, key_level text, needs text)
+    language sql immutable set search_path to '' as $$
+  values
+    ('people_create','read','people'), ('passwords','read','people'),
+    ('role_manager','read','people'), ('role_manager','read','leave_balances'),
+    ('role_manager','read','calendar'), ('role_assign','read','people'),
+    ('personal_info','read','people'), ('clearance','edit','people'),
+    ('departments','read','people'), ('leave_balances','read','people'),
+    ('leave_accrual','read','departments'), ('leave_requests','read','people'),
+    ('approval_steps','read','people'), ('reports','read','people'),
+    ('reports','read','leave_balances'), ('reports','read','leave_requests');
+$$;
 
 -- ── helpers ─────────────────────────────────────────────────────────────────
 create function private.caller_company() returns uuid
@@ -181,13 +199,21 @@ returns void
     language plpgsql security definer set search_path to '' as $$
 declare
   v_uid      uuid := auth.uid();
-  v_company  uuid := private.caller_company();
-  v_is_admin boolean := private.is_admin(v_uid);
+  v_company  uuid;
+  v_is_admin boolean;
   v_admin_id uuid;
   v_before   uuid[];
   v_after    uuid[] := coalesce(p_role_ids, '{}');
   v_changed  uuid;
+  v_key      public.app_role;
 begin
+  -- Serialise with app_transfer_admin, which locks the same profile rows in the
+  -- same (id) order: the admin check and v_before below then see a committed
+  -- transfer instead of racing it.
+  perform 1 from public.profiles where id in (v_uid, p_user_id) order by id for update;
+  v_company := private.caller_company();
+  v_is_admin := private.is_admin(v_uid);
+
   -- Only role holders reach the per-role checks below; anyone else is refused even
   -- for a call that changes nothing.
   if not v_is_admin
@@ -222,14 +248,22 @@ begin
       union
       (select x from unnest(v_after) x except select x from unnest(v_before) x)
     loop
-      if not private.role_within(v_changed, v_uid) then
+      -- Identity presets: their holders sign approval steps (hr, security) or the
+      -- clearance finance box, so giving one to someone whose password you can
+      -- reset is signing as them. It takes the power that edits those signers.
+      v_key := (select system_key from public.roles where id = v_changed);
+      if not private.role_within(v_changed, v_uid)
+         or (v_key in ('hr', 'security') and not private.has_perm(v_uid, 'approval_steps', 'edit'))
+         or (v_key = 'finance' and not private.has_perm(v_uid, 'clearance', 'edit')) then
         raise exception 'not allowed to give or remove role %', (select name from public.roles where id = v_changed)
           using errcode = '42501';
       end if;
     end loop;
   end if;
 
-  delete from public.user_roles where user_id = p_user_id and role_id <> all (v_after);
+  -- Never the admin row, whatever v_before said (D1; belt and braces to the lock).
+  delete from public.user_roles where user_id = p_user_id and role_id <> all (v_after)
+     and role is distinct from 'admin';
   insert into public.user_roles (user_id, role_id)
     select distinct p_user_id, x from unnest(v_after) x on conflict (user_id, role_id) do nothing;
 
@@ -262,6 +296,8 @@ returns void
 declare
   v_uid uuid := auth.uid();
 begin
+  -- Same lock order as app_set_user_role_ids (profile rows, by id).
+  perform 1 from public.profiles where id in (v_uid, p_target) order by id for update;
   if not private.is_admin(v_uid) then
     raise exception 'only the admin can transfer admin' using errcode = '42501';
   end if;

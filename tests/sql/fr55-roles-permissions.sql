@@ -846,6 +846,60 @@ select pg_temp.expect('presets cannot be deleted',
 select pg_temp.expect('system roles cannot be deleted',
   pg_temp.try_as('admin', format('select * from public.app_delete_role(%s)', pg_temp.role_id('company', 'employee'))), '22023');
 
+-- fix round 1: identity presets (approval-step and clearance signers) need the
+-- matching edit permission to give or take away, on top of D5.
+select pg_temp.expect('nosign (role_assign, no approval_steps) may reset emp''s password',
+  pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), 'ok:1');
+select pg_temp.expect('… but may not give emp Security (would sign security steps as emp)',
+  pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))), '42501');
+select pg_temp.expect('… nor create an employee who holds Security',
+  pg_temp.try_as('nosign', format($q$select public.app_create_employee('9990000987','FR55 c6','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'security'))), '42501');
+-- clearance read makes Finance's permissions a subset of nosign's, so only the identity rule refuses.
+insert into public.role_permissions values ((select id from fx where k='r_nosign'), 'clearance', 'read');
+-- A fresh plain target (created by hr above), so the Security scenarios cannot leak in.
+insert into fx select 'c4', id from public.profiles where personnel_no = '9990000985';
+select pg_temp.expect('nosign with clearance read may not give Finance to a plain employee (would sign the finance box)',
+  pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('c4'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'finance'))), '42501');
+select pg_temp.expect('… the target still holds Employee only',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+    where ur.user_id = (select id from fx where k='c4')), 'Employee');
+select pg_temp.expect('Everything gives Security and Finance',
+  pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s, %s]::uuid[])', pg_temp.id('c4'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'), pg_temp.role_id('company', 'finance'))), 'ok:1');
+select pg_temp.expect('… and takes them away again; nosign may not take them away',
+  pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('c4'),
+    pg_temp.role_id('company', 'employee'))) || ' '
+  || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('c4'),
+    pg_temp.role_id('company', 'employee'))), '42501 ok:1');
+
+-- fix round 1: role_manager depends on leave_balances and calendar (D6 amendment):
+-- a Manager reads every profile, balance and the calendar.
+select pg_temp.expect('role_manager without leave_balances and calendar refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'RM1', '{"people":"read","role_manager":"edit"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'RM1b', '{"people":"read","role_manager":"edit","leave_balances":"read"}')$q$), '22023 22023');
+select pg_temp.expect('role_manager with people, leave_balances and calendar read allowed',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'RM2', '{"people":"read","role_manager":"edit","leave_balances":"read","calendar":"read"}')$q$), 'ok:1');
+select pg_temp.expect('no seeded preset (any company) breaks the dependency map',
+  (select count(*)::text from public.roles r cross join private.permission_deps() d
+     join public.role_permissions rp on rp.role_id = r.id and rp.permission = d.key
+    where r.kind = 'preset'
+      and (d.key_level = 'read' or rp.level = 'edit')
+      and not exists (select 1 from public.role_permissions n where n.role_id = r.id and n.permission = d.needs)), '0');
+
+-- fix round 1: the admin row survives assignment. The D1 check refuses a call
+-- that omits the admin role id; the delete guard behind it only matters in a
+-- race (see the task-3 report), so its presence is asserted on the definition.
+select pg_temp.expect('the admin''s call omitting their admin role id is refused; the admin row survives',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('admin'),
+    pg_temp.role_id('company', 'employee'))) || ' '
+  || (select count(*)::text from public.user_roles where role = 'admin'), '42501 1');
+select pg_temp.expect('the role delete in app_set_user_role_ids never matches the admin row',
+  (select (pg_get_functiondef('public.app_set_user_role_ids(uuid, uuid[])'::regprocedure)
+           ~ 'role_id <> all \(v_after\)\s+and role is distinct from ''admin''')::text), 'true');
+
 -- grants
 select pg_temp.expect('anon may execute none of the new RPCs',
   (select count(*)::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
