@@ -234,7 +234,7 @@ const RULES: Rule[] = [
   { re: /form is not awaiting finance/, key: 'clearanceNotAwaitingFinance' },
   { re: /not allowed to sign as finance/, key: 'clearanceFinanceOnly' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
-  { re: /not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
+  { re: /^not allowed$|not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },
 ];
 

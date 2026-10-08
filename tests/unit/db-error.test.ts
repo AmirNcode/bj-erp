@@ -7,8 +7,19 @@
  * personnel number reached the user as the generic "unexpected error" banner
  * because no rule matched the message the database actually raises.
  */
-import { describe, it, expect } from 'vitest';
-import { fieldForDbError } from '@/lib/errors/db-error';
+import { describe, it, expect, vi } from 'vitest';
+import { dbErr, fieldForDbError } from '@/lib/errors/db-error';
+
+// Echo the message key, so a test can tell WHICH rule matched.
+vi.mock('next-intl/server', () => ({
+  getTranslations: async () => (key: string) => key,
+}));
+
+describe('dbErr bare permission message', () => {
+  it("maps requireCaller's bare 'not allowed' to the notAllowed key", async () => {
+    expect((await dbErr('not allowed')).error).toBe('notAllowed');
+  });
+});
 
 describe('fieldForDbError', () => {
   it('attributes the in-function duplicate check to the personnel number field', () => {
