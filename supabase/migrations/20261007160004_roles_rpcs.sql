@@ -210,7 +210,7 @@ begin
   -- Serialise with app_transfer_admin, which locks the same profile rows in the
   -- same (id) order: the admin check and v_before below then see a committed
   -- transfer instead of racing it.
-  perform 1 from public.profiles where id in (v_uid, p_user_id) order by id for update;
+  perform 1 from public.profiles where id in (v_uid, p_user_id) order by id for no key update;
   v_company := private.caller_company();
   v_is_admin := private.is_admin(v_uid);
 
@@ -297,7 +297,7 @@ declare
   v_uid uuid := auth.uid();
 begin
   -- Same lock order as app_set_user_role_ids (profile rows, by id).
-  perform 1 from public.profiles where id in (v_uid, p_target) order by id for update;
+  perform 1 from public.profiles where id in (v_uid, p_target) order by id for no key update;
   if not private.is_admin(v_uid) then
     raise exception 'only the admin can transfer admin' using errcode = '42501';
   end if;
