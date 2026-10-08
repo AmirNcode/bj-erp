@@ -11,9 +11,7 @@ import {
   minutesToDaysHours,
   type DaysHoursError,
 } from '@/lib/leave/duration';
-import { ROLES, type Role } from '@/lib/employees/editCapabilities';
-
-export { ROLES, type Role };
+import type { RoleRow } from '@/lib/actions/roles-helpers';
 
 /** Stable test-id slug for a leave type: `annual`, `sick`, or its English name. */
 export function leaveTypeSlug(type: { name_en: string | null; name_fa: string }) {
@@ -149,44 +147,64 @@ export function readDaysHours(
 }
 
 /**
- * Native checkboxes: the e2e suite checks them through their label text. Roles
- * outside `editable` render disabled (FR-51: hr toggles `manager` only).
+ * Every role of the company (app_list_roles order: system, preset, custom), by
+ * its English name (D11). Native checkboxes, picked in e2e by
+ * `[data-testid="role-<systemKey or id>"] input`. Values are role ids; boxes
+ * outside `editable` render disabled, and the admin box always is (D1: it moves
+ * only by Transfer admin), with `adminHint` saying where.
  */
 export function RoleCheckboxes({
   label,
+  roles,
   selected,
   onChange,
-  editable = ROLES,
+  editable,
+  adminHint,
 }: {
   label: string;
-  selected: Role[];
-  onChange: (roles: Role[]) => void;
-  editable?: readonly Role[];
+  roles: RoleRow[];
+  /** Selected role ids. */
+  selected: string[];
+  onChange: (roleIds: string[]) => void;
+  /** Role ids the caller may toggle. */
+  editable: readonly string[];
+  adminHint: string;
 }) {
+  const hasAdmin = roles.some((r) => r.systemKey === 'admin');
   return (
     <div className="space-y-2">
       <span className="block text-sm font-medium leading-none">{label}</span>
       <div className="flex flex-wrap gap-3">
-        {ROLES.map((role) => (
-          <label
-            key={role}
-            className={`flex items-center gap-2 ${editable.includes(role) ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
-          >
-            <input
-              type="checkbox"
-              checked={selected.includes(role)}
-              disabled={!editable.includes(role)}
-              onChange={() =>
-                onChange(
-                  selected.includes(role) ? selected.filter((r) => r !== role) : [...selected, role]
-                )
-              }
-              className="rounded border-input text-primary focus:ring-ring"
-            />
-            <span className="text-sm">{role}</span>
-          </label>
-        ))}
+        {roles.map((role) => {
+          const canToggle = role.systemKey !== 'admin' && editable.includes(role.id);
+          return (
+            <label
+              key={role.id}
+              data-testid={`role-${role.systemKey ?? role.id}`}
+              className={`flex items-center gap-2 ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+            >
+              <input
+                type="checkbox"
+                value={role.systemKey ?? role.id}
+                checked={selected.includes(role.id)}
+                disabled={!canToggle}
+                onChange={() =>
+                  onChange(
+                    selected.includes(role.id)
+                      ? selected.filter((id) => id !== role.id)
+                      : [...selected, role.id]
+                  )
+                }
+                className="rounded border-input text-primary focus:ring-ring"
+              />
+              <span className="text-sm" dir="ltr">
+                {role.name}
+              </span>
+            </label>
+          );
+        })}
       </div>
+      {hasAdmin && <p className="text-xs text-muted-foreground">{adminHint}</p>}
     </div>
   );
 }

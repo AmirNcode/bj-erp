@@ -1,6 +1,5 @@
 'use server';
 
-import type { Database } from '@/lib/supabase/types';
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
 import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
 import { requireCaller } from '@/lib/auth/context';
@@ -8,15 +7,14 @@ import { can } from '@/lib/permissions/catalog';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 
-type AppRole = Database['public']['Enums']['app_role'];
-
 export type CreateEmployeeInput = {
   personnel_no: string;
   full_name: string;
   job_title?: string;
   department_id?: string;
   manager_id?: string;
-  roles?: AppRole[];
+  /** Role ids beyond Employee (FR-55 D5; app_set_user_role_ids checks each one). */
+  roleIds?: string[];
   hire_date?: string;
   language_pref?: string;
 };
@@ -26,9 +24,10 @@ export type CreateEmployeeInput = {
  * The employee code is composed in-DB — since 20260730130002 it is the
  * personnel number alone, with no department prefix.
  * Admins create freely; managers are scoped in-DB to their own department and
- * team; hr may pick any department and manager but is likewise forced to the
- * employee role. Every one of those limits is enforced inside
- * app_create_employee — the check here only avoids a pointless round-trip.
+ * team; people_create may pick any department and manager. Roles beyond
+ * Employee go as role ids, checked by D5 in-DB like any later role change.
+ * Every one of those limits is enforced inside app_create_employee — the check
+ * here only avoids a pointless round-trip.
  * Returns the temp password so the creator can hand it to the worker.
  * The temp password is never logged or stored — shown once in the UI.
  */
@@ -54,7 +53,7 @@ export async function createEmployee(
     p_company_id: c.companyId,
     ...(input.department_id ? { p_department_id: input.department_id } : {}),
     ...(input.manager_id ? { p_manager_id: input.manager_id } : {}),
-    ...(input.roles?.length ? { p_roles: input.roles } : {}),
+    ...(input.roleIds?.length ? { p_role_ids: input.roleIds } : {}),
     ...(input.hire_date ? { p_hire_date: input.hire_date } : {}),
     ...(input.language_pref ? { p_language_pref: input.language_pref } : {}),
     ...(input.job_title ? { p_job_title: input.job_title } : {}),
@@ -112,22 +111,21 @@ export async function updateEmployee(
 }
 
 /**
- * Replaces the target user's roles entirely via the atomic
- * app_set_user_roles RPC (transactional delete+insert, guarded in-DB,
- * refuses to strip your own admin role, writes its own audit row). An hr
- * caller may only add or remove `manager`, on a non-admin other than
- * themselves (FR-51) — the RPC refuses anything else.
+ * Replaces the target user's roles (role ids, FR-55) via the atomic
+ * app_set_user_role_ids RPC: one transaction, audited in-DB. A non-admin needs
+ * D4 on the target and D5 on every role added or removed; nobody adds or removes
+ * admin here (D1, Transfer admin only). The RPC refuses anything else.
  */
 export async function setRoles(
   id: string,
-  roles: AppRole[]
+  roleIds: string[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { error } = await c.supabase.rpc('app_set_user_roles', {
+  const { error } = await c.supabase.rpc('app_set_user_role_ids', {
     p_user_id: id,
-    p_roles: roles,
+    p_role_ids: roleIds,
   });
   if (error) return dbErr(error.message);
 

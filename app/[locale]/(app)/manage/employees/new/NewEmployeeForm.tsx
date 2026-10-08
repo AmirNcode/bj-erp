@@ -26,8 +26,8 @@ import {
   RoleCheckboxes,
   leaveAmountReader,
   leaveTypeSlug,
-  type Role,
 } from '../_components/EmployeeFormParts';
+import type { RoleRow } from '@/lib/actions/roles-helpers';
 
 type Department = { id: string; name_fa: string; name_en: string };
 type Manager = { id: string; full_name: string; employee_code: string };
@@ -42,21 +42,21 @@ type InitialLeaveType = {
 };
 
 type Props = {
-  isAdmin: boolean;
+  /** Every role of the company (app_list_roles order). */
+  allRoles: RoleRow[];
+  /** The Employee role: the default selection. */
+  employeeRoleId: string | null;
   /**
-   * FR-43: may set the opening leave balance and the accrual policy. Admin or hr.
-   * Separate from `isAdmin`, which still gates the ROLE checkboxes — HR creating
-   * an admin is refused in the database (FR-35 D4).
+   * Roles the caller may give on creation (FR-55 D5, from employeeEditCapabilities
+   * on a person who holds only Employee). Empty: no role checkboxes, and the new
+   * person gets Employee only.
    */
+  editableRoleIds: string[];
+  /** FR-43: may set the opening leave balance and the accrual policy (leave_balances edit). */
   canManageLeave: boolean;
   /**
-   * Admin OR hr. Controls only the department and manager pickers (FR-35 D4).
-   *
-   * Kept separate from `isAdmin` on purpose: HR chooses where a new hire lands
-   * without gaining the role checkboxes. (Until FR-43 it also excluded the
-   * allocation and accrual fields, because `allocate_leave` and
-   * `set_employee_leave_policy` were admin-only in the database; both now admit
-   * hr, so those moved to `canManageLeave`.)
+   * people_create: the department and manager pickers (FR-35 D4). A manager
+   * without it is locked to their own department, with themselves as manager.
    */
   canChooseScope: boolean;
   ownDepartment: Department | null;
@@ -78,6 +78,7 @@ type Props = {
     department: string;
     manager: string;
     roles: string;
+    adminTransferHint: string;
     hireDate: string;
     submit: string;
     cancel: string;
@@ -108,7 +109,9 @@ function defaultMinutesFor(type: InitialLeaveType, hoursPerDay: number) {
 }
 
 export function NewEmployeeForm({
-  isAdmin,
+  allRoles,
+  employeeRoleId,
+  editableRoleIds,
   canManageLeave,
   canChooseScope,
   ownDepartment,
@@ -136,7 +139,10 @@ export function NewEmployeeForm({
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>(['employee']);
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(
+    employeeRoleId ? [employeeRoleId] : []
+  );
+  const canAssignRoles = editableRoleIds.length > 0;
   const [personnelNo, setPersonnelNo] = useState('');
   const [hireDate, setHireDate] = useState<PickerDate | null>(null);
   // Admin picks a department; manager is locked to their own.
@@ -185,7 +191,7 @@ export function NewEmployeeForm({
       job_title: ((fd.get('job_title') as string) || '').trim() || undefined,
       department_id: canChooseScope ? (fd.get('department_id') as string) || undefined : undefined,
       manager_id: canChooseScope ? (fd.get('manager_id') as string) || undefined : undefined,
-      roles: isAdmin ? selectedRoles : undefined,
+      roleIds: canAssignRoles ? selectedRoleIds : undefined,
       hire_date: hireDate ? dateObjectToGregorian(hireDate) : undefined,
     });
 
@@ -393,8 +399,15 @@ export function NewEmployeeForm({
             </p>
           </div>
 
-          {isAdmin && (
-            <RoleCheckboxes label={labels.roles} selected={selectedRoles} onChange={setSelectedRoles} />
+          {canAssignRoles && (
+            <RoleCheckboxes
+              label={labels.roles}
+              roles={allRoles}
+              selected={selectedRoleIds}
+              onChange={setSelectedRoleIds}
+              editable={editableRoleIds}
+              adminHint={labels.adminTransferHint}
+            />
           )}
 
           <div className="space-y-1.5">

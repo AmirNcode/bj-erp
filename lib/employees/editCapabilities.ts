@@ -1,32 +1,35 @@
 /**
- * What the Edit Employee form lets a caller change on one target (FR-51). Pure.
+ * What the Edit Employee form lets a caller change on one target (FR-51, FR-55
+ * D3–D5). Pure.
  *
- * This only mirrors the database: the profile guard trigger, the profiles and
- * departments policies and `app_set_user_roles` enforce the same rules
+ * This only mirrors the database: `private.can_act_on`, the profile guard
+ * trigger and `app_set_user_role_ids` enforce the same rules
  * (docs/PERMISSIONS.md). Keep the two in step.
  */
 
-// Rendered as raw slugs. The e2e `createEmployee` helper picks these checkboxes
-// by their exact label text, so translating them is a separate, deliberate
-// change (docs/TASKS.md).
-export const ROLES = ['admin', 'manager', 'employee', 'security', 'hr', 'finance'] as const;
-export type Role = (typeof ROLES)[number];
+import type { RoleRow } from '@/lib/actions/roles-helpers';
+import { can, isWithin, levelValue, type PermKey, type Perms } from '@/lib/permissions/catalog';
 
 export type EditCapabilities = {
   /** Name and hire date. */
   profile: boolean;
   /** Department, direct manager, job title, deactivate / reactivate. */
   org: boolean;
-  /** Role checkboxes the caller may toggle; the rest render disabled. */
-  editableRoles: Role[];
+  /** Role ids the caller may toggle; the other boxes render disabled. Never the admin role. */
+  editableRoleIds: string[];
   resetPassword: boolean;
-  /** Balances and accrual policy (FR-43). */
+  /** Balances and accrual policy are shown (leave_balances read). */
   leave: boolean;
-  /** Why an hr caller sees the org fields read-only. */
-  lockedReason: 'admin' | 'self' | null;
+  /** …and may be saved (leave_balances edit, on a target the caller may act on). */
+  leaveEdit: boolean;
   /**
-   * Personal information (FR-53): hr reads an admin's but may not change it,
-   * and since FR-63 nobody but an admin changes their own.
+   * Why the org fields render read-only: the target is the admin, the caller
+   * themselves (D3), or holds access the caller lacks (D4, 'above').
+   */
+  lockedReason: 'admin' | 'self' | 'above' | null;
+  /**
+   * Personal information (FR-53): read-only without personal_info edit or on a
+   * locked target, and since FR-63 nobody but an admin changes their own.
    */
   personalInfo: 'edit' | 'view' | null;
   /**
@@ -39,57 +42,117 @@ export type EditCapabilities = {
 /**
  * Whether a caller may change their OWN personal information (FR-63). Mirrors
  * `private.has_permission(uid, 'personal_info.edit_own')` — admin only today;
- * FR-55's configurable roles turn it into a per-role switch.
+ * FR-55's configurable roles turn it into a per-role switch (R3).
  */
 export function canEditOwnPersonalInfo(roles: string[]): boolean {
   return roles.includes('admin');
 }
 
+/**
+ * Identity powers of the target that `can_act_on` guards beyond permission
+ * levels. The page reads them through RLS; when it cannot, it passes true.
+ */
+export type TargetIdentity = {
+  /** Named approver on an active approval step. */
+  approver: boolean;
+  /** Signer on a clearance unit, or on a row of an open clearance form. */
+  clearanceSigner: boolean;
+};
+
+/** Per-key max over the target's roles: what they could do, active or not (D4). */
+function targetPermissions(roles: RoleRow[]): Perms {
+  const out: Perms = {};
+  for (const role of roles) {
+    for (const [key, level] of Object.entries(role.permissions) as [PermKey, Perms[PermKey]][]) {
+      if (levelValue(level) > levelValue(out[key])) out[key] = level;
+    }
+  }
+  return out;
+}
+
 export function employeeEditCapabilities({
   callerId,
   callerRoles,
+  callerPerms,
   targetId,
-  targetRoles,
+  targetRoleIds,
+  allRoles,
+  targetIsDepartmentManager,
+  targetIdentity,
 }: {
   callerId: string;
   callerRoles: string[];
+  callerPerms: Perms;
   targetId: string;
-  targetRoles: string[];
+  targetRoleIds: string[];
+  allRoles: RoleRow[];
+  targetIsDepartmentManager: boolean;
+  targetIdentity: TargetIdentity;
 }): EditCapabilities {
+  // D1: the admin box is never a checkbox anyone toggles; Transfer admin moves it.
+  const assignable = allRoles.filter((r) => r.systemKey !== 'admin');
+
   if (callerRoles.includes('admin')) {
     return {
       profile: true,
       org: true,
-      editableRoles: [...ROLES],
+      editableRoleIds: assignable.map((r) => r.id),
       resetPassword: true,
       leave: true,
+      leaveEdit: true,
       lockedReason: null,
       personalInfo: 'edit',
       specialLeave: true,
     };
   }
 
-  const isHr = callerRoles.includes('hr');
-  // RLS narrows a manager to their own reports; the page cannot tell, so the
-  // form offers the subset and the database refuses anything else.
-  const managerSubset = callerRoles.includes('manager');
-  const lockedReason = !isHr
-    ? null
-    : targetId === callerId
-      ? 'self'
-      : targetRoles.includes('admin')
-        ? 'admin'
-        : null;
-  const hrEditor = isHr && lockedReason === null;
+  const targetRoles = allRoles.filter((r) => targetRoleIds.includes(r.id));
+  const holds = (key: string) => targetRoles.some((r) => r.systemKey === key);
+  const self = targetId === callerId;
+
+  // D4 mirror of private.can_act_on, including its identity clauses: whoever
+  // could reset this person's password could sign in as them and sign their
+  // approval steps or clearance boxes.
+  const above =
+    !isWithin(targetPermissions(targetRoles), callerPerms) ||
+    (holds('manager') && !can(callerPerms, 'role_manager')) ||
+    (targetIsDepartmentManager && !can(callerPerms, 'departments')) ||
+    ((holds('hr') || holds('security') || targetIdentity.approver) && !can(callerPerms, 'approval_steps')) ||
+    ((holds('finance') || targetIdentity.clearanceSigner) && !can(callerPerms, 'clearance'));
+
+  const lockedReason = self ? 'self' : holds('admin') ? 'admin' : above ? 'above' : null;
+  const actor = lockedReason === null;
+
+  // D5, plus the identity mirror of app_set_user_role_ids: hr and security sign
+  // approval steps, finance signs the clearance finance box.
+  const mayToggle = (r: RoleRow) => {
+    if (r.systemKey === 'manager') return can(callerPerms, 'role_manager');
+    if (!can(callerPerms, 'role_assign') || !isWithin(r.permissions, callerPerms)) return false;
+    if (r.systemKey === 'hr' || r.systemKey === 'security') return can(callerPerms, 'approval_steps');
+    if (r.systemKey === 'finance') return can(callerPerms, 'clearance');
+    return true;
+  };
 
   return {
-    profile: hrEditor || (managerSubset && targetId !== callerId),
-    org: hrEditor,
-    editableRoles: hrEditor ? ['manager'] : [],
-    resetPassword: false,
-    leave: isHr,
+    // A manager's name/hire-date power is the reporting relationship, not D4;
+    // RLS narrows it to their own reports.
+    profile: (actor && can(callerPerms, 'people')) || (callerRoles.includes('manager') && !self),
+    org: actor && can(callerPerms, 'people'),
+    editableRoleIds: actor ? assignable.filter(mayToggle).map((r) => r.id) : [],
+    resetPassword: actor && can(callerPerms, 'passwords'),
+    leave: can(callerPerms, 'leave_balances', 'read'),
+    leaveEdit: actor && can(callerPerms, 'leave_balances'),
     lockedReason,
-    personalInfo: !isHr ? null : lockedReason === null ? 'edit' : 'view',
-    specialLeave: hrEditor,
+    // FR-63: your own personal information is view only unless you may edit
+    // your own (canEditOwnPersonalInfo; admin only today, returned above).
+    personalInfo: !can(callerPerms, 'personal_info', 'read')
+      ? null
+      : (actor && can(callerPerms, 'personal_info')) || (self && canEditOwnPersonalInfo(callerRoles))
+        ? 'edit'
+        : 'view',
+    // FR-65, main's literal check until R3: hr on anyone but themself or the
+    // admin, the same rule as private.special_leave_target (the 'above' lock
+    // is not part of it). Admins returned true above.
+    specialLeave: callerRoles.includes('hr') && !self && !holds('admin'),
   };
 }

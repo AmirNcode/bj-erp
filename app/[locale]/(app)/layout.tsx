@@ -10,7 +10,8 @@ import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
 import { AppShell } from './_components/AppShell';
 
-// The role shown under the name in the side panel: the most senior one held.
+// The role shown under the name in the side panel: the most senior built-in one
+// held. The `roles` messages hold the English role names in both locales (D11).
 const ROLE_PRIORITY = ['admin', 'hr', 'finance', 'manager', 'security', 'employee'] as const;
 
 type Props = {
