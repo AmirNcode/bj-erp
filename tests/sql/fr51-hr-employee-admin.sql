@@ -12,6 +12,9 @@
 -- Results arrive as NOTICEs (stderr); hide the empty result sets.
 \o /dev/null
 begin;
+-- FR-55 allows one admin row (user_roles_one_admin). These scenarios predate it
+-- and need a second admin fixture; the drop is rolled back with everything else.
+drop index public.user_roles_one_admin;
 
 create temp table fx (k text primary key, id uuid not null);
 grant select on fx to authenticated;
