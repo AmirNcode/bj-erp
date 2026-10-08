@@ -40,7 +40,7 @@ const CODE_ATTEMPTS = 5;
 export async function createDepartment(
   input: CreateDepartmentInput
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['departments', 'edit'], company: true });
   if (!c.ok) return c;
 
   const nameFa = input.name_fa.trim();
@@ -130,7 +130,7 @@ export async function setDepartmentManager(
   departmentId: string,
   managerId: string | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['departments', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -155,7 +155,7 @@ export async function renameDepartment(
   departmentId: string,
   input: { name_fa: string; name_en: string }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['departments', 'edit'] });
   if (!c.ok) return c;
 
   const nameFa = input.name_fa.trim();
@@ -206,7 +206,7 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
 export async function getDepartmentMembers(
   departmentId: string
 ): Promise<{ ok: true; members: DepartmentMembers } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['departments', 'read'] });
   if (!c.ok) return c;
 
   const { data: department, error: departmentError } = await c.supabase

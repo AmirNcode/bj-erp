@@ -29,6 +29,11 @@ type Props = {
   ownDepartmentId?: string | null;
   /** Non-null when the read FAILED — distinct from "there are none". */
   loadError?: string | null;
+  /**
+   * `departments` edit (FR-55). False renders the list read-only: no rename,
+   * no manager picker, no Add Department. The members panel stays (read).
+   */
+  canEdit?: boolean;
   locale: string;
   labels: {
     title: string;
@@ -71,6 +76,7 @@ export function DepartmentsCard({
   managers,
   ownDepartmentId = null,
   loadError = null,
+  canEdit = true,
   locale,
   labels,
 }: Props) {
@@ -186,6 +192,17 @@ export function DepartmentsCard({
                     {d.code}
                   </span>
                 </button>
+                {!canEdit ? (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>{labels.managerLabel}</span>
+                    <span
+                      className="text-sm text-foreground"
+                      data-testid={`dept-manager-readonly-${slug(d.name_en)}`}
+                    >
+                      {d.manager_name ?? labels.noManager}
+                    </span>
+                  </p>
+                ) : (
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span>{labels.managerLabel}</span>
                   <select
@@ -210,27 +227,32 @@ export function DepartmentsCard({
                     ))}
                   </select>
                 </label>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => setEditing({ id: d.id, nameFa: d.name_fa, nameEn: d.name_en })}
-                  data-testid={`dept-rename-${slug(d.name_en)}`}
-                >
-                  {labels.rename}
-                </Button>
+                )}
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => setEditing({ id: d.id, nameFa: d.name_fa, nameEn: d.name_en })}
+                    data-testid={`dept-rename-${slug(d.name_en)}`}
+                  >
+                    {labels.rename}
+                  </Button>
+                )}
               </li>
             );
           })}
         </ul>
       )}
 
-      <Button variant="outline" size="sm" asChild>
-        <Link href={`/${locale}/manage/departments/new`} data-testid="add-department-link">
-          {labels.addNew}
-        </Link>
-      </Button>
+      {canEdit && (
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/${locale}/manage/departments/new`} data-testid="add-department-link">
+            {labels.addNew}
+          </Link>
+        </Button>
+      )}
 
       <DepartmentMembersDialog
         department={open}

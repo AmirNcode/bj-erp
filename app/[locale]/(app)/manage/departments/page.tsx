@@ -1,8 +1,10 @@
 /**
  * Manage › Departments (spec 2026-07-30 §7): the department list with its
  * members panel, rename and Add Department, plus the monthly accrual runner.
- * Needs the departments permission (FR-55); everyone else goes back to the employees hub. The
- * department code stays admin-only in the database.
+ * Needs the departments permission (FR-55): read shows the list, edit adds
+ * rename / manager / Add Department, and the accrual runner needs leave_accrual.
+ * Everyone else goes back to the employees hub. The department code stays
+ * admin-only in the database.
  */
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +74,7 @@ export default async function DepartmentsPage({ params }: Props) {
             managers={managers}
             ownDepartmentId={me?.department_id ?? null}
             loadError={departmentsError?.message ?? null}
+            canEdit={can(perms, 'departments', 'edit')}
             locale={locale}
             labels={{
               title: t('departments.title'),
@@ -99,6 +102,7 @@ export default async function DepartmentsPage({ params }: Props) {
         </CardContent>
       </Card>
 
+      {can(perms, 'leave_accrual') && (
       <Card>
         <CardContent>
           <AccrualRunner
@@ -116,6 +120,7 @@ export default async function DepartmentsPage({ params }: Props) {
           />
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

@@ -215,7 +215,7 @@ const RULES: Rule[] = [
   // FR-54 clearance form (raised by the app_*_separation RPCs).
   { re: /employee already has an open clearance form/, key: 'clearanceOpenExists' },
   { re: /cannot file a clearance form for yourself/, key: 'clearanceSelf' },
-  { re: /not allowed to file a clearance form for this employee/, key: 'clearanceAdminTarget' },
+  { re: /not allowed to file a clearance form for this employee/, key: 'accessAboveYours' },
   { re: /^invalid reason$/, key: 'clearanceInvalidReason' },
   { re: /last working day is required/, key: 'clearanceLastDayRequired' },
   { re: /^note is too long$/, key: 'clearanceNoteTooLong' },
@@ -233,6 +233,44 @@ const RULES: Rule[] = [
   { re: /signed rows cannot be changed/, key: 'clearanceSignedRowLocked' },
   { re: /form is not awaiting finance/, key: 'clearanceNotAwaitingFinance' },
   { re: /not allowed to sign as finance/, key: 'clearanceFinanceOnly' },
+  // FR-55 configurable roles. Specific rules sit above the generic `not allowed`
+  // catch-all below, which would otherwise swallow the "not allowed ..." ones.
+  { re: /^only the admin can (?:edit|delete|list) role/, key: 'rolesAdminOnly' },
+  { re: /^only the admin can transfer admin$/, key: 'transferAdminOnly' },
+  { re: /^invalid role name$/, key: 'roleNameInvalid' },
+  { re: /^role name already used$/, key: 'roleNameUsed' },
+  { re: /^role not found$/, key: 'roleNotFound' },
+  { re: /^built-in role cannot be edited$/, key: 'roleBuiltInLocked' },
+  { re: /^built-in roles cannot be deleted$/, key: 'roleBuiltInNoDelete' },
+  { re: /^wrong password$/, key: 'wrongCurrentPassword' },
+  { re: /^you already hold admin$/, key: 'alreadyAdmin' },
+  { re: /^personnel number does not match an active employee$/, key: 'transferTargetMismatch' },
+  { re: /^admin is moved only by Transfer admin$/, key: 'adminMovesByTransfer' },
+  { re: /^not allowed on this employee$/, key: 'accessAboveYours' },
+  // Bulk password reset, per target: "not allowed on <personnel no>".
+  {
+    re: /^not allowed on (\S+)$/,
+    key: 'accessAboveYoursOn',
+    params: (m) => ({ personnelNo: m[1] }),
+  },
+  {
+    re: /^not allowed to give or remove role (.+)$/,
+    key: 'roleChangeNotAllowed',
+    params: (m) => ({ role: m[1] }),
+  },
+  { re: /^unknown role$/, key: 'unknownRole' },
+  // app_save_role dependency refusal, e.g. "reports needs people".
+  {
+    re: /^([a-z_]+) needs ([a-z_]+)$/,
+    key: 'permissionNeeds',
+    params: (m) => ({ key: m[1], needs: m[2] }),
+  },
+  {
+    re: /^invalid permission (\S+) = (.+)$/,
+    key: 'permissionInvalid',
+    params: (m) => ({ key: m[1], level: m[2] }),
+  },
+  { re: /you cannot appoint yourself department manager/, key: 'cannotAppointSelfManager' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
   { re: /^not allowed$|not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },

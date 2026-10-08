@@ -8,6 +8,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
+import { can, type Perms } from '@/lib/permissions/catalog';
 import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { isValidSignatureData } from '@/lib/leave/signature';
@@ -26,8 +27,6 @@ type Fail = { ok: false; error: string };
 type Done = { ok: true } | Fail;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MANAGE_ROLES = ['admin', 'hr'];
-const VIEW_ROLES = ['admin', 'hr', 'finance'];
 
 export type ClearanceListItem = {
   id: string;
@@ -57,7 +56,7 @@ export type ClearanceOverview = {
   canViewAll: boolean;
 };
 
-async function listForms(): Promise<{ ok: true; userId: string; roles: string[]; items: ClearanceListItem[] } | Fail> {
+async function listForms(): Promise<{ ok: true; userId: string; perms: Perms; items: ClearanceListItem[] } | Fail> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const { data, error } = await c.supabase.rpc('app_list_separations');
@@ -65,7 +64,7 @@ async function listForms(): Promise<{ ok: true; userId: string; roles: string[];
   return {
     ok: true,
     userId: c.user.id,
-    roles: c.roles,
+    perms: c.perms,
     items: (data ?? []).map((r) => ({
       id: r.id,
       employeeId: r.employee_id,
@@ -88,14 +87,14 @@ async function listForms(): Promise<{ ok: true; userId: string; roles: string[];
 export async function getClearanceOverview(): Promise<ClearanceOverview | Fail> {
   const res = await listForms();
   if (!res.ok) return res;
-  const { userId, roles, items } = res;
+  const { userId, perms, items } = res;
   return {
     ok: true,
     awaiting: items.filter((f) => f.awaitingMe),
     mine: items.filter((f) => f.employeeId === userId),
     others: items.filter((f) => f.employeeId !== userId && !f.awaitingMe),
-    canManage: roles.some((r) => MANAGE_ROLES.includes(r)),
-    canViewAll: roles.some((r) => VIEW_ROLES.includes(r)),
+    canManage: can(perms, 'clearance'),
+    canViewAll: can(perms, 'clearance', 'read'),
   };
 }
 
@@ -293,7 +292,7 @@ export async function getClearanceSetup(): Promise<
     }
   | Fail
 > {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES, company: true });
+  const c = await requireCaller({ perm: ['clearance', 'edit'], company: true });
   if (!c.ok) return c;
 
   const [people, departments, units] = await Promise.all([
@@ -371,7 +370,7 @@ export async function getLeaverPrefill(employeeId: string): Promise<
     }
   | Fail
 > {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
 
   const [info, profile, warnings] = await Promise.all([
@@ -415,7 +414,7 @@ export type CreateClearanceInput = {
 export async function createClearance(
   input: CreateClearanceInput
 ): Promise<{ ok: true; id: string } | Fail> {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
   if (!isSeparationReason(input.reason)) return dbErr('invalid reason');
   if (!ISO_DATE.test(input.lastWorkingDay)) return dbErr('last working day is required');
@@ -438,7 +437,7 @@ export async function updateClearance(
   id: string,
   input: { reason: SeparationReason; lastWorkingDay: string; note: string | null }
 ): Promise<Done> {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
   if (!isSeparationReason(input.reason)) return dbErr('invalid reason');
   if (!ISO_DATE.test(input.lastWorkingDay)) return dbErr('last working day is required');
@@ -455,7 +454,7 @@ export async function updateClearance(
 }
 
 export async function setClearanceRows(id: string, rows: DraftRow[]): Promise<Done> {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_set_separation_signoffs', {
     p_id: id,
@@ -467,7 +466,7 @@ export async function setClearanceRows(id: string, rows: DraftRow[]): Promise<Do
 }
 
 export async function cancelClearance(id: string): Promise<Done> {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_cancel_separation', { p_id: id });
   if (error) return dbErr(error.message);
@@ -524,7 +523,7 @@ export async function signClearanceFinance(
 }
 
 export async function saveClearanceUnits(units: UnitRow[]): Promise<Done> {
-  const c = await requireCaller({ anyOf: MANAGE_ROLES });
+  const c = await requireCaller({ perm: ['clearance', 'edit'] });
   if (!c.ok) return c;
   const payload = [...units]
     .sort((a, b) => a.sortOrder - b.sortOrder)

@@ -5,6 +5,21 @@ import { validateWeekendDays } from '@/lib/leave/weekend';
 import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
+import { can } from '@/lib/permissions/catalog';
+
+/**
+ * Work settings and holidays writes. FR-59 (main): admin and hr edit company
+ * settings; FR-55: or a role holding the matching permission at edit. The
+ * literal admin|hr check stays until FR-55 R3 moves it to `settings.edit`.
+ */
+async function requireSettingsEditor(perm: 'work_settings' | 'holidays') {
+  const c = await requireCaller({ company: true });
+  if (!c.ok) return c;
+  if (!c.roles.includes('admin') && !c.roles.includes('hr') && !can(c.perms, perm)) {
+    return dbErr('not allowed');
+  }
+  return c;
+}
 
 export type Holiday = {
   id: string;
@@ -77,7 +92,7 @@ export async function updateWorkSettings(
   input: WorkSettingsInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const weekendDays = input.weekendDays;
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireSettingsEditor('work_settings');
   if (!c.ok) return c;
   const v = validateWeekendDays(
     weekendDays,
@@ -134,7 +149,7 @@ export async function upsertHoliday(input: {
   nameEn?: string;
   isRecurring?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   const nameFa = input.nameFa.trim();
   if (!isValidIsoDate(input.date) || !nameFa) {
@@ -179,7 +194,7 @@ export async function upsertHoliday(input: {
 export async function bulkUpsertHolidays(
   rows: { date: string; nameFa: string; nameEn?: string | null; isRecurring?: boolean }[]
 ): Promise<{ ok: true; added: number; updated: number } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no holidays to import');
   // Bounded so a runaway file cannot become one enormous statement. 500 is far
@@ -233,7 +248,7 @@ export async function bulkUpsertHolidays(
 }
 
 export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   const { data, error } = await c.supabase
     .from('holidays')
@@ -328,7 +343,7 @@ export async function updateApprovalStep(input: {
   active?: boolean;
   stepOrder?: number;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
   const patch: { active?: boolean; step_order?: number } = {};
@@ -368,7 +383,7 @@ export async function createApprovalStep(input: {
   stepOrder?: number;
   appliesTo?: ('leave' | 'errand')[];
 }): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
   const role = input.role;
@@ -415,7 +430,7 @@ export async function createApprovalStep(input: {
 export async function deleteApprovalStep(
   id: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -448,7 +463,7 @@ export type ApproverCandidate = {
 export async function searchApproverCandidates(
   query: string
 ): Promise<{ ok: true; candidates: ApproverCandidate[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['approval_steps', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase.rpc('search_approver_candidates', {

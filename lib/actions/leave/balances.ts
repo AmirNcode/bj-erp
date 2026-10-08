@@ -84,7 +84,7 @@ export async function getMyBalances(): Promise<
 export async function getEmployeeBalances(
   employeeId: string
 ): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['leave_balances', 'read'], company: true });
   if (!c.ok) return c;
 
   await accrueBeforeRead(c.supabase, employeeId);
@@ -134,7 +134,7 @@ export type AllocateLeaveResult =
 export async function allocateLeave(
   input: AllocateLeaveInput
 ): Promise<AllocateLeaveResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('allocate_leave', {
@@ -167,7 +167,7 @@ export async function setLeaveBalance(
   leaveTypeId: string,
   targetMinutes: number
 ): Promise<SetLeaveBalanceResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('set_leave_balance', {
@@ -203,7 +203,7 @@ export type LeavePolicyRow = {
 export async function setEmployeeLeavePolicy(
   input: LeavePolicyInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('set_employee_leave_policy', {
@@ -224,7 +224,7 @@ export async function setEmployeeLeavePolicy(
 export async function getEmployeePolicies(
   employeeId: string
 ): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'read'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -252,7 +252,7 @@ export async function runAllAccruals(): Promise<
   { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
 > {
   // FR-51: hr posts accruals too (accrue_all_leave checks accruals.run).
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_accrual', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase.rpc('accrue_all_leave');

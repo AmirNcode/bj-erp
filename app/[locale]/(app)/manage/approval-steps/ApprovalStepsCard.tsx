@@ -64,8 +64,9 @@ type Props = {
   orderEnforced: boolean;
   labels: Labels;
   /**
-   * FR-42: HR may edit the steps, but the order switch writes `work_settings`,
-   * which stays admin-only. Passed in so the switch is disabled rather than
+   * FR-55: the order switch writes `work_settings`, so it needs work_settings
+   * edit (no preset has it; it is the admin's in practice), separately from
+   * approval_steps edit. Passed in so the switch is disabled rather than
    * failing at the database.
    */
   canEnforceOrder: boolean;

@@ -10,14 +10,58 @@
 import { describe, it, expect, vi } from 'vitest';
 import { dbErr, fieldForDbError } from '@/lib/errors/db-error';
 
-// Echo the message key, so a test can tell WHICH rule matched.
+// Echo the message key (plus its params as JSON, when given), so a test can
+// tell WHICH rule matched and what it extracted.
 vi.mock('next-intl/server', () => ({
-  getTranslations: async () => (key: string) => key,
+  getTranslations: async () => (key: string, params?: Record<string, unknown>) =>
+    params ? `${key}${JSON.stringify(params)}` : key,
 }));
 
 describe('dbErr bare permission message', () => {
   it("maps requireCaller's bare 'not allowed' to the notAllowed key", async () => {
     expect((await dbErr('not allowed')).error).toBe('notAllowed');
+  });
+});
+
+describe('dbErr FR-55 role messages', () => {
+  const msg = async (raw: string) => (await dbErr(raw)).error;
+
+  it('maps the role-editing refusals before the generic catch-all', async () => {
+    expect(await msg('only the admin can edit roles')).toBe('rolesAdminOnly');
+    expect(await msg('only the admin can delete roles')).toBe('rolesAdminOnly');
+    expect(await msg('only the admin can list role holders')).toBe('rolesAdminOnly');
+    expect(await msg('only the admin can transfer admin')).toBe('transferAdminOnly');
+    expect(await msg('role name already used')).toBe('roleNameUsed');
+    expect(await msg('built-in roles cannot be deleted')).toBe('roleBuiltInNoDelete');
+    expect(await msg('wrong password')).toBe('wrongCurrentPassword');
+  });
+
+  it('maps the "not allowed to give or remove role" prefix and keeps the role name', async () => {
+    expect(await msg('not allowed to give or remove role Payroll Clerk')).toBe(
+      'roleChangeNotAllowed{"role":"Payroll Clerk"}'
+    );
+  });
+
+  it('maps the dependency and permission-value messages with their params', async () => {
+    expect(await msg('reports needs people')).toBe('permissionNeeds{"key":"reports","needs":"people"}');
+    expect(await msg('invalid permission people = "super"')).toBe(
+      'permissionInvalid{"key":"people","level":"\\"super\\""}'
+    );
+  });
+
+  it('maps the bulk password reset refusal per personnel number', async () => {
+    expect(await msg('not allowed on 1042')).toBe('accessAboveYoursOn{"personnelNo":"1042"}');
+    expect(await msg('not allowed on this employee')).toBe('accessAboveYours');
+  });
+
+  it('gives the clearance subset refusal the generic access wording', async () => {
+    expect(await msg('not allowed to file a clearance form for this employee')).toBe('accessAboveYours');
+  });
+
+  it('still maps the other SQL refusals to the generic message', async () => {
+    expect(await msg('not allowed to set roles')).toBe('notAllowed');
+    expect(await msg('unknown role')).toBe('unknownRole');
+    expect(await msg('you cannot appoint yourself department manager')).toBe('cannotAppointSelfManager');
   });
 });
 

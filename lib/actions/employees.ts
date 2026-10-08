@@ -4,6 +4,7 @@ import type { Database } from '@/lib/supabase/types';
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
 import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
 import { requireCaller } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 
@@ -34,8 +35,10 @@ export type CreateEmployeeInput = {
 export async function createEmployee(
   input: CreateEmployeeInput
 ): Promise<{ ok: true; tempPassword: string; userId: string } | DbErrorResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'], company: true });
+  const c = await requireCaller({ company: true });
   if (!c.ok) return c;
+  // FR-55: managers keep their scoped path; everyone else needs `people_create`.
+  if (!c.roles.includes('manager') && !can(c.perms, 'people_create')) return dbErr('not allowed');
 
   // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)
@@ -83,16 +86,16 @@ export async function updateEmployee(
   id: string,
   fields: UpdateEmployeeFields
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'] });
+  const c = await requireCaller();
   if (!c.ok) return c;
 
-  const allowed = allowedProfileFields(c.roles);
+  const allowed = allowedProfileFields(c.roles, c.perms);
   const filtered = Object.fromEntries(
     Object.entries(fields).filter(([key]) => allowed.includes(key))
   ) as UpdateEmployeeFields;
 
   if (Object.keys(filtered).length === 0) {
-    return dbErr('not permitted to update these fields');
+    return dbErr('not allowed');
   }
 
   const { data, error } = await c.supabase
@@ -119,7 +122,7 @@ export async function setRoles(
   id: string,
   roles: AppRole[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller();
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('app_set_user_roles', {
@@ -140,7 +143,7 @@ export async function setActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['people', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -163,7 +166,7 @@ export async function setActive(
 export async function resetPassword(
   id: string
 ): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ perm: ['passwords', 'edit'] });
   if (!c.ok) return c;
 
   const tempPassword = generateTempPassword();
@@ -244,8 +247,10 @@ export type ImportEmployeesResult = {
 export async function importEmployees(
   input: ImportEmployeesInput
 ): Promise<({ ok: true } & ImportEmployeesResult) | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ perm: ['people_create', 'edit'], company: true });
   if (!c.ok) return c;
+  // `update` and `replace` rewrite existing people: admin only (SQL enforces it too).
+  if (input.mode !== 'add' && !c.roles.includes('admin')) return dbErr('admin role required');
   if (input.rows.length === 0) return dbErr('no rows to import');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.balanceAsOf)) return dbErr('balance date is required');
 
@@ -319,7 +324,7 @@ export async function importEmployees(
 export async function bulkResetPasswords(
   userIds: string[]
 ): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ perm: ['passwords', 'edit'] });
   if (!c.ok) return c;
   if (userIds.length === 0) return dbErr('no employees selected');
   const uniqueIds = [...new Set(userIds)];

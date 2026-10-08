@@ -1,7 +1,8 @@
 /**
- * Manage › Employees › Personal info (FR-53): CSV export and import for callers
- * with the personal_info permission. Both RPCs re-check the permission and write the audit row; this page
- * guard only keeps everyone else out of the screen.
+ * Manage › Employees › Personal info (FR-53): CSV export (personal_info read) and
+ * import (personal_info edit). Both RPCs re-check the permission and write the
+ * audit row; this page guard keeps everyone else out of the screen and hides the
+ * import part from a read-only holder.
  */
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +31,7 @@ export default async function PersonalInfoBulkPage({ params }: Props) {
   return (
     <main className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
       <PageHeader title={t('title')} />
-      <PersonalInfoBulk locale={locale} />
+      <PersonalInfoBulk locale={locale} canImport={can(perms, 'personal_info', 'edit')} />
     </main>
   );
 }
