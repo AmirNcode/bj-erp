@@ -99,21 +99,37 @@ create function private.can_act_on(p_caller uuid, p_target uuid) returns boolean
      and (not exists (select 1 from public.user_roles where user_id = p_target and role = 'manager')
           or private.has_perm(p_caller, 'role_manager', 'edit'))
      and (not exists (select 1 from public.departments where manager_id = p_target)
-          or private.has_perm(p_caller, 'departments', 'edit'));
+          or private.has_perm(p_caller, 'departments', 'edit'))
+     -- Identity powers: whoever could reset this person's password could sign in
+     -- as them and fill their approval steps or clearance boxes. Role rows are
+     -- checked active or not, like the admin row above.
+     and (not (exists (select 1 from public.user_roles
+                        where user_id = p_target and role in ('hr', 'security'))
+               or exists (select 1 from public.approval_steps
+                           where approver_id = p_target and active))
+          or private.has_perm(p_caller, 'approval_steps', 'edit'))
+     and (not (exists (select 1 from public.user_roles where user_id = p_target and role = 'finance')
+               or exists (select 1 from public.separation_units where signer_id = p_target))
+          or private.has_perm(p_caller, 'clearance', 'edit'));
 $$;
 
--- ── D5: may p_uid add or remove this role? (company checked by the caller) ──
+-- ── D5: may p_uid add or remove this role? ──────────────────────────────────
+-- False for an unknown or NULL role id and for a role of another company.
 create function private.role_within(p_role_id uuid, p_uid uuid) returns boolean
     language sql stable security definer set search_path to '' as $$
-  select case (select system_key from public.roles where id = p_role_id)
-    when 'admin' then false
-    when 'manager' then private.has_perm(p_uid, 'role_manager', 'edit')
-    else private.has_perm(p_uid, 'role_assign', 'edit')
-         and not exists (
-           select 1 from public.role_permissions rp
-            where rp.role_id = p_role_id
-              and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
-  end;
+  select coalesce((
+    select case r.system_key
+      when 'admin' then false
+      when 'manager' then private.has_perm(p_uid, 'role_manager', 'edit')
+      else private.has_perm(p_uid, 'role_assign', 'edit')
+           and not exists (
+             select 1 from public.role_permissions rp
+              where rp.role_id = r.id
+                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
+    end
+      from public.roles r
+      join public.profiles u on u.id = p_uid and u.company_id = r.company_id
+     where r.id = p_role_id), false);
 $$;
 
 -- Legacy keys (FR-51..54 call sites), kept for the deploy window; dropped next release.

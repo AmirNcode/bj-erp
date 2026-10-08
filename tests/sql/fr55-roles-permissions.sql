@@ -228,7 +228,50 @@ begin
   insert into fx values ('r_super', v_role);
   insert into public.user_roles (user_id, role_id) values ((select id from fx where k='super'), v_role);
   update public.departments set manager_id = (select id from fx where k='deptmgr') where id = (select id from fx where k='dept');
+  -- 'nosign': every catalog item except approval_steps and clearance, so only the
+  -- identity clauses of can_act_on can refuse it.
+  insert into public.roles (company_id, kind, name) values ((select id from fx where k='company'), 'custom', 'NoSign') returning id into v_role;
+  insert into public.role_permissions select v_role, k, case when private.permission_allows(k,'edit') then 'edit' else 'read' end
+    from private.permission_keys() k where k not in ('approval_steps', 'clearance');
+  insert into fx values ('r_nosign', v_role);
+  -- A custom role of the other company with no permission rows (role_within fail-open check).
+  insert into public.roles (company_id, kind, name) values ((select id from fx where k='other_company'), 'custom', 'Clerk') returning id into v_role;
+  insert into fx values ('r_other_clerk', v_role);
 end $$;
+
+-- More fixtures: identity holders, an outsider in the other company, the nosign caller.
+do $$
+declare r record;
+begin
+  for r in
+    select * from (values
+      ('appr',     'company',       '9990000971'),
+      ('appr_off', 'company',       '9990000972'),
+      ('signer',   'company',       '9990000973'),
+      ('nosign',   'company',       '9990000974'),
+      ('outsider', 'other_company', '9990000970')
+    ) as t(k, co, code)
+  loop
+    insert into fx values (r.k, gen_random_uuid());
+    insert into auth.users (id, email, encrypted_password)
+      values ((select id from fx where k = r.k), r.code || '@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+    insert into public.profiles (id, company_id, employee_code, full_name, department_id, active, personnel_no, must_change_password)
+    values ((select id from fx where k = r.k), (select id from fx where k = r.co), r.code, 'FR55 ' || r.k,
+            case when r.co = 'company' then (select id from fx where k = 'dept') end, true, r.code, false);
+    -- Enum-only: the sync trigger resolves the employee role of the profile's own company.
+    insert into public.user_roles (user_id, role) values ((select id from fx where k = r.k), 'employee');
+  end loop;
+  insert into public.user_roles (user_id, role_id) values ((select id from fx where k='nosign'), (select id from fx where k='r_nosign'));
+  insert into public.approval_steps (company_id, role, approver_id, step_order, active) values
+    ((select id from fx where k='company'), 'employee', (select id from fx where k='appr'), 91, true),
+    ((select id from fx where k='company'), 'employee', (select id from fx where k='appr_off'), 92, false);
+  insert into public.separation_units (company_id, kind, name_fa, name_en, signer_id)
+  values ((select id from fx where k='company'), 'person', 'آزمون', 'FR55 signer', (select id from fx where k='signer'));
+end $$;
+select pg_temp.expect('the outsider holds the other company''s Employee role',
+  (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
+    where ur.user_id = (select id from fx where k='outsider')
+      and r.company_id = (select id from fx where k='other_company') and r.system_key = 'employee'), '1');
 
 select pg_temp.expect('perm_level: hr people edit, help passwords edit, emp none',
   (select private.perm_level((select id from fx where k='hr'),'people')::text
@@ -269,8 +312,34 @@ select pg_temp.expect('hr acts on a manager and a department manager (parity)',
        || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='deptmgr'))::text), 'truetrue');
 select pg_temp.expect('hr not on helpdesk (passwords hr lacks)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='help'))::text), 'false');
-select pg_temp.expect('nobody acts across companies',
-  (select private.can_act_on((select id from fx where k='super'), (select id from fx where k='outsider'))::text), 'false');
+select pg_temp.expect('nobody acts across companies (Everything, hr, the admin)',
+  (select private.can_act_on((select id from fx where k='super'), (select id from fx where k='outsider'))::text
+       || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='outsider'))::text
+       || private.can_act_on((select id from fx where k='admin'), (select id from fx where k='outsider'))::text), 'falsefalsefalse');
+-- identity powers (approval steps, clearance boxes)
+select pg_temp.expect('helpdesk acts on the holder of an inactive approval step',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='appr_off'))::text), 'true');
+select pg_temp.expect('helpdesk not on a named approver',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='appr'))::text), 'false');
+select pg_temp.expect('helpdesk not on a separation person signer',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='signer'))::text), 'false');
+select pg_temp.expect('helpdesk not on security or finance holders',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='sec'))::text
+       || private.can_act_on((select id from fx where k='help'), (select id from fx where k='fin'))::text), 'falsefalse');
+select pg_temp.expect('nosign acts on a plain employee',
+  (select private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='emp2'))::text), 'true');
+select pg_temp.expect('nosign not on hr, security, finance, approver, signer (identity clauses alone)',
+  (select private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='hr'))::text
+       || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='sec'))::text
+       || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='fin'))::text
+       || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='appr'))::text
+       || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='signer'))::text),
+  'falsefalsefalsefalsefalse');
+select pg_temp.expect('hr acts on a named approver and a signer (parity)',
+  (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='appr'))::text
+       || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='signer'))::text), 'truetrue');
+select pg_temp.expect('helpdesk may not reset a named approver''s password',
+  pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('appr'), 'Temp!2026x')), '42501');
 select pg_temp.expect('an inactive caller acts on nobody',
   (select private.can_act_on((select id from fx where k='hr_off'), (select id from fx where k='emp2'))::text), 'false');
 -- role_within (D5)
@@ -281,6 +350,15 @@ select pg_temp.expect('role_within: hr gives Manager, not Helpdesk, never Admin'
 select pg_temp.expect('role_within: Everything gives Helpdesk and HR',
   (select private.role_within((select id from fx where k='r_help'), (select id from fx where k='super'))::text
        || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key='hr'), (select id from fx where k='super'))::text), 'truetrue');
+select pg_temp.expect('role_within: the admin (every permission) gives a custom role of its company',
+  (select private.role_within((select id from fx where k='r_help'), (select id from fx where k='admin'))::text), 'true');
+select pg_temp.expect('role_within: false for a random id, NULL, and the other company''s roles',
+  (select private.role_within(gen_random_uuid(), (select id from fx where k='admin'))::text
+       || private.role_within(null, (select id from fx where k='admin'))::text
+       || private.role_within((select id from fx where k='r_other_clerk'), (select id from fx where k='admin'))::text
+       || private.role_within((select id from public.roles where company_id = (select id from fx where k='other_company') and system_key='employee'), (select id from fx where k='admin'))::text
+       || private.role_within((select id from public.roles where company_id = (select id from fx where k='other_company') and system_key='manager'), (select id from fx where k='admin'))::text),
+  'falsefalsefalsefalsefalse');
 
 -- gates: passwords
 select pg_temp.expect('helpdesk resets an employee password',
@@ -426,7 +504,9 @@ select pg_temp.expect('hr edits approval steps (parity); helpdesk does not',
   || pg_temp.try_as('hr', format('delete from public.approval_steps where approver_id = %s', pg_temp.id('emp'))), 'ok:1 ok:0 ok:0 ok:1');
 select pg_temp.expect('approver search: hr yes, helpdesk no',
   pg_temp.try_as('hr', 'select public.search_approver_candidates(''FR55'')') || ' '
-  || pg_temp.try_as('help', 'select public.search_approver_candidates(''FR55'')'), 'ok:10 42501');
+  || pg_temp.try_as('help', 'select public.search_approver_candidates(''FR55'')'),
+  (select 'ok:' || least(20, count(*)) from public.profiles
+    where company_id = (select id from fx where k='company') and active and full_name ilike '%FR55%') || ' 42501');
 select pg_temp.expect('work settings: Everything edits, hr does not (parity)',
   pg_temp.try_as('super', format('update public.work_settings set hours_per_day = hours_per_day where company_id = %s', pg_temp.id('company'))) || ' '
   || pg_temp.try_as('hr', format('update public.work_settings set hours_per_day = hours_per_day where company_id = %s', pg_temp.id('company'))),
