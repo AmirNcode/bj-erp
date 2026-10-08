@@ -908,6 +908,81 @@ select pg_temp.expect('anon may execute none of the new RPCs',
                         'app_set_user_role_ids','app_set_user_roles','app_transfer_admin','app_create_employee')
       and has_function_privilege('anon', p.oid, 'execute')), '0');
 
+-- company scope (Task 3b): the delegable config writes (holidays, work_settings,
+-- approval_steps) never reach another company's rows, not even for the admin.
+-- Setup runs as the superuser (policies do not apply), so the other company owns one
+-- row per table. The SELECT policies are company-blind, so those rows ARE visible to
+-- the admin and only the write policies' company condition can stop the writes.
+do $$
+declare v_other uuid := (select id from fx where k = 'other_company');
+begin
+  insert into public.holidays (company_id, holiday_date, name_fa) values (v_other, '2099-05-01', 'FR55 other');
+  insert into public.approval_steps (company_id, role, step_order) values (v_other, 'hr', 81);
+  insert into public.work_settings (company_id) values (v_other) on conflict (company_id) do nothing;
+end $$;
+select pg_temp.expect('company scope: the other company''s rows exist and the admin can read them',
+  pg_temp.try_as('admin', format('select 1 from public.holidays where company_id = %s', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('admin', format('select 1 from public.approval_steps where company_id = %s', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('admin', format('select 1 from public.work_settings where company_id = %s', pg_temp.id('other_company'))),
+  'ok:1 ok:1 ok:1');
+
+select pg_temp.expect('company scope holidays: admin update/delete of another company''s holiday touch nothing',
+  pg_temp.try_as('admin', format('update public.holidays set name_fa = %L where company_id = %s', 'x', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('admin', format('delete from public.holidays where company_id = %s', pg_temp.id('other_company'))),
+  'ok:0 ok:0');
+select pg_temp.expect('company scope holidays: admin insert into another company refused',
+  pg_temp.try_as('admin', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)',
+    pg_temp.id('other_company'), '2099-05-02', 'x')), '42501');
+select pg_temp.expect('company scope holidays: a row cannot be moved to another company',
+  pg_temp.try_as('admin', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)',
+    pg_temp.id('company'), '2099-05-03', 'FR55 mine')) || ' '
+  || pg_temp.try_as('admin', format('update public.holidays set company_id = %s where holiday_date = %L', pg_temp.id('other_company'), '2099-05-03')),
+  'ok:1 42501');
+select pg_temp.expect('company scope holidays: own company still works for the admin',
+  pg_temp.try_as('admin', format('update public.holidays set name_fa = %L where company_id = %s and holiday_date = %L', 'FR55 mine 2', pg_temp.id('company'), '2099-05-03')) || ' '
+  || pg_temp.try_as('admin', format('delete from public.holidays where company_id = %s and holiday_date = %L', pg_temp.id('company'), '2099-05-03')),
+  'ok:1 ok:1');
+select pg_temp.expect('company scope holidays: the other company''s row is untouched',
+  (select count(*)::text || ':' || min(name_fa) from public.holidays where company_id = (select id from fx where k='other_company') and holiday_date = '2099-05-01'),
+  '1:FR55 other');
+
+select pg_temp.expect('company scope approval_steps: admin update/delete of another company''s step touch nothing',
+  pg_temp.try_as('admin', format('update public.approval_steps set step_order = 82 where company_id = %s', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s', pg_temp.id('other_company'))),
+  'ok:0 ok:0');
+select pg_temp.expect('company scope approval_steps: admin insert into another company refused',
+  pg_temp.try_as('admin', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 83)',
+    pg_temp.id('other_company'), 'security')), '42501');
+select pg_temp.expect('company scope approval_steps: a step cannot be moved to another company',
+  pg_temp.try_as('hr', format('update public.approval_steps set company_id = %s where approver_id = %s', pg_temp.id('other_company'), pg_temp.id('appr'))), '42501');
+select pg_temp.expect('company scope approval_steps: hr edits and the admin deletes in the own company',
+  pg_temp.try_as('hr', format('update public.approval_steps set step_order = 95 where approver_id = %s', pg_temp.id('appr'))) || ' '
+  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 84)', pg_temp.id('company'), 'security')) || ' '
+  || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s and step_order = 84', pg_temp.id('company'))),
+  'ok:1 ok:1 ok:1');
+select pg_temp.expect('company scope approval_steps: hr (a non-admin delegate) cannot reach the other company either',
+  pg_temp.try_as('hr', format('update public.approval_steps set step_order = 85 where company_id = %s', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 86)', pg_temp.id('other_company'), 'security')),
+  'ok:0 42501');
+select pg_temp.expect('company scope approval_steps: the other company''s step is untouched',
+  (select count(*)::text || ':' || min(step_order)::text from public.approval_steps where company_id = (select id from fx where k='other_company')), '1:81');
+
+select pg_temp.expect('company scope work_settings: admin update/delete of another company''s settings touch nothing',
+  pg_temp.try_as('admin', format('update public.work_settings set hours_per_day = 7 where company_id = %s', pg_temp.id('other_company'))) || ' '
+  || pg_temp.try_as('admin', format('delete from public.work_settings where company_id = %s', pg_temp.id('other_company'))),
+  'ok:0 ok:0');
+-- The other company already has its row: without the policy this would be 23505.
+select pg_temp.expect('company scope work_settings: admin insert for another company refused by the policy',
+  pg_temp.try_as('admin', format('insert into public.work_settings (company_id) values (%s)', pg_temp.id('other_company'))), '42501');
+-- Without the WITH CHECK, the clash with the other company's row would be 23505.
+select pg_temp.expect('company scope work_settings: settings cannot be moved to another company',
+  pg_temp.try_as('admin', format('update public.work_settings set company_id = %s where company_id = %s', pg_temp.id('other_company'), pg_temp.id('company'))), '42501');
+select pg_temp.expect('company scope work_settings: own company still works for the admin',
+  pg_temp.try_as('admin', format('update public.work_settings set hours_per_day = hours_per_day where company_id = %s', pg_temp.id('company'))),
+  (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company')));
+select pg_temp.expect('company scope work_settings: the other company''s settings are untouched',
+  (select count(*)::text || ':' || min(hours_per_day)::text from public.work_settings where company_id = (select id from fx where k='other_company')), '1:8');
+
 -- transfer (D1). Must be the LAST section: it moves the real admin's role row
 -- onto a fixture admin whose password the test knows (all rolled back).
 do $$
