@@ -66,7 +66,42 @@ describe('applyLevel', () => {
   });
 });
 
+describe('cascade down', () => {
+  it('removing people removes all transitive dependents', () => {
+    const r = applyLevel({ people: 'read', departments: 'edit', leave_accrual: 'edit', passwords: 'edit' }, 'people', null);
+    expect(r.perms).toEqual({});
+    expect(r.lowered.sort()).toEqual(['departments', 'leave_accrual', 'passwords']);
+    expect(r.raised).toEqual([]);
+  });
+  it('single row: people cannot stay when departments needs it', () => {
+    const r = applyLevel({ departments: 'read', people: 'read' }, 'people', null);
+    expect(r.perms).toEqual({});
+    expect(r.lowered).toEqual(['departments']);
+  });
+  it('lowering clearance edit to read keeps people, lowers nothing', () => {
+    const r = applyLevel({ people: 'read', clearance: 'edit' }, 'clearance', 'read');
+    expect(r.perms).toEqual({ people: 'read', clearance: 'read' });
+    expect(r.lowered).toEqual([]);
+  });
+  it('edit-only dependency does not cascade when dependent is at read', () => {
+    const r = applyLevel({ people: 'read', clearance: 'read' }, 'people', null);
+    expect(r.perms).toEqual({ clearance: 'read' });
+    expect(r.lowered).toEqual([]);
+  });
+});
+
 describe('sections', () => {
+  it('bulk none on employees cascades to departments outside the section', () => {
+    const r = applySectionBulk({ departments: 'read', people: 'read' }, 'employees', 'none');
+    expect(r.perms).toEqual({});
+    expect(r.lowered).toEqual(['departments']);
+    expect(sectionSummary(r.perms, 'employees')).toBe('none');
+  });
+  it('out-of-section raise is reported', () => {
+    const r = applySectionBulk({}, 'departments', 'allow');
+    expect(r.raised).toEqual(['people']);
+    expect(r.lowered).toEqual([]);
+  });
   it('summary is custom when mixed', () => {
     expect(sectionSummary({ people: 'edit' }, 'employees')).toBe('custom');
     expect(sectionSummary({}, 'employees')).toBe('none');

@@ -64,12 +64,36 @@ export function allows(key: PermKey, level: Level): boolean {
 
 const highest = (key: PermKey): Level => (SHAPES[key] === 'R' ? 'read' : 'edit');
 
-/** Set one item (null = Not allowed) and raise what it needs, transitively. */
-export function applyLevel(perms: Perms, key: PermKey, level: Level | null): { perms: Perms; raised: PermKey[] } {
+/**
+ * Set one item (null = Not allowed). The user's explicit choice always wins, in both directions:
+ * - raising: raise what the item needs to read, transitively (`raised`);
+ * - removing (null): first remove every item that needs it, transitively (`lowered`, the changed
+ *   key itself excluded). Lowering edit to read removes nothing: dependencies only need read.
+ */
+export function applyLevel(
+  perms: Perms,
+  key: PermKey,
+  level: Level | null
+): { perms: Perms; raised: PermKey[]; lowered: PermKey[] } {
   if (level && !allows(key, level)) throw new Error(`${key} has no ${level} level`);
   const next: Perms = { ...perms };
   if (level) next[key] = level;
   else delete next[key];
+  const lowered: PermKey[] = [];
+  if (!level) {
+    const queue: PermKey[] = [key];
+    while (queue.length) {
+      const gone = queue.shift()!;
+      for (const d of DEPENDENCIES) {
+        if (d.needs !== gone) continue;
+        const kl = next[d.key];
+        if (!kl || levelValue(kl) < levelValue(d.keyLevel)) continue;
+        delete next[d.key];
+        if (d.key !== key && !lowered.includes(d.key)) lowered.push(d.key);
+        queue.push(d.key);
+      }
+    }
+  }
   const raised: PermKey[] = [];
   let changed = true;
   while (changed) {
@@ -83,7 +107,7 @@ export function applyLevel(perms: Perms, key: PermKey, level: Level | null): { p
       changed = true;
     }
   }
-  return { perms: next, raised };
+  return { perms: next, raised, lowered };
 }
 
 export function sectionSummary(perms: Perms, section: SectionKey): SectionChoice {
@@ -94,22 +118,29 @@ export function sectionSummary(perms: Perms, section: SectionKey): SectionChoice
   return 'custom';
 }
 
+/**
+ * Set every item of a section. `raised` = items outside the section raised to satisfy
+ * dependencies; `lowered` = items outside the section removed because they needed an item the
+ * bulk choice removed. Items inside the section are set explicitly by the choice.
+ */
 export function applySectionBulk(
   perms: Perms,
   section: SectionKey,
   choice: Exclude<SectionChoice, 'custom'>
-): { perms: Perms; raised: PermKey[] } {
+): { perms: Perms; raised: PermKey[]; lowered: PermKey[] } {
   const items = SECTIONS.find((s) => s.key === section)!.items;
   let acc: Perms = { ...perms };
   const raised: PermKey[] = [];
+  const lowered: PermKey[] = [];
   for (const k of items) {
     const level: Level | null =
       choice === 'none' ? null : choice === 'allow' ? highest(k) : SHAPES[k] === 'E' ? null : 'read';
     const r = applyLevel(acc, k, level);
     acc = r.perms;
     raised.push(...r.raised.filter((x) => !items.includes(x)));
+    for (const x of r.lowered) if (!items.includes(x) && !lowered.includes(x)) lowered.push(x);
   }
-  return { perms: acc, raised };
+  return { perms: acc, raised, lowered };
 }
 
 /** D5 mirror: every level in `rolePerms` ≤ the caller's. */
