@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { employeeEditCapabilities, canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
+import { employeeEditCapabilities, canEditOwnPersonalInfo, editFormView } from '@/lib/employees/editCapabilities';
 import type { RoleRow } from '@/lib/actions/roles-helpers';
-import { fullPerms, type Perms } from '@/lib/permissions/catalog';
+import { can, fullPerms, type Perms } from '@/lib/permissions/catalog';
 
 const ME = 'caller';
 const THEM = 'target';
@@ -264,5 +264,62 @@ describe('employeeEditCapabilities', () => {
   it('personal_info read only views; leave_balances read shows balances without editing', () => {
     const viewer = { roles: ['employee'], perms: { people: 'read', personal_info: 'read', leave_balances: 'read' } as Perms };
     expect(caps(viewer, ['employee'])).toMatchObject({ personalInfo: 'view', leave: true, leaveEdit: false });
+  });
+});
+
+describe('editFormView', () => {
+  const MANAGER_ONLY = { roles: ['manager', 'employee'], perms: {} as Perms };
+  const view = (caller: { roles: string[]; perms: Perms }, targetSlugs: string[], opts: { targetId?: string } = {}) =>
+    editFormView(caps(caller, targetSlugs, opts), { showOrg: can(caller.perms, 'people', 'read') });
+
+  it('a manager-only caller keeps the pre-FR-55 view: manager note, no org or roles, no lock note', () => {
+    for (const target of [['employee'], ['employee', 'manager'], ['employee', 'hr']]) {
+      expect(view(MANAGER_ONLY, target)).toEqual({ note: 'manager', orgBlock: false, rolesBlock: false, saveable: true });
+    }
+    // Their own record: profile is false, still the manager note and no blocks.
+    expect(view(MANAGER_ONLY, ['manager', 'employee'], { targetId: ME })).toEqual({
+      note: 'manager',
+      orgBlock: false,
+      rolesBlock: false,
+      saveable: false,
+    });
+  });
+
+  it('a manager on a department-manager report keeps the manager note (no lock note)', () => {
+    const c = employeeEditCapabilities({ ...base, callerRoles: ['manager'], callerPerms: {}, targetIsDepartmentManager: true });
+    expect(c.lockedReason).toBe('above');
+    expect(editFormView(c, { showOrg: false }).note).toBe('manager');
+  });
+
+  it('people readers with no edit power get the neutral read-only note and nothing to save', () => {
+    expect(view({ roles: ['employee'], perms: SECURITY }, ['employee'])).toEqual({
+      note: 'readOnly',
+      orgBlock: false,
+      rolesBlock: false,
+      saveable: false,
+    });
+    expect(view(HELPDESK_CALLER, ['employee']).note).toBe('readOnly');
+  });
+
+  it('people readers see the lock reason with the org and roles blocks read-only', () => {
+    expect(view(HELPDESK_CALLER, ['employee', 'hr'])).toEqual({ note: 'lockedAbove', orgBlock: true, rolesBlock: true, saveable: false });
+    expect(view(hr(), ['admin'])).toMatchObject({ note: 'lockedAdmin', orgBlock: true, rolesBlock: true });
+    expect(view(hr('employee'), ['hr', 'employee'], { targetId: ME })).toMatchObject({ note: 'lockedSelf', orgBlock: true });
+  });
+
+  it('hr editing an employee: no note, org and roles blocks, saveable', () => {
+    expect(view(hr(), ['employee'])).toEqual({ note: null, orgBlock: true, rolesBlock: true, saveable: true });
+  });
+
+  it('a role assigner with people read only gets the roles block and can save', () => {
+    const assigner = { roles: ['employee'], perms: { people: 'read', role_assign: 'edit', passwords: 'edit' } as Perms };
+    expect(view(assigner, ['employee'])).toEqual({ note: null, orgBlock: false, rolesBlock: true, saveable: true });
+  });
+
+  it('leave_balances edit alone makes the form saveable, with no read-only note', () => {
+    expect(view({ roles: ['employee'], perms: { people: 'read', leave_balances: 'edit' } }, ['employee'])).toMatchObject({
+      note: null,
+      saveable: true,
+    });
   });
 });

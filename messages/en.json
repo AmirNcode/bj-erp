@@ -577,6 +577,7 @@
       "lockedAdmin": "Only an admin can change an admin's department, manager, title, roles or status.",
       "lockedSelf": "Ask an admin to change your own department, manager, title, roles or status.",
       "lockedAbove": "This person has access you don't have, so only the admin or someone with more access can change their record.",
+      "readOnlyNote": "You can view this record but not change its details.",
       "adminTransferHint": "Admin is moved with Transfer admin in Settings › Roles.",
       "accountActions": "Account"
     },

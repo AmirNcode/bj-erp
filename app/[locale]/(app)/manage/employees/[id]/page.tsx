@@ -175,6 +175,7 @@ export default async function EditEmployeePage({ params }: Props) {
         allRoles={allRoles}
         targetRoleIds={targetRoleIds}
         caps={caps}
+        showOrg={can(callerPerms, 'people', 'read')}
         departments={departments ?? []}
         managers={managers ?? []}
         balances={balances}

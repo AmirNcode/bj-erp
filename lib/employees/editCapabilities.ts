@@ -156,3 +156,44 @@ export function employeeEditCapabilities({
     specialLeave: callerRoles.includes('hr') && !self && !holds('admin'),
   };
 }
+
+export type EditFormView = {
+  /** The scope note above the form; null = none. */
+  note: 'lockedAdmin' | 'lockedSelf' | 'lockedAbove' | 'manager' | 'readOnly' | null;
+  /** Job title, department and manager (editable with caps.org, else read-only). */
+  orgBlock: boolean;
+  rolesBlock: boolean;
+  /** Anything on the form the Save button can write. */
+  saveable: boolean;
+};
+
+/**
+ * How the Edit Employee form presents `caps`. `showOrg` = the caller holds
+ * people read. Without it the caller is a manager on the relationship path and
+ * keeps the pre-FR-55 view: the manager note, name and hire date only, never a
+ * lock note (their name/hire-date power does not depend on D4).
+ */
+export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boolean }): EditFormView {
+  const saveable = caps.profile || caps.org || caps.editableRoleIds.length > 0 || caps.leaveEdit;
+  const lockNote =
+    caps.lockedReason === 'admin'
+      ? 'lockedAdmin'
+      : caps.lockedReason === 'self'
+        ? 'lockedSelf'
+        : caps.lockedReason === 'above'
+          ? 'lockedAbove'
+          : null;
+  const note: EditFormView['note'] = !showOrg
+    ? 'manager'
+    : lockNote
+      ? lockNote
+      : caps.org
+        ? null
+        : caps.profile
+          ? 'manager' // name and hire date through the reporting line only
+          : saveable
+            ? null
+            : 'readOnly';
+  const orgBlock = showOrg && (caps.org || caps.lockedReason !== null);
+  return { note, orgBlock, rolesBlock: orgBlock || caps.editableRoleIds.length > 0, saveable };
+}

@@ -10,7 +10,7 @@ import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
 import type { DaysHoursError } from '@/lib/leave/duration';
-import type { EditCapabilities } from '@/lib/employees/editCapabilities';
+import { editFormView, type EditCapabilities } from '@/lib/employees/editCapabilities';
 import type { RoleRow } from '@/lib/actions/roles-helpers';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,6 +69,11 @@ type Props = {
    * the caller cannot save renders read-only, or not at all.
    */
   caps: EditCapabilities;
+  /**
+   * The caller holds people read. Without it they are a manager on the
+   * reporting-line path and see only name and hire date (editFormView).
+   */
+  showOrg: boolean;
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
@@ -129,6 +134,7 @@ export function EditEmployeeForm({
   allRoles,
   targetRoleIds,
   caps,
+  showOrg,
   departments,
   managers,
   balances,
@@ -143,6 +149,7 @@ export function EditEmployeeForm({
   const tDuration = useTranslations('manage.employees.duration');
   const t = useTranslations('manage.employees');
   const canManageLeave = caps.leave;
+  const view = editFormView(caps, { showOrg });
   // Shown with leave_balances read; saved only with edit on a target the caller
   // may act on (the database refuses the rest).
   const canSaveLeave = caps.leaveEdit;
@@ -309,18 +316,14 @@ export function EditEmployeeForm({
 
   return (
     <div className="space-y-6">
-      {(caps.lockedReason || (!caps.org && labels.managerNote)) && (
+      {view.note && (view.note !== 'manager' || labels.managerNote) && (
         <p
           className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm"
           data-testid="edit-scope-note"
         >
-          {caps.lockedReason === 'admin'
-            ? t('lockedAdmin')
-            : caps.lockedReason === 'self'
-              ? t('lockedSelf')
-              : caps.lockedReason === 'above'
-                ? t('lockedAbove')
-                : labels.managerNote}
+          {view.note === 'manager'
+            ? labels.managerNote
+            : t(view.note === 'readOnly' ? 'readOnlyNote' : view.note)}
         </p>
       )}
       {error && (
@@ -377,13 +380,15 @@ export function EditEmployeeForm({
                 locale={locale}
                 value={hireDate}
                 onChange={setHireDate}
+                disabled={!caps.profile}
               />
             </div>
 
             {/* Department, manager and title: people edit on a target the caller
                 may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
-                admin, yourself, someone above you); a manager does not see them. */}
-            {(caps.org || caps.lockedReason) && (
+                admin, yourself, someone above you); a manager without people read
+                does not see them. */}
+            {view.orgBlock && (
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="job_title">{labels.jobTitle}</Label>
@@ -433,7 +438,7 @@ export function EditEmployeeForm({
 
             {/* Roles: shown with the org fields, and to a role assigner who
                 cannot edit them (role_assign needs only people read). */}
-            {(caps.org || caps.lockedReason || caps.editableRoleIds.length > 0) && (
+            {view.rolesBlock && (
               <RoleCheckboxes
                 label={labels.roles}
                 roles={allRoles}
@@ -518,9 +523,13 @@ export function EditEmployeeForm({
             )}
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={pending} data-testid="edit-save">
-                {pending ? '...' : labels.save}
-              </Button>
+              {/* Hidden when nothing on the form can be written: a Save that
+                  writes nothing would report a false "saved". */}
+              {view.saveable && (
+                <Button type="submit" disabled={pending} data-testid="edit-save">
+                  {pending ? '...' : labels.save}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"

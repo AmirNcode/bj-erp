@@ -5,7 +5,7 @@ import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import type { PickerDate } from '@/lib/leave/dateConvert';
 
 const INPUT_CLASS =
-  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
 
 type Props = {
   locale: string;
@@ -15,13 +15,15 @@ type Props = {
   minDate?: PickerDate | null;
   /** Put on the wrapper, for e2e. */
   testId?: string;
+  /** Read-only: the input is disabled and the calendar does not open. */
+  disabled?: boolean;
 };
 
 /**
  * The app's date input: a Persian (Jalali) picker, right-to-left in Farsi.
  * Enter commits the date inside the picker and must not also submit the form.
  */
-export function PersianDateField({ locale, value, onChange, id, minDate, testId }: Props) {
+export function PersianDateField({ locale, value, onChange, id, minDate, testId, disabled }: Props) {
   const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   return (
@@ -38,6 +40,7 @@ export function PersianDateField({ locale, value, onChange, id, minDate, testId 
         value={value}
         onChange={(date: PickerDate | null) => onChange(date ?? null)}
         minDate={minDate ?? undefined}
+        disabled={disabled}
         calendar={calendar}
         locale={calLocale}
         calendarPosition={calendarPosition}
