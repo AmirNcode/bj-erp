@@ -432,6 +432,44 @@ CSV · local data = fresh demo seed · retire existing security/admin steps.
 - The calendar's approve dialog has no override/per-diem UI (the SQL still auto-overrides for an admin
   without a natural step).
 - Local e2e specs that use demo users 1001/2001 should work again (demo data, not the real roster).
+## 2026-10-07 — FR-55 build, paused after Task 2 of 13 (subagent-driven)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
+**Trigger:** Amir approved the FR-55 spec, its two amendments, and subagent-driven execution
+with models/effort chosen per task and every task reviewed. Paused at his request: 5-hour usage
+limit at 85%.
+
+**What changed (local branch `fr55-configurable-roles`, not pushed)**
+- `e63ad65` spec + plan (`docs/specs/2026-10-07-configurable-roles-design.md`,
+  `docs/plans/2026-10-07-configurable-roles.md`).
+- `f093367` Task 1: `supabase/migrations/20261007160001_roles_tables.sql` (roles,
+  role_permissions, seeding incl. new companies, `user_roles.role_id` + sync trigger, one-admin
+  index), `tests/sql/fr55-roles-permissions.sql`, and the three older SQL tests drop the one-admin
+  index inside their rolled-back transaction. Reviewed (Opus): approved, minors carried to Task 2.
+- `2721c95` Task 2: `20261007160002_roles_helpers.sql` (has_perm, perm_level, can_act_on,
+  role_within, legacy has_permission alias, app_my_permissions, token hook app_perms, guards on
+  role_permissions and user_roles updates) and `20261007160003_roles_gates.sql` (catalog gates
+  moved to permissions). **Not reviewed yet, not applied.**
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` applied ONLY `20261007160001` to the local DB (6 roles seeded,
+  1 admin, no null role_id). All four tests/sql files green afterwards.
+
+**Verification**
+- Task 1: fr51 40 / fr52-53 53 / fr54 82 / fr55 11 PASS after apply.
+- Task 2 (implementer's dry-run, unreviewed): fr55 122 PASS, others unchanged; tsc clean; unit 602.
+
+**State left behind**
+- Branch `fr55-configurable-roles` checked out in the main checkout. `main` untouched; nothing pushed.
+- Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md` ("RESUME HERE" block)
+  — git-ignored; holds rulings, model choices and the next steps. Restart by re-running the Task 2
+  review with superpowers:subagent-driven-development.
+- Known suspect for the Task 2 review: `private.role_within` returns true for an unknown role id.
+
+**For the next agent**
+- Do not apply 20261007160002/3 before the Task 2 review is clean (applied migrations are frozen).
+- `supabase/schema.sql` is not regenerated yet (planned after Task 3 is applied).
+
 ## 2026-10-07 — FR-55 configurable roles: design + spec (no code yet)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
