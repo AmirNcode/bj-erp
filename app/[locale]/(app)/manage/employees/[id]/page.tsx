@@ -52,7 +52,11 @@ export default async function EditEmployeePage({ params }: Props) {
     .from('user_roles')
     .select('role')
     .eq('user_id', id);
-  const empRoles = (empRolesData ?? []).map((r) => r.role);
+  // Built-in roles only: custom-role rows carry no enum (FR-55) and the old role
+  // editor keeps them server-side.
+  const empRoles = (empRolesData ?? [])
+    .map((r) => r.role)
+    .filter((r): r is NonNullable<typeof r> => r != null);
 
   const caps = employeeEditCapabilities({
     callerId: user.id,

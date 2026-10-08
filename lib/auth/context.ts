@@ -55,7 +55,8 @@ export const getCachedRoles = cache(async (userId: string): Promise<string[]> =>
   // fall back to the pre-claim behavior, one user_roles query.
   const supabase = await createClient();
   const { data } = await supabase.from('user_roles').select('role').eq('user_id', userId);
-  return (data ?? []).map((r) => r.role as string);
+  // Custom-role rows (FR-55) carry no enum; the claim leaves them out too.
+  return (data ?? []).map((r) => r.role).filter((r): r is NonNullable<typeof r> => r != null);
 });
 
 /** The caller's own profile row (all columns), fetched at most once per request. */

@@ -647,4 +647,251 @@ select pg_temp.expect('token hook runs as supabase_auth_admin',
 select pg_temp.expect('hr appoints someone else as a department manager',
   pg_temp.try_as('hr', format('update public.departments set manager_id = %s where code = %L', pg_temp.id('emp'), 'ZZ5')), 'ok:1');
 
+-- ── rpcs (Task 3) ───────────────────────────────────────────────────────────
+-- Task 2 carry-overs fixed in 20261007160004.
+select pg_temp.expect('has_perm: an unknown level is false, edit still true',
+  (select coalesce(private.has_perm((select id from fx where k='admin'),'people','Edit')::text, 'null')
+       || coalesce(private.has_perm((select id from fx where k='admin'),'people',null)::text, 'null')
+       || private.has_perm((select id from fx where k='admin'),'people','edit')::text), 'falsefalsetrue');
+select pg_temp.expect('the outsider has a personal-info row (profile trigger)',
+  (select count(*)::text from public.employee_personal_info
+    where employee_id = (select id from fx where k='outsider') and company_id = (select id from fx where k='other_company')), '1');
+-- No WHERE and a constant SET: only the UPDATE policy filters the rows (the SELECT
+-- policy, which already pins the company, is not consulted). Rolled back with the rest.
+select pg_temp.expect('personal info: an unfiltered admin update touches only the admin''s company',
+  pg_temp.try_as('admin', $q$update public.employee_personal_info set father_name = 'FR55X'$q$),
+  (select 'ok:' || count(*) from public.employee_personal_info where company_id = (select id from fx where k='company')));
+select pg_temp.expect('… the other company''s row is untouched',
+  (select count(*)::text from public.employee_personal_info
+    where father_name = 'FR55X' and company_id = (select id from fx where k='other_company')), '0');
+
+-- role editor (D2, D6, D11)
+select pg_temp.expect('admin creates a role',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Clerk', '{"people":"read","holidays":"edit"}')$q$), 'ok:1');
+select pg_temp.expect('… a custom role with its permissions and a role.create audit row',
+  (select r.kind || ':' || (select count(*) from public.role_permissions rp where rp.role_id = r.id)::text || ':'
+          || (select count(*) from public.audit_log a where a.entity_id = r.id and a.action = 'role.create' and a.before is null)::text
+     from public.roles r where r.company_id = (select id from fx where k='company') and r.name = 'Clerk'), 'custom:2:1');
+select pg_temp.expect('Everything may not create a role (D2)',
+  pg_temp.try_as('super', $q$select public.app_save_role(null, 'Clerk2', '{}')$q$), '42501');
+select pg_temp.expect('dependency rule: reports without people refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"reports":"read"}')$q$), '22023');
+select pg_temp.expect('dependency rule: clearance edit without people refused, clearance read alone allowed',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"clearance":"edit"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Box', '{"clearance":"read"}')$q$), '22023 ok:1');
+select pg_temp.expect('unknown key refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"nope":"edit"}')$q$), '22023');
+select pg_temp.expect('invalid level refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"calendar":"edit"}')$q$), '22023');
+select pg_temp.expect('null, numeric and non-object permissions refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"people":null}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"people":1}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '["people"]')$q$), '22023 22023 22023');
+select pg_temp.expect('non-latin name refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'منشی', '{}')$q$), '22023');
+select pg_temp.expect('duplicate name (case-insensitive) refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'helpdesk', '{}')$q$), '22023');
+select pg_temp.expect('a custom role may be renamed',
+  pg_temp.try_as('admin', format($q$select public.app_save_role(%s, 'Clerk B', '{"people":"read"}')$q$,
+    quote_literal((select id from public.roles where company_id=(select id from fx where k='company') and name='Clerk')))), 'ok:1');
+select pg_temp.expect('… an edit writes role.update with the before permissions',
+  (select (a.before = '{"people":"read","holidays":"edit"}'::jsonb)::text || ':' || (a.after->>'name')
+               from public.audit_log a
+              where a.action = 'role.update'
+                and a.entity_id = (select id from public.roles where company_id=(select id from fx where k='company') and name='Clerk B')),
+  'true:Clerk B');
+select pg_temp.expect('preset rename ignored, permissions saved',
+  pg_temp.try_as('admin', format($q$select public.app_save_role(%s, 'Renamed', '{"people":"read","calendar":"read"}')$q$,
+    pg_temp.role_id('company', 'security'))), 'ok:1');
+select pg_temp.expect('security preset kept its name',
+  (select name from public.roles where company_id=(select id from fx where k='company') and system_key='security'), 'Security');
+select pg_temp.expect('… and holds exactly the new permissions',
+  (select string_agg(permission || '=' || level, ',' order by permission) from public.role_permissions
+    where role_id = (select id from public.roles where company_id=(select id from fx where k='company') and system_key='security')),
+  'calendar=read,people=read');
+select pg_temp.expect('system role not editable',
+  pg_temp.try_as('admin', format($q$select public.app_save_role(%s, 'Manager', '{}')$q$, pg_temp.role_id('company', 'manager'))), '22023');
+select pg_temp.expect('another company''s role is not found',
+  pg_temp.try_as('admin', format($q$select public.app_save_role(%s, 'Clerk', '{}')$q$, pg_temp.id('r_other_clerk'))), '22023');
+select pg_temp.expect('list roles: any active member sees their company''s roles; inactive sees none',
+  pg_temp.try_as('emp', 'select * from public.app_list_roles()') || ' ' || pg_temp.try_as('hr_off', 'select * from public.app_list_roles()'),
+  (select 'ok:' || count(*) from public.roles where company_id = (select id from fx where k='company')) || ' ok:0');
+select pg_temp.expect('list roles: Helpdesk counts its holder and lists its permissions',
+  pg_temp.try_as('emp', format($q$do $d$ begin if not exists (select 1 from public.app_list_roles() where id = %s and kind = 'custom'
+      and holders = 1 and permissions = '{"people":"read","passwords":"edit"}'::jsonb) then raise exception 'x' using errcode = 'P0001'; end if; end $d$$q$,
+    pg_temp.id('r_help'))), 'ok:0');
+select pg_temp.expect('role holders: admin yes, hr no',
+  pg_temp.try_as('admin', format('select * from public.app_role_holders(%s)', pg_temp.id('r_help'))) || ' '
+  || pg_temp.try_as('hr', format('select * from public.app_role_holders(%s)', pg_temp.id('r_help'))), 'ok:1 42501');
+
+-- assignment (D1, D3, D4, D5)
+select pg_temp.expect('hr gives manager',
+  pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp2'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'manager'))), 'ok:1');
+select pg_temp.expect('… emp2 holds Employee and Manager; set_roles audit names them',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+    where ur.user_id = (select id from fx where k='emp2'))
+  || ' ' || (select (a.after->'roles')::text from public.audit_log a
+              where a.action = 'set_roles' and a.entity_id = (select id from fx where k='emp2') and a.actor_id = (select id from fx where k='hr')),
+  'Employee,Manager ["Employee", "Manager"]');
+select pg_temp.expect('hr may not give Helpdesk (outside hr)',
+  pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_help'))), '42501');
+select pg_temp.expect('hr may not take Helpdesk away (D4: helpdesk is above hr)',
+  pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('help'),
+    pg_temp.role_id('company', 'employee'))), '42501');
+select pg_temp.expect('Everything gives Helpdesk',
+  pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('appr_off'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_help'))), 'ok:1');
+select pg_temp.expect('nobody sets their own roles but the admin (D3)',
+  pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('super'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_super'))), '42501');
+select pg_temp.expect('a caller without role_assign or role_manager is refused, even for no change',
+  pg_temp.try_as('help', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('oldsigner'),
+    pg_temp.role_id('company', 'employee'))), '42501');
+select pg_temp.expect('unknown, NULL and another company''s role ids refused',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %L]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), gen_random_uuid())) || ' '
+  || pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, null]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'))) || ' '
+  || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_other_clerk'))), '22023 22023 22023');
+select pg_temp.expect('nobody acts on another company''s employee, not even the admin',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('outsider'),
+    pg_temp.role_id('other_company', 'employee'))), '42501');
+select pg_temp.expect('nobody gives admin through assignment, not even the admin',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'admin'))), '42501');
+select pg_temp.expect('the admin may not drop their own admin row',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('admin'),
+    pg_temp.role_id('company', 'employee'))), '42501');
+select pg_temp.expect('the admin changes their own other roles (admin kept)',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, (select array_agg(role_id) from public.user_roles where user_id = %s) || %s::uuid)',
+    pg_temp.id('admin'), pg_temp.id('admin'), pg_temp.id('r_help'))), 'ok:1');
+select pg_temp.expect('the admin gives a custom role to anyone',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('oldsigner'),
+    pg_temp.role_id('company', 'employee'),
+    quote_literal((select id from public.roles where company_id=(select id from fx where k='company') and name='Clerk B')))), 'ok:1');
+select pg_temp.expect('old enum signature cannot add admin',
+  pg_temp.try_as('admin', format($q$select public.app_set_user_roles(%s, array['employee','admin']::public.app_role[])$q$, pg_temp.id('emp'))), '42501');
+-- Call and check in separate statements: a subquery in the calling statement
+-- reads the snapshot taken before the call.
+select pg_temp.expect('old enum signature keeps custom roles',
+  pg_temp.try_as('admin', format($q$select public.app_set_user_roles(%s, array['employee']::public.app_role[])$q$, pg_temp.id('help'))), 'ok:1');
+select pg_temp.expect('… help still holds Helpdesk',
+  (select exists (select 1 from public.user_roles where user_id=(select id from fx where k='help') and role_id=(select id from fx where k='r_help'))::text), 'true');
+select pg_temp.expect('old enum signature, hr: adds manager beside a custom role and keeps it',
+  pg_temp.try_as('hr', format($q$select public.app_set_user_roles(%s, array['employee','manager']::public.app_role[])$q$, pg_temp.id('oldsigner'))), 'ok:1');
+select pg_temp.expect('… oldsigner holds Clerk B, Employee, Manager',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+              where ur.user_id = (select id from fx where k='oldsigner')), 'Clerk B,Employee,Manager');
+select pg_temp.expect('old enum signature, hr: refused on a Helpdesk holder (D4), roles untouched',
+  pg_temp.try_as('hr', format($q$select public.app_set_user_roles(%s, array['employee','manager']::public.app_role[])$q$, pg_temp.id('appr_off'))), '42501');
+select pg_temp.expect('… appr_off still holds Employee, Helpdesk',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+              where ur.user_id = (select id from fx where k='appr_off')), 'Employee,Helpdesk');
+select pg_temp.expect('old enum signature, helpdesk (no role permissions) refused',
+  pg_temp.try_as('help', format($q$select public.app_set_user_roles(%s, array['employee']::public.app_role[])$q$, pg_temp.id('emp'))), '42501');
+
+-- create employee
+select pg_temp.expect('helpdesk may not create employees',
+  pg_temp.try_as('help', $q$select public.app_create_employee('9990000980','x','Temp!2026x',(select id from fx where k='company'))$q$), '42501');
+select pg_temp.expect('create with admin role refused (role ids and enum list)',
+  pg_temp.try_as('admin', format($q$select public.app_create_employee('9990000981','x','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'admin'))) || ' '
+  || pg_temp.try_as('admin', format($q$select public.app_create_employee('9990000981','x','Temp!2026x',%s, %s, p_roles => array['employee','admin']::public.app_role[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'))) || ' '
+  || pg_temp.try_as('hr', format($q$select public.app_create_employee('9990000981','x','Temp!2026x',%s, %s, p_roles => array['employee','admin']::public.app_role[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'))), '42501 42501 42501');
+select pg_temp.expect('admin creates with a custom role',
+  pg_temp.try_as('admin', format($q$select public.app_create_employee('9990000982','FR55 c1','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.id('r_help'))), 'ok:1');
+select pg_temp.expect('… the new employee holds Employee and Helpdesk',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+              join public.profiles p on p.id = ur.user_id where p.personnel_no = '9990000982'), 'Employee,Helpdesk');
+select pg_temp.expect('hr creates a manager through role ids (D5)',
+  pg_temp.try_as('hr', format($q$select public.app_create_employee('9990000983','FR55 c2','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'manager'))), 'ok:1');
+select pg_temp.expect('… the new employee holds Employee and Manager',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+              join public.profiles p on p.id = ur.user_id where p.personnel_no = '9990000983'), 'Employee,Manager');
+select pg_temp.expect('hr may not create with Helpdesk (D5)',
+  pg_temp.try_as('hr', format($q$select public.app_create_employee('9990000984','FR55 c3','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.id('r_help'))), '42501');
+select pg_temp.expect('… and no profile was created',
+  (select count(*)::text from public.profiles where personnel_no = '9990000984'), '0');
+select pg_temp.expect('hr without role ids still gets a plain employee (enum list clamped)',
+  pg_temp.try_as('hr', format($q$select public.app_create_employee('9990000985','FR55 c4','Temp!2026x',%s, %s, p_roles => array['employee','manager']::public.app_role[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'))), 'ok:1');
+select pg_temp.expect('… the new employee holds Employee only',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+              join public.profiles p on p.id = ur.user_id where p.personnel_no = '9990000985'), 'Employee');
+select pg_temp.expect('a manager still creates into their team, with empty role ids',
+  pg_temp.try_as('mgr', format($q$select public.app_create_employee('9990000986','FR55 c5','Temp!2026x',%s, p_role_ids => '{}'::uuid[])$q$,
+    pg_temp.id('company'))), 'ok:1');
+
+-- delete (D12)
+select pg_temp.expect('hr may not delete a role',
+  pg_temp.try_as('hr', format('select * from public.app_delete_role(%s)', pg_temp.id('r_help'))), '42501');
+select pg_temp.expect('delete returns holders',
+  pg_temp.try_as('admin', format('select * from public.app_delete_role(%s)', pg_temp.id('r_help'))),
+  'ok:4');
+select pg_temp.expect('… the role and its assignments are gone; role.delete audit lists the holders',
+  (select count(*)::text from public.roles where id = (select id from fx where k='r_help')) || ':'
+  || (select count(*)::text from public.user_roles where role_id = (select id from fx where k='r_help')) || ':'
+  || (select jsonb_array_length(a.before->'holders')::text from public.audit_log a
+       where a.action = 'role.delete' and a.entity_id = (select id from fx where k='r_help')), '0:0:4');
+select pg_temp.expect('presets cannot be deleted',
+  pg_temp.try_as('admin', format('select * from public.app_delete_role(%s)', pg_temp.role_id('company', 'hr'))), '22023');
+select pg_temp.expect('system roles cannot be deleted',
+  pg_temp.try_as('admin', format('select * from public.app_delete_role(%s)', pg_temp.role_id('company', 'employee'))), '22023');
+
+-- grants
+select pg_temp.expect('anon may execute none of the new RPCs',
+  (select count(*)::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('app_list_roles','app_role_holders','app_save_role','app_delete_role',
+                        'app_set_user_role_ids','app_set_user_roles','app_transfer_admin','app_create_employee')
+      and has_function_privilege('anon', p.oid, 'execute')), '0');
+
+-- transfer (D1). Must be the LAST section: it moves the real admin's role row
+-- onto a fixture admin whose password the test knows (all rolled back).
+do $$
+declare v_company uuid := (select id from fx where k = 'company');
+begin
+  insert into fx values ('adm_t', gen_random_uuid());
+  insert into auth.users (id, email, encrypted_password)
+    values ((select id from fx where k='adm_t'), '9990000961@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+  insert into public.profiles (id, company_id, employee_code, full_name, active, personnel_no, must_change_password)
+    values ((select id from fx where k='adm_t'), v_company, '9990000961', 'FR55 adm_t', true, '9990000961', false);
+  insert into public.user_roles (user_id, role) values ((select id from fx where k='adm_t'), 'employee');
+  update public.user_roles set user_id = (select id from fx where k='adm_t') where role = 'admin';
+end $$;
+select pg_temp.expect('transfer: non-admin refused',
+  pg_temp.try_as('super', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('emp2'), '9990000955', 'Fixture!2026')), '42501');
+select pg_temp.expect('transfer: wrong password',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('emp2'), '9990000955', 'wrong')), '42501');
+select pg_temp.expect('transfer: wrong personnel number',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('emp2'), '9990000954', 'Fixture!2026')), '22023');
+select pg_temp.expect('transfer: inactive target',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('hr_off'), '9990000952', 'Fixture!2026')), '22023');
+select pg_temp.expect('transfer: another company''s employee',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('outsider'), '9990000970', 'Fixture!2026')), '22023');
+select pg_temp.expect('transfer: to yourself',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('adm_t'), '9990000961', 'Fixture!2026')), '22023');
+select pg_temp.expect('transfer: success',
+  pg_temp.try_as('adm_t', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('emp2'), '9990000955', 'Fixture!2026')), 'ok:1');
+select pg_temp.expect('after transfer: exactly one admin, held by emp2',
+  (select count(*)::text || ':' || bool_and(user_id = (select id from fx where k='emp2'))::text
+     from public.user_roles where role = 'admin'), '1:true');
+select pg_temp.expect('after transfer: old admin keeps employee',
+  (select exists (select 1 from public.user_roles where user_id=(select id from fx where k='adm_t') and role='employee')::text), 'true');
+select pg_temp.expect('after transfer: an admin.transfer audit row',
+  (select count(*)::text from public.audit_log
+    where action = 'admin.transfer' and actor_id = (select id from fx where k='adm_t') and entity_id = (select id from fx where k='emp2')), '1');
+select pg_temp.expect('after transfer: old admin refused at once (stale token irrelevant)',
+  pg_temp.try_as('adm_t', $q$select public.app_save_role(null, 'Late', '{}')$q$), '42501');
+select pg_temp.expect('after transfer: the new admin edits roles',
+  pg_temp.try_as('emp2', $q$select public.app_save_role(null, 'Late', '{}')$q$), 'ok:1');
+
 rollback;
