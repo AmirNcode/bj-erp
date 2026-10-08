@@ -249,6 +249,9 @@ begin
       ('appr_off', 'company',       '9990000972'),
       ('signer',   'company',       '9990000973'),
       ('nosign',   'company',       '9990000974'),
+      ('leaver',   'company',       '9990000975'),
+      ('rowsigner','company',       '9990000976'),
+      ('oldsigner','company',       '9990000977'),
       ('outsider', 'other_company', '9990000970')
     ) as t(k, co, code)
   loop
@@ -267,6 +270,17 @@ begin
     ((select id from fx where k='company'), 'employee', (select id from fx where k='appr_off'), 92, false);
   insert into public.separation_units (company_id, kind, name_fa, name_en, signer_id)
   values ((select id from fx where k='company'), 'person', 'آزمون', 'FR55 signer', (select id from fx where k='signer'));
+  -- An open form naming rowsigner on a row, and a cancelled one naming oldsigner.
+  insert into public.separations (company_id, employee_id, reason, last_working_day, status)
+  values ((select id from fx where k='company'), (select id from fx where k='leaver'), 'resignation', current_date + 30, 'in_progress');
+  insert into public.separation_signoffs (separation_id, name_fa, name_en, signer_id, sort_order)
+  values ((select id from public.separations where employee_id = (select id from fx where k='leaver') and status = 'in_progress'),
+          'آزمون', 'FR55 row', (select id from fx where k='rowsigner'), 1);
+  insert into public.separations (company_id, employee_id, reason, last_working_day, status, cancelled_at)
+  values ((select id from fx where k='company'), (select id from fx where k='leaver'), 'resignation', current_date + 30, 'cancelled', now());
+  insert into public.separation_signoffs (separation_id, name_fa, name_en, signer_id, sort_order)
+  values ((select id from public.separations where employee_id = (select id from fx where k='leaver') and status = 'cancelled'),
+          'آزمون', 'FR55 row', (select id from fx where k='oldsigner'), 1);
 end $$;
 select pg_temp.expect('the outsider holds the other company''s Employee role',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
@@ -323,6 +337,11 @@ select pg_temp.expect('helpdesk not on a named approver',
   (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='appr'))::text), 'false');
 select pg_temp.expect('helpdesk not on a separation person signer',
   (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='signer'))::text), 'false');
+select pg_temp.expect('open-form row signer: helpdesk refused, hr allowed',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='rowsigner'))::text
+       || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='rowsigner'))::text), 'falsetrue');
+select pg_temp.expect('a signer on a cancelled form only: helpdesk allowed',
+  (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='oldsigner'))::text), 'true');
 select pg_temp.expect('helpdesk not on security or finance holders',
   (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='sec'))::text
        || private.can_act_on((select id from fx where k='help'), (select id from fx where k='fin'))::text), 'falsefalse');

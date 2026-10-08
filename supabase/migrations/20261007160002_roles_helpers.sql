@@ -109,7 +109,11 @@ create function private.can_act_on(p_caller uuid, p_target uuid) returns boolean
                            where approver_id = p_target and active))
           or private.has_perm(p_caller, 'approval_steps', 'edit'))
      and (not (exists (select 1 from public.user_roles where user_id = p_target and role = 'finance')
-               or exists (select 1 from public.separation_units where signer_id = p_target))
+               or exists (select 1 from public.separation_units where signer_id = p_target)
+               or exists (select 1 from public.separation_signoffs o
+                            join public.separations s on s.id = o.separation_id
+                           where o.signer_id = p_target
+                             and s.status in ('in_progress', 'awaiting_finance')))
           or private.has_perm(p_caller, 'clearance', 'edit'));
 $$;
 
