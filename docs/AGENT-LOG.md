@@ -432,6 +432,46 @@ CSV · local data = fresh demo seed · retire existing security/admin steps.
 - The calendar's approve dialog has no override/per-diem UI (the SQL still auto-overrides for an admin
   without a natural step).
 - Local e2e specs that use demo users 1001/2001 should work again (demo data, not the real roster).
+## 2026-10-08 → 2026-10-12 — FR-55 build, checkpoint after Task 8 (subagent-driven)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **Branch:** fr55-configurable-roles (local, never pushed)
+**Trigger:** Scheduled resume (01:30 Toronto, 2026-10-08) of the paused build; two usage-limit stops;
+Amir then asked (2026-10-12) to finish only the next task and checkpoint, because other work on main
+has priority.
+
+**What changed (branch commits, each reviewed by a separate subagent before the next task)**
+- Task 2 fixed after review: subset rule now also protects signing identities (hr/security holders
+  and named approvers need Approval steps edit; finance holders and clearance signers need Clearance
+  edit); role_within fails closed; real cross-company test.
+- Task 3 `20261007160004_roles_rpcs.sql`: role list/holders/save/delete, `app_set_user_role_ids`,
+  `app_transfer_admin`, `app_create_employee(p_role_ids)`. Review fixes: identity presets need the
+  matching permission to assign; role_manager depends on balances+calendar reads; the admin row can
+  never be deleted by assignment; row locks FOR NO KEY UPDATE.
+- Task 3b `20261007160005_roles_company_scope.sql` (added after an automated security scan): holidays,
+  work_settings and approval_steps writes scoped to the caller's company.
+- Tasks 4–8: TS permission catalog (cascade-down when an item another needs is turned off),
+  permission plumbing, nav/page guards, server-action gates + role error messages, edit capabilities
+  and employee forms on role ids (read-only viewers get a neutral note; Save hidden when nothing is
+  saveable). Task 9 (toggle components) built and reviewed; its fix round is NOT done.
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` applied 20261007160002–160005 to the LOCAL DB (real roster);
+  `npm run schema:dump` committed twice. Nothing deployed to Liara; nothing pushed.
+
+**Verification**
+- SQL: fr51 40 / fr52-53 53 / fr54 82 / fr55 238 PASS, 0 FAIL after the last apply.
+- Unit 679 pass; tsc, lint, build clean at Task 8.
+
+**State left behind**
+- Checkout switched back to `main` at the checkpoint; FR-55 lives on branch `fr55-configurable-roles`.
+- **The local DB keeps the five FR-55 migrations.** Running main against it works (the migrations
+  were written add-first), but: do not commit a `npm run schema:dump` made from it on main (it would
+  include FR-55 objects); main's tests/sql fr51/fr52-53/fr54 fail on it (they insert a second admin,
+  which the FR-55 one-admin index forbids); hr can no longer make themselves a department manager
+  there. Liara is unaffected.
+- Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md` ("RESUME HERE",
+  checkpoint 2026-10-12).
+
 ## 2026-10-07 — FR-55 build, paused after Task 2 of 13 (subagent-driven)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
