@@ -3,35 +3,51 @@
 /**
  * Expandable approval progress of one request (FR-64): every step in order,
  * who signed it and when, and who it still waits on. Loaded on first expand,
- * so the Home list costs nothing until someone asks.
+ * so the Home list costs nothing until someone asks; `defaultOpen` (a pending
+ * request on My Requests) loads it on mount instead.
  */
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { CircleCheck, CircleDashed, CircleX, ChevronDown } from 'lucide-react';
 import { getRequestProgress, type ProgressStep } from '@/lib/actions/leave/progress';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
 
-export function RequestProgress({ requestId }: { requestId: string }) {
+export function RequestProgress({
+  requestId,
+  defaultOpen = false,
+}: {
+  requestId: string;
+  defaultOpen?: boolean;
+}) {
   const t = useTranslations('requestProgress');
   const tSteps = useTranslations('approvals.steps');
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const toggle = () => {
-    const next = !open;
-    setOpen(next);
-    if (next && steps === null) {
+  const load = useCallback(
+    () =>
       startTransition(async () => {
         const res = await getRequestProgress(requestId);
         if (res.ok) setSteps(res.steps);
         else setError(res.error);
-      });
-    }
+      }),
+    [requestId]
+  );
+
+  // Open from the start: load once on mount rather than on the first click.
+  useEffect(() => {
+    if (defaultOpen) load();
+  }, [defaultOpen, load]);
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && steps === null && !isPending) load();
   };
 
   // Explicit map, not tSteps(label): dynamic message keys are avoided here.

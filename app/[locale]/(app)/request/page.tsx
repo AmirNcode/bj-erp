@@ -17,25 +17,30 @@ import { MyRequestsList } from './MyRequestsList';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { RequestTypeTabs } from './_components/RequestTypeTabs';
-import { FormSkeleton, ListSkeleton } from '@/components/Skeletons';
+import { ListSkeleton } from '@/components/Skeletons';
+import { CollapsibleSection } from '@/components/CollapsibleSection';
 
+// Two section headers: both sections load closed.
 function RequestPageSkeleton() {
-  return (
-    <>
-      <FormSkeleton className="rounded-t-none" />
-      <div className="mt-10">
-        <ListSkeleton count={2} />
-      </div>
-    </>
-  );
+  return <ListSkeleton count={2} />;
 }
 
 type Props = {
   params: Promise<{ locale: string }>;
+  /** `form=1` opens the new-request section; `all=1` opens My Requests with every request. */
+  searchParams: Promise<{ form?: string; all?: string }>;
 };
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function RequestPageData({ locale }: { locale: string }) {
+async function RequestPageData({
+  locale,
+  openForm,
+  showAll,
+}: {
+  locale: string;
+  openForm: boolean;
+  showAll: boolean;
+}) {
   const t = await getTranslations('request');
   const tLeave = await getTranslations('leave');
   const tRepl = await getTranslations('replacement');
@@ -118,29 +123,36 @@ async function RequestPageData({ locale }: { locale: string }) {
   };
 
   return (
-    <>
-      <LeaveRequestForm
-        leaveTypes={leaveTypes}
-        workSettings={workSettings}
-        labels={labels}
-        locale={locale}
-      />
-
-      <div className="mt-10">
-        <MyRequestsList
-          requests={requests}
+    <div className="space-y-4">
+      {/* Both sections start closed (My Requests opens itself when something is
+          pending). The tabs live inside: the other request types are pages. */}
+      <CollapsibleSection title={t('newRequestSection')} defaultOpen={openForm} testId="new-request">
+        <RequestTypeTabs active="daily" />
+        <LeaveRequestForm
+          leaveTypes={leaveTypes}
+          workSettings={workSettings}
           labels={labels}
           locale={locale}
-          hoursPerDay={workSettings.hoursPerDay}
         />
-      </div>
-    </>
+      </CollapsibleSection>
+
+      <MyRequestsList
+        // A new `?all=1` must re-run the list's opening defaults.
+        key={showAll ? 'all' : 'default'}
+        requests={requests}
+        labels={labels}
+        locale={locale}
+        hoursPerDay={workSettings.hoursPerDay}
+        showAll={showAll}
+      />
+    </div>
   );
 }
 
 // ── page shell ─────────────────────────────────────────────────────────────
-export default async function RequestPage({ params }: Props) {
+export default async function RequestPage({ params, searchParams }: Props) {
   const { locale } = await params;
+  const { form, all } = await searchParams;
   setRequestLocale(locale);
 
   const t = await getTranslations('request');
@@ -148,9 +160,8 @@ export default async function RequestPage({ params }: Props) {
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
-      <RequestTypeTabs active="daily" />
       <Suspense fallback={<RequestPageSkeleton />}>
-        <RequestPageData locale={locale} />
+        <RequestPageData locale={locale} openForm={form === '1'} showAll={all === '1'} />
       </Suspense>
     </main>
   );

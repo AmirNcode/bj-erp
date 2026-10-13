@@ -19,8 +19,8 @@ const REJECT_REASON = 'پوشش شیفت کافی نیست';
 
 /** Submit a fresh 2-working-day request for the given leave type (Persian picker). */
 async function submitTwoDayRequest(page: Page, leaveTypeValue: string, offsetDays = 0) {
-  await page.goto('/request');
-  await expect(page).toHaveURL(/\/request$/);
+  await page.goto('/request?form=1&all=1');
+  await expect(page).toHaveURL(/\/request(\?.*)?$/);
   const typeSelect = page.locator('#leave_type_id');
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
   await typeSelect.selectOption({ value: leaveTypeValue });
@@ -106,7 +106,7 @@ test.describe('Approval flow', () => {
     // 4. Employee sees one approved + one rejected.
     await logout(page);
     await login(page, empCode, empPw);
-    await page.goto('/request');
+    await page.goto('/request?form=1&all=1');
 
     const badges = page.locator('[data-testid^="status-badge-"]');
     await expect(badges.filter({ hasText: /approved|تایید/i }).first()).toBeVisible({ timeout: 10_000 });

@@ -41,7 +41,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
 
   // ── A files a request naming B as cover ───────────────────────────────────
   await login(page, a.code, a.password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(page.locator('[data-testid="replacement-picker"]')).toBeVisible({ timeout: 20_000 });
 
   await page.selectOption('#leave_type_id', { index: 1 });
@@ -86,7 +86,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
   await expect(page.locator('[data-testid="home-covering"]')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('[data-testid="home-covering"]')).toContainText('Cover Requester');
 
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await page.selectOption('#leave_type_id', { index: 1 });
   await fillDailyDateRange(page, range);
   await signRequest(page, 'daily');
@@ -96,7 +96,7 @@ test('replacement: name a colleague, they see it, and they become unavailable wh
 
   // ── A tries again: B is offered, but marked unavailable, not hidden ───────
   await login(page, a.code, a.password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await page.selectOption('#leave_type_id', { index: 1 });
   await fillDailyDateRange(page, firstDay + ' — ' + firstDay);
 

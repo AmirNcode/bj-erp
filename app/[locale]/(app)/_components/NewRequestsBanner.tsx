@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BellRing } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { getPendingApprovalIds } from '@/lib/actions/leave/approvals';
-
-/** How often an open, visible page re-checks the queue. */
-export const NEW_REQUESTS_POLL_MS = 60_000;
+import { refreshRoute } from '@/lib/actions/refresh';
+import { usePathname } from '@/i18n/navigation';
+import { POLL_MS, useVisiblePoll } from './useVisiblePoll';
 
 type Props = {
   /** Ids of the queue as the server rendered it. */
@@ -27,16 +27,17 @@ type Props = {
  *   lists derive their rows from the server, so this keeps other rows' open
  *   dialogs.
  */
-export function NewRequestsBanner({ currentIds, pollMs = NEW_REQUESTS_POLL_MS }: Props) {
+export function NewRequestsBanner({ currentIds, pollMs = POLL_MS }: Props) {
   const t = useTranslations('refresh');
   const router = useRouter();
+  const locale = useLocale();
+  const pathname = usePathname();
   // The queue as last polled, tagged with the render it was compared against.
   // Any new server render (refresh, decision) makes it stale: a request just
   // decided here is still in it and must not count as new.
   const idsKey = currentIds.join(',');
   const [result, setResult] = useState<{ ids: string[]; basis: string } | null>(null);
   const polled = result && result.basis === idsKey ? result.ids : null;
-  const inFlight = useRef(false);
 
   const shown = new Set(currentIds);
   const newCount = polled ? polled.filter((id) => !shown.has(id)).length : 0;
@@ -48,33 +49,10 @@ export function NewRequestsBanner({ currentIds, pollMs = NEW_REQUESTS_POLL_MS }:
   }, [goneKey, router]);
 
   const check = useCallback(async () => {
-    if (document.visibilityState !== 'visible' || inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const res = await getPendingApprovalIds();
-      if (res.ok) setResult({ ids: res.ids, basis: idsKey });
-    } catch {
-      // Offline or a deploy in progress: the next tick tries again.
-    } finally {
-      inFlight.current = false;
-    }
+    const res = await getPendingApprovalIds();
+    if (res.ok) setResult({ ids: res.ids, basis: idsKey });
   }, [idsKey]);
-
-  useEffect(() => {
-    const timer = window.setInterval(check, pollMs);
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void check();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('focus', onVisible);
-    window.addEventListener('online', onVisible);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', onVisible);
-      window.removeEventListener('online', onVisible);
-    };
-  }, [check, pollMs]);
+  useVisiblePoll(check, pollMs);
 
   if (newCount === 0) return null;
 
@@ -83,9 +61,14 @@ export function NewRequestsBanner({ currentIds, pollMs = NEW_REQUESTS_POLL_MS }:
       <button
         type="button"
         data-testid="new-requests-banner"
-        onClick={() => {
+        onClick={async () => {
           setResult(null);
-          router.refresh();
+          const target = `/${locale}/manage/approvals`;
+          // The approvals page may sit in this browser's 5-minute router cache
+          // without the new rows; the server action's revalidation drops it.
+          await refreshRoute(target);
+          if (pathname === '/manage/approvals') router.refresh();
+          else router.push(target);
         }}
         className="flex w-full items-center gap-3 rounded-xl bg-primary px-4 py-3 text-start text-sm font-semibold text-primary-foreground shadow-md transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >

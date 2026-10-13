@@ -469,8 +469,8 @@ export async function submitLeave(
   page: Page,
   opts: { leaveTypeValue: string; reason?: string; range?: string }
 ) {
-  await page.goto('/request');
-  await expect(page).toHaveURL(/\/request$/);
+  await page.goto('/request?form=1&all=1');
+  await expect(page).toHaveURL(/\/request(\?.*)?$/);
   await page.locator('#leave_type_id').selectOption({ value: opts.leaveTypeValue });
   await fillDailyDateRange(page, opts.range ?? jalali2DayRange());
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });

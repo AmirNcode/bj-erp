@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
@@ -8,6 +9,8 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { StatusBadge } from '@/components/StatusBadge';
+import { CollapsibleSection } from '@/components/CollapsibleSection';
+import { RequestProgress } from '@/components/RequestProgress';
 import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
 import {
@@ -46,6 +49,8 @@ type Props = {
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
+  /** Open with every request shown (`?all=1`, e.g. from the outcome banner). */
+  showAll?: boolean;
 };
 
 export function MyRequestsList({
@@ -53,7 +58,9 @@ export function MyRequestsList({
   labels,
   locale,
   hoursPerDay,
+  showAll = false,
 }: Props) {
+  const t = useTranslations('request');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -65,6 +72,17 @@ export function MyRequestsList({
     setLocalRequests(requests);
   }, [requests]);
 
+  // Pending requests are what people come to check; decided ones wait behind
+  // "show previous". With nothing pending, opening the section shows them all.
+  const pendingCount = localRequests.filter((r) => r.status === 'pending').length;
+  const [open] = useState(() => showAll || requests.some((r) => r.status === 'pending'));
+  const [previousShown, setPreviousShown] = useState(showAll);
+  const showEverything = previousShown || pendingCount === 0;
+  const visible = showEverything
+    ? localRequests
+    : localRequests.filter((r) => r.status === 'pending');
+  const hiddenCount = localRequests.length - visible.length;
+
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
@@ -73,8 +91,7 @@ export function MyRequestsList({
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-semibold mb-4">{labels.myRequests}</h2>
+    <CollapsibleSection title={labels.myRequests} defaultOpen={open} testId="my-requests">
 
       {errorMsg && (
         <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
@@ -86,7 +103,7 @@ export function MyRequestsList({
         <p className="text-muted-foreground text-sm">{labels.noRequests}</p>
       ) : (
         <div className="space-y-3">
-          {localRequests.map((req) => {
+          {visible.map((req) => {
             return (
               <Card
                 key={req.id}
@@ -166,6 +183,14 @@ export function MyRequestsList({
                         {req.decision_note}
                       </div>
                     )}
+                    {req.status !== 'cancelled' && (
+                      // Keyed by status: a decision arriving on refresh reloads the steps.
+                      <RequestProgress
+                        key={`${req.id}:${req.status}`}
+                        requestId={req.id}
+                        defaultOpen={req.status === 'pending'}
+                      />
+                    )}
                     <RequestSignatureViewer
                       requestId={req.id}
                       consentAt={req.signature_consent_at}
@@ -208,8 +233,18 @@ export function MyRequestsList({
               </Card>
             );
           })}
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setPreviousShown(true)}
+              data-testid="show-previous-requests"
+              className="w-full rounded-xl border border-dashed px-4 py-3 text-sm font-medium text-primary transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              {t('showPrevious', { count: hiddenCount })}
+            </button>
+          )}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }

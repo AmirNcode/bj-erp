@@ -9,6 +9,24 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Request page sections and approval steps on My Requests (2026-10-13)
+
+- «درخواست»: «ثبت درخواست جدید» and «درخواست‌های من» are collapsible sections, closed by default.
+  With a pending request, My Requests opens showing only pending ones, and «نمایش درخواست‌های قبلی
+  (n)» at the bottom reveals the rest; with nothing pending, opening it shows every request.
+- Each request card shows its approval steps (who signed, who it waits on), open by default while
+  the request is pending.
+- The approver banner's «نمایش» opens «تأییدها»; the daily-leave tab opens the form section.
+
+### Request outcome banner for requesters (2026-10-13)
+
+- On any page, a requester whose pending request is approved (every approval step signed) or
+  rejected (at any step) sees a banner: «درخواست شما «مرخصی استحقاقی (۱۴۰۵/۰۷/۲۲)» تأیید شد.» or
+  «… رد شد.» with the rejection reason. It stays until «نمایش», which opens My Requests with every
+  request listed.
+- Checked every minute while the app is open and on return to the foreground, only while the
+  person has a pending request.
+
 ### New-requests banner for approvers (2026-10-13)
 
 - Home and «تأییدها» re-check the approver's queue every minute while the page is open, and again

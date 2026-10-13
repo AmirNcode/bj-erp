@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
+import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
 import { AppShell } from './_components/AppShell';
 
 // The role shown under the name in the side panel: the most senior one held.
@@ -80,6 +81,11 @@ export default async function AppLayout({ children, params }: Props) {
         .then((r) => (r.ok ? r.requests.length : 0))
         .catch(() => 0)
     : undefined;
+  // Everyone can request leave: the outcome banner watches the caller's own
+  // pending requests. Streamed for the same reason as the badge.
+  const myPending = getMyPendingRequests(locale)
+    .then((r) => (r.ok ? r.requests : []))
+    .catch(() => []);
 
   return (
     <AppShell
@@ -89,6 +95,7 @@ export default async function AppLayout({ children, params }: Props) {
       appName={t('appName')}
       profile={profileSummary}
       pendingCount={pendingCount}
+      myPending={myPending}
     >
       {children}
     </AppShell>

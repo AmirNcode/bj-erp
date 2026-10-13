@@ -29,6 +29,12 @@
     "newRequests": "{count, plural, one {# new request} other {# new requests}}",
     "show": "Show"
   },
+  "requestOutcome": {
+    "approved": "Your request {label} was approved.",
+    "rejected": "Your request {label} was rejected.",
+    "reason": "Reason: {note}",
+    "show": "Show"
+  },
   "login": {
     "brand": "Behsazan Jonoob",
     "title": "Sign In",
@@ -130,6 +136,8 @@
     "success": "Request submitted successfully.",
     "error": "Error",
     "myRequests": "My Requests",
+    "newRequestSection": "New request",
+    "showPrevious": "{count, plural, one {Show # previous request} other {Show # previous requests}}",
     "noRequests": "No requests found.",
     "cancel": "Cancel",
     "cancelConfirm": "Are you sure you want to cancel this request?",

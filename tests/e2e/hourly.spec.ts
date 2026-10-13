@@ -57,7 +57,7 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
   await expect(page.locator('[data-testid="hourly-success"]')).toBeVisible({ timeout: 20_000 });
 
   // The employee's own list shows the time range, not just a duration.
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(page.getByText('۰۹:۰۰–۱۱:۰۰')).toBeVisible({ timeout: 20_000 });
 
   // ── the per-day cap refuses a 3h addition (2h + 3h > 4h) ──────────────────

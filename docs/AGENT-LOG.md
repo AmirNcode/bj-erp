@@ -78,6 +78,61 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — Request page sections, steps on My Requests, banner targets
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ a71a4d5 (uncommitted, on top of the outcome-banner work; the other
+session's leave-type picker work is still uncommitted in the same files)
+**Trigger:** Owner: banner «نمایش» goes to approvals / my requests; `/request` sections collapsible,
+closed by default, pending-first with "show previous"; approval steps on My Requests cards.
+
+- `components/CollapsibleSection.tsx` (new): header button + `hidden` content (stays mounted, so a
+  half-filled form survives collapsing). testids `${testId}-toggle` / `-content`.
+- `request/page.tsx`: `searchParams` `form=1` (opens «ثبت درخواست جدید») and `all=1` (My Requests open,
+  everything shown; `key` remounts the list when it changes). `RequestTypeTabs` moved inside the
+  form section; daily tab href is now `/request?form=1`. Skeleton is two bars.
+- `MyRequestsList`: wrapped in the section; opens when anything is pending; pending-only until
+  `show-previous-requests`; `RequestProgress` on every non-cancelled card, `defaultOpen` when
+  pending, keyed by status. `components/RequestProgress.tsx` gained `defaultOpen` (loads on mount).
+- Banners: approver «نمایش» → `refreshRoute('/{locale}/manage/approvals')` (drops the client router
+  cache) then push, or `router.refresh()` when already there (next-intl `usePathname`). Requester
+  «نمایش» → `/{locale}/request?all=1`; key `requestOutcome.ok` renamed `show`.
+- e2e: every `goto('/request')` / `goto('/en/request')` → `?form=1&all=1` (settings.spec left alone:
+  it tests locale redirects); `toHaveURL(/\/request$/)` → `/\/request(\?.*)?$/`. **e2e not run.**
+- Verified: unit 636 pass (new `tests/unit/my-requests-list.test.tsx`), lint, tsc, `next build` in a
+  scratch copy. Browser (localhost:3000, demo user 2001): sections closed/open as specified, steps
+  load ("Waiting for Reza Karimi", "HR"), «Show 8 previous requests» reveals 9 rows, `?form=1` and
+  `?all=1` behave. Banner taps not exercised live. Signed my browser pane out of hr-101 into 2001.
+- Commit check (staged snapshot, no `.env.local`, like CI): `page-refresh-button.test` failed because
+  `AppShell` → outcome banner → `outcomes.ts` imports the Supabase client, which throws without
+  `NEXT_PUBLIC_SUPABASE_URL`. Fixed by mocking `@/lib/actions/leave/outcomes` in that test. The main
+  checkout never showed it. Committed without the other session's leave-type picker hunks.
+
+
+## 2026-10-13 — Request outcome banner for requesters
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ a71a4d5 (uncommitted; another session's leave-type picker work is
+also uncommitted in the tree)
+**Trigger:** Owner asked for a banner telling requesters when a request is rejected (any step) or
+finally approved.
+
+- `lib/actions/leave/outcomes.ts`: `getMyPendingRequests(locale)` (own pending, labelled
+  "<type> (<Jalali date>)") and `getMyRequestOutcomes(ids)` (validates ≤50 uuids; own rows with
+  status approved/rejected + `decision_note`; calls `invalidateAppCache()` when any found so the
+  requester's 5-min router cache drops). Status flips to `approved` only in the final-step branch of
+  `approve_leave_request`; a rejection at any step sets `rejected`, so status alone is the signal.
+- `app/[locale]/(app)/_components/RequestOutcomeBanner.tsx`: rendered by `AppShell` on every page
+  (layout streams `myPending` like the approvals badge, so `/request` files the other session is
+  editing were not touched). Polls only while something is pending; outcomes persist until «متوجه
+  شدم»; dismissed ids are kept (hidden) so a slow refresh cannot re-show them.
+- Extracted `useVisiblePoll` (`_components/useVisiblePoll.ts`) from `NewRequestsBanner`; both use it.
+- Messages: `requestOutcome.{approved,rejected,reason,ok}`.
+- Verified: `tests/unit/request-outcome-banner.test.tsx` (4), full unit suite (631 pass), lint, tsc.
+  `next build` passes (run in a scratch copy with an APFS-cloned `node_modules`; Turbopack rejects a
+  symlinked one). NOT verified in a browser (another session's dev server holds :3000).
+
+
 ## 2026-10-13 — New-requests banner for approvers (live update)
 
 **Agent:** Claude Opus 5.5 via Claude Code

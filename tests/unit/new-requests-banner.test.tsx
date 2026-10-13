@@ -3,11 +3,18 @@ import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NewRequestsBanner } from '@/app/[locale]/(app)/_components/NewRequestsBanner';
 import { getPendingApprovalIds } from '@/lib/actions/leave/approvals';
+import { refreshRoute } from '@/lib/actions/refresh';
 
 const routerRefresh = vi.fn();
+const routerPush = vi.fn();
+let pathname = '/home';
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ refresh: routerRefresh }),
+  useRouter: () => ({ refresh: routerRefresh, push: routerPush }),
+}));
+vi.mock('@/i18n/navigation', () => ({ usePathname: () => pathname }));
+vi.mock('@/lib/actions/refresh', () => ({
+  refreshRoute: vi.fn(async () => ({ ok: true, refreshedAt: '2026-10-13T10:00:00.000Z' })),
 }));
 
 vi.mock('@/lib/actions/leave/approvals', () => ({
@@ -44,6 +51,7 @@ function setVisibility(state: 'visible' | 'hidden') {
 }
 
 beforeEach(() => {
+  pathname = '/home';
   vi.useFakeTimers();
   setVisibility('visible');
 });
@@ -96,13 +104,31 @@ describe('NewRequestsBanner', () => {
     expect(routerRefresh).not.toHaveBeenCalled();
   });
 
-  it('refreshes the route on tap and takes the next server queue as the baseline', async () => {
+  it('on tap, drops the cached approvals page and goes there', async () => {
+    fetchIds.mockResolvedValue({ ok: true, ids: ['a', 'c'] });
+    renderBanner(['a']);
+    await tick(1000);
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-requests-banner'));
+    });
+
+    expect(refreshRoute).toHaveBeenCalledWith('/en/manage/approvals');
+    expect(routerPush).toHaveBeenCalledWith('/en/manage/approvals');
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it('on the approvals page, refreshes it and takes the next server queue as the baseline', async () => {
+    pathname = '/manage/approvals';
     fetchIds.mockResolvedValue({ ok: true, ids: ['a', 'c'] });
     const { rerenderIds } = renderBanner(['a']);
 
     await tick(1000);
-    fireEvent.click(screen.getByTestId('new-requests-banner'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('new-requests-banner'));
+    });
     expect(routerRefresh).toHaveBeenCalledTimes(1);
+    expect(routerPush).not.toHaveBeenCalled();
     expect(screen.queryByTestId('new-requests-banner')).toBeNull();
 
     rerenderIds(['a', 'c']);

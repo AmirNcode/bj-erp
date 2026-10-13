@@ -77,8 +77,8 @@ test.describe('Leave request + allocation flow', () => {
     await login(page, uniqueCode, tempPassword.trim());
 
     // ── 5. Navigate to request page ───────────────────────────────────────
-    await page.goto('/request');
-    await expect(page).toHaveURL(/\/request$/);
+    await page.goto('/request?form=1&all=1');
+    await expect(page).toHaveURL(/\/request(\?.*)?$/);
 
     // ── 6. Select the same leave type ─────────────────────────────────────
     const typeSelect = page.locator('#leave_type_id');
@@ -106,7 +106,7 @@ test.describe('Leave request + allocation flow', () => {
     // ── M1: Balance check — reload to let the ledger propagate, then assert 26 days ──────
     // Reload so the allocation that was just created is visible in the balance ledger.
     await page.reload();
-    await expect(page).toHaveURL(/\/request$/);
+    await expect(page).toHaveURL(/\/request(\?.*)?$/);
     // Re-select the leave type after reload (form resets)
     const typeSelectAfterReload = page.locator('#leave_type_id');
     await expect(typeSelectAfterReload).toBeVisible({ timeout: 10_000 });
@@ -165,7 +165,7 @@ test.describe('Leave request + allocation flow', () => {
     );
 
     // ── 10. Submit an over-balance request (very long range) ──────────────
-    await page.goto('/request');
+    await page.goto('/request?form=1&all=1');
     const typeSelectAfterCancel = page.locator('#leave_type_id');
     await expect(typeSelectAfterCancel).toBeVisible({ timeout: 10_000 });
     await typeSelectAfterCancel.selectOption({ value: foundLtValue });
@@ -211,7 +211,7 @@ test.describe('Leave request + allocation flow', () => {
 
     await logout(page);
     await login(page, uniqueCode, tempPassword.trim());
-    await page.goto('/request');
+    await page.goto('/request?form=1&all=1');
     await expect(page.locator('[data-testid^="request-unpaid-"]').first()).toBeVisible({
       timeout: 20_000,
     });

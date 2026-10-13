@@ -29,6 +29,12 @@
     "newRequests": "{count} درخواست جدید",
     "show": "نمایش"
   },
+  "requestOutcome": {
+    "approved": "درخواست شما «{label}» تأیید شد.",
+    "rejected": "درخواست شما «{label}» رد شد.",
+    "reason": "دلیل: {note}",
+    "show": "نمایش"
+  },
   "login": {
     "brand": "بهسازان جنوب",
     "title": "ورود به سامانه",
@@ -130,6 +136,8 @@
     "success": "درخواست با موفقیت ارسال شد.",
     "error": "خطا",
     "myRequests": "درخواست‌های من",
+    "newRequestSection": "ثبت درخواست جدید",
+    "showPrevious": "نمایش درخواست‌های قبلی ({count})",
     "noRequests": "هیچ درخواستی ثبت نشده است.",
     "cancel": "لغو",
     "cancelConfirm": "آیا از لغو این درخواست اطمینان دارید؟",

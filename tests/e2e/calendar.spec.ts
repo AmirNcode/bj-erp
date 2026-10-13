@@ -80,7 +80,7 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await expect(page.locator('body')).not.toContainText(SECRET);
 
     // 4. And it must not leak on the teammate's own request page either.
-    await page.goto('/request');
+    await page.goto('/request?form=1&all=1');
     await expect(page.locator('body')).not.toContainText(SECRET);
 
     // 5. A plain employee never sees approve/reject buttons on the calendar.

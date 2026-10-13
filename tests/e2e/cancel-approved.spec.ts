@@ -45,7 +45,7 @@ test('employee cancels an approved future leave', async ({ page }) => {
   // Employee: the approved future request shows Cancel; cancelling opens an AlertDialog,
   // confirming flips the badge to "cancelled" and removes the button.
   await login(page, code, password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   const row = page.locator('[data-testid^="request-row-"]').first();
   await expect(row).toBeVisible({ timeout: 15_000 });
   const cancelBtn = row.locator('[data-testid^="cancel-btn-"]');

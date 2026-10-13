@@ -23,7 +23,8 @@ import { RequestTypeSelect } from './RequestTypeSelect';
 export type RequestTypeKey = 'daily' | 'hourly' | 'dailyErrand' | 'errand';
 
 const TABS: { key: RequestTypeKey; href: string }[] = [
-  { key: 'daily', href: '/request' },
+  // Arriving from another tab means filling a form: open the section that holds it.
+  { key: 'daily', href: '/request?form=1' },
   { key: 'hourly', href: '/request/hourly' },
   { key: 'dailyErrand', href: '/request/daily-errand' },
   { key: 'errand', href: '/request/errand' },

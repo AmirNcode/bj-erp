@@ -82,7 +82,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
   await expect(page.locator('[data-testid="errand-success"]')).toBeVisible({ timeout: 20_000 });
 
   // ── it comes back tagged as an errand, with its location and a tracking no ─
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(page.locator('[data-testid^="errand-badge-"]').first()).toBeVisible({
     timeout: 20_000,
   });
@@ -137,7 +137,7 @@ test('daily work errand: date range submission and signed manager approval', asy
   await logout(page);
 
   await login(page, code, password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(page.locator('[data-testid="request-tab-dailyErrand"]')).toContainText(
     /Daily Work Errands|ماموریت روزانه/
   );
@@ -158,7 +158,7 @@ test('daily work errand: date range submission and signed manager approval', asy
     timeout: 20_000,
   });
 
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   const row = page.locator('[data-testid^="request-row-"]').first();
   await expect(row).toContainText('Tehran head office');
   await expect(row).toContainText(/[2۲]/);

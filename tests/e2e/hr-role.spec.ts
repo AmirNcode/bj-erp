@@ -141,7 +141,7 @@ test('hr reviews a company-wide request and prints its paper form', async ({ pag
   // The worker files a daily leave request, signing it.
   await login(page, worker.code, worker.password);
   const typeValue = await page
-    .goto('/request')
+    .goto('/request?form=1&all=1')
     .then(() => page.locator('#leave_type_id option').nth(1).getAttribute('value'));
   await submitLeave(page, {
     leaveTypeValue: typeValue!,
@@ -217,7 +217,7 @@ test('an employee cannot reach the HR review screen or a colleague’s printed f
 
   await login(page, owner.code, owner.password);
   const typeValue = await page
-    .goto('/request')
+    .goto('/request?form=1&all=1')
     .then(() => page.locator('#leave_type_id option').nth(1).getAttribute('value'));
   await submitLeave(page, { leaveTypeValue: typeValue!, reason: 'Not for strangers' });
   await page.goto('/manage/requests');
@@ -361,7 +361,7 @@ test('a request needs both the manager and HR before it is approved', async ({ p
 
   // ── the request is STILL PENDING and the balance is untouched ─────────────
   await login(page, emp.code, emp.password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(
     page.locator(`[data-testid^="status-badge-"]`).first()
   ).toContainText(/pending|انتظار/i, { timeout: 20_000 });
@@ -390,7 +390,7 @@ test('a request needs both the manager and HR before it is approved', async ({ p
   await logout(page);
 
   await login(page, emp.code, emp.password);
-  await page.goto('/request');
+  await page.goto('/request?form=1&all=1');
   await expect(
     page.locator(`[data-testid^="status-badge-"]`).first()
   ).toContainText(/approved|تایید/i, { timeout: 20_000 });

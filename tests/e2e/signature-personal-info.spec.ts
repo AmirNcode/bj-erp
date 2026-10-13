@@ -78,7 +78,7 @@ test('saved signature pre-fills requests; personal info view-only for self, edit
   await page.click('[data-testid="saved-signature-save"]');
   await expect(page.locator('[data-testid="saved-signature-image"]')).toBeVisible({ timeout: 30_000 });
 
-  await page.goto('/en/request');
+  await page.goto('/en/request?form=1&all=1');
   await expect(page.locator('[data-testid="daily-signature-canvas"]')).toBeVisible({ timeout: 30_000 });
   // Pre-filled: Clear is enabled before any drawing, consent is still unticked.
   await expect(page.locator('[data-testid="daily-signature-clear"]')).toBeEnabled({ timeout: 30_000 });
