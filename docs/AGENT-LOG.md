@@ -82,6 +82,7 @@ Copy this block verbatim and fill it in.
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 79ac569 (unpushed)
 **Trigger:** Amir: enlarge the logo to the width of the selected sidebar item.
+**Follow-up (same day):** too large — now 80% of that width (`w-4/5`, ~173 x 86 px), centred.
 
 **What changed**
 - `app/[locale]/(app)/_components/MainNav.tsx`: logo wrapper drops its side padding; image

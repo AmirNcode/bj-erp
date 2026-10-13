@@ -120,17 +120,17 @@ export function MainNav({
         'md:inset-y-0 md:end-auto md:start-0 md:flex md:w-60 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-t-0 md:border-e md:px-3 md:pt-4 md:shadow-none' // desktop side panel (logical: start/end)
       )}
     >
-      {/* Logo only, as wide as the nav items below it (owner, 2026-10-13); the
-          app name is its alt text. */}
-      <div className="hidden pt-1 pb-[18px] md:block">
+      {/* Logo only, centred, 80% of the nav items' width (owner, 2026-10-13);
+          the app name is its alt text. */}
+      <div className="hidden justify-center pt-1 pb-[18px] md:flex">
         <Image
           src="/bj-logo.png"
           alt={appName ?? ''}
           width={1181}
           height={591}
-          sizes="216px"
+          sizes="173px"
           priority
-          className="h-auto w-full object-contain"
+          className="h-auto w-4/5 object-contain"
           data-testid="nav-logo"
         />
       </div>
