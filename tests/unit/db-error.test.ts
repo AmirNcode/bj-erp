@@ -59,6 +59,8 @@ describe('dbErr FR-55 role messages', () => {
     expect(await msg('not allowed to grant special leave')).toBe('notAllowed');
     expect(await msg('not allowed to change the approval order setting')).toBe('approvalOrderNotAllowed');
     expect(await msg('only an admin may change the hours per day')).toBe('adminOnlySetting');
+    // The marriage box stays offered when marital status is unreadable; this refusal decides.
+    expect(await msg('marriage leave needs marital status single')).toBe('marriageNeedsSingle');
   });
 
   it('gives the clearance subset refusal the generic access wording', async () => {

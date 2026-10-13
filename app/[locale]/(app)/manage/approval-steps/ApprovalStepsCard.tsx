@@ -54,7 +54,7 @@ type Labels = {
   remove: string;
   removeConfirm: string;
   removed: string;
-  orderAdminOnly: string;
+  orderNeedsStepsEdit: string;
   /** FR-47: explains the department-manager step under its row. */
   departmentHint: string;
 };
@@ -270,7 +270,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
             {labels.orderEnforced}
           </label>
           <p className="text-xs text-muted-foreground">
-            {canEnforceOrder ? labels.orderHint : labels.orderAdminOnly}
+            {canEnforceOrder ? labels.orderHint : labels.orderNeedsStepsEdit}
           </p>
         </div>
 

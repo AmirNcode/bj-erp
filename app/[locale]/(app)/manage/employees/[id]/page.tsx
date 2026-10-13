@@ -239,7 +239,9 @@ export default async function EditEmployeePage({ params }: Props) {
         <SpecialLeaveCard
           employeeId={id}
           grants={specialLeaveRes.grants}
-          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : null}
+          // undefined = unreadable (no personal_info read): Marriage stays offered
+          // and the RPC refuses a non-single target itself (R3 ruling).
+          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : undefined}
         />
       )}
     </main>

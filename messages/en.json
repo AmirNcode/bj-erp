@@ -679,7 +679,7 @@
         "remove": "Remove",
         "removeConfirm": "Signatures already collected are kept; only the requirement is removed.",
         "removed": "Approval step removed.",
-        "orderAdminOnly": "Only someone who may edit the approval steps can change whether the order is binding.",
+        "orderNeedsStepsEdit": "Only someone who may edit the approval steps can change whether the order is binding.",
         "departmentHint": "The requester's department manager (Settings → Departments) also signs, unless they are the direct manager or the requester. Once active, pending requests need this signature too.",
         "addStep": {
           "button": "Add approval step",

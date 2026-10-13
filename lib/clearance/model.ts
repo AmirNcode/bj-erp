@@ -5,6 +5,8 @@
  * which buttons to show and mirror its rules.
  */
 
+import { can, type Perms } from '@/lib/permissions/catalog';
+
 export const SEPARATION_REASONS = [
   'resignation',
   'dismissal',
@@ -139,6 +141,15 @@ export function rowsPayload(rows: readonly DraftRow[]): Array<{
       ...(r.departmentId ? { department_id: r.departmentId } : {}),
       ...(r.signerId ? { signer_id: r.signerId } : {}),
     }));
+}
+
+/**
+ * Who files, edits and cancels a form (FR-55): clearance edit, the same gate as
+ * every write behind it in lib/actions/clearance.ts. Signing stays identity-based
+ * (canSignRow / canSignFinance), as can_act_on assumes.
+ */
+export function canManageClearance(perms: Perms): boolean {
+  return can(perms, 'clearance');
 }
 
 export function canSignRow(

@@ -12,7 +12,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getClearance, getClearanceSetup } from '@/lib/actions/clearance';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { canSignFinance, canSignRow } from '@/lib/clearance/model';
+import { canManageClearance, canSignFinance, canSignRow } from '@/lib/clearance/model';
 import { addDays, formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
@@ -52,7 +52,9 @@ export default async function ClearanceDetailPage({ params }: Props) {
   }
 
   const { form: f, caller } = res;
-  const canManage = caller.roles.includes('admin') || caller.roles.includes('hr');
+  // FR-55: clearance edit, the gate of every write behind ManageActions. Signing
+  // below stays identity-based (canSignRow / canSignFinance).
+  const canManage = canManageClearance(caller.perms);
   const [setup, ws] = await Promise.all([
     canManage ? getClearanceSetup() : Promise.resolve(null),
     getWorkSettings(),

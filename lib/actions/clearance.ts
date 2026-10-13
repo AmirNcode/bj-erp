@@ -13,6 +13,7 @@ import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { isValidSignatureData } from '@/lib/leave/signature';
 import {
+  canManageClearance,
   isSeparationReason,
   rowsPayload,
   type DraftRow,
@@ -93,7 +94,7 @@ export async function getClearanceOverview(): Promise<ClearanceOverview | Fail> 
     awaiting: items.filter((f) => f.awaitingMe),
     mine: items.filter((f) => f.employeeId === userId),
     others: items.filter((f) => f.employeeId !== userId && !f.awaitingMe),
-    canManage: can(perms, 'clearance'),
+    canManage: canManageClearance(perms),
     canViewAll: can(perms, 'clearance', 'read'),
   };
 }
@@ -182,7 +183,9 @@ type RawDetail = {
 
 export async function getClearance(
   id: string
-): Promise<{ ok: true; form: ClearanceDetail; caller: { id: string; roles: string[] } } | Fail> {
+): Promise<
+  { ok: true; form: ClearanceDetail; caller: { id: string; roles: string[]; perms: Perms } } | Fail
+> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -195,7 +198,7 @@ export async function getClearance(
 
   return {
     ok: true,
-    caller: { id: c.user.id, roles: c.roles },
+    caller: { id: c.user.id, roles: c.roles, perms: c.perms },
     form: {
       id: r.id,
       status: r.status,

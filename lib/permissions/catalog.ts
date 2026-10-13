@@ -22,6 +22,8 @@ export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   { key: 'employees', items: ['people', 'people_create', 'passwords', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
+  // absences sits after calendar here (both "who is away" views); SQL permission_keys() lists it
+  // after reports. Order is display only: the tests compare sets and counts, so keep both as is.
   { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports'] },
   { key: 'finance', items: ['finance'] },
   { key: 'approvalChain', items: ['approval_steps'] },
