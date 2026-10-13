@@ -263,4 +263,24 @@ select pg_temp.expect('employee may not read the finance list',
 select pg_temp.expect('accrue_leave no longer forfeits carryover',
   (select (prosrc not like '%carryover_forfeit%')::text from pg_proc where proname = 'accrue_leave'), 'true');
 
+-- Behaviour, not just source: a fresh employee accruing 1 day a month since
+-- Esfand 1403 crosses Farvardin 1404 AND Farvardin 1405 with a carryover cap of
+-- only 1 day. Before FR-60 both Nowruz boundaries clamped the balance to 1 day;
+-- now every accrued minute survives.
+insert into fx values ('carrier', gen_random_uuid());
+insert into auth.users (id, email) values ((select id from fx where k = 'carrier'), '9990001008@fixture.invalid');
+insert into public.profiles (id, company_id, employee_code, full_name, active, personnel_no, must_change_password, hire_date)
+values ((select id from fx where k = 'carrier'), (select id from fx where k = 'company'), '9990001008', 'CF carrier', true, '9990001008', false, '2025-01-01');
+insert into public.employee_leave_policies (employee_id, leave_type_id, accrual_minutes_per_month, annual_cap_minutes, carryover_cap_minutes, accrual_start_month)
+values ((select id from fx where k = 'carrier'), (select id from fx where k = 'daily_type'), 480, null, 480, '2025-02-19');
+select public.accrue_leave((select id from fx where k = 'carrier'), (select id from fx where k = 'daily_type'));
+select pg_temp.expect('two Nowruz boundaries crossed, nothing forfeited',
+  (select count(*)::text from public.leave_ledger
+    where employee_id = (select id from fx where k = 'carrier') and entry_type = 'carryover_forfeit'), '0');
+select pg_temp.expect('balance = every month accrued (Esfand 1403 .. this month), cap ignored',
+  (select (public.current_leave_balance((select id from fx where k = 'carrier'), (select id from fx where k = 'daily_type'))
+           = 480 * (select count(*) from public.jalali_months
+                     where gregorian_start >= '2025-02-19'
+                       and gregorian_start <= (now() at time zone 'Asia/Tehran')::date))::text), 'true');
+
 rollback;
