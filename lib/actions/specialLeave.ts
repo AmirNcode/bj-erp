@@ -13,7 +13,14 @@ import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 
 export type SpecialLeaveKind = 'marriage' | 'bereavement';
-export type SpecialLeaveGrant = { id: string; kind: SpecialLeaveKind; grantedAt: string; minutes: number };
+export type SpecialLeaveGrant = {
+  id: string;
+  kind: SpecialLeaveKind;
+  grantedAt: string;
+  minutes: number;
+  /** Why it was granted — required for bereavement. */
+  note: string | null;
+};
 
 export async function getSpecialLeaveGrants(
   employeeId: string
@@ -22,7 +29,7 @@ export async function getSpecialLeaveGrants(
   if (!c.ok) return c;
   const { data, error } = await c.supabase
     .from('special_leave_grants')
-    .select('id, kind, granted_at, minutes')
+    .select('id, kind, granted_at, minutes, note')
     .eq('employee_id', employeeId)
     .is('revoked_at', null)
     .order('granted_at');
@@ -34,19 +41,25 @@ export async function getSpecialLeaveGrants(
       kind: g.kind as SpecialLeaveKind,
       grantedAt: g.granted_at,
       minutes: g.minutes,
+      note: g.note,
     })),
   };
 }
 
 export async function grantSpecialLeave(
   employeeId: string,
-  kind: SpecialLeaveKind
+  kind: SpecialLeaveKind,
+  note?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const c = await requireCaller({ anyOf: ['admin', 'hr'] });
   if (!c.ok) return c;
+  const trimmed = note?.trim() ?? '';
+  // Fast localized refusal; the RPC enforces the same.
+  if (kind === 'bereavement' && !trimmed) return dbErr('a note is required for bereavement leave');
   const { error } = await c.supabase.rpc('app_grant_special_leave', {
     p_employee_id: employeeId,
     p_kind: kind,
+    p_note: trimmed ? trimmed.slice(0, 500) : undefined,
   });
   if (error) return dbErr(error.message);
   invalidateAppCache();

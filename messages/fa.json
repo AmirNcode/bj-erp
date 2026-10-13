@@ -987,7 +987,9 @@
     "marriageAlreadyGranted": "مرخصی ازدواج قبلاً برای این شخص ثبت شده است.",
     "marriageNeedsSingle": "مرخصی ازدواج فقط برای ازدواج اول است: وضعیت تأهل باید «مجرد» باشد.",
     "annualTypeMissing": "نوع مرخصی استحقاقی پیدا نشد.",
-    "specialLeaveAlreadyRevoked": "این مورد قبلاً حذف شده است."
+    "specialLeaveAlreadyRevoked": "این مورد قبلاً حذف شده است.",
+    "specialLeaveNoteRequired": "برای مرخصی فوت اقوام نزدیک، نوشتن توضیحات الزامی است.",
+    "specialLeaveNoteTooLong": "توضیحات طولانی است (حداکثر ۵۰۰ نویسه)."
   },
   "roles": {
     "admin": "ادمین",
@@ -1356,6 +1358,10 @@
     "remove": "حذف",
     "grantedOn": "ثبت‌شده در {date}",
     "granted": "۳ روز به مرخصی استحقاقی اضافه شد.",
-    "revoked": "حذف شد؛ ۳ روز کسر شد."
+    "revoked": "حذف شد؛ ۳ روز کسر شد.",
+    "note": "توضیحات",
+    "notePlaceholder": "چه کسی و چه زمانی فوت کرده است؛ مثلاً پدر — ۱۴۰۵/۰۷/۱۸",
+    "noteRequired": "توضیحات را بنویسید: این ۳ روز برای چه ثبت می‌شود.",
+    "cancel": "انصراف"
   }
 }

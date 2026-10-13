@@ -147,6 +147,8 @@ const RULES: Rule[] = [
   { re: /annual leave type not found/, key: 'annualTypeMissing' },
   { re: /not allowed to grant special leave/, key: 'notAllowed' },
   { re: /special leave grant was already revoked/, key: 'specialLeaveAlreadyRevoked' },
+  { re: /a note is required for bereavement leave/, key: 'specialLeaveNoteRequired' },
+  { re: /special leave note is too long|special_leave_grants_note_len/, key: 'specialLeaveNoteTooLong' },
   // Errand (FR-30). The form validates both client-side first, so these only
   // surface when the DB is reached directly or the client check is bypassed.
   { re: /errand location is required/, key: 'errandLocationRequired' },

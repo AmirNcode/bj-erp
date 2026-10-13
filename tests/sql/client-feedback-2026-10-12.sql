@@ -316,9 +316,9 @@ insert into bal values ('before', public.current_leave_balance((select id from f
 select pg_temp.expect('employee may not grant special leave',
   pg_temp.try_as('emp', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), '42501');
 select pg_temp.expect('hr may not grant to themself',
-  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('hr'), 'bereavement')), '42501');
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('hr'), 'bereavement', 'x')), '42501');
 select pg_temp.expect('hr may not grant to an admin',
-  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('adm'), 'bereavement')), '42501');
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('adm'), 'bereavement', 'x')), '42501');
 select pg_temp.expect('marriage refused when already married',
   pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('named'), 'marriage')), '22023');
 select pg_temp.expect('hr grants marriage leave to a single employee',
@@ -330,9 +330,14 @@ select pg_temp.expect('marriage switches marital status to married',
   (select marital_status from public.employee_personal_info where employee_id = (select id from fx where k = 'emp')), 'married');
 select pg_temp.expect('a second marriage grant is refused',
   pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), '22023');
+select pg_temp.expect('bereavement needs a note',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('emp'), 'bereavement', '  ')), '22023');
 select pg_temp.expect('bereavement may be granted for each death',
-  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'bereavement'))
-  || pg_temp.try_as('adm', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'bereavement')), 'ok:1ok:1');
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('emp'), 'bereavement', 'Father passed away'))
+  || pg_temp.try_as('adm', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('emp'), 'bereavement', 'Sister passed away')), 'ok:1ok:1');
+select pg_temp.expect('the note is stored with the grant',
+  (select string_agg(note, ',' order by note) from public.special_leave_grants
+    where employee_id = (select id from fx where k = 'emp') and kind = 'bereavement'), 'Father passed away,Sister passed away');
 select pg_temp.expect('employee sees their own grants',
   pg_temp.val_as('emp', format('select count(*) from public.special_leave_grants where employee_id = %s', pg_temp.id('emp'))), '3');
 select pg_temp.expect('a colleague sees none of them',

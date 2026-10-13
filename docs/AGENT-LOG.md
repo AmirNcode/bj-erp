@@ -78,6 +78,28 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — FR-65: bereavement grants need a note
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 95189d6 (unpushed)
+**Trigger:** Amir: adding 3 days for a death must take a mandatory note so HR can track why.
+
+**What changed**
+- Migration `20261013140001_special_leave_note.sql` (20261013130001 was already applied locally, so
+  frozen): `special_leave_grants.note` (≤ 500), `app_grant_special_leave(…, p_note)` — required for
+  bereavement; old 2-arg form dropped.
+- `SpecialLeaveCard.tsx`: "Add 3 days" opens a note form (required); notes listed under each grant.
+  `lib/actions/specialLeave.ts`, types, db-error rules, messages. SQL suite 69.
+
+**Actions outside the repo**
+- `bj-deploy update local` (applied 20261013140001), rest restarted. Liara untouched.
+
+**Verification**
+- SQL suites 40/58/82/69 PASS after apply; tsc, lint clean; unit 621. Not checked in a browser.
+
+**State left behind**
+- Committed on local main with 95189d6, neither pushed. The two bereavement grants made locally
+  before this have no note.
+
 ## 2026-10-13 — FR-65–67: leave outside the list, HR order switch, picker auto-select
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 3b7ee29

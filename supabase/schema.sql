@@ -2674,10 +2674,10 @@ end; $$;
 
 
 --
--- Name: app_grant_special_leave(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_grant_special_leave(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) RETURNS uuid
+CREATE FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -2689,10 +2689,18 @@ declare
   v_prev    int;
   v_status  text;
   v_id      uuid;
+  v_note    text := nullif(btrim(coalesce(p_note, '')), '');
 begin
   v_company := private.special_leave_target(v_uid, p_employee_id);
   if p_kind not in ('marriage', 'bereavement') then
     raise exception 'invalid special leave kind' using errcode = '22023';
+  end if;
+  -- FR-65 amendment: HR records why each bereavement grant was made.
+  if p_kind = 'bereavement' and v_note is null then
+    raise exception 'a note is required for bereavement leave' using errcode = '22023';
+  end if;
+  if length(v_note) > 500 then
+    raise exception 'special leave note is too long (max 500 characters)' using errcode = '22023';
   end if;
 
   select id into v_type from public.leave_types
@@ -2718,8 +2726,8 @@ begin
   v_minutes := 3 * private.company_minutes_per_day(v_company);
   v_prev := public.current_leave_balance(p_employee_id, v_type);
 
-  insert into public.special_leave_grants (company_id, employee_id, kind, leave_type_id, minutes, prev_marital_status, granted_by)
-  values (v_company, p_employee_id, p_kind, v_type, v_minutes, v_status, v_uid)
+  insert into public.special_leave_grants (company_id, employee_id, kind, leave_type_id, minutes, prev_marital_status, granted_by, note)
+  values (v_company, p_employee_id, p_kind, v_type, v_minutes, v_status, v_uid, v_note)
   returning id into v_id;
 
   insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
@@ -2732,7 +2740,7 @@ begin
 
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
   values (v_uid, 'special_leave.grant', 'special_leave_grants', v_id,
-          jsonb_build_object('employee_id', p_employee_id, 'kind', p_kind, 'minutes', v_minutes));
+          jsonb_build_object('employee_id', p_employee_id, 'kind', p_kind, 'minutes', v_minutes, 'note', v_note));
   return v_id;
 end; $$;
 
@@ -5205,8 +5213,10 @@ CREATE TABLE public.special_leave_grants (
     granted_at timestamp with time zone DEFAULT now() NOT NULL,
     revoked_by uuid,
     revoked_at timestamp with time zone,
+    note text,
     CONSTRAINT special_leave_grants_kind_check CHECK ((kind = ANY (ARRAY['marriage'::text, 'bereavement'::text]))),
-    CONSTRAINT special_leave_grants_minutes_check CHECK ((minutes > 0))
+    CONSTRAINT special_leave_grants_minutes_check CHECK ((minutes > 0)),
+    CONSTRAINT special_leave_grants_note_len CHECK (((note IS NULL) OR (length(note) <= 500)))
 );
 
 
@@ -7284,14 +7294,14 @@ GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO service_role;
 
 
 --
--- Name: FUNCTION app_grant_special_leave(p_employee_id uuid, p_kind text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO postgres;
-GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO anon;
-GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO anon;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO service_role;
 
 
 --

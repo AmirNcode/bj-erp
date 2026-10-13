@@ -101,7 +101,8 @@ New permission keys `absences.view`, `settings.edit`, `finance.view` go through
   (allocation ledger row); marriage only while marital status is single, once, and the grant sets it
   to married; bereavement once per death; HR may remove a grant made by mistake (reversing
   adjustment; a removed marriage grant restores the previous marital status). Annual Leave is found
-  by `name_en = 'Annual Leave'`.
+  by `name_en = 'Annual Leave'`. Each bereavement grant needs a note (≤ 500 chars), migration
+  `20261013140001`.
 - **FR-66** hr may set approval-order enforcement.
 - **FR-67** single-match auto-select in every person picker (600 ms pause in PersonSearch).
 - The 4h / one-per-day hourly rule (FR-57) stays on hourly leave only, not hourly errands (confirmed).

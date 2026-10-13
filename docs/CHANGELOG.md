@@ -14,7 +14,8 @@ was deployed; semantic versioning starts at the first tag.
 Migration `20261013130001`.
 - **«مرخصی خارج از لیست»** at the bottom of Edit Employee (hr, admin): «ازدواج» adds 3 days of annual
   leave once, for a first marriage (only while personal info says مجرد; it then switches to متأهل);
-  «فوت اقوام نزدیک» adds 3 days for each death, listed with dates. Either can be removed if added by
+  «فوت اقوام نزدیک» adds 3 days for each death, with a required note (who and when), listed with
+  dates and notes. Either can be removed if added by
   mistake.
 - **HR** can turn "Require the order to be followed" on and off.
 - **Person pickers** (approval steps, direct manager, clearance): a single match or an exact

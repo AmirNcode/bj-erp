@@ -987,7 +987,9 @@
     "marriageAlreadyGranted": "Marriage leave has already been granted to this person.",
     "marriageNeedsSingle": "Marriage leave is only for a first marriage: their marital status must be single.",
     "annualTypeMissing": "The Annual Leave type was not found.",
-    "specialLeaveAlreadyRevoked": "This grant was already removed."
+    "specialLeaveAlreadyRevoked": "This grant was already removed.",
+    "specialLeaveNoteRequired": "A note is required for bereavement leave.",
+    "specialLeaveNoteTooLong": "The note is too long (500 characters at most)."
   },
   "roles": {
     "admin": "Admin",
@@ -1356,6 +1358,10 @@
     "remove": "Remove",
     "grantedOn": "Granted {date}",
     "granted": "3 days added to annual leave.",
-    "revoked": "Removed; 3 days taken back."
+    "revoked": "Removed; 3 days taken back.",
+    "note": "Note",
+    "notePlaceholder": "Who passed away and when, e.g. Father — 1405/07/18",
+    "noteRequired": "Write a note: why these 3 days are granted.",
+    "cancel": "Cancel"
   }
 }

@@ -298,7 +298,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
 - **FR-65** ☑ **«مرخصی خارج از لیست» — marriage and bereavement leave.** At the bottom of Edit
   Employee, hr or admin grants 3 extra days of annual leave: «ازدواج» once, for a first marriage, only
   while personal info says single (the grant sets marital status to married); «فوت اقوام نزدیک» once
-  per death. Each grant posts an allocation on the Annual Leave type; a mistaken grant is removed
+  per death, with a **required note** (why it was granted; optional for marriage). Each grant posts
+  an allocation on the Annual Leave type; a mistaken grant is removed
   with a reversing adjustment. Not on oneself (non-admin), hr never on an admin. Table
   `special_leave_grants`, RPCs `app_grant_special_leave` / `app_revoke_special_leave`, key
   `special_leave.grant`. *(2026-10-13.)*

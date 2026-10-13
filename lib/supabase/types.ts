@@ -727,6 +727,7 @@ export type Database = {
           kind: string
           leave_type_id: string
           minutes: number
+          note: string | null
           prev_marital_status: string | null
           revoked_at: string | null
           revoked_by: string | null
@@ -740,6 +741,7 @@ export type Database = {
           kind: string
           leave_type_id: string
           minutes: number
+          note?: string | null
           prev_marital_status?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
@@ -753,6 +755,7 @@ export type Database = {
           kind?: string
           leave_type_id?: string
           minutes?: number
+          note?: string | null
           prev_marital_status?: string | null
           revoked_at?: string | null
           revoked_by?: string | null
@@ -1483,7 +1486,7 @@ export type Database = {
       }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
       app_grant_special_leave: {
-        Args: { p_employee_id: string; p_kind: string }
+        Args: { p_employee_id: string; p_kind: string; p_note?: string }
         Returns: string
       }
       app_revoke_special_leave: { Args: { p_grant_id: string }; Returns: undefined }
