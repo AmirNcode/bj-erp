@@ -92,13 +92,43 @@ select pg_temp.expect('six roles seeded for the company',
 select pg_temp.expect('enum-only insert gets role_id',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k = 'hr') and r.system_key = 'hr'), '1');
-select pg_temp.expect('hr preset has 12 permissions',
+select pg_temp.expect('hr preset has 14 permissions',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id = rp.role_id
-    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '12');
-select pg_temp.expect('security preset has 4, finance 1',
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '14');
+select pg_temp.expect('security preset has 5, finance 2',
   (select string_agg(n::text, ',' order by k) from (
      select r.system_key::text k, count(*) n from public.role_permissions rp join public.roles r on r.id = rp.role_id
-      where r.company_id = (select id from fx where k = 'company') and r.system_key in ('security','finance') group by 1) s), '1,4');
+      where r.company_id = (select id from fx where k = 'company') and r.system_key in ('security','finance') group by 1) s), '2,5');
+-- R2 (2026-10-12 owner presets): HR += work_settings, holidays edit; Security +=
+-- absences read; Finance += finance read; personal_info_own on no preset.
+select pg_temp.expect('hr preset contents',
+  (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
+     from public.role_permissions rp join public.roles r on r.id = rp.role_id
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'),
+  'approval_steps=edit,calendar=read,clearance=edit,departments=edit,holidays=edit,leave_accrual=edit,'
+  || 'leave_balances=edit,leave_requests=read,people=edit,people_create=edit,personal_info=edit,reports=read,'
+  || 'role_manager=edit,work_settings=edit');
+select pg_temp.expect('security preset contents',
+  (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
+     from public.role_permissions rp join public.roles r on r.id = rp.role_id
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'security'),
+  'absences=read,calendar=read,leave_balances=read,leave_requests=read,people=read');
+select pg_temp.expect('finance preset contents',
+  (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
+     from public.role_permissions rp join public.roles r on r.id = rp.role_id
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'finance'),
+  'clearance=read,finance=read');
+select pg_temp.expect('personal_info_own is on no preset of any company',
+  (select count(*)::text from public.role_permissions where permission = 'personal_info_own'), '0');
+select pg_temp.expect('catalog: 19 keys incl. absences, finance, personal_info_own',
+  (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own'))::text
+     from private.permission_keys() k),
+  '19:3');
+select pg_temp.expect('catalog shapes: absences R, finance R, personal_info_own E',
+  (select private.permission_allows('absences','read')::text || private.permission_allows('absences','edit')::text
+       || private.permission_allows('finance','read')::text || private.permission_allows('finance','edit')::text
+       || private.permission_allows('personal_info_own','edit')::text || private.permission_allows('personal_info_own','read')::text),
+  'truefalsetruefalsetruefalse');
 do $$
 declare v_new uuid;
 begin
@@ -303,6 +333,26 @@ select pg_temp.expect('legacy key alias still answers',
   (select private.has_permission((select id from fx where k='hr'),'employees.edit')::text
        || private.has_permission((select id from fx where k='fin'),'separations.view')::text
        || private.has_permission((select id from fx where k='sec'),'employees.edit')::text), 'truetruefalse');
+-- R2: main's four keys answer from the catalog too.
+select pg_temp.expect('legacy settings.edit: hr yes (work_settings + holidays edit), security no, admin yes',
+  (select private.has_permission((select id from fx where k='hr'),'settings.edit')::text
+       || private.has_permission((select id from fx where k='sec'),'settings.edit')::text
+       || private.has_permission((select id from fx where k='admin'),'settings.edit')::text), 'truefalsetrue');
+select pg_temp.expect('legacy absences.view: security yes, hr no, admin yes',
+  (select private.has_permission((select id from fx where k='sec'),'absences.view')::text
+       || private.has_permission((select id from fx where k='hr'),'absences.view')::text
+       || private.has_permission((select id from fx where k='admin'),'absences.view')::text), 'truefalsetrue');
+select pg_temp.expect('legacy finance.view: finance yes, hr no, admin yes',
+  (select private.has_permission((select id from fx where k='fin'),'finance.view')::text
+       || private.has_permission((select id from fx where k='hr'),'finance.view')::text
+       || private.has_permission((select id from fx where k='admin'),'finance.view')::text), 'truefalsetrue');
+select pg_temp.expect('legacy personal_info.edit_own: admin yes, hr no, employee no',
+  (select private.has_permission((select id from fx where k='admin'),'personal_info.edit_own')::text
+       || private.has_permission((select id from fx where k='hr'),'personal_info.edit_own')::text
+       || private.has_permission((select id from fx where k='emp'),'personal_info.edit_own')::text), 'truefalsefalse');
+select pg_temp.expect('legacy keys: an inactive holder and an unknown key answer false',
+  (select private.has_permission((select id from fx where k='hr_off'),'settings.edit')::text
+       || private.has_permission((select id from fx where k='admin'),'no.such.key')::text), 'falsefalse');
 -- subset rule (D4)
 select pg_temp.expect('helpdesk acts on a plain employee',
   (select private.can_act_on((select id from fx where k='help'), (select id from fx where k='emp2'))::text), 'true');
@@ -318,9 +368,12 @@ select pg_temp.expect('nobody acts on the admin, not even Everything',
   (select private.can_act_on((select id from fx where k='super'), (select id from fx where k='admin'))::text), 'false');
 select pg_temp.expect('never on yourself',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='hr'))::text), 'false');
-select pg_temp.expect('hr acts on security and finance (parity)',
+-- R2: the 2026-10-12 presets give Security absences read and Finance finance read,
+-- which the HR preset does not hold, so D4 now stops hr acting on their holders
+-- (main: hr edits any non-admin). See the R2 report, concern 1.
+select pg_temp.expect('hr no longer acts on security or finance holders (presets hold absences / finance)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='sec'))::text
-       || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='fin'))::text), 'truetrue');
+       || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='fin'))::text), 'falsefalse');
 select pg_temp.expect('hr acts on a manager and a department manager (parity)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='mgr'))::text
        || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='deptmgr'))::text), 'truetrue');
@@ -347,13 +400,16 @@ select pg_temp.expect('helpdesk not on security or finance holders',
        || private.can_act_on((select id from fx where k='help'), (select id from fx where k='fin'))::text), 'falsefalse');
 select pg_temp.expect('nosign acts on a plain employee',
   (select private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='emp2'))::text), 'true');
-select pg_temp.expect('nosign not on hr, security, finance, approver, signer (identity clauses alone)',
+select pg_temp.expect('nosign not on hr, finance, approver, signer (identity clauses alone)',
   (select private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='hr'))::text
-       || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='sec'))::text
        || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='fin'))::text
        || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='appr'))::text
        || private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='signer'))::text),
-  'falsefalsefalsefalsefalse');
+  'falsefalsefalsefalse');
+-- R2: security is no longer an approval-step role (main's CHECK), so holding it is
+-- no identity power; nosign covers every Security permission.
+select pg_temp.expect('nosign acts on a security holder (security dropped from the identity clause)',
+  (select private.can_act_on((select id from fx where k='nosign'), (select id from fx where k='sec'))::text), 'true');
 select pg_temp.expect('hr acts on a named approver and a signer (parity)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='appr'))::text
        || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='signer'))::text), 'truetrue');
@@ -526,15 +582,36 @@ select pg_temp.expect('approver search: hr yes, helpdesk no',
   || pg_temp.try_as('help', 'select public.search_approver_candidates(''FR55'')'),
   (select 'ok:' || least(20, count(*)) from public.profiles
     where company_id = (select id from fx where k='company') and active and full_name ilike '%FR55%') || ' 42501');
-select pg_temp.expect('work settings: Everything edits, hr does not (parity)',
+-- R2: HR edits work settings and holidays (owner, 2026-10-12), through main's
+-- *_editor policies now keyed on the catalog items.
+select pg_temp.expect('work settings: Everything and hr edit; helpdesk does not',
   pg_temp.try_as('super', format('update public.work_settings set hours_per_day = hours_per_day where company_id = %s', pg_temp.id('company'))) || ' '
-  || pg_temp.try_as('hr', format('update public.work_settings set hours_per_day = hours_per_day where company_id = %s', pg_temp.id('company'))),
-  (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company')) || ' ok:0');
-select pg_temp.expect('holidays: Everything adds, hr may not (parity)',
+  || pg_temp.try_as('hr', format('update public.work_settings set weekend_days = weekend_days where company_id = %s', pg_temp.id('company'))) || ' '
+  || pg_temp.try_as('help', format('update public.work_settings set weekend_days = weekend_days where company_id = %s', pg_temp.id('company'))),
+  (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company'))
+  || ' ' || (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company')) || ' ok:0');
+select pg_temp.expect('work settings: approval order and hours per day stay admin-only (main''s trigger)',
+  pg_temp.try_as('hr', format('update public.work_settings set approval_order_enforced = not approval_order_enforced where company_id = %s', pg_temp.id('company'))) || ' '
+  || pg_temp.try_as('hr', format('update public.work_settings set hours_per_day = 7 where company_id = %s', pg_temp.id('company'))) || ' '
+  || pg_temp.try_as('super', format('update public.work_settings set hours_per_day = 7 where company_id = %s', pg_temp.id('company'))),
+  '42501 42501 42501');
+select pg_temp.expect('work settings: delete stays admin-only (work_settings_delete_admin)',
+  pg_temp.try_as('hr', format('delete from public.work_settings where company_id = %s', pg_temp.id('company')))
+  || ' ' || pg_temp.try_as('super', format('delete from public.work_settings where company_id = %s', pg_temp.id('company'))), 'ok:0 ok:0');
+select pg_temp.expect('holidays: Everything and hr add and delete; helpdesk may not',
   pg_temp.try_as('super', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)', pg_temp.id('company'), '2099-03-21', 'آزمون')) || ' '
   || pg_temp.try_as('hr', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)', pg_temp.id('company'), '2099-03-22', 'آزمون')) || ' '
   || pg_temp.try_as('hr', format('delete from public.holidays where company_id = %s and holiday_date = %L', pg_temp.id('company'), '2099-03-21')) || ' '
-  || pg_temp.try_as('super', format('delete from public.holidays where company_id = %s and holiday_date = %L', pg_temp.id('company'), '2099-03-21')), 'ok:1 42501 ok:0 ok:1');
+  || pg_temp.try_as('super', format('delete from public.holidays where company_id = %s and holiday_date = %L', pg_temp.id('company'), '2099-03-22')) || ' '
+  || pg_temp.try_as('help', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)', pg_temp.id('company'), '2099-03-23', 'آزمون')),
+  'ok:1 ok:1 ok:1 ok:1 42501');
+select pg_temp.expect('settings policies are main''s *_editor names keyed on the catalog items',
+  (select string_agg(policyname || '=' || (case when coalesce(qual, '') || coalesce(with_check, '') like '%has_perm%' then 'perm'
+                                                when coalesce(qual, '') like '%is_admin%' then 'admin' else '?' end), ','
+                     order by policyname)
+     from pg_policies where schemaname = 'public' and tablename in ('holidays', 'work_settings') and cmd <> 'SELECT'),
+  'holidays_delete_editor=perm,holidays_insert_editor=perm,holidays_update_editor=perm,'
+  || 'work_settings_delete_admin=admin,work_settings_insert_editor=perm,work_settings_update_editor=perm');
 
 -- gates: personal info
 select pg_temp.expect('personal info read: Everything yes, helpdesk no',
@@ -631,7 +708,7 @@ select pg_temp.expect('token hook emits app_perms',
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "passwords": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '16');
+            -> 'claims' -> 'app_perms'))::text), '19');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');
@@ -850,12 +927,19 @@ select pg_temp.expect('system roles cannot be deleted',
 -- matching edit permission to give or take away, on top of D5.
 select pg_temp.expect('nosign (role_assign, no approval_steps) may reset emp''s password',
   pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), 'ok:1');
-select pg_temp.expect('… but may not give emp Security (would sign security steps as emp)',
+-- R2: security never signs an approval step any more (main's CHECK), so giving
+-- Security is plain D5: nosign holds every Security permission.
+select pg_temp.expect('… and may give emp Security and take it away (security is no identity preset now)',
   pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
-    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))), '42501');
-select pg_temp.expect('… nor create an employee who holds Security',
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))) || ' '
+  || pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'))), 'ok:1 ok:1');
+select pg_temp.expect('… and create an employee who holds Security',
   pg_temp.try_as('nosign', format($q$select public.app_create_employee('9990000987','FR55 c6','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
-    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'security'))), '42501');
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'security'))), 'ok:1');
+select pg_temp.expect('… hr (no absences) may not give Security (D5)',
+  pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))), '42501');
 -- clearance read makes Finance's permissions a subset of nosign's, so only the identity rule refuses.
 insert into public.role_permissions values ((select id from fx where k='r_nosign'), 'clearance', 'read');
 -- A fresh plain target (created by hr above), so the Security scenarios cannot leak in.
@@ -951,18 +1035,18 @@ select pg_temp.expect('company scope approval_steps: admin update/delete of anot
   || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s', pg_temp.id('other_company'))),
   'ok:0 ok:0');
 select pg_temp.expect('company scope approval_steps: admin insert into another company refused',
-  pg_temp.try_as('admin', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 83)',
-    pg_temp.id('other_company'), 'security')), '42501');
+  pg_temp.try_as('admin', format('insert into public.approval_steps (company_id, role, manager_scope, step_order) values (%s, %L, %L, 83)',
+    pg_temp.id('other_company'), 'manager', 'department')), '42501');
 select pg_temp.expect('company scope approval_steps: a step cannot be moved to another company',
   pg_temp.try_as('hr', format('update public.approval_steps set company_id = %s where approver_id = %s', pg_temp.id('other_company'), pg_temp.id('appr'))), '42501');
 select pg_temp.expect('company scope approval_steps: hr edits and the admin deletes in the own company',
   pg_temp.try_as('hr', format('update public.approval_steps set step_order = 95 where approver_id = %s', pg_temp.id('appr'))) || ' '
-  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 84)', pg_temp.id('company'), 'security')) || ' '
+  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, manager_scope, step_order) values (%s, %L, %L, 84)', pg_temp.id('company'), 'manager', 'department')) || ' '
   || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s and step_order = 84', pg_temp.id('company'))),
   'ok:1 ok:1 ok:1');
 select pg_temp.expect('company scope approval_steps: hr (a non-admin delegate) cannot reach the other company either',
   pg_temp.try_as('hr', format('update public.approval_steps set step_order = 85 where company_id = %s', pg_temp.id('other_company'))) || ' '
-  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 86)', pg_temp.id('other_company'), 'security')),
+  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, manager_scope, step_order) values (%s, %L, %L, 86)', pg_temp.id('other_company'), 'manager', 'department')),
   'ok:0 42501');
 select pg_temp.expect('company scope approval_steps: the other company''s step is untouched',
   (select count(*)::text || ':' || min(step_order)::text from public.approval_steps where company_id = (select id from fx where k='other_company')), '1:81');
@@ -982,6 +1066,119 @@ select pg_temp.expect('company scope work_settings: own company still works for 
   (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company')));
 select pg_temp.expect('company scope work_settings: the other company''s settings are untouched',
   (select count(*)::text || ':' || min(hours_per_day)::text from public.work_settings where company_id = (select id from fx where k='other_company')), '1:8');
+
+-- ── R2: main's client-feedback features (FR-56..FR-64) under the catalog ────
+-- Custom roles built straight from the new items, each on its own user.
+do $$
+declare
+  r record;
+  v_role uuid;
+begin
+  for r in
+    select * from (values
+      ('payroll', 'Payroll',  '{"finance":"read"}'::jsonb,                                          '9990000990'),
+      ('selfie',  'SelfInfo', '{"personal_info_own":"edit"}'::jsonb,                                '9990000991'),
+      ('board',   'Board',    '{"absences":"read","people":"read","leave_requests":"read"}'::jsonb, '9990000992'),
+      ('wsonly',  'WorkOnly', '{"work_settings":"edit"}'::jsonb,                                    '9990000993')
+    ) as t(k, rname, perms, code)
+  loop
+    insert into public.roles (company_id, kind, name)
+      values ((select id from fx where k = 'company'), 'custom', r.rname) returning id into v_role;
+    insert into public.role_permissions select v_role, key, value #>> '{}' from jsonb_each(r.perms);
+    insert into fx values (r.k, gen_random_uuid());
+    insert into auth.users (id, email, encrypted_password)
+      values ((select id from fx where k = r.k), r.code || '@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+    insert into public.profiles (id, company_id, employee_code, full_name, department_id, active, personnel_no, must_change_password)
+      values ((select id from fx where k = r.k), (select id from fx where k = 'company'), r.code, 'FR55 ' || r.k,
+              (select id from fx where k = 'dept'), true, r.code, false);
+    insert into public.user_roles (user_id, role) values ((select id from fx where k = r.k), 'employee');
+    insert into public.user_roles (user_id, role_id) values ((select id from fx where k = r.k), v_role);
+  end loop;
+end $$;
+
+-- role editor: the new items' shapes and dependencies (D6: the absences board
+-- reads leave_requests and profiles through RLS).
+select pg_temp.expect('R2 editor: absences needs people and leave_requests',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsBad', '{"absences":"read"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsBad', '{"absences":"read","people":"read"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsOk', '{"absences":"read","people":"read","leave_requests":"read"}')$q$),
+  '22023 22023 ok:1');
+select pg_temp.expect('R2 editor: finance read and personal_info_own edit stand alone; wrong levels refused',
+  pg_temp.try_as('admin', $q$select public.app_save_role(null, 'FinOk', '{"finance":"read"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'OwnOk', '{"personal_info_own":"edit"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"finance":"edit"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"absences":"edit","people":"read","leave_requests":"read"}')$q$) || ' '
+  || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Bad', '{"personal_info_own":"read"}')$q$),
+  'ok:1 ok:1 22023 22023 22023');
+
+-- legacy aliases for custom roles
+select pg_temp.expect('R2 legacy keys from custom roles: finance.view, absences.view, personal_info.edit_own yes; personal_info.edit no',
+  (select private.has_permission((select id from fx where k='payroll'),'finance.view')::text
+       || private.has_permission((select id from fx where k='board'),'absences.view')::text
+       || private.has_permission((select id from fx where k='selfie'),'personal_info.edit_own')::text
+       || private.has_permission((select id from fx where k='selfie'),'personal_info.edit')::text), 'truetruetruefalse');
+select pg_temp.expect('R2 settings.edit needs work_settings AND holidays edit',
+  (select private.has_permission((select id from fx where k='wsonly'),'settings.edit')::text), 'false');
+select pg_temp.expect('R2 work_settings edit alone: edits work settings, not holidays',
+  pg_temp.try_as('wsonly', format('update public.work_settings set weekend_days = weekend_days where company_id = %s', pg_temp.id('company'))) || ' '
+  || pg_temp.try_as('wsonly', format('insert into public.holidays (company_id, holiday_date, name_fa) values (%s, %L, %L)', pg_temp.id('company'), '2099-03-24', 'آزمون')),
+  (select 'ok:' || count(*) from public.work_settings where company_id = (select id from fx where k='company')) || ' 42501');
+
+-- personal_info_own (FR-63 switch): own row only with the item; admin implicit.
+select pg_temp.expect('R2 own personal info: employee and hr refused, admin allowed',
+  pg_temp.try_as('emp', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55own', pg_temp.id('emp'))) || ' '
+  || pg_temp.try_as('hr', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55own', pg_temp.id('hr'))) || ' '
+  || pg_temp.try_as('admin', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55own', pg_temp.id('admin'))),
+  'ok:0 ok:0 ok:1');
+select pg_temp.expect('R2 own personal info: a custom role with personal_info_own edits its own row only',
+  pg_temp.try_as('selfie', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55own', pg_temp.id('selfie'))) || ' '
+  || pg_temp.try_as('selfie', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55own', pg_temp.id('emp2'))),
+  'ok:1 ok:0');
+select pg_temp.expect('R2 own personal info: hr still edits an employee''s row',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set father_name = %L where employee_id = %s', 'FR55hr', pg_temp.id('emp2'))), 'ok:1');
+select pg_temp.expect('R2 own personal info import: hr refused on its own row (FR-63), Everything (holds personal_info_own) allowed',
+  pg_temp.try_as('hr', format('select public.app_import_personal_info(%L)', json_build_array(json_build_object('personnel_no', '9990000951', 'father_name', 'FR55'))::text)) || ' '
+  || pg_temp.try_as('super', format('select public.app_import_personal_info(%L)', json_build_array(json_build_object('personnel_no', '9990000960', 'father_name', 'FR55'))::text)),
+  '42501 ok:1');
+select pg_temp.expect('R2 own personal info: the employee still reads their own row',
+  pg_temp.try_as('emp', format('select 1 from public.employee_personal_info where employee_id = %s', pg_temp.id('emp'))), 'ok:1');
+
+-- finance: finance_approved_requests follows finance read.
+select pg_temp.expect('R2 finance list: Finance preset and a custom finance role yes; hr, helpdesk, board no',
+  pg_temp.try_as('fin', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)') || ' '
+  || pg_temp.try_as('payroll', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)') || ' '
+  || pg_temp.try_as('hr', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)') || ' '
+  || pg_temp.try_as('help', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)') || ' '
+  || pg_temp.try_as('board', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)'),
+  'ok:1 ok:1 42501 42501 42501');
+
+-- absences: the board reads approved requests through leave_requests_select.
+select pg_temp.expect('R2 absences board: a custom absences role reads every approved request; helpdesk none',
+  pg_temp.try_as('board', 'select 1 from public.leave_requests where status = ''approved''') || ' '
+  || pg_temp.try_as('help', 'select 1 from public.leave_requests where status = ''approved'''),
+  (select 'ok:' || count(*) from public.leave_requests where status = 'approved') || ' ok:0');
+
+-- request_approval_progress mirrors leave_requests_select (leave_requests read).
+select pg_temp.expect('R2 approval progress: hr and a leave_requests-read role yes; helpdesk not found',
+  pg_temp.try_as('hr', format('select count(*) from public.request_approval_progress(%s)',
+    quote_literal((select id from public.leave_requests where serial_year = 1 and serial_seq = 955002)))) || ' '
+  || pg_temp.try_as('board', format('select count(*) from public.request_approval_progress(%s)',
+    quote_literal((select id from public.leave_requests where serial_year = 1 and serial_seq = 955002)))) || ' '
+  || pg_temp.try_as('help', format('select count(*) from public.request_approval_progress(%s)',
+    quote_literal((select id from public.leave_requests where serial_year = 1 and serial_seq = 955002)))),
+  'ok:1 ok:1 P0002');
+
+-- main's approval-chain rules are untouched by FR-55.
+select pg_temp.expect('R2 approval_steps_role_allowed CHECK is main''s',
+  (select pg_get_constraintdef(oid) from pg_constraint where conname = 'approval_steps_role_allowed'),
+  'CHECK (((role = ANY (ARRAY[''manager''::app_role, ''hr''::app_role, ''employee''::app_role])) OR ((role = ANY (ARRAY[''security''::app_role, ''admin''::app_role])) AND (NOT active))))');
+select pg_temp.expect('R2 hr may not add an active security step (CHECK)',
+  pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, step_order) values (%s, %L, 87)', pg_temp.id('company'), 'security')), '23514');
+select pg_temp.expect('R2 approve_leave_request: one overload, 5 args, no permission gate; reject has none either',
+  (select count(*)::text || ':' || min(pronargs)::text from pg_proc where proname = 'approve_leave_request') || ' '
+  || (pg_get_functiondef('public.approve_leave_request(uuid, text, boolean, boolean, bigint)'::regprocedure) ~ 'has_perm')::text || ' '
+  || (pg_get_functiondef('public.reject_leave_request(uuid, text)'::regprocedure) ~ 'has_perm')::text,
+  '1:5 false false');
 
 -- transfer (D1). Must be the LAST section: it moves the real admin's role row
 -- onto a fixture admin whose password the test knows (all rolled back).

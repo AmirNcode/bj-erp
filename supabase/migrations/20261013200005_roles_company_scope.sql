@@ -5,37 +5,17 @@
 -- admin writing another company's config is never legitimate). USING covers
 -- UPDATE/DELETE; WITH CHECK covers INSERT/UPDATE, so a row cannot be moved across
 -- companies either. private.caller_company() comes from 20261013200004.
+--
+-- holidays and work_settings insert/update are not here any more: main's *_editor
+-- policies (20261012120004) already carry the company condition, and
+-- 20261013200003 keeps it when it rewrites them onto the holidays / work_settings
+-- items. main kept work_settings_delete_admin admin-only but company-blind; it
+-- stays admin-only and gets the company condition like every other config write.
 
--- holidays
-drop policy holidays_insert_admin on public.holidays;
-create policy holidays_insert_admin on public.holidays for insert to authenticated
-  with check (private.has_perm((select auth.uid()), 'holidays', 'edit')
-              and company_id = (select private.caller_company()));
-drop policy holidays_update_admin on public.holidays;
-create policy holidays_update_admin on public.holidays for update to authenticated
-  using (private.has_perm((select auth.uid()), 'holidays', 'edit')
-         and company_id = (select private.caller_company()))
-  with check (private.has_perm((select auth.uid()), 'holidays', 'edit')
-              and company_id = (select private.caller_company()));
-drop policy holidays_delete_admin on public.holidays;
-create policy holidays_delete_admin on public.holidays for delete to authenticated
-  using (private.has_perm((select auth.uid()), 'holidays', 'edit')
-         and company_id = (select private.caller_company()));
-
--- work_settings
-drop policy work_settings_insert_admin on public.work_settings;
-create policy work_settings_insert_admin on public.work_settings for insert to authenticated
-  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
-              and company_id = (select private.caller_company()));
-drop policy work_settings_update_admin on public.work_settings;
-create policy work_settings_update_admin on public.work_settings for update to authenticated
-  using (private.has_perm((select auth.uid()), 'work_settings', 'edit')
-         and company_id = (select private.caller_company()))
-  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
-              and company_id = (select private.caller_company()));
+-- work_settings delete
 drop policy work_settings_delete_admin on public.work_settings;
 create policy work_settings_delete_admin on public.work_settings for delete to authenticated
-  using (private.has_perm((select auth.uid()), 'work_settings', 'edit')
+  using (private.is_admin((select auth.uid()))
          and company_id = (select private.caller_company()));
 
 -- approval_steps

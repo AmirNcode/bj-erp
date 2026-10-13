@@ -1,8 +1,9 @@
 -- FR-55 (4/4): role editor RPCs, role assignment by id, admin transfer, create
 -- employee with role ids. Spec: docs/specs/2026-10-07-configurable-roles-design.md
--- (D1, D2, D5, D6, D11, D12, "RPCs"). Also two follow-ups from reviewing
--- 20261013200002/200003: has_perm with an unknown level, and the admin branch of
--- the personal-info update policy. Review fixes: identity presets need the
+-- (D1, D2, D5, D6, D11, D12, "RPCs"). Also a follow-up from reviewing
+-- 20261013200002/200003: has_perm with an unknown level. (The admin branch of the
+-- personal-info update policy, once fixed here, now lives in 20261013200003 with
+-- main's FR-63 own-row rule.) Review fixes: identity presets need the
 -- matching edit power to assign, role_manager depends on leave_balances and
 -- calendar (D6), and assignment and transfer lock the same profile rows.
 
@@ -15,25 +16,11 @@ create or replace function private.has_perm(uid uuid, p_key text, p_level text d
      and private.perm_level(uid, p_key) >= case p_level when 'edit' then 2 when 'read' then 1 end, false);
 $$;
 
--- The admin branch passes only for rows of the admin's own company (as before FR-55).
-drop policy employee_personal_info_update on public.employee_personal_info;
-create policy employee_personal_info_update on public.employee_personal_info for update to authenticated
-  using (private.is_active((select auth.uid()))
-         and ((employee_id = (select auth.uid()))
-              or (private.is_admin((select auth.uid()))
-                  and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
-              or (private.has_perm((select auth.uid()), 'personal_info', 'edit')
-                  and private.can_act_on((select auth.uid()), employee_id))))
-  with check (private.is_active((select auth.uid()))
-         and ((employee_id = (select auth.uid()))
-              or (private.is_admin((select auth.uid()))
-                  and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
-              or (private.has_perm((select auth.uid()), 'personal_info', 'edit')
-                  and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))));
-
 -- D6 amendment: a Manager reads every profile, balance and the calendar
 -- (private.reads_*), so whoever can make someone a Manager must already read them.
--- Same signature, volatility and grants as 20261013200001; two rows added.
+-- Same signature, volatility and grants as 20261013200001; two rows added. (The
+-- absences rows are in both: main's board reads leave_requests and profiles
+-- through RLS.)
 create or replace function private.permission_deps() returns table (key text, key_level text, needs text)
     language sql immutable set search_path to '' as $$
   values
@@ -44,7 +31,8 @@ create or replace function private.permission_deps() returns table (key text, ke
     ('departments','read','people'), ('leave_balances','read','people'),
     ('leave_accrual','read','departments'), ('leave_requests','read','people'),
     ('approval_steps','read','people'), ('reports','read','people'),
-    ('reports','read','leave_balances'), ('reports','read','leave_requests');
+    ('reports','read','leave_balances'), ('reports','read','leave_requests'),
+    ('absences','read','people'), ('absences','read','leave_requests');
 $$;
 
 -- ── helpers ─────────────────────────────────────────────────────────────────
@@ -248,12 +236,13 @@ begin
       union
       (select x from unnest(v_after) x except select x from unnest(v_before) x)
     loop
-      -- Identity presets: their holders sign approval steps (hr, security) or the
-      -- clearance finance box, so giving one to someone whose password you can
-      -- reset is signing as them. It takes the power that edits those signers.
+      -- Identity presets: their holders sign approval steps (hr) or the clearance
+      -- finance box, so giving one to someone whose password you can reset is
+      -- signing as them. It takes the power that edits those signers. Security
+      -- signs no step since 20261012120003 (main's approval_steps_role_allowed).
       v_key := (select system_key from public.roles where id = v_changed);
       if not private.role_within(v_changed, v_uid)
-         or (v_key in ('hr', 'security') and not private.has_perm(v_uid, 'approval_steps', 'edit'))
+         or (v_key = 'hr' and not private.has_perm(v_uid, 'approval_steps', 'edit'))
          or (v_key = 'finance' and not private.has_perm(v_uid, 'clearance', 'edit')) then
         raise exception 'not allowed to give or remove role %', (select name from public.roles where id = v_changed)
           using errcode = '42501';

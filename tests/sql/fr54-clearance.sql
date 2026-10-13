@@ -300,8 +300,14 @@ select pg_temp.expect('a future last day does not deactivate',
   (select active::text from public.profiles where id = (select id from fx where k = 'worker')), 'true');
 
 -- A leaver who holds hr and finance signs neither box on their own form.
-select pg_temp.expect('hr files for another hr holder',
-  (pg_temp.file('F2', 'hr', 'hr2', pg_temp.today() + 30, '[]') ~ '^[0-9a-f-]{36}$')::text, 'true');
+-- FR-55 R2: the Finance preset reads `finance`, which the HR preset does not hold,
+-- so D4 stops hr filing for an hr+finance holder; the admin files this one. (See
+-- the R2 report, concern 1: HR vs Finance/Security presets.)
+select pg_temp.expect('hr may not file for an hr+finance holder (FR-55 D4, presets of 2026-10-12)',
+  left(pg_temp.val_as('hr', format('select public.app_create_separation(%s, %L, %L, null, null, null, %L)::text',
+    pg_temp.id('hr2'), 'resignation', pg_temp.today() + 30, '[]')), 9), 'ERR:42501');
+select pg_temp.expect('the admin files for an hr+finance holder',
+  (pg_temp.file('F2', 'adm', 'hr2', pg_temp.today() + 30, '[]') ~ '^[0-9a-f-]{36}$')::text, 'true');
 select pg_temp.expect('the leaver may not sign their own HR row',
   pg_temp.try_as('hr2', format('select public.app_sign_separation_row(%s, %s, true, null)',
     pg_temp.row_id('F2', 'is_hr'), pg_temp.sig())), '42501');

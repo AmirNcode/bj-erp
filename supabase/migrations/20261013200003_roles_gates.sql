@@ -3,6 +3,13 @@
 -- Only the guards change; bodies are copied from supabase/schema.sql at 6240e3c
 -- (checked equal to the live definitions). Presets keep today's behaviour, apart
 -- from D7 (no self-appointment) and D4 (nobody acts on someone who holds more).
+-- Reconciled with main's 20261012120001..20261013120001: of the bodies copied here
+-- main changed only app_import_personal_info (FR-63 own-row refusal, kept below);
+-- the settings policies follow main's *_editor names; the personal-info update
+-- policy follows FR-63 (own row only with personal_info_own); and
+-- request_approval_progress (FR-64) gets the same reader set as leave_requests_select.
+-- approve_leave_request, reject_leave_request and the approval_steps_role_allowed
+-- CHECK are main's and are not touched by FR-55.
 -- private.can_read_all stays for the deploy window; nothing calls it after this.
 
 -- ── broad reads ─────────────────────────────────────────────────────────────
@@ -118,27 +125,37 @@ drop policy approval_steps_delete_config on public.approval_steps;
 create policy approval_steps_delete_config on public.approval_steps for delete to authenticated
   using (private.has_perm((select auth.uid()), 'approval_steps', 'edit'));
 
-drop policy work_settings_insert_admin on public.work_settings;
-create policy work_settings_insert_admin on public.work_settings for insert to authenticated
-  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit'));
-drop policy work_settings_update_admin on public.work_settings;
-create policy work_settings_update_admin on public.work_settings for update to authenticated
-  using (private.has_perm((select auth.uid()), 'work_settings', 'edit'))
-  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit'));
-drop policy work_settings_delete_admin on public.work_settings;
-create policy work_settings_delete_admin on public.work_settings for delete to authenticated
-  using (private.has_perm((select auth.uid()), 'work_settings', 'edit'));
+-- work_settings / holidays: main (20261012120004) replaced the *_admin policies
+-- with *_editor ones on the legacy key settings.edit + the caller's company. The
+-- same policies now key on the catalog items, company scope kept. Unchanged:
+-- work_settings_delete_admin (admin only) and the work_settings_enforce_scope
+-- trigger, which keeps approval_order_enforced and hours_per_day admin-only
+-- whatever work_settings level a role holds.
+drop policy work_settings_insert_editor on public.work_settings;
+create policy work_settings_insert_editor on public.work_settings for insert to authenticated
+  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
+              and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
+drop policy work_settings_update_editor on public.work_settings;
+create policy work_settings_update_editor on public.work_settings for update to authenticated
+  using (private.has_perm((select auth.uid()), 'work_settings', 'edit')
+         and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
+  with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
+              and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
 
-drop policy holidays_insert_admin on public.holidays;
-create policy holidays_insert_admin on public.holidays for insert to authenticated
-  with check (private.has_perm((select auth.uid()), 'holidays', 'edit'));
-drop policy holidays_update_admin on public.holidays;
-create policy holidays_update_admin on public.holidays for update to authenticated
-  using (private.has_perm((select auth.uid()), 'holidays', 'edit'))
-  with check (private.has_perm((select auth.uid()), 'holidays', 'edit'));
-drop policy holidays_delete_admin on public.holidays;
-create policy holidays_delete_admin on public.holidays for delete to authenticated
-  using (private.has_perm((select auth.uid()), 'holidays', 'edit'));
+drop policy holidays_insert_editor on public.holidays;
+create policy holidays_insert_editor on public.holidays for insert to authenticated
+  with check (private.has_perm((select auth.uid()), 'holidays', 'edit')
+              and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
+drop policy holidays_update_editor on public.holidays;
+create policy holidays_update_editor on public.holidays for update to authenticated
+  using (private.has_perm((select auth.uid()), 'holidays', 'edit')
+         and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
+  with check (private.has_perm((select auth.uid()), 'holidays', 'edit')
+              and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
+drop policy holidays_delete_editor on public.holidays;
+create policy holidays_delete_editor on public.holidays for delete to authenticated
+  using (private.has_perm((select auth.uid()), 'holidays', 'edit')
+         and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
 
 -- ── personal information ────────────────────────────────────────────────────
 drop policy employee_personal_info_select on public.employee_personal_info;
@@ -148,19 +165,27 @@ create policy employee_personal_info_select on public.employee_personal_info for
               or (private.has_perm((select auth.uid()), 'personal_info', 'read')
                   and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))));
 
+-- FR-63 (main, 20261012130001) + FR-55: one's own row only with personal_info_own
+-- (the admin holds it implicitly); anyone else's with personal_info edit, in the
+-- caller's company, and can_act_on (D4: never the admin, nobody who holds more).
+-- The admin skips can_act_on but keeps the company scope.
 -- employee_id is pinned by private.personal_info_before_update, so WITH CHECK only
 -- needs the caller's side.
 drop policy employee_personal_info_update on public.employee_personal_info;
 create policy employee_personal_info_update on public.employee_personal_info for update to authenticated
   using (private.is_active((select auth.uid()))
-         and ((employee_id = (select auth.uid()))
-              or private.is_admin((select auth.uid()))
-              or (private.has_perm((select auth.uid()), 'personal_info', 'edit')
-                  and private.can_act_on((select auth.uid()), employee_id))))
+         and ((employee_id = (select auth.uid())
+               and private.has_perm((select auth.uid()), 'personal_info_own', 'edit'))
+              or (employee_id <> (select auth.uid())
+                  and private.has_perm((select auth.uid()), 'personal_info', 'edit')
+                  and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid()))
+                  and (private.is_admin((select auth.uid()))
+                       or private.can_act_on((select auth.uid()), employee_id)))))
   with check (private.is_active((select auth.uid()))
-         and ((employee_id = (select auth.uid()))
-              or private.is_admin((select auth.uid()))
-              or (private.has_perm((select auth.uid()), 'personal_info', 'edit')
+         and ((employee_id = (select auth.uid())
+               and private.has_perm((select auth.uid()), 'personal_info_own', 'edit'))
+              or (employee_id <> (select auth.uid())
+                  and private.has_perm((select auth.uid()), 'personal_info', 'edit')
                   and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))));
 
 -- ── functions ───────────────────────────────────────────────────────────────
@@ -540,7 +565,9 @@ begin
      order by p.active desc, p.personnel_no nulls last, p.full_name;
 end; $$;
 
--- personal_info edit; per row can_act_on (was: not an admin row)
+-- personal_info edit; per row can_act_on (was: not an admin row). Body from main's
+-- 20261012130001: one's own row follows personal_info_own (FR-63), every other row
+-- can_act_on for a non-admin (which also refuses the admin's row).
 CREATE OR REPLACE FUNCTION public.app_import_personal_info(p_rows jsonb) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
@@ -582,7 +609,12 @@ begin
     if v_target is null then
       raise exception 'unknown personnel number: %', coalesce(v_pno, '(empty)') using errcode = '22023';
     end if;
-    if not v_is_admin and not private.can_act_on(v_uid, v_target) then
+    -- FR-63: one's own row follows personal_info_own, not the import.
+    if v_target = v_uid then
+      if not private.has_perm(v_uid, 'personal_info_own', 'edit') then
+        raise exception 'not permitted to edit your own personal info: %', v_pno using errcode = '42501';
+      end if;
+    elsif not v_is_admin and not private.can_act_on(v_uid, v_target) then
       raise exception 'not permitted to edit this person''s personal info: %', v_pno using errcode = '42501';
     end if;
     for v_key in select jsonb_object_keys(v_row) loop
@@ -1502,3 +1534,116 @@ begin
   );
 end;
 $$;
+
+-- FR-64 (main, 20261013120001): the progress of a request is readable by whoever
+-- reads the request. Same reader set as leave_requests_select above: own, direct
+-- manager, or leave_requests read (admin; the hr and security presets) instead of
+-- the literal security / admin / hr. Body unchanged apart from that guard.
+create or replace function public.request_approval_progress(p_id uuid)
+returns table(
+  step_order int,
+  step_role public.app_role,
+  manager_scope text,
+  named boolean,
+  expected_name text,
+  decision public.leave_status,
+  signer_name text,
+  signed_at timestamptz
+)
+    language plpgsql stable security definer
+    set search_path to ''
+    as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_emp     uuid;
+  v_company uuid;
+  v_kind    public.request_kind;
+  v_status  public.leave_status;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+
+  select r.employee_id, r.company_id, r.kind, r.status
+    into v_emp, v_company, v_kind, v_status
+    from public.leave_requests r where r.id = p_id;
+  if v_emp is null then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+
+  if not (private.is_active(v_uid)
+          and (v_emp = v_uid
+               or private.is_manager_of(v_uid, v_emp)
+               or private.has_perm(v_uid, 'leave_requests', 'read'))) then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+
+  return query
+  with decided as (
+    select coalesce(s.step_order, 1) as step_order,
+           a.step_role,
+           coalesce(s.manager_scope, 'direct') as manager_scope,
+           s.approver_id,
+           a.decision,
+           sp.full_name as signer_name,
+           a.created_at as signed_at,
+           a.step_id
+      from public.leave_request_approvals a
+      left join public.approval_steps s on s.id = a.step_id
+      left join public.profiles sp on sp.id = a.approver_id
+     where a.request_id = p_id
+  ),
+  outstanding as (
+    select s.step_order, s.role as step_role, s.manager_scope, s.approver_id
+      from public.approval_steps s
+     where v_status = 'pending'
+       and s.company_id = v_company
+       and s.active
+       and v_kind = any(s.applies_to)
+       and private.step_applies(s.manager_scope, v_emp)
+       and not exists (
+             select 1 from public.leave_request_approvals a
+              where a.request_id = p_id
+                and (a.step_id = s.id or (a.step_id is null and a.step_role = s.role)))
+  ),
+  -- No chain configured at all: a pending request waits on the direct manager
+  -- (the FR-36 degrade branch of approve_leave_request).
+  fallback as (
+    select 1 as step_order, 'manager'::public.app_role as step_role,
+           'direct'::text as manager_scope, null::uuid as approver_id
+     where v_status = 'pending'
+       and not exists (select 1 from outstanding)
+       and not exists (select 1 from decided)
+       and not exists (
+             select 1 from public.approval_steps s
+              where s.company_id = v_company and s.active
+                and v_kind = any(s.applies_to)
+                and private.step_applies(s.manager_scope, v_emp))
+  ),
+  waiting as (
+    select * from outstanding
+    union all
+    select * from fallback
+  )
+  select d.step_order, d.step_role, d.manager_scope, d.approver_id is not null,
+         -- A named step keeps its person's name even when an admin override signed it.
+         (select np.full_name from public.profiles np where np.id = d.approver_id),
+         d.decision, d.signer_name, d.signed_at
+    from decided d
+  union all
+  select w.step_order, w.step_role, w.manager_scope, w.approver_id is not null,
+         (select ep.full_name from public.profiles ep
+           where ep.id = case
+                           when w.approver_id is not null then w.approver_id
+                           when w.step_role = 'manager' and w.manager_scope = 'department'
+                             then private.department_manager_for(v_emp)
+                           when w.step_role = 'manager'
+                             then (select pm.manager_id from public.profiles pm where pm.id = v_emp)
+                         end),
+         null::public.leave_status, null::text, null::timestamptz
+    from waiting w
+  order by 1, 8 nulls last, 2;
+end; $$;
+
+revoke all on function public.request_approval_progress(uuid) from public;
+grant execute on function public.request_approval_progress(uuid) to authenticated;
