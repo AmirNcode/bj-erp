@@ -78,6 +78,25 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — Sidebar logo as wide as the nav items
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 79ac569 (unpushed)
+**Trigger:** Amir: enlarge the logo to the width of the selected sidebar item.
+
+**What changed**
+- `app/[locale]/(app)/_components/MainNav.tsx`: logo wrapper drops its side padding; image
+  `w-full h-auto` (216 px wide, ~108 px tall on the 240 px panel), intrinsic 1181x591, testid
+  `nav-logo`. The PNG has no transparent margin, so its edges line up with the items.
+
+**Actions outside the repo**
+- `bj-deploy app local`. Liara untouched.
+
+**Verification**
+- tsc, lint clean; main-nav unit 8 pass. Not checked in a browser.
+
+**State left behind**
+- Committed on local main, not pushed (3 commits ahead of origin).
+
 ## 2026-10-13 — FR-65: bereavement grants need a note
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 95189d6 (unpushed)
