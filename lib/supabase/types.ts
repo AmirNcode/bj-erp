@@ -1600,6 +1600,10 @@ export type Database = {
         Returns: string
       }
       app_revoke_special_leave: { Args: { p_grant_id: string }; Returns: undefined }
+      app_set_approval_order_enforced: {
+        Args: { p_enforced: boolean }
+        Returns: undefined
+      }
       request_approval_progress: {
         Args: { p_id: string }
         Returns: {

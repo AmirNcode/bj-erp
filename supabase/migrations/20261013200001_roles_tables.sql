@@ -4,6 +4,10 @@
 -- items absences (R), finance (R) and personal_info_own (E, the FR-63 "may edit
 -- own personal information" switch, an explicit exception to D3); HR also edits
 -- work_settings and holidays, Security reads absences, Finance reads finance.
+-- 2026-10-13 (main's FR-65, owner ruling (a)): item special_leave (E, grant
+-- marriage / bereavement leave; reads people and adds to a balance), and HR
+-- also holds special_leave edit, absences read and finance read, so the HR
+-- preset covers Security and Finance and D4 lets HR act on their holders.
 -- seed_company_roles runs for every existing company below, so the presets
 -- reach existing companies in this same migration.
 -- Add-first: the enum column user_roles.role stays (nullable, filled for built-ins
@@ -15,15 +19,15 @@ create function private.permission_keys() returns setof text
     language sql immutable set search_path to '' as $$
   select unnest(array['people','people_create','passwords','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
-    'leave_requests','calendar','reports','absences','approval_steps','work_settings','holidays',
-    'finance']);
+    'special_leave','leave_requests','calendar','reports','absences','approval_steps','work_settings',
+    'holidays','finance']);
 $$;
 
 create function private.permission_allows(p_key text, p_level text) returns boolean
     language sql immutable set search_path to '' as $$
   select case
     when p_key in ('people_create','passwords','role_manager','role_assign','leave_accrual',
-                   'personal_info_own')
+                   'personal_info_own','special_leave')
       then p_level = 'edit'
     when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
@@ -44,7 +48,8 @@ create function private.permission_deps() returns table (key text, key_level tex
     ('leave_accrual','read','departments'), ('leave_requests','read','people'),
     ('approval_steps','read','people'), ('reports','read','people'),
     ('reports','read','leave_balances'), ('reports','read','leave_requests'),
-    ('absences','read','people'), ('absences','read','leave_requests');
+    ('absences','read','people'), ('absences','read','leave_requests'),
+    ('special_leave','read','people'), ('special_leave','read','leave_balances');
 $$;
 
 revoke all on function private.permission_keys() from public, anon;
@@ -96,7 +101,8 @@ begin
       ('hr','personal_info','edit'), ('hr','clearance','edit'), ('hr','departments','edit'),
       ('hr','leave_balances','edit'), ('hr','leave_accrual','edit'), ('hr','leave_requests','read'),
       ('hr','calendar','read'), ('hr','reports','read'), ('hr','approval_steps','edit'),
-      ('hr','work_settings','edit'), ('hr','holidays','edit'),
+      ('hr','work_settings','edit'), ('hr','holidays','edit'), ('hr','special_leave','edit'),
+      ('hr','absences','read'), ('hr','finance','read'),
       ('security','people','read'), ('security','leave_balances','read'),
       ('security','leave_requests','read'), ('security','calendar','read'),
       ('security','absences','read'),

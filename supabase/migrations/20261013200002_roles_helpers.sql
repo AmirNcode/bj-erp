@@ -104,12 +104,14 @@ create function private.can_act_on(p_caller uuid, p_target uuid) returns boolean
      -- as them and fill their approval steps or clearance boxes. Role rows are
      -- checked active or not, like the admin row above. Security is not here:
      -- since 20261012120003 an approval step may name manager, hr or a person only.
+     -- An hr holder signs approval steps AND the clearance HR rows (by role), so
+     -- needs both edit powers.
      and (not (exists (select 1 from public.user_roles
                         where user_id = p_target and role = 'hr')
                or exists (select 1 from public.approval_steps
                            where approver_id = p_target and active))
           or private.has_perm(p_caller, 'approval_steps', 'edit'))
-     and (not (exists (select 1 from public.user_roles where user_id = p_target and role = 'finance')
+     and (not (exists (select 1 from public.user_roles where user_id = p_target and role in ('hr', 'finance'))
                or exists (select 1 from public.separation_units where signer_id = p_target)
                or exists (select 1 from public.separation_signoffs o
                             join public.separations s on s.id = o.separation_id
@@ -137,10 +139,12 @@ create function private.role_within(p_role_id uuid, p_uid uuid) returns boolean
      where r.id = p_role_id), false);
 $$;
 
--- Legacy keys (FR-51..54 and FR-56..63 call sites), kept for the deploy window;
--- dropped next release. Replaces main's body (20261012130001): its four keys
--- answer from the catalog too. settings.edit is main's one switch for work hours,
--- days off, hourly cap and holidays, so it needs both items.
+-- Legacy keys (FR-51..54, FR-56..63 and FR-65 call sites), kept for the deploy
+-- window; dropped next release. Replaces main's latest body (20261013130001):
+-- every key it answers answers here too, from the catalog. settings.edit is
+-- main's one switch for work hours, days off, hourly cap and holidays, so it
+-- needs both items. special_leave.grant: 20261013200003 moves
+-- private.special_leave_target onto has_perm; the key stays for the old app.
 create or replace function private.has_permission(uid uuid, p_permission text) returns boolean
     language sql stable security definer set search_path to '' as $$
   select case p_permission
@@ -151,6 +155,7 @@ create or replace function private.has_permission(uid uuid, p_permission text) r
     when 'personal_info.view' then private.has_perm(uid, 'personal_info', 'read')
     when 'personal_info.edit' then private.has_perm(uid, 'personal_info', 'edit')
     when 'personal_info.edit_own' then private.has_perm(uid, 'personal_info_own', 'edit')
+    when 'special_leave.grant' then private.has_perm(uid, 'special_leave', 'edit')
     when 'separations.manage' then private.has_perm(uid, 'clearance', 'edit')
     when 'separations.view'   then private.has_perm(uid, 'clearance', 'read')
     when 'settings.edit'      then private.has_perm(uid, 'work_settings', 'edit')

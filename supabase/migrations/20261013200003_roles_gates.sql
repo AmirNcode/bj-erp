@@ -8,6 +8,9 @@
 -- the settings policies follow main's *_editor names; the personal-info update
 -- policy follows FR-63 (own row only with personal_info_own); and
 -- request_approval_progress (FR-64) gets the same reader set as leave_requests_select.
+-- Reconciled with main's 20261013130001/140001 (FR-65/66): the work_settings scope
+-- trigger lets approval_steps edit flip approval_order_enforced (hours_per_day stays
+-- admin-only), and private.special_leave_target keys on the special_leave item + D4.
 -- approve_leave_request, reject_leave_request and the approval_steps_role_allowed
 -- CHECK are main's and are not touched by FR-55.
 -- private.can_read_all stays for the deploy window; nothing calls it after this.
@@ -127,10 +130,14 @@ create policy approval_steps_delete_config on public.approval_steps for delete t
 
 -- work_settings / holidays: main (20261012120004) replaced the *_admin policies
 -- with *_editor ones on the legacy key settings.edit + the caller's company. The
--- same policies now key on the catalog items, company scope kept. Unchanged:
--- work_settings_delete_admin (admin only) and the work_settings_enforce_scope
--- trigger, which keeps approval_order_enforced and hours_per_day admin-only
--- whatever work_settings level a role holds.
+-- same policies now key on the catalog items, company scope kept.
+-- work_settings_delete_admin stays admin only (20261013200005 adds the company).
+-- The work_settings_enforce_scope trigger (below) keeps hours_per_day admin-only
+-- whatever work_settings level a role holds (main's rule), and lets only
+-- approval_steps edit (or the admin) change approval_order_enforced (FR-66: whoever
+-- edits the approval steps decides whether their order is enforced). A role with
+-- approval_steps edit but no work_settings edit flips the switch through
+-- public.app_set_approval_order_enforced (20261013200004).
 drop policy work_settings_insert_editor on public.work_settings;
 create policy work_settings_insert_editor on public.work_settings for insert to authenticated
   with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
@@ -141,6 +148,39 @@ create policy work_settings_update_editor on public.work_settings for update to 
          and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))
   with check (private.has_perm((select auth.uid()), 'work_settings', 'edit')
               and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())));
+
+-- Main's body (20261013130001) for hours_per_day, unchanged; plus the
+-- approval_order_enforced rule. INSERT compares with the column default (false).
+create or replace function private.enforce_work_settings_scope() returns trigger
+    language plpgsql security definer
+    set search_path to ''
+    as $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  -- Direct SQL (migrations, superuser) has no JWT and is not limited.
+  if v_uid is null or private.is_admin(v_uid) then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.hours_per_day is distinct from 8 then
+      raise exception 'only an admin may change the hours per day' using errcode = '42501';
+    end if;
+    if new.approval_order_enforced is distinct from false
+       and not private.has_perm(v_uid, 'approval_steps', 'edit') then
+      raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+    end if;
+  else
+    if new.hours_per_day is distinct from old.hours_per_day then
+      raise exception 'only an admin may change the hours per day' using errcode = '42501';
+    end if;
+    if new.approval_order_enforced is distinct from old.approval_order_enforced
+       and not private.has_perm(v_uid, 'approval_steps', 'edit') then
+      raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end; $$;
 
 drop policy holidays_insert_editor on public.holidays;
 create policy holidays_insert_editor on public.holidays for insert to authenticated
@@ -1647,3 +1687,51 @@ end; $$;
 
 revoke all on function public.request_approval_progress(uuid) from public;
 grant execute on function public.request_approval_progress(uuid) to authenticated;
+
+-- ── special leave (main's FR-65, 20261013130001/140001) ─────────────────────
+-- The guard keys on the special_leave item instead of the legacy key, and D4
+-- applies as to every other write on a person: a non-admin also needs can_act_on.
+-- Main's refusals stay, with main's messages: own record and an admin target
+-- (non-admins), another company (P0002). The admin keeps main's rule: may grant
+-- to themself, skips can_act_on. Signature, return value and grants unchanged.
+create or replace function private.special_leave_target(p_actor uuid, p_employee uuid) returns uuid
+    language plpgsql stable security definer
+    set search_path to ''
+    as $$
+declare
+  v_company uuid;
+  v_target_company uuid;
+begin
+  if p_actor is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  -- has_perm is false for an inactive caller.
+  if not private.has_perm(p_actor, 'special_leave', 'edit') then
+    raise exception 'not allowed to grant special leave' using errcode = '42501';
+  end if;
+  select company_id into v_company from public.profiles where id = p_actor;
+  select company_id into v_target_company from public.profiles where id = p_employee;
+  if v_target_company is null or v_target_company <> v_company then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  if not private.is_admin(p_actor) then
+    if p_employee = p_actor then
+      raise exception 'you cannot change your own leave balance' using errcode = '42501';
+    end if;
+    if exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
+      raise exception 'not allowed to grant special leave to an admin' using errcode = '42501';
+    end if;
+    if not private.can_act_on(p_actor, p_employee) then
+      raise exception 'not allowed to grant special leave to this employee' using errcode = '42501';
+    end if;
+  end if;
+  return v_company;
+end; $$;
+
+drop policy special_leave_grants_select on public.special_leave_grants;
+create policy special_leave_grants_select on public.special_leave_grants
+  for select to authenticated
+  using (private.is_active((select auth.uid()))
+         and (employee_id = (select auth.uid())
+              or (private.has_perm((select auth.uid()), 'special_leave', 'edit')
+                  and company_id = (select p.company_id from public.profiles p where p.id = (select auth.uid())))));

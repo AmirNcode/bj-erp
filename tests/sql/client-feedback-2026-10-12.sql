@@ -258,8 +258,10 @@ select pg_temp.expect('finance list excludes pending and rejected',
                            where f.employee_name = 'CF emp' and f.kind = 'leave'$q$), '3');
 select pg_temp.expect('admin may read the finance list',
   left(pg_temp.val_as('adm', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31')$q$), 4) <> 'ERR:', 'true');
-select pg_temp.expect('hr may not read the finance list',
-  pg_temp.val_as('hr', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31')$q$), 'ERR:42501');
+-- FR-55, owner ruling (a) of 2026-10-13: the HR preset holds `finance` read (so
+-- HR covers the Finance preset under D4), and the finance list follows that item.
+select pg_temp.expect('hr reads the finance list (FR-55: the HR preset holds finance read)',
+  left(pg_temp.val_as('hr', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31')$q$), 4) <> 'ERR:', 'true');
 select pg_temp.expect('employee may not read the finance list',
   pg_temp.val_as('emp', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31')$q$), 'ERR:42501');
 

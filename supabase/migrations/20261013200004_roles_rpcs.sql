@@ -3,9 +3,11 @@
 -- (D1, D2, D5, D6, D11, D12, "RPCs"). Also a follow-up from reviewing
 -- 20261013200002/200003: has_perm with an unknown level. (The admin branch of the
 -- personal-info update policy, once fixed here, now lives in 20261013200003 with
--- main's FR-63 own-row rule.) Review fixes: identity presets need the
--- matching edit power to assign, role_manager depends on leave_balances and
--- calendar (D6), and assignment and transfer lock the same profile rows.
+-- main's FR-63 own-row rule.) Review fixes: identity presets need the matching
+-- edit powers to assign (hr: approval_steps and clearance edit), role_manager
+-- depends on leave_balances and calendar (D6), and assignment and transfer lock
+-- the same profile rows. Main's FR-66 in FR-55 terms:
+-- app_set_approval_order_enforced (approval_steps edit flips the switch).
 
 -- ── Task 2 follow-ups ───────────────────────────────────────────────────────
 -- An unknown or NULL level is false, never "read". coalesce: a NULL here would
@@ -20,7 +22,8 @@ $$;
 -- (private.reads_*), so whoever can make someone a Manager must already read them.
 -- Same signature, volatility and grants as 20261013200001; two rows added. (The
 -- absences rows are in both: main's board reads leave_requests and profiles
--- through RLS.)
+-- through RLS; the special_leave rows: the card sits on Edit Employee and adds
+-- days to a balance.)
 create or replace function private.permission_deps() returns table (key text, key_level text, needs text)
     language sql immutable set search_path to '' as $$
   values
@@ -32,7 +35,8 @@ create or replace function private.permission_deps() returns table (key text, ke
     ('leave_accrual','read','departments'), ('leave_requests','read','people'),
     ('approval_steps','read','people'), ('reports','read','people'),
     ('reports','read','leave_balances'), ('reports','read','leave_requests'),
-    ('absences','read','people'), ('absences','read','leave_requests');
+    ('absences','read','people'), ('absences','read','leave_requests'),
+    ('special_leave','read','people'), ('special_leave','read','leave_balances');
 $$;
 
 -- ── helpers ─────────────────────────────────────────────────────────────────
@@ -236,13 +240,15 @@ begin
       union
       (select x from unnest(v_after) x except select x from unnest(v_before) x)
     loop
-      -- Identity presets: their holders sign approval steps (hr) or the clearance
-      -- finance box, so giving one to someone whose password you can reset is
-      -- signing as them. It takes the power that edits those signers. Security
-      -- signs no step since 20261012120003 (main's approval_steps_role_allowed).
+      -- Identity presets: their holders sign approval steps and the clearance HR
+      -- rows (hr) or the clearance finance box, so giving one to someone whose
+      -- password you can reset is signing as them. It takes the powers that edit
+      -- those signers (mirrors can_act_on). Security signs no step since
+      -- 20261012120003 (main's approval_steps_role_allowed).
       v_key := (select system_key from public.roles where id = v_changed);
       if not private.role_within(v_changed, v_uid)
-         or (v_key = 'hr' and not private.has_perm(v_uid, 'approval_steps', 'edit'))
+         or (v_key = 'hr' and not (private.has_perm(v_uid, 'approval_steps', 'edit')
+                                   and private.has_perm(v_uid, 'clearance', 'edit')))
          or (v_key = 'finance' and not private.has_perm(v_uid, 'clearance', 'edit')) then
         raise exception 'not allowed to give or remove role %', (select name from public.roles where id = v_changed)
           using errcode = '42501';
@@ -310,6 +316,46 @@ begin
           jsonb_build_object('admin', v_uid), jsonb_build_object('admin', p_target));
 end $$;
 
+-- ── approval-order switch (FR-66 in FR-55 terms) ────────────────────────────
+-- Whoever edits the approval steps decides whether their order is enforced, even
+-- without work_settings edit (which the RLS update policy needs). Touches only
+-- approval_order_enforced (and updated_by / updated_at); the work_settings scope
+-- trigger (20261013200003) checks the same rule again. Creates the company's row
+-- with the column defaults if it is missing.
+create function public.app_set_approval_order_enforced(p_enforced boolean)
+returns void
+    language plpgsql security definer set search_path to '' as $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid;
+  v_before  boolean;
+  v_id      uuid;
+begin
+  if v_uid is null or not private.is_active(v_uid)
+     or not (private.is_admin(v_uid) or private.has_perm(v_uid, 'approval_steps', 'edit')) then
+    raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+  end if;
+  if p_enforced is null then
+    raise exception 'approval order setting must be true or false' using errcode = '22023';
+  end if;
+  v_company := private.caller_company();
+
+  select approval_order_enforced into v_before
+    from public.work_settings where company_id = v_company for update;
+  insert into public.work_settings (company_id, approval_order_enforced, updated_by, updated_at)
+  values (v_company, p_enforced, v_uid, now())
+  on conflict (company_id) do update
+    set approval_order_enforced = excluded.approval_order_enforced,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at
+  returning id into v_id;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'work_settings.approval_order', 'work_settings', v_id,
+          case when v_before is not null then jsonb_build_object('approval_order_enforced', v_before) end,
+          jsonb_build_object('approval_order_enforced', p_enforced));
+end $$;
+
 do $$
 declare f text;
 begin
@@ -317,7 +363,7 @@ begin
     'public.app_list_roles()', 'public.app_role_holders(uuid)',
     'public.app_save_role(uuid, text, jsonb)', 'public.app_delete_role(uuid)',
     'public.app_set_user_role_ids(uuid, uuid[])', 'public.app_set_user_roles(uuid, public.app_role[])',
-    'public.app_transfer_admin(uuid, text, text)']
+    'public.app_transfer_admin(uuid, text, text)', 'public.app_set_approval_order_enforced(boolean)']
   loop
     execute format('revoke all on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);
