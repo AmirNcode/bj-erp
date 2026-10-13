@@ -1,10 +1,10 @@
 -- FR-55 Task 3b: scope the delegable config write policies to the caller's company.
--- Migration 20261007160003 made these writes depend on private.has_perm(...), which is
+-- Migration 20261013200003 made these writes depend on private.has_perm(...), which is
 -- company-blind: anyone holding the permission could write ANOTHER company's rows.
 -- Add the company condition (admin is not exempt: one company per deploy, and an
 -- admin writing another company's config is never legitimate). USING covers
 -- UPDATE/DELETE; WITH CHECK covers INSERT/UPDATE, so a row cannot be moved across
--- companies either. private.caller_company() comes from 20261007160004.
+-- companies either. private.caller_company() comes from 20261013200004.
 
 -- holidays
 drop policy holidays_insert_admin on public.holidays;

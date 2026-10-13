@@ -1,6 +1,6 @@
 -- FR-55 (2/4): permission helpers, the subset rule, the legacy alias, the token claim.
 -- Spec: docs/specs/2026-10-07-configurable-roles-design.md (D1-D7, "Helpers", "Token hook").
--- Also closes two gaps found reviewing 20261007160001: permission rows on system
+-- Also closes two gaps found reviewing 20261013200001: permission rows on system
 -- roles, and a silent overwrite of user_roles.role on UPDATE.
 
 -- ── Task 1 follow-ups ───────────────────────────────────────────────────────

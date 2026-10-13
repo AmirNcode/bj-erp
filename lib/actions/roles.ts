@@ -2,7 +2,7 @@
 
 /**
  * Configurable roles (FR-55). Every write is one RPC from
- * 20261007160004_roles_rpcs.sql, which re-checks the caller (admin only) and
+ * 20261013200004_roles_rpcs.sql, which re-checks the caller (admin only) and
  * audits in the same transaction. The `toRoleRow` mapper lives in
  * `roles-helpers.ts` because a 'use server' file may export only async functions.
  */

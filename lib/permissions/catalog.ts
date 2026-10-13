@@ -1,6 +1,6 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261007160001 + 160004). Pure. Drives
+ * permission_allows / permission_deps (migrations 20261013200001 + 200004). Pure. Drives
  * the role editor, the nav and the edit capabilities. The database is the
  * authority; tests/unit/permissions-catalog.test.ts keeps the two in step.
  */

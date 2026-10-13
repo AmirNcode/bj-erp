@@ -144,7 +144,7 @@ select pg_temp.expect('the created employee holds the company Employee role by r
       and ur.role_id = (select id from public.roles
                          where company_id = (select id from fx where k = 'company') and system_key = 'employee')), '1');
 
--- ── Task 1 follow-ups (guards added in 20261007160002) ──────────────────────
+-- ── Task 1 follow-ups (guards added in 20261013200002) ──────────────────────
 -- Runs p_sql as the superuser with no JWT, in a subtransaction. Returns
 -- 'ok:<rows>' or '<sqlstate>'.
 create function pg_temp.try_su(p_sql text) returns text
@@ -648,7 +648,7 @@ select pg_temp.expect('hr appoints someone else as a department manager',
   pg_temp.try_as('hr', format('update public.departments set manager_id = %s where code = %L', pg_temp.id('emp'), 'ZZ5')), 'ok:1');
 
 -- ── rpcs (Task 3) ───────────────────────────────────────────────────────────
--- Task 2 carry-overs fixed in 20261007160004.
+-- Task 2 carry-overs fixed in 20261013200004.
 select pg_temp.expect('has_perm: an unknown level is false, edit still true',
   (select coalesce(private.has_perm((select id from fx where k='admin'),'people','Edit')::text, 'null')
        || coalesce(private.has_perm((select id from fx where k='admin'),'people',null)::text, 'null')

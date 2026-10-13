@@ -1,7 +1,7 @@
 -- FR-55 (4/4): role editor RPCs, role assignment by id, admin transfer, create
 -- employee with role ids. Spec: docs/specs/2026-10-07-configurable-roles-design.md
 -- (D1, D2, D5, D6, D11, D12, "RPCs"). Also two follow-ups from reviewing
--- 20261007160002/160003: has_perm with an unknown level, and the admin branch of
+-- 20261013200002/200003: has_perm with an unknown level, and the admin branch of
 -- the personal-info update policy. Review fixes: identity presets need the
 -- matching edit power to assign, role_manager depends on leave_balances and
 -- calendar (D6), and assignment and transfer lock the same profile rows.
@@ -33,7 +33,7 @@ create policy employee_personal_info_update on public.employee_personal_info for
 
 -- D6 amendment: a Manager reads every profile, balance and the calendar
 -- (private.reads_*), so whoever can make someone a Manager must already read them.
--- Same signature, volatility and grants as 20261007160001; two rows added.
+-- Same signature, volatility and grants as 20261013200001; two rows added.
 create or replace function private.permission_deps() returns table (key text, key_level text, needs text)
     language sql immutable set search_path to '' as $$
   values

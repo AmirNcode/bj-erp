@@ -62,7 +62,7 @@ export const getCachedRoles = cache(async (userId: string): Promise<string[]> =>
 
 /**
  * FR-55: the caller's permissions, from the `app_perms` JWT claim (token hook,
- * migration 20261007160002) or, for a token issued before it, one
+ * migration 20261013200002) or, for a token issued before it, one
  * `app_my_permissions()` call. Same <=1h staleness as roles; RLS enforces live.
  */
 export const getCachedPermissions = cache(async (userId: string): Promise<Perms> => {
