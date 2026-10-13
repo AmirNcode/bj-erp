@@ -78,6 +78,26 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-12 — Security's absences board moves to Home
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 2ae3ce3 (unpushed)
+**Trigger:** Amir: show security who's off on their Home screen instead of a separate page.
+
+**What changed**
+- `app/[locale]/(app)/home/page.tsx`: `SecurityAbsences` (security role only) renders the
+  approved-absences board at the top of Home; date via `/home?date=`.
+- `AbsencesBoard.tsx`: `basePath` prop. `lib/nav/tabs.ts`: no Absences tab for security; admin
+  keeps `/absences` in the Manage group. Nav unit test updated. Docs: CHANGELOG, REQUIREMENTS, spec.
+
+**Actions outside the repo**
+- `bj-deploy app local` (no migrations).
+
+**Verification**
+- tsc, lint clean; unit 618 pass. Not checked in a browser.
+
+**State left behind**
+- Committed on local main, not pushed.
+
 ## 2026-10-12 — FR-63: own personal information is view only
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ d0c9eae (unpushed)

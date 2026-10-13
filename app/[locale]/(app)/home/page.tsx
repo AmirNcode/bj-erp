@@ -39,9 +39,15 @@ import { createClient } from '@/lib/supabase/server';
 import type { PendingRow } from './PendingApprovalsCard';
 import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card } from '@/components/ui/card';
+import { getApprovedAbsences } from '@/lib/actions/absences';
+import { isValidIsoDate } from '@/lib/leave/settings-validation';
+import { AbsencesBoard } from '../absences/AbsencesBoard';
 
 type Props = {
   params: Promise<{ locale: string }>;
+  /** FR-56: the day security's absences board shows (default today). */
+  searchParams: Promise<{ date?: string }>;
 };
 
 /** Most pending rows shown inline; the rest are one link away. */
@@ -344,9 +350,39 @@ async function ProfileReminder({ locale, userId }: { locale: string; userId: str
   return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;
 }
 
+// ── FR-56: security sees who is out right on Home ──────────────────────────
+async function SecurityAbsences({
+  locale,
+  userId,
+  rawDate,
+}: {
+  locale: string;
+  userId: string;
+  rawDate?: string;
+}) {
+  const roles = await getCachedRoles(userId);
+  if (!roles.includes('security')) return null;
+  const today = todayInAppTz();
+  const date = rawDate && isValidIsoDate(rawDate) ? rawDate : today;
+  const [t, res] = await Promise.all([getTranslations('absences'), getApprovedAbsences(date)]);
+  return (
+    <Card className="mb-5 gap-3 p-4" data-testid="home-absences">
+      <h2 className="text-lg font-semibold">{t('title')}</h2>
+      {res.ok ? (
+        <AbsencesBoard date={date} today={today} absences={res.absences} locale={locale} basePath="/home" />
+      ) : (
+        <p role="alert" className="text-sm text-destructive">
+          {res.error}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 // ── page shell: paints instantly, all data streams in via Suspense ─────────
-export default async function HomePage({ params }: Props) {
+export default async function HomePage({ params, searchParams }: Props) {
   const { locale } = await params;
+  const { date } = await searchParams;
   setRequestLocale(locale);
 
   // Local JWT check only — no network. The greeting needs the profile row, so
@@ -361,6 +397,9 @@ export default async function HomePage({ params }: Props) {
       </Suspense>
       <Suspense fallback={null}>
         <ClearanceAwaitingCard locale={locale} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SecurityAbsences locale={locale} userId={user.id} rawDate={date} />
       </Suspense>
       <Suspense
         fallback={

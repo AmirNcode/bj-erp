@@ -13,7 +13,7 @@ was deployed; semantic versioning starts at the first tag.
 
 Migrations `20261012120001`–`20261012120004`. Spec
 `docs/specs/2026-10-12-client-feedback-approvals-settings-design.md`.
-- **Security board («غایبین تأییدشده», `/absences`):** security sees everyone who is out on a day
+- **Security board («غایبین تأییدشده») on security's Home screen:** security sees everyone who is out on a day
   with every approval in place — daily and hourly leave, daily and hourly errands — defaulting to
   today, with a date picker. Pending requests never show. Security no longer approves anything:
   security and admin approval steps are switched off and can no longer be added.

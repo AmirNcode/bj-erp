@@ -261,7 +261,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   hr and finance see all. Opened from Manage › Employees (admin, hr) and the Home notice; printable like the paper form. *(2026-10-07; spec
   `2026-10-07-clearance-form-design.md`.)*
 
-- **FR-56** ☑ **Security board, no security approvals.** Security sees `/absences`: everyone with a
+- **FR-56** ☑ **Security board, no security approvals.** Security sees, on Home (not a separate tab),
+  everyone with a
   fully approved leave or errand (daily or hourly) on a chosen day, default today; pending requests
   never show; no reason or errand location. Security and admin can no longer be approval steps
   (existing ones deactivated). *(2026-10-12; spec

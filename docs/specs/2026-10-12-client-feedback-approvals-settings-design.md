@@ -15,7 +15,8 @@ branch (`fr55-configurable-roles`), which absorbs the role notes in §8 when it 
   Errand location and leave reason are **not** shown.
 - Audience: `security` and `admin` (permission `absences.view`). Security reads `leave_requests`
   company-wide through existing RLS already, so the page adds no new read surface.
-- Nav: a top-level tab for security (mobile bar and side panel); admins get it in the Manage group.
+- Placement (amended the same day): the board sits at the top of **security's Home screen**
+  (`/home?date=`), not in a tab. `/absences` remains for admins via the Manage group.
 
 ## 2. Hourly leave: one per day, at most 4 hours (FR-57)
 

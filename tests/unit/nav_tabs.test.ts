@@ -25,10 +25,8 @@ describe('tabsForRoles', () => {
   it('security (no manage)', () => {
     expect(tabsForRoles(['security']).map((t) => t.key)).not.toContain('manage');
   });
-  it('security gets the approved-absences tab (FR-56)', () => {
-    expect(tabsForRoles(['employee', 'security']).find((t) => t.key === 'absences')).toMatchObject({
-      href: '/absences',
-    });
+  it('security gets no absences tab — the board is on their Home (FR-56)', () => {
+    expect(tabsForRoles(['employee', 'security']).map((t) => t.key)).not.toContain('absences');
   });
   it('finance gets the finance tab (FR-62)', () => {
     expect(tabsForRoles(['employee', 'finance']).find((t) => t.key === 'finance')).toMatchObject({

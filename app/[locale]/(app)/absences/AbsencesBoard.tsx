@@ -21,17 +21,19 @@ type Props = {
   today: string;
   absences: Absence[];
   locale: string;
+  /** Page the date lives on: `/absences` (admin) or `/home` (security, FR-56). */
+  basePath?: '/absences' | '/home';
 };
 
 /** The day picker plus the list. Changing the day re-queries on the server. */
-export function AbsencesBoard({ date, today, absences, locale }: Props) {
+export function AbsencesBoard({ date, today, absences, locale, basePath = '/absences' }: Props) {
   const t = useTranslations('absences');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const go = (iso: string) =>
     startTransition(() => {
-      router.replace(iso === today ? `/${locale}/absences` : `/${locale}/absences?date=${iso}`, {
+      router.replace(iso === today ? `/${locale}${basePath}` : `/${locale}${basePath}?date=${iso}`, {
         scroll: false,
       });
     });

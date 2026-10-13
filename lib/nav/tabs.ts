@@ -52,16 +52,14 @@ function canManage(roles: string[]) {
   return roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
 }
 
-// FR-56: security's board of approved absences. FR-62: finance's list of
-// completed approvals. Each role's own top-level tab; admins reach both from
-// the Manage group instead.
-const ABSENCES_TAB: Tab = { key: 'absences', href: '/absences', labelKey: 'absences' };
+// FR-62: finance's list of completed approvals, as finance's own tab; admins
+// reach it (and FR-56's absences board) from the Manage group. Security's
+// absences board sits on their Home screen instead of a tab.
 const FINANCE_TAB: Tab = { key: 'finance', href: '/finance', labelKey: 'finance' };
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
 export function tabsForRoles(roles: string[]): Tab[] {
   const tabs = [...BASE];
-  if (roles.includes('security') && !roles.includes('admin')) tabs.push(ABSENCES_TAB);
   if (roles.includes('finance') && !roles.includes('admin')) tabs.push(FINANCE_TAB);
   if (canManage(roles)) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
   return tabs;

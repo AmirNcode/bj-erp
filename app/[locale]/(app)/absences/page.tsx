@@ -1,5 +1,6 @@
 /**
- * Approved absences (FR-56) — security's board, also offered to admins.
+ * Approved absences (FR-56). Security sees the same board on Home; this page
+ * is the admin's way in (Manage group), and still opens for security.
  *
  * Who is out on one day with every approval in place: daily and hourly leave,
  * daily and hourly errands. Pending requests never show. The day is a URL
