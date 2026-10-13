@@ -78,6 +78,25 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — Released 23d05df to Liara (FR-56–FR-63)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 23d05df
+**Trigger:** Amir: push to deploy; then write the FR-55 handoff.
+
+**Actions outside the repo**
+- Pre-push: `npm run build` ok, `npm run test:deploy` ok. `git push origin main` (e36459b..23d05df)
+  → GitHub Actions "Deploy Liara" run 38340850236: build + deploy success. Migrations
+  `20261012120001`–`20261012120004` and `20261012130001` applied by the pipeline.
+  `https://bjeng.app/api/health` → ok.
+- On Liara the migration deactivated any security/admin approval steps and clamped an hourly cap
+  above 4h to 4h (if present).
+
+**For the next agent**
+- FR-55 handoff (rebase, rename its 2026-10-07 migrations, collisions, owner requirements):
+  `.superpowers/sdd/2026-10-07-configurable-roles/handoff-2026-10-12-main-changes.md` (untracked).
+- Not yet checked on Liara: hr-101 does not exist there (demo seed only); give the client's HR person
+  the `hr` role to use Settings; the client's finance person needs the `finance` role for /finance.
+
 ## 2026-10-12 — Security's absences board moves to Home
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 2ae3ce3 (unpushed)
