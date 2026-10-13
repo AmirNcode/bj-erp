@@ -78,6 +78,22 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — Released 374d30a to Liara (FR-64)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 374d30a
+**Trigger:** Amir: push it to deploy; then add the release note.
+
+**Actions outside the repo**
+- Pre-push `npm run build` and `npm run test:deploy` ok. `git push origin main` (0df0e69..374d30a)
+  → "Deploy Liara" run 38341926589: build + deploy success; migration `20261013120001` applied.
+  `https://bjeng.app/api/health` → ok.
+
+**For the next agent**
+- This note was written late: right after the push the FR-55 agent was mid-rebase in this same
+  checkout, and a first attempt staged this entry into its rebase index; that was reverted
+  (`git restore --staged --worktree docs/AGENT-LOG.md`, only these lines) before it continued.
+  Two agents sharing one checkout collide — check `git status` for a rebase before committing.
+
 ## 2026-10-13 — FR-64: requester sees approval steps on Home
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 0df0e69
