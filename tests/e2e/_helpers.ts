@@ -339,11 +339,9 @@ export async function setManager(page: Page, employeeCode: string, managerCodeSu
 export async function pickManager(page: Page, managerCode: string) {
   const box = page.locator('#manager_id');
   await expect(box).toBeEditable({ timeout: 20_000 });
+  // An exact personnel number is chosen automatically (2026-10-13).
   await box.fill(managerCode);
-  const option = page.locator('[data-testid="manager-search-option"]', { hasText: managerCode });
-  await expect(option.first()).toBeVisible({ timeout: 10_000 });
-  await option.first().click();
-  await expect(box).toHaveValue(new RegExp(managerCode));
+  await expect(box).toHaveValue(new RegExp(managerCode), { timeout: 10_000 });
 }
 
 /** Fill a single react-multi-date-picker input (hourly leave or errand). */

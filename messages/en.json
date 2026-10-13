@@ -165,7 +165,7 @@
     "submit": "Submit hourly request",
     "durationLabel": "Duration",
     "validationTimes": "The end time must be after the start time.",
-    "dailyLimitHint": "Up to {hours} hours per day.",
+    "dailyLimitHint": "Up to {hours} hours per day, and one hourly leave per day.",
     "unavailable": "No leave type is currently available hourly. Ask an administrator."
   },
   "errand": {
@@ -688,7 +688,8 @@
           "adding": "Adding…",
           "cancel": "Cancel",
           "added": "Approval step added.",
-          "errorLabel": "Error"
+          "errorLabel": "Error",
+          "selectOne": "{count} people found — select one"
         }
       },
       "holidayImport": {
@@ -982,7 +983,11 @@
     "oneHourlyPerDay": "You already have an hourly leave on this day. Only one hourly leave is allowed per day.",
     "perDiemNotApplicable": "A per diem can only be entered on the HR step of a work errand.",
     "perDiemInvalid": "Enter the per diem as a whole number of Rials, 0 or more.",
-    "adminOnlySetting": "Only an admin may change the approval order or the hours in a working day."
+    "adminOnlySetting": "Only an admin may change the hours in a working day.",
+    "marriageAlreadyGranted": "Marriage leave has already been granted to this person.",
+    "marriageNeedsSingle": "Marriage leave is only for a first marriage: their marital status must be single.",
+    "annualTypeMissing": "The Annual Leave type was not found.",
+    "specialLeaveAlreadyRevoked": "This grant was already removed."
   },
   "roles": {
     "admin": "Admin",
@@ -1273,7 +1278,8 @@
   "personSearch": {
     "placeholder": "Type a name or personnel no.",
     "noResults": "No match.",
-    "clear": "Clear"
+    "clear": "Clear",
+    "selectOne": "{count} people found — select one"
   },
   "absences": {
     "title": "Approved absences",
@@ -1337,5 +1343,19 @@
     "rejectedBy": "Rejected by {name}",
     "waitingOnPerson": "Waiting for {name}",
     "waiting": "Waiting"
+  },
+  "specialLeave": {
+    "title": "Leave outside the list",
+    "intro": "Extra annual leave HR grants for life events. Each adds 3 days to the annual leave balance.",
+    "marriage": "Marriage (3 days)",
+    "marriageHint": "First marriage only. Ticking adds 3 days and sets marital status to married.",
+    "marriageNotSingle": "Only for a first marriage: personal information must say single.",
+    "bereavement": "Death of a close relative (3 days)",
+    "bereavementHint": "Mother, father, sibling, spouse or child. 3 days for each death.",
+    "add": "Add 3 days",
+    "remove": "Remove",
+    "grantedOn": "Granted {date}",
+    "granted": "3 days added to annual leave.",
+    "revoked": "Removed; 3 days taken back."
   }
 }

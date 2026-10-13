@@ -70,6 +70,8 @@ export default async function ApprovalStepsPage({ params }: Props) {
       personHint: tAdd('personHint'),
       searching: tAdd('searching'),
       noMatches: tAdd('noMatches'),
+      // .raw(): the dialog fills {count}.
+      selectOne: tAdd.raw('selectOne'),
       selected: tAdd('selected'),
       clear: tAdd('clear'),
       order: tAdd('order'),
@@ -94,7 +96,8 @@ export default async function ApprovalStepsPage({ params }: Props) {
       <ApprovalStepsCard
         steps={approvalData.ok ? approvalData.steps : []}
         orderEnforced={approvalData.ok ? approvalData.orderEnforced : false}
-        canEnforceOrder={isAdmin}
+        // FR-66: hr sets whether the order binds too.
+        canEnforceOrder
         labels={approvalLabels}
       />
     </div>

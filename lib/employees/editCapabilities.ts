@@ -29,6 +29,11 @@ export type EditCapabilities = {
    * and since FR-63 nobody but an admin changes their own.
    */
   personalInfo: 'edit' | 'view' | null;
+  /**
+   * «مرخصی خارج از لیست» (FR-65): grant marriage / bereavement days. Mirrors
+   * `special_leave.grant` plus the self / admin-target rule of the RPCs.
+   */
+  specialLeave: boolean;
 };
 
 /**
@@ -60,6 +65,7 @@ export function employeeEditCapabilities({
       leave: true,
       lockedReason: null,
       personalInfo: 'edit',
+      specialLeave: true,
     };
   }
 
@@ -84,5 +90,6 @@ export function employeeEditCapabilities({
     leave: isHr,
     lockedReason,
     personalInfo: !isHr ? null : lockedReason === null ? 'edit' : 'view',
+    specialLeave: hrEditor,
   };
 }

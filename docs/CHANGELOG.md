@@ -9,6 +9,18 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Leave outside the list, HR order switch, quicker person pickers — FR-65–FR-67 (2026-10-13)
+
+Migration `20261013130001`.
+- **«مرخصی خارج از لیست»** at the bottom of Edit Employee (hr, admin): «ازدواج» adds 3 days of annual
+  leave once, for a first marriage (only while personal info says مجرد; it then switches to متأهل);
+  «فوت اقوام نزدیک» adds 3 days for each death, listed with dates. Either can be removed if added by
+  mistake.
+- **HR** can turn "Require the order to be followed" on and off.
+- **Person pickers** (approval steps, direct manager, clearance): a single match or an exact
+  personnel number is selected automatically; several matches ask you to pick one.
+- The hourly leave form now says one hourly leave per day is allowed.
+
 ### Approval steps on the requester's Home — FR-64 (2026-10-13)
 
 Migration `20261013120001`. Each recent request on Home has «مراحل تأیید»: tap to see every approval

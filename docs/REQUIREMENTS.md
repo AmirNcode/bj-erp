@@ -295,6 +295,19 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   waits on (the person, for a manager or named step; the role, e.g. HR, otherwise). Via
   `request_approval_progress(id)`, names and times only. *(2026-10-13.)*
 
+- **FR-65** ☑ **«مرخصی خارج از لیست» — marriage and bereavement leave.** At the bottom of Edit
+  Employee, hr or admin grants 3 extra days of annual leave: «ازدواج» once, for a first marriage, only
+  while personal info says single (the grant sets marital status to married); «فوت اقوام نزدیک» once
+  per death. Each grant posts an allocation on the Annual Leave type; a mistaken grant is removed
+  with a reversing adjustment. Not on oneself (non-admin), hr never on an admin. Table
+  `special_leave_grants`, RPCs `app_grant_special_leave` / `app_revoke_special_leave`, key
+  `special_leave.grant`. *(2026-10-13.)*
+- **FR-66** ☑ **HR switches approval order.** hr may turn "Require the order to be followed" on or
+  off; only hours-per-day stays admin-only. *(2026-10-13.)*
+- **FR-67** ☑ **Person pickers choose a single match.** One search result, or an exact personnel
+  number, is selected automatically; several results show «… نفر پیدا شد؛ یکی را انتخاب کنید».
+  Approval-step dialog and every PersonSearch box. *(2026-10-13.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

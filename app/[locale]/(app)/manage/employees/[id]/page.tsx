@@ -17,6 +17,8 @@ import { EditEmployeeForm } from './EditEmployeeForm';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
 import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getSpecialLeaveGrants } from '@/lib/actions/specialLeave';
+import { SpecialLeaveCard } from './SpecialLeaveCard';
 
 type Props = {
   params: Promise<{ locale: string; id: string }>;
@@ -94,6 +96,8 @@ export default async function EditEmployeePage({ params }: Props) {
 
   // FR-53: hr/admin only; managers never see personal information.
   const personalInfoRes = caps.personalInfo ? await getPersonalInfo(id) : null;
+  // FR-65: hr/admin grant extra leave for marriage / a death in the family.
+  const specialLeaveRes = caps.specialLeave ? await getSpecialLeaveGrants(id) : null;
   const tPi = await getTranslations('personalInfo');
 
   return (
@@ -165,6 +169,13 @@ export default async function EditEmployeePage({ params }: Props) {
             />
           </CardContent>
         </Card>
+      )}
+      {specialLeaveRes?.ok && (
+        <SpecialLeaveCard
+          employeeId={id}
+          grants={specialLeaveRes.grants}
+          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : null}
+        />
       )}
     </main>
   );

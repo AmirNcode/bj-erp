@@ -186,6 +186,14 @@ every preset but admin.
 - `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
   `finance.view`; caller's company; approved rows only; no signatures, no reason.
 
+### `special_leave_grants` (FR-65)
+- **SELECT**: own rows, or `special_leave.grant` (admin, hr) in the caller's company. No client writes.
+- `app_grant_special_leave(employee, kind)` / `app_revoke_special_leave(grant)`: SECURITY DEFINER,
+  `special_leave.grant`, same company, not on oneself unless admin, hr never on an admin. Marriage:
+  one standing grant (partial unique index), only while marital status is `single`.
+- FR-66: `work_settings_enforce_scope` now guards only `hours_per_day`; hr sets
+  `approval_order_enforced` through the `settings.edit` policies.
+
 ### `request_approval_progress(id)` (FR-64)
 SECURITY DEFINER; answers only when the caller may read the request (own · direct manager ·
 security · admin · hr, as `leave_requests_select`), else `request not found`. Returns step order,

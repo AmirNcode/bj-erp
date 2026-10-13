@@ -5,14 +5,18 @@
  * the box once 2 characters are typed (Persian digits accepted), show at most
  * `limit` matches sorted by personnel number (low to high), and are chosen by
  * click or arrow keys + Enter. The box then shows the chosen person; × clears it.
+ * When the search narrows to one person (or an exact personnel number), that
+ * person is chosen automatically after a short pause; with several matches the
+ * list asks the user to select one (2026-10-13).
  *
  * Replaces long native <select>s of the whole roster (clearance form pickers).
  */
 
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { toAsciiDigits } from '@/lib/employees/code';
+import { autoPick } from '@/lib/employees/autoPick';
 import { cn } from '@/lib/utils';
 
 export type PersonSearchOption = { id: string; name: string; personnelNo: string | null };
@@ -82,6 +86,20 @@ export function PersonSearch({
     setQuery('');
     setOpen(false);
   };
+
+  // One match (or an exact personnel number): choose it once typing pauses, so
+  // nobody has to click a single suggestion. The pause stops a half-typed name
+  // that happens to match one person from being chosen mid-word.
+  const auto = selected || disabled ? null : autoPick(results, query);
+  useEffect(() => {
+    if (!auto) return;
+    const timer = setTimeout(() => {
+      onChange(auto.id);
+      setQuery('');
+      setOpen(false);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [auto, onChange]);
   const clear = () => {
     onChange(null);
     setQuery('');
@@ -154,6 +172,11 @@ export function PersonSearch({
           className="absolute inset-x-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-popover py-1 text-sm shadow-lg"
           data-testid={`${testId}-results`}
         >
+          {results.length > 1 && !auto && (
+            <li className="px-3 pb-1 pt-1.5 text-xs font-medium text-muted-foreground" data-testid={`${testId}-prompt`}>
+              {t('selectOne', { count: results.length })}
+            </li>
+          )}
           {results.length === 0 ? (
             <li className="px-3 py-2 text-muted-foreground">{t('noResults')}</li>
           ) : (

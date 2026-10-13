@@ -717,6 +717,48 @@ export type Database = {
           },
         ]
       }
+      special_leave_grants: {
+        Row: {
+          company_id: string
+          employee_id: string
+          granted_at: string
+          granted_by: string | null
+          id: string
+          kind: string
+          leave_type_id: string
+          minutes: number
+          prev_marital_status: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+        }
+        Insert: {
+          company_id: string
+          employee_id: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          kind: string
+          leave_type_id: string
+          minutes: number
+          prev_marital_status?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          employee_id?: string
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          kind?: string
+          leave_type_id?: string
+          minutes?: number
+          prev_marital_status?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+        }
+        Relationships: []
+      }
       leave_types: {
         Row: {
           active: boolean
@@ -1440,6 +1482,11 @@ export type Database = {
         Returns: undefined
       }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
+      app_grant_special_leave: {
+        Args: { p_employee_id: string; p_kind: string }
+        Returns: string
+      }
+      app_revoke_special_leave: { Args: { p_grant_id: string }; Returns: undefined }
       request_approval_progress: {
         Args: { p_id: string }
         Returns: {

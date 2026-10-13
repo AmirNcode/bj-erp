@@ -140,7 +140,13 @@ const RULES: Rule[] = [
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
   // FR-59: hr edits settings, but approval order / hours per day stay admin-only.
-  { re: /only an admin may change approval order or hours per day/, key: 'adminOnlySetting' },
+  { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
+  // FR-65 special leave.
+  { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
+  { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
+  { re: /annual leave type not found/, key: 'annualTypeMissing' },
+  { re: /not allowed to grant special leave/, key: 'notAllowed' },
+  { re: /special leave grant was already revoked/, key: 'specialLeaveAlreadyRevoked' },
   // Errand (FR-30). The form validates both client-side first, so these only
   // surface when the DB is reached directly or the client check is bypassed.
   { re: /errand location is required/, key: 'errandLocationRequired' },

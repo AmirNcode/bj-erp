@@ -16,6 +16,7 @@ describe('employeeEditCapabilities', () => {
       leave: true,
       lockedReason: null,
       personalInfo: 'edit',
+      specialLeave: true,
     });
   });
 
@@ -28,6 +29,7 @@ describe('employeeEditCapabilities', () => {
       leave: true,
       lockedReason: null,
       personalInfo: 'edit',
+      specialLeave: true,
     });
   });
 
@@ -43,6 +45,7 @@ describe('employeeEditCapabilities', () => {
       editableRoles: [],
       lockedReason: 'admin',
       personalInfo: 'view',
+      specialLeave: false,
     });
   });
 
@@ -54,6 +57,8 @@ describe('employeeEditCapabilities', () => {
       lockedReason: 'self',
       // FR-63: own personal information is read-only.
       personalInfo: 'view',
+      // FR-65: nobody but an admin grants themself extra leave.
+      specialLeave: false,
     });
   });
 
@@ -72,6 +77,7 @@ describe('employeeEditCapabilities', () => {
       leave: false,
       lockedReason: null,
       personalInfo: null,
+      specialLeave: false,
     });
   });
 

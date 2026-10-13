@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { nativeSelectClass } from '@/lib/native-select';
+import { autoPick } from '@/lib/employees/autoPick';
 import {
   Dialog,
   DialogContent,
@@ -44,6 +45,8 @@ export type AddStepLabels = {
   personHint: string;
   searching: string;
   noMatches: string;
+  /** Raw: {count}. Shown above several matches. */
+  selectOne: string;
   selected: string;
   clear: string;
   order: string;
@@ -109,8 +112,15 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
       // A slower earlier request must not overwrite a newer one's results.
       if (seq !== searchSeq.current) return;
       setSearching(false);
-      if (result.ok) setCandidates(result.candidates);
-      else setError(result.error);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setCandidates(result.candidates);
+      // One match, or an exact personnel number: select it — HR typed the
+      // number and should not also have to click the name (2026-10-13).
+      const only = autoPick(result.candidates, term);
+      if (only) setPicked(only);
     }, 250);
     return () => clearTimeout(timer);
   }, [query, mode, picked]);
@@ -253,6 +263,11 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
                   {!searching && query.trim().length >= 2 && shown.length === 0 && (
                     <p className="text-xs text-muted-foreground" data-testid="approval-step-no-matches">
                       {labels.noMatches}
+                    </p>
+                  )}
+                  {shown.length > 1 && (
+                    <p className="text-xs font-medium text-primary" data-testid="approval-step-select-one">
+                      {labels.selectOne.replace('{count}', String(shown.length))}
                     </p>
                   )}
                   {shown.length > 0 && (

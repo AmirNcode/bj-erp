@@ -480,11 +480,10 @@ export async function searchApproverCandidates(
 export async function setApprovalOrderEnforced(
   enforced: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  // Admin only, deliberately, even though HR may now edit the STEPS. This writes
-  // `work_settings`, whose policy is admin-only and stays that way — admitting HR
-  // here would just move the refusal from a clear message to a database error.
-  // The card disables the switch for HR to match.
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  // Admin and, since 2026-10-13 (FR-66), hr: HR configures the steps and now
+  // decides whether their order binds too. work_settings' `settings.edit`
+  // policies admit hr; the scope trigger keeps only hours_per_day admin-only.
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
 
   // Upsert on company_id for the same reason updateWorkSettings does: a missing

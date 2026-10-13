@@ -630,13 +630,11 @@ begin
     return new;
   end if;
   if tg_op = 'INSERT' then
-    if new.approval_order_enforced is distinct from false
-       or new.hours_per_day is distinct from 8 then
-      raise exception 'only an admin may change approval order or hours per day' using errcode = '42501';
+    if new.hours_per_day is distinct from 8 then
+      raise exception 'only an admin may change the hours per day' using errcode = '42501';
     end if;
-  elsif new.approval_order_enforced is distinct from old.approval_order_enforced
-        or new.hours_per_day is distinct from old.hours_per_day then
-    raise exception 'only an admin may change approval order or hours per day' using errcode = '42501';
+  elsif new.hours_per_day is distinct from old.hours_per_day then
+    raise exception 'only an admin may change the hours per day' using errcode = '42501';
   end if;
   return new;
 end; $$;
@@ -658,6 +656,7 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     when 'personal_info.view' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'personal_info.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'personal_info.edit_own' then private.is_admin(uid)
+    when 'special_leave.grant' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'separations.manage' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'separations.view'   then private.is_admin(uid) or private.has_role(uid, 'hr')
                                    or private.has_role(uid, 'finance')
@@ -1142,6 +1141,41 @@ begin
     return v_signer;
   end if;
   return null;
+end; $$;
+
+
+--
+-- Name: special_leave_target(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.special_leave_target(p_actor uuid, p_employee uuid) RETURNS uuid
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid;
+  v_target_company uuid;
+begin
+  if p_actor is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not private.is_active(p_actor) or not private.has_permission(p_actor, 'special_leave.grant') then
+    raise exception 'not allowed to grant special leave' using errcode = '42501';
+  end if;
+  select company_id into v_company from public.profiles where id = p_actor;
+  select company_id into v_target_company from public.profiles where id = p_employee;
+  if v_target_company is null or v_target_company <> v_company then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  if not private.is_admin(p_actor) then
+    if p_employee = p_actor then
+      raise exception 'you cannot change your own leave balance' using errcode = '42501';
+    end if;
+    if exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
+      raise exception 'not allowed to grant special leave to an admin' using errcode = '42501';
+    end if;
+  end if;
+  return v_company;
 end; $$;
 
 
@@ -2640,6 +2674,70 @@ end; $$;
 
 
 --
+-- Name: app_grant_special_leave(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid;
+  v_type    uuid;
+  v_minutes int;
+  v_prev    int;
+  v_status  text;
+  v_id      uuid;
+begin
+  v_company := private.special_leave_target(v_uid, p_employee_id);
+  if p_kind not in ('marriage', 'bereavement') then
+    raise exception 'invalid special leave kind' using errcode = '22023';
+  end if;
+
+  select id into v_type from public.leave_types
+   where company_id = v_company and name_en = 'Annual Leave' and active
+   limit 1;
+  if v_type is null then
+    raise exception 'annual leave type not found' using errcode = 'P0002';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || p_employee_id::text, 0));
+
+  if p_kind = 'marriage' then
+    if exists (select 1 from public.special_leave_grants
+                where employee_id = p_employee_id and kind = 'marriage' and revoked_at is null) then
+      raise exception 'marriage leave was already granted' using errcode = '22023';
+    end if;
+    select marital_status into v_status from public.employee_personal_info where employee_id = p_employee_id;
+    if v_status is distinct from 'single' then
+      raise exception 'marriage leave needs marital status single' using errcode = '22023';
+    end if;
+  end if;
+
+  v_minutes := 3 * private.company_minutes_per_day(v_company);
+  v_prev := public.current_leave_balance(p_employee_id, v_type);
+
+  insert into public.special_leave_grants (company_id, employee_id, kind, leave_type_id, minutes, prev_marital_status, granted_by)
+  values (v_company, p_employee_id, p_kind, v_type, v_minutes, v_status, v_uid)
+  returning id into v_id;
+
+  insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
+  values (p_employee_id, v_type, 'allocation', v_minutes, v_prev + v_minutes,
+          case p_kind when 'marriage' then 'marriage leave (3 days)' else 'bereavement leave (3 days)' end);
+
+  if p_kind = 'marriage' then
+    update public.employee_personal_info set marital_status = 'married' where employee_id = p_employee_id;
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'special_leave.grant', 'special_leave_grants', v_id,
+          jsonb_build_object('employee_id', p_employee_id, 'kind', p_kind, 'minutes', v_minutes));
+  return v_id;
+end; $$;
+
+
+--
 -- Name: app_import_personal_info(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2758,6 +2856,50 @@ CREATE FUNCTION public.app_list_separations() RETURNS TABLE(id uuid, employee_id
    order by s.created_at desc
    limit 500;
 $$;
+
+
+--
+-- Name: app_revoke_special_leave(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_revoke_special_leave(p_grant_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid  uuid := auth.uid();
+  v_g    public.special_leave_grants;
+  v_prev int;
+begin
+  select * into v_g from public.special_leave_grants where id = p_grant_id;
+  if v_g.id is null then
+    raise exception 'special leave grant not found' using errcode = 'P0002';
+  end if;
+  perform private.special_leave_target(v_uid, v_g.employee_id);
+
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || v_g.employee_id::text, 0));
+
+  update public.special_leave_grants
+     set revoked_at = now(), revoked_by = v_uid
+   where id = p_grant_id and revoked_at is null;
+  if not found then
+    raise exception 'special leave grant was already revoked' using errcode = '22023';
+  end if;
+
+  v_prev := public.current_leave_balance(v_g.employee_id, v_g.leave_type_id);
+  insert into public.leave_ledger (employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
+  values (v_g.employee_id, v_g.leave_type_id, 'adjustment', -v_g.minutes, v_prev - v_g.minutes,
+          case v_g.kind when 'marriage' then 'marriage leave revoked' else 'bereavement leave revoked' end);
+
+  if v_g.kind = 'marriage' then
+    update public.employee_personal_info set marital_status = v_g.prev_marital_status
+     where employee_id = v_g.employee_id;
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'special_leave.revoke', 'special_leave_grants', p_grant_id,
+          jsonb_build_object('employee_id', v_g.employee_id, 'kind', v_g.kind, 'minutes', v_g.minutes));
+end; $$;
 
 
 --
@@ -5048,6 +5190,34 @@ CREATE TABLE public.separations (
 
 
 --
+-- Name: special_leave_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.special_leave_grants (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    kind text NOT NULL,
+    leave_type_id uuid NOT NULL,
+    minutes integer NOT NULL,
+    prev_marital_status text,
+    granted_by uuid,
+    granted_at timestamp with time zone DEFAULT now() NOT NULL,
+    revoked_by uuid,
+    revoked_at timestamp with time zone,
+    CONSTRAINT special_leave_grants_kind_check CHECK ((kind = ANY (ARRAY['marriage'::text, 'bereavement'::text]))),
+    CONSTRAINT special_leave_grants_minutes_check CHECK ((minutes > 0))
+);
+
+
+--
+-- Name: TABLE special_leave_grants; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.special_leave_grants IS 'FR-65: extra annual-leave days for a first marriage (once) or a close relative''s death (each). Written only by app_grant_special_leave / app_revoke_special_leave.';
+
+
+--
 -- Name: team_leave_calendar; Type: VIEW; Schema: public; Owner: -
 --
 
@@ -5318,6 +5488,14 @@ ALTER TABLE ONLY public.separation_units
 
 ALTER TABLE ONLY public.separations
     ADD CONSTRAINT separations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: special_leave_grants special_leave_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_pkey PRIMARY KEY (id);
 
 
 --
@@ -5665,6 +5843,20 @@ CREATE INDEX separations_due_idx ON public.separations USING btree (last_working
 --
 
 CREATE UNIQUE INDEX separations_one_live ON public.separations USING btree (employee_id) WHERE ((status <> 'cancelled'::text) AND (deactivated_at IS NULL));
+
+
+--
+-- Name: special_leave_grants_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX special_leave_grants_employee ON public.special_leave_grants USING btree (employee_id);
+
+
+--
+-- Name: special_leave_grants_one_marriage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX special_leave_grants_one_marriage ON public.special_leave_grants USING btree (employee_id) WHERE ((kind = 'marriage'::text) AND (revoked_at IS NULL));
 
 
 --
@@ -6159,6 +6351,46 @@ ALTER TABLE ONLY public.separations
 
 
 --
+-- Name: special_leave_grants special_leave_grants_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: special_leave_grants special_leave_grants_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: special_leave_grants special_leave_grants_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: special_leave_grants special_leave_grants_leave_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_leave_type_id_fkey FOREIGN KEY (leave_type_id) REFERENCES public.leave_types(id);
+
+
+--
+-- Name: special_leave_grants special_leave_grants_revoked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.special_leave_grants
+    ADD CONSTRAINT special_leave_grants_revoked_by_fkey FOREIGN KEY (revoked_by) REFERENCES public.profiles(id);
+
+
+--
 -- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6563,6 +6795,21 @@ CREATE POLICY separations_select ON public.separations FOR SELECT TO authenticat
 
 
 --
+-- Name: special_leave_grants; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.special_leave_grants ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: special_leave_grants special_leave_grants_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY special_leave_grants_select ON public.special_leave_grants FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'special_leave.grant'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
+
+
+--
 -- Name: user_roles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -6866,6 +7113,13 @@ REVOKE ALL ON FUNCTION private.separation_row_signer(p_company uuid, p_employee 
 
 
 --
+-- Name: FUNCTION special_leave_target(p_actor uuid, p_employee uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.special_leave_target(p_actor uuid, p_employee uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION step_applies(p_scope text, p_emp uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -7030,6 +7284,17 @@ GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION app_grant_special_leave(p_employee_id uuid, p_kind text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO postgres;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO anon;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text) TO service_role;
+
+
+--
 -- Name: FUNCTION app_import_personal_info(p_rows jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7047,6 +7312,17 @@ REVOKE ALL ON FUNCTION public.app_list_separations() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_list_separations() TO postgres;
 GRANT ALL ON FUNCTION public.app_list_separations() TO authenticated;
 GRANT ALL ON FUNCTION public.app_list_separations() TO service_role;
+
+
+--
+-- Name: FUNCTION app_revoke_special_leave(p_grant_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO service_role;
 
 
 --
@@ -7553,6 +7829,16 @@ GRANT SELECT ON TABLE public.separation_units TO authenticated;
 GRANT ALL ON TABLE public.separations TO postgres;
 GRANT ALL ON TABLE public.separations TO service_role;
 GRANT SELECT ON TABLE public.separations TO authenticated;
+
+
+--
+-- Name: TABLE special_leave_grants; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.special_leave_grants TO postgres;
+GRANT ALL ON TABLE public.special_leave_grants TO anon;
+GRANT ALL ON TABLE public.special_leave_grants TO authenticated;
+GRANT ALL ON TABLE public.special_leave_grants TO service_role;
 
 
 --

@@ -229,8 +229,9 @@ select pg_temp.expect('hr changes working hours',
   pg_temp.try_as('hr', format('update public.work_settings set work_start = %L where company_id = %s', '07:30', pg_temp.id('company'))), 'ok:1');
 select pg_temp.expect('hr changes weekly days off',
   pg_temp.try_as('hr', format('update public.work_settings set weekend_days = %L where company_id = %s', '{4,5}', pg_temp.id('company'))), 'ok:1');
-select pg_temp.expect('hr may not change approval order',
-  pg_temp.try_as('hr', format('update public.work_settings set approval_order_enforced = true where company_id = %s', pg_temp.id('company'))), '42501');
+select pg_temp.expect('hr changes approval order (FR-66)',
+  pg_temp.try_as('hr', format('update public.work_settings set approval_order_enforced = true where company_id = %s', pg_temp.id('company'))), 'ok:1');
+update public.work_settings set approval_order_enforced = false where company_id = (select id from fx where k = 'company');
 select pg_temp.expect('hr may not change hours per day',
   pg_temp.try_as('hr', format('update public.work_settings set hours_per_day = 9 where company_id = %s', pg_temp.id('company'))), '42501');
 select pg_temp.expect('admin still changes approval order',
@@ -302,5 +303,51 @@ select pg_temp.expect('a colleague may not read someone else''s progress',
   pg_temp.val_as('named', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 'ERR:P0002');
 select pg_temp.expect('the manager may read their report''s progress',
   left(pg_temp.val_as('mgr', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 4) <> 'ERR:', 'true');
+
+
+-- ── FR-65: «مرخصی خارج از لیست» — marriage (first, once) and bereavement (each) ──
+insert into fx values ('annual', (select id from public.leave_types
+  where company_id = (select id from fx where k = 'company') and name_en = 'Annual Leave' and active limit 1));
+update public.employee_personal_info set marital_status = 'single' where employee_id = (select id from fx where k = 'emp');
+update public.employee_personal_info set marital_status = 'married' where employee_id = (select id from fx where k = 'named');
+create temp table bal (k text primary key, v int);
+insert into bal values ('before', public.current_leave_balance((select id from fx where k = 'emp'), (select id from fx where k = 'annual')));
+
+select pg_temp.expect('employee may not grant special leave',
+  pg_temp.try_as('emp', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), '42501');
+select pg_temp.expect('hr may not grant to themself',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('hr'), 'bereavement')), '42501');
+select pg_temp.expect('hr may not grant to an admin',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('adm'), 'bereavement')), '42501');
+select pg_temp.expect('marriage refused when already married',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('named'), 'marriage')), '22023');
+select pg_temp.expect('hr grants marriage leave to a single employee',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), 'ok:1');
+select pg_temp.expect('marriage adds 3 days to annual leave',
+  (public.current_leave_balance((select id from fx where k = 'emp'), (select id from fx where k = 'annual'))
+    - (select v from bal where k = 'before'))::text, (3 * 480)::text);
+select pg_temp.expect('marriage switches marital status to married',
+  (select marital_status from public.employee_personal_info where employee_id = (select id from fx where k = 'emp')), 'married');
+select pg_temp.expect('a second marriage grant is refused',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), '22023');
+select pg_temp.expect('bereavement may be granted for each death',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'bereavement'))
+  || pg_temp.try_as('adm', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'bereavement')), 'ok:1ok:1');
+select pg_temp.expect('employee sees their own grants',
+  pg_temp.val_as('emp', format('select count(*) from public.special_leave_grants where employee_id = %s', pg_temp.id('emp'))), '3');
+select pg_temp.expect('a colleague sees none of them',
+  pg_temp.val_as('named', format('select count(*) from public.special_leave_grants where employee_id = %s', pg_temp.id('emp'))), '0');
+select pg_temp.expect('hr revokes the marriage grant',
+  pg_temp.try_as('hr', format('select public.app_revoke_special_leave(%L)',
+    (select id from public.special_leave_grants where employee_id = (select id from fx where k = 'emp') and kind = 'marriage'))), 'ok:1');
+select pg_temp.expect('revoking restores marital status and the balance',
+  (select marital_status from public.employee_personal_info where employee_id = (select id from fx where k = 'emp'))
+  || '/' || (public.current_leave_balance((select id from fx where k = 'emp'), (select id from fx where k = 'annual'))
+    - (select v from bal where k = 'before'))::text, 'single/' || (6 * 480)::text);
+select pg_temp.expect('a revoked grant cannot be revoked again',
+  pg_temp.try_as('hr', format('select public.app_revoke_special_leave(%L)',
+    (select id from public.special_leave_grants where employee_id = (select id from fx where k = 'emp') and kind = 'marriage'))), '22023');
+select pg_temp.expect('after a mistaken grant was revoked, marriage can be granted',
+  pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L)', pg_temp.id('emp'), 'marriage')), 'ok:1');
 
 rollback;

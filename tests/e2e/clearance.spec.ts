@@ -31,13 +31,13 @@ function jalaliDay(offset: number): string {
   return jalaliRangeFromGregorian(day, day).split(' — ')[0];
 }
 
-/** Type into a person search box and click the suggestion carrying `code`. */
+/**
+ * Type a personnel number into a person search box. An exact number is chosen
+ * automatically (2026-10-13), so wait for the box to show that person.
+ */
 async function pickPerson(page: Page, testId: string, code: string) {
   await page.fill(`[data-testid="${testId}"]`, code);
-  const option = page.locator(`[data-testid="${testId}-option"]`, { hasText: code });
-  await expect(option).toHaveCount(1);
-  await option.click();
-  await expect(page.locator(`[data-testid="${testId}"]`)).toHaveValue(new RegExp(code));
+  await expect(page.locator(`[data-testid="${testId}"]`)).toHaveValue(new RegExp(code), { timeout: 10_000 });
 }
 
 async function fileForm(page: Page, leaverCode: string, lastDay: string, signerCode: string | null) {

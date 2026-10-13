@@ -95,6 +95,17 @@ New permission keys `absences.view`, `settings.edit`, `finance.view` go through
   file containing hr's own row fails). Migration `20261012130001_personal_info_read_only_self.sql`.
 - The Home "complete your profile" nudge asks only people who can edit their own info.
 
+## 10. Follow-ups 2026-10-13 (FR-65–FR-67)
+
+- **FR-65 «مرخصی خارج از لیست»** (Amir's answers): the 3 days go onto the Annual Leave balance
+  (allocation ledger row); marriage only while marital status is single, once, and the grant sets it
+  to married; bereavement once per death; HR may remove a grant made by mistake (reversing
+  adjustment; a removed marriage grant restores the previous marital status). Annual Leave is found
+  by `name_en = 'Annual Leave'`.
+- **FR-66** hr may set approval-order enforcement.
+- **FR-67** single-match auto-select in every person picker (600 ms pause in PersonSearch).
+- The 4h / one-per-day hourly rule (FR-57) stays on hourly leave only, not hourly errands (confirmed).
+
 ## Testing
 
 - SQL scenarios `tests/sql/client-feedback-2026-10-12.sql` (begin … rollback): one hourly per day,

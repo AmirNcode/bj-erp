@@ -43,9 +43,7 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   await page.locator('[data-testid="approval-step-kind"]').selectOption('person');
   await page.fill('[data-testid="approval-step-person-search"]', 'Chain Signer');
 
-  const results = page.locator('[data-testid="approval-step-person-results"]');
-  await expect(results).toBeVisible({ timeout: 20_000 });
-  await results.locator('button').first().click();
+  // One match: selected automatically, no click needed (2026-10-13).
   await expect(page.locator('[data-testid="approval-step-person-selected"]')).toContainText(
     'Chain Signer'
   );
@@ -75,9 +73,8 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   // FR-59), not on this page.
   await expect(page.locator('[data-testid="work-settings"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="holiday-editor"]')).toHaveCount(0);
-  // The order switch stays admin-only (a trigger guards that column even though
-  // hr may now write work_settings), so HR sees it disabled.
-  await expect(page.locator('[data-testid="approval-order-enforced"]')).toBeDisabled();
+  // FR-66 (2026-10-13): HR may switch whether the order binds.
+  await expect(page.locator('[data-testid="approval-order-enforced"]')).toBeEnabled();
   // ...but HR can add a step, which is the point of FR-42.
   await expect(page.locator('[data-testid="approval-step-add-open"]')).toBeEnabled();
 

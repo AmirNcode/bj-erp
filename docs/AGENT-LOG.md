@@ -78,6 +78,42 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — FR-65–67: leave outside the list, HR order switch, picker auto-select
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 3b7ee29
+**Trigger:** Amir: marriage / bereavement extra leave on Edit Employee; auto-select a single person
+in the approval-step search; HR may toggle approval order; hourly 4h/one-per-day on PTO.
+
+**Decisions (Amir):** extra days go onto Annual Leave; marriage only while single, sets married;
+bereavement per death; HR may undo a mistaken grant; hourly rule stays PTO-only (it already was —
+errands exempt; added a "one per day" hint); auto-select in every person picker.
+
+**What changed**
+- Migration `20261013130001_special_leave_and_order_toggle.sql`: `special_leave_grants` + RLS,
+  `app_grant_special_leave` / `app_revoke_special_leave`, guard `private.special_leave_target`,
+  has_permission key `special_leave.grant`; work_settings scope trigger guards only hours_per_day.
+- `SpecialLeaveCard.tsx` on Edit Employee (`caps.specialLeave`), `lib/actions/specialLeave.ts`,
+  `lib/employees/autoPick.ts` (PersonSearch + AddApprovalStepDialog), `setApprovalOrderEnforced`
+  admin|hr, messages (`specialLeave.*`, `selectOne`, dbErrors), types.
+- Tests: SQL client-feedback suite 67 (FR-65/66 added); unit auto-pick + edit-capabilities (621);
+  e2e helpers pickManager / clearance pickPerson / approval-step-person adapted to auto-select.
+- Docs: REQUIREMENTS FR-65–67, PERMISSIONS, CHANGELOG, spec §10; FR-55 handoff addendum (untracked).
+
+**Actions outside the repo**
+- `bj-deploy update local` (applied 20261013130001), rest restarted. Liara untouched.
+
+**Verification**
+- SQL suites fr51 40 / fr52-53 58 / fr54 82 / client-feedback 67 all PASS after apply; tsc, lint
+  clean; unit 621. e2e not run; not checked in a browser.
+
+**State left behind**
+- Committed on local main, not pushed.
+
+**For the next agent**
+- Demo users have no marital status, so «ازدواج» stays disabled until HR sets مجرد in personal info.
+- Annual Leave is looked up by `name_en = 'Annual Leave'`; a renamed type breaks the grant
+  ('annual leave type not found').
+
 ## 2026-10-13 — Released 374d30a to Liara (FR-64)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 374d30a
