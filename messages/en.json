@@ -679,7 +679,7 @@
         "remove": "Remove",
         "removeConfirm": "Signatures already collected are kept; only the requirement is removed.",
         "removed": "Approval step removed.",
-        "orderAdminOnly": "Changing whether the order is binding needs the “Work week” permission.",
+        "orderAdminOnly": "Only someone who may edit the approval steps can change whether the order is binding.",
         "departmentHint": "The requester's department manager (Settings → Departments) also signs, unless they are the direct manager or the requester. Once active, pending requests need this signature too.",
         "addStep": {
           "button": "Add approval step",
@@ -1013,6 +1013,7 @@
     "perDiemNotApplicable": "A per diem can only be entered on the HR step of a work errand.",
     "perDiemInvalid": "Enter the per diem as a whole number of Rials, 0 or more.",
     "adminOnlySetting": "Only an admin may change the hours in a working day.",
+    "approvalOrderNotAllowed": "Only someone who may edit the approval steps can change whether their order is binding.",
     "marriageAlreadyGranted": "Marriage leave has already been granted to this person.",
     "marriageNeedsSingle": "Marriage leave is only for a first marriage: their marital status must be single.",
     "annualTypeMissing": "The Annual Leave type was not found.",
@@ -1392,5 +1393,28 @@
     "notePlaceholder": "Who passed away and when, e.g. Father — 1405/07/18",
     "noteRequired": "Write a note: why these 3 days are granted.",
     "cancel": "Cancel"
+  },
+  "permissions": {
+    "sections": {
+      "finance": "Finance"
+    },
+    "items": {
+      "personal_info_own": {
+        "label": "Own personal information",
+        "description": "May edit their own personal information. Without it, people only view theirs on Profile."
+      },
+      "special_leave": {
+        "label": "Leave outside the list",
+        "description": "Grant marriage or bereavement leave days."
+      },
+      "absences": {
+        "label": "Approved absences",
+        "description": "See who is away today or on a chosen day."
+      },
+      "finance": {
+        "label": "Finance",
+        "description": "See every fully approved request with its per diem, and export it."
+      }
+    }
   }
 }

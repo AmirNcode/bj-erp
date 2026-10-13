@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  ALL_KEYS, DEPENDENCIES, SHAPES, allows, applyLevel, applySectionBulk, fullPerms, isWithin,
-  sectionSummary,
+  ALL_KEYS, DEPENDENCIES, SECTIONS, SHAPES, allows, applyLevel, applySectionBulk, fullPerms, isWithin,
+  parsePermsClaim, sectionSummary,
 } from '@/lib/permissions/catalog';
 
 /** Body between $$ ... $$ of a function in the current schema dump, whitespace removed. */
@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(16);
+    expect(ALL_KEYS).toHaveLength(20);
   });
   it('dependency rows match permission_deps() both ways', () => {
     const body = fnBody(sql, 'permission_deps');
@@ -36,6 +36,53 @@ describe('shapes', () => {
     expect(allows('passwords', 'edit')).toBe(true);
     expect(allows('calendar', 'edit')).toBe(false);
     expect(SHAPES.people).toBe('RE');
+  });
+  it('main-era items: absences and finance read only, the two switches action only', () => {
+    expect(SHAPES.absences).toBe('R');
+    expect(SHAPES.finance).toBe('R');
+    expect(SHAPES.personal_info_own).toBe('E');
+    expect(SHAPES.special_leave).toBe('E');
+    expect(allows('finance', 'edit')).toBe(false);
+    expect(allows('special_leave', 'read')).toBe(false);
+  });
+});
+
+describe('section layout', () => {
+  const items = (key: string) => SECTIONS.find((s) => s.key === key)!.items;
+  it('finance has its own section, right after leave', () => {
+    expect(SECTIONS.map((s) => s.key)).toEqual(['employees', 'departments', 'leave', 'finance', 'approvalChain', 'settings']);
+    expect(items('finance')).toEqual(['finance']);
+  });
+  it('own personal information sits right after personal information', () => {
+    const e = items('employees');
+    expect(e[e.indexOf('personal_info') + 1]).toBe('personal_info_own');
+  });
+  it('leave: special leave after accrual, absences after calendar', () => {
+    expect(items('leave')).toEqual([
+      'leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports',
+    ]);
+  });
+  it('the claim parser keeps the new keys', () => {
+    expect(parsePermsClaim({ absences: 'read', finance: 'read', personal_info_own: 'edit', special_leave: 'edit' })).toEqual({
+      absences: 'read', finance: 'read', personal_info_own: 'edit', special_leave: 'edit',
+    });
+    expect(parsePermsClaim({ finance: 'edit', special_leave: 'read' })).toEqual({});
+  });
+});
+
+describe('new dependencies (D6)', () => {
+  it('absences raises people and the request archive; finance and own personal info stand alone', () => {
+    expect(applyLevel({}, 'absences', 'read').raised.sort()).toEqual(['leave_requests', 'people']);
+    expect(applyLevel({}, 'finance', 'read').raised).toEqual([]);
+    expect(applyLevel({}, 'personal_info_own', 'edit').raised).toEqual([]);
+  });
+  it('special leave raises people and leave balances', () => {
+    expect(applyLevel({}, 'special_leave', 'edit').raised.sort()).toEqual(['leave_balances', 'people']);
+  });
+  it('removing the request archive removes absences', () => {
+    const r = applyLevel({ people: 'read', leave_requests: 'read', absences: 'read' }, 'leave_requests', null);
+    expect(r.perms).toEqual({ people: 'read' });
+    expect(r.lowered).toEqual(['absences']);
   });
 });
 
@@ -130,8 +177,10 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(16);
+    expect(Object.keys(f)).toHaveLength(20);
     expect(f.calendar).toBe('read');
+    expect(f.finance).toBe('read');
+    expect(f.special_leave).toBe('edit');
     expect(f.people).toBe('edit');
   });
 });

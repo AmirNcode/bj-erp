@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { PageHeader } from '../_components/PageHeader';
 import { PageRefreshButton } from '../_components/PageRefreshButton';
@@ -33,11 +33,11 @@ export default async function ProfilePage({ params }: Props) {
   if (!user) return null;
 
   const supabase = await createClient();
-  const [profile, savedRes, { data: personalInfo }, roles] = await Promise.all([
+  const [profile, savedRes, { data: personalInfo }, perms] = await Promise.all([
     getCachedProfile(user.id),
     getMySavedSignature(),
     supabase.from('employee_personal_info').select('complete').eq('employee_id', user.id).maybeSingle(),
-    getCachedRoles(user.id),
+    getCachedPermissions(user.id),
   ]);
   const tSig = await getTranslations('profile.signature');
   const tPi = await getTranslations('personalInfo');
@@ -123,7 +123,7 @@ export default async function ProfilePage({ params }: Props) {
         <span>
           <span className="block text-sm font-semibold">{tPi('title')}</span>
           <span className="block text-xs text-muted-foreground">
-            {!canEditOwnPersonalInfo(roles)
+            {!canEditOwnPersonalInfo(perms)
               ? tPi('viewHint')
               : personalInfo?.complete
                 ? tPi('completeHint')

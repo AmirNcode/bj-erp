@@ -1,11 +1,13 @@
 /**
  * Settings (FR-24): weekly days off with working hours, and official holidays.
- * Company configuration — admin and, since FR-59 (2026-10-12), hr; or a caller
- * with work_settings / holidays permission (FR-55). Everyone else is sent home.
- * Read-only without the edit level (admin and hr always edit, per FR-59, until
- * FR-55 R3 moves that to `settings.edit`). Writes go through
- * lib/actions/settings under the `settings.edit` RLS policies on work_settings /
- * holidays. Departments, approval steps and accrual live under Manage.
+ * Company configuration — the admin, or a caller with work_settings / holidays
+ * permission (FR-55; main's FR-59 hr access is the HR preset holding both at
+ * edit). Everyone else is sent home. Each card is read-only without its item's
+ * edit level. Writes go through lib/actions/settings under the `_editor` RLS
+ * policies on work_settings / holidays. The form never offers hours per day
+ * (admin-only, main's trigger) or the approval-order switch (approval_steps
+ * edit, on Manage › Approval steps). Departments, approval steps and accrual
+ * live under Manage.
  */
 export const dynamic = 'force-dynamic';
 
@@ -28,10 +30,8 @@ export default async function SettingsPage({ params }: Props) {
   if (!user) redirect(`/${locale}/login`);
   const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
   if (!settingsItemForRoles(roles, perms)) redirect(`/${locale}/home`);
-  // FR-59: admin and hr edit company settings (main's literal check, kept until R3).
-  const settingsEditor = roles.includes('admin') || roles.includes('hr');
-  const canEditWork = settingsEditor || can(perms, 'work_settings');
-  const canEditHolidays = settingsEditor || can(perms, 'holidays');
+  const canEditWork = can(perms, 'work_settings');
+  const canEditHolidays = can(perms, 'holidays');
 
   const [tNav, t, tImport] = await Promise.all([
     getTranslations('nav'),

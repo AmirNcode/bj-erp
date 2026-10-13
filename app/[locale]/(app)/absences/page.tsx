@@ -1,6 +1,7 @@
 /**
- * Approved absences (FR-56). Security sees the same board on Home; this page
- * is the admin's way in (Manage group), and still opens for security.
+ * Approved absences (FR-56), for absences read (FR-55; the admin implicitly).
+ * Other holders (the security and hr presets) see the same board on Home; this
+ * page is the admin's way in (Manage group), and still opens for them.
  *
  * Who is out on one day with every approval in place: daily and hourly leave,
  * daily and hourly errands. Pending requests never show. The day is a URL
@@ -11,7 +12,8 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { getApprovedAbsences } from '@/lib/actions/absences';
 import { todayInAppTz } from '@/lib/appDate';
 import { isValidIsoDate } from '@/lib/leave/settings-validation';
@@ -29,8 +31,8 @@ export default async function AbsencesPage({ params, searchParams }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('security') && !roles.includes('admin')) redirect(`/${locale}/home`);
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'absences', 'read')) redirect(`/${locale}/home`);
 
   const { date: raw } = await searchParams;
   const today = todayInAppTz();

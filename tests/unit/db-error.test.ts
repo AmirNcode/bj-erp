@@ -54,6 +54,13 @@ describe('dbErr FR-55 role messages', () => {
     expect(await msg('not allowed on this employee')).toBe('accessAboveYours');
   });
 
+  it('maps the FR-55 special-leave and approval-order refusals (R5)', async () => {
+    expect(await msg('not allowed to grant special leave to this employee')).toBe('accessAboveYours');
+    expect(await msg('not allowed to grant special leave')).toBe('notAllowed');
+    expect(await msg('not allowed to change the approval order setting')).toBe('approvalOrderNotAllowed');
+    expect(await msg('only an admin may change the hours per day')).toBe('adminOnlySetting');
+  });
+
   it('gives the clearance subset refusal the generic access wording', async () => {
     expect(await msg('not allowed to file a clearance form for this employee')).toBe('accessAboveYours');
   });

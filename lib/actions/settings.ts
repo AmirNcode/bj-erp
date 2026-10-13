@@ -5,20 +5,14 @@ import { validateWeekendDays } from '@/lib/leave/weekend';
 import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
-import { can } from '@/lib/permissions/catalog';
 
 /**
- * Work settings and holidays writes. FR-59 (main): admin and hr edit company
- * settings; FR-55: or a role holding the matching permission at edit. The
- * literal admin|hr check stays until FR-55 R3 moves it to `settings.edit`.
+ * Work settings and holidays writes: the matching FR-55 item at edit (the admin
+ * implicitly). Main's FR-59 "admin and hr" is the HR preset holding both. The
+ * RLS `_editor` policies on work_settings / holidays are the boundary.
  */
-async function requireSettingsEditor(perm: 'work_settings' | 'holidays') {
-  const c = await requireCaller({ company: true });
-  if (!c.ok) return c;
-  if (!c.roles.includes('admin') && !c.roles.includes('hr') && !can(c.perms, perm)) {
-    return dbErr('not allowed');
-  }
-  return c;
+function requireSettingsEditor(perm: 'work_settings' | 'holidays') {
+  return requireCaller({ perm: [perm, 'edit'], company: true });
 }
 
 export type Holiday = {
@@ -118,6 +112,9 @@ export async function updateWorkSettings(
 
   // Upsert on the company_id unique key so a missing row is created instead of
   // a silent 0-row update (the old code reported success without saving).
+  // Never add approval_order_enforced or hours_per_day here: the scope trigger
+  // checks the upsert's proposed row, so even an unchanged value would refuse a
+  // work_settings-only editor (approval_steps edit / admin-only respectively).
   const { data, error } = await c.supabase
     .from('work_settings')
     .upsert(
@@ -179,12 +176,12 @@ export async function upsertHoliday(input: {
 }
 
 /**
- * Bulk holiday import (FR-40) — admin only.
+ * Bulk holiday import (FR-40) — holidays edit.
  *
  * One PostgREST `upsert` on the `(company_id, holiday_date)` unique index, so the
  * whole validated set lands as a single statement and is therefore atomic without
- * a SECURITY DEFINER wrapper. Writes through the existing `holidays_insert_admin`
- * / `holidays_update_admin` policies — no new policy and no new definer surface,
+ * a SECURITY DEFINER wrapper. Writes through the existing `holidays_insert_editor`
+ * / `holidays_update_editor` policies — no new policy and no new definer surface,
  * exactly like the FR-24 editor beside it.
  *
  * Rows are expected to be already validated by `validateHolidayRows`. This
@@ -263,14 +260,14 @@ export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: fa
 }
 
 // ---------------------------------------------------------------------------
-// Approval chain configuration (FR-36, extended by FR-42) — admin OR hr.
+// Approval chain configuration (FR-36, extended by FR-42) — approval_steps edit.
 //
-// Writes go through the `approval_steps` RLS policies directly, like
+// Step writes go through the `approval_steps` RLS policies directly, like
 // work_settings and holidays: this is company configuration, not transactional
-// leave data, so it needs no SECURITY DEFINER wrapper. The role checks below are
-// fast localized refusals; the policies are the boundary. Since FR-59
-// (2026-10-12) HR also writes work settings and holidays (the
-// `settings.edit` policies); the approval-order switch stays admin-only.
+// leave data, so it needs no SECURITY DEFINER wrapper. The permission checks
+// below are fast localized refusals; the policies are the boundary. The
+// approval-order switch (FR-66) follows approval_steps edit too, through the
+// `app_set_approval_order_enforced` RPC; hours_per_day stays admin-only.
 // ---------------------------------------------------------------------------
 
 export type ApprovalStepRow = {
@@ -369,7 +366,7 @@ export async function updateApprovalStep(input: {
 }
 
 /**
- * Add an approval step (FR-42) — admin or hr.
+ * Add an approval step (FR-42) — approval_steps edit.
  *
  * Either a ROLE step (anyone holding that role may sign) or a PERSON step
  * (`approverId` set — only that person may sign, with no admin override). The
@@ -421,7 +418,7 @@ export async function createApprovalStep(input: {
 }
 
 /**
- * Remove an approval step — admin or hr.
+ * Remove an approval step — approval_steps edit.
  *
  * Recorded evidence is untouched: `leave_request_approvals` has no foreign key to
  * this table precisely so a signed decision survives its step being deleted, and
@@ -491,27 +488,22 @@ export async function searchApproverCandidates(
  *
  * Ships false — "any order, whoever is free" — and this switch is the whole
  * mechanism behind the owner's requirement that the order be changeable later.
+ *
+ * FR-66: whoever edits the approval steps (approval_steps edit; the admin and
+ * the hr preset) decides whether their order binds. It goes through the
+ * `app_set_approval_order_enforced` RPC, not a work_settings upsert, so a caller
+ * without work_settings edit can flip this one column (the RPC writes only it,
+ * creating the company's row with defaults when missing). The scope trigger
+ * refuses the column to anyone else.
  */
 export async function setApprovalOrderEnforced(
   enforced: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  // Admin and, since 2026-10-13 (FR-66), hr: HR configures the steps and now
-  // decides whether their order binds too. work_settings' `settings.edit`
-  // policies admit hr; the scope trigger keeps only hours_per_day admin-only.
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
-  // Upsert on company_id for the same reason updateWorkSettings does: a missing
-  // row must be created rather than silently updating zero rows.
-  const { data, error } = await c.supabase
-    .from('work_settings')
-    .upsert(
-      { company_id: c.companyId, approval_order_enforced: enforced, updated_by: c.user.id },
-      { onConflict: 'company_id' }
-    )
-    .select('id');
+  const { error } = await c.supabase.rpc('app_set_approval_order_enforced', { p_enforced: enforced });
   if (error) return dbErr(error.message);
-  if (!data || data.length !== 1) return dbErr('work settings were not saved');
   invalidateAppCache();
   return { ok: true };
 }

@@ -1,14 +1,14 @@
 /**
  * Manage › Approval steps (FR-36, FR-42): who must sign, in what order, and
  * whether that order binds. The chain is shown to callers with approval_steps
- * read and edited with approval_steps edit (FR-55); admin and hr may make the
- * order binding (FR-66). Everyone else is sent home.
+ * read and edited with approval_steps edit (FR-55); approval_steps edit also
+ * makes the order binding (FR-66). Everyone else is sent home.
  */
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedPermissions, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { getApprovalSteps } from '@/lib/actions/settings';
 import { PageHeader } from '../../_components/PageHeader';
@@ -22,7 +22,7 @@ export default async function ApprovalStepsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const [perms, roles] = await Promise.all([getCachedPermissions(user.id), getCachedRoles(user.id)]);
+  const perms = await getCachedPermissions(user.id);
   if (!can(perms, 'approval_steps', 'read')) redirect(`/${locale}/home`);
 
   const [tNav, tApproval, tAdd, tSteps] = await Promise.all([
@@ -97,9 +97,9 @@ export default async function ApprovalStepsPage({ params }: Props) {
       <ApprovalStepsCard
         steps={approvalData.ok ? approvalData.steps : []}
         orderEnforced={approvalData.ok ? approvalData.orderEnforced : false}
-        // FR-66: admin and hr set whether the order binds (main's literal
-        // check, same as setApprovalOrderEnforced; R3 moves it to a permission).
-        canEnforceOrder={roles.includes('admin') || roles.includes('hr')}
+        // FR-66: whoever edits the steps sets whether their order binds, the
+        // same gate as setApprovalOrderEnforced and its RPC.
+        canEnforceOrder={can(perms, 'approval_steps')}
         canEdit={can(perms, 'approval_steps')}
         labels={approvalLabels}
       />

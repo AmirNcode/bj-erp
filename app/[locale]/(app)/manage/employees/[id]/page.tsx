@@ -158,7 +158,7 @@ export default async function EditEmployeePage({ params }: Props) {
 
   // FR-53: personal_info read; managers never see personal information.
   const personalInfoRes = caps.personalInfo ? await getPersonalInfo(id) : null;
-  // FR-65: hr/admin grant extra leave for marriage / a death in the family.
+  // FR-65: special_leave edit holders grant extra leave for marriage / a death in the family.
   const specialLeaveRes = caps.specialLeave ? await getSpecialLeaveGrants(id) : null;
   const tPi = await getTranslations('personalInfo');
 

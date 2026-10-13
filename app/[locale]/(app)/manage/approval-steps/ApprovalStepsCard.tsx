@@ -64,10 +64,9 @@ type Props = {
   orderEnforced: boolean;
   labels: Labels;
   /**
-   * FR-55: the order switch writes `work_settings`, so it needs work_settings
-   * edit (no preset has it; it is the admin's in practice), separately from
-   * approval_steps edit. Passed in so the switch is disabled rather than
-   * failing at the database.
+   * FR-66: approval_steps edit (the admin and the hr preset), the gate of
+   * setApprovalOrderEnforced and its RPC. Passed in so the switch is disabled
+   * rather than failing at the database.
    */
   canEnforceOrder: boolean;
   /**

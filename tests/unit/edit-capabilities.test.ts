@@ -6,7 +6,7 @@ import { can, fullPerms, type Perms } from '@/lib/permissions/catalog';
 const ME = 'caller';
 const THEM = 'target';
 
-// The HR preset as seeded (spec "Preset seeds"): pins the FR-51 behaviour.
+// The presets as seeded (migration 20261013200001): pin the FR-51 behaviour.
 const HR: Perms = {
   people: 'edit',
   people_create: 'edit',
@@ -16,13 +16,18 @@ const HR: Perms = {
   departments: 'edit',
   leave_balances: 'edit',
   leave_accrual: 'edit',
+  special_leave: 'edit',
   leave_requests: 'read',
   calendar: 'read',
+  absences: 'read',
   reports: 'read',
+  finance: 'read',
   approval_steps: 'edit',
+  work_settings: 'edit',
+  holidays: 'edit',
 };
-const SECURITY: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read' };
-const FINANCE: Perms = { clearance: 'read' };
+const SECURITY: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read', absences: 'read' };
+const FINANCE: Perms = { clearance: 'read', finance: 'read' };
 
 const role = (id: string, systemKey: string | null, kind: RoleRow['kind'], name: string, permissions: Perms): RoleRow => ({
   id,
@@ -137,10 +142,39 @@ describe('employeeEditCapabilities', () => {
     });
   });
 
-  it('only an admin edits their own personal information (FR-63)', () => {
-    expect(canEditOwnPersonalInfo(['admin'])).toBe(true);
-    expect(canEditOwnPersonalInfo(['hr', 'employee'])).toBe(false);
-    expect(canEditOwnPersonalInfo(['employee'])).toBe(false);
+  it('own personal information follows personal_info_own: the admin implicitly, no preset (FR-63)', () => {
+    expect(canEditOwnPersonalInfo(fullPerms())).toBe(true);
+    expect(canEditOwnPersonalInfo(HR)).toBe(false);
+    expect(canEditOwnPersonalInfo(SECURITY)).toBe(false);
+    expect(canEditOwnPersonalInfo({})).toBe(false);
+    expect(canEditOwnPersonalInfo({ personal_info_own: 'edit' })).toBe(true);
+  });
+
+  it('a role holding personal_info_own edits its own personal information', () => {
+    const selfEditor = { roles: ['hr'], perms: { ...HR, personal_info_own: 'edit' } as Perms };
+    expect(caps(selfEditor, ['hr'], { targetId: ME })).toMatchObject({ lockedReason: 'self', personalInfo: 'edit' });
+    // Never someone else's through it: that is personal_info edit on a target they may act on.
+    const ownOnly = { roles: ['employee'], perms: { people: 'read', personal_info: 'read', personal_info_own: 'edit' } as Perms };
+    expect(caps(ownOnly, ['employee']).personalInfo).toBe('view');
+    expect(caps(ownOnly, ['employee'], { targetId: ME }).personalInfo).toBe('edit');
+  });
+
+  // ── FR-65 special leave: special_leave edit on a target the caller may act on ──
+
+  it('special leave: hr preset on an employee, never on themself, the admin or a target above them', () => {
+    expect(caps(hr(), ['employee']).specialLeave).toBe(true);
+    expect(caps(hr(), ['employee'], { targetId: ME }).specialLeave).toBe(false);
+    expect(caps(hr(), ['admin']).specialLeave).toBe(false);
+    // D4 'above': the Helpdesk holder carries passwords, which hr lacks.
+    expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above');
+    expect(caps(hr(), ['employee', 'Helpdesk']).specialLeave).toBe(false);
+  });
+
+  it('special leave follows the permission, not the hr role', () => {
+    expect(caps({ roles: ['hr'], perms: { ...HR, special_leave: undefined } }, ['employee']).specialLeave).toBe(false);
+    const granter = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read', special_leave: 'edit' } as Perms };
+    expect(caps(granter, ['employee']).specialLeave).toBe(true);
+    expect(caps(HELPDESK_CALLER, ['employee']).specialLeave).toBe(false);
   });
 
   it('a manager keeps the name and hire date of their reports only', () => {
@@ -198,12 +232,25 @@ describe('employeeEditCapabilities', () => {
 
   // ── Identity clauses (approval signers, clearance signers) ───────────────
 
-  const WIDE: Perms = { people: 'edit', passwords: 'edit', leave_balances: 'read', leave_requests: 'read', calendar: 'read', clearance: 'read' };
+  const WIDE: Perms = {
+    people: 'edit', passwords: 'edit', leave_balances: 'read', leave_requests: 'read', calendar: 'read',
+    clearance: 'read', absences: 'read', finance: 'read',
+  };
+  // An hr role stripped of every item, so only the identity clause can lock its holders.
+  const HR_BARE = role('r-hr', 'hr', 'preset', 'HR', {});
+  const ALL_BARE_HR = ALL.map((r) => (r.systemKey === 'hr' ? HR_BARE : r));
+  const onBareHr = (perms: Perms) =>
+    employeeEditCapabilities({ ...base, callerPerms: perms, targetRoleIds: [EMP_ROLE.id, HR_BARE.id], allRoles: ALL_BARE_HR });
 
-  it('hr or security holders need approval_steps edit, even when their levels are covered', () => {
-    const wide = { roles: ['employee'], perms: WIDE };
-    expect(caps(wide, ['employee', 'security']).lockedReason).toBe('above');
-    expect(caps({ roles: ['employee'], perms: { ...WIDE, approval_steps: 'edit' } }, ['employee', 'security']).lockedReason).toBeNull();
+  it('hr holders need approval_steps AND clearance edit: they sign steps and the clearance HR rows', () => {
+    expect(onBareHr(WIDE).lockedReason).toBe('above');
+    expect(onBareHr({ ...WIDE, approval_steps: 'edit' }).lockedReason).toBe('above');
+    expect(onBareHr({ ...WIDE, clearance: 'edit' }).lockedReason).toBe('above');
+    expect(onBareHr({ ...WIDE, approval_steps: 'edit', clearance: 'edit' }).lockedReason).toBeNull();
+  });
+
+  it('security holders sign no step since 20261012120003: covering their levels is enough', () => {
+    expect(caps({ roles: ['employee'], perms: WIDE }, ['employee', 'security']).lockedReason).toBeNull();
   });
 
   it('a named approver on an active step needs approval_steps edit', () => {
@@ -239,14 +286,17 @@ describe('employeeEditCapabilities', () => {
     expect(r.editableRoleIds).not.toContain(MANAGER_ROLE.id); // needs role_manager
   });
 
-  it('security and finance boxes also need the power that edits their signers', () => {
+  it('the hr and finance boxes also need the power that edits their signers; security needs none', () => {
     const covered: Perms = { ...WIDE, role_assign: 'edit' };
-    const r = caps({ roles: ['employee'], perms: covered }, ['employee']);
-    expect(r.editableRoleIds).not.toContain(SEC_ROLE.id);
-    expect(r.editableRoleIds).not.toContain(FIN_ROLE.id);
-    const r2 = caps({ roles: ['employee'], perms: { ...covered, approval_steps: 'edit', clearance: 'edit' } }, ['employee']);
-    expect(r2.editableRoleIds).toContain(SEC_ROLE.id);
-    expect(r2.editableRoleIds).toContain(FIN_ROLE.id);
+    const toggles = (perms: Perms) =>
+      employeeEditCapabilities({ ...base, callerPerms: perms, allRoles: ALL_BARE_HR }).editableRoleIds;
+    expect(toggles(covered)).toContain(SEC_ROLE.id);
+    expect(toggles(covered)).not.toContain(FIN_ROLE.id);
+    expect(toggles(covered)).not.toContain(HR_BARE.id);
+    expect(toggles({ ...covered, approval_steps: 'edit' })).not.toContain(HR_BARE.id);
+    expect(toggles({ ...covered, clearance: 'edit' })).toContain(FIN_ROLE.id);
+    expect(toggles({ ...covered, clearance: 'edit' })).not.toContain(HR_BARE.id);
+    expect(toggles({ ...covered, approval_steps: 'edit', clearance: 'edit' })).toContain(HR_BARE.id);
   });
 
   it('no role is toggleable on a locked target', () => {

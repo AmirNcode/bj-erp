@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { homeAbsencesBoard } from '@/lib/nav/tabs';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
@@ -344,15 +345,16 @@ async function ProfileReminder({ locale, userId }: { locale: string; userId: str
     supabase.from('employee_personal_info').select('complete').eq('employee_id', userId).maybeSingle(),
     supabase.from('user_signatures').select('user_id', { count: 'exact', head: true }).eq('user_id', userId),
   ]);
-  // FR-63: only someone who may edit their own personal information is asked
-  // to complete it; everyone else's is kept up to date by HR.
-  const needsInfo = info && canEditOwnPersonalInfo(await getCachedRoles(userId)) ? !info.complete : false;
+  // FR-63: only someone who may edit their own personal information
+  // (personal_info_own) is asked to complete it; everyone else's is kept up to date by HR.
+  const needsInfo = info && canEditOwnPersonalInfo(await getCachedPermissions(userId)) ? !info.complete : false;
   const needsSignature = count === 0;
   if (!needsInfo && !needsSignature) return null;
   return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;
 }
 
-// ── FR-56: security sees who is out right on Home ──────────────────────────
+// ── FR-56: absences holders (security, hr) see who is out right on Home ────
+// The admin opens the same board from Manage › Absences instead.
 async function SecurityAbsences({
   locale,
   userId,
@@ -362,8 +364,8 @@ async function SecurityAbsences({
   userId: string;
   rawDate?: string;
 }) {
-  const roles = await getCachedRoles(userId);
-  if (!roles.includes('security')) return null;
+  const [roles, perms] = await Promise.all([getCachedRoles(userId), getCachedPermissions(userId)]);
+  if (!homeAbsencesBoard(roles, perms)) return null;
   const today = todayInAppTz();
   const date = rawDate && isValidIsoDate(rawDate) ? rawDate : today;
   const [t, res] = await Promise.all([getTranslations('absences'), getApprovedAbsences(date)]);

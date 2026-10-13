@@ -139,12 +139,16 @@ const RULES: Rule[] = [
   // FR-61 per diem.
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
-  // FR-59: hr edits settings, but approval order / hours per day stay admin-only.
+  // FR-59: hr edits settings, but hours per day stays admin-only.
   { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
+  // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).
+  { re: /not allowed to change the approval order setting/, key: 'approvalOrderNotAllowed' },
   // FR-65 special leave.
   { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
   { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
   { re: /annual leave type not found/, key: 'annualTypeMissing' },
+  // FR-55 D4 in private.special_leave_target: the target holds access the caller lacks.
+  { re: /not allowed to grant special leave to this employee/, key: 'accessAboveYours' },
   { re: /not allowed to grant special leave/, key: 'notAllowed' },
   { re: /special leave grant was already revoked/, key: 'specialLeaveAlreadyRevoked' },
   { re: /a note is required for bereavement leave/, key: 'specialLeaveNoteRequired' },

@@ -29,23 +29,25 @@ export type EditCapabilities = {
   lockedReason: 'admin' | 'self' | 'above' | null;
   /**
    * Personal information (FR-53): read-only without personal_info edit or on a
-   * locked target, and since FR-63 nobody but an admin changes their own.
+   * locked target; your own is editable only with personal_info_own (FR-63).
    */
   personalInfo: 'edit' | 'view' | null;
   /**
    * «مرخصی خارج از لیست» (FR-65): grant marriage / bereavement days. Mirrors
-   * `special_leave.grant` plus the self / admin-target rule of the RPCs.
+   * `private.special_leave_target`: special_leave edit, then for a non-admin not
+   * on themself, not on the admin, and `can_act_on` (D4).
    */
   specialLeave: boolean;
 };
 
 /**
- * Whether a caller may change their OWN personal information (FR-63). Mirrors
- * `private.has_permission(uid, 'personal_info.edit_own')` — admin only today;
- * FR-55's configurable roles turn it into a per-role switch (R3).
+ * Whether a caller may change their OWN personal information (FR-63): the
+ * personal_info_own item, the TS mirror of `private.has_perm(uid,
+ * 'personal_info_own', 'edit')` behind the own-row `employee_personal_info_update`
+ * policy. On no preset; the admin holds it implicitly (full permissions).
  */
-export function canEditOwnPersonalInfo(roles: string[]): boolean {
-  return roles.includes('admin');
+export function canEditOwnPersonalInfo(perms: Perms): boolean {
+  return can(perms, 'personal_info_own');
 }
 
 /**
@@ -112,23 +114,24 @@ export function employeeEditCapabilities({
 
   // D4 mirror of private.can_act_on, including its identity clauses: whoever
   // could reset this person's password could sign in as them and sign their
-  // approval steps or clearance boxes.
+  // approval steps or clearance boxes. An hr holder signs both (approval steps,
+  // the clearance HR rows); security signs no step since 20261012120003.
   const above =
     !isWithin(targetPermissions(targetRoles), callerPerms) ||
     (holds('manager') && !can(callerPerms, 'role_manager')) ||
     (targetIsDepartmentManager && !can(callerPerms, 'departments')) ||
-    ((holds('hr') || holds('security') || targetIdentity.approver) && !can(callerPerms, 'approval_steps')) ||
-    ((holds('finance') || targetIdentity.clearanceSigner) && !can(callerPerms, 'clearance'));
+    ((holds('hr') || targetIdentity.approver) && !can(callerPerms, 'approval_steps')) ||
+    ((holds('hr') || holds('finance') || targetIdentity.clearanceSigner) && !can(callerPerms, 'clearance'));
 
   const lockedReason = self ? 'self' : holds('admin') ? 'admin' : above ? 'above' : null;
   const actor = lockedReason === null;
 
-  // D5, plus the identity mirror of app_set_user_role_ids: hr and security sign
-  // approval steps, finance signs the clearance finance box.
+  // D5, plus the identity mirror of app_set_user_role_ids: hr signs approval
+  // steps and the clearance HR rows, finance signs the clearance finance box.
   const mayToggle = (r: RoleRow) => {
     if (r.systemKey === 'manager') return can(callerPerms, 'role_manager');
     if (!can(callerPerms, 'role_assign') || !isWithin(r.permissions, callerPerms)) return false;
-    if (r.systemKey === 'hr' || r.systemKey === 'security') return can(callerPerms, 'approval_steps');
+    if (r.systemKey === 'hr') return can(callerPerms, 'approval_steps') && can(callerPerms, 'clearance');
     if (r.systemKey === 'finance') return can(callerPerms, 'clearance');
     return true;
   };
@@ -143,17 +146,16 @@ export function employeeEditCapabilities({
     leave: can(callerPerms, 'leave_balances', 'read'),
     leaveEdit: actor && can(callerPerms, 'leave_balances'),
     lockedReason,
-    // FR-63: your own personal information is view only unless you may edit
-    // your own (canEditOwnPersonalInfo; admin only today, returned above).
+    // FR-63: your own personal information is view only unless you hold
+    // personal_info_own (the admin, returned above, holds it implicitly).
     personalInfo: !can(callerPerms, 'personal_info', 'read')
       ? null
-      : (actor && can(callerPerms, 'personal_info')) || (self && canEditOwnPersonalInfo(callerRoles))
+      : (actor && can(callerPerms, 'personal_info')) || (self && canEditOwnPersonalInfo(callerPerms))
         ? 'edit'
         : 'view',
-    // FR-65, main's literal check until R3: hr on anyone but themself or the
-    // admin, the same rule as private.special_leave_target (the 'above' lock
-    // is not part of it). Admins returned true above.
-    specialLeave: callerRoles.includes('hr') && !self && !holds('admin'),
+    // FR-65: special_leave edit on a target the caller may act on (not self,
+    // not the admin, not above them), as private.special_leave_target checks.
+    specialLeave: actor && can(callerPerms, 'special_leave'),
   };
 }
 

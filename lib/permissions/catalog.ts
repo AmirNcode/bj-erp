@@ -1,6 +1,8 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001 + 200004). Pure. Drives
+ * permission_allows / permission_deps (migrations 20261013200001 + 200004). 20 items:
+ * the 16 of the spec plus main's absences, finance, personal_info_own (own personal
+ * information, an explicit exception to D3) and special_leave. Pure. Drives
  * the role editor, the nav and the edit capabilities. The database is the
  * authority; tests/unit/permissions-catalog.test.ts keeps the two in step.
  */
@@ -8,26 +10,29 @@
 export type Level = 'read' | 'edit';
 export type PermKey =
   | 'people' | 'people_create' | 'passwords' | 'role_manager' | 'role_assign'
-  | 'personal_info' | 'clearance' | 'departments' | 'leave_balances' | 'leave_accrual'
-  | 'leave_requests' | 'calendar' | 'reports' | 'approval_steps' | 'work_settings' | 'holidays';
+  | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
+  | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'absences' | 'reports'
+  | 'finance' | 'approval_steps' | 'work_settings' | 'holidays';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
-export type SectionKey = 'employees' | 'departments' | 'leave' | 'approvalChain' | 'settings';
+export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'approvalChain' | 'settings';
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
-  { key: 'employees', items: ['people', 'people_create', 'passwords', 'role_manager', 'role_assign', 'personal_info', 'clearance'] },
+  { key: 'employees', items: ['people', 'people_create', 'passwords', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
-  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'leave_requests', 'calendar', 'reports'] },
+  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports'] },
+  { key: 'finance', items: ['finance'] },
   { key: 'approvalChain', items: ['approval_steps'] },
   { key: 'settings', items: ['work_settings', 'holidays'] },
 ];
 
 export const SHAPES: Record<PermKey, Shape> = {
   people: 'RE', people_create: 'E', passwords: 'E', role_manager: 'E', role_assign: 'E',
-  personal_info: 'RE', clearance: 'RE', departments: 'RE', leave_balances: 'RE',
-  leave_accrual: 'E', leave_requests: 'RE', calendar: 'R', reports: 'R',
+  personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
+  leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
+  calendar: 'R', absences: 'R', reports: 'R', finance: 'R',
   approval_steps: 'RE', work_settings: 'RE', holidays: 'RE',
 };
 
@@ -51,6 +56,11 @@ export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] =
   { key: 'reports', keyLevel: 'read', needs: 'people' },
   { key: 'reports', keyLevel: 'read', needs: 'leave_balances' },
   { key: 'reports', keyLevel: 'read', needs: 'leave_requests' },
+  // The approved-absences board reads leave_requests joined to profiles through RLS.
+  { key: 'absences', keyLevel: 'read', needs: 'people' },
+  { key: 'absences', keyLevel: 'read', needs: 'leave_requests' },
+  { key: 'special_leave', keyLevel: 'read', needs: 'people' },
+  { key: 'special_leave', keyLevel: 'read', needs: 'leave_balances' },
 ];
 
 export function levelValue(l: Level | undefined): 0 | 1 | 2 {

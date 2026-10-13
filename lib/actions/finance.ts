@@ -1,11 +1,11 @@
 'use server';
 
 /**
- * Completed approvals for finance (FR-62).
+ * Completed approvals for finance (FR-62) — finance read (FR-55).
  *
  * Finance accounts for per diem and other costs once a request is fully
  * approved. Reads go through `public.finance_approved_requests`, a guarded
- * SECURITY DEFINER function (finance or admin): finance has no RLS read on
+ * SECURITY DEFINER function (`finance.view` → finance read): finance has no RLS read on
  * `leave_requests`, and the function returns approved rows only, without
  * signatures or the private reason.
  */
@@ -22,7 +22,7 @@ export async function getFinanceApprovals(
   from: string,
   to: string
 ): Promise<{ ok: true; rows: FinanceRow[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'finance'] });
+  const c = await requireCaller({ perm: ['finance', 'read'] });
   if (!c.ok) return c;
   if (!isValidIsoDate(from) || !isValidIsoDate(to) || to < from) return dbErr('invalid date range');
 

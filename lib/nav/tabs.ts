@@ -57,14 +57,13 @@ type ManageEntry = NavItem & { allowed: (roles: string[], perms: Perms) => boole
 // Approvals are identity-based (the approval chain routes to a person), not a permission.
 const isApprover = (roles: string[]) => ['admin', 'manager', 'hr'].some((r) => roles.includes(r));
 
-// FR-56 / FR-59 / FR-62 literal-role checks from main; FR-55 R3 converts them to
-// permissions (absences.view, settings.edit, finance.view).
 const isAdmin = (roles: string[]) => roles.includes('admin');
-const isAdminOrHr = (roles: string[]) => roles.includes('admin') || roles.includes('hr');
 
-// FR-62: finance's list of completed approvals, as finance's own tab; admins
-// reach it (and FR-56's absences board) from the Manage group. Security's
-// absences board sits on their Home screen instead of a tab.
+// FR-62: finance's list of completed approvals (finance read). Whoever already
+// has a Manage group finds it there (admin, the hr preset under ruling a); for
+// anyone else (the finance preset) it is a tab, so the mobile bar stays at five
+// items. The approved-absences board (absences read) is never a tab: an admin
+// opens it from Manage, every other holder sees it on Home (FR-56).
 const FINANCE_TAB: Tab = { key: 'finance', href: '/finance', labelKey: 'finance' };
 
 // Order is the side panel's order. Test ids are the ones the old Manage header
@@ -82,21 +81,24 @@ const MANAGE: ManageEntry[] = [
   { key: 'approvalSteps', href: '/manage/approval-steps', labelKey: 'approvalSteps', testId: 'nav-approval-steps', allowed: (_roles, perms) => can(perms, 'approval_steps', 'read') },
   // FR-37 reports: reports permission.
   { key: 'reports', href: '/manage/reports', labelKey: 'reports', testId: 'nav-reports', allowed: (_roles, perms) => can(perms, 'reports', 'read') },
-  // FR-56 / FR-62: the security and finance screens, for an admin.
+  // FR-56: the admin's way to the approved-absences board (absences read is
+  // implicit for the admin); other holders see it on Home (homeAbsencesBoard).
   { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: isAdmin },
-  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: isAdmin },
+  // FR-62: inside Manage only for someone who has a Manage group anyway.
+  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms) },
 ];
 
-/** True when the caller reaches at least one Manage page. */
-function canManage(roles: string[], perms: Perms) {
-  return MANAGE.some((i) => i.allowed(roles, perms));
+/** True when the caller reaches a Manage page other than Finance (which follows the group). */
+function hasManageGroup(roles: string[], perms: Perms) {
+  return MANAGE.some((i) => i.key !== 'finance' && i.allowed(roles, perms));
 }
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
 export function tabsForRoles(roles: string[], perms: Perms): Tab[] {
   const tabs = [...BASE];
-  if (roles.includes('finance') && !roles.includes('admin')) tabs.push(FINANCE_TAB);
-  if (canManage(roles, perms)) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
+  const manage = hasManageGroup(roles, perms);
+  if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
+  if (manage) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
   return tabs;
 }
 
@@ -111,11 +113,20 @@ export function manageItemsForRoles(roles: string[], perms: Perms): NavItem[] {
 }
 
 /**
- * Settings (work hours, weekly days off, official holidays): admin and hr (FR-59,
- * main's literal check, kept until R3), or either FR-55 settings permission.
+ * Settings (work hours, weekly days off, official holidays): the admin, or either
+ * settings permission at read (FR-55). Main's FR-59 "admin and hr" is the HR
+ * preset holding work_settings and holidays edit.
  */
 export function settingsItemForRoles(roles: string[], perms: Perms): NavItem | null {
-  return isAdminOrHr(roles) || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read')
+  return isAdmin(roles) || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read')
     ? { key: 'settings', href: '/settings', labelKey: 'settings', testId: 'nav-settings' }
     : null;
+}
+
+/**
+ * FR-56: the approved-absences board on Home, for every holder of absences read
+ * except the admin, who opens it from Manage › Absences instead.
+ */
+export function homeAbsencesBoard(roles: string[], perms: Perms): boolean {
+  return !isAdmin(roles) && can(perms, 'absences', 'read');
 }

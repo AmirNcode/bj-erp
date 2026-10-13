@@ -30,7 +30,7 @@ describe('PermissionSection', () => {
 
   it('shows the item count badge and a row per item', () => {
     render(<PermissionSection section="leave" perms={{}} onChange={() => {}} notes={{}} t={t} defaultOpen />);
-    expect(screen.getByTestId('perm-section-count-leave').textContent).toBe('5');
+    expect(screen.getByTestId('perm-section-count-leave').textContent).toBe('7');
     expect(screen.getByTestId('perm-row-calendar')).toBeTruthy();
     expect(screen.queryByTestId('perm-row-people')).toBeNull();
   });
