@@ -1,6 +1,7 @@
 /**
  * Profile › Personal information (FR-53): the caller's own identity, bank,
- * contact and employment details. hr/admin edit other people's from
+ * contact and employment details. Read-only since FR-63 (2026-10-12) unless the
+ * caller may edit their own (admin today); hr/admin edit other people's from
  * Manage › Employees › Edit.
  */
 
@@ -8,7 +9,8 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
 import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,7 +28,8 @@ export default async function PersonalInfoPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) return null;
 
-  const res = await getPersonalInfo(user.id);
+  const [res, roles] = await Promise.all([getPersonalInfo(user.id), getCachedRoles(user.id)]);
+  const readOnly = !canEditOwnPersonalInfo(roles);
 
   return (
     <main className="p-4 max-w-2xl mx-auto space-y-4">
@@ -38,7 +41,12 @@ export default async function PersonalInfoPage({ params }: Props) {
       <Card>
         <CardContent className="pt-6">
           {res.ok ? (
-            <PersonalInfoForm employeeId={user.id} initial={res.info} />
+            <PersonalInfoForm
+              employeeId={user.id}
+              initial={res.info}
+              readOnly={readOnly}
+              readOnlyReason="self"
+            />
           ) : (
             <p role="alert" className="text-sm text-destructive">
               {res.error}

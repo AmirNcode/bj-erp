@@ -30,6 +30,11 @@ Migrations `20261012120001`–`20261012120004`. Spec
 - **Per diem:** HR's approval of a work errand has an optional «فوق‌العاده ماموریت (ریال)» field.
 - **Finance (`/finance`):** finance (and admin) see every fully approved request in a month range,
   with per diem, totals and an Excel (CSV) export.
+- **Personal information is view only for its owner (FR-63, migration `20261012130001`):**
+  Profile › Personal information shows it read-only; HR and admin edit other people's from
+  Manage › Employees (HR never an admin's, nor their own; the CSV import enforces the same). The Home
+  reminder no longer asks people to fill in information they cannot change.
+- **Demo seed:** HR test account `hr-101` and finance `4002` (password `Demo!2026`).
 
 ### Clearance form — FR-54 (2026-10-07)
 

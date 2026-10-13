@@ -56,7 +56,7 @@ async function photoOfSignature(page: Page): Promise<Buffer> {
   return Buffer.from(b64, 'base64');
 }
 
-test('saved signature pre-fills requests; personal info for self and hr', async ({ page }) => {
+test('saved signature pre-fills requests; personal info view-only for self, edited by hr', async ({ page }) => {
   test.setTimeout(300_000);
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
@@ -125,41 +125,49 @@ test('saved signature pre-fills requests; personal info for self and hr', async 
   await page.click('[data-testid="saved-signature-save"]');
   await expect(page.locator('[data-testid="saved-signature-image"]')).toBeVisible({ timeout: 30_000 });
 
-  // ── personal information, with a typo first ──────────────────────────────
+  // ── personal information: view only for the worker (FR-63) ──────────────
   await page.click('[data-testid="profile-personal-info-link"]');
   await expect(page.locator('[data-testid="personal-info-form"]')).toBeVisible({ timeout: 30_000 });
-  await page.fill('[data-testid="pi-national_id"]', '0012345678');
-  await page.click('[data-testid="personal-info-save"]');
-  await expect(page.locator('#pi-national_id-problem')).toBeVisible();
+  await expect(page.locator('[data-testid="personal-info-read-only"]')).toBeVisible();
+  await expect(page.locator('[data-testid="pi-national_id"]')).toBeDisabled();
+  await expect(page.locator('[data-testid="personal-info-save"]')).toHaveCount(0);
 
-  await page.fill('[data-testid="pi-national_id"]', '۰۰۱۲۳۴۵۶۷۹');
-  await page.fill('[data-testid="pi-father_name"]', 'Ali');
-  await page.fill('[data-testid="pi-birth_date"]', '1370/01/01');
-  await page.fill('[data-testid="pi-sheba"]', 'IR82 0540 1026 8002 0817 9090 02');
-  await page.fill('[data-testid="pi-mobile"]', '09121234567');
-  await page.selectOption('[data-testid="pi-education"]', 'diploma');
-  await page.click('[data-testid="personal-info-save"]');
-  await expect(page.locator('[data-testid="personal-info-status"]')).toHaveText('Saved.', { timeout: 30_000 });
-  await page.reload();
-  await expect(page.locator('[data-testid="pi-sheba"]')).toHaveValue('IR820540102680020817909002', {
-    timeout: 30_000,
-  });
-  await expect(page.locator('[data-testid="pi-birth_date"]')).toHaveValue('1370/01/01');
-
+  // Nothing to nudge: the signature is saved and HR keeps personal info.
   await page.goto('/en/home');
   await page.waitForLoadState('networkidle');
   await expect(page.locator('[data-testid="profile-reminder"]')).toHaveCount(0);
   await logout(page);
 
-  // ── hr: sees and corrects it; the incomplete filter follows ──────────────
+  // ── hr: fills it in (typo first), and the incomplete filter follows ──────
   await login(page, hr.code, hr.password);
+  await page.goto(`/en/manage/employees?q=${encodeURIComponent(worker.code)}`);
+  await page.locator('tr', { hasText: worker.code }).first().locator('a[href*="/manage/employees/"]').click();
+  const card = page.locator('[data-testid="employee-personal-info"]');
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await card.locator('[data-testid="pi-national_id"]').fill('0012345678');
+  await card.locator('[data-testid="personal-info-save"]').click();
+  await expect(card.locator('#pi-national_id-problem')).toBeVisible();
+
+  await card.locator('[data-testid="pi-national_id"]').fill('۰۰۱۲۳۴۵۶۷۹');
+  await card.locator('[data-testid="pi-father_name"]').fill('Ali');
+  await card.locator('[data-testid="pi-birth_date"]').fill('1370/01/01');
+  await card.locator('[data-testid="pi-sheba"]').fill('IR82 0540 1026 8002 0817 9090 02');
+  await card.locator('[data-testid="pi-mobile"]').fill('09121234567');
+  await card.locator('[data-testid="pi-education"]').selectOption('diploma');
+  await card.locator('[data-testid="personal-info-save"]').click();
+  await expect(card.locator('[data-testid="personal-info-status"]')).toHaveText('Saved.', { timeout: 30_000 });
+  await page.reload();
+  await expect(card.locator('[data-testid="pi-sheba"]')).toHaveValue('IR820540102680020817909002', {
+    timeout: 30_000,
+  });
+  await expect(card.locator('[data-testid="pi-birth_date"]')).toHaveValue('1370/01/01');
+
   await page.goto(`/en/manage/employees?filter=incomplete&q=${encodeURIComponent(worker.code)}`);
   await expect(page.locator('[data-testid="emp-filter-incomplete"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('tr', { hasText: worker.code })).toHaveCount(0);
 
   await page.goto(`/en/manage/employees?q=${encodeURIComponent(worker.code)}`);
   await page.locator('tr', { hasText: worker.code }).first().locator('a[href*="/manage/employees/"]').click();
-  const card = page.locator('[data-testid="employee-personal-info"]');
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.locator('[data-testid="pi-national_id"]')).toHaveValue('0012345679');
   await card.locator('[data-testid="pi-mobile"]').fill('');

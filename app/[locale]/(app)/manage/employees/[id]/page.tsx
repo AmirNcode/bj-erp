@@ -161,6 +161,7 @@ export default async function EditEmployeePage({ params }: Props) {
               employeeId={id}
               initial={personalInfoRes.info}
               readOnly={caps.personalInfo === 'view'}
+              readOnlyReason={caps.lockedReason === 'self' ? 'self' : 'admin'}
             />
           </CardContent>
         </Card>

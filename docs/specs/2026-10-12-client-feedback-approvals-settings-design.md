@@ -84,6 +84,16 @@ New permission keys `absences.view`, `settings.edit`, `finance.view` go through
 `settings.edit`, **finance** gains `finance.view`. Approval steps can no longer name the
 `security` or `admin` roles.
 
+## 9. Own personal information is view only (FR-63, added the same day)
+
+- The owner reads their row on Profile › Personal information; the form renders read-only with a
+  note. hr and admin edit other people's from Manage › Employees › Edit (hr never an admin's).
+- Editing one's own row needs `personal_info.edit_own` — admin only today. FR-55 exposes it as a
+  per-role switch ("may edit own personal information").
+- Enforced in the `employee_personal_info_update` policy and in `app_import_personal_info` (an hr
+  file containing hr's own row fails). Migration `20261012130001_personal_info_read_only_self.sql`.
+- The Home "complete your profile" nudge asks only people who can edit their own info.
+
 ## Testing
 
 - SQL scenarios `tests/sql/client-feedback-2026-10-12.sql` (begin … rollback): one hourly per day,

@@ -58,7 +58,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   FR-55 (branch `fr55-configurable-roles`, rebase onto main first):* the **security** preset only
   reads approved absences (`absences.view`) and never approves; **hr** gains `settings.edit`,
   **finance** gains `finance.view` (keys added on main in `20261012120004`); approval steps may no
-  longer name the security or admin roles. Admin creates a role (name),
+  longer name the security or admin roles. **Add a per-role switch "may edit own personal
+  information"** = key `personal_info.edit_own` (FR-63, `20261012130001`): off for every preset
+  except admin; employees otherwise only view their own personal info. Admin creates a role (name),
   ticks a permission level per area (not allowed / read only / edit), and the role appears in the
   Edit Employee role checkboxes, so granting access no longer needs a migration. Seam already in
   place: `private.has_permission(uid, key)` (FR-51) — replace its body with a table lookup, move the

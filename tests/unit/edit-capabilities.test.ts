@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
+import { employeeEditCapabilities, canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 
 const ME = 'caller';
 const THEM = 'target';
@@ -52,7 +52,15 @@ describe('employeeEditCapabilities', () => {
       org: false,
       editableRoles: [],
       lockedReason: 'self',
+      // FR-63: own personal information is read-only.
+      personalInfo: 'view',
     });
+  });
+
+  it('only an admin edits their own personal information (FR-63)', () => {
+    expect(canEditOwnPersonalInfo(['admin'])).toBe(true);
+    expect(canEditOwnPersonalInfo(['hr', 'employee'])).toBe(false);
+    expect(canEditOwnPersonalInfo(['employee'])).toBe(false);
   });
 
   it('a manager keeps the name and hire date of their reports only', () => {

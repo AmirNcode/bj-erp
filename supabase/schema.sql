@@ -657,6 +657,7 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     when 'roles.manager'      then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'personal_info.view' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'personal_info.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'personal_info.edit_own' then private.is_admin(uid)
     when 'separations.manage' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'separations.view'   then private.is_admin(uid) or private.has_role(uid, 'hr')
                                    or private.has_role(uid, 'finance')
@@ -2682,6 +2683,10 @@ begin
      where company_id = v_company and personnel_no = v_pno;
     if v_target is null then
       raise exception 'unknown personnel number: %', coalesce(v_pno, '(empty)') using errcode = '22023';
+    end if;
+    -- FR-63: one's own row follows personal_info.edit_own, not the import.
+    if v_target = v_uid and not private.has_permission(v_uid, 'personal_info.edit_own') then
+      raise exception 'not permitted to edit your own personal info: %', v_pno using errcode = '42501';
     end if;
     if not v_is_admin and exists (select 1 from public.user_roles
                                    where user_id = v_target and role = 'admin') then
@@ -6214,11 +6219,11 @@ CREATE POLICY employee_personal_info_select ON public.employee_personal_info FOR
 -- Name: employee_personal_info employee_personal_info_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit_own'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid)))) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR (NOT (EXISTS ( SELECT 1
    FROM public.user_roles r
-  WHERE ((r.user_id = employee_personal_info.employee_id) AND (r.role = 'admin'::public.app_role)))))))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+  WHERE ((r.user_id = employee_personal_info.employee_id) AND (r.role = 'admin'::public.app_role)))))))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit_own'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 

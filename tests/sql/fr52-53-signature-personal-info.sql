@@ -148,26 +148,40 @@ select pg_temp.expect('owner deletes own signature',
   pg_temp.try_as('emp', format('delete from public.user_signatures where user_id = %s', pg_temp.id('emp'))), 'ok:1');
 
 -- ── personal info: self ─────────────────────────────────────────────────────
-select pg_temp.expect('employee edits own personal info',
-  pg_temp.try_as('emp', format(
+-- FR-63 (2026-10-12): the owner reads but no longer edits their own row; hr
+-- and admin edit others'. Only `personal_info.edit_own` (admin today) opens
+-- one's own row.
+select pg_temp.expect('employee may not edit own personal info (FR-63)',
+  pg_temp.try_as('emp', format('update public.employee_personal_info set father_name = %L where employee_id = %s',
+    'Ali', pg_temp.id('emp'))), 'ok:0');
+select pg_temp.expect('hr may not edit own personal info (FR-63)',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set father_name = %L where employee_id = %s',
+    'Ali', pg_temp.id('hr'))), 'ok:0');
+select pg_temp.expect('admin edits own personal info (edit_own)',
+  pg_temp.try_as('adm', format('update public.employee_personal_info set father_name = %L where employee_id = %s',
+    'Ali', pg_temp.id('adm'))), 'ok:1');
+select pg_temp.expect('employee still reads own personal info',
+  pg_temp.value_as('emp', format('select count(*) from public.employee_personal_info where employee_id = %s', pg_temp.id('emp'))), '1');
+select pg_temp.expect('hr edits an employee''s personal info',
+  pg_temp.try_as('hr', format(
     'update public.employee_personal_info set national_id = %L, father_name = %L, birth_date = %L, sheba = %L, mobile = %L where employee_id = %s',
     '0012345679', 'Ali', '1990-03-21', 'IR820540102680020817909002', '09121234567', pg_temp.id('emp'))), 'ok:1');
 select pg_temp.expect('complete flag set when the core five are filled',
   (select complete::text from public.employee_personal_info where employee_id = (select id from fx where k = 'emp')), 'true');
 select pg_temp.expect('updated_by stamped',
-  (select (updated_by = (select id from fx where k = 'emp'))::text from public.employee_personal_info
+  (select (updated_by = (select id from fx where k = 'hr'))::text from public.employee_personal_info
     where employee_id = (select id from fx where k = 'emp')), 'true');
 select pg_temp.expect('bad national id rejected',
-  pg_temp.try_as('emp', format('update public.employee_personal_info set national_id = %L where employee_id = %s',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set national_id = %L where employee_id = %s',
     '0012345678', pg_temp.id('emp'))), '23514');
 select pg_temp.expect('bad card number rejected',
-  pg_temp.try_as('emp', format('update public.employee_personal_info set card_no = %L where employee_id = %s',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set card_no = %L where employee_id = %s',
     '6037991234567890', pg_temp.id('emp'))), '23514');
 select pg_temp.expect('bad mobile rejected',
-  pg_temp.try_as('emp', format('update public.employee_personal_info set mobile = %L where employee_id = %s',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set mobile = %L where employee_id = %s',
     '9121234567', pg_temp.id('emp'))), '23514');
-select pg_temp.expect('employee cannot move their row to another employee',
-  pg_temp.try_as('emp', format('update public.employee_personal_info set employee_id = %s where employee_id = %s',
+select pg_temp.expect('an editor cannot move a row to another employee',
+  pg_temp.try_as('hr', format('update public.employee_personal_info set employee_id = %s where employee_id = %s',
     pg_temp.id('peer'), pg_temp.id('emp'))), '42501');
 select pg_temp.expect('employee cannot insert rows',
   pg_temp.try_as('emp', format('insert into public.employee_personal_info (employee_id, company_id) values (gen_random_uuid(), (select company_id from public.profiles where id = %s))',
@@ -218,6 +232,8 @@ select pg_temp.expect('hr imports; empty cells keep stored values',
 select pg_temp.expect('import kept the untouched national id',
   (select national_id || '/' || postal_code from public.employee_personal_info
     where employee_id = (select id from fx where k = 'emp')), '0012345679/1234567890');
+select pg_temp.expect('hr may not import their own row (FR-63)',
+  pg_temp.try_as('hr', format('select public.app_import_personal_info(%L::jsonb)', '[{"personnel_no":"9990000951","mobile":"09351234567"}]')), '42501');
 select pg_temp.expect('import rejects an unknown personnel number',
   pg_temp.try_as('hr', format('select public.app_import_personal_info(%L::jsonb)', '[{"personnel_no":"9990000999","mobile":"09351234567"}]')), '22023');
 select pg_temp.expect('import rejects another company''s personnel number',

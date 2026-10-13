@@ -283,6 +283,12 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
   *(2026-10-12.)*
 
+- **FR-63** ☑ **Own personal information is view only.** Users see theirs on Profile but cannot
+  change it; hr and admin edit other people's (hr never an admin's). Editing one's own needs
+  `personal_info.edit_own` — admin today; FR-55 makes it a per-role switch. Applies to the form and
+  the CSV import. The Home nudge no longer asks non-editors to complete it. Amends FR-53.
+  *(2026-10-12.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

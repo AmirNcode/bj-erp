@@ -1107,7 +1107,9 @@
         "duplicate": "this personnel number appears twice",
         "empty": "the file has no rows"
       }
-    }
+    },
+    "readOnlySelf": "Your personal information is view only. Only HR or an administrator can change it — if something is wrong, contact HR.",
+    "viewHint": "View only — kept up to date by HR"
   },
   "clearance": {
     "title": "Clearance forms",

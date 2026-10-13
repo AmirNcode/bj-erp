@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
@@ -335,7 +336,9 @@ async function ProfileReminder({ locale, userId }: { locale: string; userId: str
     supabase.from('employee_personal_info').select('complete').eq('employee_id', userId).maybeSingle(),
     supabase.from('user_signatures').select('user_id', { count: 'exact', head: true }).eq('user_id', userId),
   ]);
-  const needsInfo = info ? !info.complete : false;
+  // FR-63: only someone who may edit their own personal information is asked
+  // to complete it; everyone else's is kept up to date by HR.
+  const needsInfo = info && canEditOwnPersonalInfo(await getCachedRoles(userId)) ? !info.complete : false;
   const needsSignature = count === 0;
   if (!needsInfo && !needsSignature) return null;
   return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;

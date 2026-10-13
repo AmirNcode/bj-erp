@@ -24,9 +24,21 @@ export type EditCapabilities = {
   leave: boolean;
   /** Why an hr caller sees the org fields read-only. */
   lockedReason: 'admin' | 'self' | null;
-  /** Personal information (FR-53): hr reads an admin's but may not change it. */
+  /**
+   * Personal information (FR-53): hr reads an admin's but may not change it,
+   * and since FR-63 nobody but an admin changes their own.
+   */
   personalInfo: 'edit' | 'view' | null;
 };
+
+/**
+ * Whether a caller may change their OWN personal information (FR-63). Mirrors
+ * `private.has_permission(uid, 'personal_info.edit_own')` — admin only today;
+ * FR-55's configurable roles turn it into a per-role switch.
+ */
+export function canEditOwnPersonalInfo(roles: string[]): boolean {
+  return roles.includes('admin');
+}
 
 export function employeeEditCapabilities({
   callerId,
@@ -71,6 +83,6 @@ export function employeeEditCapabilities({
     resetPassword: false,
     leave: isHr,
     lockedReason,
-    personalInfo: !isHr ? null : lockedReason === 'admin' ? 'view' : 'edit',
+    personalInfo: !isHr ? null : lockedReason === null ? 'edit' : 'view',
   };
 }

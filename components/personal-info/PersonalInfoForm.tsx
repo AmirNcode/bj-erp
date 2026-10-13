@@ -30,11 +30,18 @@ type Props = {
   employeeId: string;
   initial: PersonalInfoValues;
   readOnly?: boolean;
+  /** Why the form is read-only: an admin's record (hr) or one's own (FR-63). */
+  readOnlyReason?: 'admin' | 'self';
 };
 
 const LTR_KINDS = new Set(['digits', 'sheba', 'date', 'count']);
 
-export function PersonalInfoForm({ employeeId, initial, readOnly = false }: Props) {
+export function PersonalInfoForm({
+  employeeId,
+  initial,
+  readOnly = false,
+  readOnlyReason = 'admin',
+}: Props) {
   const t = useTranslations('personalInfo');
   const router = useRouter();
   const [text, setText] = useState<Record<PersonalInfoKey, string>>(
@@ -119,7 +126,11 @@ export function PersonalInfoForm({ employeeId, initial, readOnly = false }: Prop
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" data-testid="personal-info-form" noValidate>
-      {readOnly && <p className="text-sm text-muted-foreground">{t('readOnly')}</p>}
+      {readOnly && (
+        <p className="text-sm text-muted-foreground" data-testid="personal-info-read-only">
+          {readOnlyReason === 'self' ? t('readOnlySelf') : t('readOnly')}
+        </p>
+      )}
       {PERSONAL_INFO_GROUPS.map((group) => (
         <fieldset key={group} className="space-y-3">
           <legend className="mb-2 text-sm font-semibold">{t(`groups.${group}`)}</legend>

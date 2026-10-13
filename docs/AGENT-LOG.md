@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-12 — FR-63: own personal information is view only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ d0c9eae (unpushed)
+**Trigger:** Amir: employees may not edit their own personal info (view on Profile only); only hr
+and admin edit other people's; note a per-role switch for this in FR-55.
+
+**What changed**
+- Migration `20261012130001_personal_info_read_only_self.sql`: has_permission key
+  `personal_info.edit_own` (admin only); `employee_personal_info_update` policy = own row only with
+  edit_own, others with personal_info.edit (hr never an admin); `app_import_personal_info` refuses
+  the caller's own row without edit_own.
+- `lib/employees/editCapabilities.ts`: `canEditOwnPersonalInfo`; hr on own record → `view`.
+  Profile › Personal information read-only (note `personalInfo.readOnlySelf`), profile hint
+  `viewHint`, Home nudge only for those who can edit their own. `PersonalInfoForm` `readOnlyReason`.
+- Tests: fr52-53 SQL suite reworked (hr edits/validates instead of the employee; self refusals;
+  admin self ok; hr import of own row 42501) — 58 PASS; unit edit-capabilities; e2e
+  signature-personal-info now checks read-only self and hr fills the data.
+- Docs: REQUIREMENTS FR-63, PERMISSIONS, CHANGELOG, TASKS (FR-55 switch), spec §9.
+
+**Actions outside the repo**
+- `bj-deploy update local` (applied 20261012130001), rest restarted. Liara untouched.
+
+**Verification**
+- SQL suites fr51 40 / fr52-53 58 / fr54 82 / client-feedback 45, all PASS after apply. tsc, lint
+  clean; unit 618 pass. Live REST: employee 2001 PATCH on own row → `[]` (0 rows). e2e not run.
+
+**State left behind**
+- Committed on local main, not pushed.
+
 ## 2026-10-12 — Client feedback: security board, admin override, HR settings, carryover, per diem, finance (FR-56–62)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b

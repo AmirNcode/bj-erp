@@ -175,8 +175,10 @@ employee who reached it would still read only their own rows.
 
 ### Permission keys added 2026-10-12 (FR-56/59/62)
 `private.has_permission` gained `settings.edit` (admin, hr), `absences.view` (admin, security),
-`finance.view` (admin, finance). **FR-55 presets must keep them:** security = `absences.view` only;
-hr adds `settings.edit`; finance adds `finance.view`.
+`finance.view` (admin, finance), and `personal_info.edit_own` (admin; FR-63). **FR-55 presets must
+keep them:** security = `absences.view` only; hr adds `settings.edit`; finance adds `finance.view`;
+`personal_info.edit_own` becomes a per-role switch ("may edit own personal information"), off for
+every preset but admin.
 - `work_settings` / `holidays` INSERT/UPDATE (and `holidays` DELETE): `settings.edit` on the
   caller's own company (`*_editor` policies; `work_settings` DELETE stays admin). Trigger
   `work_settings_enforce_scope` refuses a non-admin change to `approval_order_enforced` or
@@ -247,16 +249,18 @@ hr adds `settings.edit`; finance adds `finance.view`.
 ### `employee_personal_info` (FR-53)
 - **SELECT**: own row, or `has_permission(uid, 'personal_info.view')` (admin or hr) on a row of the
   caller's company. Managers, security and peers see nothing.
-- **UPDATE**: own row, or `personal_info.edit` (admin or hr) in the caller's company, but hr never
-  on a holder of the `admin` role (checked on the role row, like FR-51 D2).
+- **UPDATE** (FR-63, 2026-10-12): own row only with `personal_info.edit_own` (admin today — the
+  FR-55 per-role switch); someone else's row with `personal_info.edit` (admin or hr) in the caller's
+  company, but hr never on a holder of the `admin` role (checked on the role row, like FR-51 D2).
+  Everyone still READS their own row (Profile › Personal information, read-only).
 - **INSERT / DELETE**: no client grant. The profile trigger inserts; the FK cascade deletes.
 - A before-update trigger pins `employee_id` / `company_id`; an after-update trigger audits field
   names only.
 - `public.app_export_personal_info()` — SECURITY DEFINER, `personal_info.view`, caller's company,
   writes `personal_info.export` (row count) to `audit_log` before returning.
 - `public.app_import_personal_info(jsonb)` — SECURITY DEFINER, `personal_info.edit`; rows matched by
-  personnel number in the caller's company; unknown number, duplicate, unknown field or (for hr)
-  an admin target fails the whole call; one transaction; `personal_info.import` audit row.
+  personnel number in the caller's company; unknown number, duplicate, unknown field, (for hr)
+  an admin target, or the caller's own row without `personal_info.edit_own` fails the whole call; one transaction; `personal_info.import` audit row.
 
 ### `user_signatures` (FR-52)
 - **ALL**: owner only (`user_id = auth.uid()`, active). No other policy: admin, hr and managers
