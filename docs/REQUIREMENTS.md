@@ -364,7 +364,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   the owner, hr and admin; database backups therefore hold them and belong on encrypted storage.
 - **NFR-6** ☑ **Performance**: target a few hundred employees comfortably; list/calendar queries
   indexed. App-tab routes are prefetched after login and each page exposes a manual update pill for
-  explicit refresh when fresher data is needed.
+  explicit refresh when fresher data is needed. Approver pages (Home, approvals) poll the queue
+  every 60 s while visible and on return to the foreground, and offer a refresh banner on new requests.
 - **NFR-7** ☑ **Accessibility**: keyboard-navigable, adequate contrast, labelled controls; touch
   targets sized for factory-floor phone use.
 - **NFR-8** ☑ **Documentation** stays current (CLAUDE.md, this file, DATA_MODEL, PERMISSIONS,

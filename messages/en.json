@@ -25,7 +25,9 @@
   },
   "refresh": {
     "updated": "Updated {time}",
-    "pending": "Updating..."
+    "pending": "Updating...",
+    "newRequests": "{count, plural, one {# new request} other {# new requests}}",
+    "show": "Show"
   },
   "login": {
     "brand": "Behsazan Jonoob",
@@ -896,7 +898,7 @@
     "approvalStepNotSaved": "The approval step was not saved. Try again.",
     "duplicateApprovalStep": "That approval step already exists.",
     "notAllowedToReview": "You are not allowed to review requests.",
-    "onlyPending": "Only pending requests can be changed.",
+    "onlyPending": "This request is no longer pending: it was cancelled or already decided.",
     "cannotCancel": "Only pending requests, or approved requests that have not started yet, can be cancelled.",
     "requestNotFound": "Request not found.",
     "wrongCurrentPassword": "The current password is incorrect.",

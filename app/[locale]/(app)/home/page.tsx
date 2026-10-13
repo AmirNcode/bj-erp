@@ -37,6 +37,7 @@ import { ProfileReminderCard } from './ProfileReminderCard';
 import { ClearanceAwaitingCard } from './ClearanceAwaitingCard';
 import { createClient } from '@/lib/supabase/server';
 import type { PendingRow } from './PendingApprovalsCard';
+import { NewRequestsBanner } from '../_components/NewRequestsBanner';
 import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
@@ -293,6 +294,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
 
   return (
     <div className="flex flex-col gap-5" data-testid="home-board">
+      {canApprove && <NewRequestsBanner currentIds={pending.map((r) => r.id)} />}
       <div>
         <p className="text-[13px] text-muted-foreground">
           {formatCalendarDate(today, locale, 'dddd D MMMM YYYY')}

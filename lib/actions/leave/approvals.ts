@@ -383,3 +383,16 @@ export async function getPendingApprovals(): Promise<
 
   return { ok: true, requests: scoped };
 }
+
+/**
+ * Ids of the caller's current queue, for the new-requests banner's poll. Same
+ * scoping as getPendingApprovals, so the banner never counts a request the
+ * queue would not show.
+ */
+export async function getPendingApprovalIds(): Promise<
+  { ok: true; ids: string[] } | { ok: false; error: string }
+> {
+  const res = await getPendingApprovals();
+  if (!res.ok) return res;
+  return { ok: true, ids: res.requests.map((r) => r.id) };
+}

@@ -57,7 +57,9 @@ type Props = {
  */
 export function PendingApprovalsCard({ rows, total, count, labels, locale }: Props) {
   const router = useRouter();
-  const [localRows, setLocalRows] = useState(rows);
+  // Derived, not copied: a refresh must show the server's queue (see ApprovalQueue).
+  const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
+  const localRows = rows.filter((r) => !decided.has(r.id));
   const [isPending, startTransition] = useTransition();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
@@ -66,11 +68,13 @@ export function PendingApprovalsCard({ rows, total, count, labels, locale }: Pro
     startTransition(async () => {
       const res = await action();
       if (res.ok) {
-        setLocalRows((prev) => prev.filter((r) => r.id !== id));
+        setDecided((prev) => new Set(prev).add(id));
         toast.success(successMsg);
         router.refresh();
       } else {
         toast.error(res.error);
+        // Cancelled or decided elsewhere since the page loaded: drop the stale row.
+        router.refresh();
       }
     });
 

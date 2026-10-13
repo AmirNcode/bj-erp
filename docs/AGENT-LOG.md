@@ -78,6 +78,54 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — New-requests banner for approvers (live update)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 419990f (uncommitted; not deployed)
+**Trigger:** Owner asked to build the live-update banner recommended in the research entry below.
+
+- `lib/actions/leave/approvals.ts`: `getPendingApprovalIds()` — ids of `getPendingApprovals()`
+  (same scoping; heavier than a count query but only approvers poll, once a minute).
+- `app/[locale]/(app)/_components/NewRequestsBanner.tsx`: polls every 60 s while
+  `visibilityState === 'visible'`, plus on visibilitychange/focus/online; counts polled ids absent
+  from the server-rendered ids; tap → `router.refresh()`. Never auto-refreshes (decision dialogs).
+  Rendered on Home (approvers) and `/manage/approvals`. Messages `refresh.newRequests` / `refresh.show`.
+- Side bug fixed: `PendingApprovalsCard` and `ApprovalQueue` seed `useState` from props, so
+  `router.refresh()` never showed new rows. Both now get a `key` from the queue ids (remount on change).
+- Tests: `tests/unit/new-requests-banner.test.tsx` (5). Ran `npm run test:unit` (626 pass), lint,
+  `tsc --noEmit`, `npm run build` — all clean.
+- Browser check NOT done: local login as 124 with `.env.test-accounts` password was rejected
+  ("کد پرسنلی یا رمز عبور اشتباه است"); stopped after one try to avoid the rate limit. The test
+  account password may have changed locally; the file needs updating.
+- Not committed (owner commits).
+- Follow-up: owner saw no banner as hr-101. Docker app `bj-erp-app-1` was built 12:42, before
+  this code. On `next dev` (localhost:3000) as hr-101: banner mounted with the queue ids, poll POST
+  returned 200 and correctly showed nothing (no new ids). The polling pauses when the tab is hidden
+  (as designed), which looked like "no poll" in the hidden browser pane. Owner must rebuild with
+  `./deploy/bj-deploy update local` to test on the LAN URL.
+- Follow-up 2: owner found a cancelled request stayed on the approver's page; approving it said
+  `onlyPending` and the row stayed. Changes: `ApprovalQueue` / `PendingApprovalsCard` now derive rows
+  from props minus a local `decided` set (the `key` remount from earlier is removed, so a refresh
+  keeps other rows' dialogs); on a failed decision they `router.refresh()`. The banner refreshes
+  silently when a shown id is missing from the poll, and tags each poll result with the ids it was
+  compared against (a stale result counted a just-decided request as "new"). `dbErrors.onlyPending`
+  reworded (used only by approve/reject). Unit 632 pass, lint, tsc clean; `npm run build` not
+  re-run (owner's `next dev` was using `.next`); no end-to-end browser run of cancel→disappear.
+
+## 2026-10-13 — Research: notifications + live update (no code changed)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 419990f
+**Trigger:** Owner asked whether pilot feedback (notifications; new requests appear only after refresh) is worth building.
+
+- Read-only survey. Found: no service worker (only `app/manifest.ts`), no Realtime container in
+  `deploy/docker-compose.yml`, manual `PageRefreshButton`, `employee_personal_info.mobile` exists,
+  TASKS already lists "SMS notifications for approvers" and "tell approvers to open app daily".
+- Recommendation given in chat: build cheap live update (refetch on tab focus + ~60 s poll of a
+  pending-count, banner "new request — refresh"); skip Realtime/SSE/web push/email; pilot uses
+  "call your manager"; SMS to approvers (Iranian provider, transactional template) before
+  company-wide rollout. Nothing implemented, nothing run on the server.
+
 ## 2026-10-13 — Released 7376195 to Liara (FR-65–67, logo)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 7376195

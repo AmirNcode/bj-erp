@@ -57,7 +57,11 @@ type Props = {
 
 export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
   const router = useRouter();
-  const [localRequests, setLocalRequests] = useState(requests);
+  // Decided here, awaiting the refresh that drops them from `requests`. The
+  // rows are derived rather than copied into state, so a refresh (banner,
+  // poll, decision) shows the server's queue without remounting open dialogs.
+  const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
+  const localRequests = requests.filter((r) => !decided.has(r.id));
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
   // Per-request rejection note. Optional — an untouched field sends nothing.
@@ -72,13 +76,16 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
     startTransition(async () => {
       const res = await action(id);
       if (res.ok) {
-        setLocalRequests((prev) => prev.filter((r) => r.id !== id));
+        setDecided((prev) => new Set(prev).add(id));
         toast.success(successMsg);
         // Re-fetch server data so badges/counts elsewhere reflect the decision.
         router.refresh();
       } else {
         setErrorMsg(res.error);
         toast.error(res.error);
+        // Most often the requester cancelled, or another approver decided,
+        // since this page loaded: refresh so the stale row goes away.
+        router.refresh();
       }
     });
   };

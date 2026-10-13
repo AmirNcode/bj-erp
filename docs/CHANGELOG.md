@@ -9,6 +9,18 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### New-requests banner for approvers (2026-10-13)
+
+- Home and «تأییدها» re-check the approver's queue every minute while the page is open, and again
+  when the app comes back to the foreground. New requests show a banner («۲ درخواست جدید — نمایش»);
+  tapping it refreshes the page. The page never refreshes by itself.
+- A request that leaves the queue while the page is open (the requester cancelled it, or another
+  approver decided it) disappears on the next check without a banner.
+- Approving or rejecting a request that is no longer pending now says so («این درخواست دیگر در
+  انتظار نیست؛ لغو شده یا قبلاً بررسی شده است.») and removes it from the page.
+- Fixed: after a refresh, the Home pending card and the approvals queue now show the current queue
+  (both kept their first list until the page was reloaded).
+
 ### Leave outside the list, HR order switch, quicker person pickers — FR-65–FR-67 (2026-10-13)
 
 Migration `20261013130001`.

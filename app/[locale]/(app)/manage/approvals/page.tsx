@@ -11,6 +11,7 @@ import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
+import { NewRequestsBanner } from '../../_components/NewRequestsBanner';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -79,6 +80,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
 
   return (
     <>
+      <NewRequestsBanner currentIds={requests.map((r) => r.id)} />
       {loadError && (
         <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
           <strong>{labels.errorLabel}:</strong> {loadError}
