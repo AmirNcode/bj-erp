@@ -171,7 +171,8 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
                     <input
                       type="checkbox"
                       checked={step.active}
-                      disabled={isPending}
+                      // FR-56/58: a retired security/admin step cannot come back.
+                      disabled={isPending || step.role === 'security' || step.role === 'admin'}
                       className="size-4 rounded border-input text-primary focus:ring-ring"
                       data-testid={`approval-step-active-${key}`}
                       onChange={(e) =>

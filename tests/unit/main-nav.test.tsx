@@ -34,6 +34,8 @@ const labels = {
   requests: 'بایگانی درخواست‌ها',
   approvalSteps: 'مراحل تأیید',
   reports: 'گزارش‌ها',
+  absences: 'غایبین',
+  finance: 'امور مالی',
   settings: 'تنظیمات',
   language: 'زبان',
   langFa: 'فارسی',

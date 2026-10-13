@@ -33,4 +33,10 @@ describe('validateHourlySettings', () => {
     expect(validateHourlySettings('07:00', '15:00', 481)).toEqual({ ok: false });
     expect(validateHourlySettings('07:00', '15:00', 12.5)).toEqual({ ok: false });
   });
+
+  it('never allows more than 4 hours a day (FR-57)', () => {
+    expect(validateHourlySettings('07:00', '15:00', 240)).toMatchObject({ ok: true });
+    expect(validateHourlySettings('07:00', '15:00', 241)).toEqual({ ok: false });
+    expect(validateHourlySettings('07:00', '15:00', 300)).toEqual({ ok: false });
+  });
 });

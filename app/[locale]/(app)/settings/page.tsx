@@ -1,9 +1,9 @@
 /**
  * Settings (FR-24): weekly days off with working hours, and official holidays.
- * Company configuration — admin only; everyone else is sent home. Writes go
- * through lib/actions/settings under the admin-only RLS policies on
- * work_settings / holidays. Departments, approval steps and accrual live under
- * Manage.
+ * Company configuration — admin and, since FR-59 (2026-10-12), hr; everyone else
+ * is sent home. Writes go through lib/actions/settings under the
+ * `settings.edit` RLS policies on work_settings / holidays. Departments,
+ * approval steps and accrual live under Manage.
  */
 export const dynamic = 'force-dynamic';
 
@@ -23,7 +23,7 @@ export default async function SettingsPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
   const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin')) redirect(`/${locale}/home`);
+  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/home`);
 
   const [tNav, t, tImport] = await Promise.all([
     getTranslations('nav'),

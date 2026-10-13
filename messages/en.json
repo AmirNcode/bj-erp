@@ -19,7 +19,9 @@
     "reports": "Reports",
     "settings": "Settings",
     "language": "Language",
-    "profileSubtitle": "{role}, profile"
+    "profileSubtitle": "{role}, profile",
+    "absences": "Approved absences",
+    "finance": "Finance"
   },
   "refresh": {
     "updated": "Updated {time}",
@@ -316,7 +318,12 @@
       "security": "Security",
       "admin": "Admin",
       "employee": "Named approver"
-    }
+    },
+    "overrideLabel": "Approve all remaining steps (admin override)",
+    "overrideOnly": "You have no approval step of your own on this request. Approving signs every remaining step as admin and completes it.",
+    "perDiemLabel": "Per diem (Rials)",
+    "perDiemHint": "Optional. Finance sees it once the errand is fully approved.",
+    "perDiemInvalid": "Enter the per diem as a whole number of Rials."
   },
   "review": {
     "title": "Request review",
@@ -592,7 +599,7 @@
       "hoursHint": "Hourly leave requests must fall inside this window, and are capped per day.",
       "workStart": "Day starts",
       "workEnd": "Day ends",
-      "hourlyCap": "Max hours per day",
+      "hourlyCap": "Max hours per day (up to 4)",
       "save": "Save",
       "saved": "Saved.",
       "holidaysTitle": "Official holidays",
@@ -971,7 +978,11 @@
     "clearanceRowNotYours": "This row is assigned to someone else.",
     "clearanceSignedRowLocked": "Signed rows cannot be removed or changed.",
     "clearanceNotAwaitingFinance": "Finance can sign only after every row has signed.",
-    "clearanceFinanceOnly": "Only finance can sign this step."
+    "clearanceFinanceOnly": "Only finance can sign this step.",
+    "oneHourlyPerDay": "You already have an hourly leave on this day. Only one hourly leave is allowed per day.",
+    "perDiemNotApplicable": "A per diem can only be entered on the HR step of a work errand.",
+    "perDiemInvalid": "Enter the per diem as a whole number of Rials, 0 or more.",
+    "adminOnlySetting": "Only an admin may change the approval order or the hours in a working day."
   },
   "roles": {
     "admin": "Admin",
@@ -1261,5 +1272,59 @@
     "placeholder": "Type a name or personnel no.",
     "noResults": "No match.",
     "clear": "Clear"
+  },
+  "absences": {
+    "title": "Approved absences",
+    "hint": "Only fully approved leave and work errands are listed. Pending requests do not appear.",
+    "count": "{n} people out",
+    "today": "Today",
+    "empty": "Nobody has approved leave or an errand on this day.",
+    "allDaySection": "All day",
+    "hourlySection": "Part of the day",
+    "allDay": "All day",
+    "dateRange": "{from} to {to}",
+    "leave": "Leave",
+    "hourlyErrand": "Hourly work errand",
+    "dailyErrand": "Daily work errand"
+  },
+  "finance": {
+    "title": "Finance — completed approvals",
+    "kind": "Kind",
+    "all": "All requests",
+    "errands": "Work errands",
+    "leaves": "Leave",
+    "export": "Excel (CSV)",
+    "count": "Approved requests",
+    "totalPerDiem": "Total per diem",
+    "rials": "Rials",
+    "empty": "No fully approved requests in this period.",
+    "trackingNo": "Tracking no.",
+    "employee": "Employee",
+    "type": "Type",
+    "dates": "Dates",
+    "duration": "Duration",
+    "location": "Errand location",
+    "perDiem": "Per diem (Rials)",
+    "unpaid": "Unpaid: {value}",
+    "leave": "Leave",
+    "errand": "Work errand",
+    "hourlyErrand": "Hourly work errand",
+    "dailyErrand": "Daily work errand",
+    "csv": {
+      "trackingNo": "Tracking no.",
+      "personnelNo": "Personnel no.",
+      "employee": "Employee",
+      "department": "Department",
+      "kind": "Kind",
+      "type": "Type",
+      "start": "Start date",
+      "end": "End date",
+      "startTime": "From",
+      "endTime": "To",
+      "days": "Days",
+      "unpaidDays": "Unpaid days",
+      "location": "Errand location",
+      "perDiem": "Per diem (Rials)"
+    }
   }
 }

@@ -57,6 +57,8 @@ export default async function AppLayout({ children, params }: Props) {
     requests: t('requests'),
     approvalSteps: t('approvalSteps'),
     reports: t('reports'),
+    absences: t('absences'),
+    finance: t('finance'),
     settings: t('settings'),
     language: t('language'),
     langFa: tProfile('langFa'),

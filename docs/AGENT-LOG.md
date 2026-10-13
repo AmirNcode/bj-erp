@@ -78,6 +78,57 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-12 — Client feedback: security board, admin override, HR settings, carryover, per diem, finance (FR-56–62)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
+**Trigger:** Amir relayed client feedback (7 items), answered clarifying questions, asked to build
+all of it, commit, run a local instance, not push. Later: add a test HR account `hr-101` to the demo seed.
+
+**Decisions (Amir, in chat):** build on `main`, not the unfinished FR-55 branch · admin override
+fills ALL remaining steps incl. named-person steps · per diem on errands only, Rials · security board =
+today + date picker · hourly cap stays a setting but max 4h · finance sees all approved requests +
+CSV · local data = fresh demo seed · retire existing security/admin steps.
+
+**What changed**
+- Spec `docs/specs/2026-10-12-client-feedback-approvals-settings-design.md`.
+- Migrations `20261012120001` (accrue_leave without carryover forfeit), `…02` (one hourly leave
+  per day in submit_leave_impl; CHECK cap <= 240), `…03` (per_diem_rials column; security/admin steps
+  deactivated + CHECK; approve_leave_request(+p_override, +p_per_diem_rials) — old 3-arg dropped;
+  reject lets admin reject past named steps), `…04` (has_permission keys settings.edit /
+  absences.view / finance.view; work_settings+holidays *_editor policies; trigger keeping
+  approval_order_enforced/hours_per_day admin-only; finance_approved_requests()).
+- `lib/leave/approvals.ts`: fillableStep has no admin bypass; new approvalAction / perDiemApplies.
+  `lib/actions/leave/approvals.ts` + `DecisionDialogs.tsx`: override checkbox / override-only note,
+  per diem field (`lib/leave/perDiem.ts`).
+- New pages `/absences` (security, admin) and `/finance` (finance, admin) + nav; `/settings` and its
+  actions open to hr; step editor offers manager/hr only; carryover field hidden; TS accrual mirror
+  without forfeit; db-error rules; fa/en messages.
+- `scripts/seed-demo.mjs`: HR test account `hr-101` (personnel 101, created by RPC then renamed via
+  GoTrue admin API with SUPABASE_SERVICE_ROLE_KEY) and finance `4002`.
+- Tests: `tests/sql/client-feedback-2026-10-12.sql` (45), unit updates (approval-chain, accrual, nav,
+  settings-validation, per-diem), e2e hr-role / approval-step-person adjusted for HR settings.
+- Docs: REQUIREMENTS FR-56–62, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS (FR-55 note), CLAUDE.md.
+
+**Actions outside the repo**
+- Docker Desktop was EMPTY (VM disk recreated 2026-10-09): the old local DB (real roster + FR-55
+  migrations 160001–160005) is gone. Ran `bj-deploy reset-db local` (LAN 192.168.2.80, admin
+  `Admin!2026`), then `bj-deploy update local` (applied 20261012120001–04), restarted rest, ran the
+  demo seed. Local DB is demo data only now. Liara untouched.
+
+**Verification**
+- SQL: new suite 45 PASS; fr51 40, fr52-53 53, fr54 82 PASS (dry-run and after apply).
+- `tsc --noEmit` clean, `npm run lint` clean, unit 617 pass. e2e NOT run. Browser click-through NOT
+  done (Amir declined the browser pane). hr-101 login checked against GoTrue `/token`.
+
+**State left behind**
+- Committed on local `main`, not pushed.
+
+**For the next agent**
+- FR-55 branch must rebase onto this: has_permission body changed, step-role CHECK changed.
+- The calendar's approve dialog has no override/per-diem UI (the SQL still auto-overrides for an admin
+  without a natural step).
+- Local e2e specs that use demo users 1001/2001 should work again (demo data, not the real roster).
+
 ## 2026-10-07 — Released 27d59f5 + 6240e3c to Liara (FR-52/53/54 and follow-ups)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 6240e3c

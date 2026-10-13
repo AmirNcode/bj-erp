@@ -71,11 +71,12 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   await expect(page.locator('[data-testid="approval-steps-card"]')).toBeVisible({
     timeout: 30_000,
   });
-  // Work settings, holidays and departments stay admin-only and are not rendered.
+  // Work settings and holidays live on /settings (hr edits them there since
+  // FR-59), not on this page.
   await expect(page.locator('[data-testid="work-settings"]')).toHaveCount(0);
   await expect(page.locator('[data-testid="holiday-editor"]')).toHaveCount(0);
-  // The order switch writes work_settings, which is still admin-only, so HR sees
-  // it disabled rather than getting a database error on click.
+  // The order switch stays admin-only (a trigger guards that column even though
+  // hr may now write work_settings), so HR sees it disabled.
   await expect(page.locator('[data-testid="approval-order-enforced"]')).toBeDisabled();
   // ...but HR can add a step, which is the point of FR-42.
   await expect(page.locator('[data-testid="approval-step-add-open"]')).toBeEnabled();

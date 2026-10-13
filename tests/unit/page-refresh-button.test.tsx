@@ -88,6 +88,8 @@ describe('AppShell side panel', () => {
     requests: 'Request archive',
     approvalSteps: 'Approval steps',
     reports: 'Reports',
+    absences: 'Absences',
+    finance: 'Finance',
     settings: 'Settings',
     language: 'Language',
     langFa: 'فارسی',

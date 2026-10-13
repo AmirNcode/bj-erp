@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   applicableSteps,
   fillableStep,
+  approvalAction,
+  perDiemApplies,
   outstandingSteps,
   filterApprovable,
   departmentStepApplies,
@@ -61,15 +63,12 @@ describe('fillableStep — entitlement', () => {
     expect(fillableStep({ ...base, callerRoles: ['hr'] })?.role).toBe('hr');
   });
 
-  it('an admin fills the lowest outstanding step', () => {
-    expect(fillableStep({ ...base, callerRoles: ['admin'] })?.role).toBe('manager');
-    expect(
-      fillableStep({
-        ...base,
-        callerRoles: ['admin'],
-        signed: [{ stepRole: 'manager', decision: 'approved' }],
-      })?.role
-    ).toBe('hr');
+  it('holding admin alone fills no step (FR-58: admin is not a step)', () => {
+    expect(fillableStep({ ...base, callerRoles: ['admin'] })).toBeNull();
+  });
+
+  it('an admin who also holds hr fills the hr step in their own right', () => {
+    expect(fillableStep({ ...base, callerRoles: ['admin', 'hr'] })?.role).toBe('hr');
   });
 
   it('a plain employee fills nothing', () => {
@@ -124,8 +123,12 @@ describe('fillableStep — self-approval', () => {
     ).toBeNull();
   });
 
-  it('an admin still can — deliberately, so a company’s only admin is not stuck', () => {
-    expect(fillableStep({ ...base, callerRoles: ['admin'], isSelf: true })?.role).toBe('manager');
+  it('an admin approves their own request only through the override', () => {
+    // Deliberate, so a company's only admin is not stuck.
+    expect(fillableStep({ ...base, callerRoles: ['admin', 'hr'], isSelf: true })).toBeNull();
+    expect(
+      approvalAction({ ...base, callerRoles: ['admin'], isSelf: true })?.override.map((s) => s.id)
+    ).toEqual(['manager-1', 'hr-2']);
   });
 });
 
@@ -296,8 +299,9 @@ describe('filterApprovable', () => {
 //
 // Every expectation here was verified first against the LIVE engine
 // (public.approve_leave_request) in rolled-back transactions — a named approver
-// holding no role signed their step; an admin filling the chain got the MANAGER
-// step and could not complete it alone; a deactivated approver was refused.
+// holding no role signed their step; a deactivated approver was refused. Since
+// FR-58 (2026-10-12) an admin no longer fills a step as such: the override signs
+// every outstanding step at once, the named one included.
 describe('named-person steps (FR-42)', () => {
   const NAMED = 'person-uuid-1';
   const OTHER = 'person-uuid-2';
@@ -336,24 +340,17 @@ describe('named-person steps (FR-42)', () => {
     ).toBeNull();
   });
 
-  it('an ADMIN cannot fill a named step — they get the manager step instead', () => {
-    // The decisive guarantee: naming a person means that signature specifically
-    // is required, so there is no admin override. Matches the live engine, where
-    // an admin signing this chain filled `manager`.
-    expect(fillableStep({ ...withPerson, callerId: OTHER, callerRoles: ['admin'] })?.id).toBe(
-      'mgr'
-    );
+  it('an admin fills no named step in their own right', () => {
+    expect(fillableStep({ ...withPerson, callerId: OTHER, callerRoles: ['admin'] })).toBeNull();
   });
 
-  it('an admin cannot complete the chain alone', () => {
-    const afterAdmin: SignedStep[] = [
+  it('the admin override covers the named step too (FR-58)', () => {
+    const afterManager: SignedStep[] = [
       { stepId: 'mgr', stepRole: 'manager', decision: 'approved' },
     ];
     expect(
-      fillableStep({ ...withPerson, signed: afterAdmin, callerId: OTHER, callerRoles: ['admin'] })
-    ).toBeNull();
-    // ...and the chain is still outstanding on the named step.
-    expect(outstandingSteps(STEPS_WITH_PERSON, afterAdmin, 'leave')).toEqual(['employee']);
+      approvalAction({ ...withPerson, signed: afterManager, callerId: OTHER, callerRoles: ['admin'] })
+    ).toEqual({ natural: null, override: [STEPS_WITH_PERSON[1]] });
   });
 
   it('the named person cannot sign twice', () => {
@@ -401,8 +398,9 @@ describe('named-person steps (FR-42)', () => {
     const legacy: SignedStep[] = [{ stepRole: 'manager', decision: 'approved' }];
     expect(outstandingSteps(STEPS_WITH_PERSON, legacy, 'leave')).toEqual(['employee']);
     expect(
-      fillableStep({ ...withPerson, signed: legacy, callerId: OTHER, callerRoles: ['admin'] })
-    ).toBeNull();
+      approvalAction({ ...withPerson, signed: legacy, callerId: OTHER, callerRoles: ['admin'] })
+        ?.override.map((st) => st.id)
+    ).toEqual(['named']);
   });
 
   it('order enforcement still binds a named step', () => {
@@ -472,8 +470,11 @@ describe('department manager step (FR-47)', () => {
     ).toBeNull();
   });
 
-  it('an admin may fill the department step', () => {
-    expect(fillableStep({ ...input, callerRoles: ['admin'], signed: supervisorSigned })?.id).toBe('d');
+  it('the admin override includes the department step when it applies', () => {
+    expect(
+      approvalAction({ ...input, callerRoles: ['admin'], signed: supervisorSigned, departmentStepApplies: true })
+        ?.override.map((st) => st.id)
+    ).toContain('d');
   });
 
   it('filterApprovable routes the request to the department manager', () => {
@@ -512,5 +513,59 @@ describe('departmentStepApplies', () => {
   });
   it('applies to someone with no direct manager', () => {
     expect(departmentStepApplies({ ...base, employeeManagerId: null })).toBe(true);
+  });
+});
+
+describe('approvalAction (FR-58)', () => {
+  it('a plain employee has nothing to do', () => {
+    expect(approvalAction({ ...base, callerRoles: ['employee'] })).toBeNull();
+  });
+
+  it('a manager gets their natural step and no override', () => {
+    expect(approvalAction({ ...base, callerRoles: ['manager'], isDirectManager: true })).toEqual({
+      natural: STEPS[0],
+      override: [],
+    });
+  });
+
+  it('an admin gets every outstanding step as the override', () => {
+    const signed: SignedStep[] = [{ stepId: 'manager-1', stepRole: 'manager', decision: 'approved' }];
+    expect(approvalAction({ ...base, callerRoles: ['admin'], signed })).toEqual({
+      natural: null,
+      override: [STEPS[1]],
+    });
+  });
+
+  it('an admin who holds hr gets both the hr step and the override', () => {
+    const a = approvalAction({ ...base, callerRoles: ['admin', 'hr'] });
+    expect(a?.natural?.id).toBe('hr-2');
+    expect(a?.override.map((s) => s.id)).toEqual(['manager-1', 'hr-2']);
+  });
+
+  it('the override ignores order enforcement', () => {
+    expect(
+      approvalAction({ ...base, callerRoles: ['admin'], orderEnforced: true })?.override.length
+    ).toBe(2);
+  });
+
+  it('with no chain configured the admin decides alone, no override list', () => {
+    const none = { ...base, steps: [] as ApprovalStep[] };
+    expect(approvalAction({ ...none, callerRoles: ['admin'] })).toEqual({
+      natural: { id: '', role: 'manager', stepOrder: 1, appliesTo: ['leave'], active: true },
+      override: [],
+    });
+  });
+});
+
+describe('perDiemApplies (FR-61)', () => {
+  it('applies to an errand when an hr step is signed', () => {
+    expect(perDiemApplies('errand', [STEPS[1]])).toBe(true);
+    expect(perDiemApplies('errand', STEPS)).toBe(true);
+  });
+
+  it('not on leave, nor without an hr step', () => {
+    expect(perDiemApplies('leave', [STEPS[1]])).toBe(false);
+    expect(perDiemApplies('errand', [STEPS[0]])).toBe(false);
+    expect(perDiemApplies('errand', [null])).toBe(false);
   });
 });

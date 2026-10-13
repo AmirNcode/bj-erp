@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import {
   ApproveDialog,
   RejectDialog,
+  type ApproveOptions,
   type ApproveDialogLabels,
   type RejectDialogLabels,
 } from '../manage/approvals/DecisionDialogs';
@@ -28,6 +29,8 @@ export type PendingRow = {
   balanceAfter: string | null;
   /** Short-staffed warning; replaces the meta line when present. */
   warning: string | null;
+  /** FR-58/61: override and per diem choices for the approve dialog. */
+  approveOptions: ApproveOptions;
 };
 
 type Labels = ApproveDialogLabels &
@@ -153,9 +156,10 @@ export function PendingApprovalsCard({ rows, total, count, labels, locale }: Pro
                 id={row.id}
                 labels={labels}
                 disabled={isPending}
-                onApprove={(signatureData, signatureAuthorized) =>
+                options={row.approveOptions}
+                onApprove={(signatureData, signatureAuthorized, extras) =>
                   decide(row.id, labels.approveSuccess, () =>
-                    approveRequest(row.id, { signatureData, signatureAuthorized })
+                    approveRequest(row.id, { signatureData, signatureAuthorized, ...extras })
                   )
                 }
                 triggerClassName={actionClass}

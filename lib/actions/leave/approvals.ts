@@ -10,8 +10,10 @@ import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
 import {
+  approvalAction,
   departmentStepApplies,
   filterApprovable,
+  perDiemApplies,
   outstandingSteps,
   stepLabel,
   type ApprovalStep,
@@ -29,11 +31,17 @@ export type DecisionResult = { ok: true } | { ok: false; error: string };
 export type ApproveRequestInput = {
   signatureData: string;
   signatureAuthorized: boolean;
+  /** FR-58: admin only — sign every outstanding step at once. */
+  override?: boolean;
+  /** FR-61: per diem in Rials, only with an hr step on an errand. */
+  perDiemRials?: number | null;
 };
 
 /**
- * Approve a pending request. The SQL fn enforces is_manager_of(employee)||admin,
- * flips the status atomically, and debits the ledger for balance-affecting types.
+ * Approve a pending request: sign the caller's own step, or — for an admin —
+ * every outstanding step at once (FR-58). The SQL fn decides entitlement, flips
+ * the status atomically when the chain completes, and debits the ledger for
+ * balance-affecting types.
  */
 export async function approveRequest(
   requestId: string,
@@ -44,11 +52,17 @@ export async function approveRequest(
   if (!input.signatureAuthorized) return dbErr('signature authorization is required');
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  const perDiem = input.perDiemRials ?? null;
+  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
+    return dbErr('per diem must be 0 or more');
+  }
 
   const { error } = await c.supabase.rpc('approve_leave_request', {
     p_id: requestId,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
+    p_override: input.override ?? false,
+    p_per_diem_rials: perDiem ?? undefined,
   });
   if (error) return dbErr(error.message);
   invalidateAppCache();
@@ -120,6 +134,13 @@ export type PendingApproval = {
   /** Labels of the steps already approved — a department signature carries role `manager`. */
   approved: StepLabel[];
   outstanding: StepLabel[];
+  /** FR-58: the step the caller signs in their own right, if any. */
+  natural_step: StepLabel | null;
+  /** FR-58: admin — may sign every outstanding step at once. */
+  can_override: boolean;
+  /** FR-61: whether signing the natural step / the override takes a per diem. */
+  per_diem_natural: boolean;
+  per_diem_override: boolean;
 };
 
 /**
@@ -263,6 +284,10 @@ export async function getPendingApprovals(): Promise<
     signed: [] as SignedStep[],
     approved: [] as StepLabel[],
     outstanding: [] as StepLabel[],
+    natural_step: null,
+    can_override: false,
+    per_diem_natural: false,
+    per_diem_override: false,
     // Filled below: a cover can book leave between submission and approval, and
     // the manager should see that before deciding (spec §2.1). approve_leave_request
     // also refuses it, so this is a heads-up rather than the guard.
@@ -301,6 +326,24 @@ export async function getPendingApprovals(): Promise<
   }
 
   const scoped = filterApprovable(mapped, c.user.id, c.roles, steps, orderEnforced);
+  for (const r of scoped) {
+    const action = approvalAction({
+      steps,
+      signed: r.signed,
+      kind: r.kind,
+      callerRoles: c.roles,
+      isDirectManager: r.employee_manager_id === c.user.id,
+      isDepartmentManager: r.employee_department_manager_id === c.user.id,
+      departmentStepApplies: r.department_step_applies,
+      isSelf: r.employee_id === c.user.id,
+      orderEnforced,
+      callerId: c.user.id,
+    });
+    r.natural_step = action?.natural ? stepLabel(action.natural) : null;
+    r.can_override = (action?.override.length ?? 0) > 0;
+    r.per_diem_natural = perDiemApplies(r.kind, [action?.natural ?? null]);
+    r.per_diem_override = perDiemApplies(r.kind, action?.override ?? []);
+  }
 
   // One round-trip for the whole queue rather than per row.
   const withCover = ((data ?? []) as unknown as Row[]).filter((r) => r.replacement_id);

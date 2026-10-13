@@ -34,6 +34,8 @@ export default async function ManageIndexPage({ params }: Props) {
     requests: t('requests'),
     approvalSteps: t('approvalSteps'),
     reports: t('reports'),
+    absences: t('absences'),
+    finance: t('finance'),
     settings: t('settings'),
   };
 

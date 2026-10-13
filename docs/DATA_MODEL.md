@@ -231,7 +231,7 @@ until `20261006120003`, which corrected it and backfilled those requests.
 ### `employee_leave_policies`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `accrual_minutes_per_month int` · `annual_cap_minutes int` (nullable = uncapped) ·
-`carryover_cap_minutes int` (default 4320 = 9 days, ماده ۶۶) ·
+`carryover_cap_minutes int` (default 4320 = 9 days, ماده ۶۶; **unused since FR-60**, 2026-10-12) ·
 `accrual_start_month date` (always a `jalali_months.gregorian_start`; the setter validates it) ·
 `created_by` · `created_at` · `updated_at`. **Unique** (`employee_id`,`leave_type_id`).
 The per-employee accrual rule (2026-07-29, FR-27), defaulted from
@@ -273,6 +273,7 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `start_date date` ·
 `end_date date` · `day_part day_part` · `requested_minutes int` (computed, see below) ·
 `unpaid_minutes int` (default 0, constrained to `0..requested_minutes`) ·
+`per_diem_rials bigint` (FR-61, 2026-10-12: errand-only, `>= 0`, set when an hr step is signed) ·
 `status leave_status` (default `pending`) · `reason text` · `decided_by → profiles` (nullable) ·
 `decided_at` · `decision_note text` (nullable, ≤500 chars) · `signature_data text` (nullable for
 historical rows) · `signature_consent_at timestamptz` (nullable for historical rows) ·
@@ -494,8 +495,8 @@ the admin's "Post accruals now". Per month, in this order:
 ```
 1. skip if already posted                     (partial unique index + on conflict do nothing)
 2. skip if the month ended before hire_date
-3. if jalali_month = 1 AND an earlier accrual exists AND balance > carryover_cap:
-       post 'carryover_forfeit' of -(balance - cap), clamping to the cap   ← BEFORE step 5
+3. (removed 2026-10-12, FR-60) the Farvardin carryover forfeit — the whole balance now carries
+   over; `carryover_cap_minutes` is no longer read
 4. if hire_date is inside this month:
        amount = round(rate * days_from_hire_to_month_end / days_in_month)  (calendar days)
 5. if annual_cap is set:

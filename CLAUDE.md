@@ -108,7 +108,8 @@ Supabase + dev server; run serial `--workers=1`; `E2E_BASE_URL` targets an exter
 `npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org) ·
 `npm run schema:dump` (regenerate `supabase/schema.sql` from the local DB).
 Deploying: Liara → `docs/DEPLOY-LIARA.md`; local Docker → `docs/DEPLOY-ASSISTANT.md`.
-Demo-seed login (local/demo DB only): `admin` / `Admin!2026`. Liara admin password:
+Demo-seed login (local/demo DB only): `admin` / `Admin!2026`; others `Demo!2026` (hr: `hr-101`,
+finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_ROLE_KEY` in `deploy/.env`) when seeding. Liara admin password:
 `.bj-deploy/liara/admin-password`.
 
 ## Gotchas

@@ -261,6 +261,28 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   hr and finance see all. Opened from Manage › Employees (admin, hr) and the Home notice; printable like the paper form. *(2026-10-07; spec
   `2026-10-07-clearance-form-design.md`.)*
 
+- **FR-56** ☑ **Security board, no security approvals.** Security sees `/absences`: everyone with a
+  fully approved leave or errand (daily or hourly) on a chosen day, default today; pending requests
+  never show; no reason or errand location. Security and admin can no longer be approval steps
+  (existing ones deactivated). *(2026-10-12; spec
+  `2026-10-12-client-feedback-approvals-settings-design.md`.)*
+- **FR-57** ☑ **One hourly leave a day, at most 4 hours.** A second pending/approved hourly leave on
+  the same day is refused; `max_hourly_minutes_per_day` is capped at 240. Hourly errands unaffected.
+  *(2026-10-12.)*
+- **FR-58** ☑ **Admin override.** Admin is not a step. An admin's approval signs every outstanding
+  step (named-person steps included, amending FR-42) and completes the request; an admin holding
+  a step of their own signs only that unless they choose the override. Admin may reject any
+  pending request. *(2026-10-12.)*
+- **FR-59** ☑ **HR edits company settings.** Work hours, hourly cap, days off and holidays
+  (`settings.edit`: admin, hr). Approval order and hours-per-day stay admin-only. *(2026-10-12.)*
+- **FR-60** ☑ **Unlimited carryover.** No Farvardin forfeit; the whole balance carries over.
+  Supersedes FR-27's carryover cap. *(2026-10-12.)*
+- **FR-61** ☑ **Per diem on HR's step.** Optional Rial amount (`leave_requests.per_diem_rials`)
+  entered when an hr step of an errand is signed. *(2026-10-12.)*
+- **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
+  requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
+  *(2026-10-12.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

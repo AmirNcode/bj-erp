@@ -228,10 +228,13 @@ export function AccrualPolicyFields({
   errors: Record<string, DaysHoursError>;
   labels: PolicyLabels;
 }) {
+  // FR-60 (2026-10-12): the whole balance carries over, so the carryover cap is
+  // no longer read. Its field stays in the form, hidden, so the policy write
+  // keeps sending the stored value unchanged.
   const fields = [
-    { key: 'rate', label: labels.policyRate, hint: labels.policyRateHint },
-    { key: 'cap', label: labels.policyAnnualCap, hint: labels.policyAnnualCapHint },
-    { key: 'carry', label: labels.policyCarryCap, hint: labels.policyCarryCapHint },
+    { key: 'rate', label: labels.policyRate, hint: labels.policyRateHint, hidden: false },
+    { key: 'cap', label: labels.policyAnnualCap, hint: labels.policyAnnualCapHint, hidden: false },
+    { key: 'carry', label: labels.policyCarryCap, hint: labels.policyCarryCapHint, hidden: true },
   ] as const;
   return (
     <fieldset className="space-y-1.5">
@@ -240,10 +243,10 @@ export function AccrualPolicyFields({
           breakpoint follows the card, not the viewport, since the sidebar
           takes a variable share of the screen. */}
       <div className="@container">
-        <div className="grid gap-3 @3xl:grid-cols-3">
+        <div className="grid gap-3 @3xl:grid-cols-2">
           {fields.map((field) => {
             const name = policyFieldName(field.key, leaveTypeId);
-            return (
+            const input = (
               <DaysHoursField
                 key={field.key}
                 name={name}
@@ -257,6 +260,13 @@ export function AccrualPolicyFields({
                 hint={field.hint}
                 error={errors[name]}
               />
+            );
+            return field.hidden ? (
+              <div key={field.key} hidden>
+                {input}
+              </div>
+            ) : (
+              input
             );
           })}
         </div>

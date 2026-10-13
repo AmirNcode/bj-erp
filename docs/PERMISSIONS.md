@@ -10,8 +10,8 @@ only mirrors it. Every table holding employee data has policies.
 | **admin** | The owner. Full read/write across the company. Override on any decision. |
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
-| **security** | Security department staff. **Read-only** visibility into **everyone's** calendar. |
-| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Nothing else. *(FR-54; added 2026-10-07.)* |
+| **security** | Security department staff. **Read-only** visibility into **everyone's** calendar, and the approved-absences board (`/absences`, FR-56). **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
+| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only. *(FR-54; added 2026-10-07.)* |
 | **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
 
 A user may hold multiple roles (`user_roles` table). Highest applicable permission wins. An
@@ -173,6 +173,17 @@ SELECT over `profiles`, `leave_ledger`, `leave_types`, `leave_requests` and
 `hr || admin` check in the action and on the page is a fast localized refusal, not the boundary: an
 employee who reached it would still read only their own rows.
 
+### Permission keys added 2026-10-12 (FR-56/59/62)
+`private.has_permission` gained `settings.edit` (admin, hr), `absences.view` (admin, security),
+`finance.view` (admin, finance). **FR-55 presets must keep them:** security = `absences.view` only;
+hr adds `settings.edit`; finance adds `finance.view`.
+- `work_settings` / `holidays` INSERT/UPDATE (and `holidays` DELETE): `settings.edit` on the
+  caller's own company (`*_editor` policies; `work_settings` DELETE stays admin). Trigger
+  `work_settings_enforce_scope` refuses a non-admin change to `approval_order_enforced` or
+  `hours_per_day`.
+- `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
+  `finance.view`; caller's company; approved rows only; no signatures, no reason.
+
 ### `approval_steps` (FR-36)
 - **SELECT**: any active authenticated company member. Deliberately open: the requester is shown
   which steps their request is waiting on, so this is progress information, not privileged config.
@@ -204,6 +215,11 @@ employee who reached it would still read only their own rows.
 - **INSERT/UPDATE/DELETE**: **no client policy at all**, exactly like `leave_ledger`. Every row is
   written inside `approve_leave_request` / `reject_leave_request`. A client that could insert here
   could forge an approval signature.
+- **FR-58 (2026-10-12) supersedes the admin clauses below and FR-42's "no admin override":** an
+  admin fills no step as such. `approve_leave_request(..., p_override, p_per_diem_rials)` lets an
+  admin sign EVERY outstanding step at once (named ones included) — automatically when they have no
+  step of their own. `reject_leave_request` lets an admin reject any pending request. The
+  `approval_steps_role_allowed` CHECK admits `security`/`admin` only on an inactive row.
 - **Who may fill which step**: an admin may fill any outstanding step; the `manager` step needs
   `is_manager_of` (holding the manager role is not enough); any other step needs that role. A
   non-admin can never sign a step on their **own** request. When

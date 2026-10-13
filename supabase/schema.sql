@@ -615,6 +615,34 @@ end; $$;
 
 
 --
+-- Name: enforce_work_settings_scope(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.enforce_work_settings_scope() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  -- Direct SQL (migrations, superuser) has no JWT and is not limited.
+  if v_uid is null or private.is_admin(v_uid) then
+    return new;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.approval_order_enforced is distinct from false
+       or new.hours_per_day is distinct from 8 then
+      raise exception 'only an admin may change approval order or hours per day' using errcode = '42501';
+    end if;
+  elsif new.approval_order_enforced is distinct from old.approval_order_enforced
+        or new.hours_per_day is distinct from old.hours_per_day then
+    raise exception 'only an admin may change approval order or hours per day' using errcode = '42501';
+  end if;
+  return new;
+end; $$;
+
+
+--
 -- Name: has_permission(uuid, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -632,6 +660,9 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     when 'separations.manage' then private.is_admin(uid) or private.has_role(uid, 'hr')
     when 'separations.view'   then private.is_admin(uid) or private.has_role(uid, 'hr')
                                    or private.has_role(uid, 'finance')
+    when 'settings.edit'      then private.is_admin(uid) or private.has_role(uid, 'hr')
+    when 'absences.view'      then private.is_admin(uid) or private.has_role(uid, 'security')
+    when 'finance.view'       then private.is_admin(uid) or private.has_role(uid, 'finance')
     else false
   end;
 $$;
@@ -1248,6 +1279,19 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('leave:' || v_uid::text, 0));
 
   if p_kind = 'leave' and p_unit = 'hour' then
+    -- FR-57: one hourly leave per person per day. Rejected and cancelled
+    -- requests free the day again.
+    if exists (
+      select 1 from public.leave_requests r
+       where r.employee_id = v_uid
+         and r.kind = 'leave'
+         and r.unit = 'hour'
+         and r.start_date = p_start
+         and r.status in ('pending', 'approved')
+    ) then
+      raise exception 'only one hourly leave per day' using errcode = '22023';
+    end if;
+
     select coalesce(sum(r.requested_minutes), 0) into v_day_used
       from public.leave_requests r
      where r.employee_id = v_uid
@@ -1428,7 +1472,6 @@ CREATE FUNCTION public.accrue_leave(p_employee_id uuid, p_leave_type_id uuid) RE
 declare
   v_rate      int;
   v_cap       int;
-  v_carry     int;
   v_start     date;
   v_hire      date;
   v_today     date := (now() at time zone 'Asia/Tehran')::date;
@@ -1438,12 +1481,10 @@ declare
   v_m         record;
   v_amount    int;
   v_already   int;
-  v_excess    int;
-  v_earlier   boolean;
   v_rows      int;
 begin
-  select accrual_minutes_per_month, annual_cap_minutes, carryover_cap_minutes, accrual_start_month
-    into v_rate, v_cap, v_carry, v_start
+  select accrual_minutes_per_month, annual_cap_minutes, accrual_start_month
+    into v_rate, v_cap, v_start
     from public.employee_leave_policies
    where employee_id = p_employee_id and leave_type_id = p_leave_type_id;
 
@@ -1494,31 +1535,6 @@ begin
     -- Nobody accrues for a month that ended before they were hired.
     if v_hire is not null and v_m.gregorian_end < v_hire then
       continue;
-    end if;
-
-    -- Year boundary: clamp the carried balance BEFORE crediting this month.
-    if v_m.jalali_month = 1 then
-      select exists (
-        select 1 from public.leave_ledger
-         where employee_id = p_employee_id and leave_type_id = p_leave_type_id
-           and entry_type = 'allocation' and period_month is not null
-           and period_month < v_m.gregorian_start
-      ) into v_earlier;
-
-      if v_earlier and v_balance > v_carry then
-        v_excess := v_balance - v_carry;
-        insert into public.leave_ledger(employee_id, leave_type_id, entry_type,
-                                        delta_minutes, balance_after_minutes, period_month, note)
-        values (p_employee_id, p_leave_type_id, 'carryover_forfeit',
-                -v_excess, v_carry, v_m.gregorian_start, 'carryover above cap forfeited')
-        on conflict do nothing;
-        -- Only move the running balance if the row was actually written; a
-        -- concurrent caller may have posted it first.
-        get diagnostics v_rows = row_count;
-        if v_rows = 1 then
-          v_balance := v_carry;
-        end if;
-      end if;
     end if;
 
     v_amount := v_rate;
@@ -3246,10 +3262,10 @@ end; $$;
 
 
 --
--- Name: approve_leave_request(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+-- Name: approve_leave_request(uuid, text, boolean, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean) RETURNS void
+CREATE FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean DEFAULT false, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $_$
@@ -3282,6 +3298,9 @@ declare
   v_total      int;
   v_remaining  int;
   v_enforce    boolean;
+  v_override   boolean := false;
+  v_filled     int := 1;
+  v_filled_hr  boolean := false;
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
@@ -3297,6 +3316,9 @@ begin
      or p_signature_data !~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'
   then
     raise exception 'signature data is invalid' using errcode = '22023';
+  end if;
+  if p_per_diem_rials is not null and p_per_diem_rials < 0 then
+    raise exception 'per diem must be 0 or more' using errcode = '22023';
   end if;
 
   select employee_id, company_id, kind into v_emp, v_company, v_kind
@@ -3327,14 +3349,16 @@ begin
    where s.company_id = v_company and s.active and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp);
 
   if v_total = 0 then
-    -- No chain configured: behave exactly as before this migration.
+    -- No chain configured: behave exactly as before FR-36.
     if not (v_is_mgr or v_is_admin) then
       raise exception 'not allowed to decide this request' using errcode = '42501';
     end if;
     v_step_role := 'manager';
     v_step_order := 1;
   else
-    -- The lowest-ordered outstanding step this caller is entitled to fill.
+    -- The lowest-ordered outstanding step this caller fills IN THEIR OWN RIGHT
+    -- (FR-58: holding `admin` no longer entitles anyone to a step; the admin
+    -- path is the override below). Nobody signs their own request this way.
     select s.role, s.step_order, s.id into v_step_role, v_step_order, v_step_id
       from public.approval_steps s
      where s.company_id = v_company
@@ -3346,79 +3370,115 @@ begin
                 and (a.step_id = s.id
                      or (a.step_id is null and a.step_role = s.role)))
        and (
-             -- FR-42: a step reserved for one NAMED person is fillable only by
-             -- that person, and only while their account is active. There is no
-             -- admin override here, unlike a role step: naming someone means
-             -- their signature specifically is required, and an admin who could
-             -- sign in their place would make the naming advisory. A departed
-             -- approver is fixed by editing the configuration (admin or hr),
-             -- not by signing past them.
              case when s.approver_id is not null then
                     s.approver_id = v_uid and private.is_active(v_uid)
                   else
-                    v_is_admin
-                    or ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
+                    ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
                     or (s.role <> 'manager' and private.has_role(v_uid, s.role))
              end
            )
-       -- Nobody but an admin signs their own request.
-       and (v_is_admin or v_emp <> v_uid)
+       and v_emp <> v_uid
      order by s.step_order, s.role
      limit 1;
 
-    if v_step_role is null then
-      -- Distinguish "already signed by you" from "not your step", because the
-      -- two need different things from the person reading the message.
-      if exists (
-        select 1 from public.leave_request_approvals a
-         where a.request_id = p_id
-           and (a.approver_id = v_uid
-                or exists (
-                     select 1 from public.approval_steps s
-                      where s.company_id = v_company and s.active
-                        and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-                        and (a.step_id = s.id
-                             or (a.step_id is null and a.step_role = s.role))
-                        and case when s.approver_id is not null
-                                 then s.approver_id = v_uid
-                                 else ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
-                                      or (s.role <> 'manager'
-                                          and private.has_role(v_uid, s.role))
-                            end))
-      ) then
-        raise exception 'you have already signed this request' using errcode = '22023';
-      end if;
-      raise exception 'not allowed to decide this request' using errcode = '42501';
-    end if;
+    -- FR-58: an admin overrides on request, or whenever they have no step of
+    -- their own to sign.
+    v_override := v_is_admin and (coalesce(p_override, false) or v_step_role is null);
 
-    select coalesce(approval_order_enforced, false) into v_enforce
-      from public.work_settings where company_id = v_company limit 1;
+    if v_override then
+      select coalesce(bool_or(s.role = 'hr'), false) into v_filled_hr
+        from public.approval_steps s
+       where s.company_id = v_company and s.active
+         and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
+         and not exists (
+               select 1 from public.leave_request_approvals a
+                where a.request_id = p_id
+                  and (a.step_id = s.id
+                       or (a.step_id is null and a.step_role = s.role)));
 
-    if coalesce(v_enforce, false) then
-      if exists (
-        select 1 from public.approval_steps s
-         where s.company_id = v_company and s.active
-           and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-           and s.step_order < v_step_order
-           and not exists (
-                 select 1 from public.leave_request_approvals a
-                  where a.request_id = p_id
-                    and (a.step_id = s.id
-                         or (a.step_id is null and a.step_role = s.role))
-                    and a.decision = 'approved')
-      ) then
-        raise exception 'an earlier approval is still required' using errcode = '22023';
+      -- One signed row per outstanding step, so each box on the printed form
+      -- shows who filled it. Order enforcement does not bind the override.
+      insert into public.leave_request_approvals (
+        request_id, step_id, step_role, approver_id, decision, signature_data, signature_consent_at
+      )
+      select p_id, s.id, s.role, v_uid, 'approved', p_signature_data, v_consent_at
+        from public.approval_steps s
+       where s.company_id = v_company and s.active
+         and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
+         and not exists (
+               select 1 from public.leave_request_approvals a
+                where a.request_id = p_id
+                  and (a.step_id = s.id
+                       or (a.step_id is null and a.step_role = s.role)));
+      get diagnostics v_filled = row_count;
+      v_step_role := 'admin';
+      v_step_id := null;
+    else
+      if v_step_role is null then
+        -- Distinguish "already signed by you" from "not your step", because the
+        -- two need different things from the person reading the message.
+        if exists (
+          select 1 from public.leave_request_approvals a
+           where a.request_id = p_id
+             and (a.approver_id = v_uid
+                  or exists (
+                       select 1 from public.approval_steps s
+                        where s.company_id = v_company and s.active
+                          and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
+                          and (a.step_id = s.id
+                               or (a.step_id is null and a.step_role = s.role))
+                          and case when s.approver_id is not null
+                                   then s.approver_id = v_uid
+                                   else ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
+                                        or (s.role <> 'manager'
+                                            and private.has_role(v_uid, s.role))
+                              end))
+        ) then
+          raise exception 'you have already signed this request' using errcode = '22023';
+        end if;
+        raise exception 'not allowed to decide this request' using errcode = '42501';
       end if;
+
+      select coalesce(approval_order_enforced, false) into v_enforce
+        from public.work_settings where company_id = v_company limit 1;
+
+      if coalesce(v_enforce, false) then
+        if exists (
+          select 1 from public.approval_steps s
+           where s.company_id = v_company and s.active
+             and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
+             and s.step_order < v_step_order
+             and not exists (
+                   select 1 from public.leave_request_approvals a
+                    where a.request_id = p_id
+                      and (a.step_id = s.id
+                           or (a.step_id is null and a.step_role = s.role))
+                      and a.decision = 'approved')
+        ) then
+          raise exception 'an earlier approval is still required' using errcode = '22023';
+        end if;
+      end if;
+      v_filled_hr := v_step_role = 'hr';
     end if;
   end if;
 
-  -- The unique (request_id, step_id) index is what actually stops double-signing;
-  -- rows predating FR-42 are covered by the sibling index on (request_id, step_role).
-  insert into public.leave_request_approvals (
-    request_id, step_id, step_role, approver_id, decision, signature_data, signature_consent_at
-  ) values (
-    p_id, v_step_id, v_step_role, v_uid, 'approved', p_signature_data, v_consent_at
-  );
+  if not v_override then
+    -- The unique (request_id, step_id) index is what actually stops double-signing;
+    -- rows predating FR-42 are covered by the sibling index on (request_id, step_role).
+    insert into public.leave_request_approvals (
+      request_id, step_id, step_role, approver_id, decision, signature_data, signature_consent_at
+    ) values (
+      p_id, v_step_id, v_step_role, v_uid, 'approved', p_signature_data, v_consent_at
+    );
+  end if;
+
+  -- FR-61: per diem belongs to HR's step on an errand.
+  if p_per_diem_rials is not null then
+    if v_kind <> 'errand' or not v_filled_hr then
+      raise exception 'per diem can only be set on the hr step of an errand' using errcode = '22023';
+    end if;
+    update public.leave_requests set per_diem_rials = p_per_diem_rials where id = p_id;
+  end if;
 
   select count(*) into v_remaining
     from public.approval_steps s
@@ -3437,6 +3497,9 @@ begin
     jsonb_build_object(
       'employee_id', v_emp,
       'step_role', v_step_role,
+      'admin_override', v_override,
+      'steps_filled', v_filled,
+      'per_diem_rials', p_per_diem_rials,
       'steps_remaining', v_remaining,
       'digital_signature_authorized', true,
       'signature_consent_at', v_consent_at
@@ -3521,6 +3584,7 @@ begin
       'affects_balance', coalesce(v_affects, false),
       'replacement_id', v_repl,
       'completed_by_step', v_step_role,
+      'admin_override', v_override,
       'digital_signature_authorized', true,
       'signature_consent_at', v_consent_at
     )
@@ -3746,6 +3810,52 @@ begin
   return jsonb_set(event, '{claims}', claims);
 end;
 $$;
+
+
+--
+-- Name: finance_approved_requests(date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_approved_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, decided_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not private.is_active(v_uid) or not private.has_permission(v_uid, 'finance.view') then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_from is null or p_to is null or p_to < p_from then
+    raise exception 'invalid date range' using errcode = '22023';
+  end if;
+  if p_to - p_from > 400 then
+    raise exception 'date range too long' using errcode = '22023';
+  end if;
+  select company_id into v_company from public.profiles where profiles.id = v_uid;
+
+  return query
+    select r.id, r.serial_year, r.serial_seq, r.kind,
+           p.full_name, p.personnel_no,
+           d.name_fa, d.name_en,
+           t.name_fa, t.name_en, t.is_paid,
+           r.start_date, r.end_date, r.unit, r.start_time, r.end_time,
+           r.requested_minutes, r.unpaid_minutes,
+           r.errand_location, r.per_diem_rials, r.decided_at
+      from public.leave_requests r
+      join public.profiles p on p.id = r.employee_id
+      left join public.departments d on d.id = p.department_id
+      left join public.leave_types t on t.id = r.leave_type_id
+     where r.company_id = v_company
+       and r.status = 'approved'
+       and r.start_date <= p_to
+       and r.end_date >= p_from
+     order by r.start_date, r.serial_year, r.serial_seq;
+end; $$;
 
 
 --
@@ -3981,18 +4091,13 @@ begin
                 and (a.step_id = s.id
                      or (a.step_id is null and a.step_role = s.role)))
        and (
-             -- FR-42: a step reserved for one NAMED person is fillable only by
-             -- that person, and only while their account is active. There is no
-             -- admin override here, unlike a role step: naming someone means
-             -- their signature specifically is required, and an admin who could
-             -- sign in their place would make the naming advisory. A departed
-             -- approver is fixed by editing the configuration (admin or hr),
-             -- not by signing past them.
+             -- FR-58: an admin may reject any pending request, a step naming a
+             -- person included; everyone else only a step they are entitled to.
+             v_is_admin or
              case when s.approver_id is not null then
                     s.approver_id = v_uid and private.is_active(v_uid)
                   else
-                    v_is_admin
-                    or ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
+                    ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
                     or (s.role <> 'manager' and private.has_role(v_uid, s.role))
              end
            )
@@ -4320,7 +4425,7 @@ CREATE TABLE public.approval_steps (
     CONSTRAINT approval_steps_applies_to_nonempty CHECK ((array_length(applies_to, 1) >= 1)),
     CONSTRAINT approval_steps_employee_needs_person CHECK (((role <> 'employee'::public.app_role) OR (approver_id IS NOT NULL))),
     CONSTRAINT approval_steps_manager_scope_valid CHECK (((manager_scope = ANY (ARRAY['direct'::text, 'department'::text])) AND ((manager_scope = 'direct'::text) OR ((role = 'manager'::public.app_role) AND (approver_id IS NULL))))),
-    CONSTRAINT approval_steps_role_allowed CHECK ((role = ANY (ARRAY['manager'::public.app_role, 'hr'::public.app_role, 'security'::public.app_role, 'admin'::public.app_role, 'employee'::public.app_role])))
+    CONSTRAINT approval_steps_role_allowed CHECK (((role = ANY (ARRAY['manager'::public.app_role, 'hr'::public.app_role, 'employee'::public.app_role])) OR ((role = ANY (ARRAY['security'::public.app_role, 'admin'::public.app_role])) AND (NOT active))))
 );
 
 
@@ -4400,6 +4505,13 @@ CREATE TABLE public.employee_leave_policies (
     CONSTRAINT employee_leave_policies_caps_sane CHECK ((((annual_cap_minutes IS NULL) OR (annual_cap_minutes >= 0)) AND (carryover_cap_minutes >= 0))),
     CONSTRAINT employee_leave_policies_rate_sane CHECK (((accrual_minutes_per_month >= 0) AND (accrual_minutes_per_month <= 100000)))
 );
+
+
+--
+-- Name: COLUMN employee_leave_policies.carryover_cap_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.employee_leave_policies.carryover_cap_minutes IS 'Unused since FR-60 (2026-10-12): the whole balance carries over. Kept for schema compatibility.';
 
 
 --
@@ -4613,9 +4725,11 @@ CREATE TABLE public.leave_requests (
     approver_signature_data text,
     approver_signature_consent_at timestamp with time zone,
     unpaid_minutes integer DEFAULT 0 NOT NULL,
+    per_diem_rials bigint,
     CONSTRAINT leave_requests_approver_signature_shape CHECK ((((approver_signature_data IS NULL) AND (approver_signature_consent_at IS NULL)) OR ((status = ANY (ARRAY['approved'::public.leave_status, 'cancelled'::public.leave_status])) AND (approver_signature_data IS NOT NULL) AND (approver_signature_consent_at IS NOT NULL) AND ((length(approver_signature_data) >= 100) AND (length(approver_signature_data) <= 350000)) AND (mod(length(approver_signature_data), 4) = 2) AND (approver_signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
     CONSTRAINT leave_requests_decision_note_len CHECK (((decision_note IS NULL) OR (length(decision_note) <= 500))),
     CONSTRAINT leave_requests_kind_shape CHECK ((((kind = 'leave'::public.request_kind) AND (leave_type_id IS NOT NULL) AND (errand_location IS NULL)) OR ((kind = 'errand'::public.request_kind) AND (leave_type_id IS NULL) AND (replacement_id IS NULL) AND (errand_location IS NOT NULL) AND (btrim(errand_location) <> ''::text) AND (length(errand_location) <= 200)))),
+    CONSTRAINT leave_requests_per_diem_shape CHECK (((per_diem_rials IS NULL) OR ((per_diem_rials >= 0) AND (kind = 'errand'::public.request_kind)))),
     CONSTRAINT leave_requests_reason_len CHECK (((reason IS NULL) OR (length(reason) <= 500))),
     CONSTRAINT leave_requests_replacement_not_self CHECK (((replacement_id IS NULL) OR (replacement_id <> employee_id))),
     CONSTRAINT leave_requests_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
@@ -4667,6 +4781,13 @@ COMMENT ON COLUMN public.leave_requests.unpaid_minutes IS 'Minutes of this reque
 
 
 --
+-- Name: COLUMN leave_requests.per_diem_rials; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.per_diem_rials IS 'FR-61: per diem in Rials, entered on the hr approval step of an errand. Read by finance through finance_approved_requests().';
+
+
+--
 -- Name: leave_types; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4686,6 +4807,13 @@ CREATE TABLE public.leave_types (
     default_annual_cap_minutes integer,
     default_carryover_cap_minutes integer DEFAULT 4320 NOT NULL
 );
+
+
+--
+-- Name: COLUMN leave_types.default_carryover_cap_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_types.default_carryover_cap_minutes IS 'Unused since FR-60 (2026-10-12): the whole balance carries over. Kept for schema compatibility.';
 
 
 --
@@ -4890,7 +5018,7 @@ CREATE TABLE public.work_settings (
     biweekly_anchor date,
     CONSTRAINT work_settings_biweekly_anchor_required CHECK (((cardinality(COALESCE(biweekly_weekend_days, '{}'::integer[])) = 0) OR (biweekly_anchor IS NOT NULL))),
     CONSTRAINT work_settings_biweekly_days_valid CHECK (((biweekly_weekend_days <@ ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (NOT (ARRAY[1, 2, 3, 4, 5, 6, 7] <@ (COALESCE(weekend_days, '{}'::integer[]) || COALESCE(biweekly_weekend_days, '{}'::integer[])))))),
-    CONSTRAINT work_settings_hourly_cap_sane CHECK (((max_hourly_minutes_per_day > 0) AND (max_hourly_minutes_per_day <= 1440))),
+    CONSTRAINT work_settings_hourly_cap_sane CHECK (((max_hourly_minutes_per_day > 0) AND (max_hourly_minutes_per_day <= 240))),
     CONSTRAINT work_settings_hours_per_day_sane CHECK (((hours_per_day > (0)::numeric) AND (hours_per_day <= (24)::numeric))),
     CONSTRAINT work_settings_window_sane CHECK ((work_end > work_start))
 );
@@ -5565,6 +5693,13 @@ CREATE TRIGGER work_settings_audit_change AFTER INSERT OR DELETE OR UPDATE ON pu
 
 
 --
+-- Name: work_settings work_settings_enforce_scope; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION private.enforce_work_settings_scope();
+
+
+--
 -- Name: work_settings work_settings_set_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6095,17 +6230,21 @@ CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR
 ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 
 --
--- Name: holidays holidays_delete_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: holidays holidays_delete_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_delete_admin ON public.holidays FOR DELETE TO authenticated USING (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY holidays_delete_editor ON public.holidays FOR DELETE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
--- Name: holidays holidays_insert_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: holidays holidays_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_insert_admin ON public.holidays FOR INSERT TO authenticated WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY holidays_insert_editor ON public.holidays FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -6116,10 +6255,14 @@ CREATE POLICY holidays_select ON public.holidays FOR SELECT TO authenticated USI
 
 
 --
--- Name: holidays holidays_update_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: holidays holidays_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_update_admin ON public.holidays FOR UPDATE TO authenticated USING (private.is_admin(( SELECT auth.uid() AS uid))) WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY holidays_update_editor ON public.holidays FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -6358,10 +6501,12 @@ CREATE POLICY work_settings_delete_admin ON public.work_settings FOR DELETE TO a
 
 
 --
--- Name: work_settings work_settings_insert_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: work_settings work_settings_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY work_settings_insert_admin ON public.work_settings FOR INSERT TO authenticated WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY work_settings_insert_editor ON public.work_settings FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -6372,10 +6517,14 @@ CREATE POLICY work_settings_select ON public.work_settings FOR SELECT TO authent
 
 
 --
--- Name: work_settings work_settings_update_admin; Type: POLICY; Schema: public; Owner: -
+-- Name: work_settings work_settings_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY work_settings_update_admin ON public.work_settings FOR UPDATE TO authenticated USING (private.is_admin(( SELECT auth.uid() AS uid))) WITH CHECK (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY work_settings_update_editor ON public.work_settings FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+   FROM public.profiles p
+  WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -6893,13 +7042,14 @@ GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_l
 
 
 --
--- Name: FUNCTION approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean) TO postgres;
-GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean) TO authenticated;
-GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean) TO service_role;
+REVOKE ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO postgres;
+GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO anon;
+GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO authenticated;
+GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO service_role;
 
 
 --
@@ -6938,6 +7088,17 @@ REVOKE ALL ON FUNCTION public.custom_access_token_hook(event jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO service_role;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO supabase_auth_admin;
+
+
+--
+-- Name: FUNCTION finance_approved_requests(p_from date, p_to date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO postgres;
+GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO anon;
+GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO authenticated;
+GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO service_role;
 
 
 --

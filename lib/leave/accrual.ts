@@ -3,8 +3,8 @@
  * exist for an employee/leave-type; writes nothing and knows nothing about
  * Postgres.
  *
- * MUST STAY IN LOCKSTEP with public.accrue_leave in
- * supabase/migrations/20260729130006_leave_accrual_fns.sql — same order of
+ * MUST STAY IN LOCKSTEP with public.accrue_leave (current body:
+ * supabase/migrations/20261012120001_unlimited_carryover.sql) — same order of
  * operations, same rounding. The SQL is authoritative at runtime; this is what
  * makes the rules testable, the same way lib/leave/workingDays.ts mirrors
  * compute_requested_minutes.
@@ -12,14 +12,18 @@
  * Order of operations per month, and each step exists for a reason:
  *   1. skip months already posted            — idempotency
  *   2. skip months ending before the hire    — nobody accrues before being hired
- *   3. forfeit carryover excess at Farvardin — BEFORE crediting that month
- *   4. pro-rate the hire month               — calendar days, so HR can check it
- *   5. clamp to the annual cap               — counts accruals, not the balance
+ *   3. pro-rate the hire month               — calendar days, so HR can check it
+ *   4. clamp to the annual cap               — counts accruals, not the balance
+ *
+ * There is no year-end forfeit since FR-60 (2026-10-12): the whole balance
+ * carries over. `carryover_forfeit` stays a valid entry type because rows
+ * posted before then are history.
  */
 
 export type AccrualPolicy = {
   accrualMinutesPerMonth: number;
   annualCapMinutes: number | null;
+  /** Unused since FR-60 (2026-10-12): the whole balance carries over. */
   carryoverCapMinutes: number;
   /** YYYY-MM-DD — the Gregorian start of a Jalali month. */
   accrualStartMonth: string;
@@ -92,30 +96,6 @@ export function planAccruals(input: {
 
   for (const month of due) {
     if (hireDate && month.gregorianEnd < hireDate) continue;
-
-    // Year boundary: clamp what was carried in, before crediting this month.
-    // The earlier-accrual guard stops a brand-new employee whose first month
-    // happens to be Farvardin from being "carried over" into and losing their
-    // opening balance.
-    const hasEarlierAccrual =
-      posted.some((p) => p.entryType === 'allocation' && p.periodMonth < month.gregorianStart) ||
-      planned.some((p) => p.entryType === 'allocation' && p.periodMonth < month.gregorianStart);
-
-    if (
-      month.jalaliMonth === 1 &&
-      hasEarlierAccrual &&
-      !isPosted(month.gregorianStart, 'carryover_forfeit') &&
-      balance > policy.carryoverCapMinutes
-    ) {
-      const excess = balance - policy.carryoverCapMinutes;
-      balance -= excess;
-      planned.push({
-        periodMonth: month.gregorianStart,
-        entryType: 'carryover_forfeit',
-        deltaMinutes: -excess,
-        balanceAfterMinutes: balance,
-      });
-    }
 
     if (isPosted(month.gregorianStart, 'allocation')) continue;
 

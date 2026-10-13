@@ -16,7 +16,15 @@
  * it is still enforced per page (manage/layout.tsx + per-page guards) and by RLS.
  */
 
-export type TabKey = 'home' | 'request' | 'calendar' | 'organization' | 'profile' | 'manage';
+export type TabKey =
+  | 'home'
+  | 'request'
+  | 'calendar'
+  | 'organization'
+  | 'profile'
+  | 'manage'
+  | 'absences'
+  | 'finance';
 export type Tab = { key: TabKey; href: string; labelKey: string; desktopOnly?: boolean };
 
 export type ManageKey =
@@ -25,7 +33,9 @@ export type ManageKey =
   | 'approvals'
   | 'requests'
   | 'approvalSteps'
-  | 'reports';
+  | 'reports'
+  | 'absences'
+  | 'finance';
 export type NavItemKey = ManageKey | 'settings';
 export type NavItem = { key: NavItemKey; href: string; labelKey: string; testId: string };
 
@@ -42,11 +52,19 @@ function canManage(roles: string[]) {
   return roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
 }
 
+// FR-56: security's board of approved absences. FR-62: finance's list of
+// completed approvals. Each role's own top-level tab; admins reach both from
+// the Manage group instead.
+const ABSENCES_TAB: Tab = { key: 'absences', href: '/absences', labelKey: 'absences' };
+const FINANCE_TAB: Tab = { key: 'finance', href: '/finance', labelKey: 'finance' };
+
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
 export function tabsForRoles(roles: string[]): Tab[] {
-  return canManage(roles)
-    ? [...BASE, { key: 'manage', href: '/manage', labelKey: 'manage' }]
-    : BASE;
+  const tabs = [...BASE];
+  if (roles.includes('security') && !roles.includes('admin')) tabs.push(ABSENCES_TAB);
+  if (roles.includes('finance') && !roles.includes('admin')) tabs.push(FINANCE_TAB);
+  if (canManage(roles)) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
+  return tabs;
 }
 
 type ManageEntry = NavItem & { allowed: (roles: string[]) => boolean };
@@ -69,6 +87,9 @@ const MANAGE: ManageEntry[] = [
   { key: 'approvalSteps', href: '/manage/approval-steps', labelKey: 'approvalSteps', testId: 'nav-approval-steps', allowed: isAdminOrHr },
   // FR-37 reports: same audience as the review screen.
   { key: 'reports', href: '/manage/reports', labelKey: 'reports', testId: 'nav-reports', allowed: isAdminOrHr },
+  // FR-56 / FR-62: the security and finance screens, for an admin.
+  { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: isAdmin },
+  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: isAdmin },
 ];
 
 /** The labelled Manage group, filtered to what this caller can reach. */
@@ -82,9 +103,9 @@ export function manageItemsForRoles(roles: string[]): NavItem[] {
   }));
 }
 
-/** Settings (weekly days off, official holidays) — company config, admin only. */
+/** Settings (work hours, weekly days off, official holidays) — admin and hr (FR-59). */
 export function settingsItemForRoles(roles: string[]): NavItem | null {
-  return isAdmin(roles)
+  return isAdminOrHr(roles)
     ? { key: 'settings', href: '/settings', labelKey: 'settings', testId: 'nav-settings' }
     : null;
 }

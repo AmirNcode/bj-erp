@@ -70,7 +70,7 @@ const RULES: Rule[] = [
   { re: /approval step order must be between/, key: 'approvalStepOrderInvalid' },
   { re: /approval step not found/, key: 'approvalStepNotFound' },
   // FR-42 approval steps by role or named person.
-  { re: /invalid approval step role/i, key: 'invalidApprovalStepRole' },
+  { re: /invalid approval step role|approval_steps_role_allowed/i, key: 'invalidApprovalStepRole' },
   { re: /this step must name a person|approval_steps_employee_needs_person/i, key: 'approvalStepNeedsPerson' },
   { re: /approval step was not saved/i, key: 'approvalStepNotSaved' },
   { re: /duplicate key value.*approval_steps_company_(role|person)_uniq/, key: 'duplicateApprovalStep' },
@@ -133,6 +133,14 @@ const RULES: Rule[] = [
   { re: /end time must be after start time/, key: 'endBeforeStart' },
   { re: /times must fall within working hours/, key: 'outsideWorkHours' },
   { re: /hourly leave exceeds the daily limit/, key: 'hourlyDailyLimit' },
+  // FR-57: one hourly leave per person per day.
+  { re: /only one hourly leave per day/, key: 'oneHourlyPerDay' },
+  { re: /work_settings_hourly_cap_sane/, key: 'invalidHourlySettings' },
+  // FR-61 per diem.
+  { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
+  { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
+  // FR-59: hr edits settings, but approval order / hours per day stay admin-only.
+  { re: /only an admin may change approval order or hours per day/, key: 'adminOnlySetting' },
   // Errand (FR-30). The form validates both client-side first, so these only
   // surface when the DB is reached directly or the client check is bypassed.
   { re: /errand location is required/, key: 'errandLocationRequired' },

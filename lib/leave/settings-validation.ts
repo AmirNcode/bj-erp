@@ -19,7 +19,13 @@ export type HourlySettingsValidation =
   | { ok: true; workStart: string; workEnd: string; capMinutes: number }
   | { ok: false };
 
-/** Validate the company work window and keep the hourly cap inside that window. */
+/** FR-57: hourly leave may never exceed 4 hours a day (CHECK on work_settings too). */
+export const MAX_HOURLY_CAP_MINUTES = 240;
+
+/**
+ * Validate the company work window and keep the hourly cap inside that window
+ * and at most 4 hours.
+ */
 export function validateHourlySettings(
   workStart: string,
   workEnd: string,
@@ -28,7 +34,12 @@ export function validateHourlySettings(
   if (!TIME_RE.test(workStart) || !TIME_RE.test(workEnd)) return { ok: false };
   const windowMinutes = timeToMinutes(workEnd) - timeToMinutes(workStart);
   if (windowMinutes <= 0) return { ok: false };
-  if (!Number.isInteger(capMinutes) || capMinutes <= 0 || capMinutes > windowMinutes) {
+  if (
+    !Number.isInteger(capMinutes) ||
+    capMinutes <= 0 ||
+    capMinutes > windowMinutes ||
+    capMinutes > MAX_HOURLY_CAP_MINUTES
+  ) {
     return { ok: false };
   }
   return { ok: true, workStart, workEnd, capMinutes };

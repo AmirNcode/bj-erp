@@ -77,7 +77,7 @@ export async function updateWorkSettings(
   input: WorkSettingsInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const weekendDays = input.weekendDays;
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
   const v = validateWeekendDays(
     weekendDays,
@@ -134,7 +134,7 @@ export async function upsertHoliday(input: {
   nameEn?: string;
   isRecurring?: boolean;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
   const nameFa = input.nameFa.trim();
   if (!isValidIsoDate(input.date) || !nameFa) {
@@ -179,7 +179,7 @@ export async function upsertHoliday(input: {
 export async function bulkUpsertHolidays(
   rows: { date: string; nameFa: string; nameEn?: string | null; isRecurring?: boolean }[]
 ): Promise<{ ok: true; added: number; updated: number } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no holidays to import');
   // Bounded so a runaway file cannot become one enormous statement. 500 is far
@@ -233,7 +233,7 @@ export async function bulkUpsertHolidays(
 }
 
 export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
   if (!c.ok) return c;
   const { data, error } = await c.supabase
     .from('holidays')
@@ -253,8 +253,9 @@ export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: fa
 // Writes go through the `approval_steps` RLS policies directly, like
 // work_settings and holidays: this is company configuration, not transactional
 // leave data, so it needs no SECURITY DEFINER wrapper. The role checks below are
-// fast localized refusals; the policies are the boundary. HR gains this table
-// only: work settings, holidays, departments and roles stay admin-only.
+// fast localized refusals; the policies are the boundary. Since FR-59
+// (2026-10-12) HR also writes work settings and holidays (the
+// `settings.edit` policies); the approval-order switch stays admin-only.
 // ---------------------------------------------------------------------------
 
 export type ApprovalStepRow = {
@@ -371,7 +372,9 @@ export async function createApprovalStep(input: {
   if (!c.ok) return c;
 
   const role = input.role;
-  if (!['manager', 'hr', 'security', 'admin', 'employee'].includes(role)) {
+  // FR-56/58: security and admin are no longer step roles (the CHECK admits
+  // them only on an inactive, retired row).
+  if (!['manager', 'hr', 'employee'].includes(role)) {
     return dbErr('invalid approval step role');
   }
   const approverId = input.approverId?.trim() || null;
@@ -389,7 +392,7 @@ export async function createApprovalStep(input: {
     .from('approval_steps')
     .insert({
       company_id: c.companyId,
-      role: role as 'manager' | 'hr' | 'security' | 'admin' | 'employee',
+      role: role as 'manager' | 'hr' | 'employee',
       approver_id: approverId,
       step_order: stepOrder,
       applies_to: [...appliesTo],

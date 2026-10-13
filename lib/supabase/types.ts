@@ -616,6 +616,7 @@ export type Database = {
           end_date: string
           end_time: string | null
           errand_location: string | null
+          per_diem_rials: number | null
           id: string
           kind: Database["public"]["Enums"]["request_kind"]
           leave_type_id: string | null
@@ -645,6 +646,7 @@ export type Database = {
           end_date: string
           end_time?: string | null
           errand_location?: string | null
+          per_diem_rials?: number | null
           id?: string
           kind?: Database["public"]["Enums"]["request_kind"]
           leave_type_id?: string | null
@@ -673,6 +675,7 @@ export type Database = {
           end_date?: string
           end_time?: string | null
           errand_location?: string | null
+          per_diem_rials?: number | null
           id?: string
           kind?: Database["public"]["Enums"]["request_kind"]
           leave_type_id?: string | null
@@ -1429,12 +1432,40 @@ export type Database = {
       approve_leave_request: {
         Args: {
           p_id: string
+          p_override?: boolean
+          p_per_diem_rials?: number
           p_signature_authorized: boolean
           p_signature_data: string
         }
         Returns: undefined
       }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
+      finance_approved_requests: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          id: string
+          serial_year: number
+          serial_seq: number
+          kind: Database["public"]["Enums"]["request_kind"]
+          employee_name: string
+          personnel_no: string | null
+          department_name_fa: string | null
+          department_name_en: string | null
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          is_paid: boolean | null
+          start_date: string
+          end_date: string
+          unit: Database["public"]["Enums"]["leave_unit"]
+          start_time: string | null
+          end_time: string | null
+          requested_minutes: number
+          unpaid_minutes: number
+          errand_location: string | null
+          per_diem_rials: number | null
+          decided_at: string | null
+        }[]
+      }
       compute_requested_minutes: {
         Args: {
           p_company_id: string

@@ -9,6 +9,28 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Client feedback: security board, admin override, HR settings, per diem — FR-56–FR-62 (2026-10-12)
+
+Migrations `20261012120001`–`20261012120004`. Spec
+`docs/specs/2026-10-12-client-feedback-approvals-settings-design.md`.
+- **Security board («غایبین تأییدشده», `/absences`):** security sees everyone who is out on a day
+  with every approval in place — daily and hourly leave, daily and hourly errands — defaulting to
+  today, with a date picker. Pending requests never show. Security no longer approves anything:
+  security and admin approval steps are switched off and can no longer be added.
+- **Hourly leave:** at most one hourly leave per person per day (pending or approved; cancel or
+  rejection frees the day), and the daily cap can never be set above 4 hours.
+- **Admin override:** admin is no longer an approval step. Pending requests still reach the admin,
+  whose approval signs every remaining step at once (named-person steps included) and completes
+  the request. An admin who also holds a step (e.g. hr) signs just that step unless they tick
+  «تأیید همه مراحل باقی‌مانده». Admin can reject any pending request.
+- **HR settings:** HR opens Settings: working hours, hourly cap, weekly and every-other-week days
+  off, official holidays (incl. CSV import). The approval-order switch stays admin-only.
+- **Unlimited carryover:** the whole remaining balance carries into the next Jalali year; nothing is
+  forfeited at Nowruz. The carryover-cap field is gone from the leave policy editor.
+- **Per diem:** HR's approval of a work errand has an optional «فوق‌العاده ماموریت (ریال)» field.
+- **Finance (`/finance`):** finance (and admin) see every fully approved request in a month range,
+  with per diem, totals and an Excel (CSV) export.
+
 ### Clearance form — FR-54 (2026-10-07)
 
 Migrations `20261007150001`–`20261007150003`. Spec `docs/specs/2026-10-07-clearance-form-design.md`.

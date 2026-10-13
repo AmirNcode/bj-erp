@@ -1,7 +1,9 @@
 import {
   Archive,
+  Banknote,
   ChartNoAxesColumn,
   CircleCheck,
+  DoorOpen,
   Network,
   Settings,
   Users,
@@ -60,6 +62,22 @@ export const NAV_ICONS: Record<TabKey, React.ReactNode> = {
       <path d="M5 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5" />
     </Svg>
   ),
+  // FR-56: a door — who is out today.
+  absences: (
+    <Svg>
+      <path d="M5 21V4a1 1 0 0 1 1-1h9v18" />
+      <path d="M15 5l4 1.5V21" />
+      <path d="M3 21h18M12 12h.01" />
+    </Svg>
+  ),
+  // FR-62: a banknote.
+  finance: (
+    <Svg>
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 10v4M18 10v4" />
+    </Svg>
+  ),
   manage: (
     <Svg>
       <rect x="4" y="4" width="7" height="7" rx="1" />
@@ -80,5 +98,7 @@ export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
   requests: <Archive {...itemIcon} />,
   approvalSteps: <Workflow {...itemIcon} />,
   reports: <ChartNoAxesColumn {...itemIcon} />,
+  absences: <DoorOpen {...itemIcon} />,
+  finance: <Banknote {...itemIcon} />,
   settings: <Settings {...itemIcon} />,
 };

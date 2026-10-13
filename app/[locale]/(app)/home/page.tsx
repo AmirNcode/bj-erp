@@ -202,6 +202,12 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         others !== null && departmentName
           ? t('shortStaffed', { count: num(others), department: departmentName })
           : null,
+      approveOptions: {
+        hasNaturalStep: r.natural_step !== null,
+        canOverride: r.can_override,
+        perDiemNatural: r.per_diem_natural,
+        perDiemOverride: r.per_diem_override,
+      },
     };
   });
 

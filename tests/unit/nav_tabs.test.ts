@@ -25,6 +25,21 @@ describe('tabsForRoles', () => {
   it('security (no manage)', () => {
     expect(tabsForRoles(['security']).map((t) => t.key)).not.toContain('manage');
   });
+  it('security gets the approved-absences tab (FR-56)', () => {
+    expect(tabsForRoles(['employee', 'security']).find((t) => t.key === 'absences')).toMatchObject({
+      href: '/absences',
+    });
+  });
+  it('finance gets the finance tab (FR-62)', () => {
+    expect(tabsForRoles(['employee', 'finance']).find((t) => t.key === 'finance')).toMatchObject({
+      href: '/finance',
+    });
+  });
+  it('an admin reaches both from Manage, not as extra tabs', () => {
+    const keys = tabsForRoles(['admin', 'security', 'finance']).map((t) => t.key);
+    expect(keys).not.toContain('absences');
+    expect(keys).not.toContain('finance');
+  });
   it('hr gets the manage tab (FR-35)', () => {
     expect(tabsForRoles(['hr']).map((t) => t.key)).toContain('manage');
   });
@@ -70,7 +85,13 @@ describe('manageItemsForRoles', () => {
       'requests',
       'approvalSteps',
       'reports',
+      'absences',
+      'finance',
     ]);
+  });
+  it('hr does not get the security or finance screens', () => {
+    expect(keys(['hr'])).not.toContain('absences');
+    expect(keys(['hr'])).not.toContain('finance');
   });
   it('the employees hub keeps the nav-manage test id', () => {
     expect(manageItemsForRoles(['manager'])[0]).toMatchObject({
@@ -82,9 +103,9 @@ describe('manageItemsForRoles', () => {
 });
 
 describe('settingsItemForRoles', () => {
-  it('is admin only', () => {
+  it('is admin and hr (FR-59)', () => {
     expect(settingsItemForRoles(['admin'])).toMatchObject({ href: '/settings', testId: 'nav-settings' });
-    expect(settingsItemForRoles(['hr'])).toBeNull();
+    expect(settingsItemForRoles(['hr'])).toMatchObject({ href: '/settings' });
     expect(settingsItemForRoles(['manager'])).toBeNull();
     expect(settingsItemForRoles(['employee'])).toBeNull();
   });

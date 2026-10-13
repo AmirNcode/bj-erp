@@ -137,17 +137,17 @@ export function applicableSteps(
 }
 
 /**
- * The step this caller may sign right now, or null.
+ * The step this caller signs IN THEIR OWN RIGHT right now, or null.
  *
  * Order of checks matches the SQL exactly:
  *   1. no configured steps at all  -> degrade to a single manager/admin decision
  *   2. skip steps already decided
- *   3. entitlement: a step naming a PERSON is fillable only by them, with NO
- *      admin override (FR-42 — naming someone means that signature specifically
- *      is required); otherwise admin fills any, `manager` needs the DIRECT
- *      manager rather than merely someone holding the role, and any other role
- *      needs that role
- *   4. nobody but an admin signs their own request
+ *   3. entitlement: a step naming a PERSON is fillable only by them; `manager`
+ *      needs the DIRECT manager rather than merely someone holding the role
+ *      (the department step needs the department manager); any other role
+ *      needs that role. Holding `admin` entitles nobody to a step (FR-58) —
+ *      the admin path is the override, see `approvalAction`.
+ *   4. nobody signs their own request this way
  *   5. when the order binds, refuse a step with an unapproved lower-ordered one
  *   6. lowest step_order wins
  */
@@ -166,21 +166,19 @@ export function fillableStep(input: FillableInput): ApprovalStep | null {
       : null;
   }
 
-  // 4. Self-approval is an admin-only escape hatch (see the SQL's rationale:
-  //    an admin with no manager above them must still be able to take leave).
-  if (isSelf && !isAdmin) return null;
+  // 4. Nobody signs a step of their own request. An admin still approves their
+  //    own request, through the override (see `approvalAction`).
+  if (isSelf) return null;
 
   const isDecided = (step: ApprovalStep) => signed.some((d) => fills(d, step));
   const isApproved = (step: ApprovalStep) =>
     signed.some((d) => d.decision === 'approved' && fills(d, step));
 
   const canFill = (step: ApprovalStep) => {
-    // FR-42: a named step admits exactly one person, and an admin is not an
-    // exception. Deactivation is handled by the database, which additionally
+    // FR-42: a named step admits exactly one person. Deactivation is handled by the database, which additionally
     // requires the caller to be active — unreachable here, since an inactive
     // account cannot reach any authenticated screen.
     if (step.approverId) return !!callerId && step.approverId === callerId;
-    if (isAdmin) return true;
     if (isDepartmentStep(step)) return input.isDepartmentManager ?? false;
     if (step.role === 'manager') return isDirectManager;
     return callerRoles.includes(step.role);
@@ -198,6 +196,43 @@ export function fillableStep(input: FillableInput): ApprovalStep | null {
     return step;
   }
   return null;
+}
+
+/**
+ * What the caller may do with a pending request (FR-58), or null for nothing.
+ *
+ * - `natural`: the step they sign in their own right (`fillableStep`).
+ * - `override`: for an admin, every outstanding step — named-person steps
+ *   included — which one signature fills at once, completing the request.
+ *   Empty for everyone else, and when no chain is configured (the degrade
+ *   branch already lets an admin decide alone).
+ *
+ * Mirrors `approve_leave_request`: an admin call overrides when asked to, or
+ * whenever the admin has no natural step.
+ */
+export type ApprovalAction = {
+  natural: ApprovalStep | null;
+  override: ApprovalStep[];
+};
+
+export function approvalAction(input: FillableInput): ApprovalAction | null {
+  const natural = fillableStep(input);
+  const isAdmin = input.callerRoles.includes('admin');
+  const applicable = applicableSteps(input.steps, input.kind, input.departmentStepApplies ?? false);
+  const override =
+    isAdmin && applicable.length > 0
+      ? applicable.filter((s) => !input.signed.some((d) => fills(d, s)))
+      : [];
+  if (!natural && override.length === 0) return null;
+  return { natural, override };
+}
+
+/**
+ * Whether signing these steps on this kind of request takes a per diem
+ * (FR-61): only an errand, and only when an `hr` step is among them.
+ */
+export function perDiemApplies(kind: RequestKind, steps: (ApprovalStep | null)[]): boolean {
+  return kind === 'errand' && steps.some((s) => s?.role === 'hr');
 }
 
 /** Steps still waiting on someone, for the "who is left" line in the queue. */
@@ -238,7 +273,7 @@ export function filterApprovable<
 ): T[] {
   return rows.filter(
     (r) =>
-      fillableStep({
+      approvalAction({
         steps,
         signed: r.signed,
         kind: r.kind,

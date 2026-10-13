@@ -63,7 +63,9 @@ type Props = {
   onAdded: () => void;
 };
 
-const ROLE_OPTIONS = ['manager', 'hr', 'security', 'admin'] as const;
+// FR-56/58 (2026-10-12): security and admin are no longer approval steps —
+// security only watches approved absences, and an admin overrides instead.
+const ROLE_OPTIONS = ['manager', 'hr'] as const;
 
 export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
   const [open, setOpen] = useState(false);

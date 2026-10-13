@@ -274,7 +274,7 @@ export function WorkSettingsForm({
             <input
               type="number"
               min={0.5}
-              max={24}
+              max={4}
               step="0.5"
               value={capHours}
               onChange={(e) => setCapHours(Number(e.target.value))}

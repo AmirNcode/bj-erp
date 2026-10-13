@@ -27,6 +27,10 @@ try {
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Optional, demo/local only: lets the seed give an account a non-numeric login
+// code (the app itself only issues personnel numbers, FR-31). The local Docker
+// stack's key is SERVICE_ROLE_KEY in deploy/.env. Never used by the app.
+const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!URL || !ANON) {
   console.error('Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY');
   process.exit(1);
@@ -48,7 +52,11 @@ const CODE = {
   maintenanceEmployee2: '2202',
   guard1: '3001',
   guard2: '3002',
+  finance: '4002',
 };
+// Test HR account (owner, 2026-10-12): logs in as `hr-101`, personnel no. 101.
+const HR_LOGIN = 'hr-101';
+const HR_PERSONNEL_NO = '101';
 const COMPANY = '00000000-0000-0000-0000-0000000000c0';
 const DEPT = {
   prodA: '00000000-0000-0000-0000-0000000000d1',
@@ -97,6 +105,28 @@ async function ensureUser(code, fullName, deptId, roles, managerId) {
 async function clearPasswordFlag(id, code) {
   const { error } = await supa.from('profiles').update({ must_change_password: false }).eq('id', id);
   if (error) die(`clear password flag ${code} failed:`, error);
+}
+
+/**
+ * Gives an account a login code other than its personnel number. The RPC can
+ * only issue numeric codes, so the auth email is changed through GoTrue's admin
+ * API (service key) and the profile's employee_code by the signed-in admin.
+ */
+async function renameLogin(id, fromCode, toCode) {
+  if (!SERVICE_KEY) {
+    console.warn(`  SUPABASE_SERVICE_ROLE_KEY not set: ${fromCode} keeps logging in as ${fromCode}, not ${toCode}`);
+    return fromCode;
+  }
+  const admin = createClient(URL, SERVICE_KEY, { auth: { persistSession: false } });
+  const { error: authErr } = await admin.auth.admin.updateUserById(id, {
+    email: codeToEmail(toCode),
+    email_confirm: true,
+  });
+  if (authErr) die(`rename login ${fromCode} -> ${toCode} failed:`, authErr);
+  const { error } = await supa.from('profiles').update({ employee_code: toCode }).eq('id', id);
+  if (error) die(`rename employee_code ${fromCode} -> ${toCode} failed:`, error);
+  console.log(`  login ${fromCode} -> ${toCode}`);
+  return toCode;
 }
 
 async function ensureAllocation(empId, leaveTypeId, days) {
@@ -159,6 +189,22 @@ async function main() {
     [CODE.guard2, 'Javad Rostami', DEPT.sec, ['security'], ids[CODE.securitySupervisor]],
   ];
   for (const r of reports) ids[r[0]] = await ensureUser(...r);
+
+  // HR test account. Looked up by its final login first so a re-run is a no-op.
+  const { data: hrExisting } = await supa
+    .from('profiles')
+    .select('id')
+    .eq('employee_code', HR_LOGIN)
+    .maybeSingle();
+  if (hrExisting) {
+    ids[HR_LOGIN] = hrExisting.id;
+  } else {
+    const hrId = await ensureUser(HR_PERSONNEL_NO, 'Leila Hashemi', DEPT.prodA, ['hr', 'employee'], null);
+    // Keyed by the code it ends up with, so the clean-up below keeps it.
+    ids[await renameLogin(hrId, HR_PERSONNEL_NO, HR_LOGIN)] = hrId;
+  }
+  // Finance test account (FR-54 clearance, FR-62 completed approvals).
+  ids[CODE.finance] = await ensureUser(CODE.finance, 'Omid Kazemi', DEPT.prodA, ['finance', 'employee'], null);
 
   // Allocations for every curated user.
   console.log('allocating leave…');

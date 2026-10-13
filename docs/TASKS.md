@@ -54,7 +54,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - ☐ **Encrypt backups** now that they hold national IDs and bank details (FR-53): the Liara backup
   copies on the owner's Mac belong on an encrypted disk (owner action), or encrypt the dump files.
 
-- ☐ **Admin-configurable roles and permissions** (owner, 2026-10-07). Admin creates a role (name),
+- ☐ **Admin-configurable roles and permissions** (owner, 2026-10-07). *2026-10-12 client note for
+  FR-55 (branch `fr55-configurable-roles`, rebase onto main first):* the **security** preset only
+  reads approved absences (`absences.view`) and never approves; **hr** gains `settings.edit`,
+  **finance** gains `finance.view` (keys added on main in `20261012120004`); approval steps may no
+  longer name the security or admin roles. Admin creates a role (name),
   ticks a permission level per area (not allowed / read only / edit), and the role appears in the
   Edit Employee role checkboxes, so granting access no longer needs a migration. Seam already in
   place: `private.has_permission(uid, key)` (FR-51) — replace its body with a table lookup, move the

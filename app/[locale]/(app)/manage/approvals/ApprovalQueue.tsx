@@ -211,9 +211,15 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         id={req.id}
                         labels={labels}
                         disabled={isPending}
-                        onApprove={(signatureData, signatureAuthorized) =>
+                        options={{
+                          hasNaturalStep: req.natural_step !== null,
+                          canOverride: req.can_override,
+                          perDiemNatural: req.per_diem_natural,
+                          perDiemOverride: req.per_diem_override,
+                        }}
+                        onApprove={(signatureData, signatureAuthorized, extras) =>
                           decide(req.id, labels.approveSuccess, (id) =>
-                            approveRequest(id, { signatureData, signatureAuthorized })
+                            approveRequest(id, { signatureData, signatureAuthorized, ...extras })
                           )
                         }
                       />

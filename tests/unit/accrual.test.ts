@@ -106,9 +106,9 @@ describe('planAccruals', () => {
     expect(rows.map((r) => r.deltaMinutes)).toEqual([480, 480, 480]);
   });
 
-  it('forfeits the excess above the carryover cap at Farvardin 1', () => {
+  it('carries the whole balance over at Farvardin 1, no cap (FR-60)', () => {
     // Accrual started the previous year, so a year boundary is crossed carrying
-    // 6000 minutes against a 4320 cap: forfeit 1680 before crediting Farvardin.
+    // 6000 minutes — far above the policy's old 4320 cap. Nothing is forfeited.
     const rows = planAccruals({
       ...base,
       policy: { ...POLICY, accrualStartMonth: '2026-02-20' },
@@ -116,50 +116,25 @@ describe('planAccruals', () => {
       openingBalanceMinutes: 6000,
       today: '2026-04-01',
     });
-    expect(rows[0]).toMatchObject({
-      periodMonth: '2026-03-21',
-      entryType: 'carryover_forfeit',
-      deltaMinutes: -1680,
-      balanceAfterMinutes: 4320,
-    });
-    expect(rows[1]).toMatchObject({
-      periodMonth: '2026-03-21',
-      entryType: 'allocation',
-      deltaMinutes: 480,
-      balanceAfterMinutes: 4800,
-    });
+    expect(rows).toEqual([
+      {
+        periodMonth: '2026-03-21',
+        entryType: 'allocation',
+        deltaMinutes: 480,
+        balanceAfterMinutes: 6480,
+      },
+    ]);
   });
 
-  it('does not forfeit when the balance is under the cap', () => {
+  it('a carryover cap of 0 forfeits nothing either', () => {
     const rows = planAccruals({
       ...base,
-      policy: { ...POLICY, accrualStartMonth: '2026-02-20' },
+      policy: { ...POLICY, accrualStartMonth: '2026-02-20', carryoverCapMinutes: 0 },
       posted: [{ periodMonth: '2026-02-20', entryType: 'allocation', deltaMinutes: 480 }],
       openingBalanceMinutes: 1000,
       today: '2026-04-01',
     });
     expect(rows.every((r) => r.entryType === 'allocation')).toBe(true);
-  });
-
-  it('does not forfeit on the very first accrual month, even if it is Farvardin', () => {
-    const rows = planAccruals({ ...base, openingBalanceMinutes: 9999, today: '2026-04-01' });
-    expect(rows).toHaveLength(1);
-    expect(rows[0].entryType).toBe('allocation');
-  });
-
-  it('never re-posts a forfeiture that already exists', () => {
-    const rows = planAccruals({
-      ...base,
-      policy: { ...POLICY, accrualStartMonth: '2026-02-20' },
-      posted: [
-        { periodMonth: '2026-02-20', entryType: 'allocation', deltaMinutes: 480 },
-        { periodMonth: '2026-03-21', entryType: 'carryover_forfeit', deltaMinutes: -1680 },
-        { periodMonth: '2026-03-21', entryType: 'allocation', deltaMinutes: 480 },
-      ],
-      openingBalanceMinutes: 4800,
-      today: '2026-04-01',
-    });
-    expect(rows).toEqual([]);
   });
 
   it('posts nothing when the rate is zero (sick leave)', () => {
