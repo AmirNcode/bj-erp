@@ -78,6 +78,20 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — Released 7376195 to Liara (FR-65–67, logo)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 7376195
+**Trigger:** Amir: push it to deploy.
+
+**Actions outside the repo**
+- Pre-push `npm run build`, `npm run test:deploy` ok. `git push origin main` (3b7ee29..7376195)
+  → "Deploy Liara" run 38433008820: build + deploy success; migrations `20261013130001`,
+  `20261013140001` applied. `https://bjeng.app/api/health` → ok.
+
+**For the next agent**
+- On Liara, «ازدواج» needs marital status مجرد in personal info; the grant looks up the
+  `Annual Leave` leave type by its English name.
+
 ## 2026-10-13 — Sidebar logo as wide as the nav items
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 79ac569 (unpushed)
