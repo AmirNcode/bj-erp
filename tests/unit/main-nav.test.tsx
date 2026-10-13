@@ -116,11 +116,11 @@ describe('MainNav', () => {
     expect(screen.getByTestId('nav-lang-fa').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('nav-lang-en').getAttribute('aria-pressed')).toBe('false');
   });
-  it('hr preset: reports and the archive, but no settings', () => {
+  it('hr preset: reports, the archive and settings (FR-59)', () => {
     renderWithIntl(<MainNav roles={['hr']} perms={HR} locale="fa" labels={labels} />);
     expect(screen.getByTestId('nav-reports')).toBeTruthy();
     expect(screen.getByTestId('nav-requests')).toBeTruthy();
-    expect(screen.queryByTestId('nav-settings')).toBeNull();
+    expect(screen.getByTestId('nav-settings')).toBeTruthy();
   });
   it('a holidays-only role gets Settings and no Manage group', () => {
     renderWithIntl(<MainNav roles={['employee']} perms={{ holidays: 'edit' }} locale="fa" labels={labels} />);
