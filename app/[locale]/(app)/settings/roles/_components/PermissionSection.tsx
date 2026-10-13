@@ -6,7 +6,6 @@ import { Collapsible, DropdownMenu } from 'radix-ui';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TriStateToggle, type TriValue } from '@/components/ui/tri-state-toggle';
-import { useDirection } from '@/components/ui/use-direction';
 import {
   SECTIONS,
   SHAPES,
@@ -48,7 +47,6 @@ export function PermissionSection({
   };
   defaultOpen?: boolean;
 }) {
-  const dir = useDirection();
   const items = SECTIONS.find((s) => s.key === section)!.items;
   const summary = sectionSummary(perms, section);
 
@@ -62,7 +60,7 @@ export function PermissionSection({
   };
 
   return (
-    <Collapsible.Root defaultOpen={defaultOpen} dir={dir} className="rounded-xl border bg-card" data-testid={`perm-block-${section}`}>
+    <Collapsible.Root defaultOpen={defaultOpen} className="rounded-xl border bg-card" data-testid={`perm-block-${section}`}>
       <div className="flex items-center gap-3 px-4 py-3">
         <Collapsible.Trigger className="group flex min-h-10 min-w-0 flex-1 items-center gap-3 rounded-md text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {/* The wrapper mirrors the whole rotated chevron in RTL (a closed section points inline-end). */}
@@ -72,7 +70,7 @@ export function PermissionSection({
           <span className="truncate font-semibold">{t.title}</span>
           <Badge variant="secondary" data-testid={`perm-section-count-${section}`}>{items.length}</Badge>
         </Collapsible.Trigger>
-        <DropdownMenu.Root dir={dir}>
+        <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <Button variant="outline" size="sm" className="h-10 shrink-0" data-testid={`perm-section-${section}`}>
               {t.summary[summary]}

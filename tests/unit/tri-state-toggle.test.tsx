@@ -39,4 +39,29 @@ describe('TriStateToggle', () => {
     fireEvent.click(screen.getByTestId('t-read'));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('makes the disabled segment hint reachable: aria-label on the wrapper and a tooltip on focus', async () => {
+    const { rerender } = render(<TriStateToggle value="none" onChange={() => {}} shape="E" labels={labels} name="Passwords" testId="t" />);
+    const readWrapper = screen.getByTestId('t-read').parentElement as HTMLElement;
+    expect(readWrapper.getAttribute('aria-label')).toBe(labels.noRead);
+    expect(readWrapper.tabIndex).toBe(0);
+    expect(screen.queryByText(labels.noRead)).toBeNull();
+    fireEvent.focus(readWrapper);
+    expect((await screen.findAllByText(labels.noRead)).length).toBeGreaterThan(0);
+
+    rerender(<TriStateToggle value="none" onChange={() => {}} shape="R" labels={labels} name="Calendar" testId="t" />);
+    const editWrapper = screen.getByTestId('t-edit').parentElement as HTMLElement;
+    expect(editWrapper.getAttribute('aria-label')).toBe(labels.noEdit);
+    fireEvent.focus(editWrapper);
+    expect((await screen.findAllByText(labels.noEdit)).length).toBeGreaterThan(0);
+  });
+
+  it('segments are at least 40px touch targets', () => {
+    render(<TriStateToggle value="none" onChange={() => {}} shape="RE" labels={labels} name="People" testId="t" />);
+    for (const seg of ['edit', 'read', 'none']) {
+      const cls = screen.getByTestId(`t-${seg}`).className;
+      expect(cls).toContain('h-10');
+      expect(cls).toContain('w-10');
+    }
+  });
 });

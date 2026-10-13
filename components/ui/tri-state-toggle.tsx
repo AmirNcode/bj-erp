@@ -4,7 +4,6 @@ import { Ban, CircleCheck, Eye } from 'lucide-react';
 import { ToggleGroup, Tooltip } from 'radix-ui';
 
 import { cn } from '@/lib/utils';
-import { useDirection } from '@/components/ui/use-direction';
 
 export type TriValue = 'edit' | 'read' | 'none';
 
@@ -15,7 +14,7 @@ const SEGMENTS = [
 ] as const;
 
 const itemClass =
-  'inline-flex h-9 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors ' +
+  'inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground transition-colors ' +
   'data-[state=on]:bg-card data-[state=on]:shadow-sm disabled:pointer-events-none disabled:opacity-35 ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
@@ -38,7 +37,6 @@ export function TriStateToggle({
   name: string;
   testId?: string;
 }) {
-  const dir = useDirection();
   return (
     <Tooltip.Provider delayDuration={150}>
       <ToggleGroup.Root
@@ -46,7 +44,6 @@ export function TriStateToggle({
         value={value}
         onValueChange={(v) => v && v !== value && onChange(v as TriValue)}
         aria-label={name}
-        dir={dir}
         data-testid={testId}
         className="inline-flex shrink-0 gap-0.5 self-start rounded-[10px] bg-muted p-[3px]"
       >
@@ -69,7 +66,7 @@ export function TriStateToggle({
             <Tooltip.Root key={seg}>
               {/* tabIndex span: a disabled button cannot take focus or hover, so it hosts the tooltip */}
               <Tooltip.Trigger asChild>
-                <span tabIndex={0} className="inline-flex cursor-not-allowed rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                <span tabIndex={0} aria-label={hint} className="inline-flex cursor-not-allowed rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {item}
                 </span>
               </Tooltip.Trigger>
