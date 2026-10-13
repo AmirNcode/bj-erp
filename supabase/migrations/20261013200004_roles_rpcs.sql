@@ -321,15 +321,14 @@ end $$;
 -- without work_settings edit (which the RLS update policy needs). Touches only
 -- approval_order_enforced (and updated_by / updated_at); the work_settings scope
 -- trigger (20261013200003) checks the same rule again. Creates the company's row
--- with the column defaults if it is missing.
+-- with the column defaults if it is missing. Main's work_settings_audit_change
+-- trigger writes the audit row (before / after), so the RPC writes none itself.
 create function public.app_set_approval_order_enforced(p_enforced boolean)
 returns void
     language plpgsql security definer set search_path to '' as $$
 declare
   v_uid     uuid := auth.uid();
   v_company uuid;
-  v_before  boolean;
-  v_id      uuid;
 begin
   if v_uid is null or not private.is_active(v_uid)
      or not (private.is_admin(v_uid) or private.has_perm(v_uid, 'approval_steps', 'edit')) then
@@ -340,20 +339,12 @@ begin
   end if;
   v_company := private.caller_company();
 
-  select approval_order_enforced into v_before
-    from public.work_settings where company_id = v_company for update;
   insert into public.work_settings (company_id, approval_order_enforced, updated_by, updated_at)
   values (v_company, p_enforced, v_uid, now())
   on conflict (company_id) do update
     set approval_order_enforced = excluded.approval_order_enforced,
         updated_by = excluded.updated_by,
-        updated_at = excluded.updated_at
-  returning id into v_id;
-
-  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
-  values (v_uid, 'work_settings.approval_order', 'work_settings', v_id,
-          case when v_before is not null then jsonb_build_object('approval_order_enforced', v_before) end,
-          jsonb_build_object('approval_order_enforced', p_enforced));
+        updated_at = excluded.updated_at;
 end $$;
 
 do $$
@@ -363,7 +354,10 @@ begin
     'public.app_list_roles()', 'public.app_role_holders(uuid)',
     'public.app_save_role(uuid, text, jsonb)', 'public.app_delete_role(uuid)',
     'public.app_set_user_role_ids(uuid, uuid[])', 'public.app_set_user_roles(uuid, public.app_role[])',
-    'public.app_transfer_admin(uuid, text, text)', 'public.app_set_approval_order_enforced(boolean)']
+    'public.app_transfer_admin(uuid, text, text)', 'public.app_set_approval_order_enforced(boolean)',
+    -- main's FR-65 RPCs (20261013130001/140001) were revoked from public only;
+    -- Supabase's default privileges still grant anon. Same rule as every RPC here.
+    'public.app_grant_special_leave(uuid, text, text)', 'public.app_revoke_special_leave(uuid)']
   loop
     execute format('revoke all on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);

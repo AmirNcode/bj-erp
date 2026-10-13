@@ -1386,29 +1386,46 @@ select pg_temp.expect('R5 identity: an hr holder needs clearance edit too (Stepp
   (select private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='hr'))::text
        || private.can_act_on((select id from fx where k='super'), (select id from fx where k='hr'))::text
        || private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='plain'))::text), 'falsetruetrue');
-select pg_temp.expect('R5 identity mirror: giving or taking HR needs approval_steps and clearance edit',
-  pg_temp.try_as('stepper', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain'),
-    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))) || ' '
+-- Giving HR: can_act_on(Stepper, plain) and role_within(HR, Stepper) both pass,
+-- so only the identity mirror in app_set_user_role_ids refuses (its message).
+select pg_temp.expect('R5 identity mirror: giving HR needs approval_steps and clearance edit (D4 and D5 pass)',
+  (select private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='plain'))::text
+       || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key = 'hr'),
+                              (select id from fx where k='stepper'))::text) || ' '
+  || pg_temp.val_as('stepper', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])::text', pg_temp.id('plain'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))) || ' | '
   || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain'),
-    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))) || ' '
-  || pg_temp.try_as('stepper', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('plain'),
-    pg_temp.role_id('company', 'employee'))) || ' '
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))),
+  'truetrue 42501: not allowed to give or remove role HR | ok:1');
+-- Taking HR away: the target now holds hr, so can_act_on's identity clause
+-- refuses first (same two powers); the mirror's removal leg is defence in depth.
+select pg_temp.expect('R5 identity: taking HR from a holder is refused by D4''s identity clause; Everything may',
+  pg_temp.val_as('stepper', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])::text', pg_temp.id('plain'),
+    pg_temp.role_id('company', 'employee'))) || ' | '
   || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('plain'),
     pg_temp.role_id('company', 'employee'))),
-  '42501 ok:1 42501 ok:1');
+  '42501: not allowed on this employee | ok:1');
 insert into public.role_permissions select id, 'clearance', 'edit' from public.roles
   where company_id = (select id from fx where k='company') and system_key = 'hr';
 
 -- FR-66: the approval-order switch follows approval_steps edit; hours per day
 -- stays admin-only; other columns need work_settings edit.
 select pg_temp.try_su(format('update public.work_settings set approval_order_enforced = false where company_id = %s', pg_temp.id('company')));
+create temp table audit_seen as select id from public.audit_log;
 select pg_temp.expect('R5 order RPC: hr switches it on',
   pg_temp.try_as('hr', 'select public.app_set_approval_order_enforced(true)'), 'ok:1');
-select pg_temp.expect('… the switch is on; one work_settings.approval_order audit row with before/after',
+-- The audit row is main's generic work_settings trigger row; the RPC adds none.
+select pg_temp.expect('… the switch is on; exactly one audit row (the trigger''s) with before/after',
   (select approval_order_enforced::text from public.work_settings where company_id = (select id from fx where k='company')) || ' '
-  || (select count(*)::text || ':' || min(before->>'approval_order_enforced') || '>' || min(after->>'approval_order_enforced')
-        from public.audit_log where action = 'work_settings.approval_order' and actor_id = (select id from fx where k='hr')),
-  'true 1:false>true');
+  || (select count(*)::text || ':' || string_agg(a.action || ':' || (a.actor_id = (select id from fx where k='hr'))::text
+                                                 || ':' || (a.before->>'approval_order_enforced') || '>' || (a.after->>'approval_order_enforced'), ',')
+        from public.audit_log a where a.id not in (select id from audit_seen)),
+  'true 1:update_work_settings:true:false>true');
+select pg_temp.expect('R5 order: the old app''s hr upsert shape (FR-66 on main) still works',
+  pg_temp.try_as('hr', format($q$insert into public.work_settings (company_id, approval_order_enforced, updated_by) values (%s, false, %s)
+    on conflict (company_id) do update set approval_order_enforced = excluded.approval_order_enforced, updated_by = excluded.updated_by$q$,
+    pg_temp.id('company'), pg_temp.id('hr'))) || ' '
+  || pg_temp.try_as('hr', 'select public.app_set_approval_order_enforced(true)'), 'ok:1 ok:1');
 select pg_temp.expect('R5 order RPC: StepsOnly (approval_steps edit, no work_settings) switches it; a direct update finds no row',
   pg_temp.try_as('stepsonly', 'select public.app_set_approval_order_enforced(false)') || ' '
   || pg_temp.try_as('stepsonly', format('update public.work_settings set approval_order_enforced = true where company_id = %s', pg_temp.id('company'))),
@@ -1429,6 +1446,12 @@ select pg_temp.expect('R5 order RPC: employee and inactive hr refused, NULL inva
   || pg_temp.try_as('hr_off', 'select public.app_set_approval_order_enforced(true)') || ' '
   || pg_temp.try_as('hr', 'select public.app_set_approval_order_enforced(null)'),
   '42501: not allowed to change the approval order setting | 42501 22023');
+select pg_temp.expect('R5 special leave RPCs: anon may not execute, authenticated may (every signature)',
+  (select string_agg(p.oid::regprocedure::text || '=' || has_function_privilege('anon', p.oid, 'execute')::text
+                     || '/' || has_function_privilege('authenticated', p.oid, 'execute')::text, ',' order by p.oid::regprocedure::text)
+     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname in ('app_grant_special_leave', 'app_revoke_special_leave')),
+  'app_grant_special_leave(uuid,text,text)=false/true,app_revoke_special_leave(uuid)=false/true');
 select pg_temp.expect('R5 order RPC: definer, empty search_path, authenticated only',
   (select p.prosecdef::text || ' ' || array_to_string(p.proconfig, ',') || ' '
           || has_function_privilege('anon', p.oid, 'execute')::text || ' '
