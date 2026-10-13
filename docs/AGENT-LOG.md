@@ -273,6 +273,38 @@ errands exempt; added a "one per day" hint); auto-select in every person picker.
 - Annual Leave is looked up by `name_en = 'Annual Leave'`; a renamed type breaks the grant
   ('annual leave type not found').
 
+## 2026-10-12 → 2026-10-13 — FR-55 rebased onto main and reconciled with FR-56–64 (checkpoint)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **Branch:** FR-55 (renamed from
+fr55-configurable-roles at Amir's request; local only, never pushed)
+**Trigger:** Amir's handoff after main shipped FR-56–FR-64: rebase, rename the FR-55 migrations,
+reconcile the SQL collisions and the owner's preset requirements; then checkpoint so main work is
+not affected.
+
+**What changed (each step reviewed by a separate subagent)**
+- R1: rebased onto main 374d30a (no released main feature reverted; schema.sql = main's; messages
+  union); FR-55 migrations renamed 20261007160001–160005 → 20261013200001–200005.
+- R2 (c994133): migrations reconciled in place — legacy has_permission answers main's settings.edit /
+  absences.view / finance.view / personal_info.edit_own; new catalog items absences, finance,
+  personal_info_own; presets HR += work hours/holidays edit, Security += absences read, Finance +=
+  finance read; FR-63 own-row rule kept (own personal info editable only with the per-role switch);
+  settings gates rewritten on main's `_editor` policies; approval-order switch and hours_per_day stay
+  admin-only; approve/reject (5-arg, override) untouched; security dropped from signing identities.
+
+**Actions outside the repo**
+- None. The FR-55 migrations are NOT applied to any database (local DB is main's demo DB).
+
+**Verification**
+- Dry-runs (rolled back): client-feedback 52, fr51 40, fr52-53 58, fr54 83, fr55 270 — all PASS.
+- Unit: 2 catalog tests red until the migrations are applied and schema.sql regenerated (expected).
+
+**State left behind**
+- Checkout is back on `main`. Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md`
+  ("RESUME HERE (checkpoint 2026-10-13)").
+- Open owner decision: with the new presets, HR can no longer edit/deactivate/set balances/file
+  clearance for Security and Finance holders (they hold a read permission HR lacks). Options are in
+  the ledger; recommended: give HR those two read permissions (or exempt them from the comparison).
+
 ## 2026-10-13 — Released 374d30a to Liara (FR-64)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 374d30a
