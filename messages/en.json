@@ -1328,5 +1328,14 @@
       "location": "Errand location",
       "perDiem": "Per diem (Rials)"
     }
+  },
+  "requestProgress": {
+    "toggle": "Approval steps",
+    "loading": "Loading…",
+    "none": "No approval steps for this request.",
+    "approvedBy": "Signed by {name}",
+    "rejectedBy": "Rejected by {name}",
+    "waitingOnPerson": "Waiting for {name}",
+    "waiting": "Waiting"
   }
 }

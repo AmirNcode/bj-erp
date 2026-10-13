@@ -78,6 +78,31 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — FR-64: requester sees approval steps on Home
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ 0df0e69
+**Trigger:** Amir: the requester expands a request on Home and sees the steps in order, who signed
+and who is still pending.
+
+**What changed**
+- Migration `20261013120001_request_approval_progress.sql`: `public.request_approval_progress(id)`
+  (SECURITY DEFINER, read-guard mirrors leave_requests_select): recorded decisions + (while pending)
+  outstanding applicable steps with the awaited person (direct / department manager, named approver);
+  no-chain fallback = direct manager.
+- `lib/actions/leave/progress.ts`, `components/RequestProgress.tsx` (lazy-loaded on expand),
+  wired into Home recent requests (`HomeBoard.tsx`); messages `requestProgress.*`; types.
+- SQL scenarios appended to `tests/sql/client-feedback-2026-10-12.sql` (52 total).
+- Docs: REQUIREMENTS FR-64, PERMISSIONS, CHANGELOG.
+
+**Actions outside the repo**
+- `bj-deploy update local` (applied 20261013120001), rest restarted. Liara untouched.
+
+**Verification**
+- SQL suites all PASS after apply; tsc, lint clean; unit 618. Not checked in a browser.
+
+**State left behind**
+- Committed on local main, NOT pushed (Amir has not asked to deploy this one).
+
 ## 2026-10-13 — Released 23d05df to Liara (FR-56–FR-63)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 23d05df

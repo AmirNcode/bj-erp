@@ -186,6 +186,11 @@ every preset but admin.
 - `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
   `finance.view`; caller's company; approved rows only; no signatures, no reason.
 
+### `request_approval_progress(id)` (FR-64)
+SECURITY DEFINER; answers only when the caller may read the request (own · direct manager ·
+security · admin · hr, as `leave_requests_select`), else `request not found`. Returns step order,
+role, expected person, decision, signer name and time — no signatures, no notes.
+
 ### `approval_steps` (FR-36)
 - **SELECT**: any active authenticated company member. Deliberately open: the requester is shown
   which steps their request is waiting on, so this is progress information, not privileged config.

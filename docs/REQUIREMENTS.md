@@ -290,6 +290,11 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   the CSV import. The Home nudge no longer asks non-editors to complete it. Amends FR-53.
   *(2026-10-12.)*
 
+- **FR-64** ☑ **Requester follows the approval chain.** On Home, each recent request expands
+  («مراحل تأیید») to show every step in order: who signed and when, who rejected, and who it still
+  waits on (the person, for a manager or named step; the role, e.g. HR, otherwise). Via
+  `request_approval_progress(id)`, names and times only. *(2026-10-13.)*
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.

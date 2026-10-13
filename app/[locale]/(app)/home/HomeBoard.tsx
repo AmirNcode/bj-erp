@@ -10,6 +10,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
 import { RequestCancelButton } from '../request/_components/RequestCancelButton';
+import { RequestProgress } from '@/components/RequestProgress';
 import { PendingApprovalsCard, type PendingRow } from './PendingApprovalsCard';
 
 type Labels = {
@@ -226,7 +227,7 @@ export function HomeBoard({
                   {board.recent.map((r) => (
                     <div
                       key={r.id}
-                      className="flex items-center justify-between gap-3"
+                      className="flex items-start justify-between gap-3"
                       data-testid={`home-recent-request-${r.id}`}
                     >
                       <div className="min-w-0">
@@ -243,6 +244,8 @@ export function HomeBoard({
                           {formatDate(r.start_date)} — {formatDate(r.end_date)} -{' '}
                           {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
                         </div>
+                        {/* FR-64: who has signed, who it still waits on. */}
+                        {r.status !== 'cancelled' && <RequestProgress requestId={r.id} />}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
                         <span data-testid={`home-status-${r.id}`}>

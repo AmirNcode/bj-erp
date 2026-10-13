@@ -9,6 +9,12 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Approval steps on the requester's Home — FR-64 (2026-10-13)
+
+Migration `20261013120001`. Each recent request on Home has «مراحل تأیید»: tap to see every approval
+step in order — signed (by whom, when), rejected, or still waiting (and on whom) — so the requester
+knows whom to follow up with.
+
 ### Client feedback: security board, admin override, HR settings, per diem — FR-56–FR-62 (2026-10-12)
 
 Migrations `20261012120001`–`20261012120004`. Spec

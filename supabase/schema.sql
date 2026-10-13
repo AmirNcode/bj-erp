@@ -4139,6 +4139,109 @@ $$;
 
 
 --
+-- Name: request_approval_progress(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.request_approval_progress(p_id uuid) RETURNS TABLE(step_order integer, step_role public.app_role, manager_scope text, named boolean, expected_name text, decision public.leave_status, signer_name text, signed_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_emp     uuid;
+  v_company uuid;
+  v_kind    public.request_kind;
+  v_status  public.leave_status;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+
+  select r.employee_id, r.company_id, r.kind, r.status
+    into v_emp, v_company, v_kind, v_status
+    from public.leave_requests r where r.id = p_id;
+  if v_emp is null then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+
+  if not (private.is_active(v_uid)
+          and (v_emp = v_uid
+               or private.is_manager_of(v_uid, v_emp)
+               or private.has_role(v_uid, 'security')
+               or private.is_admin(v_uid)
+               or private.has_role(v_uid, 'hr'))) then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+
+  return query
+  with decided as (
+    select coalesce(s.step_order, 1) as step_order,
+           a.step_role,
+           coalesce(s.manager_scope, 'direct') as manager_scope,
+           s.approver_id,
+           a.decision,
+           sp.full_name as signer_name,
+           a.created_at as signed_at,
+           a.step_id
+      from public.leave_request_approvals a
+      left join public.approval_steps s on s.id = a.step_id
+      left join public.profiles sp on sp.id = a.approver_id
+     where a.request_id = p_id
+  ),
+  outstanding as (
+    select s.step_order, s.role as step_role, s.manager_scope, s.approver_id
+      from public.approval_steps s
+     where v_status = 'pending'
+       and s.company_id = v_company
+       and s.active
+       and v_kind = any(s.applies_to)
+       and private.step_applies(s.manager_scope, v_emp)
+       and not exists (
+             select 1 from public.leave_request_approvals a
+              where a.request_id = p_id
+                and (a.step_id = s.id or (a.step_id is null and a.step_role = s.role)))
+  ),
+  -- No chain configured at all: a pending request waits on the direct manager
+  -- (the FR-36 degrade branch of approve_leave_request).
+  fallback as (
+    select 1 as step_order, 'manager'::public.app_role as step_role,
+           'direct'::text as manager_scope, null::uuid as approver_id
+     where v_status = 'pending'
+       and not exists (select 1 from outstanding)
+       and not exists (select 1 from decided)
+       and not exists (
+             select 1 from public.approval_steps s
+              where s.company_id = v_company and s.active
+                and v_kind = any(s.applies_to)
+                and private.step_applies(s.manager_scope, v_emp))
+  ),
+  waiting as (
+    select * from outstanding
+    union all
+    select * from fallback
+  )
+  select d.step_order, d.step_role, d.manager_scope, d.approver_id is not null,
+         -- A named step keeps its person's name even when an admin override signed it.
+         (select np.full_name from public.profiles np where np.id = d.approver_id),
+         d.decision, d.signer_name, d.signed_at
+    from decided d
+  union all
+  select w.step_order, w.step_role, w.manager_scope, w.approver_id is not null,
+         (select ep.full_name from public.profiles ep
+           where ep.id = case
+                           when w.approver_id is not null then w.approver_id
+                           when w.step_role = 'manager' and w.manager_scope = 'department'
+                             then private.department_manager_for(v_emp)
+                           when w.step_role = 'manager'
+                             then (select pm.manager_id from public.profiles pm where pm.id = v_emp)
+                         end),
+         null::public.leave_status, null::text, null::timestamptz
+    from waiting w
+  order by 1, 8 nulls last, 2;
+end; $$;
+
+
+--
 -- Name: search_approver_candidates(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7174,6 +7277,17 @@ REVOKE ALL ON FUNCTION public.reject_leave_request(p_id uuid, p_reason text) FRO
 GRANT ALL ON FUNCTION public.reject_leave_request(p_id uuid, p_reason text) TO postgres;
 GRANT ALL ON FUNCTION public.reject_leave_request(p_id uuid, p_reason text) TO authenticated;
 GRANT ALL ON FUNCTION public.reject_leave_request(p_id uuid, p_reason text) TO service_role;
+
+
+--
+-- Name: FUNCTION request_approval_progress(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.request_approval_progress(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO anon;
+GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO service_role;
 
 
 --

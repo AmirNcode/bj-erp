@@ -1440,6 +1440,19 @@ export type Database = {
         Returns: undefined
       }
       cancel_leave_request: { Args: { p_id: string }; Returns: undefined }
+      request_approval_progress: {
+        Args: { p_id: string }
+        Returns: {
+          step_order: number
+          step_role: Database["public"]["Enums"]["app_role"]
+          manager_scope: string
+          named: boolean
+          expected_name: string | null
+          decision: Database["public"]["Enums"]["leave_status"] | null
+          signer_name: string | null
+          signed_at: string | null
+        }[]
+      }
       finance_approved_requests: {
         Args: { p_from: string; p_to: string }
         Returns: {

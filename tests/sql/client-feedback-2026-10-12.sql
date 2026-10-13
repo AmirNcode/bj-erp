@@ -283,4 +283,24 @@ select pg_temp.expect('balance = every month accrued (Esfand 1403 .. this month)
                      where gregorian_start >= '2025-02-19'
                        and gregorian_start <= (now() at time zone 'Asia/Tehran')::date))::text), 'true');
 
+
+-- ── FR-64: the requester follows their request through the chain ───────────
+-- l5: hr has signed (above); the manager (1) and the named approver (3) are
+-- still outstanding.
+select pg_temp.expect('requester sees every step in order with who signed / who is awaited',
+  pg_temp.val_as('emp', format($q$select string_agg(step_order || ':' || step_role || ':' ||
+      coalesce(decision::text, 'waiting') || ':' || coalesce(signer_name, expected_name, '-'), ' | ')
+      from public.request_approval_progress(%s)$q$, pg_temp.id('l5'))),
+  '1:manager:waiting:CF mgr | 2:hr:approved:CF hr | 3:employee:waiting:CF named');
+select pg_temp.expect('a decided request shows the recorded signatures only',
+  pg_temp.val_as('emp', format($q$select count(*) || '/' || count(*) filter (where decision = 'approved')
+      from public.request_approval_progress(%s)$q$, pg_temp.id('l1'))), '2/2');
+select pg_temp.expect('an override-signed named step keeps its person as the title',
+  pg_temp.val_as('emp', format($q$select expected_name || '/' || signer_name
+      from public.request_approval_progress(%s) where named$q$, pg_temp.id('l3'))), 'CF named/CF adm');
+select pg_temp.expect('a colleague may not read someone else''s progress',
+  pg_temp.val_as('named', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 'ERR:P0002');
+select pg_temp.expect('the manager may read their report''s progress',
+  left(pg_temp.val_as('mgr', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 4) <> 'ERR:', 'true');
+
 rollback;

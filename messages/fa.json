@@ -1328,5 +1328,14 @@
       "location": "محل ماموریت",
       "perDiem": "فوق‌العاده ماموریت (ریال)"
     }
+  },
+  "requestProgress": {
+    "toggle": "مراحل تأیید",
+    "loading": "در حال بارگذاری…",
+    "none": "این درخواست مرحله تأییدی ندارد.",
+    "approvedBy": "امضا شده توسط {name}",
+    "rejectedBy": "رد شده توسط {name}",
+    "waitingOnPerson": "در انتظار {name}",
+    "waiting": "در انتظار"
   }
 }
