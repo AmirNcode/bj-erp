@@ -335,6 +335,59 @@ end; $$;
 
 
 --
+-- Name: caller_company(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.caller_company() RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select company_id from public.profiles where id = auth.uid() and active;
+$$;
+
+
+--
+-- Name: can_act_on(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_act_on(p_caller uuid, p_target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_caller is distinct from p_target
+     and private.is_active(p_caller)
+     and exists (select 1 from public.profiles t
+                   join public.profiles c on c.id = p_caller and c.company_id = t.company_id
+                  where t.id = p_target)
+     and not exists (select 1 from public.user_roles where user_id = p_target and role = 'admin')
+     and not exists (select 1 from private.permission_keys() k
+                      where private.perm_level(p_target, k) > private.perm_level(p_caller, k))
+     and (not exists (select 1 from public.user_roles where user_id = p_target and role = 'manager')
+          or private.has_perm(p_caller, 'role_manager', 'edit'))
+     and (not exists (select 1 from public.departments where manager_id = p_target)
+          or private.has_perm(p_caller, 'departments', 'edit'))
+     -- Identity powers: whoever could reset this person's password could sign in
+     -- as them and fill their approval steps or clearance boxes. Role rows are
+     -- checked active or not, like the admin row above. Security is not here:
+     -- since 20261012120003 an approval step may name manager, hr or a person only.
+     -- An hr holder signs approval steps AND the clearance HR rows (by role), so
+     -- needs both edit powers.
+     and (not (exists (select 1 from public.user_roles
+                        where user_id = p_target and role = 'hr')
+               or exists (select 1 from public.approval_steps
+                           where approver_id = p_target and active))
+          or private.has_perm(p_caller, 'approval_steps', 'edit'))
+     and (not (exists (select 1 from public.user_roles where user_id = p_target and role in ('hr', 'finance'))
+               or exists (select 1 from public.separation_units where signer_id = p_target)
+               or exists (select 1 from public.separation_signoffs o
+                            join public.separations s on s.id = o.separation_id
+                           where o.signer_id = p_target
+                             and s.status in ('in_progress', 'awaiting_finance')))
+          or private.has_perm(p_caller, 'clearance', 'edit'));
+$$;
+
+
+--
 -- Name: can_read_all(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -370,12 +423,26 @@ CREATE FUNCTION private.can_read_separation(uid uuid, p_id uuid) RETURNS boolean
          from public.separations s
          join public.profiles c on c.id = uid and c.company_id = s.company_id
         where s.id = p_id
-          and (private.has_permission(uid, 'separations.view')
+          and (private.has_perm(uid, 'clearance', 'read')
                or s.employee_id = uid
                or exists (select 1 from public.separation_signoffs o
                            where o.separation_id = s.id and o.signer_id = uid))
      );
 $$;
+
+
+--
+-- Name: companies_seed_roles(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.companies_seed_roles() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  perform private.seed_company_roles(new.id);
+  return new;
+end $$;
 
 
 --
@@ -530,6 +597,12 @@ begin
     raise exception 'department manager must belong to the same company' using errcode = '22023';
   end if;
 
+  -- FR-55 D7: a non-admin never appoints themselves (any department, insert or update).
+  if not private.is_admin(v_uid) and new.manager_id = v_uid
+     and (tg_op = 'INSERT' or new.manager_id is distinct from old.manager_id) then
+    raise exception 'you cannot appoint yourself department manager' using errcode = '42501';
+  end if;
+
   if tg_op = 'INSERT' or private.is_admin(v_uid) then
     return new;
   end if;
@@ -578,15 +651,18 @@ begin
 
   if new.id = v_uid then
     v_allowed := array['full_name', 'language_pref', 'calendar_pref'];
-  elsif private.has_permission(v_uid, 'employees.edit')
-        and old.company_id = (select company_id from public.profiles where id = v_uid)
-        -- An admin's record is admin-only, even while that admin is deactivated
-        -- (so an editor cannot reactivate one): check the role row, not is_admin.
-        and not exists (select 1 from public.user_roles where user_id = old.id and role = 'admin')
+  elsif private.has_perm(v_uid, 'people', 'edit')
+        -- FR-55 D4: same company, never an admin (even a deactivated one, so an
+        -- editor cannot reactivate one), and nothing the editor does not hold.
+        and private.can_act_on(v_uid, old.id)
   then
     v_allowed := array['full_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
   elsif private.is_manager_of(v_uid, new.id) then
     v_allowed := array['full_name', 'hire_date'];
+  elsif private.has_perm(v_uid, 'passwords', 'edit') and private.can_act_on(v_uid, old.id) then
+    -- FR-55: a password reset only flips must_change_password, which the check
+    -- below admits under bj.password_flag_write. No other column.
+    v_allowed := '{}'::text[];
   else
     raise exception 'not permitted to update this profile' using errcode = '42501';
   end if;
@@ -633,11 +709,34 @@ begin
     if new.hours_per_day is distinct from 8 then
       raise exception 'only an admin may change the hours per day' using errcode = '42501';
     end if;
-  elsif new.hours_per_day is distinct from old.hours_per_day then
-    raise exception 'only an admin may change the hours per day' using errcode = '42501';
+    if new.approval_order_enforced is distinct from false
+       and not private.has_perm(v_uid, 'approval_steps', 'edit') then
+      raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+    end if;
+  else
+    if new.hours_per_day is distinct from old.hours_per_day then
+      raise exception 'only an admin may change the hours per day' using errcode = '42501';
+    end if;
+    if new.approval_order_enforced is distinct from old.approval_order_enforced
+       and not private.has_perm(v_uid, 'approval_steps', 'edit') then
+      raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+    end if;
   end if;
   return new;
 end; $$;
+
+
+--
+-- Name: has_perm(uuid, text, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.has_perm(uid uuid, p_key text, p_level text DEFAULT 'edit'::text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(private.is_active(uid)
+     and private.perm_level(uid, p_key) >= case p_level when 'edit' then 2 when 'read' then 1 end, false);
+$$;
 
 
 --
@@ -649,20 +748,20 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     SET search_path TO ''
     AS $$
   select case p_permission
-    when 'employees.edit'     then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'departments.edit'   then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'accruals.run'       then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'roles.manager'      then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'personal_info.view' then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'personal_info.edit' then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'personal_info.edit_own' then private.is_admin(uid)
-    when 'special_leave.grant' then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'separations.manage' then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'separations.view'   then private.is_admin(uid) or private.has_role(uid, 'hr')
-                                   or private.has_role(uid, 'finance')
-    when 'settings.edit'      then private.is_admin(uid) or private.has_role(uid, 'hr')
-    when 'absences.view'      then private.is_admin(uid) or private.has_role(uid, 'security')
-    when 'finance.view'       then private.is_admin(uid) or private.has_role(uid, 'finance')
+    when 'employees.edit'     then private.has_perm(uid, 'people', 'edit')
+    when 'departments.edit'   then private.has_perm(uid, 'departments', 'edit')
+    when 'accruals.run'       then private.has_perm(uid, 'leave_accrual', 'edit')
+    when 'roles.manager'      then private.has_perm(uid, 'role_manager', 'edit')
+    when 'personal_info.view' then private.has_perm(uid, 'personal_info', 'read')
+    when 'personal_info.edit' then private.has_perm(uid, 'personal_info', 'edit')
+    when 'personal_info.edit_own' then private.has_perm(uid, 'personal_info_own', 'edit')
+    when 'special_leave.grant' then private.has_perm(uid, 'special_leave', 'edit')
+    when 'separations.manage' then private.has_perm(uid, 'clearance', 'edit')
+    when 'separations.view'   then private.has_perm(uid, 'clearance', 'read')
+    when 'settings.edit'      then private.has_perm(uid, 'work_settings', 'edit')
+                                   and private.has_perm(uid, 'holidays', 'edit')
+    when 'absences.view'      then private.has_perm(uid, 'absences', 'read')
+    when 'finance.view'       then private.has_perm(uid, 'finance', 'read')
     else false
   end;
 $$;
@@ -888,6 +987,87 @@ end; $_$;
 
 
 --
+-- Name: perm_level(uuid, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.perm_level(uid uuid, p_key text) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  -- Ignores `active` on purpose: a deactivated holder keeps their latent levels,
+  -- so someone weaker cannot reactivate them (D4). Callers add is_active.
+  select case
+    when exists (select 1 from public.user_roles where user_id = uid and role = 'admin') then
+      case when private.permission_allows(p_key, 'edit') then 2
+           when private.permission_allows(p_key, 'read') then 1 else 0 end
+    else coalesce((
+      select max(case rp.level when 'edit' then 2 else 1 end)
+        from public.user_roles ur
+        join public.role_permissions rp on rp.role_id = ur.role_id
+       where ur.user_id = uid and rp.permission = p_key), 0)
+  end;
+$$;
+
+
+--
+-- Name: permission_allows(text, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case
+    when p_key in ('people_create','passwords','role_manager','role_assign','leave_accrual',
+                   'personal_info_own','special_leave')
+      then p_level = 'edit'
+    when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
+    when p_key in ('people','personal_info','clearance','departments','leave_balances',
+                   'leave_requests','approval_steps','work_settings','holidays')
+      then p_level in ('read','edit')
+    else false
+  end;
+$$;
+
+
+--
+-- Name: permission_deps(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text, needs text)
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  values
+    ('people_create','read','people'), ('passwords','read','people'),
+    ('role_manager','read','people'), ('role_manager','read','leave_balances'),
+    ('role_manager','read','calendar'), ('role_assign','read','people'),
+    ('personal_info','read','people'), ('clearance','edit','people'),
+    ('departments','read','people'), ('leave_balances','read','people'),
+    ('leave_accrual','read','departments'), ('leave_requests','read','people'),
+    ('approval_steps','read','people'), ('reports','read','people'),
+    ('reports','read','leave_balances'), ('reports','read','leave_requests'),
+    ('absences','read','people'), ('absences','read','leave_requests'),
+    ('special_leave','read','people'), ('special_leave','read','leave_balances');
+$$;
+
+
+--
+-- Name: permission_keys(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.permission_keys() RETURNS SETOF text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select unnest(array['people','people_create','passwords','role_manager','role_assign',
+    'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
+    'special_leave','leave_requests','calendar','reports','absences','approval_steps','work_settings',
+    'holidays','finance']);
+$$;
+
+
+--
 -- Name: personal_info_before_update(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -953,6 +1133,42 @@ end; $$;
 
 
 --
+-- Name: reads_balances(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.reads_balances(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.has_role(uid, 'manager') or private.has_perm(uid, 'leave_balances', 'read');
+$$;
+
+
+--
+-- Name: reads_calendar(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.reads_calendar(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.has_role(uid, 'manager') or private.has_perm(uid, 'calendar', 'read');
+$$;
+
+
+--
+-- Name: reads_people(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.reads_people(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.has_role(uid, 'manager') or private.has_perm(uid, 'people', 'read');
+$$;
+
+
+--
 -- Name: refresh_separation_status(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -992,6 +1208,46 @@ $$;
 
 
 --
+-- Name: role_permissions_guard(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.role_permissions_guard() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if (select kind from public.roles where id = new.role_id) = 'system' then
+    raise exception 'permission rows belong on preset and custom roles only' using errcode = '22023';
+  end if;
+  return new;
+end $$;
+
+
+--
+-- Name: role_within(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.role_within(p_role_id uuid, p_uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((
+    select case r.system_key
+      when 'admin' then false
+      when 'manager' then private.has_perm(p_uid, 'role_manager', 'edit')
+      else private.has_perm(p_uid, 'role_assign', 'edit')
+           and not exists (
+             select 1 from public.role_permissions rp
+              where rp.role_id = r.id
+                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
+    end
+      from public.roles r
+      join public.profiles u on u.id = p_uid and u.company_id = r.company_id
+     where r.id = p_role_id), false);
+$$;
+
+
+--
 -- Name: same_team(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1011,6 +1267,41 @@ CREATE FUNCTION private.same_team(uid uuid, target uuid) RETURNS boolean
           and caller.department_id is not null
      );
 $$;
+
+
+--
+-- Name: seed_company_roles(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.seed_company_roles(p_company uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  insert into public.roles (company_id, system_key, kind, name) values
+    (p_company, 'admin', 'system', 'Admin'), (p_company, 'manager', 'system', 'Manager'),
+    (p_company, 'employee', 'system', 'Employee'), (p_company, 'hr', 'preset', 'HR'),
+    (p_company, 'security', 'preset', 'Security'), (p_company, 'finance', 'preset', 'Finance')
+  on conflict do nothing;
+
+  insert into public.role_permissions (role_id, permission, level)
+  select r.id, v.permission, v.level
+    from public.roles r
+    join (values
+      ('hr','people','edit'), ('hr','people_create','edit'), ('hr','role_manager','edit'),
+      ('hr','personal_info','edit'), ('hr','clearance','edit'), ('hr','departments','edit'),
+      ('hr','leave_balances','edit'), ('hr','leave_accrual','edit'), ('hr','leave_requests','read'),
+      ('hr','calendar','read'), ('hr','reports','read'), ('hr','approval_steps','edit'),
+      ('hr','work_settings','edit'), ('hr','holidays','edit'), ('hr','special_leave','edit'),
+      ('hr','absences','read'), ('hr','finance','read'),
+      ('security','people','read'), ('security','leave_balances','read'),
+      ('security','leave_requests','read'), ('security','calendar','read'),
+      ('security','absences','read'),
+      ('finance','clearance','read'), ('finance','finance','read')
+    ) as v(system_key, permission, level) on r.system_key = v.system_key::public.app_role
+   where r.company_id = p_company
+  on conflict do nothing;
+end $$;
 
 
 --
@@ -1086,14 +1377,13 @@ CREATE FUNCTION private.separation_manageable(p_uid uuid, p_company uuid, p_empl
     SET search_path TO ''
     AS $$
 begin
-  if not private.has_permission(p_uid, 'separations.manage') then
+  if not private.has_perm(p_uid, 'clearance', 'edit') then
     raise exception 'not allowed to manage clearance forms' using errcode = '42501';
   end if;
   if not exists (select 1 from public.profiles where id = p_employee and company_id = p_company) then
     raise exception 'employee not found' using errcode = '42501';
   end if;
-  if not private.is_admin(p_uid)
-     and exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
+  if not private.is_admin(p_uid) and not private.can_act_on(p_uid, p_employee) then
     raise exception 'not allowed to file a clearance form for this employee' using errcode = '42501';
   end if;
 end; $$;
@@ -1159,7 +1449,8 @@ begin
   if p_actor is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
-  if not private.is_active(p_actor) or not private.has_permission(p_actor, 'special_leave.grant') then
+  -- has_perm is false for an inactive caller.
+  if not private.has_perm(p_actor, 'special_leave', 'edit') then
     raise exception 'not allowed to grant special leave' using errcode = '42501';
   end if;
   select company_id into v_company from public.profiles where id = p_actor;
@@ -1173,6 +1464,9 @@ begin
     end if;
     if exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
       raise exception 'not allowed to grant special leave to an admin' using errcode = '42501';
+    end if;
+    if not private.can_act_on(p_actor, p_employee) then
+      raise exception 'not allowed to grant special leave to this employee' using errcode = '42501';
     end if;
   end if;
   return v_company;
@@ -1408,6 +1702,41 @@ $$;
 
 
 --
+-- Name: user_roles_sync(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.user_roles_sync() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := (select company_id from public.profiles where id = new.user_id);
+  v_role_company uuid;
+begin
+  if tg_op = 'UPDATE' and new.role is distinct from old.role
+     and new.role_id is not distinct from old.role_id then
+    raise exception 'change role_id, not role' using errcode = '22023';
+  end if;
+  if new.role_id is null then
+    if new.role is null then
+      raise exception 'role or role_id required' using errcode = '23502';
+    end if;
+    select id into new.role_id from public.roles
+     where company_id = v_company and system_key = new.role;
+    if new.role_id is null then
+      raise exception 'no % role for this company', new.role using errcode = '23503';
+    end if;
+  else
+    select system_key, company_id into new.role, v_role_company from public.roles where id = new.role_id;
+    if v_role_company is distinct from v_company then
+      raise exception 'role belongs to another company' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+
+
+--
 -- Name: user_signatures_touch(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1436,7 +1765,7 @@ declare
   v_rows_after   int;
   v_last_emp     uuid;
 begin
-  if not private.has_permission(auth.uid(), 'accruals.run') then
+  if not private.has_perm(auth.uid(), 'leave_accrual', 'edit') then
     raise exception 'not allowed to post accruals' using errcode = '42501';
   end if;
 
@@ -1483,8 +1812,7 @@ begin
   -- every balance read. Without hr here, the balances HR now reads on the Edit
   -- Employee screen would silently lag behind the accrual policy HR just set.
   if not (private.is_manager_of(v_uid, p_employee_id)
-          or private.is_admin(v_uid)
-          or private.has_role(v_uid, 'hr')) then
+          or private.has_perm(v_uid, 'leave_balances', 'read')) then
     raise exception 'not allowed to accrue for this employee' using errcode = '42501';
   end if;
 
@@ -1649,9 +1977,9 @@ CREATE FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id uuid, 
     SET search_path TO ''
     AS $$
 begin
-  -- FR-43: admin OR hr. HR administers leave, so the two screens that set an
-  -- opening balance and an accrual policy are theirs as well.
-  if not (private.is_admin(auth.uid()) or private.has_role(auth.uid(), 'hr')) then
+  -- FR-43, FR-55: admin, or leave_balances at Allowed. HR administers leave, so the
+  -- two screens that set an opening balance and an accrual policy are theirs as well.
+  if not (private.is_admin(auth.uid()) or private.has_perm(auth.uid(), 'leave_balances', 'edit')) then
     raise exception 'only admins or hr can allocate leave' using errcode = '42501';
   end if;
   -- ...but nobody except an admin does it to THEMSELVES. Same asymmetry FR-36
@@ -1659,6 +1987,10 @@ begin
   -- an HR officer granting themselves leave is an obvious control weakness.
   if not private.is_admin(auth.uid()) and p_employee_id = auth.uid() then
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
+  end if;
+  -- FR-55 D4: and only on someone who holds nothing the caller lacks.
+  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+    raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
   return private.allocate_leave_impl(auth.uid(), p_employee_id, p_leave_type_id,
                                      p_period_start, p_period_end, p_minutes);
@@ -1697,7 +2029,8 @@ declare
   v_dm            uuid;
   v_result        jsonb := '[]'::jsonb;
 begin
-  v_bulk_hr := private.has_role(v_caller, 'hr') and not private.is_admin(v_caller);
+  -- FR-55: the non-admin branch keys on people_create; its clamps are unchanged.
+  v_bulk_hr := private.has_perm(v_caller, 'people_create', 'edit') and not private.is_admin(v_caller);
   if not (private.is_admin(v_caller) or v_bulk_hr) then
     raise exception 'admin or hr role required' using errcode = '42501';
   end if;
@@ -1903,7 +2236,8 @@ declare
   v_mpd           int;
 begin
   v_is_admin := private.is_admin(v_caller);
-  v_bulk_hr  := private.has_role(v_caller, 'hr') and not v_is_admin;
+  -- FR-55: the non-admin branch keys on people_create; its clamps are unchanged.
+  v_bulk_hr  := private.has_perm(v_caller, 'people_create', 'edit') and not v_is_admin;
   if not (v_is_admin or v_bulk_hr) then
     raise exception 'admin or hr role required' using errcode = '42501';
   end if;
@@ -2207,8 +2541,8 @@ declare
   v_row   record;
   v_count int;
 begin
-  if not private.is_admin(v_uid) then
-    raise exception 'only admins can reset passwords' using errcode = '42501';
+  if not (private.is_admin(v_uid) or private.has_perm(v_uid, 'passwords', 'edit')) then
+    raise exception 'not allowed to reset passwords' using errcode = '42501';
   end if;
   if jsonb_typeof(p_resets) <> 'array' then
     raise exception 'password resets must be an array' using errcode = '22023';
@@ -2248,6 +2582,11 @@ begin
     ) then
       raise exception 'employee not found' using errcode = 'P0002';
     end if;
+    -- FR-55 D4: every target, before the first credential changes.
+    if not private.is_admin(v_uid) and not private.can_act_on(v_uid, v_row.user_id) then
+      raise exception 'not allowed on %',
+        (select personnel_no from public.profiles where id = v_row.user_id) using errcode = '42501';
+    end if;
   end loop;
 
   for v_row in
@@ -2259,9 +2598,12 @@ begin
            updated_at = now()
      where id = v_row.user_id;
 
+    -- A non-admin caller passes the profile guard only with this flag (FR-55).
+    perform set_config('bj.password_flag_write', 'on', true);
     update public.profiles
        set must_change_password = true
      where id = v_row.user_id;
+    perform set_config('bj.password_flag_write', '', true);
 
     insert into public.audit_log (actor_id, action, entity, entity_id)
     values (v_uid, 'reset_password', 'auth.users', v_row.user_id);
@@ -2407,10 +2749,10 @@ $_$;
 
 
 --
--- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text) RETURNS uuid
+CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text, p_role_ids uuid[] DEFAULT NULL::uuid[]) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -2423,13 +2765,19 @@ declare
   v_roles  public.app_role[];
   v_company uuid;
   v_uid    uuid;
+  v_emp_role uuid;
   lt       record;
 begin
   if v_caller is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
   v_admin := private.is_admin(v_caller);
-  v_hr := private.has_role(v_caller, 'hr');
+  v_hr := private.has_perm(v_caller, 'people_create', 'edit');
+
+  -- D1: no path adds admin, whichever branch below runs.
+  if 'admin' = any (coalesce(p_roles, '{}')) then
+    raise exception 'admin is moved only by Transfer admin' using errcode = '42501';
+  end if;
 
   if v_admin then
     -- Tenant binding: an admin names the company, but only their own.
@@ -2444,10 +2792,10 @@ begin
     v_company := p_company_id;
   elsif v_hr then
     -- FR-35 / spec D4. HR onboards into ANY department and sets the reporting
-    -- line, which is what makes them useful. But the role list is overwritten
-    -- here regardless of what the client sent, so an HR account can never mint a
-    -- manager, another HR, security, or an admin. Checked before the manager
-    -- branch so someone holding both roles gets the wider HR scope.
+    -- line, which is what makes them useful. But the enum role list is overwritten
+    -- here regardless of what the client sent; extra roles come only through
+    -- p_role_ids, which D5 checks. Checked before the manager branch so someone
+    -- holding both gets the wider scope.
     --
     -- The company comes from the caller's own profile rather than the argument,
     -- matching the manager branch: only an admin may name the company.
@@ -2469,10 +2817,23 @@ begin
     raise exception 'admin or manager role required' using errcode = '42501';
   end if;
 
+  -- With role ids, the enum list is just Employee; the ids decide the rest below.
+  if p_role_ids is not null then
+    v_roles := array['employee']::public.app_role[];
+  end if;
+
   v_uid := private.create_employee_impl(
     v_caller, case when v_admin then 'admin' when v_hr then 'hr' else 'manager' end,
     v_company, v_dept, v_mgr, p_personnel_no, p_full_name, p_password,
     v_roles, p_hire_date, p_language_pref, p_calendar_pref, p_job_title);
+
+  -- D5 for non-admins (and D1 for everyone) through the assignment RPC. Skipped
+  -- when the ids add nothing beyond Employee, so a plain manager still onboards.
+  select id into v_emp_role from public.roles where company_id = v_company and system_key = 'employee';
+  if p_role_ids is not null
+     and exists (select 1 from unnest(p_role_ids) x where x is distinct from v_emp_role) then
+    perform public.app_set_user_role_ids(v_uid, p_role_ids || v_emp_role);
+  end if;
 
   -- Manager and HR paths: default quotas immediately, no admin round-trip.
   -- (`not v_admin` is both of them.)
@@ -2588,6 +2949,41 @@ end; $_$;
 
 
 --
+-- Name: app_delete_role(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_delete_role(p_id uuid) RETURNS TABLE(full_name text, personnel_no text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_kind text;
+  v_holders jsonb;
+begin
+  if not private.is_admin(v_uid) then
+    raise exception 'only the admin can delete roles' using errcode = '42501';
+  end if;
+  select kind into v_kind from public.roles where id = p_id and company_id = private.caller_company() for update;
+  if v_kind is null then raise exception 'role not found' using errcode = '22023'; end if;
+  if v_kind <> 'custom' then raise exception 'built-in roles cannot be deleted' using errcode = '22023'; end if;
+
+  select coalesce(jsonb_agg(jsonb_build_object('full_name', p.full_name, 'personnel_no', p.personnel_no)
+                            order by p.personnel_no), '[]'::jsonb)
+    into v_holders
+    from public.user_roles ur join public.profiles p on p.id = ur.user_id where ur.role_id = p_id;
+
+  delete from public.user_roles where role_id = p_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'role.delete', 'roles', p_id,
+          jsonb_build_object('name', (select name from public.roles where id = p_id), 'holders', v_holders), null);
+  delete from public.roles where id = p_id;
+
+  return query select h->>'full_name', h->>'personnel_no' from jsonb_array_elements(v_holders) h;
+end $$;
+
+
+--
 -- Name: app_export_personal_info(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2600,7 +2996,7 @@ declare
   v_company uuid;
   v_count   int;
 begin
-  if not private.has_permission(v_uid, 'personal_info.view') then
+  if not private.has_perm(v_uid, 'personal_info', 'read') then
     raise exception 'not permitted to export personal info' using errcode = '42501';
   end if;
   select company_id into v_company from public.profiles where id = v_uid;
@@ -2768,7 +3164,7 @@ declare
     'military_status','children_count'];
   v_key      text;
 begin
-  if not private.has_permission(v_uid, 'personal_info.edit') then
+  if not private.has_perm(v_uid, 'personal_info', 'edit') then
     raise exception 'not permitted to import personal info' using errcode = '42501';
   end if;
   if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 then
@@ -2790,13 +3186,13 @@ begin
     if v_target is null then
       raise exception 'unknown personnel number: %', coalesce(v_pno, '(empty)') using errcode = '22023';
     end if;
-    -- FR-63: one's own row follows personal_info.edit_own, not the import.
-    if v_target = v_uid and not private.has_permission(v_uid, 'personal_info.edit_own') then
-      raise exception 'not permitted to edit your own personal info: %', v_pno using errcode = '42501';
-    end if;
-    if not v_is_admin and exists (select 1 from public.user_roles
-                                   where user_id = v_target and role = 'admin') then
-      raise exception 'not permitted to edit an admin''s personal info: %', v_pno using errcode = '42501';
+    -- FR-63: one's own row follows personal_info_own, not the import.
+    if v_target = v_uid then
+      if not private.has_perm(v_uid, 'personal_info_own', 'edit') then
+        raise exception 'not permitted to edit your own personal info: %', v_pno using errcode = '42501';
+      end if;
+    elsif not v_is_admin and not private.can_act_on(v_uid, v_target) then
+      raise exception 'not permitted to edit this person''s personal info: %', v_pno using errcode = '42501';
     end if;
     for v_key in select jsonb_object_keys(v_row) loop
       if v_key <> 'personnel_no' and not (v_key = any (v_fields)) then
@@ -2839,6 +3235,27 @@ end; $$;
 
 
 --
+-- Name: app_list_roles(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_list_roles() RETURNS TABLE(id uuid, system_key text, kind text, name text, holders integer, permissions jsonb)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select r.id, r.system_key::text, r.kind, r.name,
+         (select count(*)::int from public.user_roles ur join public.profiles p on p.id = ur.user_id
+           where ur.role_id = r.id and p.active),
+         coalesce((select jsonb_object_agg(rp.permission, rp.level) from public.role_permissions rp
+                    where rp.role_id = r.id), '{}'::jsonb)
+    from public.roles r
+   where r.company_id = private.caller_company()
+   order by case r.kind when 'system' then 0 when 'preset' then 1 else 2 end,
+            array_position(array['admin','manager','employee','hr','security','finance'], r.system_key::text),
+            lower(r.name);
+$$;
+
+
+--
 -- Name: app_list_separations(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2863,6 +3280,20 @@ CREATE FUNCTION public.app_list_separations() RETURNS TABLE(id uuid, employee_id
    where private.can_read_separation(auth.uid(), s.id)
    order by s.created_at desc
    limit 500;
+$$;
+
+
+--
+-- Name: app_my_permissions(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_my_permissions() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_object_agg(k, case l when 2 then 'edit' else 'read' end), '{}'::jsonb)
+    from (select k, private.perm_level(auth.uid(), k) l from private.permission_keys() k) s
+   where l > 0 and private.is_active(auth.uid());
 $$;
 
 
@@ -2911,6 +3342,108 @@ end; $$;
 
 
 --
+-- Name: app_role_holders(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_role_holders(p_role_id uuid) RETURNS TABLE(user_id uuid, full_name text, personnel_no text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.is_admin(auth.uid()) then
+    raise exception 'only the admin can list role holders' using errcode = '42501';
+  end if;
+  return query
+    select p.id, p.full_name, p.personnel_no
+      from public.user_roles ur join public.profiles p on p.id = ur.user_id
+      join public.roles r on r.id = ur.role_id
+     where ur.role_id = p_role_id and r.company_id = private.caller_company()
+     order by p.personnel_no;
+end $$;
+
+
+--
+-- Name: app_save_role(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_save_role(p_id uuid, p_name text, p_permissions jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid := private.caller_company();
+  v_perms   jsonb := coalesce(p_permissions, '{}'::jsonb);
+  v_kind    text;
+  v_before  jsonb;
+  v_id      uuid := p_id;
+  v_name    text := btrim(coalesce(p_name, ''));
+  kv        record;
+  d         record;
+begin
+  if not private.is_admin(v_uid) then
+    raise exception 'only the admin can edit roles' using errcode = '42501';
+  end if;
+  if jsonb_typeof(v_perms) <> 'object' then
+    raise exception 'permissions must be an object' using errcode = '22023';
+  end if;
+  for kv in select key, value from jsonb_each(v_perms) loop
+    if jsonb_typeof(kv.value) <> 'string'
+       or not coalesce(private.permission_allows(kv.key, kv.value #>> '{}'), false) then
+      raise exception 'invalid permission % = %', kv.key, kv.value using errcode = '22023';
+    end if;
+  end loop;
+  for d in select * from private.permission_deps() loop
+    if v_perms ? d.key
+       and (d.key_level = 'read' or v_perms->>d.key = 'edit')
+       and not v_perms ? d.needs then
+      raise exception '% needs %', d.key, d.needs using errcode = '22023';
+    end if;
+  end loop;
+
+  if v_id is null then
+    if v_name !~ '^[A-Za-z0-9][A-Za-z0-9 &/-]{0,39}$' then
+      raise exception 'invalid role name' using errcode = '22023';
+    end if;
+    if exists (select 1 from public.roles where company_id = v_company and lower(name) = lower(v_name)) then
+      raise exception 'role name already used' using errcode = '22023';
+    end if;
+    insert into public.roles (company_id, kind, name) values (v_company, 'custom', v_name)
+      returning id into v_id;
+    v_before := null;
+  else
+    select kind into v_kind from public.roles where id = v_id and company_id = v_company for update;
+    if v_kind is null then raise exception 'role not found' using errcode = '22023'; end if;
+    if v_kind = 'system' then raise exception 'built-in role cannot be edited' using errcode = '22023'; end if;
+    if v_kind = 'custom' then
+      if v_name !~ '^[A-Za-z0-9][A-Za-z0-9 &/-]{0,39}$' then
+        raise exception 'invalid role name' using errcode = '22023';
+      end if;
+      if exists (select 1 from public.roles where company_id = v_company and lower(name) = lower(v_name) and id <> v_id) then
+        raise exception 'role name already used' using errcode = '22023';
+      end if;
+      update public.roles set name = v_name, updated_at = now() where id = v_id;
+    else
+      -- Presets keep their name (D9); the argument is ignored.
+      update public.roles set updated_at = now() where id = v_id;
+    end if;
+    select coalesce(jsonb_object_agg(permission, level), '{}'::jsonb) into v_before
+      from public.role_permissions where role_id = v_id;
+    delete from public.role_permissions where role_id = v_id;
+  end if;
+
+  insert into public.role_permissions (role_id, permission, level)
+    select v_id, key, value #>> '{}' from jsonb_each(v_perms);
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, case when v_before is null then 'role.create' else 'role.update' end, 'roles', v_id,
+          v_before, jsonb_build_object('name', (select name from public.roles where id = v_id),
+                                       'permissions', v_perms));
+  return v_id;
+end $_$;
+
+
+--
 -- Name: app_save_separation_units(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2929,7 +3462,7 @@ declare
   v_keep    uuid[] := '{}';
   v_i       integer := 0;
 begin
-  if not private.has_permission(v_uid, 'separations.manage') then
+  if not private.has_perm(v_uid, 'clearance', 'edit') then
     raise exception 'not allowed to manage clearance forms' using errcode = '42501';
   end if;
   if p_units is null or jsonb_typeof(p_units) <> 'array' then
@@ -3030,7 +3563,7 @@ declare
   v_uid     uuid := auth.uid();
   v_company uuid := private.separation_caller_company(v_uid);
 begin
-  if not private.has_permission(v_uid, 'separations.manage') then
+  if not private.has_perm(v_uid, 'clearance', 'edit') then
     raise exception 'not allowed to manage clearance forms' using errcode = '42501';
   end if;
   if not exists (select 1 from public.profiles where id = p_employee_id and company_id = v_company) then
@@ -3049,6 +3582,36 @@ end; $$;
 
 
 --
+-- Name: app_set_approval_order_enforced(boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_approval_order_enforced(p_enforced boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid     uuid := auth.uid();
+  v_company uuid;
+begin
+  if v_uid is null or not private.is_active(v_uid)
+     or not (private.is_admin(v_uid) or private.has_perm(v_uid, 'approval_steps', 'edit')) then
+    raise exception 'not allowed to change the approval order setting' using errcode = '42501';
+  end if;
+  if p_enforced is null then
+    raise exception 'approval order setting must be true or false' using errcode = '22023';
+  end if;
+  v_company := private.caller_company();
+
+  insert into public.work_settings (company_id, approval_order_enforced, updated_by, updated_at)
+  values (v_company, p_enforced, v_uid, now())
+  on conflict (company_id) do update
+    set approval_order_enforced = excluded.approval_order_enforced,
+        updated_by = excluded.updated_by,
+        updated_at = excluded.updated_at;
+end $$;
+
+
+--
 -- Name: app_set_employee_password(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3059,8 +3622,10 @@ CREATE FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text
 declare
   v_rows int;
 begin
-  if not private.is_admin(auth.uid()) then
-    raise exception 'only admins can reset passwords' using errcode = '42501';
+  if not (private.is_admin(auth.uid())
+          or (private.has_perm(auth.uid(), 'passwords', 'edit')
+              and private.can_act_on(auth.uid(), p_user_id))) then
+    raise exception 'not allowed to reset this password' using errcode = '42501';
   end if;
   if length(coalesce(p_password, '')) < 8 then
     raise exception 'new password must be at least 8 characters' using errcode = '22023';
@@ -3079,9 +3644,12 @@ begin
   end if;
 
   -- An admin resetting their own password chose it themselves.
+  -- A non-admin caller passes the profile guard only with this flag (FR-55).
+  perform set_config('bj.password_flag_write', 'on', true);
   update public.profiles
      set must_change_password = (p_user_id <> auth.uid())
    where id = p_user_id;
+  perform set_config('bj.password_flag_write', '', true);
 
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values (auth.uid(), 'reset_password', 'auth.users', p_user_id);
@@ -3217,6 +3785,94 @@ end; $$;
 
 
 --
+-- Name: app_set_user_role_ids(uuid, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid      uuid := auth.uid();
+  v_company  uuid;
+  v_is_admin boolean;
+  v_admin_id uuid;
+  v_before   uuid[];
+  v_after    uuid[] := coalesce(p_role_ids, '{}');
+  v_changed  uuid;
+  v_key      public.app_role;
+begin
+  -- Serialise with app_transfer_admin, which locks the same profile rows in the
+  -- same (id) order: the admin check and v_before below then see a committed
+  -- transfer instead of racing it.
+  perform 1 from public.profiles where id in (v_uid, p_user_id) order by id for no key update;
+  v_company := private.caller_company();
+  v_is_admin := private.is_admin(v_uid);
+
+  -- Only role holders reach the per-role checks below; anyone else is refused even
+  -- for a call that changes nothing.
+  if not v_is_admin
+     and not private.has_perm(v_uid, 'role_assign', 'edit')
+     and not private.has_perm(v_uid, 'role_manager', 'edit') then
+    raise exception 'not allowed to set roles' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_user_id and company_id = v_company) then
+    raise exception 'employee not found' using errcode = '42501';
+  end if;
+  -- Validated here, not left to role_within: the admin skips role_within.
+  if exists (select 1 from unnest(v_after) x left join public.roles r on r.id = x
+              where r.id is null or r.company_id <> v_company) then
+    raise exception 'unknown role' using errcode = '22023';
+  end if;
+  select id into v_admin_id from public.roles where company_id = v_company and system_key = 'admin';
+  select coalesce(array_agg(role_id order by role_id), '{}') into v_before
+    from public.user_roles where user_id = p_user_id;
+
+  -- D1: admin moves only by transfer, for everyone, the admin included.
+  if (v_admin_id = any (v_before)) <> (v_admin_id = any (v_after)) then
+    raise exception 'admin is moved only by Transfer admin' using errcode = '42501';
+  end if;
+
+  if not v_is_admin then
+    -- D3 + D4 (can_act_on is false on yourself), then D5 per added or removed role.
+    if not private.can_act_on(v_uid, p_user_id) then
+      raise exception 'not allowed on this employee' using errcode = '42501';
+    end if;
+    for v_changed in
+      (select x from unnest(v_before) x except select x from unnest(v_after) x)
+      union
+      (select x from unnest(v_after) x except select x from unnest(v_before) x)
+    loop
+      -- Identity presets: their holders sign approval steps and the clearance HR
+      -- rows (hr) or the clearance finance box, so giving one to someone whose
+      -- password you can reset is signing as them. It takes the powers that edit
+      -- those signers (mirrors can_act_on). Security signs no step since
+      -- 20261012120003 (main's approval_steps_role_allowed).
+      v_key := (select system_key from public.roles where id = v_changed);
+      if not private.role_within(v_changed, v_uid)
+         or (v_key = 'hr' and not (private.has_perm(v_uid, 'approval_steps', 'edit')
+                                   and private.has_perm(v_uid, 'clearance', 'edit')))
+         or (v_key = 'finance' and not private.has_perm(v_uid, 'clearance', 'edit')) then
+        raise exception 'not allowed to give or remove role %', (select name from public.roles where id = v_changed)
+          using errcode = '42501';
+      end if;
+    end loop;
+  end if;
+
+  -- Never the admin row, whatever v_before said (D1; belt and braces to the lock).
+  delete from public.user_roles where user_id = p_user_id and role_id <> all (v_after)
+     and role is distinct from 'admin';
+  insert into public.user_roles (user_id, role_id)
+    select distinct p_user_id, x from unnest(v_after) x on conflict (user_id, role_id) do nothing;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'set_roles', 'user_roles', p_user_id,
+    jsonb_build_object('roles', (select coalesce(jsonb_agg(name order by name), '[]') from public.roles where id = any (v_before))),
+    jsonb_build_object('roles', (select coalesce(jsonb_agg(name order by name), '[]') from public.roles where id = any (v_after))));
+end $$;
+
+
+--
 -- Name: app_set_user_roles(uuid, public.app_role[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3225,54 +3881,15 @@ CREATE FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_rol
     SET search_path TO ''
     AS $$
 declare
-  v_uid    uuid := auth.uid();
-  v_before public.app_role[];
-  v_after  public.app_role[] := coalesce(p_roles, '{}');
+  v_ids uuid[];
 begin
-  select coalesce(array_agg(role order by role), '{}') into v_before
-    from public.user_roles where user_id = p_user_id;
-
-  if private.is_admin(v_uid) then
-    if p_user_id = v_uid and not ('admin' = any (v_after)) then
-      raise exception 'cannot remove your own admin role' using errcode = '22023';
-    end if;
-  elsif private.has_permission(v_uid, 'roles.manager') then
-    if p_user_id = v_uid then
-      raise exception 'you cannot change your own roles' using errcode = '42501';
-    end if;
-    if not exists (
-      select 1
-        from public.profiles t
-        join public.profiles c on c.id = v_uid and c.company_id = t.company_id
-       where t.id = p_user_id
-    ) then
-      raise exception 'employee not found' using errcode = '42501';
-    end if;
-    if 'admin' = any (v_before) then
-      raise exception 'only admins can change an admin''s roles' using errcode = '42501';
-    end if;
-    if exists (
-      (select r from unnest(v_before) r except select r from unnest(v_after) r)
-      union
-      (select r from unnest(v_after) r except select r from unnest(v_before) r)
-      except select 'manager'::public.app_role
-    ) then
-      raise exception 'only the manager role may be added or removed' using errcode = '42501';
-    end if;
-  else
-    raise exception 'only admins can set roles' using errcode = '42501';
-  end if;
-
-  delete from public.user_roles where user_id = p_user_id;
-  insert into public.user_roles (user_id, role)
-    select p_user_id, unnest(v_after)
-    on conflict do nothing;
-
-  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
-  values (v_uid, 'set_roles', 'user_roles', p_user_id,
-          jsonb_build_object('roles', to_jsonb(v_before)),
-          jsonb_build_object('roles', to_jsonb(v_after)));
-end; $$;
+  select coalesce(array_agg(r.id), '{}') into v_ids
+    from public.roles r join public.profiles p on p.company_id = r.company_id and p.id = p_user_id
+   where r.system_key = any (coalesce(p_roles, '{}'));
+  select v_ids || coalesce(array_agg(ur.role_id), '{}') into v_ids
+    from public.user_roles ur where ur.user_id = p_user_id and ur.role is null;
+  perform public.app_set_user_role_ids(p_user_id, v_ids);
+end $$;
 
 
 --
@@ -3376,6 +3993,43 @@ begin
           jsonb_build_object('separation_id', s.id));
   perform private.refresh_separation_status(s.id);
 end; $$;
+
+
+--
+-- Name: app_transfer_admin(uuid, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  -- Same lock order as app_set_user_role_ids (profile rows, by id).
+  perform 1 from public.profiles where id in (v_uid, p_target) order by id for no key update;
+  if not private.is_admin(v_uid) then
+    raise exception 'only the admin can transfer admin' using errcode = '42501';
+  end if;
+  if not exists (select 1 from auth.users
+                  where id = v_uid
+                    and encrypted_password = extensions.crypt(coalesce(p_password, ''), encrypted_password)) then
+    raise exception 'wrong password' using errcode = '42501';
+  end if;
+  if p_target = v_uid then
+    raise exception 'you already hold admin' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.profiles t join public.profiles c on c.id = v_uid and c.company_id = t.company_id
+                  where t.id = p_target and t.active and t.personnel_no = btrim(coalesce(p_personnel_no, ''))) then
+    raise exception 'personnel number does not match an active employee' using errcode = '22023';
+  end if;
+
+  delete from public.user_roles where user_id = v_uid and role = 'admin';
+  insert into public.user_roles (user_id, role) values (p_target, 'admin');
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'admin.transfer', 'user_roles', p_target,
+          jsonb_build_object('admin', v_uid), jsonb_build_object('admin', p_target));
+end $$;
 
 
 --
@@ -3778,7 +4432,14 @@ begin
 
   select employee_id into v_owner from public.leave_requests where id = p_id;
   if v_owner is null then raise exception 'request not found' using errcode = 'P0002'; end if;
-  if not (v_owner = v_uid or private.is_admin(v_uid)) then
+  if not (v_owner = v_uid
+          or private.is_admin(v_uid)
+          -- FR-55 D8: leave_requests at Allowed covers the company, apart from the admin.
+          or (private.has_perm(v_uid, 'leave_requests', 'edit')
+              and exists (select 1 from public.profiles o
+                            join public.profiles c on c.company_id = o.company_id and c.id = v_uid
+                           where o.id = v_owner)
+              and not exists (select 1 from public.user_roles where user_id = v_owner and role = 'admin'))) then
     raise exception 'not allowed to cancel this request' using errcode = '42501';
   end if;
 
@@ -3936,32 +4597,28 @@ CREATE FUNCTION public.custom_access_token_hook(event jsonb) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare
-  claims jsonb;
-  roles  jsonb;
-  locale text;
+  v_uid    uuid := (event->>'user_id')::uuid;
+  v_active boolean;
+  claims   jsonb;
+  roles    jsonb;
+  perms    jsonb;
+  locale   text;
 begin
-  select coalesce(jsonb_agg(role order by role), '[]'::jsonb)
-    into roles
-    from public.user_roles
-   where user_id = (event->>'user_id')::uuid;
+  select p.active, p.language_pref into v_active, locale from public.profiles p where p.id = v_uid;
+  v_active := coalesce(v_active, false);
 
-  select p.language_pref
-    into locale
-    from public.profiles p
-   where p.id = (event->>'user_id')::uuid;
+  select coalesce(jsonb_agg(role order by role), '[]'::jsonb) into roles
+    from public.user_roles where user_id = v_uid and role is not null and v_active;
+
+  select coalesce(jsonb_object_agg(k, case l when 2 then 'edit' else 'read' end), '{}'::jsonb) into perms
+    from (select k, private.perm_level(v_uid, k) l from private.permission_keys() k) s
+   where l > 0 and v_active;
 
   claims := jsonb_set(coalesce(event->'claims', '{}'::jsonb), '{app_roles}', roles);
-
-  -- Constrain to the locales the app actually routes. A junk value here would
-  -- become a URL path segment in the middleware; lib/i18n/locale.ts rejects
-  -- anything unknown as well, but emitting a bad claim in the first place is
-  -- worse than pinning it to the default.
-  claims := jsonb_set(
-    claims,
-    '{app_locale}',
-    to_jsonb(case when locale in ('fa', 'en') then locale else 'fa' end)
-  );
-
+  claims := jsonb_set(claims, '{app_perms}', perms);
+  -- Constrain to the locales the app routes (see the previous definition's note).
+  claims := jsonb_set(claims, '{app_locale}',
+    to_jsonb(case when locale in ('fa', 'en') then locale else 'fa' end));
   return jsonb_set(event, '{claims}', claims);
 end;
 $$;
@@ -4317,9 +4974,7 @@ begin
   if not (private.is_active(v_uid)
           and (v_emp = v_uid
                or private.is_manager_of(v_uid, v_emp)
-               or private.has_role(v_uid, 'security')
-               or private.is_admin(v_uid)
-               or private.has_role(v_uid, 'hr'))) then
+               or private.has_perm(v_uid, 'leave_requests', 'read'))) then
     raise exception 'request not found' using errcode = 'P0002';
   end if;
 
@@ -4407,7 +5062,7 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '28000';
   end if;
-  if not (private.is_admin(v_uid) or private.has_role(v_uid, 'hr')) then
+  if not private.has_perm(v_uid, 'approval_steps', 'edit') then
     raise exception 'admin or hr role required' using errcode = '42501';
   end if;
 
@@ -4440,9 +5095,9 @@ CREATE FUNCTION public.set_employee_leave_policy(p_employee_id uuid, p_leave_typ
     AS $$
 declare v_id uuid;
 begin
-  -- FR-43: admin OR hr. HR administers leave, so the two screens that set an
-  -- opening balance and an accrual policy are theirs as well.
-  if not (private.is_admin(auth.uid()) or private.has_role(auth.uid(), 'hr')) then
+  -- FR-43, FR-55: admin, or leave_balances at Allowed. HR administers leave, so the
+  -- two screens that set an opening balance and an accrual policy are theirs as well.
+  if not (private.is_admin(auth.uid()) or private.has_perm(auth.uid(), 'leave_balances', 'edit')) then
     raise exception 'only admins or hr can set a leave policy' using errcode = '42501';
   end if;
   -- ...but nobody except an admin does it to THEMSELVES. Same asymmetry FR-36
@@ -4450,6 +5105,10 @@ begin
   -- an HR officer granting themselves leave is an obvious control weakness.
   if not private.is_admin(auth.uid()) and p_employee_id = auth.uid() then
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
+  end if;
+  -- FR-55 D4: and only on someone who holds nothing the caller lacks.
+  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+    raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
   if p_accrual_minutes_per_month is null or p_accrual_minutes_per_month < 0 then
     raise exception 'accrual per month must be 0 or more' using errcode = '22023';
@@ -4501,9 +5160,9 @@ declare
   v_current int;
   v_ledger uuid;
 begin
-  -- FR-43: admin OR hr. HR administers leave, so the two screens that set an
-  -- opening balance and an accrual policy are theirs as well.
-  if not (private.is_admin(auth.uid()) or private.has_role(auth.uid(), 'hr')) then
+  -- FR-43, FR-55: admin, or leave_balances at Allowed. HR administers leave, so the
+  -- two screens that set an opening balance and an accrual policy are theirs as well.
+  if not (private.is_admin(auth.uid()) or private.has_perm(auth.uid(), 'leave_balances', 'edit')) then
     raise exception 'only admins or hr can set leave balance' using errcode = '42501';
   end if;
   -- ...but nobody except an admin does it to THEMSELVES. Same asymmetry FR-36
@@ -4511,6 +5170,10 @@ begin
   -- an HR officer granting themselves leave is an obvious control weakness.
   if not private.is_admin(auth.uid()) and p_employee_id = auth.uid() then
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
+  end if;
+  -- FR-55 D4: and only on someone who holds nothing the caller lacks.
+  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+    raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
 
   -- FR-48: a balance may be negative (leave taken in advance). Bounded at one
@@ -5114,6 +5777,37 @@ COMMENT ON COLUMN public.profiles.must_change_password IS 'True while the accoun
 
 
 --
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.role_permissions (
+    role_id uuid NOT NULL,
+    permission text NOT NULL,
+    level text NOT NULL,
+    CONSTRAINT role_permissions_catalog CHECK (private.permission_allows(permission, level)),
+    CONSTRAINT role_permissions_level_check CHECK ((level = ANY (ARRAY['read'::text, 'edit'::text])))
+);
+
+
+--
+-- Name: roles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.roles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    system_key public.app_role,
+    kind text NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT roles_kind_check CHECK ((kind = ANY (ARRAY['system'::text, 'preset'::text, 'custom'::text]))),
+    CONSTRAINT roles_name_shape CHECK ((name ~ '^[A-Za-z0-9][A-Za-z0-9 &/-]{0,39}$'::text)),
+    CONSTRAINT roles_system_key_kind CHECK (((system_key IS NOT NULL) = (kind = ANY (ARRAY['system'::text, 'preset'::text]))))
+);
+
+
+--
 -- Name: separation_signoffs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -5132,7 +5826,7 @@ CREATE TABLE public.separation_signoffs (
     signature_consent_at timestamp with time zone,
     note text,
     CONSTRAINT separation_signoffs_hr_no_signer CHECK (((NOT is_hr) OR (signer_id IS NULL))),
-    CONSTRAINT separation_signoffs_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_signoffs_names CHECK (((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
     CONSTRAINT separation_signoffs_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
     CONSTRAINT separation_signoffs_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
     CONSTRAINT separation_signoffs_signed_shape CHECK (((signed_at IS NULL) = (signature_data IS NULL)))
@@ -5154,7 +5848,7 @@ CREATE TABLE public.separation_units (
     sort_order integer DEFAULT 0 NOT NULL,
     active boolean DEFAULT true NOT NULL,
     CONSTRAINT separation_units_kind CHECK ((kind = ANY (ARRAY['hr'::text, 'department'::text, 'own_department'::text, 'person'::text]))),
-    CONSTRAINT separation_units_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_units_names CHECK (((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
     CONSTRAINT separation_units_shape CHECK ((((kind = 'hr'::text) AND (department_id IS NULL) AND (signer_id IS NULL) AND active) OR ((kind = 'department'::text) AND (signer_id IS NULL)) OR ((kind = 'own_department'::text) AND (department_id IS NULL) AND (signer_id IS NULL)) OR ((kind = 'person'::text) AND (department_id IS NULL))))
 );
 
@@ -5252,7 +5946,7 @@ CREATE VIEW public.team_leave_calendar AS
    FROM ((public.leave_requests lr
      JOIN public.profiles p ON ((p.id = lr.employee_id)))
      LEFT JOIN public.leave_types lt ON ((lt.id = lr.leave_type_id)))
-  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.can_read_all(auth.uid())));
+  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())));
 
 
 --
@@ -5262,7 +5956,8 @@ CREATE VIEW public.team_leave_calendar AS
 CREATE TABLE public.user_roles (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
-    role public.app_role NOT NULL
+    role public.app_role,
+    role_id uuid NOT NULL
 );
 
 
@@ -5275,7 +5970,7 @@ CREATE TABLE public.user_signatures (
     signature_data text NOT NULL,
     source text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT user_signatures_shape CHECK ((((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text))),
+    CONSTRAINT user_signatures_shape CHECK (((length(signature_data) >= 100) AND (length(signature_data) <= 350000) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text))),
     CONSTRAINT user_signatures_source CHECK ((source = ANY (ARRAY['drawn'::text, 'upload'::text])))
 );
 
@@ -5477,6 +6172,22 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_pkey PRIMARY KEY (role_id, permission);
+
+
+--
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: separation_signoffs separation_signoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5514,6 +6225,14 @@ ALTER TABLE ONLY public.special_leave_grants
 
 ALTER TABLE ONLY public.user_roles
     ADD CONSTRAINT user_roles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_roles user_roles_user_id_role_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_user_id_role_id_key UNIQUE (user_id, role_id);
 
 
 --
@@ -5800,6 +6519,20 @@ CREATE INDEX profiles_manager_id_idx ON public.profiles USING btree (manager_id)
 
 
 --
+-- Name: roles_company_name_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX roles_company_name_uniq ON public.roles USING btree (company_id, lower(name));
+
+
+--
+-- Name: roles_company_system_key_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX roles_company_system_key_uniq ON public.roles USING btree (company_id, system_key) WHERE (system_key IS NOT NULL);
+
+
+--
 -- Name: separation_signoffs_one_hr; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5870,6 +6603,13 @@ CREATE UNIQUE INDEX special_leave_grants_one_marriage ON public.special_leave_gr
 
 
 --
+-- Name: user_roles_one_admin; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX user_roles_one_admin ON public.user_roles USING btree ((true)) WHERE (role = 'admin'::public.app_role);
+
+
+--
 -- Name: user_roles_user_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5902,6 +6642,13 @@ CREATE TRIGGER approval_steps_set_updated_at BEFORE UPDATE ON public.approval_st
 --
 
 CREATE TRIGGER companies_audit_change AFTER INSERT OR DELETE OR UPDATE ON public.companies FOR EACH ROW EXECUTE FUNCTION private.audit_row_change();
+
+
+--
+-- Name: companies companies_seed_roles; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER companies_seed_roles AFTER INSERT ON public.companies FOR EACH ROW EXECUTE FUNCTION private.companies_seed_roles();
 
 
 --
@@ -5979,6 +6726,20 @@ CREATE TRIGGER profiles_enforce_update_scope BEFORE UPDATE ON public.profiles FO
 --
 
 CREATE TRIGGER profiles_preserve_active_admin BEFORE UPDATE OF active ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.preserve_active_admin();
+
+
+--
+-- Name: role_permissions role_permissions_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER role_permissions_guard BEFORE INSERT OR UPDATE ON public.role_permissions FOR EACH ROW EXECUTE FUNCTION private.role_permissions_guard();
+
+
+--
+-- Name: user_roles user_roles_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER user_roles_sync BEFORE INSERT OR UPDATE ON public.user_roles FOR EACH ROW EXECUTE FUNCTION private.user_roles_sync();
 
 
 --
@@ -6265,6 +7026,22 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: role_permissions role_permissions_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: roles roles_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
 -- Name: separation_signoffs separation_signoffs_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6401,6 +7178,14 @@ ALTER TABLE ONLY public.special_leave_grants
 
 
 --
+-- Name: user_roles user_roles_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_roles
+    ADD CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_roles user_roles_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6442,14 +7227,14 @@ ALTER TABLE public.approval_steps ENABLE ROW LEVEL SECURITY;
 -- Name: approval_steps approval_steps_delete_config; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY approval_steps_delete_config ON public.approval_steps FOR DELETE TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role)));
+CREATE POLICY approval_steps_delete_config ON public.approval_steps FOR DELETE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
 -- Name: approval_steps approval_steps_insert_config; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY approval_steps_insert_config ON public.approval_steps FOR INSERT TO authenticated WITH CHECK ((private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role)));
+CREATE POLICY approval_steps_insert_config ON public.approval_steps FOR INSERT TO authenticated WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
@@ -6463,7 +7248,7 @@ CREATE POLICY approval_steps_select ON public.approval_steps FOR SELECT TO authe
 -- Name: approval_steps approval_steps_update_config; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY approval_steps_update_config ON public.approval_steps FOR UPDATE TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role))) WITH CHECK ((private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role)));
+CREATE POLICY approval_steps_update_config ON public.approval_steps FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company)))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
@@ -6509,7 +7294,7 @@ CREATE POLICY departments_delete_admin ON public.departments FOR DELETE TO authe
 -- Name: departments departments_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_insert_editor ON public.departments FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY departments_insert_editor ON public.departments FOR INSERT TO authenticated WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'departments'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6525,9 +7310,9 @@ CREATE POLICY departments_select_authenticated ON public.departments FOR SELECT 
 -- Name: departments departments_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY departments_update_editor ON public.departments FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY departments_update_editor ON public.departments FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'departments'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
-  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'departments.edit'::text) AND (company_id = ( SELECT p.company_id
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'departments'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6542,7 +7327,7 @@ ALTER TABLE public.employee_leave_policies ENABLE ROW LEVEL SECURITY;
 -- Name: employee_leave_policies employee_leave_policies_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY employee_leave_policies_select ON public.employee_leave_policies FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.can_read_all(( SELECT auth.uid() AS uid)))));
+CREATE POLICY employee_leave_policies_select ON public.employee_leave_policies FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -6555,7 +7340,7 @@ ALTER TABLE public.employee_personal_info ENABLE ROW LEVEL SECURITY;
 -- Name: employee_personal_info employee_personal_info_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY employee_personal_info_select ON public.employee_personal_info FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.view'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY employee_personal_info_select ON public.employee_personal_info FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_perm(( SELECT auth.uid() AS uid), 'personal_info'::text, 'read'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 
@@ -6564,11 +7349,9 @@ CREATE POLICY employee_personal_info_select ON public.employee_personal_info FOR
 -- Name: employee_personal_info employee_personal_info_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit_own'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_perm(( SELECT auth.uid() AS uid), 'personal_info_own'::text, 'edit'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_perm(( SELECT auth.uid() AS uid), 'personal_info'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
-  WHERE (p.id = ( SELECT auth.uid() AS uid)))) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR (NOT (EXISTS ( SELECT 1
-   FROM public.user_roles r
-  WHERE ((r.user_id = employee_personal_info.employee_id) AND (r.role = 'admin'::public.app_role)))))))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit_own'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_permission(( SELECT auth.uid() AS uid), 'personal_info.edit'::text) AND (company_id = ( SELECT p.company_id
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.can_act_on(( SELECT auth.uid() AS uid), employee_id)))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (((employee_id = ( SELECT auth.uid() AS uid)) AND private.has_perm(( SELECT auth.uid() AS uid), 'personal_info_own'::text, 'edit'::text)) OR ((employee_id <> ( SELECT auth.uid() AS uid)) AND private.has_perm(( SELECT auth.uid() AS uid), 'personal_info'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 
@@ -6583,7 +7366,7 @@ ALTER TABLE public.holidays ENABLE ROW LEVEL SECURITY;
 -- Name: holidays holidays_delete_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_delete_editor ON public.holidays FOR DELETE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY holidays_delete_editor ON public.holidays FOR DELETE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'holidays'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6592,7 +7375,7 @@ CREATE POLICY holidays_delete_editor ON public.holidays FOR DELETE TO authentica
 -- Name: holidays holidays_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_insert_editor ON public.holidays FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY holidays_insert_editor ON public.holidays FOR INSERT TO authenticated WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'holidays'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6608,9 +7391,9 @@ CREATE POLICY holidays_select ON public.holidays FOR SELECT TO authenticated USI
 -- Name: holidays holidays_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY holidays_update_editor ON public.holidays FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY holidays_update_editor ON public.holidays FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'holidays'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
-  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'holidays'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6638,7 +7421,7 @@ ALTER TABLE public.leave_allocations ENABLE ROW LEVEL SECURITY;
 -- Name: leave_allocations leave_allocations_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_allocations_select ON public.leave_allocations FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.can_read_all(( SELECT auth.uid() AS uid)))));
+CREATE POLICY leave_allocations_select ON public.leave_allocations FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -6651,7 +7434,7 @@ ALTER TABLE public.leave_ledger ENABLE ROW LEVEL SECURITY;
 -- Name: leave_ledger leave_ledger_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.can_read_all(( SELECT auth.uid() AS uid)))));
+CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -6666,7 +7449,7 @@ ALTER TABLE public.leave_request_approvals ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY leave_request_approvals_select ON public.leave_request_approvals FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
    FROM public.leave_requests r
-  WHERE ((r.id = leave_request_approvals.request_id) AND ((r.employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), r.employee_id) OR private.has_role(( SELECT auth.uid() AS uid), 'security'::public.app_role) OR private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role)))))));
+  WHERE ((r.id = leave_request_approvals.request_id) AND ((r.employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), r.employee_id) OR private.has_perm(( SELECT auth.uid() AS uid), 'leave_requests'::text, 'read'::text)))))));
 
 
 --
@@ -6685,14 +7468,14 @@ ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 -- Name: leave_requests leave_requests_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_requests_select ON public.leave_requests FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.has_role(( SELECT auth.uid() AS uid), 'security'::public.app_role) OR private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_role(( SELECT auth.uid() AS uid), 'hr'::public.app_role))));
+CREATE POLICY leave_requests_select ON public.leave_requests FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.has_perm(( SELECT auth.uid() AS uid), 'leave_requests'::text, 'read'::text))));
 
 
 --
 -- Name: POLICY leave_requests_select ON leave_requests; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON POLICY leave_requests_select ON public.leave_requests IS 'Full base row: own, direct manager, security, admin, hr (FR-38). Teammates read the reason-less team_leave_calendar view instead — FR-25.';
+COMMENT ON POLICY leave_requests_select ON public.leave_requests IS 'Full base row: own, direct manager, or leave_requests read (admin; the hr and security presets) (FR-38, FR-55). Teammates read the reason-less team_leave_calendar view instead — FR-25.';
 
 
 --
@@ -6739,7 +7522,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 -- Name: profiles profiles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_select ON public.profiles FOR SELECT TO authenticated USING (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active(( SELECT auth.uid() AS uid)) AND (private.same_team(( SELECT auth.uid() AS uid), id) OR private.can_read_all(( SELECT auth.uid() AS uid))))));
+CREATE POLICY profiles_select ON public.profiles FOR SELECT TO authenticated USING (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active(( SELECT auth.uid() AS uid)) AND (private.same_team(( SELECT auth.uid() AS uid), id) OR private.reads_people(( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -6760,7 +7543,51 @@ COMMENT ON POLICY profiles_select_auth_admin ON public.profiles IS 'Lets the GoT
 -- Name: profiles profiles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_permission(( SELECT auth.uid() AS uid), 'employees.edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_permission(( SELECT auth.uid() AS uid), 'employees.edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid)))));
+CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid)))));
+
+
+--
+-- Name: role_permissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: role_permissions role_permissions_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_permissions_select ON public.role_permissions FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM public.roles r
+  WHERE (r.id = role_permissions.role_id))));
+
+
+--
+-- Name: role_permissions role_permissions_select_auth_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY role_permissions_select_auth_admin ON public.role_permissions FOR SELECT TO supabase_auth_admin USING (true);
+
+
+--
+-- Name: roles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.roles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: roles roles_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roles_select ON public.roles FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT profiles.company_id
+   FROM public.profiles
+  WHERE (profiles.id = ( SELECT auth.uid() AS uid))))));
+
+
+--
+-- Name: roles roles_select_auth_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY roles_select_auth_admin ON public.roles FOR SELECT TO supabase_auth_admin USING (true);
 
 
 --
@@ -6814,7 +7641,7 @@ ALTER TABLE public.special_leave_grants ENABLE ROW LEVEL SECURITY;
 -- Name: special_leave_grants special_leave_grants_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY special_leave_grants_select ON public.special_leave_grants FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_permission(( SELECT auth.uid() AS uid), 'special_leave.grant'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY special_leave_grants_select ON public.special_leave_grants FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR (private.has_perm(( SELECT auth.uid() AS uid), 'special_leave'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 
@@ -6829,7 +7656,7 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 -- Name: user_roles user_roles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY user_roles_select ON public.user_roles FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.can_read_all(( SELECT auth.uid() AS uid)))));
+CREATE POLICY user_roles_select ON public.user_roles FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.reads_people(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -6862,14 +7689,14 @@ ALTER TABLE public.work_settings ENABLE ROW LEVEL SECURITY;
 -- Name: work_settings work_settings_delete_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY work_settings_delete_admin ON public.work_settings FOR DELETE TO authenticated USING (private.is_admin(( SELECT auth.uid() AS uid)));
+CREATE POLICY work_settings_delete_admin ON public.work_settings FOR DELETE TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
 -- Name: work_settings work_settings_insert_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY work_settings_insert_editor ON public.work_settings FOR INSERT TO authenticated WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY work_settings_insert_editor ON public.work_settings FOR INSERT TO authenticated WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'work_settings'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6885,9 +7712,9 @@ CREATE POLICY work_settings_select ON public.work_settings FOR SELECT TO authent
 -- Name: work_settings work_settings_update_editor; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY work_settings_update_editor ON public.work_settings FOR UPDATE TO authenticated USING ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+CREATE POLICY work_settings_update_editor ON public.work_settings FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'work_settings'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
-  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_permission(( SELECT auth.uid() AS uid), 'settings.edit'::text) AND (company_id = ( SELECT p.company_id
+  WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'work_settings'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
 
@@ -6897,6 +7724,7 @@ CREATE POLICY work_settings_update_editor ON public.work_settings FOR UPDATE TO 
 --
 
 GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT USAGE ON SCHEMA private TO supabase_auth_admin;
 
 
 --
@@ -6936,6 +7764,22 @@ REVOKE ALL ON FUNCTION private.attach_request_signature(p_request_id uuid, p_sig
 --
 
 REVOKE ALL ON FUNCTION private.audit_row_change() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION caller_company(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.caller_company() FROM PUBLIC;
+GRANT ALL ON FUNCTION private.caller_company() TO authenticated;
+
+
+--
+-- Name: FUNCTION can_act_on(p_caller uuid, p_target uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_act_on(p_caller uuid, p_target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.can_act_on(p_caller uuid, p_target uuid) TO authenticated;
 
 
 --
@@ -6980,6 +7824,14 @@ REVOKE ALL ON FUNCTION private.department_manager_for(p_emp uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.department_step_applies(p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION has_perm(uid uuid, p_key text, p_level text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.has_perm(uid uuid, p_key text, p_level text) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.has_perm(uid uuid, p_key text, p_level text) TO authenticated;
 
 
 --
@@ -7059,10 +7911,69 @@ GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
 
 
 --
+-- Name: FUNCTION perm_level(uid uuid, p_key text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.perm_level(uid uuid, p_key text) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO authenticated;
+GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO supabase_auth_admin;
+
+
+--
+-- Name: FUNCTION permission_allows(p_key text, p_level text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.permission_allows(p_key text, p_level text) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO authenticated;
+GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO supabase_auth_admin;
+
+
+--
+-- Name: FUNCTION permission_deps(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.permission_deps() FROM PUBLIC;
+GRANT ALL ON FUNCTION private.permission_deps() TO authenticated;
+
+
+--
+-- Name: FUNCTION permission_keys(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.permission_keys() FROM PUBLIC;
+GRANT ALL ON FUNCTION private.permission_keys() TO authenticated;
+GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
+
+
+--
 -- Name: FUNCTION preserve_active_admin(); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.preserve_active_admin() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION reads_balances(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.reads_balances(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.reads_balances(uid uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION reads_calendar(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.reads_calendar(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.reads_calendar(uid uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION reads_people(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.reads_people(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.reads_people(uid uuid) TO authenticated;
 
 
 --
@@ -7080,11 +7991,33 @@ REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_star
 
 
 --
+-- Name: FUNCTION role_permissions_guard(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.role_permissions_guard() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION role_within(p_role_id uuid, p_uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.role_within(p_role_id uuid, p_uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.role_within(p_role_id uuid, p_uid uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION same_team(uid uuid, target uuid); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.same_team(uid uuid, target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.same_team(uid uuid, target uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION seed_company_roles(p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.seed_company_roles(p_company uuid) FROM PUBLIC;
 
 
 --
@@ -7254,13 +8187,13 @@ GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO service_role;
 
 
 --
--- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) TO postgres;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO service_role;
 
 
 --
@@ -7271,6 +8204,16 @@ REVOKE ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_delete_role(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_delete_role(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_delete_role(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_delete_role(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_delete_role(p_id uuid) TO service_role;
 
 
 --
@@ -7299,7 +8242,6 @@ GRANT ALL ON FUNCTION public.app_get_separation(p_id uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO postgres;
-GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO anon;
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO service_role;
 
@@ -7315,6 +8257,16 @@ GRANT ALL ON FUNCTION public.app_import_personal_info(p_rows jsonb) TO service_r
 
 
 --
+-- Name: FUNCTION app_list_roles(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_list_roles() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_list_roles() TO postgres;
+GRANT ALL ON FUNCTION public.app_list_roles() TO authenticated;
+GRANT ALL ON FUNCTION public.app_list_roles() TO service_role;
+
+
+--
 -- Name: FUNCTION app_list_separations(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7325,14 +8277,43 @@ GRANT ALL ON FUNCTION public.app_list_separations() TO service_role;
 
 
 --
+-- Name: FUNCTION app_my_permissions(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_my_permissions() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_my_permissions() TO postgres;
+GRANT ALL ON FUNCTION public.app_my_permissions() TO authenticated;
+GRANT ALL ON FUNCTION public.app_my_permissions() TO service_role;
+
+
+--
 -- Name: FUNCTION app_revoke_special_leave(p_grant_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO postgres;
-GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.app_revoke_special_leave(p_grant_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_role_holders(p_role_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_role_holders(p_role_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_role_holders(p_role_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_role_holders(p_role_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_role_holders(p_role_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_save_role(p_id uuid, p_name text, p_permissions jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_save_role(p_id uuid, p_name text, p_permissions jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_save_role(p_id uuid, p_name text, p_permissions jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_save_role(p_id uuid, p_name text, p_permissions jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_save_role(p_id uuid, p_name text, p_permissions jsonb) TO service_role;
 
 
 --
@@ -7366,6 +8347,16 @@ GRANT ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) TO serv
 
 
 --
+-- Name: FUNCTION app_set_approval_order_enforced(p_enforced boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_approval_order_enforced(p_enforced boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_approval_order_enforced(p_enforced boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_approval_order_enforced(p_enforced boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_approval_order_enforced(p_enforced boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_employee_password(p_user_id uuid, p_password text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7396,6 +8387,16 @@ GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb
 
 
 --
+-- Name: FUNCTION app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_user_roles(p_user_id uuid, p_roles public.app_role[]); Type: ACL; Schema: public; Owner: -
 --
 
@@ -7423,6 +8424,16 @@ REVOKE ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO postgres;
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_transfer_admin(p_target uuid, p_personnel_no text, p_password text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO postgres;
+GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO service_role;
 
 
 --
@@ -7812,6 +8823,33 @@ GRANT SELECT(id) ON TABLE public.profiles TO supabase_auth_admin;
 --
 
 GRANT SELECT(language_pref) ON TABLE public.profiles TO supabase_auth_admin;
+
+
+--
+-- Name: COLUMN profiles.active; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(active) ON TABLE public.profiles TO supabase_auth_admin;
+
+
+--
+-- Name: TABLE role_permissions; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.role_permissions TO postgres;
+GRANT ALL ON TABLE public.role_permissions TO service_role;
+GRANT SELECT ON TABLE public.role_permissions TO authenticated;
+GRANT SELECT ON TABLE public.role_permissions TO supabase_auth_admin;
+
+
+--
+-- Name: TABLE roles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.roles TO postgres;
+GRANT ALL ON TABLE public.roles TO service_role;
+GRANT SELECT ON TABLE public.roles TO authenticated;
+GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 
 
 --
