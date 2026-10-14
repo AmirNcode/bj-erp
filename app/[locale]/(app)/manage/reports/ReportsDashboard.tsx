@@ -83,8 +83,11 @@ type Labels = {
 type Props = {
   data: ReportData;
   months: JalaliMonthOption[];
-  /** Present today per department (server-side, from the pulse read). */
-  capacity: CapacityRow[];
+  /**
+   * Present today per department (server-side, from the pulse read). Null hides the
+   * card: the pulse is company-wide for admin and hr only (FR-55 M10).
+   */
+  capacity: CapacityRow[] | null;
   labels: Labels;
   locale: string;
 };
@@ -237,8 +240,8 @@ export function ReportsDashboard({ data, months, capacity, labels, locale }: Pro
   );
   const maxDays = absence.reduce((m, r) => Math.max(m, r.days), 0);
   const totalAbsence = Math.round(absence.reduce((sum, r) => sum + r.days, 0) * 100) / 100;
-  const present = capacity.reduce((sum, r) => sum + r.present, 0);
-  const headcount = capacity.reduce((sum, r) => sum + r.headcount, 0);
+  const present = (capacity ?? []).reduce((sum, r) => sum + r.present, 0);
+  const headcount = (capacity ?? []).reduce((sum, r) => sum + r.headcount, 0);
 
   const fromMonth = months.find((m) => m.gregorianStart === data.rangeStart);
   const toMonth = months.find((m) => m.gregorianEnd === data.rangeEnd);
@@ -299,54 +302,56 @@ export function ReportsDashboard({ data, months, capacity, labels, locale }: Pro
       </div>
 
       <div className="grid items-start gap-5 lg:grid-cols-2">
-        <Card className="gap-4 px-[22px] py-5" data-testid="report-capacity">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">{labels.capacityTitle}</h2>
-              <p className="text-[13px] text-muted-foreground">{labels.capacitySub}</p>
+        {capacity && (
+          <Card className="gap-4 px-[22px] py-5" data-testid="report-capacity">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">{labels.capacityTitle}</h2>
+                <p className="text-[13px] text-muted-foreground">{labels.capacitySub}</p>
+              </div>
+              <span className="whitespace-nowrap text-sm font-semibold" dir="ltr">
+                {num(present)} / {num(headcount)}
+              </span>
             </div>
-            <span className="whitespace-nowrap text-sm font-semibold" dir="ltr">
-              {num(present)} / {num(headcount)}
-            </span>
-          </div>
-          {capacity.length === 0 ? (
-            <EmptyState message={labels.empty} />
-          ) : (
-            <ul className="grid grid-cols-[minmax(0,130px)_1fr_56px] items-center gap-x-3.5 gap-y-3 text-sm">
-              {capacity.map((row) => {
-                const pct = Math.round((row.present / row.headcount) * 100);
-                return (
-                  <li key={row.department} className="contents">
-                    <span
-                      className={cn('flex items-center gap-1 truncate', row.low && 'text-warning')}
-                      title={row.low ? labels.lowCapacity : undefined}
-                    >
-                      {row.low && <TriangleAlert aria-label={labels.lowCapacity} className="size-3.5 shrink-0" />}
-                      <span className="truncate">{row.department}</span>
-                    </span>
-                    <span
-                      className={cn(
-                        'h-2.5 overflow-hidden rounded-full',
-                        row.low ? 'bg-warning-foreground' : 'bg-muted'
-                      )}
-                    >
+            {capacity.length === 0 ? (
+              <EmptyState message={labels.empty} />
+            ) : (
+              <ul className="grid grid-cols-[minmax(0,130px)_1fr_56px] items-center gap-x-3.5 gap-y-3 text-sm">
+                {capacity.map((row) => {
+                  const pct = Math.round((row.present / row.headcount) * 100);
+                  return (
+                    <li key={row.department} className="contents">
                       <span
-                        className={cn('block h-full rounded-full', row.low ? 'bg-warning' : 'bg-primary')}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </span>
-                    <span
-                      className={cn('whitespace-nowrap text-end text-muted-foreground', row.low && 'text-warning')}
-                      dir="ltr"
-                    >
-                      {num(row.present)} / {num(row.headcount)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
+                        className={cn('flex items-center gap-1 truncate', row.low && 'text-warning')}
+                        title={row.low ? labels.lowCapacity : undefined}
+                      >
+                        {row.low && <TriangleAlert aria-label={labels.lowCapacity} className="size-3.5 shrink-0" />}
+                        <span className="truncate">{row.department}</span>
+                      </span>
+                      <span
+                        className={cn(
+                          'h-2.5 overflow-hidden rounded-full',
+                          row.low ? 'bg-warning-foreground' : 'bg-muted'
+                        )}
+                      >
+                        <span
+                          className={cn('block h-full rounded-full', row.low ? 'bg-warning' : 'bg-primary')}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </span>
+                      <span
+                        className={cn('whitespace-nowrap text-end text-muted-foreground', row.low && 'text-warning')}
+                        dir="ltr"
+                      >
+                        {num(row.present)} / {num(row.headcount)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        )}
 
         <Card className="gap-4 px-[22px] py-5" data-testid="report-absence-chart">
           <div className="flex items-start justify-between gap-3">

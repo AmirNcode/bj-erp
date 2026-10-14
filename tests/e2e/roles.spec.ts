@@ -16,6 +16,21 @@ async function openEmployee(page: Page, code: string) {
   await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]{36}$/, { timeout: 20_000 });
 }
 
+/**
+ * Deletes a role by name through Settings › Roles, if it still exists. The cleanup for
+ * a test that failed midway: `cleanup:e2e` removes throwaway users, not roles.
+ */
+async function deleteRoleIfPresent(page: Page, name: string) {
+  await page.goto('/settings/roles');
+  const row = page.locator('[data-testid^="role-row-"]', { hasText: name });
+  if ((await row.count()) === 0) return;
+  const id = (await row.first().getAttribute('data-testid'))!.replace('role-row-', '');
+  await page.getByTestId(`role-delete-${id}`).click();
+  await expect(page.getByTestId('delete-confirm')).toBeEnabled({ timeout: 20_000 });
+  await page.getByTestId('delete-confirm').click();
+  await expect(page.getByTestId(`role-row-${id}`)).toHaveCount(0);
+}
+
 test('admin creates Helpdesk; helpdesk resets an employee, not a manager; delete lists holders', async ({ page, browser }) => {
   test.setTimeout(240_000);
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
@@ -23,40 +38,45 @@ test('admin creates Helpdesk; helpdesk resets an employee, not a manager; delete
   const worker = await createEmployee(page, { name: 'E2E Worker', roles: ['employee'] });
   const boss = await createEmployee(page, { name: 'E2E Boss', roles: ['employee', 'manager'] });
 
-  // 1. create the role; Passwords raises Employee records to Read only
   const roleName = `Helpdesk ${Date.now() % 100000}`;
-  await page.goto('/settings/roles/new');
-  await page.getByTestId('role-name').fill(roleName);
-  await page.getByTestId('perm-passwords-edit').click();
-  await expect(page.getByTestId('perm-people-read')).toHaveAttribute('data-state', 'on');
-  await page.getByTestId('role-save').click();
-  await expect(page).toHaveURL(/\/settings\/roles\/[0-9a-f-]{36}$/);
-  const roleId = page.url().split('/').pop()!;
+  try {
+    // 1. create the role; Passwords raises Employee records to Read only
+    await page.goto('/settings/roles/new');
+    await page.getByTestId('role-name').fill(roleName);
+    await page.getByTestId('perm-passwords-edit').click();
+    await expect(page.getByTestId('perm-people-read')).toHaveAttribute('data-state', 'on');
+    await page.getByTestId('role-save').click();
+    await expect(page).toHaveURL(/\/settings\/roles\/[0-9a-f-]{36}$/);
+    const roleId = page.url().split('/').pop()!;
 
-  // 2. assign it to the helper
-  await openEmployee(page, helper.code);
-  const box = page.locator(`[data-testid="role-${roleId}"] input`);
-  await box.check();
-  await page.getByTestId('edit-save').click();
-  await expect(page.getByTestId('edit-success')).toBeVisible({ timeout: 20_000 });
-  await expect(box).toBeChecked();
+    // 2. assign it to the helper
+    await openEmployee(page, helper.code);
+    const box = page.locator(`[data-testid="role-${roleId}"] input`);
+    await box.check();
+    await page.getByTestId('edit-save').click();
+    await expect(page.getByTestId('edit-success')).toBeVisible({ timeout: 20_000 });
+    await expect(box).toBeChecked();
 
-  // 3. helpdesk session (fresh account: first-login password screen first)
-  const ctx = await browser.newContext();
-  const hp = await ctx.newPage();
-  await login(hp, helper.code, helper.password);
-  await setFirstPassword(hp, firstLoginPassword(helper.password));
-  await openEmployee(hp, worker.code);
-  await expect(hp.getByTestId('reset-password')).toBeVisible();
-  await openEmployee(hp, boss.code);
-  await expect(hp.getByTestId('reset-password')).toHaveCount(0);
-  await expect(hp.getByTestId('edit-scope-note')).toBeVisible();
-  await ctx.close();
+    // 3. helpdesk session (fresh account: first-login password screen first)
+    const ctx = await browser.newContext();
+    const hp = await ctx.newPage();
+    await login(hp, helper.code, helper.password);
+    await setFirstPassword(hp, firstLoginPassword(helper.password));
+    await openEmployee(hp, worker.code);
+    await expect(hp.getByTestId('reset-password')).toBeVisible();
+    await openEmployee(hp, boss.code);
+    await expect(hp.getByTestId('reset-password')).toHaveCount(0);
+    await expect(hp.getByTestId('edit-scope-note')).toBeVisible();
+    await ctx.close();
 
-  // 4. delete lists the holder's personnel number, then removes the role
-  await page.goto('/settings/roles');
-  await page.getByTestId(`role-delete-${roleId}`).click();
-  await expect(page.getByTestId('delete-holders')).toContainText(helper.code);
-  await page.getByTestId('delete-confirm').click();
-  await expect(page.getByTestId(`role-row-${roleId}`)).toHaveCount(0);
+    // 4. delete lists the holder's personnel number, then removes the role
+    await page.goto('/settings/roles');
+    await page.getByTestId(`role-delete-${roleId}`).click();
+    await expect(page.getByTestId('delete-holders')).toContainText(helper.code);
+    await page.getByTestId('delete-confirm').click();
+    await expect(page.getByTestId(`role-row-${roleId}`)).toHaveCount(0);
+  } finally {
+    // A failure above would leave the role behind on the shared local database.
+    await deleteRoleIfPresent(page, roleName).catch((e) => console.warn('role cleanup failed:', e));
+  }
 });

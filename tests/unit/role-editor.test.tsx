@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '@/messages/en.json';
+import Link from 'next/link';
 import { RoleEditor, mergeNotes } from '@/app/[locale]/(app)/settings/roles/_components/RoleEditor';
 import { saveRole } from '@/lib/actions/roles';
 import type { RoleRow } from '@/lib/actions/roles-helpers';
@@ -97,6 +98,36 @@ describe('RoleEditor', () => {
     expect(after.defaultPrevented).toBe(true);
   });
 
+  it('asks before an in-app link drops unsaved changes, and stays on No', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <Link href="/en/home" data-testid="side-link">Home</Link>
+        <RoleEditor role={null} locale="en" />
+      </NextIntlClientProvider>
+    );
+    const link = screen.getByTestId('side-link');
+    // Clean: no question.
+    expect(fireEvent.click(link)).toBe(true);
+    expect(confirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    expect(fireEvent.click(link)).toBe(false); // navigation prevented
+    expect(confirm).toHaveBeenCalledWith(en.rolesAdmin.unsaved);
+    confirm.mockReturnValue(true);
+    expect(fireEvent.click(link)).toBe(true);
+    // A new tab or window leaves the editor open: no question.
+    confirm.mockClear();
+    fireEvent.click(link, { ctrlKey: true });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps Save disabled on an existing role until something changes', () => {
+    renderEditor(custom({ people: 'read' }));
+    expect((screen.getByTestId('role-save') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    expect((screen.getByTestId('role-save') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('refuses a non-English name before calling the server', () => {
     renderEditor();
     fireEvent.change(screen.getByTestId('role-name'), { target: { value: 'پشتیبانی' } });
@@ -119,9 +150,17 @@ describe('RoleEditor', () => {
   it('puts a duplicate-name refusal under the name field', async () => {
     vi.mocked(saveRole).mockResolvedValueOnce({ ok: false, error: 'A role with this name already exists.', field: 'role_name' });
     renderEditor(custom({}));
+    fireEvent.change(screen.getByTestId('role-name'), { target: { value: 'Payroll' } });
     fireEvent.click(screen.getByTestId('role-save'));
     await waitFor(() => expect(screen.getByTestId('role-name-error').textContent).toBe('A role with this name already exists.'));
     expect(screen.queryByTestId('role-save-error')).toBeNull();
+  });
+
+  it('the admin-only card lists all of D2, the identity columns included', () => {
+    renderEditor();
+    const card = screen.getByTestId('admin-only-card');
+    expect(card.querySelectorAll('li')).toHaveLength(Object.keys(en.rolesAdmin.adminOnly.items).length);
+    expect(card.textContent).toContain(en.rolesAdmin.adminOnly.items.identity);
   });
 
   it('keeps a preset name fixed', () => {
@@ -131,9 +170,27 @@ describe('RoleEditor', () => {
 });
 
 describe('mergeNotes', () => {
-  it('uses the first in-section item the user changed as the cause of a bulk change', () => {
+  it('names, for a bulk change, the changed in-section item that actually needs the raised row', () => {
     const notes = mergeNotes({}, 'leave', {}, { leave_balances: 'edit', leave_accrual: 'edit', people: 'read', departments: 'read' }, ['people', 'departments'], []);
-    expect(notes).toEqual({ people: { kind: 'raised', by: 'leave_balances' }, departments: { kind: 'raised', by: 'leave_balances' } });
+    // leave_balances needs people; only leave_accrual needs departments.
+    expect(notes).toEqual({ people: { kind: 'raised', by: 'leave_balances' }, departments: { kind: 'raised', by: 'leave_accrual' } });
+  });
+
+  it('follows dependencies transitively, both ways', () => {
+    // reports needs leave_balances, which needs people: people is raised for reports.
+    expect(mergeNotes({}, 'leave', {}, { calendar: 'read', reports: 'read', people: 'read' }, ['people'], [])).toEqual({
+      people: { kind: 'raised', by: 'reports' },
+    });
+    // role_manager needs calendar (not leave_requests): it was lowered because calendar went.
+    expect(mergeNotes({}, 'leave', { leave_requests: 'read', calendar: 'read' }, {}, [], ['role_manager'])).toEqual({
+      role_manager: { kind: 'lowered', by: 'calendar' },
+    });
+  });
+
+  it('falls back to the first changed item when no dependency path explains a note', () => {
+    expect(mergeNotes({}, 'leave', {}, { calendar: 'read', people: 'read' }, ['people'], [])).toEqual({
+      people: { kind: 'raised', by: 'calendar' },
+    });
   });
 
   it('does not take a raised row of the same section as the cause', () => {

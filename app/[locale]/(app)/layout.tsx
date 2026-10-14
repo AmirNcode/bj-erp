@@ -6,13 +6,12 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { ROLE_PRIORITY, subtitleRole } from '@/lib/auth/roleSubtitle';
+import { parsePermsClaim, type Perms } from '@/lib/permissions/catalog';
+import { createClient } from '@/lib/supabase/server';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
 import { AppShell } from './_components/AppShell';
-
-// The role shown under the name in the side panel: the most senior built-in one
-// held. The `roles` messages hold the English role names in both locales (D11).
-const ROLE_PRIORITY = ['admin', 'hr', 'finance', 'manager', 'security', 'employee'] as const;
 
 type Props = {
   children: React.ReactNode;
@@ -68,10 +67,30 @@ export default async function AppLayout({ children, params }: Props) {
     langEn: tProfile('langEn'),
   };
 
-  const topRole = ROLE_PRIORITY.find((r) => roles.includes(r)) ?? 'employee';
+  // The role under the name: the most senior built-in one held; with none but
+  // Employee, the caller's custom role with the most access (role names, FR-55).
+  // Custom roles are read (own rows, RLS) only in that case.
+  let customRoles: { name: string; permissions: Perms }[] = [];
+  if (!ROLE_PRIORITY.some((r) => r !== 'employee' && roles.includes(r))) {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from('user_roles')
+      .select('role:roles(name, kind, role_permissions(permission, level))')
+      .eq('user_id', user.id);
+    customRoles = (data ?? []).flatMap(({ role }) =>
+      role && role.kind === 'custom'
+        ? [{
+            name: role.name,
+            permissions:
+              parsePermsClaim(Object.fromEntries(role.role_permissions.map((p) => [p.permission, p.level]))) ?? {},
+          }]
+        : []
+    );
+  }
+  const shown = subtitleRole(roles, customRoles);
   const profileSummary = {
     name: profile.full_name ?? '',
-    subtitle: t('profileSubtitle', { role: tRoles(topRole) }),
+    subtitle: t('profileSubtitle', { role: 'custom' in shown ? shown.custom : tRoles(shown.builtIn) }),
   };
 
   // Approvals badge. Not awaited: the promise streams into the side panel so

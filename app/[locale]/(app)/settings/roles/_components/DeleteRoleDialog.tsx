@@ -3,7 +3,8 @@
 /**
  * D12: deleting a custom role. Opening the dialog loads who holds the role, so
  * the admin sees each name and personnel number and can copy the numbers (one
- * per line) to re-assign them later. Confirming removes the role from everyone
+ * per line) to re-assign them later. Inactive holders are marked: the roles
+ * list counts active holders only. Confirming removes the role from everyone
  * and deletes it; the database audits the holder list.
  */
 
@@ -23,15 +24,13 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { deleteRole, getRoleHolders } from '@/lib/actions/roles';
-
-type Holder = { fullName: string; personnelNo: string };
+import { deleteRole, getRoleHolders, type RoleHolder } from '@/lib/actions/roles';
 
 export function DeleteRoleDialog({ roleId, roleName }: { roleId: string; roleName: string }) {
   const t = useTranslations('rolesAdmin');
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [holders, setHolders] = useState<Holder[] | null>(null);
+  const [holders, setHolders] = useState<RoleHolder[] | null>(null);
   const [error, setError] = useState('');
   const [loading, startLoading] = useTransition();
   const [deleting, startDeleting] = useTransition();
@@ -51,6 +50,9 @@ export function DeleteRoleDialog({ roleId, roleName }: { roleId: string; roleNam
       setHolders(r.holders);
     });
   };
+
+  // The roles list counts active holders only; say how many more the dialog lists.
+  const inactive = (holders ?? []).filter((h) => !h.active).length;
 
   const copy = async () => {
     const text = (holders ?? []).map((h) => h.personnelNo).join('\n');
@@ -90,9 +92,21 @@ export function DeleteRoleDialog({ roleId, roleName }: { roleId: string; roleNam
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('delete.title', { name: roleName })}</AlertDialogTitle>
+          {/* <bdi>: an English name ending in & / - stays whole inside the fa sentence. */}
+          <AlertDialogTitle>
+            {t.rich('delete.title', { name: roleName, role: (chunks) => <bdi>{chunks}</bdi> })}
+          </AlertDialogTitle>
           <AlertDialogDescription data-testid="delete-body">
-            {holders ? t('delete.body', { count: holders.length }) : loading ? t('delete.loading') : null}
+            {holders
+              ? [
+                  t('delete.body', { count: holders.length }),
+                  inactive > 0 ? t('delete.inactive', { count: inactive }) : null,
+                ]
+                  .filter(Boolean)
+                  .join(' ')
+              : loading
+                ? t('delete.loading')
+                : null}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -104,7 +118,14 @@ export function DeleteRoleDialog({ roleId, roleName }: { roleId: string; roleNam
             >
               {holders.map((h) => (
                 <li key={`${h.personnelNo}-${h.fullName}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                  <span className="min-w-0 truncate">{h.fullName}</span>
+                  <span className="min-w-0 truncate">
+                    {h.fullName}
+                    {!h.active && (
+                      <span className="ms-2 text-xs text-muted-foreground" data-testid="delete-holder-inactive">
+                        {t('delete.inactiveTag')}
+                      </span>
+                    )}
+                  </span>
                   <bdi className="shrink-0 font-mono tabular-nums text-muted-foreground">{h.personnelNo}</bdi>
                 </li>
               ))}

@@ -74,8 +74,14 @@ export function RolesList({
                     {t('adminRow')}{' '}
                     {adminHolder ? (
                       <span className="text-foreground" data-testid="admin-holder">
-                        {adminHolder.fullName} ·{' '}
-                        <bdi className="font-mono tabular-nums">{adminHolder.personnelNo}</bdi>
+                        {adminHolder.fullName}
+                        {/* The bootstrap admin has no personnel number: no dangling separator. */}
+                        {adminHolder.personnelNo && (
+                          <>
+                            {' · '}
+                            <bdi className="font-mono tabular-nums">{adminHolder.personnelNo}</bdi>
+                          </>
+                        )}
                       </span>
                     ) : (
                       t('noAdmin')

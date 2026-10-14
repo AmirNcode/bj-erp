@@ -1465,7 +1465,7 @@
       },
       "leave_requests": {
         "label": "Request archive",
-        "description": "Read: every request with its reason and signatures, and print. Allowed: cancel someone else's request."
+        "description": "Read: every request with its reason and signatures, and print. Allowed: the right to cancel someone else's request (no screen offers it yet)."
       },
       "calendar": {
         "label": "Company calendar",
@@ -1544,12 +1544,15 @@
         "bulkImport": "Bulk import in Update and Replace modes",
         "auditLog": "The audit log",
         "devTools": "Developer tools",
-        "hoursPerDay": "Hours per working day"
+        "hoursPerDay": "Hours per working day",
+        "identity": "Change a personnel number, employee code or company"
       }
     },
     "delete": {
-      "title": "Delete the role {name}?",
+      "title": "Delete the role <role>{name}</role>?",
       "body": "{count, plural, =0 {No one holds this role.} one {# person holds this role. They lose it.} other {# people hold this role. They all lose it.}}",
+      "inactive": "{count, plural, one {# of them is inactive.} other {# of them are inactive.}}",
+      "inactiveTag": "(inactive)",
       "loading": "Loading holders…",
       "copy": "Copy personnel numbers",
       "copied": "Personnel numbers copied.",

@@ -6,8 +6,8 @@ import {
 } from '@/lib/permissions/catalog';
 
 /** Body between $$ ... $$ of a function in the current schema dump, whitespace removed. */
-function fnBody(sql: string, name: string): string {
-  const header = `CREATE FUNCTION private.${name}()`;
+function fnBody(sql: string, name: string, args = ''): string {
+  const header = `CREATE FUNCTION private.${name}(${args})`;
   expect(sql.split(header)).toHaveLength(2); // defined exactly once
   const rest = sql.slice(sql.indexOf(header));
   const start = rest.indexOf('$$') + 2;
@@ -27,6 +27,19 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_deps');
     for (const d of DEPENDENCIES) expect(body).toContain(`('${d.key}','${d.keyLevel}','${d.needs}')`);
     expect(body.match(/\('[a-z_]+','[a-z]+','[a-z_]+'\)/g)).toHaveLength(DEPENDENCIES.length);
+  });
+  it('shapes match permission_allows(): its three key lists are the E, R and RE items', () => {
+    const body = fnBody(sql, 'permission_allows', 'p_key text, p_level text');
+    // when p_key in (...) then <level rule>, in that order: edit only, read only, both.
+    const lists = [...body.matchAll(/whenp_keyin\(([^)]*)\)then([^w]*?)(?=when|else)/g)].map((m) => ({
+      keys: (m[1].match(/'([a-z_]+)'/g) ?? []).map((q) => q.slice(1, -1)).sort(),
+      rule: m[2],
+    }));
+    const shapeOf = (rule: string) =>
+      rule === "p_level='edit'" ? 'E' : rule === "p_level='read'" ? 'R' : rule === "p_levelin('read','edit')" ? 'RE' : rule;
+    const fromSql = Object.fromEntries(lists.flatMap((l) => l.keys.map((k) => [k, shapeOf(l.rule)])));
+    expect(lists).toHaveLength(3);
+    expect(fromSql).toEqual(SHAPES);
   });
 });
 

@@ -16,6 +16,8 @@ import { toRoleRow, type RoleRow } from './roles-helpers';
 export type { RoleRow } from './roles-helpers';
 
 type Holder = { fullName: string; personnelNo: string };
+/** A role holder; `active` false for a deactivated account (app_list_roles counts active ones only). */
+export type RoleHolder = Holder & { active: boolean };
 
 /** Every role of the caller's company with its holder count. */
 export async function listRoles(): Promise<{ ok: true; roles: RoleRow[] } | DbErrorResult> {
@@ -29,14 +31,30 @@ export async function listRoles(): Promise<{ ok: true; roles: RoleRow[] } | DbEr
 /** Who holds a role (admin only; the delete dialog and the role card list them). */
 export async function getRoleHolders(
   roleId: string
-): Promise<{ ok: true; holders: Holder[] } | DbErrorResult> {
+): Promise<{ ok: true; holders: RoleHolder[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const { data, error } = await c.supabase.rpc('app_role_holders', { p_role_id: roleId });
   if (error) return dbErr(error.message);
+  const rows = data ?? [];
+  // The RPC lists inactive holders too; read who is active (the admin reads every
+  // profile) so the dialog can tell them apart from the list's active-only count.
+  const inactive = new Set<string>();
+  if (rows.length > 0) {
+    const { data: profiles, error: pErr } = await c.supabase
+      .from('profiles')
+      .select('id, active')
+      .in('id', rows.map((h) => h.user_id));
+    if (pErr) return dbErr(pErr.message);
+    for (const p of profiles ?? []) if (!p.active) inactive.add(p.id);
+  }
   return {
     ok: true,
-    holders: (data ?? []).map((h) => ({ fullName: h.full_name, personnelNo: h.personnel_no ?? '' })),
+    holders: rows.map((h) => ({
+      fullName: h.full_name,
+      personnelNo: h.personnel_no ?? '',
+      active: !inactive.has(h.user_id),
+    })),
   };
 }
 

@@ -8,8 +8,8 @@
  * included) and hands back the new set plus the items it raised or lowered on
  * its own. This component keeps a note on each of those rows until the next
  * save. The note names the item that caused it: for a row toggle that is the
- * row; for a bulk choice it is the first item of the section the choice changed
- * (a bulk change has no single cause, so this is a convention).
+ * row; for a bulk choice it is the changed item whose dependency explains the
+ * note (see mergeNotes).
  */
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label';
 import { saveRole } from '@/lib/actions/roles';
 import type { RoleRow } from '@/lib/actions/roles-helpers';
 import {
+  DEPENDENCIES,
   SECTIONS,
   type Perms,
   type PermKey,
@@ -38,10 +39,29 @@ export const ROLE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 &/-]{0,39}$/;
 
 type Notes = Partial<Record<PermKey, PermNote>>;
 
+/** Whether `from` needs `to`, directly or through other items (D6, any level). */
+function needsPath(from: PermKey, to: PermKey): boolean {
+  const seen = new Set<PermKey>([from]);
+  const queue: PermKey[] = [from];
+  while (queue.length) {
+    const k = queue.shift()!;
+    for (const d of DEPENDENCIES) {
+      if (d.key !== k || seen.has(d.needs)) continue;
+      if (d.needs === to) return true;
+      seen.add(d.needs);
+      queue.push(d.needs);
+    }
+  }
+  return false;
+}
+
 /**
- * The notes after one PermissionSection change. `by` is the first item of the
- * section whose level the user changed (not one raised or lowered for it).
- * Rows the user set themselves lose any older note.
+ * The notes after one PermissionSection change. The cause (`by`) is one of the
+ * section's items whose level the user changed (not one raised or lowered for
+ * it): for a raised row, the first changed item that needs it; for a lowered
+ * row, the first changed item it needs. With no such path (it cannot happen
+ * through PermissionSection), the first changed item. Rows the user set
+ * themselves lose any older note.
  */
 export function mergeNotes(
   notes: Notes,
@@ -56,10 +76,9 @@ export function mergeNotes(
   const chosen = items.filter((k) => before[k] !== after[k] && !side.has(k));
   const next: Notes = { ...notes };
   for (const k of chosen) delete next[k];
-  const by = chosen[0];
-  if (!by) return next;
-  for (const k of raised) next[k] = { kind: 'raised', by };
-  for (const k of lowered) next[k] = { kind: 'lowered', by };
+  if (!chosen[0]) return next;
+  for (const k of raised) next[k] = { kind: 'raised', by: chosen.find((c) => needsPath(c, k)) ?? chosen[0] };
+  for (const k of lowered) next[k] = { kind: 'lowered', by: chosen.find((c) => needsPath(k, c)) ?? chosen[0] };
   return next;
 }
 
@@ -102,6 +121,24 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
+
+  // In-app links (side panel, bottom bar, the General|Roles tabs) navigate on the
+  // client, so beforeunload never fires: ask on the click instead. Capture phase on
+  // the document runs before React's listeners, so a No stops next/link outright.
+  // Links that open a new tab or window leave the editor in place and pass.
+  useEffect(() => {
+    if (!dirty) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.('a[href]');
+      if (!(a instanceof HTMLAnchorElement) || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+      if (window.confirm(t('unsaved'))) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [dirty, t]);
 
   const onSectionChange =
     (section: SectionKey) => (next: Perms, raised: PermKey[], lowered: PermKey[]) => {
@@ -200,7 +237,8 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
         <Button variant="outline" className="h-10" disabled={isPending} onClick={cancel} data-testid="role-cancel">
           {t('cancel')}
         </Button>
-        <Button className="h-10" disabled={isPending} onClick={save} data-testid="role-save">
+        {/* An existing role saves only a change: an unchanged save would write an empty audit row. */}
+        <Button className="h-10" disabled={isPending || (!!role && !dirty)} onClick={save} data-testid="role-save">
           {isPending ? t('saving') : t('save')}
         </Button>
       </div>

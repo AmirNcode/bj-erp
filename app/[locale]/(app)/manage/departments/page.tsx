@@ -52,8 +52,11 @@ export default async function DepartmentsPage({ params }: Props) {
       .eq('role', 'manager')
       .eq('profiles.active', true),
   ]);
+  // D7: a non-admin may not appoint themself department manager, so they are not
+  // offered (a department they already manage still shows them as its value).
   const managers = ((managerRows ?? []) as unknown as { profiles: { id: string; full_name: string } }[])
     .map((r) => ({ id: r.profiles.id, fullName: r.profiles.full_name }))
+    .filter((m) => roles.includes('admin') || m.id !== user.id)
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'fa'));
 
   return (

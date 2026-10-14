@@ -50,4 +50,22 @@ describe('RolesList', () => {
     expect(screen.getByTestId('role-delete-c')).toBeTruthy();
     expect(screen.getByTestId('role-holders-c').textContent).toBe('1 person');
   });
+
+  it('shows the admin holder without a dangling separator when they have no personnel number', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RolesList roles={roles} adminHolder={{ fullName: 'System admin', personnelNo: '' }} locale="en" />
+      </NextIntlClientProvider>
+    );
+    expect(screen.getByTestId('admin-holder').textContent).toBe('System admin');
+  });
+
+  it('shows name · personnel number when there is one', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RolesList roles={roles} adminHolder={{ fullName: 'Amir N', personnelNo: '1001' }} locale="en" />
+      </NextIntlClientProvider>
+    );
+    expect(screen.getByTestId('admin-holder').textContent).toBe('Amir N · 1001');
+  });
 });

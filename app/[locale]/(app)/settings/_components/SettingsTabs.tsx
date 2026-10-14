@@ -16,12 +16,13 @@ export async function SettingsTabs({
   active: 'general' | 'roles';
 }) {
   const t = await getTranslations('rolesAdmin.tabs');
+  const tNav = await getTranslations('nav');
   const tabs = [
     { key: 'general' as const, href: `/${locale}/settings`, label: t('general') },
     { key: 'roles' as const, href: `/${locale}/settings/roles`, label: t('roles') },
   ];
   return (
-    <nav aria-label={t('roles')} className="flex w-fit max-w-full rounded-[10px] bg-muted p-[3px]">
+    <nav aria-label={tNav('settings')} className="flex w-fit max-w-full rounded-[10px] bg-muted p-[3px]">
       {tabs.map((tab) => {
         const on = tab.key === active;
         return (

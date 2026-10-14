@@ -54,13 +54,20 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 - ☐ **FR-55 follow-ups** (release `20261013200001`..`200005`):
   - After the FR-55 release is live, drop the `private.has_permission` legacy keys and
-    `app_set_user_roles(uuid, app_role[])`, and `private.can_read_all`.
-  - After deploy: check Liara has exactly one admin (the migration refuses otherwise).
+    `app_set_user_roles(uuid, app_role[])`, and `private.can_read_all`. First move
+    `finance_approved_requests` (still `has_permission(…, 'finance.view')`) to `has_perm`.
+  - **Before pushing the release:** check Liara has exactly one admin. The migration refuses
+    otherwise, which blocks the deploy (safe, but a failed release).
   - Admin lockout has no recovery path (D1, owner accepted).
   - SELECT policies on `holidays`, `work_settings` and `approval_steps` are company-blind (fine with
     one company per deploy; the write policies are company-scoped).
-  - The Reports page pulse is identity-scoped (admin and hr company-wide); a custom Reports-only role
-    sees a team pulse.
+  - The Reports page pulse is identity-scoped: its capacity card shows for admin and hr only
+    (company-wide); a custom Reports-only role does not see it.
+  - A screen to cancel someone else's request: `leave_requests` edit allows it in the database
+    (`cancel_leave_request`), but no screen offers it yet (the permission text says so).
+  - D7 is a guard against honest mistakes, not a control: hr can still create a hire, give them
+    Manager, appoint them department manager and sign in as them (owner question, with the D7
+    analogues below).
   - Owner questions pending, the D7 analogues: a `people` editor setting themselves as a report's
     manager (and a Manager doing so for their own reports), an `approval_steps` editor naming
     themselves as approver, a `clearance` editor naming themselves as signer, a `people_create`

@@ -19,6 +19,7 @@ export function AdminOnlyCard() {
     t('items.auditLog'),
     t('items.devTools'),
     t('items.hoursPerDay'),
+    t('items.identity'),
   ];
   return (
     <section className="rounded-xl border bg-muted/40 px-4 py-3" data-testid="admin-only-card">

@@ -452,7 +452,9 @@ their holders.
 - **D4 — subset rule, `can_act_on(caller, target)`.** True only when: same company; target is not
   the caller; the target holds no `admin` row (even deactivated); for every catalog key the target's
   level is at most the caller's (computed from all the target's roles, active or not); a target
-  holding `manager` needs the caller to hold `role_manager` edit; a target who manages a department
+  holding `manager` needs the caller to hold `role_manager` edit (one exception to the level
+  check: the target's self-only `personal_info_own` is covered by the caller's `personal_info` edit,
+  so HR keeps self-service holders, while a passwords-only Helpdesk does not); a target who manages a department
   needs `departments` edit; a target who holds `hr` or is a named approver of an active step needs
   `approval_steps` edit; a target who holds `hr` or `finance`, is a clearance unit signer, or signs a
   row of an `in_progress` / `awaiting_finance` clearance form needs `clearance` edit. The
@@ -463,7 +465,8 @@ their holders.
   Admin callers skip it. Guards every write on a person; reads are exempt.
 - **D5 — assignment, `role_within(role_id, uid)`.** `admin`: never. `manager`: `role_manager` edit.
   `employee`: `role_assign` edit (it has no rows). Otherwise `role_assign` edit and every row of the
-  role at or below the caller's level. Granting or removing `hr` also needs `approval_steps` and
+  role at or below the caller's level (`personal_info_own` counts as covered by `personal_info`
+  edit, as in D4). Granting or removing `hr` also needs `approval_steps` and
   `clearance` edit; `finance` needs `clearance` edit. The same check covers the initial roles on Add
   Employee.
 - **D6 — dependencies.** Items whose screens read through RLS need other items at read (table
@@ -494,7 +497,7 @@ are company-blind (fine with one company per deploy); the legacy `has_permission
 ## Notes
 
 - The "managers see everyone, edit only reports" rule = **broad read, narrow write**. Read uses
-  `can_read_all`; write uses `is_manager_of`.
+  `reads_people` (FR-55; `manager` or `people` read); write uses `is_manager_of`.
 - `same_team` gives employees their team calendar without exposing other teams.
 - Validate every policy on **self-hosted Supabase** before production cutover (NFR-4).
 

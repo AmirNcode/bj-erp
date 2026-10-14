@@ -20,8 +20,9 @@ Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurab
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
-function open(holders: { fullName: string; personnelNo: string }[]) {
-  vi.mocked(getRoleHolders).mockResolvedValue({ ok: true, holders });
+function open(holders: { fullName: string; personnelNo: string; active?: boolean }[]) {
+  const withActive = holders.map((h) => ({ active: true, ...h }));
+  vi.mocked(getRoleHolders).mockResolvedValue({ ok: true, holders: withActive });
   render(
     <NextIntlClientProvider locale="en" messages={en}>
       <DeleteRoleDialog roleId="r1" roleName="Helpdesk" />
@@ -45,6 +46,25 @@ describe('DeleteRoleDialog', () => {
     fireEvent.click(screen.getByTestId('copy-personnel-nos'));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('1201\n1305'));
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith(en.rolesAdmin.delete.copied));
+  });
+
+  it('says how many holders are inactive and marks them (the list counts active holders only)', async () => {
+    open([
+      { fullName: 'Sara Ahmadi', personnelNo: '1201' },
+      { fullName: 'Reza Karimi', personnelNo: '1305', active: false },
+    ]);
+    const list = await screen.findByTestId('delete-holders');
+    expect(screen.getByTestId('delete-body').textContent).toBe(
+      '2 people hold this role. They all lose it. 1 of them is inactive.'
+    );
+    expect(list.querySelectorAll('[data-testid="delete-holder-inactive"]')).toHaveLength(1);
+    expect(list.querySelectorAll('li')[1].textContent).toContain(en.rolesAdmin.delete.inactiveTag);
+  });
+
+  it('isolates the role name in the title', async () => {
+    open([]);
+    const title = await screen.findByText((_, el) => el?.tagName === 'BDI' && el.textContent === 'Helpdesk');
+    expect(title.parentElement?.textContent).toBe('Delete the role Helpdesk?');
   });
 
   it('hides the list and the copy button when nobody holds the role', async () => {
