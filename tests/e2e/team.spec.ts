@@ -55,19 +55,14 @@ async function createEmployeeWithManager(
   }
 
   // Ensure the desired role checkbox is checked (uncheck all others)
-  const labels = page.locator('label');
-  const count = await labels.count();
-  for (let i = 0; i < count; i++) {
-    const labelText = await labels.nth(i).textContent();
-    const trimmed = labelText?.trim();
-    if (['admin', 'manager', 'employee', 'security'].includes(trimmed ?? '')) {
-      const cb = labels.nth(i).locator('input[type="checkbox"]');
-      const isChecked = await cb.isChecked();
-      if (trimmed === opts.role && !isChecked) {
-        await cb.check();
-      } else if (trimmed !== opts.role && isChecked) {
-        await cb.uncheck();
-      }
+  for (const slug of ['admin', 'manager', 'employee', 'security']) {
+    const cb = page.locator(`[data-testid="role-${slug}"] input[type="checkbox"]`);
+    if (!(await cb.count())) continue;
+    const isChecked = await cb.isChecked();
+    if (slug === opts.role && !isChecked) {
+      await cb.check();
+    } else if (slug !== opts.role && isChecked) {
+      await cb.uncheck();
     }
   }
 

@@ -270,15 +270,10 @@ export async function createEmployee(
   }
   await deptSelect.selectOption({ value: deptValues[wanted] });
 
-  const labels = page.locator('label');
-  const count = await labels.count();
-  for (let i = 0; i < count; i++) {
-    const text = (await labels.nth(i).textContent())?.trim();
-    if (text && opts.roles.includes(text)) {
-      const cb = labels.nth(i).locator('input[type="checkbox"]');
-      if (await cb.count()) {
-        if (!(await cb.isChecked())) await cb.check();
-      }
+  for (const role of opts.roles) {
+    const cb = page.locator(`[data-testid="role-${role}"] input[type="checkbox"]`);
+    if (await cb.count()) {
+      if (!(await cb.isChecked())) await cb.check();
     }
   }
 
@@ -339,9 +334,11 @@ export async function setManager(page: Page, employeeCode: string, managerCodeSu
 export async function pickManager(page: Page, managerCode: string) {
   const box = page.locator('#manager_id');
   await expect(box).toBeEditable({ timeout: 20_000 });
-  // An exact personnel number is chosen automatically (2026-10-13).
+  // An exact personnel number is chosen automatically after a 600 ms pause
+  // (2026-10-13). The box first echoes the typed code, so wait for the chosen
+  // label "Name (code)" — otherwise a quick Save posts before the pick lands.
   await box.fill(managerCode);
-  await expect(box).toHaveValue(new RegExp(managerCode), { timeout: 10_000 });
+  await expect(box).toHaveValue(new RegExp(`\\(${managerCode}\\)`), { timeout: 10_000 });
 }
 
 /** Fill a single react-multi-date-picker input (hourly leave or errand). */

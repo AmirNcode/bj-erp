@@ -44,10 +44,10 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
 
   // ── 2. Change only the roles: the save goes through, the balance stays ───
-  await page.getByLabel('hr', { exact: true }).check();
+  await page.locator('[data-testid="role-hr"] input').check();
   await save(page);
   await page.reload();
-  await expect(page.getByLabel('hr', { exact: true })).toBeChecked({ timeout: 20_000 });
+  await expect(page.locator('[data-testid="role-hr"] input')).toBeChecked({ timeout: 20_000 });
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
 
   // ── 3. A mixed sign is refused before anything is written ────────────────
