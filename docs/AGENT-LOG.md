@@ -78,6 +78,79 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-14 — FR-55 finished: e2e, hr parity, docs, final review + fix wave (branch complete, not merged)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), subagent-driven (implementer + reviewer per task)
+**Branch / HEAD at start:** FR-55 @ 21acb4f (base main 6d425cf) · **end:** FR-55 @ this commit (base 6d425cf)
+**Trigger:** Amir's resume prompt: continue FR-55 after the Task 10 checkpoint (rebase if main moved,
+Tasks 11–13, final review with one fix wave, finishing-a-development-branch).
+
+**What changed** (all on branch FR-55, worktree `/Users/amir/Workspace/bj-fr55`)
+- No rebase: main had not moved (local main = origin/main = 6d425cf).
+- Task 11 (b903b36): `tests/e2e/roles.spec.ts` (create Helpdesk role, assign, helpdesk resets an
+  employee but not a manager, delete lists holders); older specs address role boxes by test id;
+  `pickManager`/`pickPerson` now wait for the picked "Name (code)" label (a pre-existing race: the
+  typed code matched before the 600 ms auto-pick, so Save went out without a manager/signer);
+  `hr-role.spec` expects HR's `/manage/settings` → `/settings` forward (Task 6).
+- Task 12 (no commit): browser check as `hr-101` on :3001 — nav, Edit Employee (only Manager box,
+  no reset = main), admin record locked, D7 self-appointment refused, order switch enabled (FR-66),
+  `/settings` without Roles tab or hours per day.
+- Task 13 (6a172b3): spec "Accepted and built" + amendments; PERMISSIONS/DATA_MODEL/REQUIREMENTS/
+  CHANGELOG/TASKS; stale admin/hr comments.
+- Final review (opus) → 0 Critical, 2 Important, 12 Minor. Fix wave 74af84f + 44465a7:
+  - I1 `supabase/migrations/20261013200002`: `can_act_on` / `role_within` (and the TS mirror) treat a
+    target's `personal_info_own` as covered by `personal_info_own` or `personal_info` edit — otherwise
+    switching the self-only item on for any role locked its holders away from HR.
+  - I2 `20261013200003`: bulk create / CSV import refuse a non-zero opening balance without
+    `leave_balances` edit (wizard hides the column for such callers).
+  - `20261013200004` `app_transfer_admin`: typed confirmation = employee code when the target has no
+    personnel number (bootstrap `admin`); an old admin left with no role keeps Employee.
+  - Minors: role editor asks before in-app navigation, Save disabled until dirty, "raised by" note
+    names the causing item, holders dialog counts inactive, Reports pulse admin/hr only, subtitle
+    shows a custom role name, department picker omits the caller, Admin-only card lists personnel no /
+    employee code / company, catalog test compares shapes with SQL, D2 override test, docs.
+  - Migrations 200002–200004 were edited in place (applied only to the disposable `bj_fr55`).
+- This commit: spec amendments for the final-review rules, TASKS residual (`getRoleHolders` `.in()`),
+  `supabase/schema.sql` regenerated from the re-cloned `bj_fr55`, this entry.
+
+**Actions outside the repo**
+- Local Docker only. Re-cloned database `bj_fr55` in `bj-erp-db-1`: stopped the `bj-fr55` stack,
+  `dropdb`/`createdb bj_fr55`, `pg_dump -Fc postgres | pg_restore -d bj_fr55` (read-only dump of db
+  `postgres`; its ledger = main's committed migrations, no FR-55 objects), applied FR-55 migrations
+  200001–200005 with `psql --single-transaction` + `bj_deploy.schema_migrations` rows
+  (release `fr55-local`), restarted the stack. First attempt used `pg_restore --no-owner`: GoTrue then
+  died ("problem creating schema migrations") because `auth.*` was owned by supabase_admin — redone
+  WITH owners; only the known pg_cron/graphql restore errors remain. Db `postgres` never written.
+- e2e users created and removed with `npm run cleanup:e2e` (targets `bj_fr55` via worktree `.env.local`).
+
+**Verification**
+- SQL on the fresh `bj_fr55`: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 325 PASS, 0 FAIL.
+- Unit 817 passed (5 skipped); `tsc --noEmit`, `npm run lint`, `npm run test:deploy` clean;
+  `npm run build` clean.
+- e2e (E2E_BASE_URL=http://localhost:3001, --workers=1): against `next start` (production build) on :3001: roles, hr-employee-admin, hr-role, team,
+  balance-days-hours, clearance, approval, bulk-import, admin-settings, department — 21 passed. Against
+  `next dev` the same specs flaked (1–2 min per test; a different 1–2 tests timed out each run, all
+  passing on the next) — dev-server slowness, not a regression.
+- Reviews: Task 11 and Task 13 approved (minors deferred); final review "with fixes" → fix wave
+  re-review approved (22/22 addressed, 3 new minors parked).
+
+**State left behind**
+- Branch FR-55 complete and reviewed, committed, NOT pushed, NOT merged. Push to main deploys to Liara.
+- `bj_fr55` + `bj-fr55` stack (gateway 127.0.0.1:8090) still running; dev server stopped.
+- SDD ledger/briefs/reviews: `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/`.
+
+**For the next agent**
+- Pre-existing (main's schema, not FR-55): `npm run cleanup:e2e` can fail with
+  `separation_signoffs_separation_id_fkey` when one throwaway user is the subject of a separation and
+  another is its signer (separations CASCADE + signoffs signer SET NULL in one delete). Leftover e2e
+  users remain in `bj_fr55` (disposable).
+- Before merging: check Liara has exactly one admin (the migration refuses otherwise).
+- Owner questions open (TASKS "FR-55 follow-ups"): D7 analogues + D7 is a guard, not a control;
+  Finance placement; HR sees the absences board and Finance; a passwords-only role cannot act on
+  `personal_info_own` holders; Marriage leave for a custom role without personal-info read.
+- Merging needs a rebase if main moved; if main added migrations sorting after 20261013200005, rename
+  FR-55's (applied only to `bj_fr55`) and re-clone with owners preserved (no `--no-owner`).
+
 ## 2026-10-13 — FR-55 rebased onto 6d425cf, FR-65/66 reconciled, Settings › Roles built (checkpoint)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop), subagent-driven (implementer + reviewer per task)

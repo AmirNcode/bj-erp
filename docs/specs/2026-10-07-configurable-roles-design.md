@@ -16,6 +16,17 @@ FR-55. Decisions D1–D12 were agreed with Amir in chat on 2026-10-07. The imple
   approval-order switch moved from admin-only to `approval_steps` edit. Each is marked below.
 - Owner ruling (a), 2026-10-13: the HR preset also covers Security and Finance, so D4 lets HR act
   on their holders.
+- Final review, 2026-10-14:
+  - D4/D5: a target's `personal_info_own` counts as covered when the caller holds
+    `personal_info_own` or `personal_info` edit (`can_act_on`, `role_within`, and the TS mirror).
+    Otherwise switching the self-only item on for any role would put its holders out of HR's
+    reach. A role without personal-info power (say, passwords only) still cannot act on them.
+  - D1 transfer: when the new admin has no personnel number (the bootstrap `admin` account), the
+    typed confirmation is their employee code. An old admin left with no other role keeps the
+    company's Employee role.
+  - Bulk create and CSV import refuse a non-zero opening balance without `leave_balances` edit, as
+    the single Add Employee form already did.
+  - The Reports page shows the today pulse only to admin and hr, whose pulse is company-wide.
 
 ## Problem
 

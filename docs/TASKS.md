@@ -59,6 +59,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - **Before pushing the release:** check Liara has exactly one admin. The migration refuses
     otherwise, which blocks the deploy (safe, but a failed release).
   - Admin lockout has no recovery path (D1, owner accepted).
+  - `getRoleHolders` (`lib/actions/roles.ts`) sends every holder id in one `.in()` filter. A
+    custom role held by several hundred people may exceed the URL limit and break the delete
+    dialog. Use an RPC or a join instead.
   - SELECT policies on `holidays`, `work_settings` and `approval_steps` are company-blind (fine with
     one company per deploy; the write policies are company-scoped).
   - The Reports page pulse is identity-scoped: its capacity card shows for admin and hr only

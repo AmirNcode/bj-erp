@@ -360,8 +360,13 @@ CREATE FUNCTION private.can_act_on(p_caller uuid, p_target uuid) RETURNS boolean
                    join public.profiles c on c.id = p_caller and c.company_id = t.company_id
                   where t.id = p_target)
      and not exists (select 1 from public.user_roles where user_id = p_target and role = 'admin')
+     -- personal_info_own is self-only (FR-63): on someone else it is covered by
+     -- personal_info edit, so HR keeps a self-service holder. A caller with no
+     -- personal-info power (a password helpdesk) still may not act on one.
      and not exists (select 1 from private.permission_keys() k
-                      where private.perm_level(p_target, k) > private.perm_level(p_caller, k))
+                      where private.perm_level(p_target, k) > private.perm_level(p_caller, k)
+                        and not (k = 'personal_info_own'
+                                 and private.perm_level(p_caller, 'personal_info') >= 2))
      and (not exists (select 1 from public.user_roles where user_id = p_target and role = 'manager')
           or private.has_perm(p_caller, 'role_manager', 'edit'))
      and (not exists (select 1 from public.departments where manager_id = p_target)
@@ -1239,7 +1244,10 @@ CREATE FUNCTION private.role_within(p_role_id uuid, p_uid uuid) RETURNS boolean
            and not exists (
              select 1 from public.role_permissions rp
               where rp.role_id = r.id
-                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
+                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission)
+                -- As in can_act_on: personal_info edit covers the self-only personal_info_own.
+                and not (rp.permission = 'personal_info_own'
+                         and private.perm_level(p_uid, 'personal_info') >= 2))
     end
       from public.roles r
       join public.profiles u on u.id = p_uid and u.company_id = r.company_id
@@ -2126,6 +2134,10 @@ begin
       nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
 
     v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    -- FR-55: an opening balance is leave_balances edit, as on the Add Employee form.
+    if v_bulk_hr and v_minutes <> 0 and not private.has_perm(v_caller, 'leave_balances', 'edit') then
+      raise exception 'not allowed to set opening balances' using errcode = '42501';
+    end if;
     if v_minutes < -366 * private.company_minutes_per_day(p_company_id)
        or v_minutes > 366 * private.company_minutes_per_day(p_company_id) then
       raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
@@ -2341,6 +2353,11 @@ begin
     end if;
 
     v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    -- FR-55: an opening balance is leave_balances edit, as on the Add Employee form
+    -- (a non-admin reaches only add mode).
+    if v_bulk_hr and v_minutes <> 0 and not private.has_perm(v_caller, 'leave_balances', 'edit') then
+      raise exception 'not allowed to set opening balances' using errcode = '42501';
+    end if;
     if v_minutes < -366 * v_mpd or v_minutes > 366 * v_mpd then
       raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
     end if;
@@ -4019,12 +4036,21 @@ begin
   if p_target = v_uid then
     raise exception 'you already hold admin' using errcode = '22023';
   end if;
+  -- The typed personnel number guards against picking the wrong person. An account
+  -- with none (the bootstrap admin, deploy/sql/bootstrap_admin.sql) is confirmed by
+  -- its employee code instead, so admin can be handed back to it.
   if not exists (select 1 from public.profiles t join public.profiles c on c.id = v_uid and c.company_id = t.company_id
-                  where t.id = p_target and t.active and t.personnel_no = btrim(coalesce(p_personnel_no, ''))) then
+                  where t.id = p_target and t.active
+                    and coalesce(t.personnel_no, t.employee_code) = btrim(coalesce(p_personnel_no, ''))) then
     raise exception 'personnel number does not match an active employee' using errcode = '22023';
   end if;
 
   delete from public.user_roles where user_id = v_uid and role = 'admin';
+  -- The bootstrap admin holds no other row: leave it the company's Employee role
+  -- rather than no role at all.
+  if not exists (select 1 from public.user_roles where user_id = v_uid) then
+    insert into public.user_roles (user_id, role) values (v_uid, 'employee');
+  end if;
   insert into public.user_roles (user_id, role) values (p_target, 'admin');
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (v_uid, 'admin.transfer', 'user_roles', p_target,
