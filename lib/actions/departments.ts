@@ -27,8 +27,8 @@ export type CreateDepartmentInput = {
 const CODE_ATTEMPTS = 5;
 
 /**
- * Creates a department in the caller's company. Admin or hr (FR-51): RLS
- * (departments_insert_editor) is the enforcement layer, the role check here
+ * Creates a department in the caller's company. `departments` edit (FR-55; the
+ * admin, the hr preset): RLS (departments_insert_editor) is the enforcement layer, the permission check here
  * exists to give a fast localized error instead of an empty-result insert.
  *
  * The caller does NOT supply a code. Since 20260730130002 the code prefixes
@@ -94,8 +94,9 @@ export async function createDepartment(
  * docs/specs/2026-07-30-work-errand-and-login-codes-design.md); the UI that
  * called this is gone. It and the `departments_update_admin` RLS policy stay
  * in place so the feature can return without a migration — this is not dead
- * code to be deleted. Admin-only: `departments_update_editor` admits hr too,
- * but the department guard trigger keeps `code` admin-only (FR-51).
+ * code to be deleted. Admin-only: `departments_update_editor` admits any
+ * `departments` edit holder, but the department guard trigger keeps `code`
+ * admin-only (FR-51).
  */
 export async function updateDepartmentCode(
   id: string,
@@ -123,7 +124,7 @@ export async function updateDepartmentCode(
 /**
  * Sets (or clears) a department's manager — the second signer on every request
  * from that department when the department-manager approval step is active
- * (FR-47). Admin or hr (FR-51): RLS `departments_update_editor` enforces the
+ * (FR-47). `departments` edit (FR-55): RLS `departments_update_editor` enforces the
  * write; the picker only offers active holders of the `manager` role.
  */
 export async function setDepartmentManager(
@@ -147,7 +148,7 @@ export async function setDepartmentManager(
 }
 
 /**
- * Renames a department (FR-51). Admin or hr: RLS `departments_update_editor`
+ * Renames a department (FR-51). `departments` edit: RLS `departments_update_editor`
  * enforces the write and the department guard trigger lets a non-admin change
  * only the names and the manager — never the code, the bulk-import key.
  */
@@ -194,8 +195,9 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
 /**
  * Who works in a department, split into Managers then Workers (D10).
  *
- * Admin or hr (FR-51), and deliberately built out of the *existing* `can_read_all`
- * SELECT paths on `profiles` and `user_roles` — no new RLS policy and no new
+ * `departments` read (FR-55), and deliberately built out of the *existing*
+ * `reads_people` SELECT paths on `profiles` and `user_roles` (the permission
+ * depends on `people` read) — no new RLS policy and no new
  * SECURITY DEFINER function were added for this panel.
  *
  * Managers = anyone in the department holding the `manager` role, plus the

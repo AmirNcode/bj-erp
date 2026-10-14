@@ -33,7 +33,7 @@ export type EmployeeRow = {
   active: boolean;
   hireDateLabel: string;
   departmentLabel: string;
-  /** Localized role names — never the raw enum values. */
+  /** Role names as stored (FR-55 D11: English everywhere, custom roles included) — never the raw enum values. */
   roleLabels: string[];
   /** Next pending/approved leave, pre-formatted; null when none. */
   upcoming: { label: string; status: 'pending' | 'approved' } | null;

@@ -207,8 +207,9 @@ export function EditEmployeeForm({
       return;
     }
 
-    // Basic fields — skipped entirely for a caller who may not change them (hr
-    // on an admin or on themselves), so the save proceeds straight to the leave
+    // Basic fields — skipped entirely for a caller who may not change them (a
+    // people-edit holder on the admin, on themselves or on someone with more
+    // access, FR-55 D3/D4), so the save proceeds straight to the leave
     // sections instead of failing here on a write they were never allowed to make.
     if (caps.profile) {
       const result = await updateEmployee(employee.id, {

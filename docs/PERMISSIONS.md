@@ -13,6 +13,14 @@ only mirrors it. Every table holding employee data has policies.
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar, and the approved-absences board (`/absences`, FR-56). **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
 | **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only. *(FR-54; added 2026-10-07.)* |
 | **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
+| **Custom roles** (FR-55) | Created by the admin in Settings › Roles: an English name and a level per catalog item (Allowed / Read only / Not allowed). Assignable like any role; see *Configurable roles (FR-55)* below. Not approval-step roles (`approval_steps.role` stays on the `app_role` enum). |
+
+**Exactly one admin** (FR-55 D1): the partial unique index `user_roles_one_admin` allows one
+`user_roles` row with `role = 'admin'`. No role-assignment path adds or removes it (not
+`app_set_user_role_ids`, `app_set_user_roles`, `app_create_employee` or bulk import); only
+`app_transfer_admin` moves it, on the admin's own password. `security`, `hr` and `finance` are
+editable presets (FR-55 D9); `admin`, `manager` and `employee` are fixed. Since FR-55 the grants
+in the rows above are the presets' *default* permissions, not hard-coded roles.
 
 A user may hold multiple roles (`user_roles` table). Highest applicable permission wins. An
 inactive profile retains only read access to its own profile shell so the login flow can explain
@@ -28,6 +36,10 @@ the disabled state; it has no business-data access and cannot use employee-facin
 | HR | **Everyone** (company-wide, read) | Creates employees (any department, `employee` role only); co-signs requests as a required approval step |
 | Admin | Everyone | Everyone (+ override approvals) |
 
+Since FR-55 the Security and HR rows are the presets' defaults: company-wide read is the
+`people`, `leave_balances`, `calendar` and `leave_requests` read items, and an admin can give any
+of them to a custom role. Manager keeps its hard-wired company-wide read.
+
 ## SQL helpers
 
 ```sql
@@ -40,13 +52,39 @@ same_team(uid, target)     := (SELECT department_id FROM profiles WHERE id=uid)
                               = (SELECT department_id FROM profiles WHERE id=target)
 can_read_all(uid)    := is_admin(uid) OR has_role(uid,'manager')
                         OR has_role(uid,'security') OR has_role(uid,'hr')
-has_permission(uid, key) -- FR-51 seam. Today: is_admin(uid) OR has_role(uid,'hr') for
-                         -- 'employees.edit' | 'departments.edit' | 'accruals.run' | 'roles.manager';
-                         -- any other key is false
+                        -- FR-55: no policy calls it any more; kept for the deploy window
+perm_level(uid, key)     -- 0 none | 1 read | 2 edit: max over all the user's roles, active or not;
+                         -- the admin gets the highest level the key allows
+has_perm(uid, key, level default 'edit')
+                         -- is_active(uid) AND perm_level(uid, key) >= level; an unknown level is false
+reads_people(uid)        := has_role(uid,'manager') OR has_perm(uid,'people','read')
+reads_balances(uid)      := has_role(uid,'manager') OR has_perm(uid,'leave_balances','read')
+reads_calendar(uid)      := has_role(uid,'manager') OR has_perm(uid,'calendar','read')
+can_act_on(caller, target) -- D4 subset rule: same company, not the caller, target holds no admin
+                         -- row, no catalog level above the caller's, plus the manager / department-
+                         -- manager / hr-or-approver / hr-finance-or-clearance-signer clauses
+role_within(role_id, uid) -- D5: may uid give or remove this role? (see below)
+caller_company()         -- company of the active caller; scopes config writes and role RPCs
+has_permission(uid, key) -- LEGACY ALIAS, kept for the deploy window (old app, old call sites):
+                         -- every key answers from the catalog; any other key is false
+                         --   employees.edit      = people edit
+                         --   departments.edit    = departments edit
+                         --   accruals.run        = leave_accrual edit
+                         --   roles.manager       = role_manager edit
+                         --   personal_info.view  = personal_info read
+                         --   personal_info.edit  = personal_info edit
+                         --   personal_info.edit_own = personal_info_own edit
+                         --   special_leave.grant = special_leave edit
+                         --   separations.manage  = clearance edit
+                         --   separations.view    = clearance read
+                         --   settings.edit       = work_settings edit AND holidays edit
+                         --   absences.view       = absences read
+                         --   finance.view        = finance read
 ```
-**New grants go through `has_permission`** (FR-51), so the planned admin-configurable roles can
-replace its body with a table lookup instead of rewriting each policy. Older hr grants (FR-38, FR-42,
-FR-43) still name `has_role(uid,'hr')` directly; they move onto it with that feature.
+**New grants go through `has_perm` plus `can_act_on` (FR-55)**, never a role literal. Remove the
+legacy keys and the old `app_set_user_roles(uuid, app_role[])` after the FR-55 release is live
+(`docs/TASKS.md`). The paragraphs below describe the pre-FR-55 helper (`can_read_all`); the
+per-table sections state what each policy checks today.
 Widening `can_read_all` is the **entire** grant that gives `hr` company-wide read (migration
 `20260818130002`). Every read path HR needs — `profiles`, `user_roles`, `leave_ledger`,
 `leave_allocations`, `employee_leave_policies`, and the `team_leave_calendar` view — already routes
@@ -63,9 +101,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 ## Policy intent per table
 
 ### `profiles`
-- **SELECT**: self · active caller + (`same_team` · `can_read_all`). The self-only inactive row is
-  deliberate: it lets the app detect the disabled account and clear its Auth session.
-- **UPDATE**: `is_admin` (all fields) · `has_permission(employees.edit)` (editor subset, FR-51) ·
+- **SELECT**: self · active caller + (`same_team` · `reads_people`: `manager` or `people` read,
+  FR-55). The self-only inactive row is deliberate: it lets the app detect the disabled account and
+  clear its Auth session.
+- **UPDATE** (row level, FR-55): `is_admin` (all fields) · `people` edit (editor subset, FR-51) ·
   `is_manager_of(target)` (managed subset) · self (own limited subset: language preference,
   password handled by Auth, contact fields).
   **Column scope is enforced in the DB** by the `profiles_enforce_update_scope` BEFORE-UPDATE
@@ -75,7 +114,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   (database-constrained to `jalali`); editor on a same-company target that holds **no** `admin`
   role row (even a deactivated admin) → `full_name`/`hire_date`/`department_id`/`manager_id`/
   `job_title`/`active`; manager-of-row → `full_name`/`hire_date`. `employee_code`/`personnel_no`/
-  `company_id` are admin-only. (Before FR-51 the trigger never compared `job_title` or
+  `company_id` are admin-only. **FR-55:** the editor branch is `people` edit **and**
+  `can_act_on(caller, target)` (D4: same company, no admin row, nothing above the caller's levels,
+  plus the relationship and identity clauses); a `passwords` + `can_act_on` branch may change
+  nothing except the `must_change_password` flag a reset sets. (Before FR-51 the trigger never compared `job_title` or
   `personnel_no`, so a self or manager update could change them.) `must_change_password` (FR-50) is
   admin-only too, except that `app_set_initial_password` / `app_change_my_password` clear the
   caller's own flag; they mark the transaction with `bj.password_flag_write`, a setting PostgREST
@@ -85,9 +127,12 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   Auth, profile, roles, allocations, and audit in one transaction.
 
 ### `user_roles`
-- **SELECT**: self · `can_read_all`.
-- **INSERT/UPDATE/DELETE**: no direct client path. Admins atomically replace roles through
-  `app_set_user_roles`, which audits the change and prevents self-lockout.
+- **SELECT**: self · `reads_people` (FR-55).
+- **INSERT/UPDATE/DELETE**: no direct client path. Roles are replaced atomically through
+  `app_set_user_role_ids(user, role_ids uuid[])` (FR-55; the old `app_set_user_roles(user,
+  app_role[])` delegates to it for the deploy window), which audits the change. See *Privileged
+  admin RPCs*. A BEFORE trigger (`user_roles_sync`) fills `role` (the enum, NULL for custom roles)
+  from `roles.system_key` and refuses a role of another company.
 - **Teammate role labels** are surfaced read-only through the `get_my_team_directory()` SECURITY
   DEFINER fn (scoped to the caller's manager + same-department active colleagues) so the Home
   **My Team** card can show role/title context without granting employees broad `user_roles` read
@@ -95,11 +140,19 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `departments`, `work_settings`, `holidays`, `leave_types`
 - **SELECT**: any active authenticated company member.
-- **WRITE**: `is_admin` only — except `departments` INSERT/UPDATE, which admit
-  `has_permission(departments.edit)` since FR-51 (`departments_insert_editor` /
-  `departments_update_editor`; DELETE stays `departments_delete_admin`). The
+- **WRITE** (FR-55): `departments` INSERT/UPDATE need `departments` edit in the caller's company
+  (`departments_insert_editor` / `departments_update_editor`; DELETE stays
+  `departments_delete_admin`). `holidays` INSERT/UPDATE/DELETE need `holidays` edit and
+  `work_settings` INSERT/UPDATE need `work_settings` edit, both on the caller's own company
+  (`*_editor` policies); `work_settings` DELETE is admin in the caller's company
+  (`work_settings_delete_admin`). `work_settings_enforce_scope` keeps `hours_per_day` admin-only and
+  lets only `approval_steps` edit (or the admin) change `approval_order_enforced`, the latter
+  through `app_set_approval_order_enforced`. `leave_types` stay admin-only. The pre-FR-55 text
+  follows: `is_admin` only — except `departments` INSERT/UPDATE, which admit
+  `has_permission(departments.edit)` since FR-51. The
   `departments_enforce_update_scope` trigger lets a non-admin change only `name_fa`, `name_en` and
-  `manager_id`; `code` (the bulk-import key), `kind` and `company_id` stay admin-only. Since
+  `manager_id`; `code` (the bulk-import key), `kind` and `company_id` stay admin-only. **FR-55 D7:**
+  a non-admin may never set themselves as a department's manager (insert or update). Since
   `20261007130002`: a non-admin may **not** change the manager of the department they belong to
   (that person signs the department-manager step on the caller's own requests, and hr can grant the
   manager role); a department manager must be a same-company profile (checked on insert and update,
@@ -132,11 +185,13 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   and `user_roles`; **no new policy and no new SECURITY DEFINER function** were added for it.
 
 ### `leave_allocations`
-- **SELECT**: own · `is_manager_of` · `can_read_all`.
-- **WRITE**: `is_admin` **or `hr`** since 2026-08-19 (FR-43), through `allocate_leave`. HR
+- **SELECT**: own · `is_manager_of` · `reads_balances` (`manager` or `leave_balances` read, FR-55).
+- **WRITE**: since FR-55, `leave_balances` edit **and** `can_act_on(caller, target)` (admin skips
+  it), through `allocate_leave`; before it, `is_admin` **or `hr`** since 2026-08-19 (FR-43). HR
   administers leave, so the opening balance and the accrual policy belong to it as well as to admin.
-  The same widening covers `set_employee_leave_policy`, `set_leave_balance` and
-  `accrue_employee_leave` (the last so the balances HR reads do not lag the policy HR just set).
+  The same gate covers `set_employee_leave_policy` and `set_leave_balance`;
+  `accrue_employee_leave` needs `is_manager_of` or `leave_balances` read (so the balances HR reads
+  do not lag the policy HR just set).
 - **Nobody but an admin may do any of it to their OWN record.** Same asymmetry as FR-36's
   self-approval rule and for the same reason. Enforced inside each function
   (`p_employee_id = auth.uid()` raises `42501`), not in the UI.
@@ -145,9 +200,9 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   than failing the whole save on it.
 
 ### `leave_requests`
-- **SELECT (full base row)**: own · direct `is_manager_of` · security · admin · **hr**
-  (2026-08-18, FR-38 — a deliberate FR-25 widening; HR signs and files the paper form today), with
-  active-account enforcement. Same-team employees read the explicit-column `team_leave_calendar` view instead;
+- **SELECT (full base row)**: own · direct `is_manager_of` · `leave_requests` read (FR-55; held by
+  the admin implicitly and by the hr and security presets — HR since 2026-08-18, FR-38, a deliberate
+  FR-25 widening: HR signs and files the paper form today), with active-account enforcement. Same-team employees read the explicit-column `team_leave_calendar` view instead;
   they never receive private reason, location, decision-note, or signature columns.
 - **INSERT / UPDATE**: no direct client policies. Daily/hourly leave and daily/hourly errand
   submission, approval, rejection, and cancellation run through guarded SECURITY DEFINER
@@ -156,7 +211,9 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   (2026-08-18) deciding it is a **chain**: every active `approval_steps` row for that request's kind
   must approve before the status flips and the ledger moves — see `leave_request_approvals` below.
   Rejection by any one required approver is immediate and unilateral.
-- **DELETE**: none (cancel via status; preserve history).
+- **DELETE**: none (cancel via status; preserve history). `cancel_leave_request` admits the owner,
+  the admin, or (FR-55) `leave_requests` edit in the caller's company, never on the admin's
+  request.
 - **Signatures (FR-32 + FR-14)**: all four submission wrappers require the requester's PNG plus
   explicit authorization, and approval requires a separate fresh PNG and authorization from the
   deciding direct manager/admin. Each consent timestamp is generated by the database in the same
@@ -169,45 +226,56 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 `/manage/reports` adds **no policy and no SECURITY DEFINER function**. Every report is a plain
 SELECT over `profiles`, `leave_ledger`, `leave_types`, `leave_requests` and
 `leave_request_approvals`, so the rows a caller sees are exactly the rows their existing RLS allows
-— `can_read_all` (which includes `hr` since 20260818130002) is what makes them company-wide. The
-`hr || admin` check in the action and on the page is a fast localized refusal, not the boundary: an
-employee who reached it would still read only their own rows.
+— company-wide for a caller holding the reads they need. **FR-55:** `reports` read gates the action
+and page and depends (D6) on `people`, `leave_balances` and `leave_requests` read, which is what makes
+the rows company-wide. The permission check in the action is a fast localized refusal, not the
+boundary: an employee who reached it would still read only their own rows. The Home pulse band is
+identity-scoped (admin/hr company-wide); a custom Reports-only role sees a team pulse.
 
 ### Permission keys added 2026-10-12 (FR-56/59/62)
 `private.has_permission` gained `settings.edit` (admin, hr), `absences.view` (admin, security),
-`finance.view` (admin, finance), and `personal_info.edit_own` (admin; FR-63). **FR-55 presets must
-keep them:** security = `absences.view` only; hr adds `settings.edit`; finance adds `finance.view`;
-`personal_info.edit_own` becomes a per-role switch ("may edit own personal information"), off for
-every preset but admin.
-- `work_settings` / `holidays` INSERT/UPDATE (and `holidays` DELETE): `settings.edit` on the
-  caller's own company (`*_editor` policies; `work_settings` DELETE stays admin). Trigger
-  `work_settings_enforce_scope` refuses a non-admin change to `approval_order_enforced` or
-  `hours_per_day`.
+`finance.view` (admin, finance), and `personal_info.edit_own` (admin; FR-63). **FR-55 made them
+catalog items** (legacy keys remain aliases): `absences` (read; hr, security presets), `finance`
+(read; hr, finance presets), `work_settings` + `holidays` (both edit for hr; `settings.edit` needs
+both) and `personal_info_own` (edit; no preset, the per-role switch "may edit own personal
+information").
+- `work_settings` / `holidays` INSERT/UPDATE (and `holidays` DELETE): `work_settings` / `holidays`
+  edit on the caller's own company (`*_editor` policies; `work_settings` DELETE stays admin).
+  `work_settings_enforce_scope` refuses a non-admin change to `hours_per_day`, and to
+  `approval_order_enforced` without `approval_steps` edit.
 - `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
-  `finance.view`; caller's company; approved rows only; no signatures, no reason.
+  `finance` read (alias `finance.view`); caller's company; approved rows only; no signatures, no
+  reason.
+- The approved-absences board (`getAbsences`) needs `absences` read; rows come through
+  `leave_requests_select`, hence the dependency on `people` and `leave_requests`.
 
 ### `special_leave_grants` (FR-65)
-- **SELECT**: own rows, or `special_leave.grant` (admin, hr) in the caller's company. No client writes.
+- **SELECT**: own rows, or `special_leave` edit (admin, hr preset) in the caller's company. No client
+  writes.
 - `app_grant_special_leave(employee, kind)` / `app_revoke_special_leave(grant)`: SECURITY DEFINER,
-  `special_leave.grant`, same company, not on oneself unless admin, hr never on an admin. Marriage:
-  one standing grant (partial unique index), only while marital status is `single`.
-- FR-66: `work_settings_enforce_scope` now guards only `hours_per_day`; hr sets
-  `approval_order_enforced` through the `settings.edit` policies.
+  guarded by `private.special_leave_target`: `special_leave` edit, same company (`P0002` otherwise),
+  and for a non-admin: not on oneself, not on an admin, and `can_act_on` (FR-55 D4). The admin may
+  grant to themself. Marriage: one standing grant (partial unique index), only while marital status
+  is `single`.
+- FR-66: hr sets `approval_order_enforced`; in FR-55 terms whoever holds `approval_steps` edit does,
+  through `app_set_approval_order_enforced`. Only `hours_per_day` stays admin-only.
 
 ### `request_approval_progress(id)` (FR-64)
 SECURITY DEFINER; answers only when the caller may read the request (own · direct manager ·
-security · admin · hr, as `leave_requests_select`), else `request not found`. Returns step order,
+`leave_requests` read, as `leave_requests_select`), else `request not found`. Returns step order,
 role, expected person, decision, signer name and time — no signatures, no notes.
 
 ### `approval_steps` (FR-36)
 - **SELECT**: any active authenticated company member. Deliberately open: the requester is shown
   which steps their request is waiting on, so this is progress information, not privileged config.
-- **INSERT/UPDATE/DELETE**: `is_admin` **OR `has_role(hr)`** since 2026-08-18 (FR-42), through the
-  Manage → Approval steps page (`/manage/approval-steps`, admin + hr since 2026-10-05). Like
+- **INSERT/UPDATE/DELETE**: `approval_steps` edit **on the caller's own company** since FR-55
+  (`approval_steps_*_config`; the admin holds it implicitly, the hr preset has it). Before that
+  `is_admin` **OR `has_role(hr)`** since 2026-08-18 (FR-42), through the
+  Manage → Approval steps page (`/manage/approval-steps`). Like
   `work_settings` and `holidays`, this is company configuration and needs no SECURITY DEFINER
-  wrapper. **This widens exactly one table**: HR still cannot edit work settings, holidays,
-  departments, leave types or roles; `/settings` and `/manage/departments` redirect HR away. The order-enforcement switch stays admin-only because it writes
-  `work_settings`.
+  wrapper. **This widens exactly one table**: (Written for FR-42: since FR-59/FR-55 HR also edits work settings and holidays, and
+  roles and leave types remain admin-only.) The order-enforcement switch belongs to `approval_steps`
+  edit via `app_set_approval_order_enforced` (FR-55), not to `work_settings`.
 - **Who may fill a NAMED step (FR-42)**: only the person in `approver_id`, and only while their
   account is active. There is **no admin override** — unlike a role step, where FR-36 deliberately
   lets an admin fill any slot so a company whose admin has no manager above them is not stuck. A
@@ -218,14 +286,14 @@ role, expected person, decision, signer name and time — no signatures, no note
   when that person is neither the requester nor the requester's direct manager — otherwise it is
   not required for that request. An admin may fill it like any role step; nobody signs their own
   request. No read policy changes: managers already read company-wide (`can_read_all`).
-- `public.search_approver_candidates(text)` (SECURITY DEFINER, admin/hr-guarded, granted to
-  `authenticated`, revoked from `anon`) backs the person picker. It **widens nothing** —
-  `can_read_all` already gives both roles company-wide profile reads; it exists so the picker
-  receives four fields instead of whole profile rows.
+- `public.search_approver_candidates(text)` (SECURITY DEFINER, `approval_steps` edit-guarded since
+  FR-55, granted to `authenticated`, revoked from `anon`) backs the person picker. It **widens
+  nothing** — `approval_steps` depends on `people` read; it exists so the picker receives four
+  fields instead of whole profile rows.
 
 ### `leave_request_approvals` (FR-36)
-- **SELECT**: mirrors `leave_requests_select` exactly — own · direct `is_manager_of` · security ·
-  admin · hr. Whoever may read a request may see who signed it. Written as an `exists` against
+- **SELECT**: mirrors `leave_requests_select` exactly — own · direct `is_manager_of` ·
+  `leave_requests` read. Whoever may read a request may see who signed it. Written as an `exists` against
   `leave_requests` rather than a join, so a policy on this table never recurses through itself.
 - **INSERT/UPDATE/DELETE**: **no client policy at all**, exactly like `leave_ledger`. Every row is
   written inside `approve_leave_request` / `reject_leave_request`. A client that could insert here
@@ -243,14 +311,14 @@ role, expected person, decision, signer name and time — no signatures, no note
   `lib/leave/approvals.ts`.
 
 ### `leave_ledger`
-- **SELECT**: own · `is_manager_of` · `can_read_all`.
+- **SELECT**: own · `is_manager_of` · `reads_balances` (FR-55).
 - **INSERT**: **server-side only** (SECURITY DEFINER fns — `allocation`, paid-portion `consumption`
   on approval, paid-portion `reversal` on approved-future cancel, and `adjustment` when an admin sets
   an absolute balance via `set_leave_balance`). No direct client writes — clients must not fabricate
   balances.
 - **Monthly accrual for everyone** (`accrue_all_leave`, the Departments page button) requires
-  `has_permission(accruals.run)`: admin or hr since FR-51. It posts only months each policy has
-  already earned.
+  `leave_accrual` edit (FR-55; admin, hr preset; before it `accruals.run`, FR-51). It posts only
+  months each policy has already earned.
 
 ### `audit_log`
 - **SELECT**: `is_admin`.
@@ -260,33 +328,37 @@ role, expected person, decision, signer name and time — no signatures, no note
   silently ignored.
 
 ### `employee_personal_info` (FR-53)
-- **SELECT**: own row, or `has_permission(uid, 'personal_info.view')` (admin or hr) on a row of the
-  caller's company. Managers, security and peers see nothing.
-- **UPDATE** (FR-63, 2026-10-12): own row only with `personal_info.edit_own` (admin today — the
-  FR-55 per-role switch); someone else's row with `personal_info.edit` (admin or hr) in the caller's
-  company, but hr never on a holder of the `admin` role (checked on the role row, like FR-51 D2).
+- **SELECT**: own row, or `personal_info` read on a row of the caller's company. Managers, security
+  and peers see nothing.
+- **UPDATE** (FR-63, 2026-10-12; FR-55): own row only with `personal_info_own` edit (the per-role
+  switch; no preset, the admin implicitly — the explicit exception to D3); someone else's row with
+  `personal_info` edit in the caller's company **and** `can_act_on` (admin skips it; never an admin
+  row, nothing above the caller's levels).
   Everyone still READS their own row (Profile › Personal information, read-only).
 - **INSERT / DELETE**: no client grant. The profile trigger inserts; the FK cascade deletes.
 - A before-update trigger pins `employee_id` / `company_id`; an after-update trigger audits field
   names only.
-- `public.app_export_personal_info()` — SECURITY DEFINER, `personal_info.view`, caller's company,
+- `public.app_export_personal_info()` — SECURITY DEFINER, `personal_info` read, caller's company,
   writes `personal_info.export` (row count) to `audit_log` before returning.
-- `public.app_import_personal_info(jsonb)` — SECURITY DEFINER, `personal_info.edit`; rows matched by
-  personnel number in the caller's company; unknown number, duplicate, unknown field, (for hr)
-  an admin target, or the caller's own row without `personal_info.edit_own` fails the whole call; one transaction; `personal_info.import` audit row.
+- `public.app_import_personal_info(jsonb)` — SECURITY DEFINER, `personal_info` edit; rows matched by
+  personnel number in the caller's company; unknown number, duplicate, unknown field, a non-admin
+  caller's row for a target that fails `can_act_on` (which includes any admin), or the caller's own
+  row without `personal_info_own` fails the whole call; one transaction; `personal_info.import`
+  audit row.
 
 ### `user_signatures` (FR-52)
 - **ALL**: owner only (`user_id = auth.uid()`, active). No other policy: admin, hr and managers
   cannot read or write anyone's saved signature.
 
 ### Clearance form (FR-54)
-- `has_permission` keys: `separations.manage` (admin, hr) — file, edit, edit rows, cancel, default
-  rows; `separations.view` (admin, hr, finance) — read every form of the company.
+- Catalog item `clearance` (FR-55): edit = file, edit, edit rows, cancel, default rows
+  (`separations.manage`; admin, hr preset), and the leaver must pass `can_act_on`; read = every form
+  of the company (`separations.view`; admin, hr, finance preset).
 - **SELECT** on `separations` / `separation_signoffs`: `private.can_read_separation(uid, id)` —
-  active, same company, and `separations.view`, or the leaver, or a signer named on a row.
+  active, same company, and `clearance` read, or the leaver, or a signer named on a row.
   `separation_units`: any active user of the company. **No INSERT/UPDATE/DELETE grants.**
-- RPCs (SECURITY DEFINER, `authenticated` only): `app_create_separation` (manage; not yourself; hr
-  not on an admin; not the last active admin; one live form), `app_update_separation` /
+- RPCs (SECURITY DEFINER, `authenticated` only): `app_create_separation` (manage; not yourself;
+  `can_act_on`, so never an admin; not the last active admin; one live form), `app_update_separation` /
   `app_cancel_separation` (manage; until the account is switched off), `app_set_separation_signoffs`
   (manage; in progress; signed rows only move), `app_sign_separation_row` (the row's signer; HR row:
   any hr or admin; never the leaver), `app_sign_separation_finance` (`finance` role; never the
@@ -297,8 +369,8 @@ role, expected person, decision, signer name and time — no signatures, no note
 
 ### Bulk import modes (FR-49)
 - `public.app_bulk_import_employees(...)` — SECURITY DEFINER, granted to `authenticated`. `add`
-  mode: admin or hr (hr clamped to plain employees, no department config, as v2). `update` /
-  `replace`: **admin only**, enforced in SQL. Never deactivates an admin or the caller; only the
+  mode: admin or `people_create` (clamped to plain employees, no department config, as v2). `update` /
+  `replace`: **admin only** (D2), enforced in SQL. Never deactivates an admin or the caller; only the
   `manager` role follows the file (admin/hr/security untouched); deletes a department only when no
   profile, active or not, is in it. Every deactivation, reassignment, deletion and update is
   audited. The server action `importEmployees` is admin-only.
@@ -310,6 +382,114 @@ role, expected person, decision, signer name and time — no signatures, no note
   manages a department. Every role may call it (owner decision D8). **It widens names, titles,
   departments and reporting lines to every employee — nothing else**: no personnel number, roles,
   hire date, balances or leave data. Same pattern as `get_my_team_directory()`.
+
+## Configurable roles (FR-55)
+
+Design record: `docs/specs/2026-10-07-configurable-roles-design.md`. Tables: `roles`,
+`role_permissions` (`docs/DATA_MODEL.md`). The admin edits roles in Settings › Roles; the editor
+shows three states per item (Allowed = `edit`, Read only = `read`, Not allowed = no row).
+
+### Catalog (20 items)
+
+Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
+`private.permission_keys` / `permission_allows` / `permission_deps` and `lib/permissions/catalog.ts`
+(a unit test compares them with `supabase/schema.sql`).
+
+| Section | Key | Shape | Needs (read) |
+|---|---|---|---|
+| Employees | `people` | R/E | — |
+| | `people_create` | E | `people` |
+| | `passwords` | E | `people` |
+| | `role_manager` | E | `people`, `leave_balances`, `calendar` |
+| | `role_assign` | E | `people` |
+| | `personal_info` | R/E | `people` |
+| | `personal_info_own` | E | — |
+| | `clearance` | R/E | `people` at edit |
+| Departments | `departments` | R/E | `people` |
+| Leave | `leave_balances` | R/E | `people` |
+| | `leave_accrual` | E | `departments` |
+| | `special_leave` | E | `people`, `leave_balances` |
+| | `leave_requests` | R/E | `people` |
+| | `calendar` | R | — |
+| | `absences` | R | `people`, `leave_requests` |
+| | `reports` | R | `people`, `leave_balances`, `leave_requests` |
+| Finance | `finance` | R | — |
+| Approval chain | `approval_steps` | R/E | `people` |
+| Settings | `work_settings` | R/E | — |
+| | `holidays` | R/E | — |
+
+### Presets (seeded per company)
+
+| Preset | Holds |
+|---|---|
+| **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `absences`, `reports`, `finance` at read |
+| **Security** | `people`, `leave_balances`, `leave_requests`, `calendar`, `absences` at read |
+| **Finance** | `clearance`, `finance` at read |
+
+`personal_info_own`, `passwords` and `role_assign` are on no preset. `admin`, `manager` and
+`employee` carry no permission rows (admin holds every item implicitly; manager has the hard-wired
+company-wide read through `reads_*`). Presets keep their name and cannot be deleted; permissions are
+editable. HR holds `work_settings`, `holidays`, `special_leave`, `absences` and `finance` read under
+owner ruling (a), 2026-10-13, so the HR preset covers Security and Finance and D4 lets it act on
+their holders.
+
+### Rules (D1–D7)
+
+- **D1 — one admin.** Index `user_roles_one_admin`; only `app_transfer_admin(target, personnel_no,
+  password)` moves it (caller's password re-entered, target active, same company, not the caller).
+  The migration refuses to run if more than one admin row exists. There is no recovery path for a
+  locked-out admin (owner accepted).
+- **D2 — locked, admin-only, never in the matrix:** create/edit/delete roles; grant or transfer
+  admin; approval override (filling any step, signing one's own request); bulk import in Update and
+  Replace modes; the audit log; developer tools (`app_cleanup_e2e_users`); `hours_per_day`;
+  `personnel_no` / `employee_code` / `company_id`; deleting `work_settings`. The role editor shows
+  them in a read-only "Admin only" card. The approval-order switch
+  (`work_settings.approval_order_enforced`) is **not** locked: it follows `approval_steps` edit
+  through `app_set_approval_order_enforced`.
+- **D3 — never on yourself.** No delegated permission acts on the holder's own record. The explicit
+  exception is `personal_info_own` (own personal information); the importer's own CSV row also
+  needs it (`app_import_personal_info`, main's FR-63).
+- **D4 — subset rule, `can_act_on(caller, target)`.** True only when: same company; target is not
+  the caller; the target holds no `admin` row (even deactivated); for every catalog key the target's
+  level is at most the caller's (computed from all the target's roles, active or not); a target
+  holding `manager` needs the caller to hold `role_manager` edit; a target who manages a department
+  needs `departments` edit; a target who holds `hr` or is a named approver of an active step needs
+  `approval_steps` edit; a target who holds `hr` or `finance`, is a clearance unit signer, or signs a
+  row of an `in_progress` / `awaiting_finance` clearance form needs `clearance` edit. The
+  relationship and identity clauses stop impersonation: resetting someone's password would let you
+  sign in as them and fill their steps. Manager is not an identity clause (managers sign through
+  `manager_id` / `departments.manager_id`, set through `people` / `departments` edit, which D4 and D7
+  guard); `security` is not one either (it cannot be an approval-step role since `20261012120003`).
+  Admin callers skip it. Guards every write on a person; reads are exempt.
+- **D5 — assignment, `role_within(role_id, uid)`.** `admin`: never. `manager`: `role_manager` edit.
+  `employee`: `role_assign` edit (it has no rows). Otherwise `role_assign` edit and every row of the
+  role at or below the caller's level. Granting or removing `hr` also needs `approval_steps` and
+  `clearance` edit; `finance` needs `clearance` edit. The same check covers the initial roles on Add
+  Employee.
+- **D6 — dependencies.** Items whose screens read through RLS need other items at read (table
+  above); `app_save_role` rejects a set that breaks them and the editor raises them, saying so.
+- **D7 — no self-appointment as a department manager** (non-admin, insert or update). Open owner
+  questions (`docs/TASKS.md`): the analogues for `people` edit, `approval_steps` edit, `clearance`
+  edit and `people_create`.
+
+### Which gate does what
+
+| Object | Gate |
+|---|---|
+| Employees / Departments / Request archive / Approval steps / Reports pages | `manager` or `people` read · `departments` read · `leave_requests` read · `approval_steps` read · `reports` read |
+| Finance page | `finance` read (a Manage item for callers who already have the Manage group, else a bottom tab) |
+| Settings | admin, or `work_settings` read, or `holidays` read; the Roles tab is admin only |
+| `app_list_roles()` | any active member (the employee forms render the role boxes) |
+| `app_role_holders`, `app_save_role`, `app_delete_role`, `app_transfer_admin` | admin only |
+| `app_my_permissions()` | the caller; fallback when the `app_perms` JWT claim is missing |
+
+The `app_perms` claim (`{key: level}`, empty for an inactive user) is added by
+`custom_access_token_hook` next to `app_roles`; a change reaches the app on the next token refresh
+(at most an hour), RLS enforces it at once.
+
+Known gaps (`docs/TASKS.md`): the SELECT policies on `holidays`, `work_settings` and `approval_steps`
+are company-blind (fine with one company per deploy); the legacy `has_permission` keys and the old
+`app_set_user_roles` signature stay until the FR-55 release is live.
 
 ## Notes
 
@@ -326,7 +506,10 @@ department and any manager, but the role list is **overwritten in-database** to 
 bulk path every CSV row's `role` column is clamped the same way. An HR account therefore cannot
 create a manager, another HR, a security user, or an admin; granting authority remains admin-only.
 The `hr` branch is checked **before** the manager branch so a user holding both gets the wider scope.
-Audit rows record the path as `hr` / `bulk_hr`.
+Audit rows record the path as `hr` / `bulk_hr`. **FR-55:** the branch is now `people_create` edit
+(any role holding it, not only `hr`); `app_create_employee` refuses `admin` on every branch and gains
+an optional `p_role_ids uuid[]` that decides extra roles through `app_set_user_role_ids` (D5), so a
+non-admin still cannot create someone more privileged than themselves.
 
 `public.app_create_employee(...)`, `public.app_set_employee_password(...)`, and
 `public.app_bulk_set_employee_passwords(jsonb)` are `SECURITY DEFINER`
@@ -340,7 +523,9 @@ in the same transaction via `private.allocate_leave_impl`). Anyone else gets `42
 admin/manager/security roles therefore stays admin-only. `app_bulk_create_employees(jsonb)`
 (CSV import, admin-only, all-or-nothing single transaction) reuses the same
 `private.create_employee_impl`.
-Bulk password reset accepts 1–100 unique non-caller employees, validates the complete payload
+**FR-55:** both password RPCs accept the admin, or `passwords` edit plus `can_act_on` per target
+(a helpdesk role can reset an ordinary employee, not a manager, department manager, hr holder,
+admin or itself). Bulk password reset accepts 1–100 unique non-caller employees, validates the complete payload
 before updating anyone, enforces the bcrypt-safe 8–72 ASCII-character range, and succeeds or rolls
 back as one transaction.
 This is the chosen alternative to shipping a `service_role` secret into the app server — it keeps
@@ -358,19 +543,23 @@ refuses the issued password (`crypt` comparison), sets the new one, clears the f
 neither RPC clears the flag without a real change. The flag is a UI gate, not an RLS boundary: a flagged session's data access
 is unchanged, and RLS stays the authority.
 
-`public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin-only; self-guards via
-`private.is_admin(auth.uid())`, `42501` otherwise) sets an employee's **current** balance for a leave
+`public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin, or since FR-55
+`leave_balances` edit plus `can_act_on`; `42501` otherwise) sets an employee's **current** balance for a leave
 type to an absolute value by writing an `adjustment` ledger row (audited `set_leave_balance`); additive
 grants still go through `allocate_leave`. Granted to `authenticated`, revoked from `anon`. Used by the
 admin employee create/edit forms.
 
 `public.app_set_user_roles(p_user_id, p_roles)` (2026-07-02 hardening) **atomically replaces** a
 user's roles in one transaction (the app previously did delete-then-insert as two client
-statements — a failed insert lost all roles). Admin, who may not remove the **caller's own**
-`admin` role (lockout guard, `22023`). Since FR-51 also a `has_permission(roles.manager)` holder (hr),
-only to add or remove `manager`, on a same-company target that holds no `admin` and is not the
-caller (`42501` otherwise). Anyone else `42501`. Audited (`set_roles`). Granted to
-`authenticated`, revoked from `anon`. The app's `setRoles` server action calls this RPC.
+statements — a failed insert lost all roles). **FR-55 superseded it with**
+`public.app_set_user_role_ids(p_user_id, p_role_ids uuid[])`, which the `setRoles` server action
+now calls; the old signature remains for the deploy window, touches built-in rows only, keeps custom
+rows and delegates to the new one. Rules of the new RPC: the admin row never changes, for anyone
+(D1; `42501`); the admin may set any other role; anyone else needs `role_assign` or `role_manager`,
+`can_act_on` on the target (D3, D4), and per added or removed role `role_within` (D5), plus
+`approval_steps` and `clearance` edit to give or remove `hr` and `clearance` edit for `finance`.
+The caller's and target's profile rows are locked in id order, as in `app_transfer_admin`. Audited
+(`set_roles`). Granted to `authenticated`, revoked from `anon`.
 
 The Supabase security advisor flags these as exposed `SECURITY DEFINER` functions (lint 0029).
 **Accepted by design** — the in-function admin check is the intended gate. Note on the advisor's
@@ -392,6 +581,10 @@ consumes only the available paid minutes and atomically records the remainder in
 `(select auth.uid())` (advisor lint 0003, initplan).
 
 ## FR-25 — leave `reason` is private (ENFORCED in Phase 3)
+
+*FR-55: wherever this section names "security", "admin" or "hr" as readers of the base row, read
+`leave_requests` read (admin implicitly, the hr and security presets by default);
+`team_leave_calendar` is scoped `own | same_team | reads_calendar` (`manager` or `calendar` read).*
 
 A leave request's free-text `reason` may contain medical/personal info, so **teammates must not see
 it.** Enforced: `leave_requests` SELECT is restricted to own / `is_manager_of` / `security` / `admin`

@@ -9,6 +9,37 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin-configurable roles and permissions — FR-55 (2026-10-13)
+
+Migrations `20261013200001`..`200005`. Spec `docs/specs/2026-10-07-configurable-roles-design.md`.
+- **Settings › Roles** (admin): create, edit and delete custom roles, and edit the HR, Security and
+  Finance presets. Each of 20 access items is Allowed, Read only or Not allowed, in collapsible
+  sections with a section-level dropdown; dependent items are raised automatically with a note.
+  Role names are English. Deleting a role lists its holders and copies their personnel numbers.
+- **Role checkboxes** on Add Employee and Edit Employee list every role by its English name (the raw
+  slugs and the label-based e2e selectors are gone); boxes the caller may not toggle are disabled.
+- **Transfer admin** (Settings › Roles): the only way the single admin changes (own password plus the
+  new admin's personnel number). A unique index now allows exactly one admin row.
+- **Every grant is a permission, not a role literal.** About 60 policies, RPCs and triggers and the
+  server actions moved from `admin` / `hr` checks to `private.has_perm(uid, key, level)`. The
+  subset rule `private.can_act_on` stops a delegate acting on themselves, on the admin, on anyone who
+  holds more access, or on the people whose password would let them sign as a manager, department
+  manager, hr holder, named approver or clearance signer. A non-admin can no longer make themselves a
+  department's manager.
+- **Presets keep today's behaviour**; HR also holds work settings, holidays, special leave, absences
+  and finance (owner ruling, 2026-10-13). New items from main: `absences`, `finance`,
+  `personal_info_own` (the per-role «may edit own personal information» switch, on no preset),
+  `special_leave`. «Enforce approval order» follows `approval_steps` edit; hours per day stays
+  admin-only.
+- Navigation follows permissions: Finance is a Manage item for callers who already have the group,
+  else a bottom tab; the old HR `/manage/settings` page forwards to `/settings`.
+- Add-first: `private.has_permission` keeps every legacy key as an alias and
+  `app_set_user_roles(uuid, app_role[])` still works (it delegates to the new
+  `app_set_user_role_ids(uuid, uuid[])`), so the app still running during a deploy is unaffected.
+- Behaviour change: `app_create_employee` now refuses the `admin` role on every branch.
+- Tests: `tests/sql/fr55-roles-permissions.sql`, the four earlier SQL files kept green as the parity
+  proof, `tests/unit/permissions-catalog.test.ts` and friends, `tests/e2e/roles.spec.ts`.
+
 ### Request page sections and approval steps on My Requests (2026-10-13)
 
 - «درخواست»: «ثبت درخواست جدید» and «درخواست‌های من» are collapsible sections, closed by default.

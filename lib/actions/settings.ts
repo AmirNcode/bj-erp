@@ -454,8 +454,8 @@ export type ApproverCandidate = {
  *
  * Goes through the `search_approver_candidates` definer function rather than a
  * client select, so the picker receives only the four fields it renders instead
- * of whole profile rows. It does not widen anything: `can_read_all` already gives
- * both admin and hr company-wide profile reads.
+ * of whole profile rows. It does not widen anything: `approval_steps` depends on
+ * `people` read, which already gives company-wide profile reads (FR-55).
  */
 export async function searchApproverCandidates(
   query: string

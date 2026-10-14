@@ -134,8 +134,9 @@ export async function setRoles(
 }
 
 /**
- * Activates or deactivates an employee. Admin, or hr on a non-admin other than
- * themselves (FR-51; the profile guard trigger enforces the target rule).
+ * Activates or deactivates an employee. The admin, or a `people` edit holder on
+ * someone they may act on (FR-51, FR-55 D3/D4: not themselves, not the admin, not
+ * anyone with more access; the profile guard trigger enforces the target rule).
  */
 export async function setActive(
   id: string,

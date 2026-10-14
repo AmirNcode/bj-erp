@@ -1,8 +1,21 @@
 # Admin-configurable roles and permissions — design
 
-**Status:** Draft for owner review, 2026-10-07. FR-55. Decisions D1–D12 were agreed with Amir in
-chat on 2026-10-07. The implementation plan (`docs/plans/2026-10-07-configurable-roles.md`) is
-written after this spec is approved.
+**Status:** Accepted and built, 2026-10-13 (branch `FR-55`, migrations `20261013200001`..`200005`).
+FR-55. Decisions D1–D12 were agreed with Amir in chat on 2026-10-07. The implementation plan is
+`docs/plans/2026-10-07-configurable-roles.md`.
+
+**Amendments made while building** (the text below describes the built state):
+- `personnel_no` left the catalog: no screen changes a personnel number, and the login email is
+  derived from it. The column stays admin-only in SQL. The catalog has 16 items from this spec
+  plus four from main's FR-56..65: `absences`, `finance`, `personal_info_own`, `special_leave`
+  (20 in all).
+- The role-set RPC is `app_set_user_role_ids(uuid, uuid[])`. A `uuid[]` overload of
+  `app_set_user_roles` would break PostgREST's resolution by argument names, so the old
+  `(uuid, app_role[])` function keeps its name and now delegates.
+- D4 gained identity clauses (approvers and clearance signers), D6 gained dependencies, and the
+  approval-order switch moved from admin-only to `approval_steps` edit. Each is marked below.
+- Owner ruling (a), 2026-10-13: the HR preset also covers Security and Finance, so D4 lets HR act
+  on their holders.
 
 ## Problem
 
@@ -52,6 +65,15 @@ checkboxes that show raw English slugs.
   4. Bulk import in Update and Replace modes.
   5. The audit log (no screen today).
   6. Developer tools (`app_cleanup_e2e_users`).
+  7. `work_settings.hours_per_day`, which moves past balances (trigger
+     `work_settings_enforce_scope`, main's rule).
+  8. `profiles.personnel_no`, `employee_code` and `company_id`.
+
+  The approval-order switch (`work_settings.approval_order_enforced`, main's FR-66) is **not** on
+  this list. An earlier draft made it admin-only; it now belongs to `approval_steps` edit, since
+  whoever edits the steps decides whether their order is enforced. A holder flips it through
+  `app_set_approval_order_enforced`, and the `work_settings_enforce_scope` trigger refuses a
+  change to the column from anyone without `approval_steps` edit.
 
   The role editor shows them in a read-only "Admin only" card so the admin can see what no role can
   ever hold.
@@ -59,34 +81,51 @@ checkboxes that show raw English slugs.
 ### Delegation guards
 
 - **D3 — Never on yourself.** No delegated permission acts on the holder's own record. This
-  generalises the FR-43 and FR-51 D3 rules.
+  generalises the FR-43 and FR-51 D3 rules. The one explicit exception is `personal_info_own`
+  (main's FR-63): the holder may correct their own personal information. Main's FR-63 rule stays
+  in `app_import_personal_info`: a CSV row for the importer's own personnel number is refused
+  unless the importer holds `personal_info_own` (the admin holds it implicitly), and every other
+  row goes through `can_act_on`. Nobody else can ever edit their own row through the import.
 - **D4 — Subset rule.** `private.can_act_on(caller, target)` is true only when all of these hold:
   - target and caller are in the same company, and the target is not the caller;
   - the target holds no `admin` row, even a deactivated one;
   - for every catalog key, the target's level is at most the caller's level;
   - if the target holds `manager`, the caller holds `role_manager`;
   - if the target manages a department (`departments.manager_id`), the caller holds
-    `departments` at Allowed.
+    `departments` at Allowed;
+  - **identity clauses** (added while building): if the target holds `hr`, or is the named approver
+    (`approval_steps.approver_id`) of an active step, the caller holds `approval_steps` edit; if
+    the target holds `hr` or `finance`, or is a `separation_units.signer_id`, or is the
+    `separation_signoffs.signer_id` of a form that is `in_progress` or `awaiting_finance`, the
+    caller holds `clearance` edit. Role rows count whether or not the target is active.
 
-  It guards every write that acts on a person: profile edit, deactivate and reactivate, personnel
-  number, password reset (single and bulk), role change, personal-info edit, balance and policy
-  edit, and filing a clearance form. Reads are exempt. Admin callers skip it. The relationship
-  clauses close an impersonation path: a helpdesk that could reset a manager's password could sign
-  in as them and approve their team's leave.
+  It guards every write that acts on a person: profile edit, deactivate and reactivate, password
+  reset (single and bulk), role change, personal-info edit, balance and policy edit, special-leave
+  grants, and filing a clearance form. Reads are exempt. Admin callers skip it. The relationship
+  and identity clauses close an impersonation path: a helpdesk that could reset a manager's or an
+  hr holder's password could sign in as them and approve their team's leave or sign a clearance row.
+  Manager is not an identity clause because managers sign through `profiles.manager_id` and
+  `departments.manager_id`. Those are set through `people` edit and `departments` edit, which D4
+  and D7 already guard. `security` is not an identity either: since `20261012120003` an approval
+  step may name only `manager`, `hr` or a person.
 
   The target's levels are computed from all their roles whether or not the target is active, so a
   deactivated account cannot be reactivated by someone below it.
 - **D5 — Assignment.** A caller may add or remove a role only when every permission in that role
   is at or below the caller's own level (`role_assign`). `manager` needs `role_manager` instead.
   `employee` carries no permissions and is assignable with `role_assign`. The same check applies to
-  the initial roles on Add Employee. The caller must also pass D4 on the target.
+  the initial roles on Add Employee. The caller must also pass D4 on the target. The identity
+  presets mirror D4: granting or removing `hr` needs `approval_steps` edit and `clearance` edit,
+  and granting or removing `finance` needs `clearance` edit, because their holders sign approval
+  steps and clearance rows. `admin` is never assignable (D1).
 - **D6 — Dependencies.** Some items only work when another is granted, because their screens read
   through RLS. The UI raises the dependency automatically and says so; `app_save_role` rejects a
   set that breaks the map. The map below comes from the read paths of each screen.
 
   | Item | Needs (at least Read only) | Why |
   |---|---|---|
-  | `people_create`, `personnel_no`, `passwords`, `role_manager`, `role_assign` | `people` | they live on the Employees screens |
+  | `people_create`, `passwords`, `role_manager`, `role_assign` | `people` | they live on the Employees screens |
+  | `role_manager` | also `leave_balances`, `calendar` | a Manager reads every balance and the calendar (`reads_*`), so whoever can make one must already read them |
   | `personal_info` | `people` | the personal-info list and import are keyed by person |
   | `clearance` at Allowed | `people` | the new-form setup reads `profiles` |
   | `departments` | `people` | members panel and manager picker read `profiles` |
@@ -95,12 +134,20 @@ checkboxes that show raw English slugs.
   | `leave_requests` | `people` | the archive joins `profiles` |
   | `approval_steps` | `people` | the page joins named approvers' `profiles` |
   | `reports` | `people`, `leave_balances`, `leave_requests` | reports are plain RLS selects |
+  | `absences` | `people`, `leave_requests` | the approved-absences board reads `leave_requests` joined to `profiles` |
+  | `special_leave` | `people`, `leave_balances` | the card sits on Edit Employee and adds days to a balance |
 
-  `clearance` at Read only (finance) and `calendar` need nothing: they read through SECURITY
-  DEFINER RPCs and the `team_leave_calendar` view.
+  `clearance` at Read only (finance), `calendar`, `finance` and `personal_info_own` need nothing:
+  they read through SECURITY DEFINER RPCs and the `team_leave_calendar` view, or (the last) act
+  on the caller's own row.
 - **D7 — No self-appointment.** A non-admin cannot set themselves as the manager of any department.
   Otherwise someone with `departments` could take the department-manager signature on another
   department's requests. FR-51 D9 already stops them changing their own department's manager.
+  Enforced in `enforce_department_update_scope`, on insert and update. The analogues (a `people`
+  editor who names themselves as a report's manager, an `approval_steps` editor who names
+  themselves approver, a `clearance` editor who names themselves signer, a `people_create`
+  holder who sets themselves as manager of a new hire) are not guarded; they are open questions
+  for the owner (`docs/TASKS.md`).
 
 ### Scope and model
 
@@ -136,20 +183,23 @@ Levels: `read` < `edit`. Absence means Not allowed. In the UI, Allowed = `edit`.
 |---|---|---|---|---|
 | Employees | `people` | R/E | Employees list and records, read-only | Edit name, hire date, department, direct manager, job title; deactivate and reactivate |
 | | `people_create` | E | — | Add employees (form, CSV import in Add mode) |
-| | `personnel_no` | E | — | Change a personnel number (the login code) |
 | | `passwords` | E | — | Reset passwords, bulk reset, print login slips |
 | | `role_manager` | E | — | Give or remove the Manager role |
 | | `role_assign` | E | — | Give or remove other roles (D5) |
 | | `personal_info` | R/E | View, CSV export | Correct, CSV import |
+| | `personal_info_own` | E | — | Edit one's own personal information (FR-63; D3 exception) |
 | | `clearance` | R/E | Every clearance form | File, edit rows, cancel; default rows |
 | Departments | `departments` | R/E | Departments page and members | Create, rename, set manager |
 | Leave | `leave_balances` | R/E | Anyone's balances and accrual policy | Opening balance, corrections, policy |
 | | `leave_accrual` | E | — | Post the monthly accrual for everyone |
+| | `special_leave` | E | — | Grant marriage or bereavement leave on Edit Employee (FR-65) |
 | | `leave_requests` | R/E | Request archive incl. private reason, signatures, print | Cancel someone else's request |
 | | `calendar` | R | Everyone's time-off on the calendar | — |
+| | `absences` | R | The approved-absences board (FR-56) | — |
 | | `reports` | R | HR reports | — |
-| Approval chain | `approval_steps` | R/E | View the steps | Add, remove, reorder, turn on and off |
-| Settings | `work_settings` | R/E | View | Weekly days off, working hours, hourly cap, enforce approval order |
+| Finance | `finance` | R | Finance's list of completed approvals with per diem (FR-62) | — |
+| Approval chain | `approval_steps` | R/E | View the steps | Add, remove, reorder, turn on and off, enforce the approval order |
+| Settings | `work_settings` | R/E | View | Weekly days off, working hours, hourly cap (not hours per day, which stays admin-only) |
 | | `holidays` | R/E | View | Add, edit, delete, CSV upload |
 
 ### Preset seeds (= today's behaviour)
@@ -164,18 +214,28 @@ Levels: `read` < `edit`. Absence means Not allowed. In the UI, Allowed = `edit`.
 | `departments` | edit | — | — |
 | `leave_balances` | edit | read | — |
 | `leave_accrual` | edit | — | — |
+| `special_leave` | edit | — | — |
 | `leave_requests` | read | read | — |
 | `calendar` | read | read | — |
+| `absences` | read | read | — |
 | `reports` | read | — | — |
+| `finance` | read | — | read |
 | `approval_steps` | edit | — | — |
-| everything else | — | — | — |
+| `work_settings` | edit | — | — |
+| `holidays` | edit | — | — |
+| `passwords`, `role_assign`, `personal_info_own` | — | — | — |
 
-The data each preset can reach is unchanged. Two visible differences follow from the screens now
+`personal_info_own` is on no preset: the admin holds it implicitly, and the switch is per role.
+HR's `work_settings`, `holidays` and `finance` rows follow main's FR-59 and FR-62; `special_leave`,
+`absences` and `finance` read follow owner ruling (a) of 2026-10-13, so the HR preset covers what
+Security and Finance hold and D4 lets HR act on those holders.
+
+The data each preset can reach is unchanged. Visible differences follow from the screens now
 following permissions:
 - Security gains read-only access to Manage › Employees and the request archive, which show data
   their RLS already allowed.
-- The "Enforce approval order" switch moves under `work_settings`. It stays admin-only in practice
-  because no preset has `work_settings`.
+- The "Enforce approval order" switch belongs to `approval_steps` edit (see D2), so HR keeps it.
+  `hours_per_day` stays admin-only.
 
 Behaviour changes for hr:
 - D7: hr can no longer make themselves a department's manager.
@@ -219,6 +279,8 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
   roles, regardless of whether the user is active, and returns 2 for the admin.
 - `has_perm(uid, key, level)`: `is_active(uid)`, and either `is_admin(uid)` or
   `perm_level(uid, key) >=` the requested level.
+- `reads_people`, `reads_balances`, `reads_calendar(uid)`: `manager` role OR the matching read
+  (`people`, `leave_balances`, `calendar`). They replace `can_read_all` in the broad-read policies.
 - `has_permission(uid, text)` is kept as an alias for the legacy keys:
 
   | Legacy key | New key and level |
@@ -229,13 +291,22 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
   | `roles.manager` | `role_manager` edit |
   | `personal_info.view` | `personal_info` read |
   | `personal_info.edit` | `personal_info` edit |
+  | `personal_info.edit_own` | `personal_info_own` edit |
+  | `special_leave.grant` | `special_leave` edit |
   | `separations.manage` | `clearance` edit |
   | `separations.view` | `clearance` read |
+  | `settings.edit` | `work_settings` edit AND `holidays` edit |
+  | `absences.view` | `absences` read |
+  | `finance.view` | `finance` read |
 
   It is dropped in a later release.
+- `caller_company()`: the active caller's company; scopes the config write policies and the role
+  RPCs.
 - `can_act_on(caller, target)`: D4.
 - `role_within(role_id, uid)`: D5. True when every row of the role is at or below the user's level.
-  For `manager` it checks `role_manager`. For `employee` it is true. For `admin` it is false.
+  For `manager` it checks `role_manager`. For `employee` it requires `role_assign` and is otherwise
+  true (the role has no rows). For `admin` it is false. False for an unknown role or another
+  company's.
 
 ### Policies and gates that change
 
@@ -253,24 +324,32 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
 | Object | New gate |
 |---|---|
 | `enforce_profile_update_scope`, editor branch | `people` edit + `can_act_on` |
-| `enforce_profile_update_scope`, `personnel_no` column | `personnel_no` + `can_act_on`, admin otherwise |
+| `enforce_profile_update_scope`, password branch | `passwords` + `can_act_on`; may change nothing but the `must_change_password` flag a reset sets |
+| `enforce_profile_update_scope`, `personnel_no`, `employee_code`, `company_id` | admin only, as before |
 | `profiles_update` | `people` edit (row level) |
 | `departments_insert_editor`, `departments_update_editor` | `departments` edit |
 | `enforce_department_update_scope` | as before, plus D7 |
 | `allocate_leave`, `set_leave_balance`, `set_employee_leave_policy` | `leave_balances` edit + `can_act_on` |
+| `private.special_leave_target` (grant and revoke special leave) | `special_leave` edit + `can_act_on`; never on oneself or an admin unless the caller is the admin |
+| `special_leave_grants` SELECT | own rows, or `special_leave` edit in the caller's company |
 | `accrue_employee_leave` | `is_manager_of` OR `leave_balances` read |
 | `accrue_all_leave` | `leave_accrual` |
-| `approval_steps` I/U/D policies, `search_approver_candidates` | `approval_steps` edit |
-| `work_settings` I/U/D policies | `work_settings` edit; this includes `approval_order_enforced`, so no column guard is needed |
-| `holidays` I/U/D policies | `holidays` edit |
-| `employee_personal_info_select`, `app_export_personal_info` | `personal_info` read |
-| `employee_personal_info_update`, `app_import_personal_info` | `personal_info` edit + `can_act_on` per row |
+| `approval_steps` I/U/D policies, `search_approver_candidates` | `approval_steps` edit; the I/U/D policies also require `company_id = private.caller_company()` |
+| `work_settings` I/U policies | `work_settings` edit in the caller's company. `work_settings_enforce_scope` keeps `hours_per_day` admin-only and lets only `approval_steps` edit (or the admin) change `approval_order_enforced` |
+| `work_settings` delete policy | admin, in the caller's company |
+| `app_set_approval_order_enforced(boolean)` | `approval_steps` edit or admin; flips the switch without `work_settings` edit |
+| `holidays` I/U/D policies | `holidays` edit in the caller's company |
+| `employee_personal_info_select`, `app_export_personal_info` | own row, or `personal_info` read in the caller's company |
+| `employee_personal_info_update`, `app_import_personal_info` | own row with `personal_info_own` edit; any other row with `personal_info` edit + `can_act_on` per row (the admin skips `can_act_on`) |
 | `can_read_separation` | `clearance` read |
 | `separation_manageable`, `app_save_separation_units`, `app_separation_warnings` | `clearance` edit (+ `can_act_on` on the leaver) |
 | `app_set_employee_password`, `app_bulk_set_employee_passwords` | `passwords` + `can_act_on` per target; admin unchanged |
-| `app_create_employee` | `people_create` (replaces the hr branch); new optional `p_role_ids uuid[]` checked with D5; never `admin` |
+| `app_create_employee` | `people_create` (replaces the hr branch); new optional `p_role_ids uuid[]` checked with D5 through `app_set_user_role_ids`; never `admin` |
 | `app_bulk_create_employees`, `app_bulk_import_employees` Add mode | `people_create`; Update and Replace stay admin (D2) |
-| `cancel_leave_request` | owner, OR `leave_requests` edit (replaces the admin-only branch) |
+| `cancel_leave_request` | owner, OR `leave_requests` edit in the caller's company and never on the admin (replaces the admin-only branch) |
+| `request_approval_progress` | whoever reads the request: own, `is_manager_of`, or `leave_requests` read |
+| `finance_approved_requests` | `finance` read, through the legacy alias `finance.view` |
+| the approved-absences board (`getAbsences` action) | `absences` read; the rows come through `leave_requests_select` |
 
 **Unchanged:**
 - Approval signing in `approve_leave_request` / `reject_leave_request` (identity and relationship;
@@ -291,10 +370,17 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
   `role.create` / `role.update` with the before and after permissions.
 - `app_delete_role(p_id)`: admin only, custom roles only. Deletes the assignments and the role.
   Audit: `role.delete` with the holder list. Returns the removed holders.
-- `app_set_user_roles(p_user_id uuid, p_role_ids uuid[])`: the new signature. Admin may set any
-  role except `admin`, which must be unchanged. Otherwise: D3 + D4 + D5 on each added or removed
-  role. Audit: `set_roles` with role names. The old `(uuid, app_role[])` signature stays for the
-  deploy window. It touches built-in rows only, keeps custom rows, and never changes `admin`.
+- `app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[])`: the new role-set RPC (not a
+  `uuid[]` overload of `app_set_user_roles`, see the amendments). Admin may set any role except
+  `admin`, which must be unchanged for everyone. Otherwise: the caller needs `role_assign` or
+  `role_manager`, then D3 + D4 on the target and D5 on each added or removed role, with the
+  identity-preset rule for `hr` and `finance`. Locks the caller's and target's profile rows in id
+  order, like `app_transfer_admin`. Audit: `set_roles` with role names. The old
+  `app_set_user_roles(uuid, app_role[])` stays for the deploy window and delegates: it touches
+  built-in rows only, keeps custom rows, and never changes `admin`.
+- `app_set_approval_order_enforced(p_enforced boolean)`: `approval_steps` edit or admin. Upserts
+  the company's `work_settings` row. Main's `work_settings_audit_change` trigger writes the audit
+  row.
 - `app_transfer_admin(p_target uuid, p_personnel_no text, p_password text)`: D1. Audit:
   `admin.transfer`.
 - `app_my_permissions()`: `{key: level}` for the caller. Fallback when the JWT claim is missing.
@@ -341,9 +427,13 @@ Replace need admin.
 | Request archive | `leave_requests` read |
 | Approval steps | `approval_steps` read |
 | Reports | `reports` read |
-| Manage group, mobile Manage tab | any of the above |
+| Absences (admin only; other holders see the board on Home) | admin |
+| Finance | `finance` read: a Manage item for a caller who already has a Manage group, else a bottom tab |
+| Manage group, mobile Manage tab | any of the above except Finance |
 | Settings | admin OR `work_settings` read OR `holidays` read |
 | Settings › Roles tab | admin |
+
+The old HR `/manage/settings` page forwards to `/settings` for anyone who sees Settings.
 
 Personal-info page: `personal_info` read; its import: edit. Employee import page: `people_create`.
 Clearance buttons: `clearance` read / edit.

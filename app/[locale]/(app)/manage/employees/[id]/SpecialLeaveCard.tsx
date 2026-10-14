@@ -3,9 +3,10 @@
 /**
  * «مرخصی خارج از لیست» (FR-65) at the bottom of Edit Employee: a special_leave
  * holder grants 3 extra days of annual leave for a first marriage (a checkbox,
- * offered while personal info says single or the caller cannot read it) or for each death of a close relative
- * (a button, with the grants listed). Unticking / removing reverses a grant
- * made by mistake. The database enforces every rule; this only reflects them.
+ * offered while personal info says single or the caller cannot read it) or for
+ * each death of a close relative (a button, with the grants listed). Unticking
+ * or removing reverses a grant made by mistake. The database enforces every
+ * rule; this only reflects them.
  */
 
 import { useState, useTransition } from 'react';

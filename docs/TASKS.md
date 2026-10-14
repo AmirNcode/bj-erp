@@ -44,8 +44,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   first login (training session) will hit it. Onboard in groups, or raise
   `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` (default 300) in the VM `.env` and recreate `auth`. See the
   comment in `deploy/docker-compose.yml`.
-- ☐ **Limited admin role** for on-site helpdesk: reset passwords (and maybe create employees)
-  without full admin. Today only `admin` can reset passwords.
 - ☐ **SMS notifications** for approvers (owner plans an SMS service). Replaces the generic
   notifications item below once a provider is chosen.
 
@@ -54,24 +52,22 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - ☐ **Encrypt backups** now that they hold national IDs and bank details (FR-53): the Liara backup
   copies on the owner's Mac belong on an encrypted disk (owner action), or encrypt the dump files.
 
-- ☐ **Admin-configurable roles and permissions** (owner, 2026-10-07). *2026-10-12 client note for
-  FR-55 (branch `fr55-configurable-roles`, rebase onto main first):* the **security** preset only
-  reads approved absences (`absences.view`) and never approves; **hr** gains `settings.edit`,
-  **finance** gains `finance.view` (keys added on main in `20261012120004`); approval steps may no
-  longer name the security or admin roles. **Add a per-role switch "may edit own personal
-  information"** = key `personal_info.edit_own` (FR-63, `20261012130001`): off for every preset
-  except admin; employees otherwise only view their own personal info. Admin creates a role (name),
-  ticks a permission level per area (not allowed / read only / edit), and the role appears in the
-  Edit Employee role checkboxes, so granting access no longer needs a migration. Seam already in
-  place: `private.has_permission(uid, key)` (FR-51) — replace its body with a table lookup, move the
-  older hard-coded `has_role(uid,'hr')` grants onto it, and replace the fixed `app_role` enum with a
-  roles table.
+- ☐ **FR-55 follow-ups** (release `20261013200001`..`200005`):
+  - After the FR-55 release is live, drop the `private.has_permission` legacy keys and
+    `app_set_user_roles(uuid, app_role[])`, and `private.can_read_all`.
+  - After deploy: check Liara has exactly one admin (the migration refuses otherwise).
+  - Admin lockout has no recovery path (D1, owner accepted).
+  - SELECT policies on `holidays`, `work_settings` and `approval_steps` are company-blind (fine with
+    one company per deploy; the write policies are company-scoped).
+  - The Reports page pulse is identity-scoped (admin and hr company-wide); a custom Reports-only role
+    sees a team pulse.
+  - Owner questions pending, the D7 analogues: a `people` editor setting themselves as a report's
+    manager (and a Manager doing so for their own reports), an `approval_steps` editor naming
+    themselves as approver, a `clearance` editor naming themselves as signer, a `people_create`
+    holder setting themselves as manager of a new hire.
 
 - ☐ FR-8: leave types cannot be added or edited in the app. Only the seeded types exist.
 - ☐ Rejection reason: preset reasons in a dropdown, keeping free text as "other" (owner's plan).
-- ☐ The role checkboxes on both employee forms show raw English slugs (`admin`, `hr`, …) even in
-  Farsi. The e2e `createEmployee` helper and `hr-employee-admin.spec` select them by label text, so
-  add `data-testid`s before translating them.
 - ☐ Ask the client whether the daily work errand has its own paper form. It reuses BJ-F 50207
   today.
 - ☐ Optional: extend `jalali_months` below 1400 for historical leave records. Regenerate with

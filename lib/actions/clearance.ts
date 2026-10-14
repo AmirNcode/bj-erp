@@ -51,7 +51,7 @@ export type ClearanceOverview = {
   awaiting: ClearanceListItem[];
   /** The caller's own form (as the leaver), newest first. */
   mine: ClearanceListItem[];
-  /** Everything else the caller may read: all forms for admin/hr/finance, otherwise the ones they sign. */
+  /** Everything else the caller may read: all forms for `clearance` read holders (admin, hr, finance presets), otherwise the ones they sign. */
   others: ClearanceListItem[];
   canManage: boolean;
   canViewAll: boolean;
@@ -281,7 +281,7 @@ export async function getClearanceSignature(
 export type PersonOption = { id: string; name: string; personnelNo: string | null; departmentId: string | null };
 export type DepartmentOption = { id: string; nameFa: string; nameEn: string; managerId: string | null };
 
-/** Pickers for the new-form, edit-rows and default-rows screens (admin / hr). */
+/** Pickers for the new-form, edit-rows and default-rows screens (`clearance` edit). */
 export async function getClearanceSetup(): Promise<
   | {
       ok: true;

@@ -4,8 +4,9 @@
  * Leave balances, allocations and the accrual policy. Balances accrue lazily:
  * every read first posts any months the employee has earned (see shared.ts).
  *
- * Admin and hr both manage balances and policies (FR-43); the database also
- * refuses a non-admin doing it to their own record.
+ * Balances and policies need `leave_balances` edit (FR-55; the admin, the hr
+ * preset), and the database also refuses a non-admin doing it to their own
+ * record or to anyone `can_act_on` rules out (D3/D4).
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -247,11 +248,11 @@ export async function getEmployeePolicies(
   };
 }
 
-/** Admin "Post accruals now". Returns what actually happened, for the UI to show. */
+/** "Post accruals now" (`leave_accrual` edit). Returns what actually happened, for the UI to show. */
 export async function runAllAccruals(): Promise<
   { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
 > {
-  // FR-51: hr posts accruals too (accrue_all_leave checks accruals.run).
+  // FR-55: accrue_all_leave checks leave_accrual edit (FR-51's accruals.run).
   const c = await requireCaller({ perm: ['leave_accrual', 'edit'] });
   if (!c.ok) return c;
 

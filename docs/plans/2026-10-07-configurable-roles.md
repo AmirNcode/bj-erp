@@ -1,5 +1,9 @@
 # Configurable roles and permissions (FR-55) Implementation Plan
 
+> **Built 2026-10-13.** Migration names below (`20261007160001`..`160005`) were renamed to
+> `20261013200001`..`200005` when the branch was rebased onto main; the catalog grew from 16 to 20
+> items and `personnel_no` was dropped. The spec's Status section lists every amendment.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 > Repo convention: **no commits unless Amir asks**. Every "Commit" step below is "stop, run the
 > listed checks, report"; Amir commits.
