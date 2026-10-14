@@ -302,7 +302,8 @@
       "errorEmpty": "No signature found in the image. Sign on plain paper with a dark pen and try again.",
       "errorTooLarge": "This image cannot be made small enough. Try a closer, simpler photo of the signature.",
       "errorUnsupported": "This file could not be read as an image."
-    }
+    },
+    "settingsHint": "Work week, holidays and other company settings"
   },
   "approvals": {
     "title": "Approvals",
@@ -1396,7 +1397,12 @@
   },
   "permissions": {
     "sections": {
-      "finance": "Finance"
+      "finance": "Finance",
+      "employees": "Employees",
+      "departments": "Departments",
+      "leave": "Leave",
+      "approvalChain": "Approval chain",
+      "settings": "Company settings"
     },
     "items": {
       "personal_info_own": {
@@ -1414,7 +1420,154 @@
       "finance": {
         "label": "Finance",
         "description": "See every fully approved request with its per diem, and export it."
+      },
+      "people": {
+        "label": "Employee records",
+        "description": "Read: the employee list and records. Allowed: edit name, hire date, department, manager, title; deactivate."
+      },
+      "people_create": {
+        "label": "Add employees",
+        "description": "Add people one by one or from a CSV (Add new only)."
+      },
+      "passwords": {
+        "label": "Passwords",
+        "description": "Reset passwords and print login slips."
+      },
+      "role_manager": {
+        "label": "Manager role",
+        "description": "Give or remove the Manager role."
+      },
+      "role_assign": {
+        "label": "Assign roles",
+        "description": "Give or remove roles that need no more access than you have."
+      },
+      "personal_info": {
+        "label": "Personal information",
+        "description": "Read: view and export. Allowed: correct and import."
+      },
+      "clearance": {
+        "label": "Clearance forms",
+        "description": "Read: every form. Allowed: file, edit, cancel; default rows."
+      },
+      "departments": {
+        "label": "Departments",
+        "description": "Read: departments and members. Allowed: create, rename, set manager."
+      },
+      "leave_balances": {
+        "label": "Leave balances",
+        "description": "Read: anyone's balances and accrual policy. Allowed: opening balances, corrections, policy."
+      },
+      "leave_accrual": {
+        "label": "Monthly accrual",
+        "description": "Post the monthly accrual for everyone."
+      },
+      "leave_requests": {
+        "label": "Request archive",
+        "description": "Read: every request with its reason and signatures, and print. Allowed: cancel someone else's request."
+      },
+      "calendar": {
+        "label": "Company calendar",
+        "description": "See everyone's time off."
+      },
+      "reports": {
+        "label": "Reports",
+        "description": "HR reports."
+      },
+      "approval_steps": {
+        "label": "Approval steps",
+        "description": "Read: view the steps. Allowed: add, remove, reorder, turn on and off, and decide whether their order binds."
+      },
+      "work_settings": {
+        "label": "Work week",
+        "description": "Weekly days off, working hours, hourly cap."
+      },
+      "holidays": {
+        "label": "Official holidays",
+        "description": "Add, edit, delete and upload holidays."
       }
+    },
+    "levels": {
+      "edit": "Allowed",
+      "read": "Read only",
+      "none": "Not allowed",
+      "noRead": "This item has no read-only level",
+      "noEdit": "This item can only be viewed"
+    },
+    "summary": {
+      "custom": "Custom",
+      "allow": "Allowed",
+      "read": "Read only",
+      "none": "Not allowed"
+    },
+    "raisedBy": "Turned on because {item} needs it",
+    "loweredBy": "Turned off because it needs {item}"
+  },
+  "rolesAdmin": {
+    "tabs": {
+      "general": "General",
+      "roles": "Roles"
+    },
+    "title": "Roles",
+    "intro": "Who can do what. A role covers the whole company, but never its holder's own record or the admin.",
+    "newRole": "New role",
+    "newTitle": "New role",
+    "holders": "{count, plural, =0 {No one} one {# person} other {# people}}",
+    "builtIn": "Built-in",
+    "adminRow": "Full access. Exactly one person holds it.",
+    "noAdmin": "No one",
+    "managerNote": "Built-in, follows the reporting line",
+    "employeeNote": "Everyone",
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "transfer": "Transfer admin"
+    },
+    "nameLabel": "Role name",
+    "nameHint": "English letters, digits, space, & / -",
+    "nameInvalid": "Use English letters, digits, space, & / or -, start with a letter or digit, at most 40 characters.",
+    "nameLocked": "A built-in role keeps its name.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Role saved.",
+    "cancel": "Cancel",
+    "unsaved": "You have unsaved changes. Leave without saving?",
+    "errorLabel": "Error",
+    "adminOnly": {
+      "title": "Admin only",
+      "intro": "No role can hold these. They stay with the admin.",
+      "items": {
+        "roleEditor": "Create, edit and delete roles",
+        "adminTransfer": "Give or transfer admin",
+        "approvalOverride": "Fill any approval step, and sign their own request",
+        "bulkImport": "Bulk import in Update and Replace modes",
+        "auditLog": "The audit log",
+        "devTools": "Developer tools",
+        "hoursPerDay": "Hours per working day"
+      }
+    },
+    "delete": {
+      "title": "Delete the role {name}?",
+      "body": "{count, plural, =0 {No one holds this role.} one {# person holds this role. They lose it.} other {# people hold this role. They all lose it.}}",
+      "loading": "Loading holders…",
+      "copy": "Copy personnel numbers",
+      "copied": "Personnel numbers copied.",
+      "copyFailed": "Could not copy. Select the numbers by hand.",
+      "confirm": "Delete",
+      "deleting": "Deleting…",
+      "deleted": "Role deleted.",
+      "cancel": "Cancel"
+    },
+    "transfer": {
+      "title": "Transfer admin",
+      "intro": "Hand full access to another active employee.",
+      "person": "New admin",
+      "personnelNo": "Type their personnel number to confirm",
+      "password": "Your password",
+      "warning": "You will lose admin. Only the new admin can give it back.",
+      "confirm": "Transfer admin",
+      "transferring": "Transferring…",
+      "cancel": "Cancel",
+      "loadFailed": "Could not load the employee list."
     }
   }
 }

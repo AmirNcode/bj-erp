@@ -73,6 +73,32 @@ export async function deleteRole(
   };
 }
 
+export type TransferCandidate = { id: string; name: string; personnelNo: string | null };
+
+/**
+ * Who the admin can hand admin to: active people of the caller's company other
+ * than the caller, ordered by personnel number. Admin only. The RPC re-checks
+ * every condition; this only fills the Transfer admin person search.
+ */
+export async function listTransferCandidates(): Promise<
+  { ok: true; people: TransferCandidate[] } | DbErrorResult
+> {
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase
+    .from('profiles')
+    .select('id, full_name, personnel_no')
+    .eq('company_id', c.companyId)
+    .eq('active', true)
+    .neq('id', c.user.id)
+    .order('personnel_no', { ascending: true });
+  if (error) return dbErr(error.message);
+  return {
+    ok: true,
+    people: (data ?? []).map((p) => ({ id: p.id, name: p.full_name, personnelNo: p.personnel_no })),
+  };
+}
+
 /**
  * Hands the admin role to another active employee. Needs the caller's own
  * password and the target's personnel number as a typo guard. The caller stops

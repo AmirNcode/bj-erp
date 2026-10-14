@@ -133,3 +133,22 @@ describe('fieldForDbError', () => {
     expect(fieldForDbError(raw)).toBe('personnel_no');
   });
 });
+
+describe('fieldForDbError FR-55 roles screens', () => {
+  it('puts role-name refusals under the name input', () => {
+    expect(fieldForDbError('role name already used')).toBe('role_name');
+    expect(fieldForDbError('invalid role name')).toBe('role_name');
+    expect(
+      fieldForDbError('duplicate key value violates unique constraint "roles_company_name_uniq"')
+    ).toBe('role_name');
+  });
+
+  it('puts the transfer refusals under their inputs', () => {
+    expect(fieldForDbError('personnel number does not match an active employee')).toBe('personnel_no');
+    expect(fieldForDbError('wrong password')).toBe('password');
+  });
+
+  it('maps the index race to the same message as the pre-check', async () => {
+    expect((await dbErr('duplicate key value violates unique constraint "roles_company_name_uniq"')).error).toBe('roleNameUsed');
+  });
+});

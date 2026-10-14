@@ -7,7 +7,7 @@
  * policies on work_settings / holidays. The form never offers hours per day
  * (admin-only, main's trigger) or the approval-order switch (approval_steps
  * edit, on Manage › Approval steps). Departments, approval steps and accrual
- * live under Manage.
+ * live under Manage. The admin also sees the General | Roles tabs (FR-55).
  */
 export const dynamic = 'force-dynamic';
 
@@ -19,6 +19,7 @@ import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { getCompanyHolidays } from '@/lib/actions/settings';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
+import { SettingsTabs } from './_components/SettingsTabs';
 
 type Props = { params: Promise<{ locale: string }> };
 
@@ -60,6 +61,8 @@ export default async function SettingsPage({ params }: Props) {
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+      {/* FR-55: General | Roles, for the admin only (the role editor is admin-only, D2). */}
+      {roles.includes('admin') && <SettingsTabs locale={locale} active="general" />}
       <h1 className="text-2xl font-bold tracking-tight">{tNav('settings')}</h1>
 
       <WorkSettingsForm

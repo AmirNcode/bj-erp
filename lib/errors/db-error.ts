@@ -18,7 +18,7 @@ import { getTranslations } from 'next-intl/server';
  * place that knows which raw database message means which field, so a future
  * action raising the same message gets the same placement for free.
  */
-export type ErrorField = 'personnel_no';
+export type ErrorField = 'personnel_no' | 'role_name' | 'password';
 
 /** The shape every failing server action returns. `field` is optional. */
 export type DbErrorResult = { ok: false; error: string; field?: ErrorField };
@@ -241,14 +241,20 @@ const RULES: Rule[] = [
   // catch-all below, which would otherwise swallow the "not allowed ..." ones.
   { re: /^only the admin can (?:edit|delete|list) role/, key: 'rolesAdminOnly' },
   { re: /^only the admin can transfer admin$/, key: 'transferAdminOnly' },
-  { re: /^invalid role name$/, key: 'roleNameInvalid' },
-  { re: /^role name already used$/, key: 'roleNameUsed' },
+  { re: /^invalid role name$/, key: 'roleNameInvalid', field: 'role_name' },
+  { re: /^role name already used$/, key: 'roleNameUsed', field: 'role_name' },
+  // Two concurrent saves of the same name race past the RPC's pre-check to the index.
+  { re: /duplicate key value.*roles_company_name_uniq/, key: 'roleNameUsed', field: 'role_name' },
   { re: /^role not found$/, key: 'roleNotFound' },
   { re: /^built-in role cannot be edited$/, key: 'roleBuiltInLocked' },
   { re: /^built-in roles cannot be deleted$/, key: 'roleBuiltInNoDelete' },
-  { re: /^wrong password$/, key: 'wrongCurrentPassword' },
+  { re: /^wrong password$/, key: 'wrongCurrentPassword', field: 'password' },
   { re: /^you already hold admin$/, key: 'alreadyAdmin' },
-  { re: /^personnel number does not match an active employee$/, key: 'transferTargetMismatch' },
+  {
+    re: /^personnel number does not match an active employee$/,
+    key: 'transferTargetMismatch',
+    field: 'personnel_no',
+  },
   { re: /^admin is moved only by Transfer admin$/, key: 'adminMovesByTransfer' },
   { re: /^not allowed on this employee$/, key: 'accessAboveYours' },
   // Bulk password reset, per target: "not allowed on <personnel no>".
