@@ -41,6 +41,7 @@ const { grantSpecialLeave, revokeSpecialLeave } = await import('@/lib/actions/sp
 const { getApprovedAbsences } = await import('@/lib/actions/absences');
 const { getFinanceApprovals } = await import('@/lib/actions/finance');
 const { upsertHoliday, bulkUpsertHolidays, deleteHoliday } = await import('@/lib/actions/settings');
+const { importEmployees } = await import('@/lib/actions/employees');
 
 beforeEach(() => {
   callerPerms = {};
@@ -104,5 +105,38 @@ describe.each(CASES)('$name', ({ run, allowed, refused }) => {
     callerPerms = refused;
     expect((await run()).ok).toBe(false);
     expect(touched).toEqual([]);
+  });
+});
+
+// I2: an opening balance in a bulk import is leave_balances edit, as on the Add Employee form.
+describe('importEmployees: opening balances need leave_balances edit', () => {
+  const input = (balance: number) => ({
+    mode: 'add' as const,
+    rows: [{
+      full_name: 'A', personnel_no: '9990000936', job_title: null, role: 'employee' as const, department_code: 'QC',
+      supervisor_personnel_no: null, manager_personnel_no: null, hire_date: null, balance_minutes: balance,
+    }],
+    departments: [],
+    balanceAsOf: '2026-10-01',
+    overwriteBalances: false,
+    deactivate: [],
+    reassign: [],
+    deleteDepartments: [],
+  });
+  const clerk: Perms = { people: 'read', people_create: 'edit' };
+
+  it('refuses a non-zero balance without it, before the database', async () => {
+    callerPerms = clerk;
+    expect(await importEmployees(input(480))).toMatchObject({ ok: false, error: 'openingBalanceNotAllowed' });
+    expect(touched).toEqual([]);
+  });
+  it('imports zero balances without it', async () => {
+    callerPerms = clerk;
+    expect((await importEmployees(input(0))).ok).toBe(true);
+    expect(touched).toEqual(['app_bulk_import_employees']);
+  });
+  it('imports a balance with it', async () => {
+    callerPerms = { ...clerk, leave_balances: 'edit' };
+    expect((await importEmployees(input(-480))).ok).toBe(true);
   });
 });

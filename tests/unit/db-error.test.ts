@@ -26,6 +26,10 @@ describe('dbErr bare permission message', () => {
 describe('dbErr FR-55 role messages', () => {
   const msg = async (raw: string) => (await dbErr(raw)).error;
 
+  it('maps the bulk opening-balance refusal before the generic catch-all (I2)', async () => {
+    expect(await msg('not allowed to set opening balances')).toBe('openingBalanceNotAllowed');
+  });
+
   it('maps the role-editing refusals before the generic catch-all', async () => {
     expect(await msg('only the admin can edit roles')).toBe('rolesAdminOnly');
     expect(await msg('only the admin can delete roles')).toBe('rolesAdminOnly');

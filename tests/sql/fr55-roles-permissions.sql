@@ -1477,6 +1477,117 @@ select pg_temp.expect('… one row with the column defaults and the switch on, u
 select pg_temp.try_su(format('delete from public.work_settings where company_id = %s', pg_temp.id('company')));
 select pg_temp.try_su('insert into public.work_settings select * from ws_saved');
 
+-- ── final review fixes (I1, I2, M8) ─────────────────────────────────────────
+-- Fixtures: a self-service holder, callers with and without personal-info
+-- power, an onboarding clerk without leave_balances, a plain target.
+do $$
+declare
+  r record;
+  v_role uuid;
+begin
+  for r in
+    select * from (values
+      ('selfsvc',    'SelfService', '{"personal_info_own":"edit"}'::jsonb,                                   '9990000931'),
+      ('assigner',   'Assigner',    '{"people":"edit","role_assign":"edit","personal_info":"edit"}'::jsonb, '9990000932'),
+      ('helpassign', 'HelpAssign',  '{"people":"read","passwords":"edit","role_assign":"edit"}'::jsonb,     '9990000933'),
+      ('onboarder',  'Onboarder',   '{"people":"read","people_create":"edit"}'::jsonb,                      '9990000934'),
+      ('plain2',     null,          null::jsonb,                                                            '9990000935')
+    ) as t(k, rname, perms, code)
+  loop
+    insert into fx values (r.k, gen_random_uuid());
+    insert into auth.users (id, email, encrypted_password)
+      values ((select id from fx where k = r.k), r.code || '@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+    insert into public.profiles (id, company_id, employee_code, full_name, department_id, active, personnel_no, must_change_password)
+      values ((select id from fx where k = r.k), (select id from fx where k = 'company'), r.code, 'FR55 ' || r.k,
+              (select id from fx where k = 'dept'), true, r.code, false);
+    insert into public.user_roles (user_id, role) values ((select id from fx where k = r.k), 'employee');
+    if r.rname is not null then
+      insert into public.roles (company_id, kind, name)
+        values ((select id from fx where k = 'company'), 'custom', r.rname) returning id into v_role;
+      insert into public.role_permissions select v_role, key, value #>> '{}' from jsonb_each(r.perms);
+      insert into public.user_roles (user_id, role_id) values ((select id from fx where k = r.k), v_role);
+      insert into fx values ('r_' || r.k, v_role);
+    end if;
+  end loop;
+end $$;
+
+-- I1: personal_info_own is self-only. A caller with personal_info edit (HR)
+-- covers it on someone else; a caller with no personal-info power does not.
+select pg_temp.expect('I1: hr acts on a SelfService holder; helpdesk does not',
+  (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='selfsvc'))::text
+       || private.can_act_on((select id from fx where k='help'), (select id from fx where k='selfsvc'))::text), 'truefalse');
+select pg_temp.expect('I1: hr edits a SelfService holder''s profile and gives them Manager',
+  pg_temp.try_as('hr', format('update public.profiles set job_title = %L where id = %s', 'I1', pg_temp.id('selfsvc'))) || ' '
+  || pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s, %s]::uuid[])', pg_temp.id('selfsvc'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_selfsvc'), pg_temp.role_id('company', 'manager'))),
+  'ok:1 ok:1');
+select pg_temp.expect('I1: helpdesk (passwords, no personal info) still may not reset a SelfService holder',
+  pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('selfsvc'), 'Temp!2026x')), '42501');
+select pg_temp.expect('I1: role_within SelfService: Assigner (personal_info edit) yes, HelpAssign (none) no',
+  (select private.role_within((select id from fx where k='r_selfsvc'), (select id from fx where k='assigner'))::text
+       || private.role_within((select id from fx where k='r_selfsvc'), (select id from fx where k='helpassign'))::text), 'truefalse');
+select pg_temp.expect('I1: HelpAssign may not give SelfService; Assigner may',
+  pg_temp.val_as('helpassign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])::text', pg_temp.id('plain2'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_selfsvc'))) || ' | '
+  || pg_temp.try_as('assigner', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain2'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_selfsvc'))),
+  '42501: not allowed to give or remove role SelfService | ok:1');
+-- Owner ruling (a) survives the switch being turned on for a preset.
+insert into public.role_permissions select id, 'personal_info_own', 'edit' from public.roles
+  where company_id = (select id from fx where k='company') and system_key = 'security';
+select pg_temp.expect('I1: with personal_info_own on Security, hr still acts on a Security holder; helpdesk does not',
+  (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='sec'))::text
+       || private.can_act_on((select id from fx where k='help'), (select id from fx where k='sec'))::text), 'truefalse');
+delete from public.role_permissions where permission = 'personal_info_own' and role_id = (select id from public.roles
+  where company_id = (select id from fx where k='company') and system_key = 'security');
+
+-- I2: bulk onboarding posts an opening balance only with leave_balances edit,
+-- like the single Add Employee form.
+select pg_temp.expect('I2: bulk add: Onboarder (people_create, no leave_balances) may not set an opening balance',
+  pg_temp.val_as('onboarder', format('select public.app_bulk_create_employees(%s, %L, %L, %L)::text', pg_temp.id('company'),
+    json_build_array(json_build_object('personnel_no', '9990000936', 'full_name', 'FR55 I2 a', 'password', 'Temp!2026x',
+      'department_code', (select code from public.departments where id = (select id from fx where k='dept')), 'balance_minutes', 150000))::text,
+    '[]', current_date)), '42501: not allowed to set opening balances');
+select pg_temp.expect('I2: bulk import add: Onboarder may not set an opening balance',
+  pg_temp.val_as('onboarder', format($q$select public.app_bulk_import_employees(%s, 'add', %L, '[]'::jsonb, %L, false, '{}'::uuid[], '[]'::jsonb, '{}'::text[])::text$q$,
+    pg_temp.id('company'), json_build_array(json_build_object('personnel_no', '9990000937', 'full_name', 'FR55 I2 b', 'password', 'Temp!2026x',
+      'department_code', (select code from public.departments where id = (select id from fx where k='dept')), 'balance_minutes', -480))::text, current_date)),
+  '42501: not allowed to set opening balances');
+select pg_temp.expect('I2: Onboarder still onboards with a zero balance (both RPCs)',
+  pg_temp.try_as('onboarder', format('select public.app_bulk_create_employees(%s, %L, %L, %L)', pg_temp.id('company'),
+    json_build_array(json_build_object('personnel_no', '9990000936', 'full_name', 'FR55 I2 a', 'password', 'Temp!2026x',
+      'department_code', (select code from public.departments where id = (select id from fx where k='dept')), 'balance_minutes', 0))::text,
+    '[]', current_date)) || ' '
+  || pg_temp.try_as('onboarder', format($q$select public.app_bulk_import_employees(%s, 'add', %L, '[]'::jsonb, %L, false, '{}'::uuid[], '[]'::jsonb, '{}'::text[])$q$,
+    pg_temp.id('company'), json_build_array(json_build_object('personnel_no', '9990000937', 'full_name', 'FR55 I2 b', 'password', 'Temp!2026x',
+      'department_code', (select code from public.departments where id = (select id from fx where k='dept'))))::text, current_date)),
+  'ok:1 ok:1');
+select pg_temp.expect('I2: hr (leave_balances edit) still sets an opening balance in bulk',
+  pg_temp.try_as('hr', format($q$select public.app_bulk_import_employees(%s, 'add', %L, '[]'::jsonb, %L, false, '{}'::uuid[], '[]'::jsonb, '{}'::text[])$q$,
+    pg_temp.id('company'), json_build_array(json_build_object('personnel_no', '9990000938', 'full_name', 'FR55 I2 c', 'password', 'Temp!2026x',
+      'department_code', (select code from public.departments where id = (select id from fx where k='dept')), 'balance_minutes', 480))::text, current_date)),
+  'ok:1');
+select pg_temp.expect('… the hire''s opening balance is 480 minutes',
+  (select coalesce(sum(l.delta_minutes), 0)::text from public.leave_ledger l join public.profiles p on p.id = l.employee_id
+    where p.personnel_no = '9990000938'), '480');
+
+-- M8 (D2): holding approval_steps edit is not the admin override.
+do $$
+begin
+  insert into public.leave_requests (employee_id, company_id, kind, errand_location, start_date, end_date,
+                                     requested_minutes, status, serial_year, serial_seq)
+  values ((select id from fx where k = 'plain2'), (select id from fx where k = 'company'), 'errand', 'FR55',
+          current_date + 6, current_date + 6, 480, 'pending', 1, 955003);
+end $$;
+select pg_temp.expect('M8 D2: Everything may not override approval steps; the admin may',
+  pg_temp.try_as('super', format('select public.approve_leave_request(%s, %L, true, true)',
+    quote_literal((select id from public.leave_requests where serial_year = 1 and serial_seq = 955003)),
+    'data:image/png;base64,iVBORw0KGgo' || repeat('A', 89))) || ' '
+  || pg_temp.try_as('admin', format('select public.approve_leave_request(%s, %L, true, true)',
+    quote_literal((select id from public.leave_requests where serial_year = 1 and serial_seq = 955003)),
+    'data:image/png;base64,iVBORw0KGgo' || repeat('A', 89))),
+  '42501 ok:1');
+
 -- transfer (D1). Must be the LAST section: it moves the real admin's role row
 -- onto a fixture admin whose password the test knows (all rolled back).
 do $$
@@ -1516,5 +1627,31 @@ select pg_temp.expect('after transfer: old admin refused at once (stale token ir
   pg_temp.try_as('adm_t', $q$select public.app_save_role(null, 'Late', '{}')$q$), '42501');
 select pg_temp.expect('after transfer: the new admin edits roles',
   pg_temp.try_as('emp2', $q$select public.app_save_role(null, 'Late', '{}')$q$), 'ok:1');
+-- M2: the bootstrap admin account has no personnel number and holds only admin.
+-- Its employee code confirms a transfer to it, and handing admin on from it
+-- leaves it the company's Employee role instead of no role at all.
+do $$
+begin
+  insert into fx values ('boot', gen_random_uuid());
+  insert into auth.users (id, email, encrypted_password)
+    values ((select id from fx where k='boot'), 'fr55boot@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+  insert into public.profiles (id, company_id, employee_code, full_name, active, personnel_no, must_change_password)
+    values ((select id from fx where k='boot'), (select id from fx where k='company'), 'fr55boot', 'FR55 boot', true, null, false);
+end $$;
+select pg_temp.expect('M2 transfer: to an account with no personnel number, its employee code confirms (a blank does not)',
+  -- emp2's password is the one the bulk reset above set.
+  pg_temp.try_as('emp2', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('boot'), '', 'Temp!2026y')) || ' '
+  || pg_temp.try_as('emp2', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('boot'), 'fr55boot', 'Temp!2026y')),
+  '22023 ok:1');
+select pg_temp.expect('… the account holds only admin, like the bootstrap admin',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+    where ur.user_id = (select id from fx where k='boot')), 'Admin');
+select pg_temp.expect('M2 transfer: the account hands admin back',
+  pg_temp.try_as('boot', format('select public.app_transfer_admin(%s, %L, %L)', pg_temp.id('emp2'), '9990000955', 'Fixture!2026')), 'ok:1');
+select pg_temp.expect('… it now holds Employee; emp2 is the one admin again',
+  (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
+    where ur.user_id = (select id from fx where k='boot')) || ' '
+  || (select count(*)::text || ':' || bool_and(user_id = (select id from fx where k='emp2'))::text
+        from public.user_roles where role = 'admin'), 'Employee 1:true');
 
 rollback;

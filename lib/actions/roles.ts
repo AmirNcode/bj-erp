@@ -87,21 +87,28 @@ export async function listTransferCandidates(): Promise<
   if (!c.ok) return c;
   const { data, error } = await c.supabase
     .from('profiles')
-    .select('id, full_name, personnel_no')
+    .select('id, full_name, personnel_no, employee_code')
     .eq('company_id', c.companyId)
     .eq('active', true)
     .neq('id', c.user.id)
     .order('personnel_no', { ascending: true });
   if (error) return dbErr(error.message);
+  // An account with no personnel number (the bootstrap admin) is confirmed by its
+  // employee code, as app_transfer_admin accepts; show that code in its place.
   return {
     ok: true,
-    people: (data ?? []).map((p) => ({ id: p.id, name: p.full_name, personnelNo: p.personnel_no })),
+    people: (data ?? []).map((p) => ({
+      id: p.id,
+      name: p.full_name,
+      personnelNo: p.personnel_no ?? p.employee_code,
+    })),
   };
 }
 
 /**
  * Hands the admin role to another active employee. Needs the caller's own
- * password and the target's personnel number as a typo guard. The caller stops
+ * password and the target's personnel number (their employee code when they have
+ * none) as a typo guard. The caller stops
  * being admin, so their session is refreshed to drop the stale admin claims.
  */
 export async function transferAdmin(input: {

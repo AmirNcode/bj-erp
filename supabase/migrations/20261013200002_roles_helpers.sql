@@ -94,8 +94,13 @@ create function private.can_act_on(p_caller uuid, p_target uuid) returns boolean
                    join public.profiles c on c.id = p_caller and c.company_id = t.company_id
                   where t.id = p_target)
      and not exists (select 1 from public.user_roles where user_id = p_target and role = 'admin')
+     -- personal_info_own is self-only (FR-63): on someone else it is covered by
+     -- personal_info edit, so HR keeps a self-service holder. A caller with no
+     -- personal-info power (a password helpdesk) still may not act on one.
      and not exists (select 1 from private.permission_keys() k
-                      where private.perm_level(p_target, k) > private.perm_level(p_caller, k))
+                      where private.perm_level(p_target, k) > private.perm_level(p_caller, k)
+                        and not (k = 'personal_info_own'
+                                 and private.perm_level(p_caller, 'personal_info') >= 2))
      and (not exists (select 1 from public.user_roles where user_id = p_target and role = 'manager')
           or private.has_perm(p_caller, 'role_manager', 'edit'))
      and (not exists (select 1 from public.departments where manager_id = p_target)
@@ -132,7 +137,10 @@ create function private.role_within(p_role_id uuid, p_uid uuid) returns boolean
            and not exists (
              select 1 from public.role_permissions rp
               where rp.role_id = r.id
-                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
+                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission)
+                -- As in can_act_on: personal_info edit covers the self-only personal_info_own.
+                and not (rp.permission = 'personal_info_own'
+                         and private.perm_level(p_uid, 'personal_info') >= 2))
     end
       from public.roles r
       join public.profiles u on u.id = p_uid and u.company_id = r.company_id

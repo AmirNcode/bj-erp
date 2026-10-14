@@ -1081,6 +1081,10 @@ begin
       nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
 
     v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    -- FR-55: an opening balance is leave_balances edit, as on the Add Employee form.
+    if v_bulk_hr and v_minutes <> 0 and not private.has_perm(v_caller, 'leave_balances', 'edit') then
+      raise exception 'not allowed to set opening balances' using errcode = '42501';
+    end if;
     if v_minutes < -366 * private.company_minutes_per_day(p_company_id)
        or v_minutes > 366 * private.company_minutes_per_day(p_company_id) then
       raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
@@ -1292,6 +1296,11 @@ begin
     end if;
 
     v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
+    -- FR-55: an opening balance is leave_balances edit, as on the Add Employee form
+    -- (a non-admin reaches only add mode).
+    if v_bulk_hr and v_minutes <> 0 and not private.has_perm(v_caller, 'leave_balances', 'edit') then
+      raise exception 'not allowed to set opening balances' using errcode = '42501';
+    end if;
     if v_minutes < -366 * v_mpd or v_minutes > 366 * v_mpd then
       raise exception 'row %: opening balance is out of range', v_i using errcode = '22023';
     end if;

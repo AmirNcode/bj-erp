@@ -155,10 +155,17 @@ export function applySectionBulk(
   return { perms: acc, raised, lowered };
 }
 
-/** D5 mirror: every level in `rolePerms` ≤ the caller's. */
+/**
+ * D4/D5 mirror (`private.can_act_on`'s key loop, `private.role_within`): every level in
+ * `rolePerms` ≤ the caller's. One exception: personal_info_own is self-only (FR-63), so on
+ * someone else it is covered by personal_info edit — HR keeps a self-service holder, while a
+ * caller with no personal-info power (a password helpdesk) still does not.
+ */
 export function isWithin(rolePerms: Perms, callerPerms: Perms): boolean {
   return (Object.keys(rolePerms) as PermKey[]).every(
-    (k) => levelValue(rolePerms[k]) <= levelValue(callerPerms[k])
+    (k) =>
+      levelValue(rolePerms[k]) <= levelValue(callerPerms[k]) ||
+      (k === 'personal_info_own' && can(callerPerms, 'personal_info'))
   );
 }
 

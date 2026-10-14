@@ -32,6 +32,9 @@ export default async function ImportPage({ params }: Props) {
   if (!can(perms, 'people_create')) {
     redirect(`/${locale}/manage/employees`);
   }
+  // Opening balances are leave_balances edit (FR-55), as on the Add Employee form;
+  // app_bulk_import_employees refuses a non-zero one without it.
+  const canSetBalances = can(perms, 'leave_balances');
 
   const t = await getTranslations('manage.import');
   const supabase = await createClient();
@@ -119,6 +122,7 @@ export default async function ImportPage({ params }: Props) {
               isManager: managerIds.has(p.id),
             })),
           hoursPerDay: Number(ws?.hours_per_day ?? 8),
+          balancesAllowed: canSetBalances,
         }}
         locale={locale}
         today={todayInAppTz()}
@@ -147,6 +151,7 @@ export default async function ImportPage({ params }: Props) {
           >,
           balanceDate: t('balanceDate'),
           balanceDateHint: t('balanceDateHint'),
+          balancesSkipped: t('balancesSkipped'),
           balanceDateFuture: t('balanceDateFuture'),
           accrualStarts: t.raw('accrualStarts') as string,
           departmentsTitle: t('departmentsTitle'),

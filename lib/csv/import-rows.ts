@@ -56,9 +56,17 @@ export const IMPORT_COLUMNS: { key: ImportColumnKey; labelFa: string; required: 
   { key: 'pto_hours', labelFa: 'مانده مرخصی (ساعت)', required: false },
 ];
 
+/** The opening-balance columns: only a caller with leave_balances edit fills them (FR-55). */
+export const BALANCE_COLUMNS: ImportColumnKey[] = ['pto_days', 'pto_hours'];
+
+/** The columns a caller sees: without `balances` the opening-balance columns are left out. */
+export function importColumns({ balances = true }: { balances?: boolean } = {}) {
+  return balances ? IMPORT_COLUMNS : IMPORT_COLUMNS.filter((c) => !BALANCE_COLUMNS.includes(c.key));
+}
+
 /** Template header cell: Farsi label with the latin key in parentheses. */
-export function templateHeader(): string[] {
-  return IMPORT_COLUMNS.map((c) => `${c.labelFa} (${c.key})`);
+export function templateHeader(opts: { balances?: boolean } = {}): string[] {
+  return importColumns(opts).map((c) => `${c.labelFa} (${c.key})`);
 }
 
 /**
@@ -158,6 +166,12 @@ export type ImportContext = {
   }[];
   existingEmployees: { personnelNo: string; fullName: string; isManager: boolean }[];
   hoursPerDay: number;
+  /**
+   * The caller holds leave_balances edit (default true). Without it the balance columns
+   * are ignored and every row opens at 0: the database refuses a non-zero opening
+   * balance from such a caller (app_bulk_import_employees, FR-55).
+   */
+  balancesAllowed?: boolean;
 };
 
 export type ImportResult = {
@@ -296,6 +310,7 @@ export function validateImportRows(
     if (d.sup && d.sup === d.personnel_no) fail('supervisor_personnel_no', 'selfReference');
     if (d.mgr && d.mgr === d.personnel_no) fail('manager_personnel_no', 'selfReference');
 
+    if (ctx.balancesAllowed === false) return d;
     const days = parseSignedInt(get('pto_days'));
     const hours = parseSignedInt(get('pto_hours'));
     if (days === null || Math.abs(days) > 366) fail('pto_days', 'badBalance');

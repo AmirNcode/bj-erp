@@ -281,6 +281,8 @@ const RULES: Rule[] = [
     params: (m) => ({ key: m[1], level: m[2] }),
   },
   { re: /you cannot appoint yourself department manager/, key: 'cannotAppointSelfManager' },
+  // Bulk onboarding without leave_balances edit (app_bulk_*_employees).
+  { re: /^not allowed to set opening balances$/, key: 'openingBalanceNotAllowed' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
   { re: /^not allowed$|not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },

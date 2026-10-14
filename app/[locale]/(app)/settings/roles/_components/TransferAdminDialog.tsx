@@ -2,7 +2,8 @@
 
 /**
  * D1: the only way admin moves. The admin picks an active employee, types that
- * person's personnel number (a typo guard) and their own password. On success
+ * person's personnel number (their employee code when they have none; a typo
+ * guard) and their own password. On success
  * the caller is no longer admin, so the app goes Home with a refreshed session
  * (transferAdmin refreshes it server-side).
  */
@@ -39,7 +40,7 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<FieldErrors>({});
   const [isPending, startTransition] = useTransition();
-  const [loading, startLoading] = useTransition();
+  const [, startLoading] = useTransition();
 
   const reset = () => {
     setTargetId(null);
@@ -64,6 +65,10 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
   };
 
   const ready = !!targetId && personnelNo.trim() !== '' && password !== '';
+  // An account with no personnel number (the bootstrap admin) is confirmed by its
+  // employee code, which may hold letters: offer a text keyboard for it.
+  const target = people.find((p) => p.id === targetId);
+  const typed = target?.personnelNo && !/^\d+$/.test(target.personnelNo) ? 'text' : 'numeric';
 
   const confirm = () => {
     if (!ready) return;
@@ -89,7 +94,15 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
           {t('actions.transfer')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent
+        className="sm:max-w-lg"
+        // Start on the person search, the first thing to fill (Radix would pick the first
+        // enabled field; the search was disabled while the list loads).
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          document.getElementById('transfer-person')?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('transfer.title')}</DialogTitle>
           <DialogDescription>{t('transfer.intro')}</DialogDescription>
@@ -103,7 +116,7 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
               people={people}
               value={targetId}
               onChange={setTargetId}
-              disabled={isPending || loading}
+              disabled={isPending}
               testId="transfer-person"
             />
           </div>
@@ -112,7 +125,7 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
             <Label htmlFor="transfer-personnel-no">{t('transfer.personnelNo')}</Label>
             <Input
               id="transfer-personnel-no"
-              inputMode="numeric"
+              inputMode={typed}
               dir="ltr"
               autoComplete="off"
               value={personnelNo}

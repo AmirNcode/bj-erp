@@ -252,6 +252,14 @@ export async function importEmployees(
   if (input.mode !== 'add' && !c.roles.includes('admin')) return dbErr('admin role required');
   if (input.rows.length === 0) return dbErr('no rows to import');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.balanceAsOf)) return dbErr('balance date is required');
+  // An opening balance is leave_balances edit, as on the Add Employee form (SQL enforces it too).
+  if (
+    !c.roles.includes('admin') &&
+    !can(c.perms, 'leave_balances') &&
+    input.rows.some((row) => row.balance_minutes !== 0)
+  ) {
+    return dbErr('not allowed to set opening balances');
+  }
 
   // Only the fields the RPC reads — the wizard's rows carry UI-only extras.
   const rows = input.rows.map((row) => ({

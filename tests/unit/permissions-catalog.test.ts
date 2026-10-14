@@ -175,6 +175,14 @@ describe('isWithin / fullPerms', () => {
     expect(isWithin({ people: 'edit' }, { people: 'read' })).toBe(false);
     expect(isWithin({ passwords: 'edit' }, {})).toBe(false);
   });
+  it('personal_info edit covers the self-only personal_info_own (I1); nothing else does', () => {
+    expect(isWithin({ personal_info_own: 'edit' }, { people: 'edit', personal_info: 'edit' })).toBe(true);
+    expect(isWithin({ personal_info_own: 'edit' }, { personal_info_own: 'edit' })).toBe(true);
+    expect(isWithin({ personal_info_own: 'edit' }, { people: 'read', personal_info: 'read' })).toBe(false);
+    expect(isWithin({ personal_info_own: 'edit' }, { people: 'read', passwords: 'edit' })).toBe(false);
+    // The exception is for personal_info_own only.
+    expect(isWithin({ personal_info: 'edit' }, { personal_info_own: 'edit' })).toBe(false);
+  });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
     expect(Object.keys(f)).toHaveLength(20);

@@ -226,6 +226,24 @@ describe('employeeEditCapabilities', () => {
     ).toBeNull();
   });
 
+  // I1: personal_info_own is self-only; on someone else personal_info edit covers it.
+  const SELF_SERVICE = role('r-self', null, 'custom', 'SelfService', { personal_info_own: 'edit' });
+  const WITH_SELF = [...ALL, SELF_SERVICE];
+  const onSelfService = (perms: Perms, roleIds = [EMP_ROLE.id, SELF_SERVICE.id]) =>
+    employeeEditCapabilities({ ...base, callerPerms: perms, targetRoleIds: roleIds, allRoles: WITH_SELF });
+
+  it('hr acts on a self-service holder (personal_info edit covers personal_info_own); helpdesk does not', () => {
+    expect(onSelfService(HR)).toMatchObject({ lockedReason: null, org: true, personalInfo: 'edit' });
+    expect(onSelfService(HELPDESK_CALLER.perms)).toMatchObject({ lockedReason: 'above', resetPassword: false });
+  });
+
+  it('the self-service box: a role assigner with personal_info edit may toggle it, one without may not', () => {
+    const assigner = { people: 'edit', role_assign: 'edit', personal_info: 'edit' } as Perms;
+    const helpAssign = { people: 'read', passwords: 'edit', role_assign: 'edit' } as Perms;
+    expect(onSelfService(assigner, [EMP_ROLE.id]).editableRoleIds).toContain(SELF_SERVICE.id);
+    expect(onSelfService(helpAssign, [EMP_ROLE.id]).editableRoleIds).not.toContain(SELF_SERVICE.id);
+  });
+
   it('a target holding a custom role the caller does not cover is above the caller', () => {
     expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above'); // hr lacks passwords
   });

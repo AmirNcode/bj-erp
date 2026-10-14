@@ -43,6 +43,45 @@ async function openAndPick() {
 }
 
 describe('TransferAdminDialog', () => {
+  it('opens with the focus on the person search', async () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <TransferAdminDialog locale="en" />
+      </NextIntlClientProvider>
+    );
+    fireEvent.click(screen.getByTestId('transfer-admin'));
+    const search = await screen.findByTestId('transfer-person');
+    await waitFor(() => expect(document.activeElement).toBe(search));
+  });
+
+  it('a person shown by employee code (no personnel number) gets a text keyboard', async () => {
+    vi.mocked(listTransferCandidates).mockResolvedValueOnce({
+      ok: true,
+      people: [{ id: 'boot', name: 'System admin', personnelNo: 'admin' }],
+    });
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <TransferAdminDialog locale="en" />
+      </NextIntlClientProvider>
+    );
+    fireEvent.click(screen.getByTestId('transfer-admin'));
+    const search = await screen.findByTestId('transfer-person');
+    expect(screen.getByTestId('transfer-personnel-no').getAttribute('inputmode')).toBe('numeric');
+    fireEvent.change(search, { target: { value: 'System' } });
+    fireEvent.click(await screen.findByTestId('transfer-person-option'));
+    expect(screen.getByTestId('transfer-personnel-no').getAttribute('inputmode')).toBe('text');
+  });
+
+  it('shows a wrong-password refusal under the password field', async () => {
+    vi.mocked(transferAdmin).mockResolvedValueOnce({ ok: false, error: 'Wrong password.', field: 'password' });
+    await openAndPick();
+    fireEvent.change(screen.getByTestId('transfer-personnel-no'), { target: { value: '1201' } });
+    fireEvent.change(screen.getByTestId('transfer-password'), { target: { value: 'nope' } });
+    fireEvent.click(screen.getByTestId('transfer-confirm'));
+    expect((await screen.findByTestId('transfer-password-error')).textContent).toBe('Wrong password.');
+    expect(screen.queryByTestId('transfer-error')).toBeNull();
+  });
+
   it('keeps confirm disabled until person, personnel number and password are all filled', async () => {
     await openAndPick();
     expect(confirmDisabled()).toBe(true);

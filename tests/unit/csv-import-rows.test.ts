@@ -40,6 +40,12 @@ describe('template', () => {
     expect(header).toContain('مانده مرخصی (ساعت) (pto_hours)');
   });
 
+  it('leaves the balance columns out for a caller who may not set balances (I2)', () => {
+    const header = templateHeader({ balances: false });
+    expect(header).toHaveLength(IMPORT_COLUMNS.length - 2);
+    expect(header.some((h) => h.includes('pto_'))).toBe(false);
+  });
+
   it('round-trips its own header', () => {
     const r = validateImportRows([templateHeader()], ctx());
     expect(r.errors).toEqual([]);
@@ -125,6 +131,15 @@ describe('rows', () => {
     );
     expect(r.errors.map((e) => e.messageKey)).toEqual(['mixedSign', 'hoursTooLarge', 'badBalance', 'badBalance']);
     expect(r.rows).toEqual([]);
+  });
+
+  it('without leave_balances edit the balance columns are ignored: every row opens at 0 (I2)', () => {
+    const r = validateImportRows(
+      [H, row('A', '1', 'employee', 'QC', '', '', '', '', '12', '3'), row('B', '2', 'employee', 'QC', '', '', '', '', 'x', '99')],
+      ctx({ balancesAllowed: false })
+    );
+    expect(r.errors).toEqual([]);
+    expect(r.rows.map((x) => x.balance_minutes)).toEqual([0, 0]);
   });
 
   it('converts Persian digits', () => {

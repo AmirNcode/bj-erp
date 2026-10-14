@@ -304,12 +304,21 @@ begin
   if p_target = v_uid then
     raise exception 'you already hold admin' using errcode = '22023';
   end if;
+  -- The typed personnel number guards against picking the wrong person. An account
+  -- with none (the bootstrap admin, deploy/sql/bootstrap_admin.sql) is confirmed by
+  -- its employee code instead, so admin can be handed back to it.
   if not exists (select 1 from public.profiles t join public.profiles c on c.id = v_uid and c.company_id = t.company_id
-                  where t.id = p_target and t.active and t.personnel_no = btrim(coalesce(p_personnel_no, ''))) then
+                  where t.id = p_target and t.active
+                    and coalesce(t.personnel_no, t.employee_code) = btrim(coalesce(p_personnel_no, ''))) then
     raise exception 'personnel number does not match an active employee' using errcode = '22023';
   end if;
 
   delete from public.user_roles where user_id = v_uid and role = 'admin';
+  -- The bootstrap admin holds no other row: leave it the company's Employee role
+  -- rather than no role at all.
+  if not exists (select 1 from public.user_roles where user_id = v_uid) then
+    insert into public.user_roles (user_id, role) values (v_uid, 'employee');
+  end if;
   insert into public.user_roles (user_id, role) values (p_target, 'admin');
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (v_uid, 'admin.transfer', 'user_roles', p_target,

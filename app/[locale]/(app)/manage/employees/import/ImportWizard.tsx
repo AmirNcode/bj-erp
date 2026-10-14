@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react';
 import { parseCsv, buildCsv } from '@/lib/csv/parse';
 import {
   IMPORT_COLUMNS,
+  importColumns,
   templateHeader,
   validateImportRows,
   type ImportContext,
@@ -81,6 +82,8 @@ type Props = {
     warnings: Record<RowWarning['messageKey'], string>;
     balanceDate: string;
     balanceDateHint: string;
+    /** Shown instead of the balance columns when the caller lacks leave_balances edit. */
+    balancesSkipped: string;
     balanceDateFuture: string;
     /** Raw template: {month} {start}. */
     accrualStarts: string;
@@ -148,9 +151,14 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
     () => new Map<string, string>(IMPORT_COLUMNS.map((c) => [c.key, c.labelFa])),
     []
   );
+  // Without leave_balances edit the balance columns are left out of the template and the
+  // example, and validateImportRows ignores them (context.balancesAllowed): rows open at 0.
+  const balances = context.balancesAllowed !== false;
+  const columns = importColumns({ balances });
+  const exampleRows = EXAMPLE_ROWS.map((cells) => cells.filter((_, i) => columns.includes(IMPORT_COLUMNS[i])));
 
   const downloadTemplate = () => {
-    const blob = new Blob([buildCsv([templateHeader()])], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([buildCsv([templateHeader({ balances })])], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -260,7 +268,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
             <table className="w-full text-xs">
               <thead className="border-b bg-muted/40">
                 <tr>
-                  {IMPORT_COLUMNS.map((c) => (
+                  {columns.map((c) => (
                     <th key={c.key} className="text-start px-2 py-1.5 font-semibold whitespace-nowrap">
                       {c.labelFa}
                       {c.required && <span className="text-destructive"> *</span>}
@@ -269,7 +277,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
                 </tr>
               </thead>
               <tbody>
-                {EXAMPLE_ROWS.map((cells, r) => (
+                {exampleRows.map((cells, r) => (
                   <tr key={r} className="text-muted-foreground">
                     {cells.map((v, i) => (
                       <td key={i} className="px-2 py-1.5 whitespace-nowrap" dir="auto">
@@ -281,6 +289,11 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
               </tbody>
             </table>
           </div>
+          {!balances && (
+            <p className="text-sm text-muted-foreground" data-testid="import-balances-skipped">
+              {labels.balancesSkipped}
+            </p>
+          )}
           {context.departments.length > 0 && (
             <div className="text-sm text-muted-foreground">
               {context.departments.map((d) => (
