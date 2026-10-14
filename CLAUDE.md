@@ -39,8 +39,9 @@ Context7 before using them** — no training-data API details.
    Jalali = *presentation* concern only — convert at UI edge. Never store Jalali strings.
 2. **RLS is source of truth** for access control. UI hides forbidden data; Postgres
    Row-Level Security enforces. Every table touching employee data has policies.
-3. **Roles** live in `user_roles` table (`admin | manager | hr | employee | security`), checked via
-   `has_role()` SQL helper — not single enum column. One user may hold several.
+3. **Roles** live in `roles` + `role_permissions`, assigned through `user_roles.role_id` (one user may
+   hold several). Built-ins `admin | manager | employee` are fixed; `hr | security | finance` are
+   editable presets; admins add custom roles in Settings › Roles (FR-55). `has_role()` sees built-ins only.
 4. **Farsi-first**: default locale `fa`, default direction RTL. All user-facing strings
    translated (`fa` + `en`).
 5. **Module isolation**: future modules (QC, finance…) share auth/org/roles but own their tables
@@ -144,7 +145,9 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
   steps both have `step_role='manager'` (`manager_scope` tells them apart).
 - **e2e with `E2E_BASE_URL`:** the teardown cleanup fails; run `npm run cleanup:e2e` by hand after.
 - **Local DB holds the real roster** (since 2026-10-07): run only e2e specs that use their own `999…` users; skip `accrual.spec` (posts accruals for everyone).
-- **New permission grants go through `private.has_permission(uid, '<key>')`** (FR-51 seam for configurable roles), not a fresh `has_role(uid,'hr')` check.
+- **New permission grant = a catalog item:** SQL `private.permission_keys` / `permission_allows` / `permission_deps` + `lib/permissions/catalog.ts` (a unit test compares them with `schema.sql`); check it with `private.has_perm(uid, key, level)`, and add `private.can_act_on(caller, target)` for writes on another person. `private.has_permission(uid, '<legacy key>')` stays only as an alias for the old app — map any new legacy key there too.
+- **Exactly one admin** (partial unique index `user_roles_one_admin`); it moves only via `app_transfer_admin`. SQL fixtures that insert a second admin need `drop index public.user_roles_one_admin;` right after `begin;`.
+- **Separate DB for a long-lived branch** (keeps the shared local DB on main's schema): `pg_dump -Fc` db `postgres` and `pg_restore` into a new database in `bj-erp-db-1` (only pg_cron/graphql objects fail; pg_cron exists only in `postgres`), run a second GoTrue + PostgREST + gateway on it (network `bj-erp_default`, `…@db:5432/<db>`), and dump `schema.sql` with `pg_dump -d <db>` — `npm run schema:dump` is hard-wired to `postgres`.
 - **Dry-run migrations first:** run the migration + `tests/sql/*` scenarios inside `begin … rollback` as `supabase_admin` before `bj-deploy update local` (applying freezes it).
 - **Leave amounts in forms:** minutes, edited as whole days + hours via `DaysHoursField` / `leaveAmountReader` (`EmployeeFormParts`); never a decimal-days input.
 - **Local SQL as superuser:** `postgres` is not one in the db image; use `supabase_admin` with `PGPASSWORD` from `deploy/.env` (see `tests/sql/*` header).

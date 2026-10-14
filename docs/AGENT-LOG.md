@@ -78,6 +78,56 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-13 — FR-55 rebased onto 6d425cf, FR-65/66 reconciled, Settings › Roles built (checkpoint)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), subagent-driven (implementer + reviewer per task)
+**Branch / HEAD at start:** FR-55 @ 59f46e5 (base 374d30a) · **end:** FR-55 @ this commit (base 6d425cf)
+**Trigger:** Amir's resume handoff (main shipped FR-65–67 + banners): rebase again, fix the
+`special_leave.grant` blocker, FR-66 approval-order switch on permissions, owner ruling (a) "HR gets
+absences + finance read", then Task 9 fix and Task 10; stop after Task 10 as a checkpoint.
+
+**What changed** (all on branch FR-55, worktree `/Users/amir/Workspace/bj-fr55`)
+- R4: rebased 24 commits onto main 6d425cf (5 conflict files; schema.sql = main's, regenerated later).
+- R5 `supabase/migrations/20261013200001–200004` (edited in place, applied nowhere persistent):
+  catalog item `special_leave` (action-only; deps people + leave_balances read) + legacy alias
+  `special_leave.grant`; `private.special_leave_target` on `has_perm` + `can_act_on`; new RPC
+  `app_set_approval_order_enforced` (approval_steps edit) + `enforce_work_settings_scope` column guard
+  (hours_per_day admin-only kept); HR preset += absences read, finance read, special_leave edit;
+  hr targets need approval_steps + clearance edit in `can_act_on`; special-leave RPCs revoked from anon.
+- `supabase/schema.sql` regenerated from the FR-55 database copy (see below).
+- R3 TS: catalog 20 items; nav/Home/pages/actions on permissions (Finance = Manage item when the caller
+  has a Manage group, else a tab; Home absences board for non-admin absences readers); order switch via
+  the RPC; special-leave card = perm + can-act; clearance detail on clearance edit; Marriage stays
+  enabled when marital status is unreadable (RPC decides).
+- Task 9 fix: one radix `Direction.Provider` in `app/[locale]/layout.tsx`, 40px segments, hint tests.
+- Task 10: `/settings/roles`, `/new`, `/[id]`, RoleEditor, Delete/Transfer dialogs, AdminOnlyCard,
+  `listTransferCandidates`, Profile → Settings link.
+- `CLAUDE.md`: roles convention, catalog-item rule, one-admin fixture rule, separate-DB recipe.
+
+**Actions outside the repo**
+- Local Docker only: created database `bj_fr55` in `bj-erp-db-1` (pg_dump/pg_restore of db
+  `postgres`), applied FR-55 migrations to it (ledger rows release `fr55-local`); started compose
+  project `bj-fr55` (GoTrue + PostgREST + gateway on 127.0.0.1:8090) from
+  `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/fr55-stack/`.
+  Db `postgres` (shared with main's agent) untouched. Nothing on Liara.
+
+**Verification**
+- On bj_fr55: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 309 PASS, 0 FAIL.
+- `npx tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 791 passed; `npm run build` OK.
+- Browser (dev :3001 on bj_fr55, admin): roles list, editor dependency notes, save/delete a role,
+  English + mobile, transfer dialog (not submitted), Profile Settings link; no console errors.
+
+**State left behind**
+- Committed on FR-55 only; not pushed; not merged. Main checkout untouched (another agent's work).
+- Ledger + RESUME block: `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/progress.md`;
+  handoff + next prompt: `handoff-2026-10-13-checkpoint.md` there.
+- Left: Task 11 e2e, Task 12 hr parity, Task 13 docs, final review + one fix wave (T10 minors listed).
+
+**For the next agent**
+- Work in the worktree; never run git in `/Users/amir/Workspace/bj`. Apply FR-55 SQL to `bj_fr55` only.
+- If main moved: rebase onto its committed tip; FR-55 migrations must still sort last.
+
+
 ## 2026-10-13 — Request page sections, steps on My Requests, banner targets
 
 **Agent:** Claude Opus 5.5 via Claude Code
