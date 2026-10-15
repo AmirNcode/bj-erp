@@ -54,7 +54,7 @@ type Labels = {
   remove: string;
   removeConfirm: string;
   removed: string;
-  orderAdminOnly: string;
+  orderNeedsStepsEdit: string;
   /** FR-47: explains the department-manager step under its row. */
   departmentHint: string;
 };
@@ -64,14 +64,19 @@ type Props = {
   orderEnforced: boolean;
   labels: Labels;
   /**
-   * FR-42: HR may edit the steps, but the order switch writes `work_settings`,
-   * which stays admin-only. Passed in so the switch is disabled rather than
-   * failing at the database.
+   * FR-66: approval_steps edit (the admin and the hr preset), the gate of
+   * setApprovalOrderEnforced and its RPC. Passed in so the switch is disabled
+   * rather than failing at the database.
    */
   canEnforceOrder: boolean;
+  /**
+   * FR-55: without approval_steps edit the card is a read-only view: order and
+   * active are disabled, and Add and Remove are hidden. Defaults to true.
+   */
+  canEdit?: boolean;
 };
 
-export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrder }: Props) {
+export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrder, canEdit = true }: Props) {
   const router = useRouter();
   const [enforced, setEnforced] = useState(orderEnforced);
   const [error, setError] = useState('');
@@ -154,7 +159,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
                       min={1}
                       max={99}
                       defaultValue={step.stepOrder}
-                      disabled={isPending}
+                      disabled={isPending || !canEdit}
                       className="h-8 w-16"
                       data-testid={`approval-step-order-${key}`}
                       // Commit on blur rather than per keystroke: each save is a
@@ -172,7 +177,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
                       type="checkbox"
                       checked={step.active}
                       // FR-56/58: a retired security/admin step cannot come back.
-                      disabled={isPending || step.role === 'security' || step.role === 'admin'}
+                      disabled={isPending || !canEdit || step.role === 'security' || step.role === 'admin'}
                       className="size-4 rounded border-input text-primary focus:ring-ring"
                       data-testid={`approval-step-active-${key}`}
                       onChange={(e) =>
@@ -184,7 +189,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
 
                   {/* The department step is seeded by migration and the Add dialog
                       cannot recreate it, so it is switched off rather than removed. */}
-                  {!isDepartment && (
+                  {!isDepartment && canEdit && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -234,13 +239,15 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
           </ul>
         )}
 
-        <AddApprovalStepDialog
-          labels={labels.addStep}
-          usedRoles={steps
-            .filter((s) => !s.approverId && s.managerScope !== 'department')
-            .map((s) => s.role)}
-          onAdded={() => router.refresh()}
-        />
+        {canEdit && (
+          <AddApprovalStepDialog
+            labels={labels.addStep}
+            usedRoles={steps
+              .filter((s) => !s.approverId && s.managerScope !== 'department')
+              .map((s) => s.role)}
+            onAdded={() => router.refresh()}
+          />
+        )}
 
         <div className="space-y-1.5 rounded-lg border border-border bg-secondary/40 px-3 py-2">
           <label
@@ -263,7 +270,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
             {labels.orderEnforced}
           </label>
           <p className="text-xs text-muted-foreground">
-            {canEnforceOrder ? labels.orderHint : labels.orderAdminOnly}
+            {canEnforceOrder ? labels.orderHint : labels.orderNeedsStepsEdit}
           </p>
         </div>
 

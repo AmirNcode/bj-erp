@@ -79,7 +79,7 @@ export type PersonalInfoExportRow =
 export async function exportPersonalInfo(): Promise<
   { ok: true; rows: PersonalInfoExportRow[] } | { ok: false; error: string }
 > {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['personal_info', 'read'] });
   if (!c.ok) return c;
   const { data, error } = await c.supabase.rpc('app_export_personal_info');
   if (error) return dbErr(error.message);
@@ -90,7 +90,7 @@ export async function exportPersonalInfo(): Promise<
 export async function getImportablePersonnelNos(): Promise<
   { ok: true; personnelNos: string[] } | { ok: false; error: string }
 > {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['personal_info', 'read'] });
   if (!c.ok) return c;
 
   const [{ data: profiles, error }, { data: admins, error: rolesError }] = await Promise.all([
@@ -112,7 +112,7 @@ export async function getImportablePersonnelNos(): Promise<
 export async function importPersonalInfo(
   rows: PersonalInfoImportRow[]
 ): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['personal_info', 'edit'] });
   if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no rows to import');
 

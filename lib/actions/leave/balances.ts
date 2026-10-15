@@ -4,8 +4,9 @@
  * Leave balances, allocations and the accrual policy. Balances accrue lazily:
  * every read first posts any months the employee has earned (see shared.ts).
  *
- * Admin and hr both manage balances and policies (FR-43); the database also
- * refuses a non-admin doing it to their own record.
+ * Balances and policies need `leave_balances` edit (FR-55; the admin, the hr
+ * preset), and the database also refuses a non-admin doing it to their own
+ * record or to anyone `can_act_on` rules out (D3/D4).
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -84,7 +85,7 @@ export async function getMyBalances(): Promise<
 export async function getEmployeeBalances(
   employeeId: string
 ): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'], company: true });
+  const c = await requireCaller({ perm: ['leave_balances', 'read'], company: true });
   if (!c.ok) return c;
 
   await accrueBeforeRead(c.supabase, employeeId);
@@ -134,7 +135,7 @@ export type AllocateLeaveResult =
 export async function allocateLeave(
   input: AllocateLeaveInput
 ): Promise<AllocateLeaveResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('allocate_leave', {
@@ -167,7 +168,7 @@ export async function setLeaveBalance(
   leaveTypeId: string,
   targetMinutes: number
 ): Promise<SetLeaveBalanceResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('set_leave_balance', {
@@ -203,7 +204,7 @@ export type LeavePolicyRow = {
 export async function setEmployeeLeavePolicy(
   input: LeavePolicyInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
   const { error } = await c.supabase.rpc('set_employee_leave_policy', {
@@ -224,7 +225,7 @@ export async function setEmployeeLeavePolicy(
 export async function getEmployeePolicies(
   employeeId: string
 ): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['leave_balances', 'read'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -247,12 +248,12 @@ export async function getEmployeePolicies(
   };
 }
 
-/** Admin "Post accruals now". Returns what actually happened, for the UI to show. */
+/** "Post accruals now" (`leave_accrual` edit). Returns what actually happened, for the UI to show. */
 export async function runAllAccruals(): Promise<
   { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
 > {
-  // FR-51: hr posts accruals too (accrue_all_leave checks accruals.run).
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  // FR-55: accrue_all_leave checks leave_accrual edit (FR-51's accruals.run).
+  const c = await requireCaller({ perm: ['leave_accrual', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase.rpc('accrue_all_leave');

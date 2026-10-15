@@ -12,6 +12,7 @@ import {
   type NavItemKey,
   type TabKey,
 } from '@/lib/nav/tabs';
+import type { Perms } from '@/lib/permissions/catalog';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
 import { NAV_ICONS, NAV_ITEM_ICONS } from './nav-icons';
@@ -28,6 +29,7 @@ export type NavLabels = Record<TabKey, string> &
 
 type Props = {
   roles: string[];
+  perms: Perms;
   locale: string;
   labels: NavLabels;
   appName?: string;
@@ -60,6 +62,7 @@ function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: str
 
 export function MainNav({
   roles,
+  perms,
   locale,
   labels,
   appName,
@@ -69,9 +72,9 @@ export function MainNav({
 }: Props) {
   const t = useTranslations('nav');
   const pathname = usePathname();
-  const tabs = tabsForRoles(roles);
-  const manageItems = manageItemsForRoles(roles);
-  const settings = settingsItemForRoles(roles);
+  const tabs = tabsForRoles(roles, perms);
+  const manageItems = manageItemsForRoles(roles, perms);
+  const settings = settingsItemForRoles(roles, perms);
 
   const isActive = (href: string) => {
     const full = `/${locale}${href}`;

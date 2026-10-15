@@ -23,7 +23,8 @@ Source of truth for the schema. Postgres (Supabase). All employee-data tables ge
 ## Enums
 
 ```
-app_role        : 'admin' | 'manager' | 'employee' | 'security' | 'hr'   -- hr 2026-08-18, FR-35
+app_role        : 'admin' | 'manager' | 'employee' | 'security' | 'hr' | 'finance'   -- hr 2026-08-18, FR-35; finance FR-54
+                  -- FR-55: the enum only names the built-in roles (roles.system_key); custom roles have no enum value
 department_kind : 'team' | 'security' | 'office'        -- extensible
 leave_status    : 'pending' | 'approved' | 'rejected' | 'cancelled'
 day_part        : 'full' | 'am' | 'pm'                  -- hourly added later
@@ -154,9 +155,34 @@ Spec `docs/specs/2026-10-07-clearance-form-design.md`. Writes only through RPCs;
   `bj.separation_apply = on`, which `enforce_profile_update_scope` honours for an `active`
   true→false change only (the cron run has no `auth.uid()`).
 
+### `roles` (2026-10-13, FR-55)
+`id` · `company_id → companies` · `system_key app_role NULL` · `kind text` (`system` | `preset` |
+`custom`) · `name text` · `created_at` · `updated_at`.
+Unique (`company_id`,`system_key`) where not null; unique (`company_id`,`lower(name)`). CHECKs:
+`system_key` is not null exactly when `kind` is `system` or `preset`; `name` matches
+`^[A-Za-z0-9][A-Za-z0-9 &/-]{0,39}$` (English only, D11). Six rows per company, seeded by
+`private.seed_company_roles` (also run by an AFTER INSERT trigger on `companies`): system `Admin`,
+`Manager`, `Employee`; presets `HR`, `Security`, `Finance`. The admin adds `custom` rows in
+Settings › Roles. RLS: SELECT for active members of the company (and `supabase_auth_admin` for the
+token hook); no client writes — `app_save_role` / `app_delete_role` do them.
+
+### `role_permissions` (2026-10-13, FR-55)
+`role_id → roles on delete cascade` · `permission text` · `level text` (`read` | `edit`). Primary key
+(`role_id`,`permission`). CHECK `private.permission_allows(permission, level)` (the catalog's keys
+and shapes, 19 items since `20261013200007` removed `passwords` — `docs/PERMISSIONS.md`). A trigger refuses rows on `system` roles. RLS: SELECT
+for rows whose role the caller can see; no client writes. Preset rows seeded as in PERMISSIONS.md.
+
 ### `user_roles`
-`id` · `user_id → profiles` · `role app_role` · unique(`user_id`,`role`).
-A user may have several rows. RLS uses `has_role(uid, role)`.
+`id` · `user_id → profiles` · `role app_role NULL` · `role_id → roles NOT NULL` · unique(`user_id`,`role`)
+· unique(`user_id`,`role_id`).
+A user may have several rows. RLS uses `has_role(uid, role)` for built-ins and `has_perm` for
+catalog items. **FR-55:** `role_id` is the source of truth. The BEFORE INSERT/UPDATE trigger
+`user_roles_sync` fills `role_id` from `role` (an enum-only insert from the old app, create-employee
+or bulk import), sets `role` from `roles.system_key` (NULL for custom roles), refuses a role of
+another company, and refuses an UPDATE that changes only `role`. The partial unique index
+**`user_roles_one_admin`** (`create unique index … on user_roles ((true)) where role = 'admin'`)
+allows exactly one admin row; the migration fails if more than one exists. The admin row moves only
+via `app_transfer_admin`.
 
 ### Directory read helper
 `get_my_team_directory()` returns the caller's direct manager plus active teammates in the same
@@ -548,7 +574,7 @@ cover already known to be away. Recorded in spec §2.1 and here because it reads
 
 ```
 companies 1─* departments 1─* profiles *─1 profiles(manager)
-profiles 1─* user_roles
+profiles 1─* user_roles *─1 roles 1─* role_permissions     companies 1─* roles
 profiles 1─* leave_allocations *─1 leave_types
 profiles 1─* employee_leave_policies *─1 leave_types
 profiles 1─* leave_requests   *─1 leave_types

@@ -261,6 +261,18 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   hr and finance see all. Opened from Manage › Employees (admin, hr) and the Home notice; printable like the paper form. *(2026-10-07; spec
   `2026-10-07-clearance-form-design.md`.)*
 
+- **FR-55** ☑ **Admin-configurable roles and permissions.** The admin creates roles in Settings ›
+  Roles (English name, no migration needed) and sets each of 20 access items to Allowed, Read only
+  or Not allowed, in collapsible sections; the role then appears as a checkbox on the employee forms.
+  HR, Security and Finance are editable presets seeded with today's grants; Admin, Manager and
+  Employee are fixed. There is exactly one admin, who moves only by «Transfer admin» (own password and
+  the new admin's personnel number); a role holder can never create or become an admin, act on
+  themselves, or act on someone who holds more access than they do (managers, department managers,
+  hr holders, approvers and clearance signers need the matching access too). Deleting a role lists its
+  holders with a «Copy personnel numbers» button. Admin-only for good: the role editor, admin
+  transfer, approval override, bulk import Update/Replace, the audit log, hours per day.
+  Closes the helpdesk-role and raw-slug-checkbox backlog items. *(2026-10-13; spec
+  `2026-10-07-configurable-roles-design.md`.)*
 - **FR-56** ☑ **Security board, no security approvals.** Security sees, on Home (not a separate tab),
   everyone with a
   fully approved leave or errand (daily or hourly) on a chosen day, default today; pending requests

@@ -894,6 +894,70 @@ export type Database = {
           },
         ]
       }
+      role_permissions: {
+        Row: {
+          level: string
+          permission: string
+          role_id: string
+        }
+        Insert: {
+          level: string
+          permission: string
+          role_id: string
+        }
+        Update: {
+          level?: string
+          permission?: string
+          role_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      roles: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          kind: string
+          name: string
+          system_key: Database["public"]["Enums"]["app_role"] | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          name: string
+          system_key?: Database["public"]["Enums"]["app_role"] | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          name?: string
+          system_key?: Database["public"]["Enums"]["app_role"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "roles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       separation_signoffs: {
         Row: {
           department_id: string | null
@@ -1119,20 +1183,32 @@ export type Database = {
       user_roles: {
         Row: {
           id: string
-          role: Database["public"]["Enums"]["app_role"]
+          // NULL on custom-role rows; role_id is the source of truth (FR-55).
+          role: Database["public"]["Enums"]["app_role"] | null
+          role_id: string
           user_id: string
         }
         Insert: {
           id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"] | null
+          // Filled from `role` by the user_roles_sync trigger when omitted.
+          role_id?: string
           user_id: string
         }
         Update: {
           id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          role?: Database["public"]["Enums"]["app_role"] | null
+          role_id?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_roles_user_id_fkey"
             columns: ["user_id"]
@@ -1336,6 +1412,7 @@ export type Database = {
           p_manager_id?: string
           p_password: string
           p_personnel_no: string
+          p_role_ids?: string[]
           p_roles?: Database["public"]["Enums"]["app_role"][]
         }
         Returns: string
@@ -1398,6 +1475,8 @@ export type Database = {
         Returns: string
       }
       app_get_separation: { Args: { p_id: string }; Returns: Json }
+      // FR-55: { permission key: 'read' | 'edit' } for the caller.
+      app_my_permissions: { Args: never; Returns: Json }
       app_list_separations: {
         Args: never
         Returns: {
@@ -1467,6 +1546,41 @@ export type Database = {
         }
         Returns: undefined
       }
+      app_set_user_role_ids: {
+        Args: { p_role_ids: string[]; p_user_id: string }
+        Returns: undefined
+      }
+      app_list_roles: {
+        Args: never
+        Returns: {
+          holders: number
+          id: string
+          kind: string
+          name: string
+          permissions: Json
+          system_key: string | null
+        }[]
+      }
+      app_password_reset_eligible: {
+        Args: { p_ids: string[] }
+        Returns: string[]
+      }
+      app_role_holders: {
+        Args: { p_role_id: string }
+        Returns: { full_name: string; personnel_no: string | null; user_id: string }[]
+      }
+      app_save_role: {
+        Args: { p_id: string | null; p_name: string; p_permissions: Json }
+        Returns: string
+      }
+      app_delete_role: {
+        Args: { p_id: string }
+        Returns: { full_name: string; personnel_no: string | null }[]
+      }
+      app_transfer_admin: {
+        Args: { p_password: string; p_personnel_no: string; p_target: string }
+        Returns: undefined
+      }
       accrue_all_leave: { Args: never; Returns: Json }
       accrue_employee_leave: { Args: { p_employee_id: string }; Returns: undefined }
       accrue_leave: {
@@ -1490,6 +1604,10 @@ export type Database = {
         Returns: string
       }
       app_revoke_special_leave: { Args: { p_grant_id: string }; Returns: undefined }
+      app_set_approval_order_enforced: {
+        Args: { p_enforced: boolean }
+        Returns: undefined
+      }
       request_approval_progress: {
         Args: { p_id: string }
         Returns: {

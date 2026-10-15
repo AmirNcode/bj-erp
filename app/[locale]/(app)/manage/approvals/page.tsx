@@ -1,12 +1,16 @@
 /**
- * Approvals queue — manager (own reports) + admin (all). Read scope comes from
- * RLS + getPendingApprovals; the /manage layout already gates admin|manager.
+ * Approvals queue — the approval chain routes to people, so access is identity
+ * based (admin, manager, hr), not a permission (FR-55; lib/nav/tabs.ts). Read
+ * scope comes from RLS + getPendingApprovals. The /manage layout admits anyone
+ * with a Manage item, so this page guards itself.
  */
 
 export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
+import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
@@ -100,6 +104,11 @@ async function ApprovalsData({ locale }: { locale: string }) {
 export default async function ApprovalsPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  const user = await getCachedUser();
+  if (!user) redirect(`/${locale}/login`);
+  const roles = await getCachedRoles(user.id);
+  if (!['admin', 'manager', 'hr'].some((r) => roles.includes(r))) redirect(`/${locale}/home`);
 
   const t = await getTranslations('approvals');
 

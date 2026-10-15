@@ -1,15 +1,15 @@
 /**
  * Profile › Personal information (FR-53): the caller's own identity, bank,
  * contact and employment details. Read-only since FR-63 (2026-10-12) unless the
- * caller may edit their own (admin today); hr/admin edit other people's from
- * Manage › Employees › Edit.
+ * caller holds personal_info_own (the admin implicitly; on no preset); people
+ * with personal_info edit change other people's from Manage › Employees › Edit.
  */
 
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
 import { PageHeader } from '../../_components/PageHeader';
@@ -28,8 +28,8 @@ export default async function PersonalInfoPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) return null;
 
-  const [res, roles] = await Promise.all([getPersonalInfo(user.id), getCachedRoles(user.id)]);
-  const readOnly = !canEditOwnPersonalInfo(roles);
+  const [res, perms] = await Promise.all([getPersonalInfo(user.id), getCachedPermissions(user.id)]);
+  const readOnly = !canEditOwnPersonalInfo(perms);
 
   return (
     <main className="p-4 max-w-2xl mx-auto space-y-4">

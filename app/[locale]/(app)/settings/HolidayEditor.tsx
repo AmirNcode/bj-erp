@@ -44,10 +44,13 @@ type Labels = {
 
 export function HolidayEditor({
   initial,
+  readOnly = false,
   locale,
   labels,
 }: {
   initial: Holiday[];
+  /** FR-55: a read-only viewer sees the list without the add form, import or delete buttons. */
+  readOnly?: boolean;
   locale: string;
   labels: Labels;
 }) {
@@ -119,13 +122,15 @@ export function HolidayEditor({
             {labels.holidaysCount.replace('{count}', formatNumber(holidays.length, locale))}
           </p>
         </div>
-        <HolidayImportDialog
-          existingDates={holidays.map((h) => h.holiday_date)}
-          locale={locale}
-          labels={labels.holidayImport}
-          errorLabel={labels.errorLabel}
-          onImported={refresh}
-        />
+        {!readOnly && (
+          <HolidayImportDialog
+            existingDates={holidays.map((h) => h.holiday_date)}
+            locale={locale}
+            labels={labels.holidayImport}
+            errorLabel={labels.errorLabel}
+            onImported={refresh}
+          />
+        )}
       </div>
       {errMsg && (
         <p role="alert" data-testid="holiday-error" className="px-6 pb-3 text-sm text-destructive">
@@ -134,77 +139,79 @@ export function HolidayEditor({
       )}
 
       {/* Add form: one row on desktop. */}
-      <div className="mx-6 space-y-2.5 rounded-xl border border-muted bg-muted/35 p-3.5">
-        <div className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[180px_1fr_1fr_auto]">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">{labels.dateLabel}</label>
-            <div className="relative">
-              <CalendarDays
-                aria-hidden="true"
-                className="pointer-events-none absolute start-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
-              />
-              {/* rmdp-container class is intentional — e2e locates input via .rmdp-container input */}
-              <DatePicker
-                value={picked}
-                onChange={setPicked}
-                calendar={calendar}
-                locale={calLocale}
-                containerClassName="w-full"
-                inputClass={`${fieldClass} ps-9`}
+      {!readOnly && (
+        <div className="mx-6 space-y-2.5 rounded-xl border border-muted bg-muted/35 p-3.5">
+          <div className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[180px_1fr_1fr_auto]">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-muted-foreground">{labels.dateLabel}</label>
+              <div className="relative">
+                <CalendarDays
+                  aria-hidden="true"
+                  className="pointer-events-none absolute start-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+                {/* rmdp-container class is intentional — e2e locates input via .rmdp-container input */}
+                <DatePicker
+                  value={picked}
+                  onChange={setPicked}
+                  calendar={calendar}
+                  locale={calLocale}
+                  containerClassName="w-full"
+                  inputClass={`${fieldClass} ps-9`}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="hol-name-fa" className="text-xs font-medium text-muted-foreground">
+                {labels.nameFaLabel}
+              </label>
+              <input
+                id="hol-name-fa"
+                data-testid="holiday-name-fa"
+                value={nameFa}
+                onChange={(e) => setNameFa(e.target.value)}
+                className={fieldClass}
+                disabled={isPending}
               />
             </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="hol-name-fa" className="text-xs font-medium text-muted-foreground">
-              {labels.nameFaLabel}
-            </label>
-            <input
-              id="hol-name-fa"
-              data-testid="holiday-name-fa"
-              value={nameFa}
-              onChange={(e) => setNameFa(e.target.value)}
-              className={fieldClass}
+            <div className="flex flex-col gap-1">
+              <label htmlFor="hol-name-en" className="text-xs font-medium text-muted-foreground">
+                {labels.nameEnLabel}
+              </label>
+              <input
+                id="hol-name-en"
+                dir="ltr"
+                value={nameEn}
+                onChange={(e) => setNameEn(e.target.value)}
+                className={fieldClass}
+                disabled={isPending}
+              />
+            </div>
+            <Button
+              type="button"
+              data-testid="holiday-add"
+              onClick={onAdd}
               disabled={isPending}
-            />
+              className="rounded-[10px]"
+            >
+              <Plus aria-hidden="true" />
+              {labels.addHoliday}
+            </Button>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="hol-name-en" className="text-xs font-medium text-muted-foreground">
-              {labels.nameEnLabel}
-            </label>
+          <label className="flex cursor-pointer items-start gap-2 text-sm">
             <input
-              id="hol-name-en"
-              dir="ltr"
-              value={nameEn}
-              onChange={(e) => setNameEn(e.target.value)}
-              className={fieldClass}
+              type="checkbox"
+              checked={recurring}
+              onChange={(e) => setRecurring(e.target.checked)}
               disabled={isPending}
+              className="mt-1 rounded border-input"
             />
-          </div>
-          <Button
-            type="button"
-            data-testid="holiday-add"
-            onClick={onAdd}
-            disabled={isPending}
-            className="rounded-[10px]"
-          >
-            <Plus aria-hidden="true" />
-            {labels.addHoliday}
-          </Button>
+            <span>
+              {labels.recurringLabel}
+              <span className="block text-xs text-muted-foreground">{labels.recurringHint}</span>
+            </span>
+          </label>
         </div>
-        <label className="flex cursor-pointer items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={recurring}
-            onChange={(e) => setRecurring(e.target.checked)}
-            disabled={isPending}
-            className="mt-1 rounded border-input"
-          />
-          <span>
-            {labels.recurringLabel}
-            <span className="block text-xs text-muted-foreground">{labels.recurringHint}</span>
-          </span>
-        </label>
-      </div>
+      )}
 
       <div className="px-6 pt-3 pb-5">
         {holidays.length === 0 ? (
@@ -223,37 +230,39 @@ export function HolidayEditor({
                 <span className="col-start-1 row-start-2 sm:col-start-auto sm:row-start-auto">
                   {h.name_fa}
                 </span>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`${labels.delete}: ${h.name_fa}`}
-                      disabled={isPending}
-                      className="row-span-2 text-muted-foreground group-hover:text-destructive group-hover:ring-1 group-hover:ring-destructive/40 sm:row-span-1"
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent size="sm">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{labels.delete}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {show(h.holiday_date)} ، {h.name_fa}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-                      <AlertDialogAction
-                        variant="destructive"
-                        onClick={() => onDelete(h.id)}
-                        data-testid={`holiday-delete-confirm-${h.id}`}
+                {!readOnly && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`${labels.delete}: ${h.name_fa}`}
+                        disabled={isPending}
+                        className="row-span-2 text-muted-foreground group-hover:text-destructive group-hover:ring-1 group-hover:ring-destructive/40 sm:row-span-1"
                       >
-                        {labels.delete}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent size="sm">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{labels.delete}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {show(h.holiday_date)} ، {h.name_fa}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
+                        <AlertDialogAction
+                          variant="destructive"
+                          onClick={() => onDelete(h.id)}
+                          data-testid={`holiday-delete-confirm-${h.id}`}
+                        >
+                          {labels.delete}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </li>
             ))}
           </ul>

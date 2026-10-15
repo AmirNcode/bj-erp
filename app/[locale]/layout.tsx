@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
+import { Direction } from 'radix-ui';
 import { routing } from '@/i18n/routing';
 import '../globals.css';
 
@@ -62,9 +63,12 @@ export default async function LocaleLayout({ children, params }: Props) {
       className={`${rubik.variable} ${vazirmatn.variable} h-full antialiased font-sans`}
     >
       <body className="min-h-full flex flex-col">
-        <NextIntlClientProvider messages={messages}>
-          {children}
-        </NextIntlClientProvider>
+        {/* Radix reads this provider, not <html dir>: roving-focus arrows and menu placement follow it. */}
+        <Direction.Provider dir={dir}>
+          <NextIntlClientProvider messages={messages}>
+            {children}
+          </NextIntlClientProvider>
+        </Direction.Provider>
       </body>
     </html>
   );

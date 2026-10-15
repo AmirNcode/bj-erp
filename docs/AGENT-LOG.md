@@ -78,6 +78,575 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-15 — Authorized FR-55 release
+
+**Agent:** Codex
+**Branch / HEAD at start:** `codex/fr55-reviewed` @ `6111f1d`
+**Trigger:** Owner approved commit/update PR #6, refresh backup, merge and verify production.
+
+**What changed**
+- Publishing the previously verified sensitive-role implementation and retained review journal.
+  Verification evidence is in the preceding implementation/rehearsal entry below.
+
+**Actions outside the repo**
+- Refreshing Liara's full logical backup and verified offsite copy before merging PR #6.
+- Production changes will run through the existing GitHub deployment/migration-ledger workflow,
+  not ad hoc SQL. Deployment results and post-deploy checks will be recorded in a follow-up entry.
+
+**State left behind**
+- This entry records release authorization/preparation, not deployment success.
+- Main checkout's unrelated work remains untouched; no test users will be created in production.
+
+## 2026-10-15 — Sensitive role controls and FR-55 release rehearsal
+
+**Agent:** Codex
+**Branch / HEAD at start:** `codex/fr55-reviewed` @ `6111f1d`
+**Trigger:** Restrict sensitive access to admin, preserve HR duties but limit HR role assignment
+to Employee/Manager, add warnings, then prepare and verify the release. Resumed after usage reset.
+
+**What changed**
+- `20261015153112_sensitive_role_assignment.sql` replaces `private.role_within`: non-admins cannot
+  give/remove any role with a valid edit permission, or HR/Finance identity roles. Manager is the
+  explicit delegated exception. HR with extra role_assign still cannot assign custom roles.
+  Existing record-editing rights stay unchanged. Role creation/editing was already admin-only.
+- The TypeScript capability mirror matches SQL. All write-capable rows show a warning icon/text;
+  sensitive saves (including existing roles) require confirmation listing the affected permissions.
+  Read-only saves do not. English/Farsi translations and policy/spec/changelog/backlog updated.
+- Browser testing found cancel/reopen could place the overlay after content at the same z-index.
+  The new confirmation content now explicitly stacks above its overlay and scrolls on small screens.
+- Added policy SQL/unit tests and cancel/reopen browser coverage. Restored-production testing exposed
+  three fixture assumptions: broad legacy grants cause RLS to return zero modified rows rather than
+  throw, and a real department-manager approval step collided with a fixture. Tests now verify the
+  actual unchanged row for denied writes, and use a fixture-specific named approver. No production
+  grant or business behavior was changed to accommodate tests.
+
+**Actions outside the repo**
+- Liara SSH was read-only: exactly one admin, active; `pgrst_ddl_watch` enabled; 79 ledger records.
+  Remote main remains `6d425cf4308818ff3ea11f47a8cd556bcaf76cb7` (no main drift).
+- Verified existing backup `daily-20261015T021247Z.dump`, SHA-256
+  `713b735fd2cbbb984f8e7df31e2fb081aec4d816458464b4e7c9f0a802f0ef15`.
+  Restored into a new network-disabled `bj-fr55-release-check` container, isolated storage, no ports.
+  Used the runbook GraphQL ACL handling and disabled cron. Applied all eight pending migrations
+  using deployment-ledger checksum checks. Baseline/final counts: 139 profiles, 139 auth users,
+  one active admin; ledger advanced from 79 to 87. Production was not migrated or modified.
+- Backed up isolated `bj_fr55`, applied only the new migration there with its ledger entry,
+  regenerated schema explicitly from that database. The new migration is now frozen locally.
+- Built unchanged main application source from `6d425cf` in `/tmp/bj-fr55-main-smoke`, pointed only
+  at upgraded `bj_fr55` via local gateway :8090, served on :3002. Feature build served on :3001.
+  Main checkout and its unrelated uncommitted work were not edited.
+
+**Verification**
+- Typecheck, lint, production build, deployment tests pass; unit tests 833 pass / 5 skip.
+- Production dependency audit: zero vulnerabilities. CI's rate-limit configuration, Liara Compose
+  configuration and real-proxy client-IP runtime tests also pass (both local/Liara Caddy images).
+- All five SQL suites pass on BOTH `bj_fr55` and the migrated production-backup copy:
+  69 / 40 / 59 / 83 / 355 (606 PASS each), zero FAIL/ERROR. Suites roll back their fixtures.
+- `schema.sql` byte-matches a fresh `bj_fr55` schema dump; `git diff --check` clean.
+- English desktop/Farsi mobile warning, cancel, reopen and real click eligibility pass; screenshots
+  inspected. Focused role-creation/assignment browser regression passes after the overlay fix.
+- Final production-build browser regression: 18/18 pass (roles, HR role, first-login password,
+  HR employee administration, team, manager creation, clearance, approval, admin settings, navigation).
+  Other E2E specs were not run in this session.
+- Old-main/new-schema smoke: Manager creation and both HR employee/department workflows pass.
+  Initial HR run failed because the old test asserted the typed manager code before async selection;
+  retried using the already-known exact selected-label wait in the scratch TEST helper only.
+  Old application source/build stayed unchanged. This is targeted compatibility, not every route.
+
+**State left behind**
+- Changes uncommitted; PR #6 not updated; no merge, push, or deployment. Prior review entry retained.
+- Removed the disposable production-backup rehearsal container/storage and its temporary credential
+  file after verification. Source backup retained. Stopped both preview servers (:3001/:3002).
+- E2E teardown still fails because it sends Auth cleanup to the Next application URL rather than
+  the API gateway; throwaway `999…` users remain in isolated `bj_fr55`. No broad cleanup attempted
+  because of the previously documented clearance foreign-key blocker.
+
+**For the next agent**
+- Refresh backup and repeat read-only admin/main checks at deploy time. Commit/review/update PR #6
+  before an explicitly authorized merge; pushing main deploys. Rollback uses the fresh-database
+  restore, NOT `pg_restore --clean` into live. After deploy smoke-test permissions/eligibility RPCs,
+  admin sensitive-role confirmation, HR assignment limits and password-reset visibility.
+- Manager/approver impersonation through issued creation credentials remains explicitly deferred;
+  warnings and sensitive-role assignment restrictions do not solve credential ownership or revoke
+  old sessions. Admin-transfer concurrency has not been exercised with two live sessions.
+
+## 2026-10-15 — Independent review of PR #6 (FR-55, admin-only resets), review only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), lead at high effort.
+- Three read-only Opus 5.5 subagents, no nesting:
+  - DB security: effort max. It hit an API rate limit mid-run and was resumed with its context intact.
+  - App behaviour: effort high.
+  - Migrations and coverage: effort high.
+- The lead ran every test, probe and server.
+
+**Branch / HEAD at start:** codex/fr55-reviewed @ 6111f1d (= PR #6 head); origin/main 6d425cf (= merge-base). No drift; worktree clean.
+**Trigger:** Amir asked for an independent review of PR #6 against main, review only.
+
+**What changed**
+- Only this entry, uncommitted. No code changed; nothing committed, pushed or merged. Main checkout not touched.
+
+**Actions outside the repo** (local Docker, database `bj_fr55` only; nothing on `postgres` or Liara)
+- Read-only checks:
+  - ledger checksums for 200001–200007 equal the HEAD files;
+  - `pg_dump -d bj_fr55` (public + private) is byte-identical to `supabase/schema.sql` minus its header.
+- Five `tests/sql` suites as `supabase_admin` on `bj_fr55`; each rolls back.
+- Three reviewer probes, each `begin … rollback`, no leftovers (checked):
+  - A: transfer to an account still on an HR-issued password succeeds.
+  - B: a custom `people_create` + `role_assign` holder creates a pawn holding its own role and sets its own balance through it.
+  - C: cleanup called by a junk-coded admin. Inconclusive: it aborted on the known `separation_signoffs_separation_id_fkey` first.
+- `fr55-dev` preview (`next dev` on :3001 → gateway :8090 → `bj_fr55`), started through the preview tool and stopped afterwards.
+- e2e runs created throwaway 999… users. Teardown cleanup failed (the known `E2E_BASE_URL` issue); `bj_fr55` now holds 82 junk-coded profiles. Cleanup was not run by hand: it hits the known FK failure.
+
+**Verification** (run independently this session)
+- `tsc --noEmit`, `lint`, `test:deploy`, `git diff --check origin/main...HEAD`: clean.
+- Unit: 829 passed, 5 skipped.
+- `npm run build`: clean.
+- SQL suites (PASS/FAIL lines read; only PASS lines printed): client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 346. 0 FAIL, 0 ERROR.
+- e2e against `next dev`, `--workers=1`, 18/18 passed:
+  - roles, hr-role, first-login-password: 10;
+  - hr-employee-admin, team, manager-create-employee, clearance, approval, admin-settings, nav: 8.
+
+**Findings** (no Critical, High or Medium defect in the PR's own code)
+- **Medium, NEW variant of the deferred creation-credential item (owner decision): pawn with the creator's own role.**
+  - Holder X of a custom role with `people_create` + `role_assign` creates P with a password X picks and `p_role_ids` = X's role. D5 accepts it.
+  - As P, X passes `can_act_on(P, X)` for everything the role delegates. Probe B moved X's own balance this way.
+  - Not reachable with presets only: HR lacks `role_assign`.
+  - Wider than main, where a creator could give at most Manager.
+  - Belongs in the deferred D13/Tier-2 decision. Document it under TASKS; until then do not build a role with both items.
+- **Low, NEW variant of the same item:** `app_transfer_admin` accepts a target still on an issued password (`must_change_password = true`; probe A). Cheap partial guard: `and not t.must_change_password`.
+- **Low, NEW, deploy failure window only:** between 200001 and 200004, main's `app_set_user_roles` (bare `on conflict do nothing`) silently drops a second admin row while auditing it as set.
+- **Low, NEW, UX:** after Transfer admin the new admin's JWT still lacks admin for up to 1 h. Same staleness as any role change. Tell them to sign in again.
+- **Pre-existing process issue (release prerequisite):**
+  - `deploy/update.sh:183-189` suggests `pg_restore --clean` into the live DB. That leaves FR-55-only objects behind and blocks a re-deploy.
+  - Use the fresh-database restore in `docs/DEPLOY-LIARA.md` instead.
+- **Info:**
+  - `getCachedPermissions` falls back to `{}` without logging.
+  - `app_list_roles` shows holder counts to every member.
+  - 27 SQL messages have no `db-error` rule; none is reachable from normal UI.
+  - Admin resets are company-blind (single tenant).
+  - `anon` ALL and `authenticated` TRUNCATE on `profiles` / `user_roles` are identical on main and unreachable through PostgREST.
+  - Older suites drop the one-admin index.
+- Prior PR #5 findings re-checked:
+  - The three Mediums are fixed.
+  - The accepted Lows are unchanged.
+
+**State left behind**
+- PR #6 unchanged, not merged. This entry is uncommitted in the worktree.
+- `bj_fr55` has 82 throwaway users. The stack is still running; the preview server is stopped.
+
+**For the next agent**
+- **Release prerequisites:**
+  - Read-only Liara check: exactly one admin row, its profile active, and `pgrst_ddl_watch` present.
+  - Confirm main has not changed `supabase/` since 6d425cf.
+  - Rehearse the migrations on a restored Liara backup.
+  - N-1 smoke: old main app on the new schema.
+  - DB rollback = fresh-database restore only.
+  - Post-deploy smoke of `rpc/app_my_permissions` and `rpc/app_password_reset_eligible`.
+- CI runs no SQL suites; migrations are first exercised on Liara.
+
+## 2026-10-14 — Publish replacement FR-55 review PR
+
+**Agent:** Codex
+**Branch / HEAD at start:** FR-55 @ 1bb8e51, with Claude's review and fix work uncommitted.
+**Trigger:** Owner requested pushing these changes as a new PR replacing #5, then a fresh Claude review prompt.
+
+**What changed**
+- Preserved the implementation and review entries; prepared the existing 31 changed/new files plus this journal entry for a replacement branch, `codex/fr55-reviewed`.
+- No implementation changes made during publication preparation.
+
+**Actions outside the repo**
+- Verified GitHub #5 is open at 1bb8e51, targeting main at 6d425cf. Publication targets only the replacement feature branch; close #5 after the replacement exists, preserving its branch.
+- No database operation, production access, merge or deployment authorized or performed.
+
+**Verification**
+- `git diff --check` passed. Publication checks run separately; final results belong in the replacement PR description.
+- Claude's preceding entry records SQL/browser/build/e2e results; those are not independently rerun by this publication session.
+
+**State left behind**
+- Main checkout's unrelated work preserved. Feature worktree retained for the next review. Migrations 200006 and 200007 remain unchanged.
+
+**For the next agent**
+- Review the replacement PR's full diff against main, including admin-only resets and transfer-dialog normalization. Account-creation impersonation remains explicitly deferred by the owner.
+
+## 2026-10-14 — FR-55 review: password resets admin-only (Medium 1 decision), browser check
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), lead only (no subagents this round).
+**Branch / HEAD at start:** FR-55 @ 1bb8e51, plus the uncommitted 200006 / Medium 2+3 work below. Nothing committed.
+**Trigger:** Amir decided Medium 1:
+- password resets stay admin-only in the database on every path;
+- `passwords` leaves the role editor and is refused by `app_save_role`;
+- existing grants carry no authority;
+- D13 and Tier 2 are not built; the creation-credential gap is documented as deferred;
+- finish the pending browser check.
+
+**What changed** (uncommitted, worktree `/Users/amir/Workspace/bj-fr55`)
+- `supabase/migrations/20261013200007_password_reset_admin_only.sql` (new; 200006 left frozen):
+  - Catalog drops `passwords`, leaving 19 items: `permission_keys`, `permission_allows` (so the `role_permissions` CHECK and `app_save_role` → 22023 refuse it) and `permission_deps`.
+  - Stored `passwords` rows are deleted and audited (`role.update`, actor null).
+  - `perm_level` and `role_within` count only catalog-valid rows. A surviving row (restore, hand-made) is level 0 everywhere and appears in neither the claims nor `app_my_permissions`.
+  - `private.can_reset_password` = `is_admin(caller)`, so the single reset and `app_password_reset_eligible` follow.
+  - The bulk RPC's entry gate is admin-only.
+  - `enforce_profile_update_scope` loses its `passwords` branch.
+  - Copied bodies were diffed against `schema.sql`: only the intended lines differ.
+- TS:
+  - `lib/permissions/catalog.ts`: 19 items.
+  - `editCapabilities.ts`: `resetPassword` false for every non-admin.
+  - `lib/actions/employees.ts`: both reset actions `requireCaller({ anyOf: ['admin'] })`.
+  - Employees page: `canBulkReset` = admin.
+  - `AdminOnlyCard` + fa/en messages: added "Reset passwords…" item; removed `permissions.items.passwords`.
+- Tests:
+  - `tests/sql/fr55-roles-permissions.sql`:
+    - Helpdesk fixture = `people` read + `role_assign` (still "above" hr), plus a stored `passwords` grant (CHECK dropped and re-added `NOT VALID` inside the rollback).
+    - Reset expectations flipped to admin-only; the admin performs the resets later checks rely on.
+    - New final section covers the 200006 rule and 200007:
+      - catalog and deletion;
+      - `app_save_role` refusing passwords (new and existing role);
+      - the CHECK refusing the superuser;
+      - a stored grant = level 0 and no claim;
+      - eligibility for the stored-grant holder, hr, admin and anon;
+      - non-admin single and bulk resets refused;
+      - direct `must_change_password` write refused;
+      - `auth.users` not client-writable;
+      - admin single and bulk resets work and are audited.
+  - Unit:
+    - `passwords` swapped for `people_create` / `role_assign` / `leave_requests` where generic;
+    - new cases: a stale `passwords` claim or perm gives nothing.
+  - `tests/e2e/roles.spec.ts`:
+    - the custom role is now a personal-info desk;
+    - no `perm-passwords-*` item in the editor;
+    - the desk edits an employee, is read-only on a manager, and has no reset button on either.
+- Docs:
+  - Spec: amendment, D2 item 1a, catalog/deps/gates/test text, migration range 200001–200007.
+  - `PERMISSIONS.md`, `DATA_MODEL.md` (19 items).
+  - `CHANGELOG.md` FR-55 entry.
+  - `TASKS.md`: deferred account-control item (D3 not fully protected; R1, D13, Tier 2); release range 200001–200007.
+- `supabase/schema.sql`: regenerated from `bj_fr55` (`pg_dump -d bj_fr55`). No `'passwords'` remains.
+
+**Actions outside the repo** (local only)
+- `bj_fr55`:
+  - dry-ran 200007 inside the fr55 suite's rollback (final 346 PASS);
+  - applied it with `psql --single-transaction` + ledger row (release `fr55-local`), checksum matches;
+  - `role_permissions_catalog` is still validated after the suites ran.
+- Main checkout `.claude/launch.json`: twice added a temporary `bj-fr55-start` entry (`npm --prefix …/bj-fr55 run start -p 3001`) to start the preview server. Restored to its exact original content each time; `git diff` shows 0 lines.
+- Browser (production build on :3001 against `bj_fr55`), as admin:
+  - role editor has no Passwords item;
+  - Admin-only card lists password resets;
+  - Employees: 25/25 row checkboxes, none on the admin's own row;
+  - Transfer dialog turns `۱۲۴ ١٢٤` into `124 124` and `Ab۱۲ش!` into `Ab12!` (not submitted).
+- Browser, non-admin HR:
+  - Setup: the admin reset the e2e-leftover HR account `9995209428` ("Days Hours Probe") twice through the UI (audited). I then signed in as it and set a new test password.
+  - Employees list: 0 checkboxes, no select-all.
+  - Employee record: Save and Deactivate, no Reset Password.
+  - Local account 124 does not exist on `bj_fr55`; its failed sign-in was the only console 400.
+- e2e: `E2E_BASE_URL=http://localhost:3001 npx playwright test tests/e2e/roles.spec.ts --workers=1` → 1 passed.
+  - Teardown cleanup failed (documented `E2E_BASE_URL` issue).
+  - `npm run cleanup:e2e` by hand failed on the known `separation_signoffs_separation_id_fkey`, so throwaway users remain in `bj_fr55`.
+- Nothing ran on `postgres` or Liara.
+
+**Verification**
+- SQL suites on `bj_fr55` after apply (PASS/FAIL lines read): client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 346; 0 FAIL, 0 ERROR.
+- `tsc`, `lint` clean.
+- Unit: 829 passed, 5 skipped.
+- `npm run build` clean.
+- e2e `roles.spec`: 1/1.
+- Not run: the other e2e specs.
+
+**State left behind**
+- All uncommitted in the worktree. `bj_fr55` has 200006 and 200007 applied, so both are frozen there.
+- Preview server stopped.
+
+**For the next agent**
+- D3 is NOT fully protected: creation-time credentials and the review's R1 path (pre-existing on main) remain; see TASKS.
+- Re-delegating password resets needs Amir's decision on D13 / Tier 2 first.
+
+## 2026-10-14 — FR-55 review fixes: Medium 2 + 3 done, Medium 1 policy awaiting Amir
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), lead at high effort.
+- Two Opus subagents:
+  - Medium 1 policy analysis (effort max, read-only).
+  - Medium 3 UI fix (effort high, two files).
+- The lead did all database work, test runs and schema regeneration.
+
+**Branch / HEAD at start:** FR-55 @ 1bb8e51, plus the uncommitted review entry below. Nothing committed.
+**Trigger:** Amir asked for:
+- the fixes for review Mediums 2 and 3;
+- a policy proposal for Medium 1, with no implementation before his approval.
+
+**What changed** (uncommitted, worktree `/Users/amir/Workspace/bj-fr55`)
+- `supabase/migrations/20261013200006_password_reset_eligibility.sql` (new, forward-only; 200001–200005 not edited):
+  - `private.can_reset_password(caller, target)` holds the reset rule in one place: admin, or passwords edit + `can_act_on`.
+  - `app_set_employee_password` and `app_bulk_set_employee_passwords` both use it. Their bodies are otherwise the same as 200003.
+  - New `public.app_password_reset_eligible(uuid[])` returns the ids the caller may bulk-reset, excluding self. Granted to authenticated only.
+  - The bulk refusal now names `coalesce(personnel_no, employee_code)`. The bootstrap admin used to show as `<NULL>`.
+  - The Medium 1 decision should change only `can_reset_password` (as 200007).
+- `lib/employees/passwordReset.ts` (new):
+  - `passwordResetEligibleIds` calls that RPC and fails closed.
+  - `resetSelectableIds` is a pure helper.
+- `app/[locale]/(app)/manage/employees/page.tsx`: each row gets `canReset` from the RPC, only when the caller has passwords edit.
+- `EmployeesTable.tsx`: row checkboxes and select-all cover `canReset` rows only.
+- `lib/supabase/types.ts`: added the RPC.
+- `TransferAdminDialog.tsx`, written by the subagent and reviewed:
+  - the password `onChange` now uses `toLatinPassword`, as login and change-password do. It converts Persian/Arabic-Indic digits and drops other non-ASCII characters; it does NOT map Persian letters to Latin.
+  - the confirmation field uses `toAsciiDigits`, so letter codes such as `admin` survive; it is trimmed on submit.
+- Tests:
+  - `tests/unit/employees-table-reset.test.tsx` (new, 6 tests): mixed eligible/ineligible rows, select-all, fail-closed helper.
+  - `tests/unit/transfer-admin-dialog.test.tsx`: 5 new tests for a Persian-layout password, Persian digits, Arabic-Indic digits, Latin input, and a letter code.
+  - `tests/sql/fr55-roles-permissions.sql`: 9 new "M2" checks, using its own `m2_*` fixtures (codes 9990000921–923). The suite's `help` fixture loses passwords edit earlier in the file, so it could not be reused.
+- `supabase/schema.sql`: regenerated from `bj_fr55` with `pg_dump -d bj_fr55` (`npm run schema:dump` targets `postgres`). The diff holds only the 200006 objects.
+
+**Actions outside the repo** (local Docker, database `bj_fr55` only)
+- Dry-ran 200006 inside `begin … rollback`.
+- Dry-ran the fr55 suite with 200006 spliced into its rollback transaction:
+  - first runs: a fixture-email clash, then the `help` fixture problem;
+  - final dry run: 334 PASS.
+- Applied 200006 with `psql --single-transaction` and a ledger row (release `fr55-local`). The checksum matches the file. 200006 is now frozen.
+- Probed through the 127.0.0.1:8090 gateway as anon:
+  - new RPC → 42501 permission denied;
+  - unknown RPC → PGRST202.
+  - So PostgREST reloaded its schema without a restart.
+- No drop, re-clone, `postgres` or Liara access.
+
+**Verification**
+- SQL suites on `bj_fr55` after the apply: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 334. All PASS, 0 FAIL, 0 ERROR.
+- `npx tsc --noEmit` and `npm run lint`: clean.
+- `npm run test:unit`: 828 passed, 5 skipped.
+- `npm run build`: clean.
+- Not run: e2e, and a browser check of the Employees list as a passwords holder.
+
+**Medium 1 (superseded by the entry above: resets made admin-only, D13 not built)**
+- A reciprocal `can_act_on(target, caller)` check closes only the reproduced case.
+- It fails for:
+  - inactive peers;
+  - create-with-roles;
+  - reset-then-promote;
+  - temporary status gaps;
+  - resetting your own approver.
+- Proposed D13 "account control", with D4 left unchanged for record edits:
+  - Never reset a target that holds a control key (passwords, people_create, role_assign, role_manager; latent levels count).
+  - Never reset someone who decides for you (manager, department manager, hr/finance, named approver, unit or open-form signer).
+  - Non-admins may not grant roles that carry control keys or hr/finance.
+  - After any non-admin role change, the target must not be able to act on or decide for the caller.
+- Still open even with D13:
+  - R1 (pre-existing on main): HR creates hire P with a known password, makes P the only named approver, and approves its own request as P.
+  - Chain placement after creation.
+  - The issued password is known to whoever issued it.
+  - Sessions survive a reset (no SQL touches `auth.sessions` or `auth.refresh_tokens`).
+- Tier 2 (an issuer column, and revoking sessions on reset) is a separate owner decision.
+
+**State left behind**
+- Uncommitted changes in the worktree: the migration, schema, TS, tests, and both journal entries.
+- `bj_fr55` now has 200006 applied. Medium 1 must go in a new 200007.
+
+**For the next agent**
+- Do not implement Medium 1 until Amir approves a policy.
+
+## 2026-10-14 — Independent pre-merge review of PR #5 (FR-55), review only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), lead reviewer at high effort. Three read-only
+Opus subagents: DB security (effort max), app behavior (high), migrations/coverage (high).
+**Branch / HEAD at start:** FR-55 @ 1bb8e51 (= origin/FR-55, PR head); base origin/main 6d425cf. No drift.
+**Trigger:** Amir asked for an independent review of PR #5 covering correctness, security, regressions
+and merge readiness.
+
+**What changed**
+- Only this entry, uncommitted, in the worktree `/Users/amir/Workspace/bj-fr55`. No code was changed,
+  nothing was committed or pushed, and the main checkout was not touched.
+
+**Actions outside the repo**
+- Local Docker, database `bj_fr55` only. First checked that its ledger checksums for 200001–200005
+  equal the PR-head files.
+- Ran the five `tests/sql` suites as `supabase_admin` (each suite rolls back).
+- Ran two probe scripts, each inside `begin … rollback`:
+  - S1, peer impersonation: confirmed.
+  - S2, cleanup of an admin with a junk code: inconclusive. It was blocked by the known e2e leftover
+    `separation_signoffs_separation_id_fkey`.
+- Ran a read-only query of anon EXECUTE grants, and of `pg_event_trigger` on `bj_fr55` and on
+  `postgres`.
+- Nothing ran on Liara or against the database `postgres`.
+
+**Verification** (run independently this session)
+- `npx tsc --noEmit`, `npm run lint`, `npm run test:deploy`, `npm run build`: all clean.
+- `npm run test:unit`: 817 passed, 5 skipped.
+- SQL suites on `bj_fr55`: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 325. All PASS, 0 FAIL.
+- e2e: not rerun. The 21/21 result is still only the implementer's report.
+
+**Findings** (no Critical)
+- **Medium (security, NEW, confirmed): peer impersonation bypasses D3.**
+  - `can_act_on` allows a target whose levels are *equal* to the caller's.
+  - Repro: two people hold a role with passwords + people read + leave_balances edit. A resets B's
+    password. Signed in as B, A sets A's own balance (S1 → 100000).
+  - The same route reaches A's own bank details or manager_id.
+  - Variant: people_create + role_assign can mint a puppet employee.
+  - Not reachable with the presets alone, because HR lacks `passwords`.
+  - Fix: refuse a reset (single or bulk) and an assign/create when the target could act back on the
+    caller. Or the owner accepts it explicitly.
+- **Medium (UX, NEW): bulk password reset with select-all.**
+  - Where: `EmployeesTable.tsx:97`.
+  - Select-all includes the admin row for a non-admin passwords holder.
+  - `app_bulk_set_employee_passwords` then refuses the whole batch, with "not allowed on <NULL>" for
+    the bootstrap admin.
+- **Medium (UX, NEW): Transfer admin skips Farsi-keyboard normalization.**
+  - Where: `TransferAdminDialog.tsx:136,160`.
+  - `toLatinPassword` and digit normalization are not applied, so Persian digits or a Persian
+    keyboard layout fail the D1 transfer.
+- **Low:**
+  - **`cancel_leave_request`:** its delegated branch skips `can_act_on`. The spec allows this.
+  - **Manager profile branch:** no D4 check (pre-existing).
+  - **Password re-entry in `app_transfer_admin`:** no throttle. It also takes its lock before the
+    admin check.
+  - **Migration precondition:** checks `>1` admin rows only; 0 rows or an inactive admin passes.
+  - **No `lock_timeout`** in the migrations.
+  - **Older SQL suites:** they drop `user_roles_one_admin` inside the transaction, which blocks token
+    refreshes while they run.
+  - **`readOnlyReason` on personal info:** always says "admin" (`[id]/page.tsx:233`).
+  - **`orgBlock`:** hides org fields from a plain people-read holder.
+  - **Personal-info import:** a generic error for a row that is "above" the caller.
+  - **`permissionNeeds`:** shows raw keys.
+  - **PostgREST reload:** no `notify pgrst` in the migrations.
+    - Low only: `pgrst_ddl_watch` exists in this image, and main's `20261013130001` shipped new RPCs
+      without a notify.
+    - Still smoke-test `rpc/app_my_permissions` after deploy, because a failure there silently
+      becomes `{}`.
+- **Info:**
+  - anon still has EXECUTE on `approve_leave_request`, `finance_approved_requests` and
+    `request_approval_progress`. Each raises without a uid.
+  - No DELETE guard keeps the admin `user_roles` row from going away by cascade.
+
+**State left behind**
+- PR #5 is unchanged and not merged.
+- `bj_fr55` and the `bj-fr55` stack are still running. Nothing in them was changed: every probe rolled
+  back.
+- `.next` in the worktree was rebuilt by `npm run build`.
+
+**For the next agent**
+- Before any push, verify on Liara with a read-only query: exactly one `role='admin'` row, and its
+  profile is active.
+- No CI job runs migrations or the SQL suites. Dry-run 200001–200005 on a restored Liara backup first.
+- Worktree cleanup: this entry is uncommitted. Commit it with the FR-55 fixes or move it to main
+  before you remove the worktree.
+
+## 2026-10-14 — FR-55 finished: e2e, hr parity, docs, final review + fix wave (branch complete, not merged)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), subagent-driven (implementer + reviewer per task)
+**Branch / HEAD at start:** FR-55 @ 21acb4f (base main 6d425cf) · **end:** FR-55 @ this commit (base 6d425cf)
+**Trigger:** Amir's resume prompt: continue FR-55 after the Task 10 checkpoint (rebase if main moved,
+Tasks 11–13, final review with one fix wave, finishing-a-development-branch).
+
+**What changed** (all on branch FR-55, worktree `/Users/amir/Workspace/bj-fr55`)
+- No rebase: main had not moved (local main = origin/main = 6d425cf).
+- Task 11 (b903b36): `tests/e2e/roles.spec.ts` (create Helpdesk role, assign, helpdesk resets an
+  employee but not a manager, delete lists holders); older specs address role boxes by test id;
+  `pickManager`/`pickPerson` now wait for the picked "Name (code)" label (a pre-existing race: the
+  typed code matched before the 600 ms auto-pick, so Save went out without a manager/signer);
+  `hr-role.spec` expects HR's `/manage/settings` → `/settings` forward (Task 6).
+- Task 12 (no commit): browser check as `hr-101` on :3001 — nav, Edit Employee (only Manager box,
+  no reset = main), admin record locked, D7 self-appointment refused, order switch enabled (FR-66),
+  `/settings` without Roles tab or hours per day.
+- Task 13 (6a172b3): spec "Accepted and built" + amendments; PERMISSIONS/DATA_MODEL/REQUIREMENTS/
+  CHANGELOG/TASKS; stale admin/hr comments.
+- Final review (opus) → 0 Critical, 2 Important, 12 Minor. Fix wave 74af84f + 44465a7:
+  - I1 `supabase/migrations/20261013200002`: `can_act_on` / `role_within` (and the TS mirror) treat a
+    target's `personal_info_own` as covered by `personal_info_own` or `personal_info` edit — otherwise
+    switching the self-only item on for any role locked its holders away from HR.
+  - I2 `20261013200003`: bulk create / CSV import refuse a non-zero opening balance without
+    `leave_balances` edit (wizard hides the column for such callers).
+  - `20261013200004` `app_transfer_admin`: typed confirmation = employee code when the target has no
+    personnel number (bootstrap `admin`); an old admin left with no role keeps Employee.
+  - Minors: role editor asks before in-app navigation, Save disabled until dirty, "raised by" note
+    names the causing item, holders dialog counts inactive, Reports pulse admin/hr only, subtitle
+    shows a custom role name, department picker omits the caller, Admin-only card lists personnel no /
+    employee code / company, catalog test compares shapes with SQL, D2 override test, docs.
+  - Migrations 200002–200004 were edited in place (applied only to the disposable `bj_fr55`).
+- This commit: spec amendments for the final-review rules, TASKS residual (`getRoleHolders` `.in()`),
+  `supabase/schema.sql` regenerated from the re-cloned `bj_fr55`, this entry.
+
+**Actions outside the repo**
+- Local Docker only. Re-cloned database `bj_fr55` in `bj-erp-db-1`: stopped the `bj-fr55` stack,
+  `dropdb`/`createdb bj_fr55`, `pg_dump -Fc postgres | pg_restore -d bj_fr55` (read-only dump of db
+  `postgres`; its ledger = main's committed migrations, no FR-55 objects), applied FR-55 migrations
+  200001–200005 with `psql --single-transaction` + `bj_deploy.schema_migrations` rows
+  (release `fr55-local`), restarted the stack. First attempt used `pg_restore --no-owner`: GoTrue then
+  died ("problem creating schema migrations") because `auth.*` was owned by supabase_admin — redone
+  WITH owners; only the known pg_cron/graphql restore errors remain. Db `postgres` never written.
+- e2e users created and removed with `npm run cleanup:e2e` (targets `bj_fr55` via worktree `.env.local`).
+
+**Verification**
+- SQL on the fresh `bj_fr55`: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 325 PASS, 0 FAIL.
+- Unit 817 passed (5 skipped); `tsc --noEmit`, `npm run lint`, `npm run test:deploy` clean;
+  `npm run build` clean.
+- e2e (E2E_BASE_URL=http://localhost:3001, --workers=1): against `next start` (production build) on :3001: roles, hr-employee-admin, hr-role, team,
+  balance-days-hours, clearance, approval, bulk-import, admin-settings, department — 21 passed. Against
+  `next dev` the same specs flaked (1–2 min per test; a different 1–2 tests timed out each run, all
+  passing on the next) — dev-server slowness, not a regression.
+- Reviews: Task 11 and Task 13 approved (minors deferred); final review "with fixes" → fix wave
+  re-review approved (22/22 addressed, 3 new minors parked).
+
+**State left behind**
+- Branch FR-55 complete and reviewed, committed, NOT pushed, NOT merged. Push to main deploys to Liara.
+- `bj_fr55` + `bj-fr55` stack (gateway 127.0.0.1:8090) still running; dev server stopped.
+- SDD ledger/briefs/reviews: `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/`.
+
+**For the next agent**
+- Pre-existing (main's schema, not FR-55): `npm run cleanup:e2e` can fail with
+  `separation_signoffs_separation_id_fkey` when one throwaway user is the subject of a separation and
+  another is its signer (separations CASCADE + signoffs signer SET NULL in one delete). Leftover e2e
+  users remain in `bj_fr55` (disposable).
+- Before merging: check Liara has exactly one admin (the migration refuses otherwise).
+- Owner questions open (TASKS "FR-55 follow-ups"): D7 analogues + D7 is a guard, not a control;
+  Finance placement; HR sees the absences board and Finance; a passwords-only role cannot act on
+  `personal_info_own` holders; Marriage leave for a custom role without personal-info read.
+- Merging needs a rebase if main moved; if main added migrations sorting after 20261013200005, rename
+  FR-55's (applied only to `bj_fr55`) and re-clone with owners preserved (no `--no-owner`).
+
+## 2026-10-13 — FR-55 rebased onto 6d425cf, FR-65/66 reconciled, Settings › Roles built (checkpoint)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), subagent-driven (implementer + reviewer per task)
+**Branch / HEAD at start:** FR-55 @ 59f46e5 (base 374d30a) · **end:** FR-55 @ this commit (base 6d425cf)
+**Trigger:** Amir's resume handoff (main shipped FR-65–67 + banners): rebase again, fix the
+`special_leave.grant` blocker, FR-66 approval-order switch on permissions, owner ruling (a) "HR gets
+absences + finance read", then Task 9 fix and Task 10; stop after Task 10 as a checkpoint.
+
+**What changed** (all on branch FR-55, worktree `/Users/amir/Workspace/bj-fr55`)
+- R4: rebased 24 commits onto main 6d425cf (5 conflict files; schema.sql = main's, regenerated later).
+- R5 `supabase/migrations/20261013200001–200004` (edited in place, applied nowhere persistent):
+  catalog item `special_leave` (action-only; deps people + leave_balances read) + legacy alias
+  `special_leave.grant`; `private.special_leave_target` on `has_perm` + `can_act_on`; new RPC
+  `app_set_approval_order_enforced` (approval_steps edit) + `enforce_work_settings_scope` column guard
+  (hours_per_day admin-only kept); HR preset += absences read, finance read, special_leave edit;
+  hr targets need approval_steps + clearance edit in `can_act_on`; special-leave RPCs revoked from anon.
+- `supabase/schema.sql` regenerated from the FR-55 database copy (see below).
+- R3 TS: catalog 20 items; nav/Home/pages/actions on permissions (Finance = Manage item when the caller
+  has a Manage group, else a tab; Home absences board for non-admin absences readers); order switch via
+  the RPC; special-leave card = perm + can-act; clearance detail on clearance edit; Marriage stays
+  enabled when marital status is unreadable (RPC decides).
+- Task 9 fix: one radix `Direction.Provider` in `app/[locale]/layout.tsx`, 40px segments, hint tests.
+- Task 10: `/settings/roles`, `/new`, `/[id]`, RoleEditor, Delete/Transfer dialogs, AdminOnlyCard,
+  `listTransferCandidates`, Profile → Settings link.
+- `CLAUDE.md`: roles convention, catalog-item rule, one-admin fixture rule, separate-DB recipe.
+
+**Actions outside the repo**
+- Local Docker only: created database `bj_fr55` in `bj-erp-db-1` (pg_dump/pg_restore of db
+  `postgres`), applied FR-55 migrations to it (ledger rows release `fr55-local`); started compose
+  project `bj-fr55` (GoTrue + PostgREST + gateway on 127.0.0.1:8090) from
+  `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/fr55-stack/`.
+  Db `postgres` (shared with main's agent) untouched. Nothing on Liara.
+
+**Verification**
+- On bj_fr55: client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 309 PASS, 0 FAIL.
+- `npx tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 791 passed; `npm run build` OK.
+- Browser (dev :3001 on bj_fr55, admin): roles list, editor dependency notes, save/delete a role,
+  English + mobile, transfer dialog (not submitted), Profile Settings link; no console errors.
+
+**State left behind**
+- Committed on FR-55 only; not pushed; not merged. Main checkout untouched (another agent's work).
+- Ledger + RESUME block: `/Users/amir/Workspace/bj/.superpowers/sdd/2026-10-07-configurable-roles/progress.md`;
+  handoff + next prompt: `handoff-2026-10-13-checkpoint.md` there.
+- Left: Task 11 e2e, Task 12 hr parity, Task 13 docs, final review + one fix wave (T10 minors listed).
+
+**For the next agent**
+- Work in the worktree; never run git in `/Users/amir/Workspace/bj`. Apply FR-55 SQL to `bj_fr55` only.
+- If main moved: rebase onto its committed tip; FR-55 migrations must still sort last.
+
+
 ## 2026-10-13 — Request page sections, steps on My Requests, banner targets
 
 **Agent:** Claude Opus 5.5 via Claude Code
@@ -273,6 +842,38 @@ errands exempt; added a "one per day" hint); auto-select in every person picker.
 - Annual Leave is looked up by `name_en = 'Annual Leave'`; a renamed type breaks the grant
   ('annual leave type not found').
 
+## 2026-10-12 → 2026-10-13 — FR-55 rebased onto main and reconciled with FR-56–64 (checkpoint)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **Branch:** FR-55 (renamed from
+fr55-configurable-roles at Amir's request; local only, never pushed)
+**Trigger:** Amir's handoff after main shipped FR-56–FR-64: rebase, rename the FR-55 migrations,
+reconcile the SQL collisions and the owner's preset requirements; then checkpoint so main work is
+not affected.
+
+**What changed (each step reviewed by a separate subagent)**
+- R1: rebased onto main 374d30a (no released main feature reverted; schema.sql = main's; messages
+  union); FR-55 migrations renamed 20261007160001–160005 → 20261013200001–200005.
+- R2 (c994133): migrations reconciled in place — legacy has_permission answers main's settings.edit /
+  absences.view / finance.view / personal_info.edit_own; new catalog items absences, finance,
+  personal_info_own; presets HR += work hours/holidays edit, Security += absences read, Finance +=
+  finance read; FR-63 own-row rule kept (own personal info editable only with the per-role switch);
+  settings gates rewritten on main's `_editor` policies; approval-order switch and hours_per_day stay
+  admin-only; approve/reject (5-arg, override) untouched; security dropped from signing identities.
+
+**Actions outside the repo**
+- None. The FR-55 migrations are NOT applied to any database (local DB is main's demo DB).
+
+**Verification**
+- Dry-runs (rolled back): client-feedback 52, fr51 40, fr52-53 58, fr54 83, fr55 270 — all PASS.
+- Unit: 2 catalog tests red until the migrations are applied and schema.sql regenerated (expected).
+
+**State left behind**
+- Checkout is back on `main`. Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md`
+  ("RESUME HERE (checkpoint 2026-10-13)").
+- Open owner decision: with the new presets, HR can no longer edit/deactivate/set balances/file
+  clearance for Security and Finance holders (they hold a read permission HR lacks). Options are in
+  the ledger; recommended: give HR those two read permissions (or exempt them from the comparison).
+
 ## 2026-10-13 — Released 374d30a to Liara (FR-64)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD:** main @ 374d30a
@@ -432,6 +1033,124 @@ CSV · local data = fresh demo seed · retire existing security/admin steps.
 - The calendar's approve dialog has no override/per-diem UI (the SQL still auto-overrides for an admin
   without a natural step).
 - Local e2e specs that use demo users 1001/2001 should work again (demo data, not the real roster).
+## 2026-10-08 → 2026-10-12 — FR-55 build, checkpoint after Task 8 (subagent-driven)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **Branch:** fr55-configurable-roles (local, never pushed)
+**Trigger:** Scheduled resume (01:30 Toronto, 2026-10-08) of the paused build; two usage-limit stops;
+Amir then asked (2026-10-12) to finish only the next task and checkpoint, because other work on main
+has priority.
+
+**What changed (branch commits, each reviewed by a separate subagent before the next task)**
+- Task 2 fixed after review: subset rule now also protects signing identities (hr/security holders
+  and named approvers need Approval steps edit; finance holders and clearance signers need Clearance
+  edit); role_within fails closed; real cross-company test.
+- Task 3 `20261007160004_roles_rpcs.sql`: role list/holders/save/delete, `app_set_user_role_ids`,
+  `app_transfer_admin`, `app_create_employee(p_role_ids)`. Review fixes: identity presets need the
+  matching permission to assign; role_manager depends on balances+calendar reads; the admin row can
+  never be deleted by assignment; row locks FOR NO KEY UPDATE.
+- Task 3b `20261007160005_roles_company_scope.sql` (added after an automated security scan): holidays,
+  work_settings and approval_steps writes scoped to the caller's company.
+- Tasks 4–8: TS permission catalog (cascade-down when an item another needs is turned off),
+  permission plumbing, nav/page guards, server-action gates + role error messages, edit capabilities
+  and employee forms on role ids (read-only viewers get a neutral note; Save hidden when nothing is
+  saveable). Task 9 (toggle components) built and reviewed; its fix round is NOT done.
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` applied 20261007160002–160005 to the LOCAL DB (real roster);
+  `npm run schema:dump` committed twice. Nothing deployed to Liara; nothing pushed.
+
+**Verification**
+- SQL: fr51 40 / fr52-53 53 / fr54 82 / fr55 238 PASS, 0 FAIL after the last apply.
+- Unit 679 pass; tsc, lint, build clean at Task 8.
+
+**State left behind**
+- Checkout switched back to `main` at the checkpoint; FR-55 lives on branch `fr55-configurable-roles`.
+- **The local DB keeps the five FR-55 migrations.** Running main against it works (the migrations
+  were written add-first), but: do not commit a `npm run schema:dump` made from it on main (it would
+  include FR-55 objects); main's tests/sql fr51/fr52-53/fr54 fail on it (they insert a second admin,
+  which the FR-55 one-admin index forbids); hr can no longer make themselves a department manager
+  there. Liara is unaffected.
+- Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md` ("RESUME HERE",
+  checkpoint 2026-10-12).
+
+## 2026-10-07 — FR-55 build, paused after Task 2 of 13 (subagent-driven)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
+**Trigger:** Amir approved the FR-55 spec, its two amendments, and subagent-driven execution
+with models/effort chosen per task and every task reviewed. Paused at his request: 5-hour usage
+limit at 85%.
+
+**What changed (local branch `fr55-configurable-roles`, not pushed)**
+- `e63ad65` spec + plan (`docs/specs/2026-10-07-configurable-roles-design.md`,
+  `docs/plans/2026-10-07-configurable-roles.md`).
+- `f093367` Task 1: `supabase/migrations/20261007160001_roles_tables.sql` (roles,
+  role_permissions, seeding incl. new companies, `user_roles.role_id` + sync trigger, one-admin
+  index), `tests/sql/fr55-roles-permissions.sql`, and the three older SQL tests drop the one-admin
+  index inside their rolled-back transaction. Reviewed (Opus): approved, minors carried to Task 2.
+- `2721c95` Task 2: `20261007160002_roles_helpers.sql` (has_perm, perm_level, can_act_on,
+  role_within, legacy has_permission alias, app_my_permissions, token hook app_perms, guards on
+  role_permissions and user_roles updates) and `20261007160003_roles_gates.sql` (catalog gates
+  moved to permissions). **Not reviewed yet, not applied.**
+
+**Actions outside the repo**
+- `./deploy/bj-deploy update local` applied ONLY `20261007160001` to the local DB (6 roles seeded,
+  1 admin, no null role_id). All four tests/sql files green afterwards.
+
+**Verification**
+- Task 1: fr51 40 / fr52-53 53 / fr54 82 / fr55 11 PASS after apply.
+- Task 2 (implementer's dry-run, unreviewed): fr55 122 PASS, others unchanged; tsc clean; unit 602.
+
+**State left behind**
+- Branch `fr55-configurable-roles` checked out in the main checkout. `main` untouched; nothing pushed.
+- Resume map: `.superpowers/sdd/2026-10-07-configurable-roles/progress.md` ("RESUME HERE" block)
+  — git-ignored; holds rulings, model choices and the next steps. Restart by re-running the Task 2
+  review with superpowers:subagent-driven-development.
+- Known suspect for the Task 2 review: `private.role_within` returns true for an unknown role id.
+
+**For the next agent**
+- Do not apply 20261007160002/3 before the Task 2 review is clean (applied migrations are frozen).
+- `supabase/schema.sql` is not regenerated yet (planned after Task 3 is applied).
+
+## 2026-10-07 — FR-55 configurable roles: design + spec (no code yet)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop) · **HEAD at start:** main @ e36459b
+**Trigger:** Amir: build admin create/edit roles with a three-way toggle per access item (Claude
+desktop connector-permissions UI), and work out which admin operations must never be delegable so
+no second admin can exist. Spec-driven: plan → spec → implementation plan → build.
+
+**What changed**
+- `docs/specs/2026-10-07-configurable-roles-design.md` (new, draft): decisions D1–D12, 17-item
+  catalog, preset seeds (parity with today), DB/app/UI/test design. Every decision was answered by
+  Amir in chat (exactly one admin, transfer only with password; locked list incl. approval override
+  and bulk update/replace; subset rule incl. manager / department-manager relationship powers;
+  presets editable; company-wide scope; no custom approval-step roles; role names English only;
+  delete dialog lists holders' personnel numbers with a copy button; data model "one roles table +
+  user_roles.role_id"; permissions via `app_perms` JWT claim; no admin recovery script).
+- Session plan: `~/.claude/plans/lets-start-working-on-bright-snowglobe.md` (outside the repo).
+
+**Actions outside the repo**
+- Read-only query on the local DB: role holder counts (admin 1, hr 2, security 3 of which 0
+  active, manager 21).
+
+**Verification**
+- None (documents only).
+
+**State left behind**
+- Spec approved by Amir. Implementation plan written: `docs/plans/2026-10-07-configurable-roles.md`
+  (13 tasks: 4 migrations + SQL scenarios, TS catalog, plumbing, nav/guards, actions,
+  capabilities/forms, toggle components, Settings › Roles, e2e, hr parity, docs). It amends the
+  spec in two places, to be confirmed by Amir and then applied to the spec in Task 13:
+  `personnel_no` dropped from the catalog (no screen changes a personnel number; the login email
+  derives from it), and the new assignment RPC is named `app_set_user_role_ids` (overloading
+  `app_set_user_roles` would break PostgREST name resolution). Both files uncommitted; no code yet.
+
+**For the next agent**
+- Found during the inventory, not fixed: `public.accrue_leave(uuid, uuid)` has no caller check and
+  is granted to `authenticated` → any user reads any employee's balance (offered as a separate task).
+  Also: hr can open the employee import page but `importEmployees` is admin-only; calendar
+  approve buttons exclude hr; admin cannot sign the clearance finance box.
+- `tests/sql/fr51*`, `fr52-53*`, `fr54*` insert a second admin fixture; the FR-55 one-admin index
+  will break them until rewritten.
 
 ## 2026-10-07 — Released 27d59f5 + 6240e3c to Liara (FR-52/53/54 and follow-ups)
 

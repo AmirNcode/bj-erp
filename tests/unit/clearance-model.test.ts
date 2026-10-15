@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canManageClearance,
   canSignFinance,
   canSignRow,
   draftRowsFromUnits,
@@ -161,5 +162,19 @@ describe('canSignFinance', () => {
     expect(canSignFinance({ id: 'f', roles: ['finance'] }, 'leaver', 'in_progress')).toBe(false);
     expect(canSignFinance({ id: 'h', roles: ['hr'] }, 'leaver', 'awaiting_finance')).toBe(false);
     expect(canSignFinance({ id: 'leaver', roles: ['finance'] }, 'leaver', 'awaiting_finance')).toBe(false);
+  });
+});
+
+describe('canManageClearance (FR-55: clearance edit, not the hr role)', () => {
+  it('clearance edit manages a form: the hr preset or a custom role', () => {
+    expect(canManageClearance({ people: 'read', clearance: 'edit' })).toBe(true);
+  });
+  it('clearance read, the finance preset, or nothing does not', () => {
+    expect(canManageClearance({ clearance: 'read' })).toBe(false);
+    expect(canManageClearance({ clearance: 'read', finance: 'read' })).toBe(false);
+    expect(canManageClearance({})).toBe(false);
+  });
+  it('signing stays identity-based: an hr holder still signs the HR row without clearance edit', () => {
+    expect(canSignRow(row({ isHr: true }), { id: 'h', roles: ['hr'] }, 'leaver', 'in_progress')).toBe(true);
   });
 });

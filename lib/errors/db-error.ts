@@ -18,7 +18,7 @@ import { getTranslations } from 'next-intl/server';
  * place that knows which raw database message means which field, so a future
  * action raising the same message gets the same placement for free.
  */
-export type ErrorField = 'personnel_no';
+export type ErrorField = 'personnel_no' | 'role_name' | 'password';
 
 /** The shape every failing server action returns. `field` is optional. */
 export type DbErrorResult = { ok: false; error: string; field?: ErrorField };
@@ -139,12 +139,16 @@ const RULES: Rule[] = [
   // FR-61 per diem.
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
-  // FR-59: hr edits settings, but approval order / hours per day stay admin-only.
+  // FR-59: hr edits settings, but hours per day stays admin-only.
   { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
+  // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).
+  { re: /not allowed to change the approval order setting/, key: 'approvalOrderNotAllowed' },
   // FR-65 special leave.
   { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
   { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
   { re: /annual leave type not found/, key: 'annualTypeMissing' },
+  // FR-55 D4 in private.special_leave_target: the target holds access the caller lacks.
+  { re: /not allowed to grant special leave to this employee/, key: 'accessAboveYours' },
   { re: /not allowed to grant special leave/, key: 'notAllowed' },
   { re: /special leave grant was already revoked/, key: 'specialLeaveAlreadyRevoked' },
   { re: /a note is required for bereavement leave/, key: 'specialLeaveNoteRequired' },
@@ -215,7 +219,7 @@ const RULES: Rule[] = [
   // FR-54 clearance form (raised by the app_*_separation RPCs).
   { re: /employee already has an open clearance form/, key: 'clearanceOpenExists' },
   { re: /cannot file a clearance form for yourself/, key: 'clearanceSelf' },
-  { re: /not allowed to file a clearance form for this employee/, key: 'clearanceAdminTarget' },
+  { re: /not allowed to file a clearance form for this employee/, key: 'accessAboveYours' },
   { re: /^invalid reason$/, key: 'clearanceInvalidReason' },
   { re: /last working day is required/, key: 'clearanceLastDayRequired' },
   { re: /^note is too long$/, key: 'clearanceNoteTooLong' },
@@ -233,8 +237,54 @@ const RULES: Rule[] = [
   { re: /signed rows cannot be changed/, key: 'clearanceSignedRowLocked' },
   { re: /form is not awaiting finance/, key: 'clearanceNotAwaitingFinance' },
   { re: /not allowed to sign as finance/, key: 'clearanceFinanceOnly' },
+  // FR-55 configurable roles. Specific rules sit above the generic `not allowed`
+  // catch-all below, which would otherwise swallow the "not allowed ..." ones.
+  { re: /^only the admin can (?:edit|delete|list) role/, key: 'rolesAdminOnly' },
+  { re: /^only the admin can transfer admin$/, key: 'transferAdminOnly' },
+  { re: /^invalid role name$/, key: 'roleNameInvalid', field: 'role_name' },
+  { re: /^role name already used$/, key: 'roleNameUsed', field: 'role_name' },
+  // Two concurrent saves of the same name race past the RPC's pre-check to the index.
+  { re: /duplicate key value.*roles_company_name_uniq/, key: 'roleNameUsed', field: 'role_name' },
+  { re: /^role not found$/, key: 'roleNotFound' },
+  { re: /^built-in role cannot be edited$/, key: 'roleBuiltInLocked' },
+  { re: /^built-in roles cannot be deleted$/, key: 'roleBuiltInNoDelete' },
+  { re: /^wrong password$/, key: 'wrongCurrentPassword', field: 'password' },
+  { re: /^you already hold admin$/, key: 'alreadyAdmin' },
+  {
+    re: /^personnel number does not match an active employee$/,
+    key: 'transferTargetMismatch',
+    field: 'personnel_no',
+  },
+  { re: /^admin is moved only by Transfer admin$/, key: 'adminMovesByTransfer' },
+  { re: /^not allowed on this employee$/, key: 'accessAboveYours' },
+  // Bulk password reset, per target: "not allowed on <personnel no>".
+  {
+    re: /^not allowed on (\S+)$/,
+    key: 'accessAboveYoursOn',
+    params: (m) => ({ personnelNo: m[1] }),
+  },
+  {
+    re: /^not allowed to give or remove role (.+)$/,
+    key: 'roleChangeNotAllowed',
+    params: (m) => ({ role: m[1] }),
+  },
+  { re: /^unknown role$/, key: 'unknownRole' },
+  // app_save_role dependency refusal, e.g. "reports needs people".
+  {
+    re: /^([a-z_]+) needs ([a-z_]+)$/,
+    key: 'permissionNeeds',
+    params: (m) => ({ key: m[1], needs: m[2] }),
+  },
+  {
+    re: /^invalid permission (\S+) = (.+)$/,
+    key: 'permissionInvalid',
+    params: (m) => ({ key: m[1], level: m[2] }),
+  },
+  { re: /you cannot appoint yourself department manager/, key: 'cannotAppointSelfManager' },
+  // Bulk onboarding without leave_balances edit (app_bulk_*_employees).
+  { re: /^not allowed to set opening balances$/, key: 'openingBalanceNotAllowed' },
   { re: /not allowed to review requests/i, key: 'notAllowedToReview' },
-  { re: /not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
+  { re: /^not allowed$|not allowed to|only admins can|not permitted|role required|only admins or hr can/i, key: 'notAllowed' },
   { re: /not authenticated/i, key: 'notAuthenticated' },
 ];
 

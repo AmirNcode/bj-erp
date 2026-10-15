@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
+import { resetSelectableIds } from '@/lib/employees/passwordReset';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,17 +34,20 @@ export type EmployeeRow = {
   active: boolean;
   hireDateLabel: string;
   departmentLabel: string;
-  /** Localized role names — never the raw enum values. */
+  /** Role names as stored (FR-55 D11: English everywhere, custom roles included) — never the raw enum values. */
   roleLabels: string[];
   /** Next pending/approved leave, pre-formatted; null when none. */
   upcoming: { label: string; status: 'pending' | 'approved' } | null;
   isSelf: boolean;
+  /** The caller may bulk-reset this person's password (the database rule; never yourself). */
+  canReset: boolean;
 };
 
 type Props = {
   employees: EmployeeRow[];
-  isAdmin: boolean;
-  /** Manager without admin/hr: department and roles are read-only for them. */
+  /** The admin: row checkboxes and bulk password regeneration (resets are admin-only). */
+  canBulkReset: boolean;
+  /** Manager without people edit: department and roles are read-only for them. */
   showLocks: boolean;
   locale: string;
   labels: {
@@ -81,20 +85,21 @@ export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
 }
 
 /**
- * Desktop employees table. For admins each row gets a checkbox; a selection
+ * Desktop employees table. For the admin each eligible row gets a checkbox; a selection
  * opens a bar offering bulk password regeneration (the recovery path for a lost
  * one-time credentials file) — confirmed first: old passwords stop working.
  */
-export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }: Props) {
+export function EmployeesTable({ employees, canBulkReset, showLocks, locale, labels }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<IssuedCredential[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // The caller's own account is excluded — bulk-resetting your own admin
-  // password would hand you a lockout.
-  const selectable = employees.filter((e) => !e.isSelf);
-  const allSelected = selectable.length > 0 && selectable.every((e) => selected.has(e.id));
+  // Only rows the database would accept (lib/employees/passwordReset.ts): never
+  // the caller's own account, and for a non-admin never the admin or anyone who
+  // holds more (D4), since one refused row refuses the whole batch.
+  const selectable = resetSelectableIds(employees);
+  const allSelected = selectable.length > 0 && selectable.every((id) => selected.has(id));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -105,7 +110,7 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
     });
 
   const toggleAll = () =>
-    setSelected(allSelected ? new Set() : new Set(selectable.map((e) => e.id)));
+    setSelected(allSelected ? new Set() : new Set(selectable));
 
   const regenerate = () =>
     startTransition(async () => {
@@ -127,11 +132,11 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
     <Lock aria-label={labels.locked} className="inline size-3 text-muted-foreground" />
   ) : null;
   const th = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
-  const colCount = (isAdmin ? 1 : 0) + 6;
+  const colCount = (canBulkReset ? 1 : 0) + 6;
 
   return (
     <div className="hidden space-y-3 md:block">
-      {isAdmin && selected.size > 0 && (
+      {canBulkReset && selected.size > 0 && (
         <div
           className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-secondary px-4 py-2.5"
           data-testid="emp-bulk-bar"
@@ -176,7 +181,7 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40">
               <tr>
-                {isAdmin && (
+                {canBulkReset && (
                   <th className="w-10 px-4 py-3">
                     <input
                       type="checkbox"
@@ -214,9 +219,9 @@ export function EmployeesTable({ employees, isAdmin, showLocks, locale, labels }
                   key={emp.id}
                   className={cn('transition-colors hover:bg-muted/30', !emp.active && 'opacity-55')}
                 >
-                  {isAdmin && (
+                  {canBulkReset && (
                     <td className="px-4 py-3">
-                      {!emp.isSelf && (
+                      {emp.canReset && (
                         <input
                           type="checkbox"
                           aria-label={emp.employee_code}

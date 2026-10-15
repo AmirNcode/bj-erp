@@ -53,8 +53,8 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
 
   // ── 1. department, manager, title and the manager role ───────────────────
   await openEdit(page, worker.code);
-  await expect(page.getByLabel('security', { exact: true })).toBeDisabled();
-  await expect(page.getByLabel('admin', { exact: true })).toBeDisabled();
+  await expect(page.locator('[data-testid="role-security"] input')).toBeDisabled();
+  await expect(page.locator('[data-testid="role-admin"] input')).toBeDisabled();
   await expect(page.locator('[data-testid="employee-deactivate"]')).toBeVisible();
 
   const dept = page.locator('#department_id');
@@ -63,20 +63,20 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await dept.selectOption(newDept);
   await pickManager(page, boss.code);
   await page.fill('[data-testid="job-title"]', 'Welder');
-  await page.getByLabel('manager', { exact: true }).check();
+  await page.locator('[data-testid="role-manager"] input').check();
   await save(page);
 
   await page.reload();
   await expect(page.locator('[data-testid="job-title"]')).toHaveValue('Welder', { timeout: 30_000 });
   await expect(dept).toHaveValue(newDept);
   await expect(page.locator('#manager_id')).toHaveValue(new RegExp(boss.code));
-  await expect(page.getByLabel('manager', { exact: true })).toBeChecked();
+  await expect(page.locator('[data-testid="role-manager"] input')).toBeChecked();
 
   // ── 2. and the role comes off again ──────────────────────────────────────
-  await page.getByLabel('manager', { exact: true }).uncheck();
+  await page.locator('[data-testid="role-manager"] input').uncheck();
   await save(page);
   await page.reload();
-  await expect(page.getByLabel('manager', { exact: true })).not.toBeChecked({ timeout: 30_000 });
+  await expect(page.locator('[data-testid="role-manager"] input')).not.toBeChecked({ timeout: 30_000 });
 
   // ── 3. deactivate, then reactivate ───────────────────────────────────────
   await page.click('[data-testid="employee-deactivate"]');
@@ -90,7 +90,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await expect(page.locator('[data-testid="edit-scope-note"]')).toContainText('Only an admin');
   await expect(page.locator('[data-testid="job-title"]')).toBeDisabled();
   await expect(page.locator('#department_id')).toBeDisabled();
-  await expect(page.getByLabel('manager', { exact: true })).toBeDisabled();
+  await expect(page.locator('[data-testid="role-manager"] input')).toBeDisabled();
   await expect(page.locator('[data-testid="employee-deactivate"]')).toHaveCount(0);
 
   // ── 5. so are hr's own org fields ────────────────────────────────────────

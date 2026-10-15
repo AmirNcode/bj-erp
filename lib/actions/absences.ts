@@ -1,13 +1,15 @@
 'use server';
 
 /**
- * Approved absences on one day (FR-56) — security's board.
+ * Approved absences on one day (FR-56) — the board for absences read (FR-55:
+ * the security and hr presets; the admin implicitly).
  *
  * Security needs to know who is out and that their request is fully approved;
  * it never approves. Only `approved` requests are listed — pending ones never
- * show. Reads through the existing `leave_requests_select` policy, which already
- * admits security company-wide, so this adds no read surface. The reason and the
- * errand location are not selected: the gate needs who and when, not why.
+ * show. Reads through the `leave_requests_select` policy: absences depends on
+ * leave_requests read and people read (D6), so this adds no read surface. The
+ * reason and the errand location are not selected: the gate needs who and
+ * when, not why.
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -34,7 +36,7 @@ export type Absence = {
 export async function getApprovedAbsences(
   date: string
 ): Promise<{ ok: true; absences: Absence[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'security'] });
+  const c = await requireCaller({ perm: ['absences', 'read'] });
   if (!c.ok) return c;
   if (!isValidIsoDate(date)) return dbErr('invalid date');
 

@@ -33,11 +33,12 @@ function jalaliDay(offset: number): string {
 
 /**
  * Type a personnel number into a person search box. An exact number is chosen
- * automatically (2026-10-13), so wait for the box to show that person.
+ * automatically (2026-10-13), so wait for the box to show that person as
+ * "Name (code)": the box echoes the typed code before the pick lands.
  */
 async function pickPerson(page: Page, testId: string, code: string) {
   await page.fill(`[data-testid="${testId}"]`, code);
-  await expect(page.locator(`[data-testid="${testId}"]`)).toHaveValue(new RegExp(code), { timeout: 10_000 });
+  await expect(page.locator(`[data-testid="${testId}"]`)).toHaveValue(new RegExp(`\\(${code}\\)`), { timeout: 10_000 });
 }
 
 async function fileForm(page: Page, leaverCode: string, lastDay: string, signerCode: string | null) {

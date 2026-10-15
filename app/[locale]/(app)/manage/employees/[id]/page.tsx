@@ -1,17 +1,20 @@
 /**
- * Edit employee page — fields available depend on the caller's roles and the
- * target (employeeEditCapabilities, FR-51). Admin: everything. hr: profile,
- * department, manager, title, activate/deactivate and the manager role, except
- * on an admin or themselves; plus leave (FR-43). Manager: name and hire date.
+ * Edit employee page — fields available depend on the caller's permissions and
+ * the target (employeeEditCapabilities, FR-51 / FR-55 D3–D5). Admin: everything.
+ * A permission holder acts on a target only when the target holds nothing above
+ * them, is not the admin and is not themselves. Manager: name and hire date of
+ * their reports.
  */
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
 import { getEmployeeBalances, getEmployeePolicies, getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
-import { notFound } from 'next/navigation';
-import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
+import { listRoles } from '@/lib/actions/roles';
+import { notFound, redirect } from 'next/navigation';
+import { employeeEditCapabilities, type TargetIdentity } from '@/lib/employees/editCapabilities';
+import { can, type Perms } from '@/lib/permissions/catalog';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
@@ -23,6 +26,41 @@ import { SpecialLeaveCard } from './SpecialLeaveCard';
 type Props = {
   params: Promise<{ locale: string; id: string }>;
 };
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * The target's identity powers that private.can_act_on guards (approval and
+ * clearance signers). Only read when the caller lacks the power that covers
+ * them; a failed read counts as true, so the form locks rather than offers a
+ * save the database will refuse.
+ *
+ * Signer rows of open clearance forms are readable only with `clearance` read.
+ * Without it the check falls back to the clearance units (readable by everyone):
+ * locking every record for such a caller would make the page useless, and the
+ * database still refuses the rare per-form signer.
+ */
+async function targetIdentity(supabase: Supabase, id: string, perms: Perms): Promise<TargetIdentity> {
+  const approverQuery = can(perms, 'approval_steps')
+    ? null
+    : supabase.from('approval_steps').select('id').eq('approver_id', id).eq('active', true).limit(1);
+  const unitQuery = can(perms, 'clearance')
+    ? null
+    : supabase.from('separation_units').select('id').eq('signer_id', id).limit(1);
+  const signoffQuery =
+    can(perms, 'clearance') || !can(perms, 'clearance', 'read')
+      ? null
+      : supabase
+          .from('separation_signoffs')
+          .select('id, separations!separation_signoffs_separation_id_fkey!inner(status)')
+          .eq('signer_id', id)
+          .in('separations.status', ['in_progress', 'awaiting_finance'])
+          .limit(1);
+  const [approver, unit, signoff] = await Promise.all([approverQuery, unitQuery, signoffQuery]);
+  const found = (r: { data: unknown[] | null; error: unknown } | null) =>
+    r !== null && (r.error != null || (r.data?.length ?? 0) > 0);
+  return { approver: found(approver), clearanceSigner: found(unit) || found(signoff) };
+}
 
 export default async function EditEmployeePage({ params }: Props) {
   const { locale, id } = await params;
@@ -36,7 +74,15 @@ export default async function EditEmployeePage({ params }: Props) {
 
   if (!user) return notFound();
 
-  const callerRoles = await getCachedRoles(user.id);
+  const [callerRoles, callerPerms] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedPermissions(user.id),
+  ]);
+  // The Manage layout admits anyone with a Manage item; this page needs the
+  // Employees one.
+  if (!callerRoles.includes('manager') && !can(callerPerms, 'people', 'read')) {
+    redirect(`/${locale}/home`);
+  }
 
   // Fetch target employee
   const { data: employee } = await supabase
@@ -47,18 +93,34 @@ export default async function EditEmployeePage({ params }: Props) {
 
   if (!employee) return notFound();
 
-  // Fetch employee's current roles
-  const { data: empRolesData } = await supabase
-    .from('user_roles')
-    .select('role')
-    .eq('user_id', id);
-  const empRoles = (empRolesData ?? []).map((r) => r.role);
+  // The target's role ids (FR-55: custom roles have no enum), every role of the
+  // company, and whether they manage a department (D4).
+  const isAdmin = callerRoles.includes('admin');
+  const [targetRolesRes, rolesRes, managedDeptRes, identity] = await Promise.all([
+    supabase.from('user_roles').select('role_id').eq('user_id', id),
+    listRoles(),
+    supabase.from('departments').select('id').eq('manager_id', id).limit(1),
+    isAdmin
+      ? Promise.resolve({ approver: false, clearanceSigner: false })
+      : targetIdentity(supabase, id, callerPerms),
+  ]);
+  // Without the roles the target's levels are unknown; render nothing rather
+  // than offer edits the subset rule might refuse.
+  if (!rolesRes.ok) throw new Error(rolesRes.error);
+  if (targetRolesRes.error) throw new Error(targetRolesRes.error.message);
+  const allRoles = rolesRes.roles;
+  const targetRoleIds = (targetRolesRes.data ?? []).map((r) => r.role_id);
 
   const caps = employeeEditCapabilities({
     callerId: user.id,
     callerRoles,
+    callerPerms,
     targetId: id,
-    targetRoles: empRoles,
+    targetRoleIds,
+    allRoles,
+    // A failed read locks (fail closed); the database decides either way.
+    targetIsDepartmentManager: managedDeptRes.error != null || (managedDeptRes.data?.length ?? 0) > 0,
+    targetIdentity: identity,
   });
   const canManageLeave = caps.leave;
 
@@ -94,9 +156,9 @@ export default async function EditEmployeePage({ params }: Props) {
         .eq('affects_balance', true)
     : { data: [] };
 
-  // FR-53: hr/admin only; managers never see personal information.
+  // FR-53: personal_info read; managers never see personal information.
   const personalInfoRes = caps.personalInfo ? await getPersonalInfo(id) : null;
-  // FR-65: hr/admin grant extra leave for marriage / a death in the family.
+  // FR-65: special_leave edit holders grant extra leave for marriage / a death in the family.
   const specialLeaveRes = caps.specialLeave ? await getSpecialLeaveGrants(id) : null;
   const tPi = await getTranslations('personalInfo');
 
@@ -110,8 +172,10 @@ export default async function EditEmployeePage({ params }: Props) {
       />
       <EditEmployeeForm
         employee={employee}
-        empRoles={empRoles as string[]}
+        allRoles={allRoles}
+        targetRoleIds={targetRoleIds}
         caps={caps}
+        showOrg={can(callerPerms, 'people', 'read')}
         departments={departments ?? []}
         managers={managers ?? []}
         balances={balances}
@@ -126,6 +190,7 @@ export default async function EditEmployeePage({ params }: Props) {
           department: t('employees.department'),
           manager: t('employees.manager'),
           roles: t('employees.roles'),
+          adminTransferHint: t('employees.adminTransferHint'),
           hireDate: t('employees.hireDate'),
           jobTitle: t('employees.jobTitle'),
           save: t('employees.save'),
@@ -174,7 +239,9 @@ export default async function EditEmployeePage({ params }: Props) {
         <SpecialLeaveCard
           employeeId={id}
           grants={specialLeaveRes.grants}
-          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : null}
+          // undefined = unreadable (no personal_info read): Marriage stays offered
+          // and the RPC refuses a non-single target itself (R3 ruling).
+          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : undefined}
         />
       )}
     </main>

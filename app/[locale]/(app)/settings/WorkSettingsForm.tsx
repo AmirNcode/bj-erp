@@ -57,6 +57,7 @@ export function WorkSettingsForm({
   initialWorkStart,
   initialWorkEnd,
   initialHourlyCapMinutes,
+  readOnly = false,
   locale,
   labels,
 }: {
@@ -68,6 +69,8 @@ export function WorkSettingsForm({
   initialWorkStart: string;
   initialWorkEnd: string;
   initialHourlyCapMinutes: number;
+  /** FR-55: a read-only viewer sees the values with every control disabled and no Save. */
+  readOnly?: boolean;
   locale: string;
   labels: Labels;
 }) {
@@ -89,6 +92,7 @@ export function WorkSettingsForm({
   const [okMsg, setOkMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
+  const locked = isPending || readOnly;
 
   // A day can be in only one slot across BOTH rows: weekly and every other
   // week at once is refused by the server and a CHECK constraint, so the other
@@ -110,7 +114,7 @@ export function WorkSettingsForm({
           {/* Native <select> — must stay native for Playwright selectOption. */}
           <select
             value={slot === null ? 'none' : keyOf(slot)}
-            disabled={isPending}
+            disabled={locked}
             data-testid={`weekend-${kind}-${i}`}
             aria-label={kind === 'weekly' ? labels.frequencyWeekly : labels.frequencyBiweekly}
             onChange={(e) => {
@@ -126,7 +130,7 @@ export function WorkSettingsForm({
               </option>
             ))}
           </select>
-          {slots.length > 1 && (
+          {!readOnly && slots.length > 1 && (
             <Button
               type="button"
               variant="ghost"
@@ -140,7 +144,7 @@ export function WorkSettingsForm({
               <X aria-hidden="true" />
             </Button>
           )}
-          {i === 0 && slots.length < WEEKDAYS.length && (
+          {!readOnly && i === 0 && slots.length < WEEKDAYS.length && (
             <Button
               type="button"
               variant="ghost"
@@ -225,6 +229,7 @@ export function WorkSettingsForm({
                   <DatePicker
                     value={anchor}
                     onChange={setAnchor}
+                    disabled={readOnly}
                     calendar={calendarPickerConfig(locale).calendar}
                     locale={calendarPickerConfig(locale).calLocale}
                     containerClassName="w-full"
@@ -251,7 +256,7 @@ export function WorkSettingsForm({
               type="time"
               value={workStart}
               onChange={(e) => setWorkStart(e.target.value)}
-              disabled={isPending}
+              disabled={locked}
               dir="ltr"
               data-testid="work-start"
               className={inputClass}
@@ -263,7 +268,7 @@ export function WorkSettingsForm({
               type="time"
               value={workEnd}
               onChange={(e) => setWorkEnd(e.target.value)}
-              disabled={isPending}
+              disabled={locked}
               dir="ltr"
               data-testid="work-end"
               className={inputClass}
@@ -278,7 +283,7 @@ export function WorkSettingsForm({
               step="0.5"
               value={capHours}
               onChange={(e) => setCapHours(Number(e.target.value))}
-              disabled={isPending}
+              disabled={locked}
               data-testid="hourly-cap-hours"
               className={inputClass}
             />
@@ -292,27 +297,31 @@ export function WorkSettingsForm({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t bg-muted/30 px-6 py-3.5">
-        {okMsg && (
-          <p role="status" data-testid="work-settings-saved" className="text-[12.5px] text-success">
-            {okMsg}
-          </p>
-        )}
-        {savedAt && (
-          <p className="text-[12.5px] text-muted-foreground">
-            {labels.lastSaved.replace('{date}', formatCalendarDate(todayInAppTz(new Date(savedAt)), locale))}
-          </p>
-        )}
-        <Button
-          type="button"
-          data-testid="work-settings-save"
-          onClick={onSave}
-          disabled={isPending}
-          className="rounded-[10px]"
-        >
-          {labels.save}
-        </Button>
-      </div>
+      {(!readOnly || savedAt) && (
+        <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t bg-muted/30 px-6 py-3.5">
+          {okMsg && (
+            <p role="status" data-testid="work-settings-saved" className="text-[12.5px] text-success">
+              {okMsg}
+            </p>
+          )}
+          {savedAt && (
+            <p className="text-[12.5px] text-muted-foreground">
+              {labels.lastSaved.replace('{date}', formatCalendarDate(todayInAppTz(new Date(savedAt)), locale))}
+            </p>
+          )}
+          {!readOnly && (
+            <Button
+              type="button"
+              data-testid="work-settings-save"
+              onClick={onSave}
+              disabled={isPending}
+              className="rounded-[10px]"
+            >
+              {labels.save}
+            </Button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }

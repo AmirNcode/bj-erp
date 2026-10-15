@@ -69,8 +69,10 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   //
   // FR-42: HR configures the approval chain, which since the 2026-10 redesign
   // has its own page under Manage. Company config (work settings, holidays)
-  // lives on /settings, which HR reaches since FR-59 (2026-10-12); the old
-  // /manage/settings URL forwards HR to the approval chain and nothing else.
+  // lives on /settings, which HR reaches since FR-59 (2026-10-12). FR-55: the
+  // old /manage/settings URL forwards anyone the Settings page admits to
+  // /settings (HR included); only a caller with approval_steps but no Settings
+  // access would land on the approval chain.
   await page.goto('/manage/approval-steps');
   await expect(page.locator('[data-testid="approval-steps-card"]')).toBeVisible({
     timeout: 20_000,
@@ -81,7 +83,8 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('[data-testid="holiday-editor"]')).toBeVisible();
   await page.goto('/manage/settings');
-  await expect(page).toHaveURL(/\/manage\/approval-steps$/, { timeout: 20_000 });
+  await expect(page).toHaveURL(/(?<!\/manage)\/settings$/, { timeout: 20_000 });
+  await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 20_000 });
 
   // FR-51: HR creates departments (the code stays admin-only in the database).
   await page.goto('/manage/departments/new');
@@ -268,10 +271,11 @@ test('hr creates an employee in another department, and cannot grant a role', as
   await expect(page.locator('#manager_id')).toBeVisible();
   await expect(page.locator('[data-testid="mgr-locked"]')).toHaveCount(0);
 
-  // No role checkboxes — granting a role stays admin-only, and this is the
-  // boundary that has NOT moved: `app_create_employee` clamps an HR caller's role
-  // list to {employee} in the database (FR-35 D4).
-  await expect(page.locator('input[type="checkbox"][value="admin"]')).toHaveCount(0);
+  // Granting a role stays admin-only, and this is the boundary that has NOT
+  // moved: `app_create_employee` clamps an HR caller's role list to {employee}
+  // in the database (FR-35 D4). FR-55 D1: HR now SEES the role boxes, but the
+  // admin one is always disabled (the single admin only moves via transfer).
+  await expect(page.locator('[data-testid="role-admin"] input')).toBeDisabled();
 
   // CHANGED BY FR-43: the allocation and accrual-policy fields ARE offered to HR
   // now. They were hidden only because `allocate_leave` and

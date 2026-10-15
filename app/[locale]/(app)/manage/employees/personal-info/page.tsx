@@ -1,14 +1,16 @@
 /**
- * Manage › Employees › Personal info (FR-53): CSV export and import for hr and
- * admin. Both RPCs re-check the permission and write the audit row; this page
- * guard only keeps everyone else out of the screen.
+ * Manage › Employees › Personal info (FR-53): CSV export (personal_info read) and
+ * import (personal_info edit). Both RPCs re-check the permission and write the
+ * audit row; this page guard keeps everyone else out of the screen and hides the
+ * import part from a read-only holder.
  */
 
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { PageHeader } from '../../../_components/PageHeader';
 import { PersonalInfoBulk } from './PersonalInfoBulk';
 
@@ -20,8 +22,8 @@ export default async function PersonalInfoBulkPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin') && !roles.includes('hr')) {
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'personal_info', 'read')) {
     redirect(`/${locale}/manage/employees`);
   }
 
@@ -29,7 +31,7 @@ export default async function PersonalInfoBulkPage({ params }: Props) {
   return (
     <main className="mx-auto max-w-3xl space-y-4 p-4 md:p-6">
       <PageHeader title={t('title')} />
-      <PersonalInfoBulk locale={locale} />
+      <PersonalInfoBulk locale={locale} canImport={can(perms, 'personal_info', 'edit')} />
     </main>
   );
 }

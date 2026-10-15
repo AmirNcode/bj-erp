@@ -83,11 +83,8 @@ export async function getReportData(
   rangeStart: string,
   rangeEnd: string
 ): Promise<{ ok: true; data: ReportData } | { ok: false; error: string }> {
-  const c = await requireCaller({ company: true });
+  const c = await requireCaller({ perm: ['reports', 'read'], company: true });
   if (!c.ok) return c;
-  if (!c.roles.includes('hr') && !c.roles.includes('admin')) {
-    return dbErr('not allowed to review requests');
-  }
 
   const [
     { data: employees, error: empError },

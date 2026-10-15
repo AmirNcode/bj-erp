@@ -1,5 +1,5 @@
 /**
- * HR request review (FR-38) — `hr` and `admin` only.
+ * HR request review (FR-38) — needs the leave_requests permission (FR-55).
  *
  * Managers keep `/manage/approvals`, which is scoped to their own reports and is
  * about *deciding*. This screen is about *reviewing and filing*: every request in
@@ -11,7 +11,8 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getReviewRequests } from '@/lib/actions/leave/review';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -84,11 +85,11 @@ export default async function RequestsReviewPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
 
-  // The /manage layout already admits admin, manager and hr. This narrows it
+  // The /manage layout also admits managers. This narrows it
   // further: a manager has no business browsing every employee's private reason,
   // which this screen's rows are one click away from.
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('hr') && !roles.includes('admin')) {
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'leave_requests', 'read')) {
     redirect(`/${locale}/home`);
   }
 

@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * «مرخصی خارج از لیست» (FR-65) at the bottom of Edit Employee: hr or admin
- * grants 3 extra days of annual leave for a first marriage (a checkbox, offered
- * only while personal info says single) or for each death of a close relative
- * (a button, with the grants listed). Unticking / removing reverses a grant
- * made by mistake. The database enforces every rule; this only reflects them.
+ * «مرخصی خارج از لیست» (FR-65) at the bottom of Edit Employee: a special_leave
+ * holder grants 3 extra days of annual leave for a first marriage (a checkbox,
+ * offered while personal info says single or the caller cannot read it) or for
+ * each death of a close relative (a button, with the grants listed). Unticking
+ * or removing reverses a grant made by mistake. The database enforces every
+ * rule; this only reflects them.
  */
 
 import { useState, useTransition } from 'react';
@@ -14,6 +15,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { grantSpecialLeave, revokeSpecialLeave, type SpecialLeaveGrant } from '@/lib/actions/specialLeave';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { marriageOffer } from '@/lib/employees/specialLeave';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,8 +24,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 type Props = {
   employeeId: string;
   grants: SpecialLeaveGrant[];
-  /** From personal info: 'single' | 'married' | null. */
-  maritalStatus: string | null;
+  /**
+   * From personal info: 'single' | 'married' | null (not set); undefined when
+   * the caller cannot read the target's personal information.
+   */
+  maritalStatus: string | null | undefined;
 };
 
 export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
@@ -38,7 +43,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
 
   const marriage = grants.find((g) => g.kind === 'marriage') ?? null;
   const deaths = grants.filter((g) => g.kind === 'bereavement');
-  const marriageAllowed = !!marriage || maritalStatus === 'single';
+  const offer = marriageOffer({ granted: !!marriage, maritalStatus });
   const date = (iso: string) => formatCalendarDate(iso.slice(0, 10), locale);
 
   const run = (
@@ -83,7 +88,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
               type="checkbox"
               className="size-4"
               checked={!!marriage}
-              disabled={isPending || !marriageAllowed}
+              disabled={isPending || !offer.enabled}
               onChange={(e) =>
                 e.target.checked
                   ? run(() => grantSpecialLeave(employeeId, 'marriage'), t('granted'))
@@ -96,7 +101,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
           <p className="ps-6 text-xs text-muted-foreground" data-testid="special-leave-marriage-hint">
             {marriage
               ? t('grantedOn', { date: date(marriage.grantedAt) })
-              : marriageAllowed
+              : offer.hint === 'marriageHint'
                 ? t('marriageHint')
                 : t('marriageNotSingle')}
           </p>

@@ -102,6 +102,7 @@ describe('AppShell side panel', () => {
     const { container } = renderWithIntl(
       <AppShell
         roles={['employee']}
+        perms={{}}
         locale={locale}
         labels={labels}
         appName="BJ"

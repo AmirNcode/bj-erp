@@ -1,14 +1,17 @@
 /**
  * Manage › Departments (spec 2026-07-30 §7): the department list with its
  * members panel, rename and Add Department, plus the monthly accrual runner.
- * Admin and hr (FR-51); everyone else goes back to the employees hub. The
- * department code stays admin-only in the database.
+ * Needs the departments permission (FR-55): read shows the list, edit adds
+ * rename / manager / Add Department, and the accrual runner needs leave_accrual.
+ * Everyone else goes back to the employees hub. The department code stays
+ * admin-only in the database.
  */
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageHeader } from '../../_components/PageHeader';
@@ -23,8 +26,8 @@ export default async function DepartmentsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('admin') && !roles.includes('hr')) redirect(`/${locale}/manage/employees`);
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
+  if (!can(perms, 'departments', 'read')) redirect(`/${locale}/manage/employees`);
 
   const [tNav, t] = await Promise.all([
     getTranslations('nav'),
@@ -49,8 +52,11 @@ export default async function DepartmentsPage({ params }: Props) {
       .eq('role', 'manager')
       .eq('profiles.active', true),
   ]);
+  // D7: a non-admin may not appoint themself department manager, so they are not
+  // offered (a department they already manage still shows them as its value).
   const managers = ((managerRows ?? []) as unknown as { profiles: { id: string; full_name: string } }[])
     .map((r) => ({ id: r.profiles.id, fullName: r.profiles.full_name }))
+    .filter((m) => roles.includes('admin') || m.id !== user.id)
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'fa'));
 
   return (
@@ -71,6 +77,7 @@ export default async function DepartmentsPage({ params }: Props) {
             managers={managers}
             ownDepartmentId={me?.department_id ?? null}
             loadError={departmentsError?.message ?? null}
+            canEdit={can(perms, 'departments', 'edit')}
             locale={locale}
             labels={{
               title: t('departments.title'),
@@ -98,6 +105,7 @@ export default async function DepartmentsPage({ params }: Props) {
         </CardContent>
       </Card>
 
+      {can(perms, 'leave_accrual') && (
       <Card>
         <CardContent>
           <AccrualRunner
@@ -115,6 +123,7 @@ export default async function DepartmentsPage({ params }: Props) {
           />
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

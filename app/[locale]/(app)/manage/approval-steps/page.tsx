@@ -1,13 +1,15 @@
 /**
  * Manage › Approval steps (FR-36, FR-42): who must sign, in what order, and
- * whether that order binds. admin and hr configure the chain; only an admin may
- * make the order binding. Everyone else is sent home.
+ * whether that order binds. The chain is shown to callers with approval_steps
+ * read and edited with approval_steps edit (FR-55); approval_steps edit also
+ * makes the order binding (FR-66). Everyone else is sent home.
  */
 export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { getApprovalSteps } from '@/lib/actions/settings';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalStepsCard } from './ApprovalStepsCard';
@@ -20,9 +22,8 @@ export default async function ApprovalStepsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  const isAdmin = roles.includes('admin');
-  if (!isAdmin && !roles.includes('hr')) redirect(`/${locale}/home`);
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'approval_steps', 'read')) redirect(`/${locale}/home`);
 
   const [tNav, tApproval, tAdd, tSteps] = await Promise.all([
     getTranslations('nav'),
@@ -47,7 +48,7 @@ export default async function ApprovalStepsPage({ params }: Props) {
     remove: tApproval('remove'),
     removeConfirm: tApproval('removeConfirm'),
     removed: tApproval('removed'),
-    orderAdminOnly: tApproval('orderAdminOnly'),
+    orderNeedsStepsEdit: tApproval('orderNeedsStepsEdit'),
     departmentHint: tApproval('departmentHint'),
     steps: {
       manager: tSteps('manager'),
@@ -96,8 +97,10 @@ export default async function ApprovalStepsPage({ params }: Props) {
       <ApprovalStepsCard
         steps={approvalData.ok ? approvalData.steps : []}
         orderEnforced={approvalData.ok ? approvalData.orderEnforced : false}
-        // FR-66: hr sets whether the order binds too.
-        canEnforceOrder
+        // FR-66: whoever edits the steps sets whether their order binds, the
+        // same gate as setApprovalOrderEnforced and its RPC.
+        canEnforceOrder={can(perms, 'approval_steps')}
+        canEdit={can(perms, 'approval_steps')}
         labels={approvalLabels}
       />
     </div>

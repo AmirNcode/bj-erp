@@ -25,6 +25,7 @@
 import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
+import { can, parsePermsClaim, type Level, type PermKey, type Perms } from '@/lib/permissions/catalog';
 
 export type AuthUser = { id: string; email?: string };
 
@@ -55,7 +56,22 @@ export const getCachedRoles = cache(async (userId: string): Promise<string[]> =>
   // fall back to the pre-claim behavior, one user_roles query.
   const supabase = await createClient();
   const { data } = await supabase.from('user_roles').select('role').eq('user_id', userId);
-  return (data ?? []).map((r) => r.role as string);
+  // Custom-role rows (FR-55) carry no enum; the claim leaves them out too.
+  return (data ?? []).map((r) => r.role).filter((r): r is NonNullable<typeof r> => r != null);
+});
+
+/**
+ * FR-55: the caller's permissions, from the `app_perms` JWT claim (token hook,
+ * migration 20261013200002) or, for a token issued before it, one
+ * `app_my_permissions()` call. Same <=1h staleness as roles; RLS enforces live.
+ */
+export const getCachedPermissions = cache(async (userId: string): Promise<Perms> => {
+  const claims = await getCachedClaims();
+  const fromClaim = claims?.sub === userId ? parsePermsClaim(claims.app_perms) : null;
+  if (fromClaim) return fromClaim;
+  const supabase = await createClient();
+  const { data } = await supabase.rpc('app_my_permissions');
+  return parsePermsClaim(data) ?? {};
 });
 
 /** The caller's own profile row (all columns), fetched at most once per request. */
@@ -71,6 +87,7 @@ export type Caller = {
   supabase: Awaited<ReturnType<typeof createClient>>;
   user: AuthUser;
   roles: string[];
+  perms: Perms;
 };
 
 type CallerOptions = {
@@ -78,6 +95,8 @@ type CallerOptions = {
   anyOf?: string[];
   /** Also load the caller's company id (one profile read). */
   company?: boolean;
+  /** The caller must hold at least this permission level (FR-55). */
+  perm?: [PermKey, Level];
 };
 
 /**
@@ -89,19 +108,23 @@ export async function requireCaller(
   options: CallerOptions & { company: true }
 ): Promise<(Caller & { companyId: string }) | DbErrorResult>;
 export async function requireCaller(options?: CallerOptions): Promise<Caller | DbErrorResult>;
-export async function requireCaller({ anyOf, company }: CallerOptions = {}) {
+export async function requireCaller({ anyOf, company, perm }: CallerOptions = {}) {
   const supabase = await createClient();
   const user = await getCachedUser();
   if (!user) return dbErr('not authenticated');
 
-  const [roles, profile] = await Promise.all([
+  const [roles, perms, profile] = await Promise.all([
     getCachedRoles(user.id),
+    getCachedPermissions(user.id),
     company ? getCachedProfile(user.id) : null,
   ]);
   if (anyOf && !anyOf.some((role) => roles.includes(role))) {
     return dbErr(`${anyOf.join(' or ')} role required`);
   }
-  if (!company) return { ok: true as const, supabase, user, roles };
+  if (perm && !can(perms, perm[0], perm[1])) {
+    return dbErr('not allowed');
+  }
+  if (!company) return { ok: true as const, supabase, user, roles, perms };
   if (!profile?.company_id) return dbErr('no profile for caller');
-  return { ok: true as const, supabase, user, roles, companyId: profile.company_id };
+  return { ok: true as const, supabase, user, roles, perms, companyId: profile.company_id };
 }

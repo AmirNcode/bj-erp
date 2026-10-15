@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedProfile, getCachedPermissions, getCachedRoles } from '@/lib/auth/context';
+import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { PageHeader } from '../_components/PageHeader';
 import { PageRefreshButton } from '../_components/PageRefreshButton';
@@ -33,12 +34,15 @@ export default async function ProfilePage({ params }: Props) {
   if (!user) return null;
 
   const supabase = await createClient();
-  const [profile, savedRes, { data: personalInfo }, roles] = await Promise.all([
+  const [profile, savedRes, { data: personalInfo }, perms, roles] = await Promise.all([
     getCachedProfile(user.id),
     getMySavedSignature(),
     supabase.from('employee_personal_info').select('complete').eq('employee_id', user.id).maybeSingle(),
+    getCachedPermissions(user.id),
     getCachedRoles(user.id),
   ]);
+  const settingsItem = settingsItemForRoles(roles, perms);
+  const tNav = await getTranslations('nav');
   const tSig = await getTranslations('profile.signature');
   const tPi = await getTranslations('personalInfo');
 
@@ -114,6 +118,24 @@ export default async function ProfilePage({ params }: Props) {
         </span>
       </Link>
 
+      {/* FR-55: Settings is in the side panel (desktop) and in Manage (mobile) — but a
+          role holding only settings items has no Manage tab, so mobile reaches it here. */}
+      {settingsItem && (
+        <Link
+          href={`/${locale}${settingsItem.href}`}
+          data-testid="profile-settings-link"
+          className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
+        >
+          <span>
+            <span className="block text-sm font-semibold">{tNav('settings')}</span>
+            <span className="block text-xs text-muted-foreground">{t('settingsHint')}</span>
+          </span>
+          <span aria-hidden className="text-muted-foreground rtl:rotate-180">
+            ›
+          </span>
+        </Link>
+      )}
+
       {/* FR-53: personal information lives on its own page; it is a long form. */}
       <Link
         href={`/${locale}/profile/personal-info`}
@@ -123,7 +145,7 @@ export default async function ProfilePage({ params }: Props) {
         <span>
           <span className="block text-sm font-semibold">{tPi('title')}</span>
           <span className="block text-xs text-muted-foreground">
-            {!canEditOwnPersonalInfo(roles)
+            {!canEditOwnPersonalInfo(perms)
               ? tPi('viewHint')
               : personalInfo?.complete
                 ? tPi('completeHint')

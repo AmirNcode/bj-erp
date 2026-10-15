@@ -4,8 +4,9 @@
  * «مرخصی خارج از لیست» (FR-65): 3 extra days of annual leave for a first
  * marriage (once) or a close relative's death (each). Granted and revoked only
  * through the guarded RPCs, which post the ledger rows and enforce the rules
- * (hr or admin; not on oneself; hr never on an admin; marriage only while
- * single). The grants table is readable by the employee and by grant holders.
+ * (special_leave edit; for a non-admin not on oneself, never on an admin, and
+ * only on someone they may act on; marriage only while single). The grants
+ * table is readable by the employee and by special_leave holders.
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -51,7 +52,7 @@ export async function grantSpecialLeave(
   kind: SpecialLeaveKind,
   note?: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['special_leave', 'edit'] });
   if (!c.ok) return c;
   const trimmed = note?.trim() ?? '';
   // Fast localized refusal; the RPC enforces the same.
@@ -67,7 +68,7 @@ export async function grantSpecialLeave(
 }
 
 export async function revokeSpecialLeave(grantId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['special_leave', 'edit'] });
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_revoke_special_leave', { p_grant_id: grantId });
   if (error) return dbErr(error.message);

@@ -12,6 +12,9 @@
 \set ON_ERROR_STOP on
 \o /dev/null
 begin;
+-- FR-55 allows one admin row (user_roles_one_admin). These scenarios predate it
+-- and need a second admin fixture; the drop is rolled back with everything else.
+drop index public.user_roles_one_admin;
 
 create temp table fx (k text primary key, id uuid not null);
 grant select on fx to authenticated;
@@ -187,7 +190,9 @@ select pg_temp.expect('employee cannot insert rows',
   pg_temp.try_as('emp', format('insert into public.employee_personal_info (employee_id, company_id) values (gen_random_uuid(), (select company_id from public.profiles where id = %s))',
     pg_temp.id('emp'))), '42501');
 select pg_temp.expect('employee cannot delete rows',
-  pg_temp.try_as('emp', format('delete from public.employee_personal_info where employee_id = %s', pg_temp.id('emp'))), '42501');
+  (pg_temp.try_as('emp', format('delete from public.employee_personal_info where employee_id = %s', pg_temp.id('emp'))) in ('42501', 'ok:0'))::text, 'true');
+select pg_temp.expect('employee delete leaves the personal info row intact',
+  (select count(*)::text from public.employee_personal_info where employee_id = (select id from fx where k = 'emp')), '1');
 select pg_temp.expect('audit records field names, not values',
   (select (after->'fields' ? 'national_id' and after::text not like '%0012345679%')::text
      from public.audit_log

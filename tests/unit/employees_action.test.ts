@@ -7,7 +7,7 @@ import { allowedProfileFields, generateTempPassword } from '@/lib/actions/employ
 
 describe('allowedProfileFields', () => {
   it('admin may send every editable column, job title included', () => {
-    expect(allowedProfileFields(['admin'])).toEqual([
+    expect(allowedProfileFields(['admin'], {})).toEqual([
       'full_name',
       'department_id',
       'manager_id',
@@ -18,8 +18,8 @@ describe('allowedProfileFields', () => {
     ]);
   });
 
-  it('hr may send the FR-51 set: no language, and active goes through setActive', () => {
-    expect(allowedProfileFields(['hr', 'employee'])).toEqual([
+  it('a holder of people:edit may send the FR-51 set: no language, and active goes through setActive', () => {
+    expect(allowedProfileFields(['employee'], { people: 'edit' })).toEqual([
       'full_name',
       'department_id',
       'manager_id',
@@ -28,12 +28,16 @@ describe('allowedProfileFields', () => {
     ]);
   });
 
-  it('a manager keeps exactly name and hire date', () => {
-    expect(allowedProfileFields(['manager', 'employee'])).toEqual(['full_name', 'hire_date']);
+  it('a manager without people keeps exactly name and hire date', () => {
+    expect(allowedProfileFields(['manager', 'employee'], {})).toEqual(['full_name', 'hire_date']);
+  });
+
+  it('people:read alone may not send any column', () => {
+    expect(allowedProfileFields(['employee'], { people: 'read' })).toEqual([]);
   });
 
   it('admin wins over any other role it is combined with', () => {
-    expect(allowedProfileFields(['manager', 'admin'])).toContain('language_pref');
+    expect(allowedProfileFields(['manager', 'admin'], {})).toContain('language_pref');
   });
 });
 

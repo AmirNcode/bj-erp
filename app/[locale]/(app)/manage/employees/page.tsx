@@ -1,6 +1,6 @@
 /**
- * Manage › Employees. admin, hr and manager read company-wide (RLS
- * `can_read_all`); writes stay restricted per role on the edit page and in RLS.
+ * Manage › Employees. Managers and `people` read holders read company-wide;
+ * writes stay restricted per permission on the edit page and in RLS (FR-55).
  * Absorbs the old My Team page as the `reports` filter (/team redirects here).
  *
  * All list state is in the URL (q, dept, filter, page) and the query runs
@@ -13,10 +13,13 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ChevronLeft, ChevronRight, ClipboardCheck, IdCard, Lock, Plus, Upload } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { listRoles } from '@/lib/actions/roles';
+import { can } from '@/lib/permissions/catalog';
 import { todayInAppTz } from '@/lib/appDate';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
@@ -31,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ListSkeleton } from '@/components/Skeletons';
+import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
 import { EmployeesTable, Avatar, type EmployeeRow } from './EmployeesTable';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
@@ -39,31 +43,33 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const ROLE_ORDER = ['admin', 'hr', 'finance', 'manager', 'security', 'employee'] as const;
 const LIST_SELECT = `id, employee_code, full_name, active, hire_date,
        departments!profiles_department_id_fkey (name_fa, name_en),
-       user_roles (role)`;
+       user_roles (user_id, role_id)`;
 const INCOMPLETE_EMBED = 'employee_personal_info!employee_personal_info_employee_id_fkey!inner(complete)';
 
 // ── async child that owns the list query ───────────────────────────────────
 async function EmployeesData({
   locale,
   query,
-  isAdmin,
+  canBulkReset,
   showLocks,
 }: {
   locale: string;
   query: EmployeesQuery;
-  isAdmin: boolean;
+  canBulkReset: boolean;
   showLocks: boolean;
 }) {
-  const [t, tl, tr, tRoles, tErrand] = await Promise.all([
+  const [t, tl, tr, tErrand, rolesRes] = await Promise.all([
     getTranslations('manage.employees'),
     getTranslations('manage.employees.list'),
     getTranslations('manage.employees.regen'),
-    getTranslations('roles'),
     getTranslations('errand'),
+    listRoles(),
   ]);
+  // Role chips: English role names (D11), in app_list_roles order (system,
+  // preset, custom).
+  const allRoles = rolesRes.ok ? rolesRes.roles : [];
   const supabase = await createClient();
   const user = await getCachedUser();
   const base = `/${locale}/manage/employees`;
@@ -105,6 +111,8 @@ async function EmployeesData({
         .gte('end_date', todayInAppTz())
         .order('start_date')
     : { data: [] };
+  // Bulk password reset: checkboxes only on rows the database would accept.
+  const resettable = canBulkReset ? await passwordResetEligibleIds(supabase, ids) : new Set<string>();
   const nextByEmployee = new Map<string, NonNullable<typeof upcoming>[number]>();
   for (const u of upcoming ?? []) {
     if (u.employee_id && !nextByEmployee.has(u.employee_id)) nextByEmployee.set(u.employee_id, u);
@@ -117,7 +125,7 @@ async function EmployeesData({
 
   const rows: EmployeeRow[] = (employees ?? []).map((emp) => {
     const next = nextByEmployee.get(emp.id);
-    const roleSet = new Set((emp.user_roles as { role: string }[]).map((r) => r.role));
+    const roleSet = new Set((emp.user_roles as { role_id: string }[]).map((r) => r.role_id));
     return {
       id: emp.id,
       employee_code: emp.employee_code,
@@ -125,7 +133,7 @@ async function EmployeesData({
       active: emp.active,
       hireDateLabel: emp.hire_date ? formatCalendarDate(emp.hire_date, locale) : '—',
       departmentLabel: deptName(emp.departments),
-      roleLabels: ROLE_ORDER.filter((r) => roleSet.has(r)).map((r) => tRoles(r)),
+      roleLabels: allRoles.filter((r) => roleSet.has(r.id)).map((r) => r.name),
       upcoming:
         next && next.start_date
           ? {
@@ -141,6 +149,7 @@ async function EmployeesData({
             }
           : null,
       isSelf: emp.id === user?.id,
+      canReset: resettable.has(emp.id),
     };
   });
 
@@ -160,7 +169,7 @@ async function EmployeesData({
       {/* Desktop table (client: admin selection + bulk password regeneration) */}
       <EmployeesTable
         employees={rows}
-        isAdmin={isAdmin}
+        canBulkReset={canBulkReset}
         showLocks={showLocks}
         locale={locale}
         labels={{
@@ -284,11 +293,17 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   ]);
 
   const user = await getCachedUser();
-  const myRoles = user ? await getCachedRoles(user.id) : [];
-  const isAdmin = myRoles.includes('admin');
-  const isHr = myRoles.includes('hr');
+  if (!user) redirect(`/${locale}/login`);
+  const [myRoles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
   const isManager = myRoles.includes('manager');
-  const canSeePersonalInfo = isAdmin || isHr;
+  // The Manage layout admits anyone with a Manage item; this page is the
+  // Employees one (lib/nav/tabs.ts).
+  if (!isManager && !can(perms, 'people', 'read')) redirect(`/${locale}/home`);
+  const canSeePersonalInfo = can(perms, 'personal_info', 'read');
+  // A manager without people edit changes only name and hire date of reports.
+  const managerOnly = isManager && !can(perms, 'people');
+  // Same rule as the Add page's guard: people_create, or a manager's own-team path.
+  const canAdd = isManager || can(perms, 'people_create');
   const query = parseEmployeesQuery(sp, { isManager, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
@@ -332,8 +347,9 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
               </Link>
             </Button>
           )}
-          {/* FR-54: clearance forms (فرم تسویه حساب), filed by admin and hr. */}
-          {(isAdmin || isHr) && (
+          {/* FR-54: clearance forms (فرم تسویه حساب): clearance read lists them,
+              edit files new ones (the clearance pages gate each). */}
+          {can(perms, 'clearance', 'read') && (
             <Button variant="outline" className="rounded-[10px]" asChild>
               <Link href={`/${locale}/clearance`} data-testid="clearance-link">
                 <ClipboardCheck aria-hidden="true" />
@@ -341,7 +357,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
               </Link>
             </Button>
           )}
-          {(isAdmin || isHr) && (
+          {can(perms, 'people_create') && (
             <Button variant="outline" className="rounded-[10px]" asChild>
               <Link href={`${base}/import`} data-testid="import-link">
                 <Upload aria-hidden="true" />
@@ -350,12 +366,14 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
             </Button>
           )}
           {/* Add Department lives under Manage › Departments (D9). */}
-          <Button className="hidden rounded-[10px] sm:inline-flex" asChild>
-            <Link href={`${base}/new`} data-testid="add-employee-link">
-              <Plus aria-hidden="true" />
-              {t('employees.addNew')}
-            </Link>
-          </Button>
+          {canAdd && (
+            <Button className="hidden rounded-[10px] sm:inline-flex" asChild>
+              <Link href={`${base}/new`} data-testid="add-employee-link">
+                <Plus aria-hidden="true" />
+                {t('employees.addNew')}
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -385,7 +403,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
       />
 
       {/* Managers edit only name and hire date of their direct reports. */}
-      {isManager && !isAdmin && !isHr && (
+      {managerOnly && (
         <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground" data-testid="emp-locked-hint">
           <Lock aria-hidden="true" className="size-3.5 shrink-0" />
           {tl('lockedHint')}
@@ -396,20 +414,22 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
         <EmployeesData
           locale={locale}
           query={query}
-          isAdmin={isAdmin}
-          showLocks={isManager && !isAdmin && !isHr}
+          canBulkReset={myRoles.includes('admin')}
+          showLocks={managerOnly}
         />
       </Suspense>
 
       {/* Mobile: floating add button (the header one is desktop-only). */}
-      <Link
-        href={`${base}/new`}
-        aria-label={t('employees.addNew')}
-        data-testid="add-employee-fab"
-        className="fixed bottom-24 end-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg sm:hidden"
-      >
-        <Plus aria-hidden="true" className="size-6" />
-      </Link>
+      {canAdd && (
+        <Link
+          href={`${base}/new`}
+          aria-label={t('employees.addNew')}
+          data-testid="add-employee-fab"
+          className="fixed bottom-24 end-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg sm:hidden"
+        >
+          <Plus aria-hidden="true" className="size-6" />
+        </Link>
+      )}
     </div>
   );
 }

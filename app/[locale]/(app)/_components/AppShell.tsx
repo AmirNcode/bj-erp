@@ -1,3 +1,4 @@
+import type { Perms } from '@/lib/permissions/catalog';
 import { Toaster } from '@/components/ui/sonner';
 import { MainNav, type NavLabels } from './MainNav';
 import { RoutePrefetcher } from './RoutePrefetcher';
@@ -6,6 +7,8 @@ import type { WatchedRequest } from '@/lib/actions/leave/outcomes';
 
 type Props = {
   roles: string[];
+  /** FR-55 effective permissions: they decide which links the nav offers. */
+  perms: Perms;
   locale: string;
   labels: NavLabels;
   appName: string;
@@ -24,6 +27,7 @@ type Props = {
  */
 export function AppShell({
   roles,
+  perms,
   locale,
   labels,
   appName,
@@ -42,6 +46,7 @@ export function AppShell({
       </main>
       <MainNav
         roles={roles}
+        perms={perms}
         locale={locale}
         labels={labels}
         appName={appName}
@@ -49,7 +54,7 @@ export function AppShell({
         initialUpdatedAt={initialUpdatedAt}
         pendingCount={pendingCount}
       />
-      <RoutePrefetcher roles={roles} locale={locale} />
+      <RoutePrefetcher roles={roles} perms={perms} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
   );

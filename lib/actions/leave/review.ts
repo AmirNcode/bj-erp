@@ -48,11 +48,8 @@ export type ReviewRequestRow = {
 export async function getReviewRequests(): Promise<
   { ok: true; requests: ReviewRequestRow[] } | { ok: false; error: string }
 > {
-  const c = await requireCaller();
+  const c = await requireCaller({ perm: ['leave_requests', 'read'] });
   if (!c.ok) return c;
-  if (!c.roles.includes('hr') && !c.roles.includes('admin')) {
-    return dbErr('not allowed to review requests');
-  }
 
   const { data, error } = await c.supabase
     .from('leave_requests')

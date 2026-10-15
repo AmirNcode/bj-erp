@@ -10,7 +10,8 @@ import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
 import { balanceAdjustments } from '@/lib/leave/allocations';
 import type { DaysHoursError } from '@/lib/leave/duration';
-import type { EditCapabilities } from '@/lib/employees/editCapabilities';
+import { editFormView, type EditCapabilities } from '@/lib/employees/editCapabilities';
+import type { RoleRow } from '@/lib/actions/roles-helpers';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -32,11 +33,9 @@ import {
   AccrualPolicyFields,
   DaysHoursField,
   RoleCheckboxes,
-  ROLES,
   leaveAmountReader,
   leaveTypeSlug,
   type PolicyMinutes,
-  type Role,
 } from '../_components/EmployeeFormParts';
 import {
   dateObjectToGregorian,
@@ -60,13 +59,21 @@ type Profile = {
 
 type Props = {
   employee: Profile;
-  empRoles: string[];
+  /** Every role of the company (app_list_roles order). */
+  allRoles: RoleRow[];
+  /** The employee's current role ids. */
+  targetRoleIds: string[];
   /**
    * What this caller may change on this employee (FR-51), from
    * employeeEditCapabilities. The database enforces the same rules; a section
    * the caller cannot save renders read-only, or not at all.
    */
   caps: EditCapabilities;
+  /**
+   * The caller holds people read. Without it they are a manager on the
+   * reporting-line path and see only name and hire date (editFormView).
+   */
+  showOrg: boolean;
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
@@ -89,6 +96,7 @@ type Props = {
     department: string;
     manager: string;
     roles: string;
+    adminTransferHint: string;
     hireDate: string;
     jobTitle: string;
     save: string;
@@ -123,8 +131,10 @@ type Props = {
 
 export function EditEmployeeForm({
   employee,
-  empRoles,
+  allRoles,
+  targetRoleIds,
   caps,
+  showOrg,
   departments,
   managers,
   balances,
@@ -139,6 +149,10 @@ export function EditEmployeeForm({
   const tDuration = useTranslations('manage.employees.duration');
   const t = useTranslations('manage.employees');
   const canManageLeave = caps.leave;
+  const view = editFormView(caps, { showOrg });
+  // Shown with leave_balances read; saved only with edit on a target the caller
+  // may act on (the database refuses the rest).
+  const canSaveLeave = caps.leaveEdit;
   const [pending, setPending] = useState(false);
   const [managerId, setManagerId] = useState<string | null>(employee.manager_id ?? null);
   const managerOptions = managers.map((m) => ({ id: m.id, name: m.full_name, personnelNo: m.employee_code }));
@@ -146,9 +160,7 @@ export function EditEmployeeForm({
   const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   const [success, setSuccess] = useState(false);
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
-  const [selectedRoles, setSelectedRoles] = useState<Role[]>(
-    (empRoles as Role[]).filter((r) => ROLES.includes(r))
-  );
+  const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(targetRoleIds);
   const [hireDate, setHireDate] = useState<PickerDate | null>(() =>
     employee.hire_date ? gregorianToPersianDateObject(employee.hire_date, locale) : null
   );
@@ -176,13 +188,13 @@ export function EditEmployeeForm({
     // Leave amounts are read and checked before ANY write, so a bad entry cannot
     // leave the profile and roles saved but the balances not.
     const amounts = leaveAmountReader(fd, hoursPerDay);
-    const targets = canManageLeave
+    const targets = canSaveLeave
       ? balances.map((balance) => ({
           leaveTypeId: balance.leaveTypeId,
           target: amounts.read(`balance_${balance.leaveTypeId}`, true),
         }))
       : [];
-    const policyInputs = canManageLeave
+    const policyInputs = canSaveLeave
       ? balances.map((balance) => ({
           leaveTypeId: balance.leaveTypeId,
           ...amounts.policy(balance.leaveTypeId),
@@ -195,8 +207,9 @@ export function EditEmployeeForm({
       return;
     }
 
-    // Basic fields — skipped entirely for a caller who may not change them (hr
-    // on an admin or on themselves), so the save proceeds straight to the leave
+    // Basic fields — skipped entirely for a caller who may not change them (a
+    // people-edit holder on the admin, on themselves or on someone with more
+    // access, FR-55 D3/D4), so the save proceeds straight to the leave
     // sections instead of failing here on a write they were never allowed to make.
     if (caps.profile) {
       const result = await updateEmployee(employee.id, {
@@ -218,14 +231,13 @@ export function EditEmployeeForm({
       }
     }
 
-    // Roles: admin sets any; hr may only add or remove `manager` (FR-51) — the
-    // other boxes are disabled and app_set_user_roles refuses anything else.
-    // Written only when the set changed, so a plain save adds no audit row.
+    // Roles (FR-55 D5): only the boxes in caps.editableRoleIds are enabled, and
+    // app_set_user_role_ids refuses anything else. Written only when the set
+    // changed, so a plain save adds no audit row.
     const rolesChanged =
-      [...selectedRoles].sort().join(',') !==
-      (empRoles as Role[]).filter((r) => ROLES.includes(r)).sort().join(',');
-    if (caps.editableRoles.length > 0 && rolesChanged) {
-      const rolesResult = await setRoles(employee.id, selectedRoles);
+      [...selectedRoleIds].sort().join(',') !== [...targetRoleIds].sort().join(',');
+    if (caps.editableRoleIds.length > 0 && rolesChanged) {
+      const rolesResult = await setRoles(employee.id, selectedRoleIds);
       if (!rolesResult.ok) {
         setPending(false);
         setError(rolesResult.error);
@@ -233,10 +245,10 @@ export function EditEmployeeForm({
       }
     }
 
-    // Balance and accrual policy: admin or hr (FR-43). Split out of the branch
-    // above, which used to conflate "may assign roles" with "may administer
-    // leave" — two different authorities that now belong to different people.
-    if (canManageLeave) {
+    // Balance and accrual policy (FR-43, leave_balances edit). Split out of the
+    // branch above: assigning roles and administering leave are different
+    // authorities that belong to different people.
+    if (canSaveLeave) {
       // Only balances whose minute total changed are written, so saving a role
       // change never touches a balance.
       const changes = balanceAdjustments(
@@ -305,16 +317,14 @@ export function EditEmployeeForm({
 
   return (
     <div className="space-y-6">
-      {(caps.lockedReason || (!caps.org && labels.managerNote)) && (
+      {view.note && (view.note !== 'manager' || labels.managerNote) && (
         <p
           className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm"
           data-testid="edit-scope-note"
         >
-          {caps.lockedReason === 'admin'
-            ? t('lockedAdmin')
-            : caps.lockedReason === 'self'
-              ? t('lockedSelf')
-              : labels.managerNote}
+          {view.note === 'manager'
+            ? labels.managerNote
+            : t(view.note === 'readOnly' ? 'readOnlyNote' : view.note)}
         </p>
       )}
       {error && (
@@ -371,13 +381,15 @@ export function EditEmployeeForm({
                 locale={locale}
                 value={hireDate}
                 onChange={setHireDate}
+                disabled={!caps.profile}
               />
             </div>
 
-            {/* Department, manager, title and roles: admin, or hr on a non-admin
-                other than themselves (FR-51). hr sees them read-only on an admin's
-                record or their own; a manager does not see them. */}
-            {(caps.org || caps.lockedReason) && (
+            {/* Department, manager and title: people edit on a target the caller
+                may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
+                admin, yourself, someone above you); a manager without people read
+                does not see them. */}
+            {view.orgBlock && (
               <>
                 <div className="space-y-1.5">
                   <Label htmlFor="job_title">{labels.jobTitle}</Label>
@@ -422,22 +434,28 @@ export function EditEmployeeForm({
                   />
                 </div>
 
-                <RoleCheckboxes
-                  label={labels.roles}
-                  selected={selectedRoles}
-                  onChange={setSelectedRoles}
-                  editable={caps.editableRoles}
-                />
               </>
             )}
 
-            {/* FR-43: balance and accrual policy are admin OR hr. Deliberately
-                a separate block from the admin one above — department, manager
-                and roles are a different authority from administering leave, and
-                they used to share one condition purely because only admins had
-                either. */}
+            {/* Roles: shown with the org fields, and to a role assigner who
+                cannot edit them (role_assign needs only people read). */}
+            {view.rolesBlock && (
+              <RoleCheckboxes
+                label={labels.roles}
+                roles={allRoles}
+                selected={selectedRoleIds}
+                onChange={setSelectedRoleIds}
+                editable={caps.editableRoleIds}
+                adminHint={labels.adminTransferHint}
+              />
+            )}
+
+            {/* FR-43: balance and accrual policy, leave_balances read to see and
+                edit to save — a different authority from the org fields above.
+                A disabled fieldset also leaves its inputs out of the submit,
+                which the leave writes skip anyway (canSaveLeave). */}
             {canManageLeave && (
-              <>
+              <fieldset disabled={!canSaveLeave} className="space-y-5">
 
                 {balances.length > 0 && (
                   <div
@@ -502,13 +520,17 @@ export function EditEmployeeForm({
                     })}
                   </div>
                 )}
-              </>
+              </fieldset>
             )}
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={pending}>
-                {pending ? '...' : labels.save}
-              </Button>
+              {/* Hidden when nothing on the form can be written: a Save that
+                  writes nothing would report a false "saved". */}
+              {view.saveable && (
+                <Button type="submit" disabled={pending} data-testid="edit-save">
+                  {pending ? '...' : labels.save}
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"
@@ -533,6 +555,7 @@ export function EditEmployeeForm({
                 size="sm"
                 onClick={handleResetPassword}
                 disabled={pending}
+                data-testid="reset-password"
                 className="border-orange-300 text-orange-700 hover:bg-orange-50"
               >
                 {labels.resetPwd}

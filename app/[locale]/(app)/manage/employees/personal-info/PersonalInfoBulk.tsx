@@ -36,7 +36,8 @@ function download(rows: string[][], name: string) {
   URL.revokeObjectURL(url);
 }
 
-export function PersonalInfoBulk({ locale }: { locale: string }) {
+/** `canImport` (personal_info edit) shows the import card; export needs only read. */
+export function PersonalInfoBulk({ locale, canImport }: { locale: string; canImport: boolean }) {
   const t = useTranslations('personalInfo.bulk');
   const tf = useTranslations('personalInfo.fields');
   const tp = useTranslations('personalInfo.problems');
@@ -118,6 +119,7 @@ export function PersonalInfoBulk({ locale }: { locale: string }) {
         </CardContent>
       </Card>
 
+      {canImport && (
       <Card>
         <CardHeader className="border-b pb-4">
           <CardTitle>{t('importTitle')}</CardTitle>
@@ -178,6 +180,7 @@ export function PersonalInfoBulk({ locale }: { locale: string }) {
           )}
         </CardContent>
       </Card>
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-destructive">

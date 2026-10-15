@@ -1,15 +1,15 @@
 /**
  * Manage section layout — server guard.
- * Only users with the 'admin', 'manager' or 'hr' role may enter.
- * Everyone else is redirected to /home.
+ * Anyone who reaches at least one Manage item (FR-55 permissions; approvers and
+ * managers keep theirs by identity) may enter. Everyone else is redirected to /home.
  *
- * This is the outer door only. The pages behind it guard themselves further:
- * Settings redirects anyone who is not an admin; Departments and Add-Department
- * admit admin and hr (FR-51) and redirect everyone else.
+ * This is the outer door only. Every page behind it guards itself with the
+ * permission it needs.
  */
 
 import { redirect } from 'next/navigation';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { manageItemsForRoles } from '@/lib/nav/tabs';
 
 type Props = {
   children: React.ReactNode;
@@ -24,9 +24,8 @@ export default async function ManageLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const roles = await getCachedRoles(user.id);
-  const canAccess =
-    roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
+  const canAccess = manageItemsForRoles(roles, perms).length > 0;
 
   if (!canAccess) {
     redirect(`/${locale}/home`);

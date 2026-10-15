@@ -1,16 +1,21 @@
 /**
- * Create new employee page — role-adaptive.
- * Admin: any department / manager / roles, plus manual allocations.
- * Manager: locked to own department + self as manager, employee role only,
- * default quotas applied in-DB. Enforcement lives in app_create_employee;
- * this page only mirrors it.
+ * Create new employee page — permission-adaptive (FR-55).
+ * people_create: any department / manager; the initial roles the caller may
+ * assign (D5); leave_balances edit adds manual allocations and accrual policy.
+ * Manager without people_create: locked to own department + self as manager,
+ * employee role only, default quotas applied in-DB. Enforcement lives in
+ * app_create_employee; this page only mirrors it.
  */
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
-import { getCachedUser, getCachedRoles, getCachedProfile } from '@/lib/auth/context';
+import { redirect } from 'next/navigation';
+import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
 import { getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
+import { listRoles } from '@/lib/actions/roles';
+import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
+import { can } from '@/lib/permissions/catalog';
 import { PageHeader } from '../../../_components/PageHeader';
 import { NewEmployeeForm } from './NewEmployeeForm';
 import { FormSkeleton } from '@/components/Skeletons';
@@ -26,19 +31,34 @@ async function NewEmployeeData({ locale }: { locale: string }) {
 
   const user = await getCachedUser();
   if (!user) return null;
-  const [roles, callerProfile] = await Promise.all([
+  const [roles, perms, callerProfile, rolesRes] = await Promise.all([
     getCachedRoles(user.id),
+    getCachedPermissions(user.id),
     getCachedProfile(user.id),
+    listRoles(),
   ]);
-  const isAdmin = roles.includes('admin');
-  // FR-35 D4: hr picks the department and reporting line like an admin, but gets
-  // neither the role checkboxes nor the allocation/policy fields.
-  const canChooseScope = isAdmin || roles.includes('hr');
-  // FR-43: HR sets the opening balance and accrual policy too. Kept separate from
-  // `canChooseScope` because they answer different questions — where the hire
-  // lands, versus what leave they start with — and separate from `isAdmin`
-  // because role assignment stays admin-only (FR-35 D4).
-  const canManageLeave = isAdmin || roles.includes('hr');
+  // FR-35 D4: people_create picks the department and reporting line. A manager
+  // without it is locked to their own team (app_create_employee overwrites both).
+  const canChooseScope = can(perms, 'people_create');
+  // FR-43: opening balance and accrual policy. A different question from
+  // `canChooseScope` — what leave the hire starts with, not where they land.
+  const canManageLeave = can(perms, 'leave_balances');
+  // D5: the initial roles are checked like any later role change. The new person
+  // holds only Employee, so the subset rule never locks them.
+  const allRoles = rolesRes.ok ? rolesRes.roles : [];
+  const employeeRoleId = allRoles.find((r) => r.systemKey === 'employee')?.id ?? null;
+  const editableRoleIds = employeeRoleId
+    ? employeeEditCapabilities({
+        callerId: user.id,
+        callerRoles: roles,
+        callerPerms: perms,
+        targetId: '',
+        targetRoleIds: [employeeRoleId],
+        allRoles,
+        targetIsDepartmentManager: false,
+        targetIdentity: { approver: false, clearanceSigner: false },
+      }).editableRoleIds
+    : [];
 
   // Admin picks dept/manager and types allocations; a manager's variant only
   // needs their own department row.
@@ -72,7 +92,9 @@ async function NewEmployeeData({ locale }: { locale: string }) {
 
   return (
     <NewEmployeeForm
-      isAdmin={isAdmin}
+      allRoles={allRoles}
+      employeeRoleId={employeeRoleId}
+      editableRoleIds={editableRoleIds}
       canManageLeave={canManageLeave}
       canChooseScope={canChooseScope}
       ownDepartment={ownDepartment}
@@ -92,6 +114,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
         department: t('employees.department'),
         manager: t('employees.manager'),
         roles: t('employees.roles'),
+        adminTransferHint: t('employees.adminTransferHint'),
         hireDate: t('employees.hireDate'),
         submit: t('employees.create'),
         cancel: t('employees.cancel'),
@@ -123,6 +146,15 @@ async function NewEmployeeData({ locale }: { locale: string }) {
 export default async function NewEmployeePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
+
+  // The Manage layout admits anyone with a Manage item; adding people needs
+  // people_create, or a manager's own-team path.
+  const user = await getCachedUser();
+  if (!user) redirect(`/${locale}/login`);
+  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
+  if (!roles.includes('manager') && !can(perms, 'people_create')) {
+    redirect(`/${locale}/home`);
+  }
 
   const t = await getTranslations('manage');
 

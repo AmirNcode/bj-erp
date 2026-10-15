@@ -1,5 +1,6 @@
 /**
- * Completed approvals for finance (FR-62) — `finance` and `admin`.
+ * Completed approvals for finance (FR-62) — finance read (FR-55: the finance and
+ * hr presets; the admin implicitly).
  *
  * Every fully approved request overlapping a Jalali month range, with the per
  * diem HR entered on errands, a total, and a CSV export. The range is a URL
@@ -10,7 +11,8 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { getFinanceApprovals } from '@/lib/actions/finance';
 import { getReportMonths } from '@/lib/actions/reports';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
@@ -32,8 +34,8 @@ export default async function FinancePage({ params, searchParams }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!roles.includes('finance') && !roles.includes('admin')) redirect(`/${locale}/home`);
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'finance', 'read')) redirect(`/${locale}/home`);
 
   const [t, months, settings] = await Promise.all([
     getTranslations('finance'),

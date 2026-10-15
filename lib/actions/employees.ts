@@ -1,13 +1,11 @@
 'use server';
 
-import type { Database } from '@/lib/supabase/types';
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
 import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
 import { requireCaller } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
-
-type AppRole = Database['public']['Enums']['app_role'];
 
 export type CreateEmployeeInput = {
   personnel_no: string;
@@ -15,7 +13,8 @@ export type CreateEmployeeInput = {
   job_title?: string;
   department_id?: string;
   manager_id?: string;
-  roles?: AppRole[];
+  /** Role ids beyond Employee (FR-55 D5; app_set_user_role_ids checks each one). */
+  roleIds?: string[];
   hire_date?: string;
   language_pref?: string;
 };
@@ -25,17 +24,20 @@ export type CreateEmployeeInput = {
  * The employee code is composed in-DB — since 20260730130002 it is the
  * personnel number alone, with no department prefix.
  * Admins create freely; managers are scoped in-DB to their own department and
- * team; hr may pick any department and manager but is likewise forced to the
- * employee role. Every one of those limits is enforced inside
- * app_create_employee — the check here only avoids a pointless round-trip.
+ * team; people_create may pick any department and manager. Roles beyond
+ * Employee go as role ids, checked by D5 in-DB like any later role change.
+ * Every one of those limits is enforced inside app_create_employee — the check
+ * here only avoids a pointless round-trip.
  * Returns the temp password so the creator can hand it to the worker.
  * The temp password is never logged or stored — shown once in the UI.
  */
 export async function createEmployee(
   input: CreateEmployeeInput
 ): Promise<{ ok: true; tempPassword: string; userId: string } | DbErrorResult> {
-  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'], company: true });
+  const c = await requireCaller({ company: true });
   if (!c.ok) return c;
+  // FR-55: managers keep their scoped path; everyone else needs `people_create`.
+  if (!c.roles.includes('manager') && !can(c.perms, 'people_create')) return dbErr('not allowed');
 
   // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)
@@ -51,7 +53,7 @@ export async function createEmployee(
     p_company_id: c.companyId,
     ...(input.department_id ? { p_department_id: input.department_id } : {}),
     ...(input.manager_id ? { p_manager_id: input.manager_id } : {}),
-    ...(input.roles?.length ? { p_roles: input.roles } : {}),
+    ...(input.roleIds?.length ? { p_role_ids: input.roleIds } : {}),
     ...(input.hire_date ? { p_hire_date: input.hire_date } : {}),
     ...(input.language_pref ? { p_language_pref: input.language_pref } : {}),
     ...(input.job_title ? { p_job_title: input.job_title } : {}),
@@ -83,16 +85,16 @@ export async function updateEmployee(
   id: string,
   fields: UpdateEmployeeFields
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'manager', 'hr'] });
+  const c = await requireCaller();
   if (!c.ok) return c;
 
-  const allowed = allowedProfileFields(c.roles);
+  const allowed = allowedProfileFields(c.roles, c.perms);
   const filtered = Object.fromEntries(
     Object.entries(fields).filter(([key]) => allowed.includes(key))
   ) as UpdateEmployeeFields;
 
   if (Object.keys(filtered).length === 0) {
-    return dbErr('not permitted to update these fields');
+    return dbErr('not allowed');
   }
 
   const { data, error } = await c.supabase
@@ -109,22 +111,21 @@ export async function updateEmployee(
 }
 
 /**
- * Replaces the target user's roles entirely via the atomic
- * app_set_user_roles RPC (transactional delete+insert, guarded in-DB,
- * refuses to strip your own admin role, writes its own audit row). An hr
- * caller may only add or remove `manager`, on a non-admin other than
- * themselves (FR-51) — the RPC refuses anything else.
+ * Replaces the target user's roles (role ids, FR-55) via the atomic
+ * app_set_user_role_ids RPC: one transaction, audited in-DB. A non-admin needs
+ * D4 on the target and D5 on every role added or removed; nobody adds or removes
+ * admin here (D1, Transfer admin only). The RPC refuses anything else.
  */
 export async function setRoles(
   id: string,
-  roles: AppRole[]
+  roleIds: string[]
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { error } = await c.supabase.rpc('app_set_user_roles', {
+  const { error } = await c.supabase.rpc('app_set_user_role_ids', {
     p_user_id: id,
-    p_roles: roles,
+    p_role_ids: roleIds,
   });
   if (error) return dbErr(error.message);
 
@@ -133,14 +134,15 @@ export async function setRoles(
 }
 
 /**
- * Activates or deactivates an employee. Admin, or hr on a non-admin other than
- * themselves (FR-51; the profile guard trigger enforces the target rule).
+ * Activates or deactivates an employee. The admin, or a `people` edit holder on
+ * someone they may act on (FR-51, FR-55 D3/D4: not themselves, not the admin, not
+ * anyone with more access; the profile guard trigger enforces the target rule).
  */
 export async function setActive(
   id: string,
   active: boolean
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin', 'hr'] });
+  const c = await requireCaller({ perm: ['people', 'edit'] });
   if (!c.ok) return c;
 
   const { data, error } = await c.supabase
@@ -163,7 +165,7 @@ export async function setActive(
 export async function resetPassword(
   id: string
 ): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin'] }) // admin-only (20261013200007);
   if (!c.ok) return c;
 
   const tempPassword = generateTempPassword();
@@ -244,10 +246,20 @@ export type ImportEmployeesResult = {
 export async function importEmployees(
   input: ImportEmployeesInput
 ): Promise<({ ok: true } & ImportEmployeesResult) | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  const c = await requireCaller({ perm: ['people_create', 'edit'], company: true });
   if (!c.ok) return c;
+  // `update` and `replace` rewrite existing people: admin only (SQL enforces it too).
+  if (input.mode !== 'add' && !c.roles.includes('admin')) return dbErr('admin role required');
   if (input.rows.length === 0) return dbErr('no rows to import');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.balanceAsOf)) return dbErr('balance date is required');
+  // An opening balance is leave_balances edit, as on the Add Employee form (SQL enforces it too).
+  if (
+    !c.roles.includes('admin') &&
+    !can(c.perms, 'leave_balances') &&
+    input.rows.some((row) => row.balance_minutes !== 0)
+  ) {
+    return dbErr('not allowed to set opening balances');
+  }
 
   // Only the fields the RPC reads — the wizard's rows carry UI-only extras.
   const rows = input.rows.map((row) => ({
@@ -319,7 +331,7 @@ export async function importEmployees(
 export async function bulkResetPasswords(
   userIds: string[]
 ): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
+  const c = await requireCaller({ anyOf: ['admin'] }); // admin-only (20261013200007)
   if (!c.ok) return c;
   if (userIds.length === 0) return dbErr('no employees selected');
   const uniqueIds = [...new Set(userIds)];
