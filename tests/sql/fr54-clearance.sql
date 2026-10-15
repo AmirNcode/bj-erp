@@ -216,8 +216,12 @@ select pg_temp.expect('a signer reads every row',
   pg_temp.try_as('itp', format('select * from public.separation_signoffs where separation_id = %s', pg_temp.id('F1'))), 'ok:5');
 select pg_temp.expect('finance reads every form',
   pg_temp.try_as('fin', format('select * from public.separations where id = %s', pg_temp.id('F1'))), 'ok:1');
+create temporary table separation_before_direct_write as
+  select to_jsonb(separations) as snapshot from public.separations where id = (select id from fx where k = 'F1');
 select pg_temp.expect('nobody writes the tables directly',
-  pg_temp.try_as('hr', format('update public.separations set note = %L where id = %s', 'x', pg_temp.id('F1'))), '42501');
+  (pg_temp.try_as('hr', format('update public.separations set note = %L where id = %s', 'x', pg_temp.id('F1'))) in ('42501', 'ok:0'))::text, 'true');
+select pg_temp.expect('direct write leaves the separation unchanged',
+  (select (to_jsonb(separations) = snapshot)::text from public.separations cross join separation_before_direct_write where id = (select id from fx where k = 'F1')), 'true');
 select pg_temp.expect('finance reads the leaver''s balances',
   left(pg_temp.try_as('fin', format('select * from public.app_separation_balances(%s)', pg_temp.id('F1'))), 3), 'ok:');
 select pg_temp.expect('an outsider may not read balances',

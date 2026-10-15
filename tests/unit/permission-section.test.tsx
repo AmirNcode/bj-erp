@@ -10,6 +10,7 @@ Element.prototype.scrollIntoView ??= () => {};
 afterEach(cleanup);
 
 const t = {
+  sensitive: 'Sensitive when allowed',
   title: 'Leave',
   items: Object.fromEntries(ALL_KEYS.map((k) => [k, { label: `L:${k}`, description: `D:${k}` }])) as Record<PermKey, { label: string; description: string }>,
   levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only' },
@@ -23,6 +24,12 @@ function openMenu(section: string) {
 }
 
 describe('PermissionSection', () => {
+  it('marks write-capable permissions even when off, but not read-only permissions', () => {
+    render(<PermissionSection section="leave" perms={{}} onChange={() => {}} notes={{}} t={t} defaultOpen />);
+    expect(screen.getByTestId('perm-sensitive-leave_balances').textContent).toContain(t.sensitive);
+    expect(screen.queryByTestId('perm-sensitive-reports')).toBeNull();
+    expect(screen.queryByTestId('perm-sensitive-calendar')).toBeNull();
+  });
   it('header shows Custom when the section is mixed', () => {
     render(<PermissionSection section="leave" perms={{ leave_balances: 'edit' }} onChange={() => {}} notes={{}} t={t} defaultOpen />);
     expect(screen.getByTestId('perm-section-leave').textContent).toContain('Custom');

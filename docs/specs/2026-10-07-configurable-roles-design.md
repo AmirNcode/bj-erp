@@ -1,10 +1,16 @@
 # Admin-configurable roles and permissions — design
 
-**Status:** Accepted and built, 2026-10-13 (branch `FR-55`, migrations `20261013200001`..`200007`).
+**Status:** Accepted and built, 2026-10-13 (migrations `20261013200001`..`200007`),
+with the 2026-10-15 sensitive-role amendment (`20261015153112`, branch `codex/fr55-reviewed`).
 FR-55. Decisions D1–D12 were agreed with Amir in chat on 2026-10-07. The implementation plan is
 `docs/plans/2026-10-07-configurable-roles.md`.
 
 **Amendments made while building** (the text below describes the built state):
+- Owner decision, 2026-10-15 (`20261015153112_sensitive_role_assignment.sql`): every write permission
+  is sensitive. Role creation/editing stays admin-only; sensitive saves require an explicit warning
+  and confirmation, and write-capable rows carry a visible warning icon/text. Sensitive roles and
+  HR/Finance identity presets can only be assigned/removed by admin. HR retains its duties but may
+  assign only Employee/Manager, even with extra roles. Manager is the explicit delegated exception.
 - `personnel_no` left the catalog: no screen changes a personnel number, and the login email is
   derived from it. The column stays admin-only in SQL. The catalog has 16 items from this spec
   plus four from main's FR-56..65: `absences`, `finance`, `personal_info_own`, `special_leave`
@@ -143,13 +149,12 @@ checkboxes that show raw English slugs.
 
   The target's levels are computed from all their roles whether or not the target is active, so a
   deactivated account cannot be reactivated by someone below it.
-- **D5 — Assignment.** A caller may add or remove a role only when every permission in that role
-  is at or below the caller's own level (`role_assign`). `manager` needs `role_manager` instead.
-  `employee` carries no permissions and is assignable with `role_assign`. The same check applies to
-  the initial roles on Add Employee. The caller must also pass D4 on the target. The identity
-  presets mirror D4: granting or removing `hr` needs `approval_steps` edit and `clearance` edit,
-  and granting or removing `finance` needs `clearance` edit, because their holders sign approval
-  steps and clearance rows. `admin` is never assignable (D1).
+- **D5 — Assignment.** Only admin may add/remove roles with any valid `edit` permission, or the
+  HR/Finance identity presets. A non-admin may assign Manager with `role_manager`; Employee is
+  automatic on creation and toggleable with `role_assign`. HR holders are limited to those two
+  roles, even when other roles grant additional permissions. Other non-admins with `role_assign`
+  may assign read-only roles within their own access. The same checks cover initial roles on Add
+  Employee and the legacy enum RPC. The caller must also pass D4. `admin` moves only via D1 transfer.
 - **D6 — Dependencies.** Some items only work when another is granted, because their screens read
   through RLS. The UI raises the dependency automatically and says so; `app_save_role` rejects a
   set that breaks the map. The map below comes from the read paths of each screen.

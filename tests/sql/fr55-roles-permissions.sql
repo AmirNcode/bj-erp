@@ -485,9 +485,9 @@ select pg_temp.expect('role_within: hr gives Manager, not Helpdesk, never Admin'
   (select private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key='manager'), (select id from fx where k='hr'))::text
        || private.role_within((select id from fx where k='r_help'), (select id from fx where k='hr'))::text
        || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key='admin'), (select id from fx where k='super'))::text), 'truefalsefalse');
-select pg_temp.expect('role_within: Everything gives Helpdesk and HR',
+select pg_temp.expect('role_within: non-admin Everything cannot give sensitive Helpdesk or HR',
   (select private.role_within((select id from fx where k='r_help'), (select id from fx where k='super'))::text
-       || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key='hr'), (select id from fx where k='super'))::text), 'truetrue');
+       || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key='hr'), (select id from fx where k='super'))::text), 'falsefalse');
 select pg_temp.expect('role_within: the admin (every permission) gives a custom role of its company',
   (select private.role_within((select id from fx where k='r_help'), (select id from fx where k='admin'))::text), 'true');
 select pg_temp.expect('role_within: false for a random id, NULL, and the other company''s roles',
@@ -814,6 +814,26 @@ select pg_temp.expect('… the other company''s row is untouched',
     where father_name = 'FR55X' and company_id = (select id from fx where k='other_company')), '0');
 
 -- role editor (D2, D6, D11)
+select pg_temp.expect('sensitive: creator cannot create a pawn with their own write-capable role',
+  pg_temp.try_as('super', format($q$select public.app_create_employee('9990000891','Sensitive Pawn','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.id('r_super'))), '42501');
+select pg_temp.expect('sensitive: refused pawn creation leaves no profile or auth account',
+  (select count(*)::text from public.profiles where personnel_no = '9990000891') || ':' ||
+  (select count(*)::text from auth.users where email like '9990000891@%'), '0:0');
+select pg_temp.expect('sensitive: role creation is refused for a non-admin even with all permissions',
+  pg_temp.try_as('super', $q$select public.app_save_role(null, 'Sensitive Unauthorized', '{"people":"read","people_create":"edit"}')$q$), '42501');
+insert into public.role_permissions select id, 'role_assign', 'edit' from public.roles
+  where company_id = (select id from fx where k='company') and system_key = 'hr';
+select pg_temp.expect('sensitive: HR cannot assign Security even when explicitly granted role_assign',
+  pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))), '42501');
+select pg_temp.expect('sensitive: HR cannot create a hire with a sensitive custom role',
+  pg_temp.try_as('hr', format($q$select public.app_create_employee('9990000892','HR Pawn','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
+    pg_temp.id('company'), pg_temp.id('dept'), pg_temp.id('r_super'))), '42501');
+select pg_temp.expect('sensitive: legacy role assignment cannot give HR a Security assignment path',
+  pg_temp.try_as('hr', format($q$select public.app_set_user_roles(%s, array['employee','security']::public.app_role[])$q$, pg_temp.id('emp'))), '42501');
+delete from public.role_permissions where permission = 'role_assign' and role_id =
+  (select id from public.roles where company_id = (select id from fx where k='company') and system_key = 'hr');
 select pg_temp.expect('admin creates a role',
   pg_temp.try_as('admin', $q$select public.app_save_role(null, 'Clerk', '{"people":"read","holidays":"edit"}')$q$), 'ok:1');
 select pg_temp.expect('… a custom role with its permissions and a role.create audit row',
@@ -894,8 +914,11 @@ select pg_temp.expect('hr may not give Helpdesk (outside hr)',
 select pg_temp.expect('hr may not take Helpdesk away (D4: helpdesk is above hr)',
   pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('help'),
     pg_temp.role_id('company', 'employee'))), '42501');
-select pg_temp.expect('Everything gives Helpdesk',
+select pg_temp.expect('Everything cannot give sensitive Helpdesk',
   pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('appr_off'),
+    pg_temp.role_id('company', 'employee'), pg_temp.id('r_help'))), '42501');
+select pg_temp.expect('admin gives Helpdesk',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('appr_off'),
     pg_temp.role_id('company', 'employee'), pg_temp.id('r_help'))), 'ok:1');
 select pg_temp.expect('nobody sets their own roles but the admin (D3)',
   pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('super'),
@@ -1037,13 +1060,16 @@ select pg_temp.expect('nosign with clearance read may not give Finance to a plai
 select pg_temp.expect('… the target still holds Employee only',
   (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k='c4')), 'Employee');
-select pg_temp.expect('Everything gives Security and Finance',
+select pg_temp.expect('Everything cannot give Security and Finance together',
   pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s, %s]::uuid[])', pg_temp.id('c4'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'), pg_temp.role_id('company', 'finance'))), '42501');
+select pg_temp.expect('admin gives Security and Finance',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %s, %s]::uuid[])', pg_temp.id('c4'),
     pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'), pg_temp.role_id('company', 'finance'))), 'ok:1');
-select pg_temp.expect('… and takes them away again; nosign may not take them away',
+select pg_temp.expect('admin takes them away again; nosign may not take them away',
   pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('c4'),
     pg_temp.role_id('company', 'employee'))) || ' '
-  || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('c4'),
+  || pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('c4'),
     pg_temp.role_id('company', 'employee'))), '42501 ok:1');
 
 -- fix round 1: role_manager depends on leave_balances and calendar (D6 amendment):
@@ -1128,8 +1154,8 @@ select pg_temp.expect('company scope approval_steps: a step cannot be moved to a
   pg_temp.try_as('hr', format('update public.approval_steps set company_id = %s where approver_id = %s', pg_temp.id('other_company'), pg_temp.id('appr'))), '42501');
 select pg_temp.expect('company scope approval_steps: hr edits and the admin deletes in the own company',
   pg_temp.try_as('hr', format('update public.approval_steps set step_order = 95 where approver_id = %s', pg_temp.id('appr'))) || ' '
-  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, manager_scope, step_order) values (%s, %L, %L, 84)', pg_temp.id('company'), 'manager', 'department')) || ' '
-  || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s and step_order = 84', pg_temp.id('company'))),
+  || pg_temp.try_as('hr', format('insert into public.approval_steps (company_id, role, approver_id, step_order) values (%s, %L, %s, 84)', pg_temp.id('company'), 'employee', pg_temp.id('fin'))) || ' '
+  || pg_temp.try_as('admin', format('delete from public.approval_steps where company_id = %s and approver_id = %s', pg_temp.id('company'), pg_temp.id('fin'))),
   'ok:1 ok:1 ok:1');
 select pg_temp.expect('company scope approval_steps: hr (a non-admin delegate) cannot reach the other company either',
   pg_temp.try_as('hr', format('update public.approval_steps set step_order = 85 where company_id = %s', pg_temp.id('other_company'))) || ' '
@@ -1401,9 +1427,7 @@ select pg_temp.expect('R5 identity: an hr holder needs clearance edit too (Stepp
   (select private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='hr'))::text
        || private.can_act_on((select id from fx where k='super'), (select id from fx where k='hr'))::text
        || private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='plain'))::text), 'falsetruetrue');
--- Giving HR: can_act_on(Stepper, plain) and role_within(HR, Stepper) both pass,
--- so only the identity mirror in app_set_user_role_ids refuses (its message).
-select pg_temp.expect('R5 identity mirror: giving HR needs approval_steps and clearance edit (D4 and D5 pass)',
+select pg_temp.expect('R5: HR assignment requires admin even when ordinary person editing is allowed',
   (select private.can_act_on((select id from fx where k='stepper'), (select id from fx where k='plain'))::text
        || private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key = 'hr'),
                               (select id from fx where k='stepper'))::text) || ' '
@@ -1411,13 +1435,16 @@ select pg_temp.expect('R5 identity mirror: giving HR needs approval_steps and cl
     pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))) || ' | '
   || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain'),
     pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))),
-  'truetrue 42501: not allowed to give or remove role HR | ok:1');
+  'truefalse 42501: not allowed to give or remove role HR | 42501');
+select pg_temp.expect('R5 setup: admin assigns HR',
+  pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain'),
+    pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'hr'))), 'ok:1');
 -- Taking HR away: the target now holds hr, so can_act_on's identity clause
 -- refuses first (same two powers); the mirror's removal leg is defence in depth.
-select pg_temp.expect('R5 identity: taking HR from a holder is refused by D4''s identity clause; Everything may',
+select pg_temp.expect('R5 identity: taking HR from a holder is refused by D4; admin may',
   pg_temp.val_as('stepper', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])::text', pg_temp.id('plain'),
     pg_temp.role_id('company', 'employee'))) || ' | '
-  || pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('plain'),
+  || pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('plain'),
     pg_temp.role_id('company', 'employee'))),
   '42501: not allowed on this employee | ok:1');
 insert into public.role_permissions select id, 'clearance', 'edit' from public.roles
@@ -1538,15 +1565,15 @@ select pg_temp.expect('I1: hr edits a SelfService holder''s profile and gives th
   'ok:1 ok:1');
 select pg_temp.expect('I1: helpdesk (passwords, no personal info) still may not reset a SelfService holder',
   pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('selfsvc'), 'Temp!2026x')), '42501');
-select pg_temp.expect('I1: role_within SelfService: Assigner (personal_info edit) yes, HelpAssign (none) no',
+select pg_temp.expect('I1: sensitive SelfService cannot be assigned by either non-admin',
   (select private.role_within((select id from fx where k='r_selfsvc'), (select id from fx where k='assigner'))::text
-       || private.role_within((select id from fx where k='r_selfsvc'), (select id from fx where k='helpassign'))::text), 'truefalse');
-select pg_temp.expect('I1: HelpAssign may not give SelfService; Assigner may',
+       || private.role_within((select id from fx where k='r_selfsvc'), (select id from fx where k='helpassign'))::text), 'falsefalse');
+select pg_temp.expect('I1: neither HelpAssign nor Assigner may give SelfService',
   pg_temp.val_as('helpassign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])::text', pg_temp.id('plain2'),
     pg_temp.role_id('company', 'employee'), pg_temp.id('r_selfsvc'))) || ' | '
   || pg_temp.try_as('assigner', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('plain2'),
     pg_temp.role_id('company', 'employee'), pg_temp.id('r_selfsvc'))),
-  '42501: not allowed to give or remove role SelfService | ok:1');
+  '42501: not allowed to give or remove role SelfService | 42501');
 -- Owner ruling (a) survives the switch being turned on for a preset.
 insert into public.role_permissions select id, 'personal_info_own', 'edit' from public.roles
   where company_id = (select id from fx where k='company') and system_key = 'security';

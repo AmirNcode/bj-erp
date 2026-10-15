@@ -5,6 +5,7 @@ import { PermissionSection } from '@/app/[locale]/(app)/settings/roles/_componen
 import { ALL_KEYS, type PermKey } from '@/lib/permissions/catalog';
 
 const t = {
+  sensitive: 'Sensitive when allowed',
   title: 'Leave',
   items: Object.fromEntries(ALL_KEYS.map((k) => [k, { label: `L:${k}`, description: `D:${k}` }])) as Record<PermKey, { label: string; description: string }>,
   levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only' },

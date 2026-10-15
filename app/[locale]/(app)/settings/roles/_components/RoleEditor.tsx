@@ -20,11 +20,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { saveRole } from '@/lib/actions/roles';
 import type { RoleRow } from '@/lib/actions/roles-helpers';
 import {
   DEPENDENCIES,
   SECTIONS,
+  sensitivePermissions,
   type Perms,
   type PermKey,
   type SectionChoice,
@@ -92,9 +94,11 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
   const [dirty, setDirty] = useState(false);
   const [nameError, setNameError] = useState('');
   const [error, setError] = useState('');
+  const [confirmSensitive, setConfirmSensitive] = useState(false);
   const [isPending, startTransition] = useTransition();
   const isPreset = role?.kind === 'preset';
   const listHref = `/${locale}/settings/roles`;
+  const sensitive = sensitivePermissions(perms);
 
   // Placeholder-free objects, read whole; the two {item} messages go through t().
   const labels = useMemo(() => {
@@ -107,6 +111,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
         summary: tp.raw('summary') as Record<SectionChoice, string>,
         raisedBy: (item: string) => tp('raisedBy', { item }),
         loweredBy: (item: string) => tp('loweredBy', { item }),
+        sensitive: tp('sensitive'),
       },
     };
   }, [tp]);
@@ -152,7 +157,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
     router.push(listHref);
   };
 
-  const save = () => {
+  const save = (confirmed = false) => {
     setError('');
     setNameError('');
     const trimmed = name.trim();
@@ -160,6 +165,11 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
       setNameError(t('nameInvalid'));
       return;
     }
+    if (!confirmed && sensitive.length > 0) {
+      setConfirmSensitive(true);
+      return;
+    }
+    setConfirmSensitive(false);
     startTransition(async () => {
       const result = await saveRole({ id: role?.id ?? null, name: trimmed, permissions: perms });
       if (!result.ok) {
@@ -221,6 +231,27 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
 
       <AdminOnlyCard />
 
+      <AlertDialog open={confirmSensitive} onOpenChange={setConfirmSensitive}>
+        <AlertDialogContent className="z-[51] max-h-[calc(100dvh-2rem)] overflow-y-auto">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('sensitiveTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('sensitiveDescription')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="max-h-64 list-disc space-y-2 overflow-y-auto ps-5 text-sm" data-testid="sensitive-permissions">
+            {sensitive.map((key) => (
+              <li key={key}>
+                <span className="font-medium">{labels.section.items[key].label}</span>
+                <p className="text-muted-foreground">{labels.section.items[key].description}</p>
+              </li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="sensitive-cancel">{t('cancel')}</AlertDialogCancel>
+            <Button onClick={() => save(true)} disabled={isPending} data-testid="sensitive-confirm">{t('sensitiveProceed')}</Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {error && (
         <p role="alert" className="text-sm text-destructive" data-testid="role-save-error">
           {t('errorLabel')}: {error}
@@ -238,7 +269,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
           {t('cancel')}
         </Button>
         {/* An existing role saves only a change: an unchanged save would write an empty audit row. */}
-        <Button className="h-10" disabled={isPending || (!!role && !dirty)} onClick={save} data-testid="role-save">
+        <Button className="h-10" disabled={isPending || (!!role && !dirty)} onClick={() => save()} data-testid="role-save">
           {isPending ? t('saving') : t('save')}
         </Button>
       </div>

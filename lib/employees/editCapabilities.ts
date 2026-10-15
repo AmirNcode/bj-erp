@@ -8,7 +8,7 @@
  */
 
 import type { RoleRow } from '@/lib/actions/roles-helpers';
-import { can, isWithin, levelValue, type PermKey, type Perms } from '@/lib/permissions/catalog';
+import { can, isWithin, levelValue, sensitivePermissions, type PermKey, type Perms } from '@/lib/permissions/catalog';
 
 export type EditCapabilities = {
   /** Name and hire date. */
@@ -130,9 +130,9 @@ export function employeeEditCapabilities({
   // steps and the clearance HR rows, finance signs the clearance finance box.
   const mayToggle = (r: RoleRow) => {
     if (r.systemKey === 'manager') return can(callerPerms, 'role_manager');
+    if (callerRoles.includes('hr')) return r.systemKey === 'employee' && can(callerPerms, 'role_assign');
+    if (r.systemKey === 'hr' || r.systemKey === 'finance' || sensitivePermissions(r.permissions).length > 0) return false;
     if (!can(callerPerms, 'role_assign') || !isWithin(r.permissions, callerPerms)) return false;
-    if (r.systemKey === 'hr') return can(callerPerms, 'approval_steps') && can(callerPerms, 'clearance');
-    if (r.systemKey === 'finance') return can(callerPerms, 'clearance');
     return true;
   };
 

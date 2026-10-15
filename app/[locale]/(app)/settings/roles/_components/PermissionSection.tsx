@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, TriangleAlert } from 'lucide-react';
 import { Collapsible, DropdownMenu } from 'radix-ui';
 
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,7 @@ export function PermissionSection({
     summary: Record<SectionChoice, string>;
     raisedBy: (byLabel: string) => string;
     loweredBy: (byLabel: string) => string;
+    sensitive: string;
   };
   defaultOpen?: boolean;
 }) {
@@ -109,7 +110,15 @@ export function PermissionSection({
               data-testid={`perm-row-${k}`}
             >
               <div className="min-w-0">
-                <div className="text-sm font-medium">{t.items[k].label}</div>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {t.items[k].label}
+                  {SHAPES[k] !== 'R' && (
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" data-testid={`perm-sensitive-${k}`}>
+                      <TriangleAlert className="size-4" aria-hidden="true" />
+                      {t.sensitive}
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-muted-foreground">{t.items[k].description}</div>
                 {note && (
                   <div className="mt-1 text-xs text-primary">

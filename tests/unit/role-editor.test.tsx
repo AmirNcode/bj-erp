@@ -40,6 +40,29 @@ const openSection = (key: string) =>
   fireEvent.click(screen.getByTestId(`perm-block-${key}`).querySelector('button')!);
 
 describe('RoleEditor', () => {
+  it('cancels sensitive saving without losing edits, then requires a fresh confirmation', async () => {
+    renderEditor(custom({ people: 'read' }));
+    fireEvent.click(screen.getByTestId('perm-people-edit'));
+    fireEvent.click(screen.getByTestId('role-save'));
+    expect(screen.getByTestId('sensitive-permissions').textContent).toContain(en.permissions.items.people.label);
+    fireEvent.click(screen.getByTestId('sensitive-cancel'));
+    expect(saveRole).not.toHaveBeenCalled();
+    expect(screen.getByTestId('perm-people-edit').getAttribute('data-state')).toBe('on');
+    fireEvent.click(screen.getByTestId('role-save'));
+    expect(saveRole).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('sensitive-confirm'));
+    await waitFor(() => expect(saveRole).toHaveBeenCalledTimes(1));
+  });
+
+  it('saves a read-only role without sensitive confirmation', async () => {
+    renderEditor();
+    fireEvent.change(screen.getByTestId('role-name'), { target: { value: 'Readers' } });
+    fireEvent.click(screen.getByTestId('perm-people-read'));
+    fireEvent.click(screen.getByTestId('role-save'));
+    await waitFor(() => expect(saveRole).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('sensitive-confirm')).toBeNull();
+  });
+
   it('notes the rows a change raised, naming the item that needed them', () => {
     renderEditor();
     openSection('leave');
@@ -142,6 +165,8 @@ describe('RoleEditor', () => {
     fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     expect(screen.getByTestId('perm-row-people').textContent).toContain('Turned on');
     fireEvent.click(screen.getByTestId('role-save'));
+    expect(saveRole).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('sensitive-confirm'));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/en/settings/roles/new-id'));
     expect(saveRole).toHaveBeenCalledWith({ id: null, name: 'Helpdesk QA', permissions: { people_create: 'edit', people: 'read' } });
     expect(screen.getByTestId('perm-row-people').textContent).not.toContain('Turned on');

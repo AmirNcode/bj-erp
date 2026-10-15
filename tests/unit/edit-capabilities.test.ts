@@ -53,6 +53,20 @@ const idOf = (slug: string) => ALL.find((r) => r.systemKey === slug || r.name ==
 
 const NO_IDENTITY = { approver: false, clearanceSigner: false };
 
+describe('sensitive role assignment', () => {
+  it('HR cannot assign custom roles even with role_assign from another role', () => {
+    const reader = role('r-reader', null, 'custom', 'Reader', { people: 'read' });
+    const result = employeeEditCapabilities({
+      callerId: ME, callerRoles: ['hr', 'employee'], callerPerms: fullPerms(),
+      targetId: THEM, targetRoleIds: [EMP_ROLE.id], allRoles: [...ALL, reader],
+      targetIsDepartmentManager: false, targetIdentity: NO_IDENTITY,
+    });
+    expect(result.editableRoleIds).toEqual([MANAGER_ROLE.id, EMP_ROLE.id]);
+    expect(result.profile).toBe(true);
+    expect(result.leaveEdit).toBe(true);
+  });
+});
+
 const base = {
   callerId: ME,
   callerRoles: ['employee'],
@@ -247,10 +261,10 @@ describe('employeeEditCapabilities', () => {
     expect(onSelfService(HELPDESK_CALLER.perms)).toMatchObject({ lockedReason: 'above', resetPassword: false });
   });
 
-  it('the self-service box: a role assigner with personal_info edit may toggle it, one without may not', () => {
+  it('non-admin role assigners cannot toggle sensitive self-service roles', () => {
     const assigner = { people: 'edit', role_assign: 'edit', personal_info: 'edit' } as Perms;
     const helpAssign = { people: 'read', leave_requests: 'edit', role_assign: 'edit' } as Perms;
-    expect(onSelfService(assigner, [EMP_ROLE.id]).editableRoleIds).toContain(SELF_SERVICE.id);
+    expect(onSelfService(assigner, [EMP_ROLE.id]).editableRoleIds).not.toContain(SELF_SERVICE.id);
     expect(onSelfService(helpAssign, [EMP_ROLE.id]).editableRoleIds).not.toContain(SELF_SERVICE.id);
   });
 
@@ -305,16 +319,16 @@ describe('employeeEditCapabilities', () => {
 
   // ── D5 assignment ────────────────────────────────────────────────────────
 
-  it('role_assign may toggle roles within its own set only', () => {
+  it('role_assign cannot toggle sensitive roles even within its own set', () => {
     const r = caps({ roles: ['employee'], perms: { people: 'edit', role_assign: 'edit', leave_requests: 'edit' } }, ['employee']);
-    expect(r.editableRoleIds).toContain(HELPDESK.id); // {people:read, leave_requests:edit} ⊆ caller
+    expect(r.editableRoleIds).not.toContain(HELPDESK.id);
     expect(r.editableRoleIds).toContain(EMP_ROLE.id); // no permissions
     expect(r.editableRoleIds).not.toContain(HR_ROLE.id); // hr ⊄ caller
     expect(r.editableRoleIds).not.toContain(ADMIN_ROLE.id);
     expect(r.editableRoleIds).not.toContain(MANAGER_ROLE.id); // needs role_manager
   });
 
-  it('the hr and finance boxes also need the power that edits their signers; security needs none', () => {
+  it('HR and Finance identity roles stay admin-only regardless of caller permissions', () => {
     const covered: Perms = { ...WIDE, role_assign: 'edit' };
     const toggles = (perms: Perms) =>
       employeeEditCapabilities({ ...base, callerPerms: perms, allRoles: ALL_BARE_HR }).editableRoleIds;
@@ -322,9 +336,9 @@ describe('employeeEditCapabilities', () => {
     expect(toggles(covered)).not.toContain(FIN_ROLE.id);
     expect(toggles(covered)).not.toContain(HR_BARE.id);
     expect(toggles({ ...covered, approval_steps: 'edit' })).not.toContain(HR_BARE.id);
-    expect(toggles({ ...covered, clearance: 'edit' })).toContain(FIN_ROLE.id);
+    expect(toggles({ ...covered, clearance: 'edit' })).not.toContain(FIN_ROLE.id);
     expect(toggles({ ...covered, clearance: 'edit' })).not.toContain(HR_BARE.id);
-    expect(toggles({ ...covered, approval_steps: 'edit', clearance: 'edit' })).toContain(HR_BARE.id);
+    expect(toggles({ ...covered, approval_steps: 'edit', clearance: 'edit' })).not.toContain(HR_BARE.id);
   });
 
   it('no role is toggleable on a locked target', () => {

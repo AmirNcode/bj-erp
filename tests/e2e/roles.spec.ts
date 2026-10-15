@@ -48,6 +48,11 @@ test('admin creates a personal-info desk; it edits an employee, not a manager, a
     await page.getByTestId('perm-personal_info-edit').click();
     await expect(page.getByTestId('perm-people-read')).toHaveAttribute('data-state', 'on');
     await page.getByTestId('role-save').click();
+    await expect(page.getByTestId('sensitive-permissions')).toBeVisible();
+    await page.getByTestId('sensitive-cancel').click();
+    await expect(page).toHaveURL(/\/settings\/roles\/new$/);
+    await page.getByTestId('role-save').click();
+    await page.getByTestId('sensitive-confirm').click();
     await expect(page).toHaveURL(/\/settings\/roles\/[0-9a-f-]{36}$/);
     const roleId = page.url().split('/').pop()!;
 

@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Sensitive role access — 2026-10-15
+
+- Admin confirms sensitive permissions before saving a new or existing role; write-capable items
+  show a warning icon and text in Farsi and English. Read-only access does not trigger a warning.
+- Only admin assigns roles with write access or HR/Finance identity powers. HR retains its duties
+  but can assign only Employee/Manager. Manager remains available through `role_manager`.
+- Forward migration: `20261015153112_sensitive_role_assignment.sql`.
+
 ### Admin-configurable roles and permissions — FR-55 (2026-10-13)
 
 Migrations `20261013200001`..`200007`. Spec `docs/specs/2026-10-07-configurable-roles-design.md`.

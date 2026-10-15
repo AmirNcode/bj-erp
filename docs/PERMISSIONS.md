@@ -464,11 +464,16 @@ their holders.
   guard); `security` is not one either (it cannot be an approval-step role since `20261012120003`).
   Admin callers skip it. Guards every write on a person; reads are exempt.
 - **D5 — assignment, `role_within(role_id, uid)`.** `admin`: never. `manager`: `role_manager` edit.
-  `employee`: `role_assign` edit (it has no rows). Otherwise `role_assign` edit and every row of the
-  role at or below the caller's level (`personal_info_own` counts as covered by `personal_info`
-  edit, as in D4). Granting or removing `hr` also needs `approval_steps` and
-  `clearance` edit; `finance` needs `clearance` edit. The same check covers the initial roles on Add
-  Employee.
+  `employee`: `role_assign` edit (new hires receive Employee automatically). Since the owner decision
+  on 2026-10-15, only admin may assign/remove roles with any valid `edit` permission, or the HR and
+  Finance identity presets. Manager remains the explicit `role_manager` exception. HR holders can
+  assign/remove only Employee and Manager, even if another role grants `role_assign`. Other non-admins
+  with `role_assign` may assign read-only roles within their own access. Existing HR duties and D4
+  record-editing rules are unchanged. These checks also cover initial roles and the legacy RPC.
+- **Sensitive-access confirmation.** All write-capable permission rows show an icon and text warning.
+  Saving a role with any `edit` permission requires confirmation listing the sensitive permissions,
+  including edits to existing roles and presets. Read-only selections do not trigger confirmation.
+  Only admin can create/edit roles; the confirmation informs that decision, not an authorization gate.
 - **D6 — dependencies.** Items whose screens read through RLS need other items at read (table
   above); `app_save_role` rejects a set that breaks them and the editor raises them, saying so.
 - **D7 — no self-appointment as a department manager** (non-admin, insert or update). Open owner

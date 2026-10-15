@@ -1247,22 +1247,23 @@ CREATE FUNCTION private.role_within(p_role_id uuid, p_uid uuid) RETURNS boolean
     SET search_path TO ''
     AS $$
   select coalesce((
-    select case r.system_key
-      when 'admin' then false
-      when 'manager' then private.has_perm(p_uid, 'role_manager', 'edit')
+    select case
+      when r.system_key = 'admin' then false
+      when private.is_admin(p_uid) then true
+      when r.system_key = 'manager' then private.has_perm(p_uid, 'role_manager', 'edit')
+      when exists (select 1 from public.user_roles where user_id = p_uid and role = 'hr')
+        then r.system_key = 'employee' and private.has_perm(p_uid, 'role_assign', 'edit')
+      when r.system_key in ('hr', 'finance') then false
+      when exists (select 1 from public.role_permissions rp where rp.role_id = r.id
+                   and rp.level = 'edit' and private.permission_allows(rp.permission, rp.level)) then false
       else private.has_perm(p_uid, 'role_assign', 'edit')
-           and not exists (
-             select 1 from public.role_permissions rp
-              where rp.role_id = r.id
-                and private.permission_allows(rp.permission, rp.level)
-                and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission)
-                -- As in can_act_on: personal_info edit covers the self-only personal_info_own.
-                and not (rp.permission = 'personal_info_own'
-                         and private.perm_level(p_uid, 'personal_info') >= 2))
+        and not exists (select 1 from public.role_permissions rp where rp.role_id = r.id
+                         and private.permission_allows(rp.permission, rp.level)
+                         and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission))
     end
-      from public.roles r
-      join public.profiles u on u.id = p_uid and u.company_id = r.company_id
-     where r.id = p_role_id), false);
+    from public.roles r
+    join public.profiles caller on caller.id = p_uid and caller.company_id = r.company_id
+    where r.id = p_role_id), false);
 $$;
 
 

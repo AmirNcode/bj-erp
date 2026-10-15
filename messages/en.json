@@ -1398,6 +1398,7 @@
     "cancel": "Cancel"
   },
   "permissions": {
+    "sensitive": "Sensitive when allowed",
     "sections": {
       "finance": "Finance",
       "employees": "Employees",
@@ -1437,7 +1438,7 @@
       },
       "role_assign": {
         "label": "Assign roles",
-        "description": "Give or remove roles that need no more access than you have."
+        "description": "Give or remove read-only roles within your own access. Sensitive roles, HR and Finance are admin-only. HR holders can assign only Employee and Manager."
       },
       "personal_info": {
         "label": "Personal information",
@@ -1501,6 +1502,9 @@
     "loweredBy": "Turned off because it needs {item}"
   },
   "rolesAdmin": {
+    "sensitiveTitle": "Review sensitive access",
+    "sensitiveDescription": "These permissions can change employee data, balances, access or company settings. They may have unintended consequences, especially when combined with other roles. Only the admin can assign roles with this access. Review the permissions below before saving. Changes to an existing role affect everyone who holds it.",
+    "sensitiveProceed": "I understand — save role",
     "tabs": {
       "general": "General",
       "roles": "Roles"

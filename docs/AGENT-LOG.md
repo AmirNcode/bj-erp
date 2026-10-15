@@ -78,6 +78,171 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-15 — Authorized FR-55 release
+
+**Agent:** Codex
+**Branch / HEAD at start:** `codex/fr55-reviewed` @ `6111f1d`
+**Trigger:** Owner approved commit/update PR #6, refresh backup, merge and verify production.
+
+**What changed**
+- Publishing the previously verified sensitive-role implementation and retained review journal.
+  Verification evidence is in the preceding implementation/rehearsal entry below.
+
+**Actions outside the repo**
+- Refreshing Liara's full logical backup and verified offsite copy before merging PR #6.
+- Production changes will run through the existing GitHub deployment/migration-ledger workflow,
+  not ad hoc SQL. Deployment results and post-deploy checks will be recorded in a follow-up entry.
+
+**State left behind**
+- This entry records release authorization/preparation, not deployment success.
+- Main checkout's unrelated work remains untouched; no test users will be created in production.
+
+## 2026-10-15 — Sensitive role controls and FR-55 release rehearsal
+
+**Agent:** Codex
+**Branch / HEAD at start:** `codex/fr55-reviewed` @ `6111f1d`
+**Trigger:** Restrict sensitive access to admin, preserve HR duties but limit HR role assignment
+to Employee/Manager, add warnings, then prepare and verify the release. Resumed after usage reset.
+
+**What changed**
+- `20261015153112_sensitive_role_assignment.sql` replaces `private.role_within`: non-admins cannot
+  give/remove any role with a valid edit permission, or HR/Finance identity roles. Manager is the
+  explicit delegated exception. HR with extra role_assign still cannot assign custom roles.
+  Existing record-editing rights stay unchanged. Role creation/editing was already admin-only.
+- The TypeScript capability mirror matches SQL. All write-capable rows show a warning icon/text;
+  sensitive saves (including existing roles) require confirmation listing the affected permissions.
+  Read-only saves do not. English/Farsi translations and policy/spec/changelog/backlog updated.
+- Browser testing found cancel/reopen could place the overlay after content at the same z-index.
+  The new confirmation content now explicitly stacks above its overlay and scrolls on small screens.
+- Added policy SQL/unit tests and cancel/reopen browser coverage. Restored-production testing exposed
+  three fixture assumptions: broad legacy grants cause RLS to return zero modified rows rather than
+  throw, and a real department-manager approval step collided with a fixture. Tests now verify the
+  actual unchanged row for denied writes, and use a fixture-specific named approver. No production
+  grant or business behavior was changed to accommodate tests.
+
+**Actions outside the repo**
+- Liara SSH was read-only: exactly one admin, active; `pgrst_ddl_watch` enabled; 79 ledger records.
+  Remote main remains `6d425cf4308818ff3ea11f47a8cd556bcaf76cb7` (no main drift).
+- Verified existing backup `daily-20261015T021247Z.dump`, SHA-256
+  `713b735fd2cbbb984f8e7df31e2fb081aec4d816458464b4e7c9f0a802f0ef15`.
+  Restored into a new network-disabled `bj-fr55-release-check` container, isolated storage, no ports.
+  Used the runbook GraphQL ACL handling and disabled cron. Applied all eight pending migrations
+  using deployment-ledger checksum checks. Baseline/final counts: 139 profiles, 139 auth users,
+  one active admin; ledger advanced from 79 to 87. Production was not migrated or modified.
+- Backed up isolated `bj_fr55`, applied only the new migration there with its ledger entry,
+  regenerated schema explicitly from that database. The new migration is now frozen locally.
+- Built unchanged main application source from `6d425cf` in `/tmp/bj-fr55-main-smoke`, pointed only
+  at upgraded `bj_fr55` via local gateway :8090, served on :3002. Feature build served on :3001.
+  Main checkout and its unrelated uncommitted work were not edited.
+
+**Verification**
+- Typecheck, lint, production build, deployment tests pass; unit tests 833 pass / 5 skip.
+- Production dependency audit: zero vulnerabilities. CI's rate-limit configuration, Liara Compose
+  configuration and real-proxy client-IP runtime tests also pass (both local/Liara Caddy images).
+- All five SQL suites pass on BOTH `bj_fr55` and the migrated production-backup copy:
+  69 / 40 / 59 / 83 / 355 (606 PASS each), zero FAIL/ERROR. Suites roll back their fixtures.
+- `schema.sql` byte-matches a fresh `bj_fr55` schema dump; `git diff --check` clean.
+- English desktop/Farsi mobile warning, cancel, reopen and real click eligibility pass; screenshots
+  inspected. Focused role-creation/assignment browser regression passes after the overlay fix.
+- Final production-build browser regression: 18/18 pass (roles, HR role, first-login password,
+  HR employee administration, team, manager creation, clearance, approval, admin settings, navigation).
+  Other E2E specs were not run in this session.
+- Old-main/new-schema smoke: Manager creation and both HR employee/department workflows pass.
+  Initial HR run failed because the old test asserted the typed manager code before async selection;
+  retried using the already-known exact selected-label wait in the scratch TEST helper only.
+  Old application source/build stayed unchanged. This is targeted compatibility, not every route.
+
+**State left behind**
+- Changes uncommitted; PR #6 not updated; no merge, push, or deployment. Prior review entry retained.
+- Removed the disposable production-backup rehearsal container/storage and its temporary credential
+  file after verification. Source backup retained. Stopped both preview servers (:3001/:3002).
+- E2E teardown still fails because it sends Auth cleanup to the Next application URL rather than
+  the API gateway; throwaway `999…` users remain in isolated `bj_fr55`. No broad cleanup attempted
+  because of the previously documented clearance foreign-key blocker.
+
+**For the next agent**
+- Refresh backup and repeat read-only admin/main checks at deploy time. Commit/review/update PR #6
+  before an explicitly authorized merge; pushing main deploys. Rollback uses the fresh-database
+  restore, NOT `pg_restore --clean` into live. After deploy smoke-test permissions/eligibility RPCs,
+  admin sensitive-role confirmation, HR assignment limits and password-reset visibility.
+- Manager/approver impersonation through issued creation credentials remains explicitly deferred;
+  warnings and sensitive-role assignment restrictions do not solve credential ownership or revoke
+  old sessions. Admin-transfer concurrency has not been exercised with two live sessions.
+
+## 2026-10-15 — Independent review of PR #6 (FR-55, admin-only resets), review only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), lead at high effort.
+- Three read-only Opus 5.5 subagents, no nesting:
+  - DB security: effort max. It hit an API rate limit mid-run and was resumed with its context intact.
+  - App behaviour: effort high.
+  - Migrations and coverage: effort high.
+- The lead ran every test, probe and server.
+
+**Branch / HEAD at start:** codex/fr55-reviewed @ 6111f1d (= PR #6 head); origin/main 6d425cf (= merge-base). No drift; worktree clean.
+**Trigger:** Amir asked for an independent review of PR #6 against main, review only.
+
+**What changed**
+- Only this entry, uncommitted. No code changed; nothing committed, pushed or merged. Main checkout not touched.
+
+**Actions outside the repo** (local Docker, database `bj_fr55` only; nothing on `postgres` or Liara)
+- Read-only checks:
+  - ledger checksums for 200001–200007 equal the HEAD files;
+  - `pg_dump -d bj_fr55` (public + private) is byte-identical to `supabase/schema.sql` minus its header.
+- Five `tests/sql` suites as `supabase_admin` on `bj_fr55`; each rolls back.
+- Three reviewer probes, each `begin … rollback`, no leftovers (checked):
+  - A: transfer to an account still on an HR-issued password succeeds.
+  - B: a custom `people_create` + `role_assign` holder creates a pawn holding its own role and sets its own balance through it.
+  - C: cleanup called by a junk-coded admin. Inconclusive: it aborted on the known `separation_signoffs_separation_id_fkey` first.
+- `fr55-dev` preview (`next dev` on :3001 → gateway :8090 → `bj_fr55`), started through the preview tool and stopped afterwards.
+- e2e runs created throwaway 999… users. Teardown cleanup failed (the known `E2E_BASE_URL` issue); `bj_fr55` now holds 82 junk-coded profiles. Cleanup was not run by hand: it hits the known FK failure.
+
+**Verification** (run independently this session)
+- `tsc --noEmit`, `lint`, `test:deploy`, `git diff --check origin/main...HEAD`: clean.
+- Unit: 829 passed, 5 skipped.
+- `npm run build`: clean.
+- SQL suites (PASS/FAIL lines read; only PASS lines printed): client-feedback 69, fr51 40, fr52-53 58, fr54 82, fr55 346. 0 FAIL, 0 ERROR.
+- e2e against `next dev`, `--workers=1`, 18/18 passed:
+  - roles, hr-role, first-login-password: 10;
+  - hr-employee-admin, team, manager-create-employee, clearance, approval, admin-settings, nav: 8.
+
+**Findings** (no Critical, High or Medium defect in the PR's own code)
+- **Medium, NEW variant of the deferred creation-credential item (owner decision): pawn with the creator's own role.**
+  - Holder X of a custom role with `people_create` + `role_assign` creates P with a password X picks and `p_role_ids` = X's role. D5 accepts it.
+  - As P, X passes `can_act_on(P, X)` for everything the role delegates. Probe B moved X's own balance this way.
+  - Not reachable with presets only: HR lacks `role_assign`.
+  - Wider than main, where a creator could give at most Manager.
+  - Belongs in the deferred D13/Tier-2 decision. Document it under TASKS; until then do not build a role with both items.
+- **Low, NEW variant of the same item:** `app_transfer_admin` accepts a target still on an issued password (`must_change_password = true`; probe A). Cheap partial guard: `and not t.must_change_password`.
+- **Low, NEW, deploy failure window only:** between 200001 and 200004, main's `app_set_user_roles` (bare `on conflict do nothing`) silently drops a second admin row while auditing it as set.
+- **Low, NEW, UX:** after Transfer admin the new admin's JWT still lacks admin for up to 1 h. Same staleness as any role change. Tell them to sign in again.
+- **Pre-existing process issue (release prerequisite):**
+  - `deploy/update.sh:183-189` suggests `pg_restore --clean` into the live DB. That leaves FR-55-only objects behind and blocks a re-deploy.
+  - Use the fresh-database restore in `docs/DEPLOY-LIARA.md` instead.
+- **Info:**
+  - `getCachedPermissions` falls back to `{}` without logging.
+  - `app_list_roles` shows holder counts to every member.
+  - 27 SQL messages have no `db-error` rule; none is reachable from normal UI.
+  - Admin resets are company-blind (single tenant).
+  - `anon` ALL and `authenticated` TRUNCATE on `profiles` / `user_roles` are identical on main and unreachable through PostgREST.
+  - Older suites drop the one-admin index.
+- Prior PR #5 findings re-checked:
+  - The three Mediums are fixed.
+  - The accepted Lows are unchanged.
+
+**State left behind**
+- PR #6 unchanged, not merged. This entry is uncommitted in the worktree.
+- `bj_fr55` has 82 throwaway users. The stack is still running; the preview server is stopped.
+
+**For the next agent**
+- **Release prerequisites:**
+  - Read-only Liara check: exactly one admin row, its profile active, and `pgrst_ddl_watch` present.
+  - Confirm main has not changed `supabase/` since 6d425cf.
+  - Rehearse the migrations on a restored Liara backup.
+  - N-1 smoke: old main app on the new schema.
+  - DB rollback = fresh-database restore only.
+  - Post-deploy smoke of `rpc/app_my_permissions` and `rpc/app_password_reset_eligible`.
+- CI runs no SQL suites; migrations are first exercised on Liara.
+
 ## 2026-10-14 — Publish replacement FR-55 review PR
 
 **Agent:** Codex

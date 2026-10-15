@@ -41,6 +41,10 @@ export const SHAPES: Record<PermKey, Shape> = {
 
 export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);
 
+export function sensitivePermissions(perms: Perms): PermKey[] {
+  return ALL_KEYS.filter((key) => SHAPES[key] !== 'R' && perms[key] === 'edit');
+}
+
 /** D6. `keyLevel` 'read' = applies at any level; 'edit' = only when the key is edit. */
 export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] = [
   { key: 'people_create', keyLevel: 'read', needs: 'people' },

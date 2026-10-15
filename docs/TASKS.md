@@ -56,8 +56,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - After the FR-55 release is live, drop the `private.has_permission` legacy keys and
     `app_set_user_roles(uuid, app_role[])`, and `private.can_read_all`. First move
     `finance_approved_requests` (still `has_permission(…, 'finance.view')`) to `has_perm`.
-  - **Before pushing the release:** check Liara has exactly one admin. The migration refuses
-    otherwise, which blocks the deploy (safe, but a failed release).
+  - **At release:** recheck Liara has exactly one active admin and `pgrst_ddl_watch` enabled;
+    verified read-only on 2026-10-15. More than one admin is rejected by the migration, but zero
+    or inactive admins are not rejected. Refresh the backup before deploying; use only the
+    fresh-database restore procedure if rollback is needed.
   - Admin lockout has no recovery path (D1, owner accepted).
   - `getRoleHolders` (`lib/actions/roles.ts`) sends every holder id in one `.in()` filter. A
     custom role held by several hundred people may exceed the URL limit and break the delete
@@ -71,7 +73,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - D7 is a guard against honest mistakes, not a control: hr can still create a hire, give them
     Manager, appoint them department manager and sign in as them (owner question, with the D7
     analogues below).
-  - **Deferred (review decision 2026-10-14): account control and D3.** Password resets are
+  - **Deferred (review decision 2026-10-14): account control and D3.**
+    The 2026-10-15 sensitive-role restriction closes the reproduced self-role pawn path: only admin
+    may assign write-capable roles, and HR is restricted to Employee/Manager. The manager/approver
+    creation-credential issue below remains deferred; warnings do not close it. Password resets are
     admin-only (`20261013200007`), which closes the peer-reset path. NOT closed: impersonation
     through credentials a non-admin issues when creating an employee. Every creator
     (`people_create`, a Manager onboarding to their team, bulk create) picks the initial password
