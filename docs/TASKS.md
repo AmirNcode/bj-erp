@@ -52,7 +52,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - ☐ **Encrypt backups** now that they hold national IDs and bank details (FR-53): the Liara backup
   copies on the owner's Mac belong on an encrypted disk (owner action), or encrypt the dump files.
 
-- ☐ **FR-55 follow-ups** (release `20261013200001`..`200005`):
+- ☐ **FR-55 follow-ups** (release `20261013200001`..`200007`):
   - After the FR-55 release is live, drop the `private.has_permission` legacy keys and
     `app_set_user_roles(uuid, app_role[])`, and `private.can_read_all`. First move
     `finance_approved_requests` (still `has_permission(…, 'finance.view')`) to `has_perm`.
@@ -71,6 +71,18 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - D7 is a guard against honest mistakes, not a control: hr can still create a hire, give them
     Manager, appoint them department manager and sign in as them (owner question, with the D7
     analogues below).
+  - **Deferred (review decision 2026-10-14): account control and D3.** Password resets are
+    admin-only (`20261013200007`), which closes the peer-reset path. NOT closed: impersonation
+    through credentials a non-admin issues when creating an employee. Every creator
+    (`people_create`, a Manager onboarding to their team, bulk create) picks the initial password
+    and can complete the first-login change, `must_change_password` is enforced in the app layout
+    only, and a reset does not end the target's sessions (no SQL touches `auth.sessions` /
+    `auth.refresh_tokens`). Pre-existing on main: HR creates a hire, makes them the only named
+    approver, signs in as them and approves HR's own request (code reading, not reproduced).
+    Options from the review: an account-control rule ("D13": control keys, never reset or empower
+    someone who decides for you) and issuer tracking + session revocation ("Tier 2"). Before
+    re-delegating password resets, decide these and add SQL scenarios for every path. D3 is not
+    fully protected until then.
   - Owner questions pending, the D7 analogues: a `people` editor setting themselves as a report's
     manager (and a Manager doing so for their own reports), an `approval_steps` editor naming
     themselves as approver, a `clearance` editor naming themselves as signer, a `people_create`

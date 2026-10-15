@@ -1,6 +1,6 @@
 # Admin-configurable roles and permissions — design
 
-**Status:** Accepted and built, 2026-10-13 (branch `FR-55`, migrations `20261013200001`..`200005`).
+**Status:** Accepted and built, 2026-10-13 (branch `FR-55`, migrations `20261013200001`..`200007`).
 FR-55. Decisions D1–D12 were agreed with Amir in chat on 2026-10-07. The implementation plan is
 `docs/plans/2026-10-07-configurable-roles.md`.
 
@@ -20,13 +20,33 @@ FR-55. Decisions D1–D12 were agreed with Amir in chat on 2026-10-07. The imple
   - D4/D5: a target's `personal_info_own` counts as covered when the caller holds
     `personal_info_own` or `personal_info` edit (`can_act_on`, `role_within`, and the TS mirror).
     Otherwise switching the self-only item on for any role would put its holders out of HR's
-    reach. A role without personal-info power (say, passwords only) still cannot act on them.
+    reach. A role without personal-info power (say, people read only) still cannot act on them.
   - D1 transfer: when the new admin has no personnel number (the bootstrap `admin` account), the
     typed confirmation is their employee code. An old admin left with no other role keeps the
     company's Employee role.
   - Bulk create and CSV import refuse a non-zero opening balance without `leave_balances` edit, as
     the single Add Employee form already did.
   - The Reports page shows the today pulse only to admin and hr, whose pulse is company-wide.
+- Independent review, 2026-10-14 (decision by Amir):
+  - **Password resets are admin-only for now** (`20261013200007`). A delegated reset let one person
+    sign in as an equal peer and act on their own record through them, which defeats D3. A check
+    that the target cannot act back on the caller closed only that case; inactive peers,
+    reset-then-promote and resetting one's own approver stayed open. So the `passwords` item left
+    the catalog (19 items): `permission_keys`, `permission_allows` (the `role_permissions` CHECK
+    and `app_save_role` refuse it), `permission_deps`, the TS catalog and the role editor. Stored
+    grants are deleted, and `perm_level` / `role_within` read only rows the catalog allows, so a
+    row that survived counts for nothing. Single reset, bulk reset, the eligibility RPC and the
+    `enforce_profile_update_scope` password branch are the admin's alone; password resets join D2.
+  - `private.can_reset_password(caller, target)` (`20261013200006`, now `is_admin(caller)`) is the
+    one reset rule; `app_password_reset_eligible(uuid[])` feeds the Employees list so its bulk
+    selection holds only accepted rows.
+  - **Deferred, not closed:** impersonation through credentials a non-admin issues when CREATING
+    an employee. Every creator (`people_create`, a Manager onboarding to their team, bulk create)
+    chooses the initial password and can complete the first-login change themselves; a reset does
+    not end the target's sessions. Example (pre-existing on main): HR creates a hire, makes them
+    the only named approver, and approves HR's own request as them. The review's account-control
+    policy ("D13") and issuer tracking ("Tier 2") are deferred owner decisions. **D3 is not fully
+    protected**; see TASKS "FR-55 follow-ups".
 
 ## Problem
 
@@ -71,6 +91,7 @@ checkboxes that show raw English slugs.
 - **D2 — Locked, admin-only operations.** These are never in the matrix and check `is_admin`
   directly:
   1. The role editor: create, edit and delete roles.
+  1a. Password resets, single and bulk (review decision 2026-10-14, `20261013200007`).
   2. Granting or transferring admin.
   3. Approval override: filling any approval step, and signing one's own request.
   4. Bulk import in Update and Replace modes.
@@ -135,7 +156,7 @@ checkboxes that show raw English slugs.
 
   | Item | Needs (at least Read only) | Why |
   |---|---|---|
-  | `people_create`, `passwords`, `role_manager`, `role_assign` | `people` | they live on the Employees screens |
+  | `people_create`, `role_manager`, `role_assign` | `people` | they live on the Employees screens (`passwords` was here until `20261013200007` removed the item) |
   | `role_manager` | also `leave_balances`, `calendar` | a Manager reads every balance and the calendar (`reads_*`), so whoever can make one must already read them |
   | `personal_info` | `people` | the personal-info list and import are keyed by person |
   | `clearance` at Allowed | `people` | the new-form setup reads `profiles` |
@@ -194,7 +215,7 @@ Levels: `read` < `edit`. Absence means Not allowed. In the UI, Allowed = `edit`.
 |---|---|---|---|---|
 | Employees | `people` | R/E | Employees list and records, read-only | Edit name, hire date, department, direct manager, job title; deactivate and reactivate |
 | | `people_create` | E | — | Add employees (form, CSV import in Add mode) |
-| | `passwords` | E | — | Reset passwords, bulk reset, print login slips |
+| | ~~`passwords`~~ | — | — | Removed 2026-10-14 (`20261013200007`): password resets are admin-only (D2) |
 | | `role_manager` | E | — | Give or remove the Manager role |
 | | `role_assign` | E | — | Give or remove other roles (D5) |
 | | `personal_info` | R/E | View, CSV export | Correct, CSV import |
@@ -234,7 +255,7 @@ Levels: `read` < `edit`. Absence means Not allowed. In the UI, Allowed = `edit`.
 | `approval_steps` | edit | — | — |
 | `work_settings` | edit | — | — |
 | `holidays` | edit | — | — |
-| `passwords`, `role_assign`, `personal_info_own` | — | — | — |
+| `role_assign`, `personal_info_own` | — | — | — |
 
 `personal_info_own` is on no preset: the admin holds it implicitly, and the switch is per role.
 HR's `work_settings`, `holidays` and `finance` rows follow main's FR-59 and FR-62; `special_leave`,
@@ -335,7 +356,7 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
 | Object | New gate |
 |---|---|
 | `enforce_profile_update_scope`, editor branch | `people` edit + `can_act_on` |
-| `enforce_profile_update_scope`, password branch | `passwords` + `can_act_on`; may change nothing but the `must_change_password` flag a reset sets |
+| `enforce_profile_update_scope`, password branch | removed in `20261013200007`: only the admin flips `must_change_password` |
 | `enforce_profile_update_scope`, `personnel_no`, `employee_code`, `company_id` | admin only, as before |
 | `profiles_update` | `people` edit (row level) |
 | `departments_insert_editor`, `departments_update_editor` | `departments` edit |
@@ -354,7 +375,7 @@ SELECT for the token hook. No client INSERT, UPDATE or DELETE.
 | `employee_personal_info_update`, `app_import_personal_info` | own row with `personal_info_own` edit; any other row with `personal_info` edit + `can_act_on` per row (the admin skips `can_act_on`) |
 | `can_read_separation` | `clearance` read |
 | `separation_manageable`, `app_save_separation_units`, `app_separation_warnings` | `clearance` edit (+ `can_act_on` on the leaver) |
-| `app_set_employee_password`, `app_bulk_set_employee_passwords` | `passwords` + `can_act_on` per target; admin unchanged |
+| `app_set_employee_password`, `app_bulk_set_employee_passwords`, `app_password_reset_eligible` | admin only, through `private.can_reset_password` (`20261013200006`/`200007`); was `passwords` + `can_act_on` |
 | `app_create_employee` | `people_create` (replaces the hr branch); new optional `p_role_ids uuid[]` checked with D5 through `app_set_user_role_ids`; never `admin` |
 | `app_bulk_create_employees`, `app_bulk_import_employees` Add mode | `people_create`; Update and Replace stay admin (D2) |
 | `cancel_leave_request` | owner, OR `leave_requests` edit in the caller's company and never on the admin (replaces the admin-only branch) |
@@ -532,8 +553,9 @@ green after):
 - **Locked operations.** A custom role holding every catalog item at its highest level is still
   refused all of D2: saving or deleting a role, `app_transfer_admin`, filling any approval step,
   bulk Update/Replace, and reading the audit log.
-- **Subset matrix.** Helpdesk (`people` read + `passwords`) resets an employee. It is refused on a
-  manager, a department manager, an hr holder, the admin and itself.
+- **Subset matrix.** Helpdesk (`people` read + `role_assign`, plus a stored `passwords` grant since
+  `20261013200007`) is "above" hr and refused on a manager, a department manager, an hr holder,
+  the admin and itself. No non-admin resets a password, with or without a stored grant.
 - **Assignment.** hr gives and removes Manager. hr cannot give Helpdesk, which it does not cover.
   A `role_assign` holder gives a role inside its own set and is refused one outside it.
 - **Validation.** Dependency violations, unknown keys, and invalid levels are rejected.
@@ -548,9 +570,11 @@ insert a second admin. They must stay green: that is the parity proof for the pr
 actions, `can()`, the capabilities including D3–D5, and nav visibility.
 
 **e2e `tests/e2e/roles.spec.ts`.** Only `999…` throwaway users:
-1. The admin creates "Helpdesk" (`people` read + `passwords`).
+1. The admin creates a personal-info desk (`personal_info` edit, which raises `people` read); the
+   editor offers no Passwords item.
 2. The admin assigns it to a throwaway user.
-3. Helpdesk resets a throwaway employee and has no reset button on a throwaway manager.
+3. The desk edits a throwaway employee's personal information, is read-only on a throwaway
+   manager, and has no reset button on either.
 4. The delete dialog lists the holder's personnel number.
 
 Specs that select role checkboxes by label (`hr-employee-admin`, `hr-role`, `team`, `_helpers`)

@@ -1561,6 +1561,10 @@ export type Database = {
           system_key: string | null
         }[]
       }
+      app_password_reset_eligible: {
+        Args: { p_ids: string[] }
+        Returns: string[]
+      }
       app_role_holders: {
         Args: { p_role_id: string }
         Returns: { full_name: string; personnel_no: string | null; user_id: string }[]

@@ -61,8 +61,8 @@ describe('RoleEditor', () => {
 
   it('disables the middle segment on action-only items and Allowed on read-only ones', () => {
     renderEditor();
-    expect((screen.getByTestId('perm-passwords-read') as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByTestId('perm-passwords-edit') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByTestId('perm-people_create-read') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByTestId('perm-people_create-edit') as HTMLButtonElement).disabled).toBe(false);
     openSection('leave');
     expect((screen.getByTestId('perm-calendar-edit') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -78,7 +78,7 @@ describe('RoleEditor', () => {
   it('cancel asks first when there are unsaved changes, and stays on No', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderEditor();
-    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     fireEvent.click(screen.getByTestId('role-cancel'));
     expect(confirm).toHaveBeenCalledWith(en.rolesAdmin.unsaved);
     expect(push).not.toHaveBeenCalled();
@@ -92,7 +92,7 @@ describe('RoleEditor', () => {
     const before = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(before);
     expect(before.defaultPrevented).toBe(false);
-    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     const after = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(after);
     expect(after.defaultPrevented).toBe(true);
@@ -110,7 +110,7 @@ describe('RoleEditor', () => {
     // Clean: no question.
     expect(fireEvent.click(link)).toBe(true);
     expect(confirm).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     expect(fireEvent.click(link)).toBe(false); // navigation prevented
     expect(confirm).toHaveBeenCalledWith(en.rolesAdmin.unsaved);
     confirm.mockReturnValue(true);
@@ -124,7 +124,7 @@ describe('RoleEditor', () => {
   it('keeps Save disabled on an existing role until something changes', () => {
     renderEditor(custom({ people: 'read' }));
     expect((screen.getByTestId('role-save') as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     expect((screen.getByTestId('role-save') as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -139,11 +139,11 @@ describe('RoleEditor', () => {
   it('saves a new role, clears the notes and opens its page', async () => {
     renderEditor();
     fireEvent.change(screen.getByTestId('role-name'), { target: { value: ' Helpdesk QA ' } });
-    fireEvent.click(screen.getByTestId('perm-passwords-edit'));
+    fireEvent.click(screen.getByTestId('perm-people_create-edit'));
     expect(screen.getByTestId('perm-row-people').textContent).toContain('Turned on');
     fireEvent.click(screen.getByTestId('role-save'));
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/en/settings/roles/new-id'));
-    expect(saveRole).toHaveBeenCalledWith({ id: null, name: 'Helpdesk QA', permissions: { passwords: 'edit', people: 'read' } });
+    expect(saveRole).toHaveBeenCalledWith({ id: null, name: 'Helpdesk QA', permissions: { people_create: 'edit', people: 'read' } });
     expect(screen.getByTestId('perm-row-people').textContent).not.toContain('Turned on');
   });
 
@@ -194,8 +194,8 @@ describe('mergeNotes', () => {
   });
 
   it('does not take a raised row of the same section as the cause', () => {
-    const notes = mergeNotes({}, 'employees', {}, { passwords: 'edit', people: 'read' }, ['people'], []);
-    expect(notes).toEqual({ people: { kind: 'raised', by: 'passwords' } });
+    const notes = mergeNotes({}, 'employees', {}, { people_create: 'edit', people: 'read' }, ['people'], []);
+    expect(notes).toEqual({ people: { kind: 'raised', by: 'people_create' } });
   });
 
   it('drops the note of a row the user then sets', () => {

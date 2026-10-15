@@ -1431,10 +1431,6 @@
         "label": "Add employees",
         "description": "Add people one by one or from a CSV (Add new only)."
       },
-      "passwords": {
-        "label": "Passwords",
-        "description": "Reset passwords and print login slips."
-      },
       "role_manager": {
         "label": "Manager role",
         "description": "Give or remove the Manager role."
@@ -1540,6 +1536,7 @@
       "items": {
         "roleEditor": "Create, edit and delete roles",
         "adminTransfer": "Give or transfer admin",
+        "passwordReset": "Reset passwords and issue new login slips",
         "approvalOverride": "Fill any approval step, and sign their own request",
         "bulkImport": "Bulk import in Update and Replace modes",
         "auditLog": "The audit log",

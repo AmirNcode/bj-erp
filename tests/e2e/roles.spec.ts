@@ -31,19 +31,21 @@ async function deleteRoleIfPresent(page: Page, name: string) {
   await expect(page.getByTestId(`role-row-${id}`)).toHaveCount(0);
 }
 
-test('admin creates Helpdesk; helpdesk resets an employee, not a manager; delete lists holders', async ({ page, browser }) => {
+test('admin creates a personal-info desk; it edits an employee, not a manager, and never resets passwords; delete lists holders', async ({ page, browser }) => {
   test.setTimeout(240_000);
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const helper = await createEmployee(page, { name: 'E2E Helpdesk', roles: ['employee'] });
   const worker = await createEmployee(page, { name: 'E2E Worker', roles: ['employee'] });
   const boss = await createEmployee(page, { name: 'E2E Boss', roles: ['employee', 'manager'] });
 
-  const roleName = `Helpdesk ${Date.now() % 100000}`;
+  const roleName = `PI Desk ${Date.now() % 100000}`;
   try {
-    // 1. create the role; Passwords raises Employee records to Read only
+    // 1. create the role; personal-info edit raises Employee records to Read only.
+    // Password resets are admin-only (20261013200007): the editor offers no Passwords item.
     await page.goto('/settings/roles/new');
     await page.getByTestId('role-name').fill(roleName);
-    await page.getByTestId('perm-passwords-edit').click();
+    await expect(page.locator('[data-testid^="perm-passwords-"]')).toHaveCount(0);
+    await page.getByTestId('perm-personal_info-edit').click();
     await expect(page.getByTestId('perm-people-read')).toHaveAttribute('data-state', 'on');
     await page.getByTestId('role-save').click();
     await expect(page).toHaveURL(/\/settings\/roles\/[0-9a-f-]{36}$/);
@@ -63,8 +65,10 @@ test('admin creates Helpdesk; helpdesk resets an employee, not a manager; delete
     await login(hp, helper.code, helper.password);
     await setFirstPassword(hp, firstLoginPassword(helper.password));
     await openEmployee(hp, worker.code);
-    await expect(hp.getByTestId('reset-password')).toBeVisible();
+    await expect(hp.getByTestId('personal-info-save')).toBeVisible();
+    await expect(hp.getByTestId('reset-password')).toHaveCount(0);
     await openEmployee(hp, boss.code);
+    await expect(hp.getByTestId('personal-info-read-only')).toBeVisible();
     await expect(hp.getByTestId('reset-password')).toHaveCount(0);
     await expect(hp.getByTestId('edit-scope-note')).toBeVisible();
     await ctx.close();

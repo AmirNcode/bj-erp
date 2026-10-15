@@ -165,7 +165,7 @@ export async function setActive(
 export async function resetPassword(
   id: string
 ): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
-  const c = await requireCaller({ perm: ['passwords', 'edit'] });
+  const c = await requireCaller({ anyOf: ['admin'] }) // admin-only (20261013200007);
   if (!c.ok) return c;
 
   const tempPassword = generateTempPassword();
@@ -331,7 +331,7 @@ export async function importEmployees(
 export async function bulkResetPasswords(
   userIds: string[]
 ): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
-  const c = await requireCaller({ perm: ['passwords', 'edit'] });
+  const c = await requireCaller({ anyOf: ['admin'] }); // admin-only (20261013200007)
   if (!c.ok) return c;
   if (userIds.length === 0) return dbErr('no employees selected');
   const uniqueIds = [...new Set(userIds)];

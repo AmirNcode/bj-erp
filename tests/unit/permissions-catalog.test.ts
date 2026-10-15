@@ -21,7 +21,10 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(20);
+    expect(ALL_KEYS).toHaveLength(19);
+    // Password resets are admin-only (20261013200007): no role can hold them.
+    expect(ALL_KEYS).not.toContain('passwords');
+    expect(body).not.toContain("'passwords'");
   });
   it('dependency rows match permission_deps() both ways', () => {
     const body = fnBody(sql, 'permission_deps');
@@ -45,8 +48,8 @@ describe('catalog matches SQL', () => {
 
 describe('shapes', () => {
   it('action items have no read level, read items no edit level', () => {
-    expect(allows('passwords', 'read')).toBe(false);
-    expect(allows('passwords', 'edit')).toBe(true);
+    expect(allows('people_create', 'read')).toBe(false);
+    expect(allows('people_create', 'edit')).toBe(true);
     expect(allows('calendar', 'edit')).toBe(false);
     expect(SHAPES.people).toBe('RE');
   });
@@ -106,7 +109,7 @@ describe('applyLevel', () => {
     expect(r.raised.sort()).toEqual(['leave_balances', 'leave_requests', 'people']);
   });
   it('does not lower an existing higher level', () => {
-    expect(applyLevel({ people: 'edit' }, 'passwords', 'edit').perms.people).toBe('edit');
+    expect(applyLevel({ people: 'edit' }, 'people_create', 'edit').perms.people).toBe('edit');
   });
   it('clearance read needs nothing; edit needs people', () => {
     expect(applyLevel({}, 'clearance', 'read').raised).toEqual([]);
@@ -119,7 +122,7 @@ describe('applyLevel', () => {
     expect(applyLevel({}, 'role_manager', 'edit').raised.sort()).toEqual(['calendar', 'leave_balances', 'people']);
   });
   it('null removes the item only', () => {
-    expect(applyLevel({ people: 'read', passwords: 'edit' }, 'passwords', null).perms).toEqual({ people: 'read' });
+    expect(applyLevel({ people: 'read', people_create: 'edit' }, 'people_create', null).perms).toEqual({ people: 'read' });
   });
   it('refuses a level the shape forbids', () => {
     expect(() => applyLevel({}, 'calendar', 'edit')).toThrow();
@@ -128,9 +131,9 @@ describe('applyLevel', () => {
 
 describe('cascade down', () => {
   it('removing people removes all transitive dependents', () => {
-    const r = applyLevel({ people: 'read', departments: 'edit', leave_accrual: 'edit', passwords: 'edit' }, 'people', null);
+    const r = applyLevel({ people: 'read', departments: 'edit', leave_accrual: 'edit', people_create: 'edit' }, 'people', null);
     expect(r.perms).toEqual({});
-    expect(r.lowered.sort()).toEqual(['departments', 'leave_accrual', 'passwords']);
+    expect(r.lowered.sort()).toEqual(['departments', 'leave_accrual', 'people_create']);
     expect(r.raised).toEqual([]);
   });
   it('single row: people cannot stay when departments needs it', () => {
@@ -174,7 +177,7 @@ describe('sections', () => {
   it('read-only-all leaves action items off', () => {
     const r = applySectionBulk({}, 'employees', 'read');
     expect(r.perms.people).toBe('read');
-    expect(r.perms.passwords).toBeUndefined();
+    expect(r.perms.people_create).toBeUndefined();
     expect(sectionSummary(r.perms, 'employees')).toBe('read');
   });
   it('none clears the section, keeping others', () => {
@@ -186,19 +189,19 @@ describe('isWithin / fullPerms', () => {
   it('compares levels per key', () => {
     expect(isWithin({ people: 'read' }, { people: 'edit' })).toBe(true);
     expect(isWithin({ people: 'edit' }, { people: 'read' })).toBe(false);
-    expect(isWithin({ passwords: 'edit' }, {})).toBe(false);
+    expect(isWithin({ people_create: 'edit' }, {})).toBe(false);
   });
   it('personal_info edit covers the self-only personal_info_own (I1); nothing else does', () => {
     expect(isWithin({ personal_info_own: 'edit' }, { people: 'edit', personal_info: 'edit' })).toBe(true);
     expect(isWithin({ personal_info_own: 'edit' }, { personal_info_own: 'edit' })).toBe(true);
     expect(isWithin({ personal_info_own: 'edit' }, { people: 'read', personal_info: 'read' })).toBe(false);
-    expect(isWithin({ personal_info_own: 'edit' }, { people: 'read', passwords: 'edit' })).toBe(false);
+    expect(isWithin({ personal_info_own: 'edit' }, { people: 'read', people_create: 'edit' })).toBe(false);
     // The exception is for personal_info_own only.
     expect(isWithin({ personal_info: 'edit' }, { personal_info_own: 'edit' })).toBe(false);
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(20);
+    expect(Object.keys(f)).toHaveLength(19);
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');
     expect(f.special_leave).toBe('edit');

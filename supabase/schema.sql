@@ -437,6 +437,18 @@ $$;
 
 
 --
+-- Name: can_reset_password(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(private.is_admin(p_caller), false);
+$$;
+
+
+--
 -- Name: companies_seed_roles(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -664,11 +676,8 @@ begin
     v_allowed := array['full_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
   elsif private.is_manager_of(v_uid, new.id) then
     v_allowed := array['full_name', 'hire_date'];
-  elsif private.has_perm(v_uid, 'passwords', 'edit') and private.can_act_on(v_uid, old.id) then
-    -- FR-55: a password reset only flips must_change_password, which the check
-    -- below admits under bj.password_flag_write. No other column.
-    v_allowed := '{}'::text[];
   else
+    -- Password resets are the admin's alone (20261013200007).
     raise exception 'not permitted to update this profile' using errcode = '42501';
   end if;
 
@@ -1009,7 +1018,8 @@ CREATE FUNCTION private.perm_level(uid uuid, p_key text) RETURNS integer
       select max(case rp.level when 'edit' then 2 else 1 end)
         from public.user_roles ur
         join public.role_permissions rp on rp.role_id = ur.role_id
-       where ur.user_id = uid and rp.permission = p_key), 0)
+       where ur.user_id = uid and rp.permission = p_key
+         and private.permission_allows(rp.permission, rp.level)), 0)
   end;
 $$;
 
@@ -1023,7 +1033,7 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     SET search_path TO ''
     AS $$
   select case
-    when p_key in ('people_create','passwords','role_manager','role_assign','leave_accrual',
+    when p_key in ('people_create','role_manager','role_assign','leave_accrual',
                    'personal_info_own','special_leave')
       then p_level = 'edit'
     when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
@@ -1044,7 +1054,7 @@ CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text
     SET search_path TO ''
     AS $$
   values
-    ('people_create','read','people'), ('passwords','read','people'),
+    ('people_create','read','people'),
     ('role_manager','read','people'), ('role_manager','read','leave_balances'),
     ('role_manager','read','calendar'), ('role_assign','read','people'),
     ('personal_info','read','people'), ('clearance','edit','people'),
@@ -1065,7 +1075,7 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
     AS $$
-  select unnest(array['people','people_create','passwords','role_manager','role_assign',
+  select unnest(array['people','people_create','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
     'special_leave','leave_requests','calendar','reports','absences','approval_steps','work_settings',
     'holidays','finance']);
@@ -1244,6 +1254,7 @@ CREATE FUNCTION private.role_within(p_role_id uuid, p_uid uuid) RETURNS boolean
            and not exists (
              select 1 from public.role_permissions rp
               where rp.role_id = r.id
+                and private.permission_allows(rp.permission, rp.level)
                 and case rp.level when 'edit' then 2 else 1 end > private.perm_level(p_uid, rp.permission)
                 -- As in can_act_on: personal_info edit covers the self-only personal_info_own.
                 and not (rp.permission = 'personal_info_own'
@@ -2558,7 +2569,7 @@ declare
   v_row   record;
   v_count int;
 begin
-  if not (private.is_admin(v_uid) or private.has_perm(v_uid, 'passwords', 'edit')) then
+  if not private.is_admin(v_uid) then
     raise exception 'not allowed to reset passwords' using errcode = '42501';
   end if;
   if jsonb_typeof(p_resets) <> 'array' then
@@ -2599,10 +2610,10 @@ begin
     ) then
       raise exception 'employee not found' using errcode = 'P0002';
     end if;
-    -- FR-55 D4: every target, before the first credential changes.
-    if not private.is_admin(v_uid) and not private.can_act_on(v_uid, v_row.user_id) then
+    if not private.can_reset_password(v_uid, v_row.user_id) then
       raise exception 'not allowed on %',
-        (select personnel_no from public.profiles where id = v_row.user_id) using errcode = '42501';
+        (select coalesce(personnel_no, employee_code) from public.profiles where id = v_row.user_id)
+        using errcode = '42501';
     end if;
   end loop;
 
@@ -2615,7 +2626,6 @@ begin
            updated_at = now()
      where id = v_row.user_id;
 
-    -- A non-admin caller passes the profile guard only with this flag (FR-55).
     perform set_config('bj.password_flag_write', 'on', true);
     update public.profiles
        set must_change_password = true
@@ -3315,6 +3325,21 @@ $$;
 
 
 --
+-- Name: app_password_reset_eligible(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_password_reset_eligible(p_ids uuid[]) RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select distinct x
+    from unnest(coalesce(p_ids, '{}'::uuid[])) x
+   where x is distinct from auth.uid()
+     and private.can_reset_password(auth.uid(), x);
+$$;
+
+
+--
 -- Name: app_revoke_special_leave(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3639,9 +3664,7 @@ CREATE FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text
 declare
   v_rows int;
 begin
-  if not (private.is_admin(auth.uid())
-          or (private.has_perm(auth.uid(), 'passwords', 'edit')
-              and private.can_act_on(auth.uid(), p_user_id))) then
+  if not private.can_reset_password(auth.uid(), p_user_id) then
     raise exception 'not allowed to reset this password' using errcode = '42501';
   end if;
   if length(coalesce(p_password, '')) < 8 then
@@ -7825,6 +7848,14 @@ GRANT ALL ON FUNCTION private.can_read_separation(uid uuid, p_id uuid) TO authen
 
 
 --
+-- Name: FUNCTION can_reset_password(p_caller uuid, p_target uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION company_minutes_per_day(p_company_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -8310,6 +8341,16 @@ REVOKE ALL ON FUNCTION public.app_my_permissions() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO postgres;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO authenticated;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO service_role;
+
+
+--
+-- Name: FUNCTION app_password_reset_eligible(p_ids uuid[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) TO service_role;
 
 
 --

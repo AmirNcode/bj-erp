@@ -139,8 +139,8 @@ describe('manageItemsForRoles', () => {
   it('hr with an emptied role keeps only Approvals (identity-based)', () => {
     expect(keys(['hr'], {})).toEqual(['approvals']);
   });
-  it('helpdesk (people read + passwords) gets Employees only', () => {
-    expect(keys(['employee'], { people: 'read', passwords: 'edit' })).toEqual(['employees']);
+  it('helpdesk (people read + people_create) gets Employees only', () => {
+    expect(keys(['employee'], { people: 'read', people_create: 'edit' })).toEqual(['employees']);
   });
   it('the employees hub keeps the nav-manage test id', () => {
     expect(manageItemsForRoles(['manager'], {})[0]).toMatchObject({

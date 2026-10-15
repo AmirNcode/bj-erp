@@ -116,8 +116,8 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `job_title`/`active`; manager-of-row → `full_name`/`hire_date`. `employee_code`/`personnel_no`/
   `company_id` are admin-only. **FR-55:** the editor branch is `people` edit **and**
   `can_act_on(caller, target)` (D4: same company, no admin row, nothing above the caller's levels,
-  plus the relationship and identity clauses); a `passwords` + `can_act_on` branch may change
-  nothing except the `must_change_password` flag a reset sets. (Before FR-51 the trigger never compared `job_title` or
+  plus the relationship and identity clauses). The `passwords` branch FR-55 added is gone since
+  `20261013200007`: password resets are admin-only. (Before FR-51 the trigger never compared `job_title` or
   `personnel_no`, so a self or manager update could change them.) `must_change_password` (FR-50) is
   admin-only too, except that `app_set_initial_password` / `app_change_my_password` clear the
   caller's own flag; they mark the transaction with `bj.password_flag_write`, a setting PostgREST
@@ -389,7 +389,7 @@ Design record: `docs/specs/2026-10-07-configurable-roles-design.md`. Tables: `ro
 `role_permissions` (`docs/DATA_MODEL.md`). The admin edits roles in Settings › Roles; the editor
 shows three states per item (Allowed = `edit`, Read only = `read`, Not allowed = no row).
 
-### Catalog (20 items)
+### Catalog (19 items; `passwords` removed in `20261013200007`)
 
 Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 `private.permission_keys` / `permission_allows` / `permission_deps` and `lib/permissions/catalog.ts`
@@ -399,7 +399,6 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 |---|---|---|---|
 | Employees | `people` | R/E | — |
 | | `people_create` | E | `people` |
-| | `passwords` | E | `people` |
 | | `role_manager` | E | `people`, `leave_balances`, `calendar` |
 | | `role_assign` | E | `people` |
 | | `personal_info` | R/E | `people` |
@@ -426,7 +425,8 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | **Security** | `people`, `leave_balances`, `leave_requests`, `calendar`, `absences` at read |
 | **Finance** | `clearance`, `finance` at read |
 
-`personal_info_own`, `passwords` and `role_assign` are on no preset. `admin`, `manager` and
+`personal_info_own` and `role_assign` are on no preset. The catalog has 19 items: `passwords` was
+removed by `20261013200007` (password resets are admin-only; a stored row counts for nothing). `admin`, `manager` and
 `employee` carry no permission rows (admin holds every item implicitly; manager has the hard-wired
 company-wide read through `reads_*`). Presets keep their name and cannot be deleted; permissions are
 editable. HR holds `work_settings`, `holidays`, `special_leave`, `absences` and `finance` read under
@@ -454,7 +454,7 @@ their holders.
   level is at most the caller's (computed from all the target's roles, active or not); a target
   holding `manager` needs the caller to hold `role_manager` edit (one exception to the level
   check: the target's self-only `personal_info_own` is covered by the caller's `personal_info` edit,
-  so HR keeps self-service holders, while a passwords-only Helpdesk does not); a target who manages a department
+  so HR keeps self-service holders, while a role without personal-info edit does not); a target who manages a department
   needs `departments` edit; a target who holds `hr` or is a named approver of an active step needs
   `approval_steps` edit; a target who holds `hr` or `finance`, is a clearance unit signer, or signs a
   row of an `in_progress` / `awaiting_finance` clearance form needs `clearance` edit. The
@@ -526,9 +526,14 @@ in the same transaction via `private.allocate_leave_impl`). Anyone else gets `42
 admin/manager/security roles therefore stays admin-only. `app_bulk_create_employees(jsonb)`
 (CSV import, admin-only, all-or-nothing single transaction) reuses the same
 `private.create_employee_impl`.
-**FR-55:** both password RPCs accept the admin, or `passwords` edit plus `can_act_on` per target
-(a helpdesk role can reset an ordinary employee, not a manager, department manager, hr holder,
-admin or itself). Bulk password reset accepts 1–100 unique non-caller employees, validates the complete payload
+**FR-55 review decision (2026-10-14, `20261013200006`/`200007`):** both password RPCs, and
+`app_password_reset_eligible(uuid[])` (which ids the caller may bulk-reset; the Employees list uses
+it for its checkboxes), accept the **admin only**, through the single rule
+`private.can_reset_password(caller, target)`. A delegated reset let one person sign in as an equal
+peer and act on their own record through them (D3), so the `passwords` item was withdrawn rather
+than patched. **Not closed:** impersonation through credentials a non-admin issues when creating an
+employee (the creator picks the initial password and can complete the first-login change), and a
+reset does not end the target's existing sessions; deferred (TASKS, FR-55 follow-ups). Bulk password reset accepts 1–100 unique non-caller employees, validates the complete payload
 before updating anyone, enforces the bcrypt-safe 8–72 ASCII-character range, and succeeds or rolls
 back as one transaction.
 This is the chosen alternative to shipping a `service_role` secret into the app server — it keeps

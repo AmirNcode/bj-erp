@@ -169,7 +169,7 @@ token hook); no client writes — `app_save_role` / `app_delete_role` do them.
 ### `role_permissions` (2026-10-13, FR-55)
 `role_id → roles on delete cascade` · `permission text` · `level text` (`read` | `edit`). Primary key
 (`role_id`,`permission`). CHECK `private.permission_allows(permission, level)` (the catalog's keys
-and shapes, 20 items — `docs/PERMISSIONS.md`). A trigger refuses rows on `system` roles. RLS: SELECT
+and shapes, 19 items since `20261013200007` removed `passwords` — `docs/PERMISSIONS.md`). A trigger refuses rows on `system` roles. RLS: SELECT
 for rows whose role the caller can see; no client writes. Preset rows seeded as in PERMISSIONS.md.
 
 ### `user_roles`

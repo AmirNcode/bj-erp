@@ -34,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ListSkeleton } from '@/components/Skeletons';
+import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
 import { EmployeesTable, Avatar, type EmployeeRow } from './EmployeesTable';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
@@ -110,6 +111,8 @@ async function EmployeesData({
         .gte('end_date', todayInAppTz())
         .order('start_date')
     : { data: [] };
+  // Bulk password reset: checkboxes only on rows the database would accept.
+  const resettable = canBulkReset ? await passwordResetEligibleIds(supabase, ids) : new Set<string>();
   const nextByEmployee = new Map<string, NonNullable<typeof upcoming>[number]>();
   for (const u of upcoming ?? []) {
     if (u.employee_id && !nextByEmployee.has(u.employee_id)) nextByEmployee.set(u.employee_id, u);
@@ -146,6 +149,7 @@ async function EmployeesData({
             }
           : null,
       isSelf: emp.id === user?.id,
+      canReset: resettable.has(emp.id),
     };
   });
 
@@ -410,7 +414,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
         <EmployeesData
           locale={locale}
           query={query}
-          canBulkReset={can(perms, 'passwords')}
+          canBulkReset={myRoles.includes('admin')}
           showLocks={managerOnly}
         />
       </Suspense>

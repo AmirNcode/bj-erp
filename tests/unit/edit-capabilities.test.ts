@@ -44,7 +44,9 @@ const EMP_ROLE = role('r-employee', 'employee', 'system', 'Employee', {});
 const HR_ROLE = role('r-hr', 'hr', 'preset', 'HR', HR);
 const SEC_ROLE = role('r-security', 'security', 'preset', 'Security', SECURITY);
 const FIN_ROLE = role('r-finance', 'finance', 'preset', 'Finance', FINANCE);
-const HELPDESK = role('r-helpdesk', null, 'custom', 'Helpdesk', { people: 'read', passwords: 'edit' });
+// A custom role hr does not cover (hr reads leave requests only). It held `passwords` until
+// password resets became admin-only (20261013200007).
+const HELPDESK = role('r-helpdesk', null, 'custom', 'Helpdesk', { people: 'read', leave_requests: 'edit' });
 const ALL = [ADMIN_ROLE, MANAGER_ROLE, EMP_ROLE, HR_ROLE, SEC_ROLE, FIN_ROLE, HELPDESK];
 
 const idOf = (slug: string) => ALL.find((r) => r.systemKey === slug || r.name === slug)!.id;
@@ -78,7 +80,7 @@ const caps = (
 
 const ADMIN = { roles: ['admin'], perms: fullPerms() };
 const hr = (...extra: string[]) => ({ roles: ['hr', ...extra], perms: HR });
-const HELPDESK_CALLER = { roles: ['employee'], perms: { people: 'read', passwords: 'edit' } as Perms };
+const HELPDESK_CALLER = { roles: ['employee'], perms: { people: 'read', leave_requests: 'edit' } as Perms };
 
 describe('employeeEditCapabilities', () => {
   it('admin may do everything, on anyone; every role but admin is toggleable', () => {
@@ -165,7 +167,7 @@ describe('employeeEditCapabilities', () => {
     expect(caps(hr(), ['employee']).specialLeave).toBe(true);
     expect(caps(hr(), ['employee'], { targetId: ME }).specialLeave).toBe(false);
     expect(caps(hr(), ['admin']).specialLeave).toBe(false);
-    // D4 'above': the Helpdesk holder carries passwords, which hr lacks.
+    // D4 'above': the Helpdesk holder carries leave_requests edit, which hr lacks.
     expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above');
     expect(caps(hr(), ['employee', 'Helpdesk']).specialLeave).toBe(false);
   });
@@ -197,14 +199,22 @@ describe('employeeEditCapabilities', () => {
 
   // ── D4 subset rule ───────────────────────────────────────────────────────
 
-  it('helpdesk: reset password on a plain employee, nothing else', () => {
+  it('a custom role with people read: nothing on a plain employee, and no password reset', () => {
     expect(caps(HELPDESK_CALLER, ['employee'])).toMatchObject({
       profile: false,
       org: false,
-      resetPassword: true,
+      resetPassword: false,
       editableRoleIds: [],
       lockedReason: null,
     });
+  });
+
+  it('password resets are the admin alone (20261013200007), even with a stale passwords grant', () => {
+    const stale = { people: 'edit', passwords: 'edit' } as unknown as Perms;
+    expect(caps({ roles: ['employee'], perms: stale }, ['employee']).resetPassword).toBe(false);
+    expect(caps(hr(), ['employee']).resetPassword).toBe(false);
+    expect(caps({ roles: ['employee'], perms: { ...fullPerms() } }, ['employee']).resetPassword).toBe(false);
+    expect(caps(ADMIN, ['employee']).resetPassword).toBe(true);
   });
 
   it('helpdesk is locked on a manager (relationship power) and on hr (above)', () => {
@@ -217,7 +227,7 @@ describe('employeeEditCapabilities', () => {
     expect(
       employeeEditCapabilities({
         ...base,
-        callerPerms: { people: 'read', passwords: 'edit' },
+        callerPerms: { people: 'read', leave_requests: 'edit' },
         targetIsDepartmentManager: true,
       }).lockedReason
     ).toBe('above');
@@ -239,19 +249,19 @@ describe('employeeEditCapabilities', () => {
 
   it('the self-service box: a role assigner with personal_info edit may toggle it, one without may not', () => {
     const assigner = { people: 'edit', role_assign: 'edit', personal_info: 'edit' } as Perms;
-    const helpAssign = { people: 'read', passwords: 'edit', role_assign: 'edit' } as Perms;
+    const helpAssign = { people: 'read', leave_requests: 'edit', role_assign: 'edit' } as Perms;
     expect(onSelfService(assigner, [EMP_ROLE.id]).editableRoleIds).toContain(SELF_SERVICE.id);
     expect(onSelfService(helpAssign, [EMP_ROLE.id]).editableRoleIds).not.toContain(SELF_SERVICE.id);
   });
 
   it('a target holding a custom role the caller does not cover is above the caller', () => {
-    expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above'); // hr lacks passwords
+    expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above'); // hr reads leave requests only
   });
 
   // ── Identity clauses (approval signers, clearance signers) ───────────────
 
   const WIDE: Perms = {
-    people: 'edit', passwords: 'edit', leave_balances: 'read', leave_requests: 'read', calendar: 'read',
+    people: 'edit', leave_balances: 'read', leave_requests: 'read', calendar: 'read',
     clearance: 'read', absences: 'read', finance: 'read',
   };
   // An hr role stripped of every item, so only the identity clause can lock its holders.
@@ -296,8 +306,8 @@ describe('employeeEditCapabilities', () => {
   // ── D5 assignment ────────────────────────────────────────────────────────
 
   it('role_assign may toggle roles within its own set only', () => {
-    const r = caps({ roles: ['employee'], perms: { people: 'edit', role_assign: 'edit', passwords: 'edit' } }, ['employee']);
-    expect(r.editableRoleIds).toContain(HELPDESK.id); // {people:read, passwords:edit} ⊆ caller
+    const r = caps({ roles: ['employee'], perms: { people: 'edit', role_assign: 'edit', leave_requests: 'edit' } }, ['employee']);
+    expect(r.editableRoleIds).toContain(HELPDESK.id); // {people:read, leave_requests:edit} ⊆ caller
     expect(r.editableRoleIds).toContain(EMP_ROLE.id); // no permissions
     expect(r.editableRoleIds).not.toContain(HR_ROLE.id); // hr ⊄ caller
     expect(r.editableRoleIds).not.toContain(ADMIN_ROLE.id);
@@ -318,7 +328,7 @@ describe('employeeEditCapabilities', () => {
   });
 
   it('no role is toggleable on a locked target', () => {
-    const r = caps({ roles: ['employee'], perms: { people: 'edit', role_assign: 'edit', passwords: 'edit' } }, ['employee', 'hr']);
+    const r = caps({ roles: ['employee'], perms: { people: 'edit', role_assign: 'edit', leave_requests: 'edit' } }, ['employee', 'hr']);
     expect(r.lockedReason).toBe('above');
     expect(r.editableRoleIds).toEqual([]);
   });
@@ -380,7 +390,7 @@ describe('editFormView', () => {
   });
 
   it('a role assigner with people read only gets the roles block and can save', () => {
-    const assigner = { roles: ['employee'], perms: { people: 'read', role_assign: 'edit', passwords: 'edit' } as Perms };
+    const assigner = { roles: ['employee'], perms: { people: 'read', role_assign: 'edit' } as Perms };
     expect(view(assigner, ['employee'])).toEqual({ note: null, orgBlock: false, rolesBlock: true, saveable: true });
   });
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toRoleRow } from '@/lib/actions/roles-helpers';
 
 describe('toRoleRow', () => {
-  it('maps and sanitises permissions', () => {
+  it('maps and sanitises permissions (a stored passwords grant is dropped: resets are admin-only)', () => {
     expect(
       toRoleRow({
         id: 'r',
@@ -18,7 +18,7 @@ describe('toRoleRow', () => {
       kind: 'custom',
       name: 'Helpdesk',
       holders: 2,
-      permissions: { people: 'read', passwords: 'edit' },
+      permissions: { people: 'read' },
     });
   });
 

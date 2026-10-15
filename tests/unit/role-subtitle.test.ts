@@ -4,13 +4,13 @@ import { subtitleRole } from '@/lib/auth/roleSubtitle';
 describe('subtitleRole (the side-panel subtitle)', () => {
   it('shows the most senior built-in role held', () => {
     expect(subtitleRole(['employee', 'manager', 'hr'], [])).toEqual({ builtIn: 'hr' });
-    expect(subtitleRole(['admin', 'employee'], [{ name: 'Helpdesk', permissions: { passwords: 'edit' } }])).toEqual({
+    expect(subtitleRole(['admin', 'employee'], [{ name: 'Helpdesk', permissions: { people_create: 'edit' } }])).toEqual({
       builtIn: 'admin',
     });
   });
 
   it('a built-in role beats a custom one, Employee excepted', () => {
-    expect(subtitleRole(['employee', 'security'], [{ name: 'Helpdesk', permissions: { passwords: 'edit' } }])).toEqual({
+    expect(subtitleRole(['employee', 'security'], [{ name: 'Helpdesk', permissions: { people_create: 'edit' } }])).toEqual({
       builtIn: 'security',
     });
   });
@@ -18,7 +18,7 @@ describe('subtitleRole (the side-panel subtitle)', () => {
   it('falls back to the custom role with the most access when only Employee is built in', () => {
     expect(
       subtitleRole(['employee'], [
-        { name: 'Helpdesk', permissions: { people: 'read', passwords: 'edit' } },
+        { name: 'Helpdesk', permissions: { people: 'read', people_create: 'edit' } },
         { name: 'Payroll', permissions: { people: 'read', leave_balances: 'edit', reports: 'read' } },
       ])
     ).toEqual({ custom: 'Payroll' });

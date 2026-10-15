@@ -120,4 +120,65 @@ describe('TransferAdminDialog', () => {
     expect(screen.queryByTestId('transfer-error')).toBeNull();
     expect(replace).not.toHaveBeenCalled();
   });
+
+  describe('Farsi-keyboard input is normalized the way login and change-password do it', () => {
+    const fieldValue = (testId: string) => (screen.getByTestId(testId) as HTMLInputElement).value;
+
+    // Fills both fields, records what they show (the dialog closes on success), confirms.
+    async function submit(personnelNo: string, password: string) {
+      fireEvent.change(screen.getByTestId('transfer-personnel-no'), { target: { value: personnelNo } });
+      fireEvent.change(screen.getByTestId('transfer-password'), { target: { value: password } });
+      const shown = { personnelNo: fieldValue('transfer-personnel-no'), password: fieldValue('transfer-password') };
+      fireEvent.click(screen.getByTestId('transfer-confirm'));
+      await waitFor(() => expect(transferAdmin).toHaveBeenCalledTimes(1));
+      return shown;
+    }
+
+    it('sends a password typed on a Persian layout as its latin form', async () => {
+      await openAndPick();
+      // Persian digits are what the layout emits for 1-2-3; a Persian letter (ش) can
+      // never be in a stored password and is dropped, as toLatinPassword does.
+      const shown = await submit('1201', 'Secret۱۲۳ش');
+      expect(transferAdmin).toHaveBeenCalledWith({ targetId: 'p1', personnelNo: '1201', password: 'Secret123' });
+      // The field holds what is sent.
+      expect(shown.password).toBe('Secret123');
+    });
+
+    it('sends Persian digits in the personnel number as ASCII', async () => {
+      await openAndPick();
+      const shown = await submit(' ۱۲۰۱ ', 'secret');
+      expect(transferAdmin).toHaveBeenCalledWith({ targetId: 'p1', personnelNo: '1201', password: 'secret' });
+      expect(shown.personnelNo).toBe(' 1201 ');
+    });
+
+    it('sends Arabic-Indic digits in the personnel number as ASCII', async () => {
+      await openAndPick();
+      await submit('١٢٠١', 'secret');
+      expect(transferAdmin).toHaveBeenCalledWith({ targetId: 'p1', personnelNo: '1201', password: 'secret' });
+    });
+
+    it('passes ordinary latin password and ASCII digits through unchanged', async () => {
+      await openAndPick();
+      await submit('1201', 'Pa ss!w0rd~');
+      expect(transferAdmin).toHaveBeenCalledWith({ targetId: 'p1', personnelNo: '1201', password: 'Pa ss!w0rd~' });
+    });
+
+    it('sends a letter employee code (no personnel number) unchanged', async () => {
+      vi.mocked(listTransferCandidates).mockResolvedValueOnce({
+        ok: true,
+        people: [{ id: 'boot', name: 'System admin', personnelNo: 'admin' }],
+      });
+      render(
+        <NextIntlClientProvider locale="en" messages={en}>
+          <TransferAdminDialog locale="en" />
+        </NextIntlClientProvider>
+      );
+      fireEvent.click(screen.getByTestId('transfer-admin'));
+      const search = await screen.findByTestId('transfer-person');
+      fireEvent.change(search, { target: { value: 'System' } });
+      fireEvent.click(await screen.findByTestId('transfer-person-option'));
+      await submit(' admin ', 'secret');
+      expect(transferAdmin).toHaveBeenCalledWith({ targetId: 'boot', personnelNo: 'admin', password: 'secret' });
+    });
+  });
 });

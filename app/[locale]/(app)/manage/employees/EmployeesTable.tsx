@@ -14,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
+import { resetSelectableIds } from '@/lib/employees/passwordReset';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,11 +39,13 @@ export type EmployeeRow = {
   /** Next pending/approved leave, pre-formatted; null when none. */
   upcoming: { label: string; status: 'pending' | 'approved' } | null;
   isSelf: boolean;
+  /** The caller may bulk-reset this person's password (the database rule; never yourself). */
+  canReset: boolean;
 };
 
 type Props = {
   employees: EmployeeRow[];
-  /** passwords edit: row checkboxes and bulk password regeneration. */
+  /** The admin: row checkboxes and bulk password regeneration (resets are admin-only). */
   canBulkReset: boolean;
   /** Manager without people edit: department and roles are read-only for them. */
   showLocks: boolean;
@@ -82,7 +85,7 @@ export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
 }
 
 /**
- * Desktop employees table. With `passwords` edit each row gets a checkbox; a selection
+ * Desktop employees table. For the admin each eligible row gets a checkbox; a selection
  * opens a bar offering bulk password regeneration (the recovery path for a lost
  * one-time credentials file) — confirmed first: old passwords stop working.
  */
@@ -92,10 +95,11 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
   const [credentials, setCredentials] = useState<IssuedCredential[] | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // The caller's own account is excluded — bulk-resetting your own admin
-  // password would hand you a lockout.
-  const selectable = employees.filter((e) => !e.isSelf);
-  const allSelected = selectable.length > 0 && selectable.every((e) => selected.has(e.id));
+  // Only rows the database would accept (lib/employees/passwordReset.ts): never
+  // the caller's own account, and for a non-admin never the admin or anyone who
+  // holds more (D4), since one refused row refuses the whole batch.
+  const selectable = resetSelectableIds(employees);
+  const allSelected = selectable.length > 0 && selectable.every((id) => selected.has(id));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -106,7 +110,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
     });
 
   const toggleAll = () =>
-    setSelected(allSelected ? new Set() : new Set(selectable.map((e) => e.id)));
+    setSelected(allSelected ? new Set() : new Set(selectable));
 
   const regenerate = () =>
     startTransition(async () => {
@@ -217,7 +221,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
                 >
                   {canBulkReset && (
                     <td className="px-4 py-3">
-                      {!emp.isSelf && (
+                      {emp.canReset && (
                         <input
                           type="checkbox"
                           aria-label={emp.employee_code}

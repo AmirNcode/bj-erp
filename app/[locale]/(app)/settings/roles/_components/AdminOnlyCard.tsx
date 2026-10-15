@@ -6,7 +6,8 @@ import { useTranslations } from 'next-intl';
 /**
  * D2: what no role can ever hold, shown read-only under the matrix so the admin
  * sees the whole picture. Hours per working day joined the list with main's
- * FR-62/66 work_settings trigger.
+ * FR-62/66 work_settings trigger; password resets with the FR-55 review decision
+ * (20261013200007).
  */
 export function AdminOnlyCard() {
   const t = useTranslations('rolesAdmin.adminOnly');
@@ -14,6 +15,7 @@ export function AdminOnlyCard() {
   const items = [
     t('items.roleEditor'),
     t('items.adminTransfer'),
+    t('items.passwordReset'),
     t('items.approvalOverride'),
     t('items.bulkImport'),
     t('items.auditLog'),

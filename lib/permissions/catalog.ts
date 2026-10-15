@@ -1,15 +1,16 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001 + 200004). 20 items:
- * the 16 of the spec plus main's absences, finance, personal_info_own (own personal
- * information, an explicit exception to D3) and special_leave. Pure. Drives
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 19 items:
+ * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
+ * the FR-55 review decision) plus main's absences, finance, personal_info_own (own
+ * personal information, an explicit exception to D3) and special_leave. Pure. Drives
  * the role editor, the nav and the edit capabilities. The database is the
  * authority; tests/unit/permissions-catalog.test.ts keeps the two in step.
  */
 
 export type Level = 'read' | 'edit';
 export type PermKey =
-  | 'people' | 'people_create' | 'passwords' | 'role_manager' | 'role_assign'
+  | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
   | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'absences' | 'reports'
   | 'finance' | 'approval_steps' | 'work_settings' | 'holidays';
@@ -20,7 +21,7 @@ export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'ap
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
-  { key: 'employees', items: ['people', 'people_create', 'passwords', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
+  { key: 'employees', items: ['people', 'people_create', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
   // absences sits after calendar here (both "who is away" views); SQL permission_keys() lists it
   // after reports. Order is display only: the tests compare sets and counts, so keep both as is.
@@ -31,7 +32,7 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
 ];
 
 export const SHAPES: Record<PermKey, Shape> = {
-  people: 'RE', people_create: 'E', passwords: 'E', role_manager: 'E', role_assign: 'E',
+  people: 'RE', people_create: 'E', role_manager: 'E', role_assign: 'E',
   personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
   leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
   calendar: 'R', absences: 'R', reports: 'R', finance: 'R',
@@ -43,7 +44,6 @@ export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);
 /** D6. `keyLevel` 'read' = applies at any level; 'edit' = only when the key is edit. */
 export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] = [
   { key: 'people_create', keyLevel: 'read', needs: 'people' },
-  { key: 'passwords', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'leave_balances' },
   { key: 'role_manager', keyLevel: 'read', needs: 'calendar' },

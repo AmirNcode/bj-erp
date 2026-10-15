@@ -27,6 +27,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { listTransferCandidates, transferAdmin } from '@/lib/actions/roles';
+import { toLatinPassword } from '@/lib/auth/passwordPolicy';
+import { toAsciiDigits } from '@/lib/employees/code';
 
 type FieldErrors = { personnelNo?: string; password?: string; form?: string };
 
@@ -134,7 +136,10 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
               className="h-10"
               data-testid="transfer-personnel-no"
               onChange={(e) => {
-                setPersonnelNo(e.target.value);
+                // Persian/Arabic-Indic digits become ASCII as typed, so the field shows what
+                // is sent. Letters stay: a person without a personnel number is confirmed by
+                // their employee code (e.g. `admin`). Trimmed on submit, as the SQL btrims.
+                setPersonnelNo(toAsciiDigits(e.target.value));
                 setErrors((x) => ({ ...x, personnelNo: undefined }));
               }}
             />
@@ -158,7 +163,9 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
               className="h-10"
               data-testid="transfer-password"
               onChange={(e) => {
-                setPassword(e.target.value);
+                // Same filter as login and change-password: a Farsi layout would otherwise
+                // send characters no stored (latin) password can match.
+                setPassword(toLatinPassword(e.target.value));
                 setErrors((x) => ({ ...x, password: undefined }));
               }}
             />

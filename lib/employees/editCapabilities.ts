@@ -142,7 +142,8 @@ export function employeeEditCapabilities({
     profile: (actor && can(callerPerms, 'people')) || (callerRoles.includes('manager') && !self),
     org: actor && can(callerPerms, 'people'),
     editableRoleIds: actor ? assignable.filter(mayToggle).map((r) => r.id) : [],
-    resetPassword: actor && can(callerPerms, 'passwords'),
+    // Password resets are the admin's alone (20261013200007, returned above).
+    resetPassword: false,
     leave: can(callerPerms, 'leave_balances', 'read'),
     leaveEdit: actor && can(callerPerms, 'leave_balances'),
     lockedReason,

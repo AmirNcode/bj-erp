@@ -11,9 +11,9 @@ was deployed; semantic versioning starts at the first tag.
 
 ### Admin-configurable roles and permissions — FR-55 (2026-10-13)
 
-Migrations `20261013200001`..`200005`. Spec `docs/specs/2026-10-07-configurable-roles-design.md`.
+Migrations `20261013200001`..`200007`. Spec `docs/specs/2026-10-07-configurable-roles-design.md`.
 - **Settings › Roles** (admin): create, edit and delete custom roles, and edit the HR, Security and
-  Finance presets. Each of 20 access items is Allowed, Read only or Not allowed, in collapsible
+  Finance presets. Each of 19 access items is Allowed, Read only or Not allowed, in collapsible
   sections with a section-level dropdown; dependent items are raised automatically with a note.
   Role names are English. Deleting a role lists its holders and copies their personnel numbers.
 - **Role checkboxes** on Add Employee and Edit Employee list every role by its English name (the raw
@@ -37,6 +37,10 @@ Migrations `20261013200001`..`200005`. Spec `docs/specs/2026-10-07-configurable-
   `app_set_user_roles(uuid, app_role[])` still works (it delegates to the new
   `app_set_user_role_ids(uuid, uuid[])`), so the app still running during a deploy is unaffected.
 - Behaviour change: `app_create_employee` now refuses the `admin` role on every branch.
+- **Password resets stay admin-only** (review decision, 2026-10-14, `20261013200006`/`200007`): no
+  role can hold a Passwords item, the bulk-reset checkboxes appear only on rows the database accepts,
+  and the reset error names the employee code when there is no personnel number.
+- Transfer admin accepts Persian/Arabic-Indic digits and a Farsi keyboard layout, as login does.
 - Tests: `tests/sql/fr55-roles-permissions.sql`, the four earlier SQL files kept green as the parity
   proof, `tests/unit/permissions-catalog.test.ts` and friends, `tests/e2e/roles.spec.ts`.
 

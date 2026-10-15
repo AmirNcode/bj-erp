@@ -141,10 +141,10 @@ select pg_temp.expect('finance preset contents',
   'clearance=read,finance=read');
 select pg_temp.expect('personal_info_own is on no preset of any company',
   (select count(*)::text from public.role_permissions where permission = 'personal_info_own'), '0');
-select pg_temp.expect('catalog: 20 keys incl. absences, finance, personal_info_own, special_leave',
+select pg_temp.expect('catalog: 19 keys (passwords left in 20261013200007) incl. absences, finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '20:4');
+  '19:4');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -284,7 +284,17 @@ do $$
 declare v_role uuid;
 begin
   insert into public.roles (company_id, kind, name) values ((select id from fx where k='company'), 'custom', 'Helpdesk') returning id into v_role;
-  insert into public.role_permissions values (v_role, 'people', 'read'), (v_role, 'passwords', 'edit');
+  -- role_assign: a catalog item hr lacks, so Helpdesk stays "above" hr (D4/D5).
+  -- Until 20261013200007 the role held `passwords` for that.
+  insert into public.role_permissions values (v_role, 'people', 'read'), (v_role, 'role_assign', 'edit');
+  -- Helpdesk also keeps a `passwords` grant stored before 20261013200007 took the
+  -- item out of the catalog (the migration deletes such rows; this one models a
+  -- row that survived, say a restore). The CHECK refuses it now, so it goes in
+  -- with the constraint off and comes back NOT VALID. It must count for nothing.
+  alter table public.role_permissions drop constraint role_permissions_catalog;
+  insert into public.role_permissions values (v_role, 'passwords', 'edit');
+  alter table public.role_permissions add constraint role_permissions_catalog
+    check (private.permission_allows(permission, level)) not valid;
   insert into fx values ('r_help', v_role);
   insert into public.user_roles (user_id, role_id) values ((select id from fx where k='help'), v_role);
   -- 'super': every catalog item at its highest level (D2 checks)
@@ -352,9 +362,9 @@ select pg_temp.expect('the outsider holds the other company''s Employee role',
     where ur.user_id = (select id from fx where k='outsider')
       and r.company_id = (select id from fx where k='other_company') and r.system_key = 'employee'), '1');
 
-select pg_temp.expect('perm_level: hr people edit, help passwords edit, emp none',
+select pg_temp.expect('perm_level: hr people edit, help role_assign edit, emp none',
   (select private.perm_level((select id from fx where k='hr'),'people')::text
-       || private.perm_level((select id from fx where k='help'),'passwords')::text
+       || private.perm_level((select id from fx where k='help'),'role_assign')::text
        || private.perm_level((select id from fx where k='emp'),'people')::text), '220');
 select pg_temp.expect('admin perm_level is max per key',
   (select private.perm_level((select id from fx where k='admin'),'calendar')::text
@@ -430,7 +440,7 @@ select pg_temp.expect('hr acts on security and finance holders (owner ruling a)'
 select pg_temp.expect('hr acts on a manager and a department manager (parity)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='mgr'))::text
        || private.can_act_on((select id from fx where k='hr'), (select id from fx where k='deptmgr'))::text), 'truetrue');
-select pg_temp.expect('hr not on helpdesk (passwords hr lacks)',
+select pg_temp.expect('hr not on helpdesk (role_assign hr lacks)',
   (select private.can_act_on((select id from fx where k='hr'), (select id from fx where k='help'))::text), 'false');
 select pg_temp.expect('nobody acts across companies (Everything, hr, the admin)',
   (select private.can_act_on((select id from fx where k='super'), (select id from fx where k='outsider'))::text
@@ -488,9 +498,11 @@ select pg_temp.expect('role_within: false for a random id, NULL, and the other c
        || private.role_within((select id from public.roles where company_id = (select id from fx where k='other_company') and system_key='manager'), (select id from fx where k='admin'))::text),
   'falsefalsefalsefalsefalse');
 
--- gates: passwords
-select pg_temp.expect('helpdesk resets an employee password',
-  pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp2'), 'Temp!2026x')), 'ok:1');
+-- gates: passwords (admin-only since 20261013200007; Helpdesk holds a stored grant)
+select pg_temp.expect('helpdesk with a stored passwords grant may not reset an employee (200007)',
+  pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp2'), 'Temp!2026x')), '42501');
+select pg_temp.expect('the admin resets an employee password',
+  pg_temp.try_as('admin', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp2'), 'Temp!2026x')), 'ok:1');
 select pg_temp.expect('… and the employee must change it',
   (select must_change_password::text from public.profiles where id = (select id from fx where k='emp2')), 'true');
 select pg_temp.expect('helpdesk may not reset a manager',
@@ -505,8 +517,11 @@ select pg_temp.expect('helpdesk may not reset itself',
   pg_temp.try_as('help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('help'), 'Temp!2026x')), '42501');
 select pg_temp.expect('hr may not reset passwords (parity)',
   pg_temp.try_as('hr', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp2'), 'Temp!2026x')), '42501');
-select pg_temp.expect('helpdesk bulk-resets an employee',
+select pg_temp.expect('helpdesk with a stored passwords grant may not bulk-reset (200007)',
   pg_temp.try_as('help', format('select public.app_bulk_set_employee_passwords(%L)',
+    json_build_array(json_build_object('user_id', (select id from fx where k='emp2'), 'password', 'Temp!2026y'))::text)), '42501');
+select pg_temp.expect('the admin bulk-resets an employee',
+  pg_temp.try_as('admin', format('select public.app_bulk_set_employee_passwords(%L)',
     json_build_array(json_build_object('user_id', (select id from fx where k='emp2'), 'password', 'Temp!2026y'))::text)), 'ok:1');
 select pg_temp.expect('helpdesk bulk reset including a manager is refused whole',
   pg_temp.try_as('help', format('select public.app_bulk_set_employee_passwords(%L)',
@@ -755,16 +770,16 @@ select pg_temp.expect('hr without people is refused at once',
 insert into public.role_permissions
   select id, 'people', 'edit' from public.roles where company_id = (select id from fx where k='company') and system_key='hr';
 -- app_my_permissions / hook
-select pg_temp.expect('app_my_permissions for helpdesk',
-  pg_temp.try_as('help', $q$do $d$ begin if public.app_my_permissions() <> '{"people":"read","passwords":"edit"}'::jsonb then raise exception 'x' using errcode='P0001'; end if; end $d$$q$), 'ok:0');
+select pg_temp.expect('app_my_permissions for helpdesk: the stored passwords grant is not reported (200007)',
+  pg_temp.try_as('help', $q$do $d$ begin if public.app_my_permissions() <> '{"people":"read","role_assign":"edit"}'::jsonb then raise exception 'x' using errcode='P0001'; end if; end $d$$q$), 'ok:0');
 select pg_temp.expect('app_my_permissions: an employee has none',
   pg_temp.try_as('emp', $q$do $d$ begin if public.app_my_permissions() <> '{}'::jsonb then raise exception 'x' using errcode='P0001'; end if; end $d$$q$), 'ok:0');
-select pg_temp.expect('token hook emits app_perms',
+select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwords, 200007)',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms')::text), '{"people": "read", "passwords": "edit"}');
+            -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '20');
+            -> 'claims' -> 'app_perms'))::text), '19');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');
@@ -857,7 +872,7 @@ select pg_temp.expect('list roles: any active member sees their company''s roles
   (select 'ok:' || count(*) from public.roles where company_id = (select id from fx where k='company')) || ' ok:0');
 select pg_temp.expect('list roles: Helpdesk counts its holder and lists its permissions',
   pg_temp.try_as('emp', format($q$do $d$ begin if not exists (select 1 from public.app_list_roles() where id = %s and kind = 'custom'
-      and holders = 1 and permissions = '{"people":"read","passwords":"edit"}'::jsonb) then raise exception 'x' using errcode = 'P0001'; end if; end $d$$q$,
+      and holders = 1 and permissions = '{"people":"read","passwords":"edit","role_assign":"edit"}'::jsonb) then raise exception 'x' using errcode = 'P0001'; end if; end $d$$q$,
     pg_temp.id('r_help'))), 'ok:0');
 select pg_temp.expect('role holders: admin yes, hr no',
   pg_temp.try_as('admin', format('select * from public.app_role_holders(%s)', pg_temp.id('r_help'))) || ' '
@@ -886,7 +901,7 @@ select pg_temp.expect('nobody sets their own roles but the admin (D3)',
   pg_temp.try_as('super', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('super'),
     pg_temp.role_id('company', 'employee'), pg_temp.id('r_super'))), '42501');
 select pg_temp.expect('a caller without role_assign or role_manager is refused, even for no change',
-  pg_temp.try_as('help', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('oldsigner'),
+  pg_temp.try_as('sec', format('select public.app_set_user_role_ids(%s, array[%s]::uuid[])', pg_temp.id('oldsigner'),
     pg_temp.role_id('company', 'employee'))), '42501');
 select pg_temp.expect('unknown, NULL and another company''s role ids refused',
   pg_temp.try_as('admin', format('select public.app_set_user_role_ids(%s, array[%s, %L]::uuid[])', pg_temp.id('emp'),
@@ -987,8 +1002,8 @@ select pg_temp.expect('system roles cannot be deleted',
 
 -- fix round 1: identity presets (approval-step and clearance signers) need the
 -- matching edit permission to give or take away, on top of D5.
-select pg_temp.expect('nosign (role_assign, no approval_steps) may reset emp''s password',
-  pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), 'ok:1');
+select pg_temp.expect('nosign (every item but approval_steps and clearance) may not reset emp''s password: admin-only (200007)',
+  pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), '42501');
 -- R2: security never signs an approval step any more (main's CHECK), so giving
 -- Security is plain D5: nosign holds every Security permission.
 select pg_temp.expect('… and may give emp Security and take it away (security is no identity preset now)',
@@ -1489,7 +1504,7 @@ begin
     select * from (values
       ('selfsvc',    'SelfService', '{"personal_info_own":"edit"}'::jsonb,                                   '9990000931'),
       ('assigner',   'Assigner',    '{"people":"edit","role_assign":"edit","personal_info":"edit"}'::jsonb, '9990000932'),
-      ('helpassign', 'HelpAssign',  '{"people":"read","passwords":"edit","role_assign":"edit"}'::jsonb,     '9990000933'),
+      ('helpassign', 'HelpAssign',  '{"people":"read","role_assign":"edit"}'::jsonb,     '9990000933'),
       ('onboarder',  'Onboarder',   '{"people":"read","people_create":"edit"}'::jsonb,                      '9990000934'),
       ('plain2',     null,          null::jsonb,                                                            '9990000935')
     ) as t(k, rname, perms, code)
@@ -1653,5 +1668,118 @@ select pg_temp.expect('… it now holds Employee; emp2 is the one admin again',
     where ur.user_id = (select id from fx where k='boot')) || ' '
   || (select count(*)::text || ':' || bool_and(user_id = (select id from fx where k='emp2'))::text
         from public.user_roles where role = 'admin'), 'Employee 1:true');
+
+-- ── review fixes: one reset rule (20261013200006), resets admin-only (200007) ─
+-- private.can_reset_password is the one rule both reset RPCs and the
+-- eligibility RPC use; since 20261013200007 it is the admin alone. Fresh
+-- fixtures: a plain employee, a Manager, a Manager with no personnel number, and
+-- m2_help, who holds people edit plus a stored `passwords` grant (the catalog
+-- refuses it now; inserted with the CHECK off, as for Helpdesk above). emp2 is
+-- the admin at this point.
+do $$
+declare r record; v_role uuid;
+begin
+  for r in
+    select * from (values
+      ('m2_plain', '9990000921', '9990000921', 'employee'),
+      ('m2_mgr',   '9990000922', '9990000922', 'manager'),
+      ('m2_nopno', 'fr55m2nopno', null,        'manager'),
+      ('m2_help',  '9990000923', '9990000923', 'employee')
+    ) as t(k, code, pno, role)
+  loop
+    insert into fx values (r.k, gen_random_uuid());
+    insert into auth.users (id, email, encrypted_password)
+      values ((select id from fx where k = r.k), r.code || '@fixture.invalid', extensions.crypt('Fixture!2026', extensions.gen_salt('bf')));
+    insert into public.profiles (id, company_id, employee_code, full_name, department_id, active, personnel_no, must_change_password)
+    values ((select id from fx where k = r.k), (select id from fx where k = 'company'), r.code, 'FR55 ' || r.k,
+            (select id from fx where k = 'dept'), true, r.pno, false);
+    insert into public.user_roles (user_id, role) values ((select id from fx where k = r.k), 'employee');
+    if r.role <> 'employee' then
+      insert into public.user_roles (user_id, role) values ((select id from fx where k = r.k), r.role::public.app_role);
+    end if;
+  end loop;
+  insert into public.roles (company_id, kind, name) values ((select id from fx where k='company'), 'custom', 'M2 Desk') returning id into v_role;
+  insert into fx values ('r_m2', v_role);
+  insert into public.role_permissions values (v_role, 'people', 'edit');
+  alter table public.role_permissions drop constraint role_permissions_catalog;
+  insert into public.role_permissions values (v_role, 'passwords', 'edit');
+  alter table public.role_permissions add constraint role_permissions_catalog
+    check (private.permission_allows(permission, level)) not valid;
+  insert into public.user_roles (user_id, role_id) values ((select id from fx where k='m2_help'), v_role);
+end $$;
+
+create function pg_temp.eligible_as(p_actor text, p_keys text[]) returns text
+language sql as $f$
+  select pg_temp.val_as(p_actor, format(
+    $q$select coalesce(string_agg(fx.k, ',' order by fx.k), '-')
+         from public.app_password_reset_eligible(%L::uuid[]) e join fx on fx.id = e$q$,
+    (select array_agg(id) from fx where k = any (p_keys))::text));
+$f$;
+
+-- the catalog (200007)
+select pg_temp.expect('200007: passwords left the catalog (keys, shape, dependencies)',
+  (select count(*)::text from private.permission_keys() k where k = 'passwords') || ' '
+  || private.permission_allows('passwords', 'edit')::text || ' '
+  || (select count(*)::text from private.permission_deps() d where 'passwords' in (d.key, d.needs)),
+  '0 false 0');
+select pg_temp.expect('200007: no stored passwords grant survived the migration (fixtures aside)',
+  (select count(*)::text from public.role_permissions
+    where permission = 'passwords' and role_id not in (select id from fx where k in ('r_help', 'r_m2'))), '0');
+select pg_temp.expect('200007: the role editor RPC refuses passwords, on a new role and on an existing one',
+  pg_temp.try_as('emp2', $q$select public.app_save_role(null, 'PW Try', '{"people":"read","passwords":"edit"}')$q$) || ' '
+  || pg_temp.try_as('emp2', format($q$select public.app_save_role(%s, 'M2 Desk', '{"people":"edit","passwords":"edit"}')$q$, pg_temp.id('r_m2'))),
+  '22023 22023');
+select pg_temp.expect('200007: … even the superuser cannot store one (CHECK)',
+  pg_temp.try_su(format('insert into public.role_permissions values (%s, %L, %L)', pg_temp.id('r_m2'), 'passwords', 'read')), '23514');
+select pg_temp.expect('200007: a stored grant counts for nothing (level 0, not in the claims)',
+  (select private.perm_level((select id from fx where k='m2_help'), 'passwords')::text) || ' '
+  || (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='m2_help'),'claims','{}'::jsonb))
+              -> 'claims' -> 'app_perms')::text),
+  '0 {"people": "edit"}');
+
+-- eligibility (200006 RPC, 200007 rule)
+select pg_temp.expect('eligibility: a stored passwords grant gives nobody',
+  pg_temp.eligible_as('m2_help', array['m2_plain', 'm2_mgr', 'm2_nopno', 'hr', 'm2_help', 'emp2']), '-');
+select pg_temp.expect('eligibility: hr (the preset) gets nobody',
+  pg_temp.eligible_as('hr', array['m2_plain', 'm2_mgr']), '-');
+select pg_temp.expect('eligibility: the admin gets everyone but themself',
+  pg_temp.eligible_as('emp2', array['m2_plain', 'm2_mgr', 'hr', 'help', 'm2_help', 'emp2']), 'help,hr,m2_help,m2_mgr,m2_plain');
+select pg_temp.expect('eligibility: anon may not call it',
+  (select has_function_privilege('anon', 'public.app_password_reset_eligible(uuid[])', 'execute')::text), 'false');
+
+-- every reset path refuses a non-admin, stored grant or not
+select pg_temp.expect('single reset: refused with a stored grant, refused for hr',
+  pg_temp.try_as('m2_help', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('m2_plain'), 'Temp!2026x')) || ' '
+  || pg_temp.try_as('hr', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('m2_plain'), 'Temp!2026x')),
+  '42501 42501');
+select pg_temp.expect('bulk reset: refused at the entry gate with a stored grant',
+  pg_temp.val_as('m2_help', format('select public.app_bulk_set_employee_passwords(%L)',
+    json_build_array(json_build_object('user_id', (select id from fx where k='m2_plain'), 'password', 'Temp!2026z'))::text)),
+  '42501: not allowed to reset passwords');
+select pg_temp.expect('direct profile write: a people editor with a stored grant may not flip must_change_password',
+  pg_temp.try_as('m2_help', format('update public.profiles set must_change_password = true where id = %s', pg_temp.id('m2_plain'))), '42501');
+select pg_temp.expect('… nothing changed for the plain employee',
+  (select must_change_password::text from public.profiles where id = (select id from fx where k='m2_plain')), 'false');
+select pg_temp.expect('direct auth.users write is not possible for a client',
+  pg_temp.try_as('m2_help', format('update auth.users set encrypted_password = %L where id = %s', 'x', pg_temp.id('m2_plain'))), '42501');
+
+-- the admin still resets
+-- (A scalar subquery runs before try_as in one expression, so each effect is
+-- checked in its own expect.)
+select pg_temp.expect('admin single reset works',
+  pg_temp.try_as('emp2', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('m2_plain'), 'Temp!2026x')), 'ok:1');
+select pg_temp.expect('… and the target must change it',
+  (select must_change_password::text from public.profiles where id = (select id from fx where k='m2_plain')), 'true');
+select pg_temp.expect('admin bulk reset works on a mixed set (plain, managers, one without a personnel number)',
+  pg_temp.try_as('emp2', format('select public.app_bulk_set_employee_passwords(%L)',
+    json_build_array(json_build_object('user_id', (select id from fx where k='m2_plain'), 'password', 'Temp!2026z'),
+                     json_build_object('user_id', (select id from fx where k='m2_mgr'), 'password', 'Temp!2026z'),
+                     json_build_object('user_id', (select id from fx where k='m2_nopno'), 'password', 'Temp!2026z'))::text)), 'ok:1');
+select pg_temp.expect('… audited per target (the single reset above plus three)',
+  (select count(*)::text from public.audit_log where action = 'reset_password' and actor_id = (select id from fx where k='emp2')
+     and entity_id in (select id from fx where k in ('m2_plain', 'm2_mgr', 'm2_nopno'))), '4');
+select pg_temp.expect('admin bulk reset still refuses their own row',
+  pg_temp.try_as('emp2', format('select public.app_bulk_set_employee_passwords(%L)',
+    json_build_array(json_build_object('user_id', (select id from fx where k='emp2'), 'password', 'Temp!2026z'))::text)), '22023');
 
 rollback;
