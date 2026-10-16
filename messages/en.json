@@ -122,7 +122,6 @@
       "errand": "Hourly Work Errand"
     },
     "leaveType": "Leave Type",
-    "selectType": "— Select Leave Type —",
     "dateRange": "Date Range",
     "startDate": "Start date",
     "endDate": "End date",

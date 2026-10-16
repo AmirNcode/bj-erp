@@ -83,7 +83,7 @@ test.describe('Leave request + allocation flow', () => {
     // ── 6. Select the same leave type ─────────────────────────────────────
     const typeSelect = page.locator('#leave_type_id');
     await expect(typeSelect).toBeVisible({ timeout: 10_000 });
-    await typeSelect.selectOption({ value: foundLtValue });
+    await typeSelect.locator(`input[value="${foundLtValue}"]`).locator('xpath=..').click();
 
     // ── 7. Pick a 2-working-day range using the Persian (Jalali) date picker ────────────────
     // The application is Persian-calendar only. We compute the range dynamically
@@ -110,7 +110,7 @@ test.describe('Leave request + allocation flow', () => {
     // Re-select the leave type after reload (form resets)
     const typeSelectAfterReload = page.locator('#leave_type_id');
     await expect(typeSelectAfterReload).toBeVisible({ timeout: 10_000 });
-    await typeSelectAfterReload.selectOption({ value: foundLtValue });
+    await typeSelectAfterReload.locator(`input[value="${foundLtValue}"]`).locator('xpath=..').click();
     // Re-fill the Jalali range to show the balance preview
     await fillDailyDateRange(page, jalaliRangeStr);
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
@@ -134,7 +134,7 @@ test.describe('Leave request + allocation flow', () => {
     await page.click('button[type="submit"]');
 
     // After reload, find the pending request in My Requests
-    await page.waitForURL(/\/request$/, { timeout: 15_000 });
+    await page.waitForURL(/\/request(\?.*)?$/, { timeout: 15_000 });
     await page.waitForTimeout(1000); // allow page data to load
 
     // The request should appear as pending
@@ -168,7 +168,7 @@ test.describe('Leave request + allocation flow', () => {
     await page.goto('/request?form=1&all=1');
     const typeSelectAfterCancel = page.locator('#leave_type_id');
     await expect(typeSelectAfterCancel).toBeVisible({ timeout: 10_000 });
-    await typeSelectAfterCancel.selectOption({ value: foundLtValue });
+    await typeSelectAfterCancel.locator(`input[value="${foundLtValue}"]`).locator('xpath=..').click();
 
     // Pick a very long range — e.g. 200 days — to exceed the 26-day balance
     const farFutureStart = getNextMonday();
@@ -215,7 +215,7 @@ test.describe('Leave request + allocation flow', () => {
     await expect(page.locator('[data-testid^="request-unpaid-"]').first()).toBeVisible({
       timeout: 20_000,
     });
-    await page.locator('#leave_type_id').selectOption({ value: foundLtValue });
+    await page.locator(`#leave_type_id input[value="${foundLtValue}"]`).locator('xpath=..').click();
     await fillDailyDateRange(page, jalali2DayRange(400));
     await expect(page.locator('[data-testid="balance-display"]')).toContainText(/[0۰]/, {
       timeout: 10_000,

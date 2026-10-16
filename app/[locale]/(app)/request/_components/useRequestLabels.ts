@@ -14,7 +14,6 @@ export function useRequestLabels() {
   return {
     title: t('title'),
     leaveType: t('leaveType'),
-    selectType: t('selectType'),
     dateRange: t('dateRange'),
     startDate: t('startDate'),
     endDate: t('endDate'),

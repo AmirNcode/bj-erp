@@ -32,7 +32,6 @@ import { Textarea } from '@/components/ui/textarea';
 
 type Labels = {
   leaveType: string;
-  selectType: string;
   date: string;
   fromTime: string;
   toTime: string;
@@ -72,7 +71,6 @@ function useLabels(maxHourlyMinutesPerDay: number): Labels {
   const tSignature = useTranslations('signature');
   return {
     leaveType: t('leaveType'),
-    selectType: t('selectType'),
     date: tHourly('date'),
     fromTime: tHourly('fromTime'),
     toTime: tHourly('toTime'),
@@ -115,7 +113,8 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
   const labels = useLabels(workSettings.maxHourlyMinutesPerDay);
   const slots = timeSlots({ start: workSettings.workStart, end: workSettings.workEnd }, 30);
 
-  const [selectedTypeId, setSelectedTypeId] = useState('');
+  // A lone type needs no choice: preselect it.
+  const [selectedTypeId, setSelectedTypeId] = useState(leaveTypes.length === 1 ? leaveTypes[0].id : '');
   const [date, setDate] = useState<PickerDate | null>(null);
   const [startTime, setStartTime] = useState(slots[0] ?? '');
   const [endTime, setEndTime] = useState(slots[2] ?? slots[slots.length - 1] ?? '');
@@ -184,7 +183,6 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
             onChange={setSelectedTypeId}
             locale={locale}
             label={labels.leaveType}
-            placeholder={labels.selectType}
           />
 
           <div className="space-y-1.5">

@@ -7,6 +7,7 @@
  */
 
 import { useTranslations } from 'next-intl';
+import { Check } from 'lucide-react';
 import { PersianDateField } from '@/components/PersianDateField';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,49 +21,75 @@ import {
   type LeaveBalanceProjection,
 } from '@/lib/leave/duration';
 import { MAX_ERRAND_LOCATION_LENGTH } from '@/lib/leave/errand';
+import { cn } from '@/lib/utils';
 import { nativeSelectClass } from '@/lib/native-select';
 import { ReplacementPicker } from './ReplacementPicker';
 import type { useReplacementCandidates } from './useRequestForm';
 
+/**
+ * Leave type as one-tap choices instead of a <select>: every option is visible
+ * and picking one is a single tap. Native radios (visually hidden) keep arrow-key
+ * navigation and screen-reader semantics; the label is the tap target (≥44px).
+ * Equal tiles: two per row on a phone (an odd last one spans the row), one row on desktop.
+ * `id`/`testId` sit on the fieldset; e2e checks `#<id> input[value="<type id>"]`.
+ */
 export function LeaveTypeSelect({
   id,
   testId,
-  className = nativeSelectClass,
   leaveTypes,
   value,
   onChange,
   locale,
   label,
-  placeholder,
 }: {
   id: string;
   testId?: string;
-  className?: string;
   leaveTypes: LeaveType[];
   value: string;
   onChange: (leaveTypeId: string) => void;
   locale: string;
   label: string;
-  placeholder: string;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={className}
-        data-testid={testId}
-      >
-        <option value="">{placeholder}</option>
-        {leaveTypes.map((lt) => (
-          <option key={lt.id} value={lt.id}>
-            {localizedLeaveTypeName(lt, locale)}
-          </option>
-        ))}
-      </select>
-    </div>
+    <fieldset id={id} className="space-y-1.5" data-testid={testId}>
+      <legend className="mb-1.5 text-sm leading-none font-medium">{label}</legend>
+      <div className="grid grid-cols-2 gap-2 max-sm:*:odd:last:col-span-2 sm:grid-cols-[repeat(auto-fit,minmax(9rem,1fr))]">
+        {leaveTypes.map((lt) => {
+          const checked = lt.id === value;
+          return (
+            <label
+              key={lt.id}
+              className={cn(
+                'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-[color,background-color,border-color,box-shadow] select-none',
+                'has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50',
+                checked
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-input bg-transparent text-foreground hover:bg-accent'
+              )}
+            >
+              <input
+                type="radio"
+                name={id}
+                value={lt.id}
+                checked={checked}
+                onChange={() => onChange(lt.id)}
+                className="sr-only"
+              />
+              <span
+                aria-hidden
+                className={cn(
+                  'grid size-4 shrink-0 place-items-center rounded-full border',
+                  checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input'
+                )}
+              >
+                {checked && <Check className="size-3" strokeWidth={3} />}
+              </span>
+              {localizedLeaveTypeName(lt, locale)}
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

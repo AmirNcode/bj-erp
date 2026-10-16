@@ -23,7 +23,8 @@ the lessons that will still matter in six months.
   fa/en message key trees kept byte-identical; test RTL rendering, not just LTR.
 - **The `data-testid` contract.** Reskins/refactors preserve every testid so the e2e suite
   survives; e2e drives native `<select>` via `selectOption`, so those stay native (shadcn Radix
-  Select breaks Playwright) — a standing decision.
+  Select breaks Playwright) — a standing decision. Exception: leave type is native radios in a
+  fieldset (`#leave_type_id input[value=…]`.check()); hidden native inputs keep Playwright working.
 - **Cache invariant:** every mutating server action must call `invalidateAppCache()`
   (`lib/cache/invalidate-app.ts`), or the actor sees 5-min-stale tabs (`staleTimes.dynamic=300`).
 - **Verify library APIs via Context7 before use** — Next 16 / Supabase APIs moved past training

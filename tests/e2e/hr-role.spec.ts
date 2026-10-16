@@ -145,7 +145,7 @@ test('hr reviews a company-wide request and prints its paper form', async ({ pag
   await login(page, worker.code, worker.password);
   const typeValue = await page
     .goto('/request?form=1&all=1')
-    .then(() => page.locator('#leave_type_id option').nth(1).getAttribute('value'));
+    .then(() => page.locator('#leave_type_id input[type="radio"]').first().getAttribute('value'));
   await submitLeave(page, {
     leaveTypeValue: typeValue!,
     reason: 'HR print probe reason',
@@ -221,7 +221,7 @@ test('an employee cannot reach the HR review screen or a colleague’s printed f
   await login(page, owner.code, owner.password);
   const typeValue = await page
     .goto('/request?form=1&all=1')
-    .then(() => page.locator('#leave_type_id option').nth(1).getAttribute('value'));
+    .then(() => page.locator('#leave_type_id input[type="radio"]').first().getAttribute('value'));
   await submitLeave(page, { leaveTypeValue: typeValue!, reason: 'Not for strangers' });
   await page.goto('/manage/requests');
   // Not even the outer /manage door opens for a plain employee.

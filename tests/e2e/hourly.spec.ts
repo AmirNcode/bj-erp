@@ -45,7 +45,7 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
   const day = jalali2DayRange().split(' — ')[0];
 
   const submitHourly = async (from: string, to: string) => {
-    await page.selectOption('[data-testid="hourly-type"]', { index: 1 });
+    await page.locator('[data-testid="hourly-type"] input[type="radio"]').first().locator('xpath=..').click();
     await fillPicker(page, day);
     await page.selectOption('[data-testid="hourly-from"]', from);
     await page.selectOption('[data-testid="hourly-to"]', to);
@@ -60,13 +60,15 @@ test('hourly request: submit, approve, and the per-day cap', async ({ page }) =>
   await page.goto('/request?form=1&all=1');
   await expect(page.getByText('۰۹:۰۰–۱۱:۰۰')).toBeVisible({ timeout: 20_000 });
 
-  // ── the per-day cap refuses a 3h addition (2h + 3h > 4h) ──────────────────
+  // ── a second hourly leave on the same day is refused ───────────────────────
+  // Since FR-65–67 (2026-10-13) one hourly leave per day is allowed, and that
+  // rule answers before the per-day cap (2h + 3h > 4h) would.
   await page.goto('/request/hourly');
   await expect(page.locator('[data-testid="hourly-form"]')).toBeVisible({ timeout: 20_000 });
   await submitHourly('11:00', '14:00');
-  const capError = page.locator('[data-testid="hourly-error"]');
-  await expect(capError).toBeVisible({ timeout: 20_000 });
-  await expect(capError).toContainText('سقف روزانه'); // the mapped fa message
+  const dayError = page.locator('[data-testid="hourly-error"]');
+  await expect(dayError).toBeVisible({ timeout: 20_000 });
+  await expect(dayError).toContainText('فقط یک مرخصی ساعتی'); // the mapped fa message
   await logout(page);
 
   // ── an admin approves it and sees the time range in the queue ─────────────
@@ -125,7 +127,7 @@ test('sick leave is not offered hourly', async ({ page }) => {
   await expect(page.locator('[data-testid="hourly-form"]')).toBeVisible({ timeout: 20_000 });
 
   // allow_hourly is false for sick leave, so it must not be selectable at all.
-  const options = await page.locator('[data-testid="hourly-type"] option').allTextContents();
+  const options = await page.locator('[data-testid="hourly-type"] label').allTextContents();
   expect(options.join(' ')).not.toContain('استعلاجی');
   expect(options.join(' ')).not.toContain('Sick');
 });

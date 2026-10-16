@@ -23,8 +23,9 @@ test('profile settings persist, language switches locale, logout clears session'
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
 
   // The request form follows the language preference, including native select options.
-  await page.goto('/en/request');
-  await expect(page).toHaveURL(/\/en\/request$/, { timeout: 10_000 });
+  // `form=1` opens the new-request section, which starts closed.
+  await page.goto('/en/request?form=1');
+  await expect(page).toHaveURL(/\/en\/request\?form=1$/, { timeout: 10_000 });
   await expect(page.locator('#leave_type_id')).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('#leave_type_id')).toContainText('Annual Leave');
   await expect(page.locator('#leave_type_id')).not.toContainText('مرخصی استحقاقی');

@@ -41,7 +41,8 @@ const selectClassName =
 
 export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
   const labels = useRequestLabels();
-  const [selectedTypeId, setSelectedTypeId] = useState('');
+  // A lone type needs no choice: preselect it.
+  const [selectedTypeId, setSelectedTypeId] = useState(leaveTypes.length === 1 ? leaveTypes[0].id : '');
   const [startDate, setStartDate] = useState<PickerDate | null>(null);
   const [endDate, setEndDate] = useState<PickerDate | null>(null);
   const [dayPart, setDayPart] = useState<DayPart>('full');
@@ -112,13 +113,11 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
         <form onSubmit={handleSubmit} className="space-y-5">
           <LeaveTypeSelect
             id="leave_type_id"
-            className={selectClassName}
             leaveTypes={leaveTypes}
             value={selectedTypeId}
             onChange={setSelectedTypeId}
             locale={locale}
             label={labels.leaveType}
-            placeholder={labels.selectType}
           />
 
           {/* Separate dates make the range explicit and match the client's form. */}

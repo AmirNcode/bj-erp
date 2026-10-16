@@ -78,6 +78,31 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-22 — Leave type picker restored onto main (cherry-pick of 1e5ce65)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `main` @ `d8b7ecd` (local, 1 ahead of origin)
+**Trigger:** Owner: deleted all non-main branches; bring back the leave-type picker + test fixes from the deleted local `codex/local-reconciliation` and commit to local main.
+
+**What changed**
+- Cherry-picked `1e5ce65` (leave type dropdown → one-tap radio tiles in `LeaveTypeSelect`, lone type preselected, e2e specs click the tiles, `tests/unit/leave-type-select.test.tsx`).
+- Conflicts: main had moved form copy into client hooks (`useRequestLabels`, local `useLabels`), so the commit's server-built `labels` blocks were dropped (kept main); `LeaveRequestForm` keeps `useRequestLabels()` plus the preselect. Removed the now-unused `selectType` label from `useRequestLabels.ts` and `HourlyRequestForm.tsx` (key gone from messages). Agent log: kept both sides (the commit's 2026-10-13..16 entries sit after main's newer ones).
+- Not restored: `56189d0` (docs only: CLAUDE.md note that `.bj-deploy/liara/admin-password` is the LOCAL password; stale TASKS status). Owner did not ask for it.
+
+**Actions outside the repo**
+- Local only: Playwright runs + `npm run cleanup:e2e` (0 left). Earlier this session: deleted local branches `codex/{approval-delegation,hr-head-per-diem,local-reconciliation,per-diem-wording,travel-booking}`, removed worktree `.claude/worktrees/travel-booking`, `git fetch --prune`.
+
+**Verification**
+- `tsc --noEmit` 0; lint 0; vitest 107 files / 1020 passed.
+- e2e `--workers=1`: approval, hourly ×2, replacement pass. `leave.spec.ts:18` now passes the old line-137 failure (URL regex fixed) but fails at step 9: after cancelling from Home, `home-recent-request-` first row still shows «در انتظار». Not picker-related; Home's recent list changed on main (FR-72). Not fixed.
+
+**State left behind**
+- Committed on local `main`, not pushed (owner tests then pushes; push deploys to Liara).
+
+**For the next agent**
+- Fix `leave.spec.ts` step 9 to target the cancelled row by id instead of `.first()`.
+- `56189d0` can still be recovered by SHA until git gc.
+
 ## 2026-10-22 — Hourly work errand: no per diem
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
@@ -1444,6 +1469,118 @@ reports without requiring the CEO to personally approve each request, and how ot
   decisions for the owner/client. This discussion does not authorize implementation or configuration.
 - For a future design, record the actual signer and delegated authority and define handling of
   self-requests, revoked/expired delegation and pending requests; do not repurpose admin override.
+## 2026-10-16 — Git branch cleanup after FR-55 production confirmation
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ `6d425cf` (dirty; remote main `984b661`)
+**Trigger:** Owner confirmed production admin login works and requested obsolete-branch cleanup.
+
+**What changed**
+- Deleted eight local branches: `FR-55`, `claude/objective-kilby-c2fe28`, `codex/code-review`,
+  `codex/deploy-preflight-hotfix`, `codex/migration-ledger-atomic-hotfix`,
+  `codex/migration-stdin-hotfix`, `fr55-pre-rebase-backup`, `fr55-pre-rebase2-backup`.
+- The first six tips are ancestors of current remote main. The two pre-rebase checkpoints retain
+  rewritten historical commits, so archived them (and all other deleted local branches) first in
+  `/Users/amir/Backups/bj-erp/git-cleanup-20261016/obsolete-branches.bundle`; bundle verification passed.
+  `refs-before.txt` beside it records the original local/remote ref hashes.
+- Kept local `main` and `codex/fr55-reviewed`: both worktrees contain uncommitted work. Main has
+  the leave-form/UI/test changes and local certificate; FR-55 has deployment journal/task updates.
+  Did not pull, reset, stash, commit or discard those changes. Main remains 40 commits behind remote.
+- Detached the clean, fully merged Claude worktree at its existing `91371d8` commit before removing
+  its branch name. Its directory, files and ignored contents remain intact.
+
+**Actions outside the repo**
+- Deleted five obsolete remote branches: `FR-55`, `codex/code-review`,
+  `codex/deploy-preflight-hotfix`, `codex/fr55-reviewed`, `codex/migration-stdin-hotfix`.
+  Used atomic deletion with exact-tip leases to prevent deleting concurrent updates. Remote now
+  contains only `main`; no open PRs existed. No application/database/deployment changes.
+
+**Verification / next step**
+- Rechecked branch refs and worktree states; all active uncommitted work retained. No tests needed
+  for ref-only cleanup. This journal addition is uncommitted alongside existing main work.
+- Owner confirms signed-in production works and is continuing functional testing. Credential
+  correction: the local password file is for the local test deploy, NOT production; do not retry it
+  against production or request the production password. Earlier smoke attempts used the wrong
+  environment credential, not proof the actual production password was outdated.
+
+## 2026-10-14 — FR-55 review-prompt pre-exploration
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 6d425cf
+**Trigger:** Owner requested basic exploration and a grounded prompt for Claude to review PR #5.
+
+**What changed**
+- `docs/AGENT-LOG.md` only: this session entry; existing uncommitted work preserved.
+- Read onboarding, recent journals, FR-55 spec, task follow-ups, package scripts, auth/catalog entry points and migration precondition. Confirmed `/Users/amir/Workspace/bj-fr55` is a registered Git worktree on `FR-55`, clean at `1bb8e51`, not a standalone duplicate; `/Workspace/bj-fr55` does not exist.
+
+**Actions outside the repo**
+- Read GitHub PR #5 metadata: OPEN, base main, head FR-55 at `1bb8e514216d4550062ba346f12def2693f2dbf2`, MERGEABLE, no reported status checks. No GitHub writes, database access or deployment.
+
+**Verification**
+- Git status, worktree list and local diff inventory inspected (129 changed files against origin/main at `6d425cf`). Tests not run: preparation only; prior test results remain implementation-agent claims.
+- Initial GitHub request failed due to restricted network; approved read-only retry succeeded. Initial JSON request used unsupported `baseRefOid`; retried with supported fields.
+
+**State left behind**
+- Review prompt prepared; no code review verdict, commit, merge, cleanup or production verification performed.
+
+**For the next agent**
+- Use branch docs, preserve main's unrelated edits, and recheck live PR refs before review. Branch journal describes isolated `bj_fr55` DB and port 8090; runtime state was not inspected. SQL test header defaults to `postgres`, so do not copy it blindly for FR-55 testing.
+
+## 2026-10-13 — Leave type picker: dropdown → one-tap choices
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 419990f (uncommitted, on top of the banner work; not deployed)
+**Trigger:** Owner asked to replace the «نوع مرخصی» dropdown with single-select options (fewer taps).
+
+- `app/[locale]/(app)/request/_components/FormParts.tsx` `LeaveTypeSelect`: now a `<fieldset>`
+  (keeps `id`/`data-testid`) of visually hidden native radios inside ≥44px label tiles with a
+  check dot. Grid: 2 per row on phone (odd last spans the row), one auto-fit row on `sm+`.
+  `placeholder`/`className` props dropped. Used by daily + hourly leave forms.
+- Both forms preselect the type when only one exists. `selectType` message key removed (fa+en,
+  both pages).
+- e2e selectors moved from `selectOption` to `#leave_type_id input[value="…"]`.check() /
+  `input[type="radio"]`.first() (`_helpers`, leave, approval, replacement, hr-role, hourly specs).
+  hourly.spec «sick not offered» now reads `[data-testid="hourly-type"] label` texts.
+- Tests: new `tests/unit/leave-type-select.test.tsx` (4). `npm run test:unit` 630 pass; lint and
+  `tsc --noEmit` clean. e2e NOT run.
+- Browser check: real `/request` not reachable — login as 124 rejected again (same stale
+  `.env.test-accounts` password). Verified via a throwaway `app/[locale]/zz-preview` page
+  (deleted) at 375px and 1280px, fa + en, tap selects. Not committed.
+
+## 2026-10-13 — e2e run against local Docker (after 6d425cf)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 6d425cf (working tree also holds the other session's uncommitted
+leave-type radio picker; the Docker image built 14:29 includes it)
+**Trigger:** Owner asked to run the e2e suite against local.
+
+- Ran `E2E_BASE_URL=https://192.168.2.80:3500 E2E_MANAGER_CODE=1001 E2E_MANAGER_PASSWORD=… npx
+  playwright test --workers=1` over every spec except `accrual.spec`. The local DB is the demo seed
+  (16 profiles), so the manager override replaced `.env.test-accounts`' 124 (absent here).
+- Result: 36 passed, 17 failed, 1 skipped (50 min). Causes:
+  - 10 — leave-type radios (other session, uncommitted): `.check()` on the `sr-only` inputs in
+    `#leave_type_id` / `hourly-type` never succeeds (approval, calendar, cancel-approved, hourly,
+    hr-role ×3, leave, overlap-error, replacement). The form section WAS open (`?form=1` works).
+  - 4–5 — `pickManager` race with FR-67 auto-pick (95189d6): `PersonSearch` selects after a 600 ms
+    pause; the helper's `toHaveValue(code)` passes on the typed text and submits first, so no manager
+    is saved (seen live: the errand probe's `manager_id` was NULL). errand ×2, hr-employee-admin,
+    team; clearance probably the same.
+  - 1 — environment: `approval-step-person` expects a seeded department-manager step; the local demo
+    DB has only manager + hr.
+  - 1 — mine: `settings.spec` asserts `#leave_type_id` visible on `/en/request`; the form section is
+    now closed by default. Not fixed yet.
+- `npm run cleanup:e2e` run by hand afterwards (0 left; teardown had already cleaned). Removed
+  `test-results/`. No code changed.
+- Follow-up (owner: fix all three, rerun): e2e-only changes, uncommitted —
+  - radios: 11 `….check()` on `sr-only` inputs → `.locator('xpath=..').click()` (the wrapping
+    label) in `_helpers.ts`, approval, replacement, hourly, leave specs.
+  - pickers: `pickManager` (`_helpers.ts`) and clearance `pickPerson` wait for
+    `[data-testid="<testId>-clear"]`, shown only once a person is selected.
+  - `settings.spec` opens `/en/request?form=1`.
+  - Rerun of the 13 failing files: 21 passed, 2 failed → `leave.spec` had a `waitForURL(/\/request$/)`
+    my earlier sed missed (fixed); `hourly.spec`'s second same-day request now hits FR-65–67's
+    one-hourly-per-day rule before the 4h cap, so it asserts «فقط یک مرخصی ساعتی» (the daily-cap
+    message is no longer reached by e2e). Both then passed. Cleanup run again.
 
 ## 2026-10-15 — Authorized FR-55 release
 
@@ -2013,7 +2150,6 @@ absences + finance read", then Task 9 fix and Task 10; stop after Task 10 as a c
 - Work in the worktree; never run git in `/Users/amir/Workspace/bj`. Apply FR-55 SQL to `bj_fr55` only.
 - If main moved: rebase onto its committed tip; FR-55 migrations must still sort last.
 
-
 ## 2026-10-13 — Request page sections, steps on My Requests, banner targets
 
 **Agent:** Claude Opus 5.5 via Claude Code
@@ -2044,7 +2180,6 @@ closed by default, pending-first with "show previous"; approval steps on My Requ
   `NEXT_PUBLIC_SUPABASE_URL`. Fixed by mocking `@/lib/actions/leave/outcomes` in that test. The main
   checkout never showed it. Committed without the other session's leave-type picker hunks.
 
-
 ## 2026-10-13 — Request outcome banner for requesters
 
 **Agent:** Claude Opus 5.5 via Claude Code
@@ -2067,7 +2202,6 @@ finally approved.
 - Verified: `tests/unit/request-outcome-banner.test.tsx` (4), full unit suite (631 pass), lint, tsc.
   `next build` passes (run in a scratch copy with an APFS-cloned `node_modules`; Turbopack rejects a
   symlinked one). NOT verified in a browser (another session's dev server holds :3000).
-
 
 ## 2026-10-13 — New-requests banner for approvers (live update)
 

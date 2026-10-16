@@ -167,6 +167,11 @@ Migrations `20261013200001`..`200007`. Spec `docs/specs/2026-10-07-configurable-
 - Checked every minute while the app is open and on return to the foreground, only while the
   person has a pending request.
 
+### Leave type as one-tap choices (2026-10-13)
+
+- «نوع مرخصی» on the daily and hourly leave forms is now a row of tappable options instead of a
+  dropdown: every type is visible and one tap picks it. With only one type, it is preselected.
+
 ### New-requests banner for approvers (2026-10-13)
 
 - Home and «تأییدها» re-check the approver's queue every minute while the page is open, and again

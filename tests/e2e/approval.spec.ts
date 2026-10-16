@@ -23,7 +23,7 @@ async function submitTwoDayRequest(page: Page, leaveTypeValue: string, offsetDay
   await expect(page).toHaveURL(/\/request(\?.*)?$/);
   const typeSelect = page.locator('#leave_type_id');
   await expect(typeSelect).toBeVisible({ timeout: 10_000 });
-  await typeSelect.selectOption({ value: leaveTypeValue });
+  await typeSelect.locator(`input[value="${leaveTypeValue}"]`).locator('xpath=..').click();
 
   await fillDailyDateRange(page, jalali2DayRange(offsetDays));
   await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
@@ -136,7 +136,7 @@ test.describe('Approval flow', () => {
     // 5. Balance debited by the approved request (tolerant, like leave.spec.ts):
     //    re-pick the range to surface the balance; assert 24 if it propagated.
     const typeSelect = page.locator('#leave_type_id');
-    await typeSelect.selectOption({ value: ltValue });
+    await typeSelect.locator(`input[value="${ltValue}"]`).locator('xpath=..').click();
     await fillDailyDateRange(page, jalali2DayRange());
     await expect(page.locator('[data-testid="leave-preview"]')).toBeVisible({ timeout: 10_000 });
     const balText = await page.locator('[data-testid="balance-display"]').textContent();
