@@ -10,6 +10,7 @@ import { STATUS_BADGE_STYLES } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import type { ApprovalChoice } from '@/lib/leave/approval-context';
 import {
   ApproveDialog,
   RejectDialog,
@@ -31,6 +32,8 @@ export type PendingRow = {
   warning: string | null;
   /** FR-58/61: override and per diem choices for the approve dialog. */
   approveOptions: ApproveOptions;
+  rejectionSteps?: ApprovalChoice[];
+  canReject?: boolean;
 };
 
 type Labels = ApproveDialogLabels &
@@ -57,9 +60,8 @@ type Props = {
  */
 export function PendingApprovalsCard({ rows, total, count, labels, locale }: Props) {
   const router = useRouter();
-  // Derived, not copied: a refresh must show the server's queue (see ApprovalQueue).
-  const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
-  const localRows = rows.filter((r) => !decided.has(r.id));
+  // One decision may leave another step for this caller. Refresh the complete queue.
+  const localRows = rows;
   const [isPending, startTransition] = useTransition();
   const [notes, setNotes] = useState<Record<string, string>>({});
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
@@ -68,7 +70,6 @@ export function PendingApprovalsCard({ rows, total, count, labels, locale }: Pro
     startTransition(async () => {
       const res = await action();
       if (res.ok) {
-        setDecided((prev) => new Set(prev).add(id));
         toast.success(successMsg);
         router.refresh();
       } else {
@@ -148,18 +149,19 @@ export function PendingApprovalsCard({ rows, total, count, labels, locale }: Pro
               <RejectDialog
                 id={row.id}
                 labels={labels}
-                disabled={isPending}
+                disabled={isPending || row.canReject === false}
+                steps={row.rejectionSteps}
                 note={notes[row.id] ?? ''}
                 onNoteChange={(v) => setNotes((n) => ({ ...n, [row.id]: v }))}
-                onReject={() =>
-                  decide(row.id, labels.rejectSuccess, () => rejectRequest(row.id, notes[row.id]))
+                onReject={(stepId) =>
+                  decide(row.id, labels.rejectSuccess, () => rejectRequest(row.id, notes[row.id], stepId))
                 }
                 triggerClassName={actionClass}
               />
               <ApproveDialog
                 id={row.id}
                 labels={labels}
-                disabled={isPending}
+                disabled={isPending || (!row.approveOptions.hasNaturalStep && !row.approveOptions.canOverride)}
                 options={row.approveOptions}
                 onApprove={(signatureData, signatureAuthorized, extras) =>
                   decide(row.id, labels.approveSuccess, () =>

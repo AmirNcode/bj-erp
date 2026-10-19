@@ -9,6 +9,8 @@ type Props = {
   roles: string[];
   /** FR-55 effective permissions: they decide which links the nav offers. */
   perms: Perms;
+  canApprove?: boolean;
+  canDelegate?: boolean;
   locale: string;
   labels: NavLabels;
   appName: string;
@@ -28,6 +30,8 @@ type Props = {
 export function AppShell({
   roles,
   perms,
+  canApprove,
+  canDelegate,
   locale,
   labels,
   appName,
@@ -47,6 +51,8 @@ export function AppShell({
       <MainNav
         roles={roles}
         perms={perms}
+        canApprove={canApprove}
+        canDelegate={canDelegate}
         locale={locale}
         labels={labels}
         appName={appName}
@@ -54,7 +60,7 @@ export function AppShell({
         initialUpdatedAt={initialUpdatedAt}
         pendingCount={pendingCount}
       />
-      <RoutePrefetcher roles={roles} perms={perms} locale={locale} />
+      <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
   );

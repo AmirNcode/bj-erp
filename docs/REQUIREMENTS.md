@@ -3,6 +3,11 @@
 Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ todo · ◐ partial ·
 ☑ done. Statuses reflect the current build: v1 (Phases 0–6) is complete and merged to `main`.
 
+**Unreleased amendment (2026-10-18):** approval delegation/timers are implemented locally on
+`codex/approval-delegation`; migrations `20261018011333` and `20261018231551` are applied only to
+the isolated synthetic test database. References below to this amendment do not indicate a
+production release or worker activation. Validation/release status stays in `docs/TASKS.md`.
+
 ## Functional — Identity & Org
 
 - **FR-1** ☑ A single **admin** (the owner) can create, edit, deactivate employees.
@@ -43,12 +48,14 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   zero, and records the rest as unpaid time. Durations use the configured workday, default 8 hours.
   *(Extended 2026-08-05.)*
 - **FR-14** ☑ **Approval**: the employee's **direct manager** approves/rejects; **admin can
-  override** any decision. Approval requires the deciding manager/admin to draw a fresh digital
+  override** any decision. Manual approval requires the actual deciding approver to supply a digital
   signature and explicitly authorize its use; rejection requires neither. The signature, consent
   timestamp, decision, audit event, and ledger update are committed atomically. *(Extended
   2026-08-05.)* **Amended by FR-36 (planned 2026-08-18):** approval becomes a chain of required
-  signed steps rather than one decision. The manager step described here is retained as the first
-  step; the ledger update moves to whichever signature completes the chain. **Shipped 2026-08-18.**
+  steps rather than one decision. The manager step described here is retained as the first
+  step; the ledger update moves to whichever decision completes the chain. **Shipped 2026-08-18.**
+  The unreleased amendment permits attributed one-hop delegated signatures and unsigned automatic
+  CEO evidence under explicit recorded authority; it never invents the CEO's signature.
 - **FR-15** ☑ Employee can **cancel** a pending request, and an **approved future** request
   (`start_date` after today) — balance restored via a `reversal` ledger row. *(Pending-cancel
   shipped in Phase 2; approved-future in Phase 6.)*
@@ -71,7 +78,11 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   leave is refused at submit and re-checked at approval; unavailable colleagues are shown disabled with
   the reason rather than hidden. The named person sees "you are covering X" on Home — no consent gate.
   Being named as cover never blocks that person's own leave (deliberate asymmetry, spec §2.1).
-  *(2026-07-29.)*
+  *(2026-07-29.)* The unreleased amendment also permits eligible same-company approval delegates
+  outside the department. Ordinary colleagues remain valid work cover without approval authority;
+  eligible temporary delegation starts only during a fully approved absence, then the saved default
+  resumes. No Replacement leaves the field null and retains saved approval coverage. Missing approval
+  cover is advisory and warns only people with approval duties.
 - **FR-27** ☑ **Monthly accrual.** Each employee has a per-leave-type policy (days earned per
   month, yearly cap, carryover cap, start month), defaulted from the leave type and editable by an
   admin. Accrual is posted lazily and idempotently, anchored to **Jalali month starts**, with the
@@ -104,7 +115,7 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   follows the same signed request and signed manager/admin approval flow as hourly work errands.
   Any overlapping leave or errand conflicts in both directions. *(2026-08-05.)*
 
-- **FR-36** ☑ **Configurable approval chain.** A request requires a signed approval from every
+- **FR-36** ☑ **Configurable approval chain.** A request requires satisfaction of every applicable
   **active step** configured for its kind, not a single decision. Steps ship seeded as
   **manager** (order 1) then **hr** (order 2), applying to all four request kinds. Whether the order
   binds is the company setting `work_settings.approval_order_enforced`, **default false** — so by
@@ -116,6 +127,11 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   is not stuck. If an admin deactivates every step, approval degrades to the pre-chain single
   manager/admin decision rather than becoming impossible. *(2026-08-18; amends FR-14. Spec
   `2026-08-18-hr-role-and-locale-persistence-design.md`.)*
+  **Unreleased:** manual/delegated decisions select exact step IDs, including repeated manager
+  roles. Explicit HR-head exemptions and automatic CEO evidence satisfy only their recorded steps;
+  automatic CEO completion may precede earlier HR review, but the request remains pending until
+  all required steps finish. A delegate cannot manually sign their own request. One old role-only
+  approval cannot satisfy multiple ambiguous current steps; show the remaining decisions for review.
 - **FR-37** ☑ **HR reports and export.** An `hr` or `admin` user gets `/manage/reports`: leave balance
   by employee, requests by period and status, absence by department, pending-approval ageing, and
   headcount by department, over a Jalali month range. Each downloads as a UTF-8-BOM CSV that opens
@@ -129,10 +145,14 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   cancelled), filterable by status, kind and free text over name / personnel number / tracking
   number. Each row opens `/print/request/[id]`, a printable sheet reproducing the client's own
   stationery — **BJ-F 50210(R0)** daily leave, **50208(R0)** hourly leave, **50207(R0)** hourly
-  errand — with that form's own four signature boxes. The two signatures the app captures (requester,
-  approver) are printed as images with their consent timestamps; جانشین, حراست and the HR box print
-  empty for a wet signature until FR-36 fills them. The daily work errand has no photographed paper
+  errand — with that form's own four signature boxes. Actual requester and per-step human signatures
+  print with their consent timestamps; جانشین remains unsigned. Additional steps print below the
+  paper boxes. The daily work errand has no photographed paper
   original and reuses the 50207 layout, saying so on the sheet. *(2026-08-18.)*
+  **Unreleased:** scoped print evidence keeps exact step labels, delegated attribution, historical
+  authority statement/reference, appointed delegate, submission/consent and actual automatic processing
+  timestamps. Automatic/exempt steps never print a human PNG. An unreadable/missing ledger row is
+  shown as unknown balance, never assumed zero.
 
 - **FR-39** ☑ **A taken personnel number is reported on the field.** Creating an employee with a
   personnel number that already exists names the problem beside the Personnel number input, with
@@ -167,12 +187,12 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   searchable by name or personnel number, whose signature is then required on every request. A
   named approver who is deactivated **blocks** the step and is flagged in Settings rather than
   falling back to their role or silently disappearing from the chain. Steps beyond the four boxes on
-  the client's paper stationery print in an additional-approvals strip below them. **A named step
-  admits that person ONLY — an admin may not override it**, because an override cannot be reconciled
-  with a deactivated approver blocking the step, and naming someone means that signature
-  specifically is required. Evidence rows key on the STEP rather than its role, so several named
+  the client's paper stationery print in an additional-approvals strip below them. A named step's
+  natural approver is that person; FR-58 later permits explicit admin override, including named
+  steps. The unreleased amendment admits their valid one-hop approval delegate as well. Evidence
+  rows key on the STEP rather than its role, so several named
   people may share a role without one of them completing another's step. The order-enforcement
-  switch stays admin-only: it writes `work_settings`, which HR does not gain.
+  switch now follows `approval_steps` edit (FR-55/66).
   *(2026-08-18; extends FR-36.)*
 
 - **FR-43** ☑ **HR sets the opening leave balance and the accrual policy.** The Add and Edit
@@ -262,8 +282,10 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   `2026-10-07-clearance-form-design.md`.)*
 
 - **FR-55** ☑ **Admin-configurable roles and permissions.** The admin creates roles in Settings ›
-  Roles (English name, no migration needed) and sets each of 20 access items to Allowed, Read only
-  or Not allowed, in collapsible sections; the role then appears as a checkbox on the employee forms.
+  Roles (English name, no migration needed) and sets each released catalog item's permitted level
+  to Allowed, Read only or Not allowed, in collapsible sections; the role then appears as a checkbox
+  on employee forms. There are 19 released items; unreleased `approval_delegate` adds a twentieth
+  with exactly Yes (`edit`) / No (absent) under Approval chain.
   HR, Security and Finance are editable presets seeded with today's grants; Admin, Manager and
   Employee are fixed. There is exactly one admin, who moves only by «Transfer admin» (own password and
   the new admin's personnel number); a role holder can never create or become an admin, act on
@@ -306,6 +328,9 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   («مراحل تأیید») to show every step in order: who signed and when, who rejected, and who it still
   waits on (the person, for a manager or named step; the role, e.g. HR, otherwise). Via
   `request_approval_progress(id)`, names and times only. *(2026-10-13.)*
+  **Unreleased:** scoped context adds exact-step delegated/automatic/exempt evidence, timer status,
+  changed configuration and historical HR-exemption/legacy-reconciliation warnings, without PNGs.
+  Closed request evidence survives later approval-chain changes.
 
 - **FR-65** ☑ **«مرخصی خارج از لیست» — marriage and bereavement leave.** At the bottom of Edit
   Employee, hr or admin grants 3 extra days of annual leave: «ازدواج» once, for a first marriage, only
@@ -321,16 +346,64 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   number, is selected automatically; several results show «… نفر پیدا شد؛ یکی را انتخاب کنید».
   Approval-step dialog and every PersonSearch box. *(2026-10-13.)*
 
+### Unreleased approval delegation and CEO timer amendment
+
+- ◐ **Saved and temporary approval delegates.** `approval_delegate` lets natural approvers manage
+  only their own saved delegate at `/settings/roles`; admin manages other principals and explicit
+  CEO/HR-head identities plus actual HR-review step IDs. Role authoring stays admin-only; fixed
+  Manager stays locked and gains permission only via an admin-assigned supplementary role.
+  Delegates must independently be active same-company managers/approvers; CEO delegates must
+  already report directly to the CEO. No borrowed authority qualifies someone for onward delegation.
+  FR-55 D4/D5 and ordinary personnel-edit/read scopes remain intact.
+- ◐ **Exact absence preview.** All four request forms use server preview JSON and reset consent
+  on changed inputs/authority/settings. Temporary windows use Asia/Tehran and exclusive ends:
+  full calendar days, exact hourly times, AM/PM halves of configured `work_start`–`work_end`.
+  Previewed bounds are validated/snapshotted at submission. Eligible Replacement confers temporary
+  authority only in its approved source window; ordinary cover does not. Errands gain no replacement
+  field. The original approver keeps authority; no multi-hop or delegated self-signing is allowed.
+- ◐ **CEO delegate's own new requests.** Saved/temporary CEO automatic appointments need their
+  own explicit authority attestation; the request also needs requester signature and separate
+  responsibility consent. The CEO must naturally own applicable steps for both leave and errand
+  before authorizing that policy. After the review window elapses (admin-set per company, 1–1440
+  minutes, default 120; each request keeps the window it was submitted under, and the form's
+  consent text names it), eligible pending CEO steps may complete
+  on the next successful server run, even before earlier HR review. Only the explicitly designated
+  HR head is exempt from mapped HR-review steps; non-HR delegates still need HR. Early manual CEO
+  approval records the real CEO signature. Automatic evidence has no human signer/PNG or per-diem
+  self-approval. Other required steps still govern overall approval, absence activation and ledger use.
+- ◐ **Durable lifecycle and concurrency.** No retroactive enrollment, timer transfer or revival after
+  authority is revoked, expired, interrupted or changed, including A→B→A, reactivation and worker
+  downtime. Rejection/cancel stops automation. Company approval lock precedes employee leave lock;
+  caller/company authority is rechecked after waiting and timestamps use actual post-wait time
+  (`20261018231551` forward correction). Shared finalization prevents duplicate consumption.
+- ◐ **Scoped inbox and operations.** Named/custom-role approvers and delegates reach authorized
+  Home/Manage inbox actions through live capabilities; no broad personnel permission is required.
+  Exact-step decisions refresh the queue when another step remains for the same actor. Minute worker
+  runs without browsers, isolates failed items, backs off retries and caps attempts at 60. Registration
+  is inactive; production activation is separate. Admin sees company health counts; designated CEO
+  sees own-principal counts with masked job/run metadata, within the existing settings page guard.
+  UI distinguishes inactive, overdue, blocked, no completed execution and stale execution.
+
+Contract: `docs/plans/approval-delegation-rpc-contract.md`; policy:
+`docs/specs/2026-10-17-ceo-delegate-approval-design.md`. Credential/session hardening is explicitly
+deferred: retained initial credentials or sessions can impersonate principals/delegates, and password
+reset does not revoke sessions. Preserve this residual risk without adding an activation gate;
+password resets remain admin-only.
+
 ## Functional — Visibility (see also PERMISSIONS.md)
 
 - **FR-16** ☑ **Employee** sees only **their own team's** time-off + their own requests.
 - **FR-17** ☑ **Every manager** sees **company-wide** time-off (read), edits/approves only reports.
+  Unreleased delegation adds approval-only access to another principal's exact eligible steps;
+  it does not broaden the manager's profile-edit authority.
 - **FR-18** ☑ **Security** staff see **everyone's** calendar and time-off (read-only).
 - **FR-19** ☑ **Admin** sees and edits everything.
 - **FR-25** ☑ A leave request's free-text **`reason` is private**: visible only to the requester,
   their manager, security, admin, and — since 2026-08-18 (FR-38) — **hr**. NOT to teammates. The team calendar shows coworkers' dates +
   status only. (Decided 2026-06-23; enforced in the Phase 3 team-calendar read path via the
   reason-less `team_leave_calendar` view — see PERMISSIONS.md.)
+  The unreleased amendment also exposes authorized request context to applicable natural named/
+  department/role approvers and valid delegates, without granting broad profile or ledger read.
 
 ## Functional — UI / App shell
 
@@ -339,6 +412,8 @@ Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ t
   manager additionally sees a pending-approval queue + reports' status.
 - **FR-21** ☑ **Bottom tab bar**, role-driven. v1: Home · Request · Calendar · Profile/Settings;
   Admin & Manager get a Manage/Approvals tab. Future roles inject their own tabs.
+  Unreleased approval capability checks also expose the inbox to named/custom-role approvers and
+  effective delegates, independently of broad role-name gates.
 - **FR-22** ☑ **Calendar view** of time-off, scoped by the viewer's visibility (FR-16–19).
   Supports both agenda/list and month-grid views; month cells show per-day off counts, visible names
   with overflow, and selected-day return-to-work details.

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { countCalendarDays } from '@/lib/leave/dailyErrand';
 import { isValidErrandLocation } from '@/lib/leave/errand';
@@ -11,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
 import { DateRangeFields, ErrandDetailsFields, FormFeedback } from '../_components/FormParts';
-import { useRequestSubmit, useSignature } from '../_components/useRequestForm';
+import { useRequestSubmit, useSignature, useRequestDelegation } from '../_components/useRequestForm';
 
 type Labels = {
   dateRange: string;
@@ -53,6 +54,8 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
   const requestedMinutes =
     countCalendarDays(startIso, endIso) * Math.round(workSettings.hoursPerDay * 60);
 
+  const delegation = useRequestDelegation(startIso && endIso ? { start: startIso, end: endIso, unit: 'day', dayPart: 'full', replacementId: null } : null);
+
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const problem =
@@ -60,7 +63,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
         ? labels.validationSelectDate
         : !isValidErrandLocation(location)
           ? labels.validationLocation
-          : signature.problem(labels.signature);
+          : signature.problem(labels.signature) ?? delegation.problem();
 
     submit(
       problem,
@@ -72,6 +75,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
           description: description || undefined,
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
+          ...delegation.submission,
         }),
       () => {
         setStartDate(null);
@@ -120,6 +124,8 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
             labels={labels}
           />
 
+          <RequestDelegationFields idPrefix="daily-errand" delegation={delegation} locale={locale} showCover={false} />
+
           <RequestSignatureFields
             idPrefix="daily-errand"
             {...signature.fieldProps}
@@ -148,7 +154,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
 
           <Button
             type="submit"
-            disabled={isPending}
+            disabled={isPending || delegation.blocked}
             className="w-full"
             data-testid="daily-errand-submit"
           >

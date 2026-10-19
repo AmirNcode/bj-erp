@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { can } from '@/lib/permissions/catalog';
 import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { getCompanyHolidays } from '@/lib/actions/settings';
@@ -30,7 +31,10 @@ export default async function SettingsPage({ params }: Props) {
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
   const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
-  if (!settingsItemForRoles(roles, perms)) redirect(`/${locale}/home`);
+  const capabilities = await getApprovalCapabilities();
+  const settingsItem = settingsItemForRoles(roles, perms, capabilities.canDelegate);
+  if (!settingsItem) redirect(`/${locale}/home`);
+  if (settingsItem.href !== '/settings') redirect(`/${locale}${settingsItem.href}`);
   const canEditWork = can(perms, 'work_settings');
   const canEditHolidays = can(perms, 'holidays');
 
@@ -62,7 +66,7 @@ export default async function SettingsPage({ params }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
       {/* FR-55: General | Roles, for the admin only (the role editor is admin-only, D2). */}
-      {roles.includes('admin') && <SettingsTabs locale={locale} active="general" />}
+      {(capabilities.isAdmin || capabilities.canDelegate) && <SettingsTabs locale={locale} active="general" />}
       <h1 className="text-2xl font-bold tracking-tight">{tNav('settings')}</h1>
 
       <WorkSettingsForm

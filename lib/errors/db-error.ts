@@ -31,6 +31,21 @@ type Rule = {
 };
 
 const RULES: Rule[] = [
+  { re: /delegation preview (?:refresh required|changed|required)/i, key: 'delegationPreview' },
+  { re: /CEO automatic approval authority changed/i, key: 'delegationPreview' },
+  { re: /CEO automatic approval responsibility consent required/i, key: 'automaticConsent' },
+  { re: /temporary CEO delegation authorization required/i, key: 'temporaryCeoConsent' },
+  { re: /CEO has no natural applicable approval step|CEO must naturally own applicable approval steps/i, key: 'ceoApprovalConfiguration' },
+  { re: /delegate must be an active eligible approver/i, key: 'delegateIneligible' },
+  { re: /principal needs approval delegation permission/i, key: 'delegationPrincipal' },
+  { re: /not permitted to select a delegate/i, key: 'delegationNotPermitted' },
+  { re: /overlapping temporary approval delegation/i, key: 'delegationOverlap' },
+  { re: /HR review step must be an active company approval step/i, key: 'hrStepInvalid' },
+  { re: /automatic approval window must be 1 to 1440 minutes/i, key: 'autoWindowInvalid' },
+  { re: /executive must be active in your company/i, key: 'executiveInvalid' },
+  { re: /automatic approval authorization requires the designated CEO appointment/i, key: 'ceoAuthorityInvalid' },
+  { re: /approval step is no longer applicable/i, key: 'approvalStepChanged' },
+
   {
     // The minute-contract migrations retained the legacy "day(s)" word in
     // some SQL messages, but both numeric values are now minutes.

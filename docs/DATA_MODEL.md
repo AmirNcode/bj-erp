@@ -1,8 +1,13 @@
 # DATA MODEL
 
 Source of truth for the schema. Postgres (Supabase). All employee-data tables get RLS
-(`docs/PERMISSIONS.md`). Column lists are the intended design; exact DDL lands in
-`supabase/migrations/` during implementation.
+(`docs/PERMISSIONS.md`). Current exact SQL is in `supabase/schema.sql`; versioned changes live in
+`supabase/migrations/`.
+
+**Unreleased local branch (2026-10-18):** approval delegation below is implemented on
+`codex/approval-delegation`. Migrations `20261018011333` and `20261018231551` have been applied only
+to the isolated synthetic test database, not production. They are frozen; later SQL fixes require
+forward migrations. The worker is registered inactive by the migration; production activation is separate.
 
 ## Conventions
 
@@ -169,7 +174,8 @@ token hook); no client writes — `app_save_role` / `app_delete_role` do them.
 ### `role_permissions` (2026-10-13, FR-55)
 `role_id → roles on delete cascade` · `permission text` · `level text` (`read` | `edit`). Primary key
 (`role_id`,`permission`). CHECK `private.permission_allows(permission, level)` (the catalog's keys
-and shapes, 19 items since `20261013200007` removed `passwords` — `docs/PERMISSIONS.md`). A trigger refuses rows on `system` roles. RLS: SELECT
+and shapes: 19 released items after `passwords` removal; the unreleased delegation migration adds
+the twentieth, `approval_delegate`, with only `edit` permitted — `docs/PERMISSIONS.md`). A trigger refuses rows on `system` roles. RLS: SELECT
 for rows whose role the caller can see; no client writes. Preset rows seeded as in PERMISSIONS.md.
 
 ### `user_roles`
@@ -197,7 +203,7 @@ by `auth.uid()` and grants execute only to `authenticated`.
 
 ### `work_settings`
 `id` · `company_id` **(unique — one row per company, 2026-07-02)** ·
-`approval_order_enforced bool` (default **false**, 2026-08-18 — when true a step cannot be signed
+`approval_order_enforced bool` (default **false**, 2026-08-18 — when true a manual step cannot be signed
 until every lower-ordered active step has been; false means any order, whoever is free) ·
 `weekend_days int[]`
 (ISO weekday numbers; default `{5}` = Friday) · `hours_per_day numeric` (default 8, 2026-07-29) ·
@@ -313,21 +319,20 @@ their own row and never exposed through `team_leave_calendar` (explicit column l
 **Requester signature (2026-08-05, FR-32):** every new daily leave, hourly leave, daily errand, and
 hourly errand wrapper requires a bounded PNG data URL plus explicit authorization.
 `private.attach_request_signature`
-sets the image and database-generated `signature_consent_at = now()` in the same transaction as the
+sets the image and database-generated consent timestamp in the same transaction as the
 request insert. `leave_requests_signature_shape` requires both columns to be NULL (historical rows)
 or both present, and bounds/validates the PNG shape. There is no later signature update path:
 approval, rejection, and cancellation preserve the evidence. List/calendar reads carry only the
-timestamp; the image is fetched from the RLS-protected base row on demand and is absent from
+timestamp; the image is fetched through the scoped signature RPC on demand and is absent from
 `team_leave_calendar`.
 
-**Approver signature (2026-08-05, FR-14):** the signed, three-argument
-`approve_leave_request` requires the deciding direct manager or admin to provide a fresh bounded PNG
-and explicit authorization. The RPC sets the approval status, `decided_by`, `decided_at`, approver
-signature, database-generated consent timestamp, ledger consumption, and audit event in one
-transaction. `leave_requests_approver_signature_shape` permits unsigned historical rows but requires
-both evidence fields on every newly signed approval. Rejection stays unsigned. The image is fetched
-on demand under the same base-row RLS rules as the requester's signature and is never added to
-`team_leave_calendar` or the audit JSON.
+**Approver signature (FR-14/36; unreleased delegation amendment):** manual and delegated approvals
+require the actual actor's bounded PNG and explicit consent; rejection stays unsigned. Exact-step
+decisions use `approve_leave_request_v2` / `reject_leave_request_v2`. Automatic CEO decisions have
+no human signer, PNG or signature-consent timestamp; their separate immutable authority/responsibility
+evidence is described below. Finalization, paid/unpaid reconciliation, ledger consumption and audit
+are atomic. A chain completed automatically may have null compatibility approver-signature fields.
+Images are fetched only through the scoped signature RPC and never appear in calendar/audit JSON.
 
 **Paid/unpaid split (2026-08-05, FR-13):** `unpaid_minutes` is estimated at submission and
 recomputed authoritatively by `approve_leave_request` while holding the employee's ledger advisory
@@ -351,12 +356,15 @@ errands number independently, matching the client's separate paper form books (B
 
 **Replacement (2026-07-29, FR-28):** `replacement_id → profiles` (nullable), with a CHECK that it is
 never the requester. Optional. Candidates come from `get_replacement_candidates(...)` — the caller's own
-active department colleagues, **annotated** with `unavailable` + `unavailable_reason` rather than
+active department colleagues; the unreleased delegation branch also admits eligible same-company
+approval delegates outside the department. Candidates are **annotated** with `unavailable` + `unavailable_reason` rather than
 filtered, so a worker is told "on leave" instead of facing an unexplained gap. The predicate lives once,
 in `private.replacement_is_away`, and is shared by that read, `submit_leave_impl`, and
 `approve_leave_request` (which re-checks it, because a cover can book leave after submission).
 `get_my_cover_conflicts(...)` returns what the caller is cover for, powering the Home card and the
-reverse-case warning. **Never exposed through `team_leave_calendar`.**
+reverse-case warning. Operational cover alone grants no approval authority. Eligible temporary
+delegation requires the principal's permission and an approved source absence; No Replacement keeps
+`replacement_id` null and does not erase the saved delegate. **Never exposed through `team_leave_calendar`.**
 
 **Hourly (2026-07-29, FR-26):** `unit leave_unit` (`day|hour`, default `day`) · `start_time time` ·
 `end_time time`, both company-local and NULL for daily requests. A CHECK constraint
@@ -390,19 +398,20 @@ errand, or inclusive calendar days × configured `hours_per_day` for a daily err
 ### `approval_steps` (2026-08-18, FR-36)
 `id` · `company_id → companies` · `role app_role` · `applies_to request_kind[]` (default
 `{leave,errand}`) · `step_order int` · `active bool` · `created_at` · `updated_at`.
-**Unique** (`company_id`,`role`). Company configuration: **who must sign a request**.
+Company configuration: **which exact steps a request requires**. The original unique
+(`company_id`,`role`) constraint was replaced by the partial indexes described below.
 Seeded `manager` (order 1) then `hr` (order 2) for every company, both kinds.
 
 `role = 'manager'` means **the requester's own direct manager**, resolved per request via
 `private.is_manager_of` — not "anyone holding the manager role", which would contradict FR-17's
-narrow-write rule. `'security'` is permitted by the CHECK for the deferred حراست step but nothing
-seeds it. RLS: any active user may SELECT (the requester is shown the chain's progress); **admin OR
-hr** for INSERT/UPDATE/DELETE since 2026-08-18 (FR-42).
+narrow-write rule. Since FR-56, `security` and `admin` step roles may exist only inactive. RLS:
+active members may SELECT; writes need same-company `approval_steps` edit (FR-55).
 
 **Named approvers (2026-08-18, FR-42):** `approver_id → profiles` (nullable). NULL keeps the
-original meaning — anyone holding `role` may fill the step. Non-NULL means **only that person**, and
-there is deliberately **no admin override**: naming someone means that signature specifically is
-required, and an override could not be reconciled with a deactivated approver blocking the step.
+original meaning — the naturally authorized role/manager may fill the step. Non-NULL names that
+person as the natural approver. FR-58 permits explicit admin override, including named steps.
+The unreleased delegation branch additionally allows a valid one-hop delegate on the principal's
+exact steps; this does not confer the principal's other permissions.
 `role` stays meaningful for a person-step because it decides which signature box the form prints it
 in; `employee` joins the allowed set for a named person who holds no app role, with a CHECK that
 `employee` is only valid when `approver_id` is set.
@@ -444,29 +453,82 @@ others never filled.
 
 Not one expression index over `coalesce(step_id::text, step_role::text)`: casting an enum to text is
 only STABLE, and an index expression must be IMMUTABLE — Postgres rejects it outright. Every
-"has this step been decided?" test in the engine reads
-`a.step_id = s.id or (a.step_id is null and a.step_role = s.role)`, and there are FOUR of them (step
-selection, the already-signed message, order enforcement, the remaining-step count).
+"has this step been decided?" test keys on `step_id`. In the unreleased branch a legacy null-step
+role decision satisfies a current step only when that mapping is unambiguous; one old manager row
+cannot satisfy both direct-manager and department-manager steps. Ambiguity is surfaced for review.
 
 **Deliberately NOT a foreign key to `approval_steps`.** Configuration can be reordered or
 deactivated later, and recorded evidence must not change or vanish when it is.
 
 Signature columns carry the same bounded-PNG CHECK as `leave_requests.signature_data`. A rejection
-must be unsigned (FR-14); an approval is signed, **except** for rows written by the 2026-08-18
-backfill, which represent decisions made before FR-14 shipped and have no signature to record. New
-rows cannot exploit that allowance: the table has **no client write policy** and its only writer
-validates the PNG first. RLS SELECT mirrors `leave_requests_select` exactly.
+must be unsigned (FR-14); manual/delegated approvals are signed. Historical backfill rows and the
+unreleased automatic CEO evidence are unsigned for separate, explicit reasons. The table has no
+client write path; the guarded decision writer validates the appropriate evidence kind. RLS SELECT
+uses the same request-scoped authorization as `leave_requests`.
 
 **Ledger timing moved.** `approve_leave_request` now fills ONE step; it writes the `consumption`
 row, flips `status` to `approved`, and sets `decided_by`/`decided_at` only when **every active step
-applying to that request's kind** has approved. `leave_status` itself is unchanged — a request stays
+applying to that request's kind** is satisfied (including explicit HR exemptions in the unreleased
+branch). `leave_status` itself is unchanged — a request stays
 `pending` throughout — so every existing query, view, index and policy keeps working. The
 per-employee advisory lock is taken **before** the step is chosen, not just before the ledger write:
 two approvers signing different steps at the same instant would otherwise both count zero
 outstanding steps and both finalize, debiting twice.
 
-`leave_requests.approver_signature_data`/`_consent_at` are retained and record whoever **completed**
-the chain, so pre-chain readers keep working; the per-step evidence lives here.
+`leave_requests.approver_signature_data`/`_consent_at` retain the final human signature when present;
+they are null for automatic finalization. Per-step evidence remains authoritative.
+
+### Approval delegation and automatic CEO steps (unreleased, 2026-10-18)
+
+- **`approval_executive_settings`** — company PK; `auto_approval_minutes` (CEO review window,
+  default 120, 1–1440; admin-only via `app_set_auto_approval_window`, audited, does not bump
+  `version`, so pending timers keep their snapshotted deadline; migration `20261019143148`);
+  explicit `ceo_id`, `hr_head_id`, `hr_step_ids[]`,
+  monotonic `version`, configuring actor/time. No identities or appointments are seeded. HR exemptions
+  use explicitly mapped step IDs, never role names or a person's job title.
+- **`approval_delegations`** — company/principal/delegate IDs and immutable name snapshots; optional
+  `source_request_id`, `starts_at`/`ends_at`, activation/revocation times, configuring actor and
+  `ceo_authorized`. One current saved grant per principal; temporary grants belong to a source
+  leave request. Temporary authority applies only while that source is approved and current time is
+  in `[starts_at, ends_at)`, taking precedence over the saved grant; the eligible saved grant resumes
+  afterward. A pending absence never grants authority to approve itself.
+- **`approval_request_policy`** — request PK, company, snapshotted absence interval, designated HR
+  head, exact exempt HR-step IDs, full step snapshot and `configuration_changed`. Full-day boundaries
+  use Asia/Tehran calendar dates; hourly bounds use exact times. AM/PM split the configured
+  `work_start`–`work_end` at its midpoint. Server preview JSON binds those bounds to submission;
+  stale settings/authority require a refreshed preview. Later settings do not move recorded bounds.
+- **`approval_auto_requests`** — request PK; grant/principal/delegate IDs and names, executive
+  settings version, exact CEO-step IDs/snapshot, responsibility consent, submission, due and actual
+  processing/attempt times, attempts and reason. `window_minutes` snapshots the company window at
+  enrollment and `due_at = submitted_at + window_minutes` (check constraint); states are
+  `pending | blocked | completed | invalidated`. New eligible requests alone enroll, atomically with
+  requester signature and explicit responsibility consent. Saved and temporary CEO appointments
+  require separate explicit authority attestations. No old-request enrollment or timer transfer.
+- **`approval_worker_runs`** — identity PK, actual start/finish times, examined/completed/blocked
+  totals. Minute worker batches prioritize new due work and back off blocked retries (maximum 60
+  attempts); due time is eligibility, not guaranteed completion time. Execution requires no browser.
+
+`leave_request_approvals` adds `evidence_kind` (`legacy | manual | delegated | automatic`),
+principal ID/name, actual signer-name snapshot, authority ID and immutable `evidence` JSON.
+Automatic rows require null human approver/PNG/consent, plus principal, grant and exact step ID;
+evidence retains submission, responsibility consent, actual processing time and authority statement.
+HR exemption is a policy snapshot/progress projection, not a fabricated signed approval row.
+Print preserves exact step labels, historical authority/delegate identity and these timestamps.
+
+All decisions and authority changes serialize on the company approval lock before the employee
+leave lock. Forward migration `20261018231551` rechecks caller authority after waits and records
+submission/decision/signature evidence using actual clock time after lock acquisition. Shared
+finalization prevents duplicate consumption. Revocation, expiry, role/permission/profile/company or
+executive/step changes permanently invalidate affected pending timers, including A→B→A and temporary
+interruptions that begin and end while the worker is offline. Restoration never revives an old timer.
+Automatic CEO steps may precede unfinished HR review; they do not waive remaining steps or activate
+an absence until the full chain completes. Closed progress retains immutable decisions/exemptions;
+changed pending HR-step meaning exposes historical exemption metadata for review.
+
+RPC payloads and authorization: `docs/plans/approval-delegation-rpc-contract.md` and
+`docs/PERMISSIONS.md`. Credential/session hardening remains explicitly deferred: retained initial
+credentials or sessions can impersonate a principal/delegate, and password resets do not revoke
+existing sessions. This is recorded residual risk, not an added activation gate; resets stay admin-only.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
+import { progressLabel } from '@/lib/leave/approval-context';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave/approvals';
 import type { PendingApproval, DecisionResult } from '@/lib/actions/leave/approvals';
@@ -57,11 +59,9 @@ type Props = {
 
 export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
   const router = useRouter();
-  // Decided here, awaiting the refresh that drops them from `requests`. The
-  // rows are derived rather than copied into state, so a refresh (banner,
-  // poll, decision) shows the server's queue without remounting open dialogs.
-  const [decided, setDecided] = useState<ReadonlySet<string>>(new Set());
-  const localRequests = requests.filter((r) => !decided.has(r.id));
+  // A decision can leave another step for the same signer; refresh the live queue.
+  const tEvidence = useTranslations('approvalEvidence');
+  const localRequests = requests;
   const [errorMsg, setErrorMsg] = useState('');
   const [isPending, startTransition] = useTransition();
   // Per-request rejection note. Optional — an untouched field sends nothing.
@@ -76,7 +76,6 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
     startTransition(async () => {
       const res = await action(id);
       if (res.ok) {
-        setDecided((prev) => new Set(prev).add(id));
         toast.success(successMsg);
         // Re-fetch server data so badges/counts elsewhere reflect the decision.
         router.refresh();
@@ -167,29 +166,18 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                         data-testid={`chain-${req.id}`}
                       >
                         <span className="text-muted-foreground">{labels.chainTitle}:</span>
-                        {(() => {
-                          // Labels, not roles: the department manager's
-                          // signature also carries role `manager` (FR-47).
-                          const approved = new Set(req.approved);
-                          // Everyone required, in order: those already approved
-                          // plus those still outstanding.
-                          const all = [...approved, ...req.outstanding.filter((r) => !approved.has(r))];
-                          return all.map((role) => (
-                            <span
-                              key={role}
-                              data-testid={`chain-${req.id}-${role}`}
-                              className={
-                                approved.has(role)
-                                  ? 'rounded bg-success/10 px-1.5 py-0.5 text-success'
-                                  : 'rounded bg-secondary px-1.5 py-0.5 text-muted-foreground'
-                              }
-                            >
-                              {approved.has(role) ? '✓' : '○'}{' '}
-                              {labels.stepLabels[role] ?? role}
-                            </span>
-                          ));
-                        })()}
+                        {(req.progress ?? []).map((step, index) => (
+                          <span key={step.step_id ?? `legacy-${index}`} className="rounded bg-secondary px-1.5 py-0.5" data-testid={`chain-${req.id}-${step.step_id ?? index}`}>
+                            {step.decision === 'approved' || step.evidence_kind === 'hr_exempt' ? '✓ ' : '○ '}
+                            {step.named ? step.expected_name : labels.stepLabels[progressLabel(step)]}
+                            {step.evidence_kind === 'automatic' && ` · ${tEvidence('automaticShort')}`}
+                            {step.evidence_kind === 'hr_exempt' && ` · ${tEvidence('hrExempt')}`}
+                            {step.evidence_kind === 'delegated' && ` · ${tEvidence('onBehalf', { name: step.principal_name ?? '—' })}`}
+                          </span>
+                        ))}
                       </div>
+                      {req.configuration_changed && <p className="mt-2 text-xs text-warning">{tEvidence('configurationChanged')}</p>}
+                      {req.legacy_reconciliation_required && <p className="mt-2 text-xs text-warning">{tEvidence('legacyReconciliation')}</p>}
                       {req.replacement_name && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>
                           {labels.coverLabel}: {req.replacement_name}
@@ -217,12 +205,13 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                       <ApproveDialog
                         id={req.id}
                         labels={labels}
-                        disabled={isPending}
+                        disabled={isPending || (!req.natural_step && !req.can_override)}
                         options={{
                           hasNaturalStep: req.natural_step !== null,
                           canOverride: req.can_override,
                           perDiemNatural: req.per_diem_natural,
                           perDiemOverride: req.per_diem_override,
+                          steps: req.decision_steps,
                         }}
                         onApprove={(signatureData, signatureAuthorized, extras) =>
                           decide(req.id, labels.approveSuccess, (id) =>
@@ -234,12 +223,13 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                       <RejectDialog
                         id={req.id}
                         labels={labels}
-                        disabled={isPending}
+                        disabled={isPending || req.can_reject === false}
+                        steps={req.rejection_steps}
                         note={rejectNotes[req.id] ?? ''}
                         onNoteChange={(v) => setRejectNotes((n) => ({ ...n, [req.id]: v }))}
-                        onReject={() =>
+                        onReject={(stepId) =>
                           decide(req.id, labels.rejectSuccess, (id) =>
-                            rejectRequest(id, rejectNotes[id])
+                            rejectRequest(id, rejectNotes[id], stepId)
                           )
                         }
                       />

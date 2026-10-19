@@ -1,6 +1,6 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 19 items:
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 20 items:
  * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
  * the FR-55 review decision) plus main's absences, finance, personal_info_own (own
  * personal information, an explicit exception to D3) and special_leave. Pure. Drives
@@ -13,7 +13,7 @@ export type PermKey =
   | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
   | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'absences' | 'reports'
-  | 'finance' | 'approval_steps' | 'work_settings' | 'holidays';
+  | 'finance' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
@@ -27,7 +27,7 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   // after reports. Order is display only: the tests compare sets and counts, so keep both as is.
   { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports'] },
   { key: 'finance', items: ['finance'] },
-  { key: 'approvalChain', items: ['approval_steps'] },
+  { key: 'approvalChain', items: ['approval_steps', 'approval_delegate'] },
   { key: 'settings', items: ['work_settings', 'holidays'] },
 ];
 
@@ -36,7 +36,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
   leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
   calendar: 'R', absences: 'R', reports: 'R', finance: 'R',
-  approval_steps: 'RE', work_settings: 'RE', holidays: 'RE',
+  approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
 };
 
 export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);

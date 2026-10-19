@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(19);
+    expect(ALL_KEYS).toHaveLength(20);
     // Password resets are admin-only (20261013200007): no role can hold them.
     expect(ALL_KEYS).not.toContain('passwords');
     expect(body).not.toContain("'passwords'");
@@ -201,7 +201,7 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(19);
+    expect(Object.keys(f)).toHaveLength(20);
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');
     expect(f.special_leave).toBe('edit');

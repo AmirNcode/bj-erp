@@ -1,4 +1,8 @@
 import { useEffect, useState, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
+import { getRequestDelegationPreview } from '@/lib/actions/leave/delegation';
+import type { DelegationPreviewQuery, RequestDelegationPreview } from '@/lib/leave/delegation';
+import type { Json } from '@/lib/supabase/types';
 import { useRouter } from 'next/navigation';
 import { getMyBalance } from '@/lib/actions/leave/balances';
 import { getReplacementCandidates } from '@/lib/actions/leave/requests';
@@ -135,6 +139,74 @@ export function useReplacementCandidates(query: CandidateQuery | null) {
     reset: () => {
       setReplacementId('');
       setNoReplacement(false);
+    },
+  };
+}
+
+/** Preview/consent is bound to the exact inputs and server authority version. */
+export function useRequestDelegation(query: DelegationPreviewQuery | null) {
+  const t = useTranslations('delegation');
+  const key = query ? JSON.stringify(query) : '';
+  const [revision, setRevision] = useState(0);
+  const [inputVersion, setInputVersion] = useState({ key, version: 0 });
+  // A→B→A (including clearing dates) is a new preview, even if A's earlier result is cached in state.
+  if (inputVersion.key !== key) setInputVersion({ key, version: inputVersion.version + 1 });
+  const fetchKey = `${key}:${revision}:${inputVersion.version}`;
+  const [fetched, setFetched] = useState<{
+    key: string; preview: RequestDelegationPreview | null; error: string;
+  } | null>(null);
+  const [ownConsent, setOwnConsent] = useState('');
+  const [temporaryConsent, setTemporaryConsent] = useState('');
+
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    getRequestDelegationPreview(JSON.parse(key) as DelegationPreviewQuery).then((result) => {
+      if (cancelled) return;
+      setFetched(result.ok
+        ? { key: fetchKey, preview: result.preview, error: '' }
+        : { key: fetchKey, preview: null, error: result.error });
+      // An A→B→A edit still needs a fresh acceptance when the original inputs return.
+      setOwnConsent('');
+      setTemporaryConsent('');
+    }).catch(() => {
+      if (!cancelled) {
+        setFetched({ key: fetchKey, preview: null, error: t('previewFailed') });
+        setOwnConsent('');
+        setTemporaryConsent('');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [key, fetchKey, t]);
+
+  const ready = !!key && fetched?.key === fetchKey;
+  const preview = ready ? fetched.preview : null;
+  const consentKey = preview ? `${fetchKey}:${preview.preview_token}:${preview.authority_id ?? ''}` : '';
+  const autoApprovalConsent = !!consentKey && ownConsent === consentKey;
+  const temporaryCeoAuthorized = !!consentKey && temporaryConsent === consentKey;
+  const error = ready ? fetched.error : '';
+  const loading = !!key && !ready;
+  const problem = () => !preview
+    ? error || t('previewRequired')
+    : preview.auto_approval_eligible && !autoApprovalConsent
+      ? t('ownConsentRequired')
+      : preview.is_ceo && preview.temporary_eligible && !temporaryCeoAuthorized
+        ? t('temporaryConsentRequired')
+        : null;
+
+  return {
+    preview, loading, error,
+    blocked: !!key && problem() !== null,
+    autoApprovalConsent,
+    temporaryCeoAuthorized,
+    setAutoApprovalConsent: (checked: boolean) => setOwnConsent(checked ? consentKey : ''),
+    setTemporaryCeoAuthorized: (checked: boolean) => setTemporaryConsent(checked ? consentKey : ''),
+    refresh: () => setRevision((r) => r + 1),
+    problem,
+    submission: {
+      delegationPreview: preview as unknown as Json | null,
+      autoApprovalConsent,
+      temporaryCeoAuthorized,
     },
   };
 }

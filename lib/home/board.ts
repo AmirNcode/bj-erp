@@ -40,14 +40,15 @@ export type HomeBoard = {
 
 export function buildHomeBoard(input: {
   roles: string[];
+  canApprove?: boolean;
   requests: LeaveRequestWithType[];
   team: CalendarEntry[];
   directory?: TeamDirectoryMember[];
   pendingCount: number;
 }): HomeBoard {
   // hr signs a step of the approval chain too (FR-36), so it gets the queue.
-  const showApprovals =
-    input.roles.includes('admin') || input.roles.includes('manager') || input.roles.includes('hr');
+  const showApprovals = input.canApprove ?? (
+    input.roles.includes('admin') || input.roles.includes('manager') || input.roles.includes('hr'));
   const upcomingByEmployee = new Map<string, TeamUpcomingTimeOff[]>();
 
   for (const entry of input.team) {

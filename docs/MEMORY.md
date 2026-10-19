@@ -348,6 +348,15 @@ stores it.
 and `t('print')` threw `INSUFFICIENT_PATH` at render, logged by the server while the page still
 rendered. Grep server output after an e2e run, and give namespaces names no string uses.
 
+### `next start --hostname 127.0.0.1` loops every Farsi route
+Middleware's `NextURL` rewrites any loopback host to `localhost`, so next-intl's default-locale
+rewrite (`/login` → `http://localhost:3002/fa/login`) no longer matches the router's origin
+(`http://127.0.0.1:3002`, built from `--hostname`). Next then proxies it as an *external* URL;
+the proxied `/fa/login` hits next-intl's prefix-strip redirect back to `/login` →
+`ERR_TOO_MANY_REDIRECTS`. English (`/en/…`, no rewrite) works, which hides it. Bind local servers
+with `--hostname localhost` (or `0.0.0.0`, as the Docker image does) — not an app bug
+(2026-10-19, `next` 16.3.8, `resolve-routes.js` `getRelativeURL` vs `initUrl`).
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

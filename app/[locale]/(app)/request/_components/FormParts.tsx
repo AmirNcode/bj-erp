@@ -6,6 +6,7 @@
  * caller, so each form keeps its own DOM contract with the e2e suite.
  */
 
+import { useTranslations } from 'next-intl';
 import { PersianDateField } from '@/components/PersianDateField';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -232,8 +233,10 @@ export function ErrandDetailsFields({
 export function ReplacementField({
   replacement,
   labels,
+  delegationEnabled = false,
 }: {
   replacement: ReturnType<typeof useReplacementCandidates>;
+  delegationEnabled?: boolean;
   labels: {
     replacementTitle: string;
     replacementHint: string;
@@ -244,6 +247,7 @@ export function ReplacementField({
     replacementEmpty: string;
   };
 }) {
+  const t = useTranslations('delegation');
   return (
     <ReplacementPicker
       candidates={replacement.candidates}
@@ -254,7 +258,7 @@ export function ReplacementField({
       onNoReplacementChange={replacement.setNoReplacement}
       labels={{
         title: labels.replacementTitle,
-        hint: labels.replacementHint,
+        hint: delegationEnabled ? t('replacementHint') : labels.replacementHint,
         select: labels.replacementSelect,
         noReplacement: labels.replacementNoReplacement,
         onLeave: labels.replacementOnLeave,

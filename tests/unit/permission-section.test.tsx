@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PermissionSection } from '@/app/[locale]/(app)/settings/roles/_components/PermissionSection';
 import { ALL_KEYS, type PermKey } from '@/lib/permissions/catalog';
@@ -13,7 +13,7 @@ const t = {
   sensitive: 'Sensitive when allowed',
   title: 'Leave',
   items: Object.fromEntries(ALL_KEYS.map((k) => [k, { label: `L:${k}`, description: `D:${k}` }])) as Record<PermKey, { label: string; description: string }>,
-  levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only' },
+  levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only', yes: 'Yes', no: 'No' },
   summary: { custom: 'Custom', allow: 'Allowed', read: 'Read only', none: 'Not allowed' },
   raisedBy: (by: string) => `Raised by ${by}`,
   loweredBy: (by: string) => `Lowered by ${by}`,
@@ -117,5 +117,26 @@ describe('PermissionSection', () => {
     const row = screen.getByTestId('perm-row-reports');
     expect(row.textContent).toContain('Lowered by L:leave_balances');
     expect(row.textContent).not.toContain('Raised by');
+  });
+});
+
+
+describe('approval delegation permission', () => {
+  it('offers exactly Yes and No with no disabled Read segment', () => {
+    const onChange = vi.fn();
+    render(<PermissionSection section="approvalChain" perms={{}} onChange={onChange} notes={{}} t={t} defaultOpen />);
+    const toggle = screen.getByTestId('perm-approval_delegate');
+    expect(within(toggle).getAllByRole('radio')).toHaveLength(2);
+    expect(screen.queryByTestId('perm-approval_delegate-read')).toBeNull();
+    fireEvent.click(within(toggle).getByRole('radio', { name: 'Yes' }));
+    expect(onChange.mock.calls[0]).toEqual([{ approval_delegate: 'edit' }, [], []]);
+  });
+
+  it('section Read turns delegation off without inventing a read grant', () => {
+    const onChange = vi.fn();
+    render(<PermissionSection section="approvalChain" perms={{ approval_delegate: 'edit' }} onChange={onChange} notes={{}} t={t} defaultOpen />);
+    openMenu('approvalChain');
+    fireEvent.click(screen.getByTestId('perm-section-approvalChain-read'));
+    expect(onChange.mock.calls[0][0]).toEqual({ approval_steps: 'read', people: 'read' });
   });
 });

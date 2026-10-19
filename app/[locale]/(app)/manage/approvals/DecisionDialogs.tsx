@@ -5,6 +5,8 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { parseRials } from '@/lib/leave/perDiem';
+import type { ApprovalChoice } from '@/lib/leave/approval-context';
+import { nativeSelectClass } from '@/lib/native-select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -54,9 +56,31 @@ export type ApproveOptions = {
   /** Whether the natural step / the override takes a per diem. */
   perDiemNatural: boolean;
   perDiemOverride: boolean;
+  steps?: ApprovalChoice[];
 };
 
-export type ApproveExtras = { override: boolean; perDiemRials: number | null };
+export type ApproveExtras = { override: boolean; perDiemRials: number | null; stepId: string | null };
+
+function StepChoice({ id, steps, value, onChange }: {
+  id: string; steps: ApprovalChoice[]; value: string; onChange: (id: string) => void;
+}) {
+  const t = useTranslations('approvalEvidence');
+  const tSteps = useTranslations('approvals.steps');
+  const name = (step: ApprovalChoice) => {
+    const title = step.name ?? tSteps(step.label);
+    return step.delegated ? `${title} · ${t('onBehalf', { name: step.principalName ?? '—' })}` : title;
+  };
+  if (!steps.length) return null;
+  if (steps.length === 1) return <p className="rounded-md bg-muted px-3 py-2 text-sm">{name(steps[0])}</p>;
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{t('selectStep')}</Label>
+      <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className={nativeSelectClass}>
+        {steps.map((step) => <option key={step.stepId ?? 'legacy'} value={step.stepId ?? ''}>{name(step)}</option>)}
+      </select>
+    </div>
+  );
+}
 
 type TriggerProps = {
   /** Extra classes for the trigger button (the home rows use larger buttons). */
@@ -87,12 +111,14 @@ export function ApproveDialog({
   const [validationError, setValidationError] = useState('');
   const [overrideChecked, setOverrideChecked] = useState(false);
   const [perDiem, setPerDiem] = useState('');
+  const [selectedStepId, setSelectedStepId] = useState('');
+  const selectedStep = options?.steps?.find((step) => (step.stepId ?? '') === selectedStepId) ?? options?.steps?.[0];
 
   // An admin with no step of their own can only override; the database does
   // the same when asked to approve without one.
   const overrideOnly = !!options?.canOverride && !options.hasNaturalStep;
   const override = overrideOnly || (!!options?.canOverride && overrideChecked);
-  const showPerDiem = override ? !!options?.perDiemOverride : !!options?.perDiemNatural;
+  const showPerDiem = override ? !!options?.perDiemOverride : (selectedStep?.perDiem ?? !!options?.perDiemNatural);
 
   return (
     <AlertDialog
@@ -103,6 +129,7 @@ export function ApproveDialog({
           setValidationError('');
           setOverrideChecked(false);
           setPerDiem('');
+          setSelectedStepId(options?.steps?.[0]?.stepId ?? '');
         }
       }}
     >
@@ -122,6 +149,7 @@ export function ApproveDialog({
           <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
           <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
         </AlertDialogHeader>
+        {!override && options?.steps && <StepChoice id={`approve-step-${id}`} steps={options.steps} value={selectedStep?.stepId ?? ''} onChange={setSelectedStepId} />}
         {overrideOnly && (
           <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid={`approve-override-only-${id}`}>
             {t('overrideOnly')}
@@ -191,7 +219,7 @@ export function ApproveDialog({
                   return;
                 }
               }
-              onApprove(signatureData, signatureAuthorized, { override, perDiemRials });
+              onApprove(signatureData, signatureAuthorized, { override, perDiemRials, stepId: override ? null : selectedStep?.stepId ?? null });
             }}
             data-testid={`approve-confirm-${id}`}
           >
@@ -210,6 +238,7 @@ export function RejectDialog({
   note,
   onNoteChange,
   onReject,
+  steps,
   triggerClassName,
   triggerIcon,
 }: {
@@ -219,11 +248,14 @@ export function RejectDialog({
   /** Optional rejection note — an untouched field sends nothing. */
   note: string;
   onNoteChange: (value: string) => void;
-  onReject: () => void;
+  onReject: (stepId?: string | null) => void;
+  steps?: ApprovalChoice[];
 } & TriggerProps) {
   const tc = useTranslations('common');
+  const [selectedStepId, setSelectedStepId] = useState('');
+  const selected = steps?.find((step) => (step.stepId ?? '') === selectedStepId) ?? steps?.[0];
   return (
-    <AlertDialog>
+    <AlertDialog onOpenChange={(open) => { if (open) setSelectedStepId(steps?.[0]?.stepId ?? ''); }}>
       <AlertDialogTrigger asChild>
         <Button
           size="sm"
@@ -241,6 +273,7 @@ export function RejectDialog({
           <AlertDialogTitle>{labels.reject}</AlertDialogTitle>
           <AlertDialogDescription>{labels.rejectConfirm}</AlertDialogDescription>
         </AlertDialogHeader>
+        {steps && <StepChoice id={`reject-step-${id}`} steps={steps} value={selected?.stepId ?? ''} onChange={setSelectedStepId} />}
 
         <div className="space-y-1.5 text-start">
           <Label htmlFor={`reject-reason-${id}`}>{labels.rejectReasonLabel}</Label>
@@ -259,7 +292,7 @@ export function RejectDialog({
           <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
-            onClick={onReject}
+            onClick={() => onReject(selected?.stepId ?? null)}
             data-testid={`reject-confirm-${id}`}
           >
             {labels.reject}

@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { manageItemsForRoles, settingsItemForRoles, type NavItem } from '@/lib/nav/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '../_components/PageHeader';
@@ -24,8 +25,9 @@ export default async function ManageIndexPage({ params }: Props) {
     ? await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)])
     : [[], {}];
   const t = await getTranslations('nav');
-  const items = manageItemsForRoles(roles, perms);
-  const settings = settingsItemForRoles(roles, perms);
+  const capabilities = await getApprovalCapabilities();
+  const items = manageItemsForRoles(roles, perms, capabilities.canApprove, capabilities.canDelegate);
+  const settings = settingsItemForRoles(roles, perms, capabilities.canDelegate);
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
   // Explicit map, not t(item.labelKey): a dynamic message key has already
   // caused a production-only failure here (docs/MEMORY.md).
@@ -60,9 +62,9 @@ export default async function ManageIndexPage({ params }: Props) {
   return (
     <div className="mx-auto max-w-xl space-y-5">
       <PageHeader title={t('manage')} />
-      <Card className="gap-0 overflow-hidden py-0">
+      {items.length > 0 && <Card className="gap-0 overflow-hidden py-0">
         <ul className="divide-y divide-muted">{items.map(row)}</ul>
-      </Card>
+      </Card>}
       {settings && (
         <Card className="gap-0 overflow-hidden py-0">
           <ul>{row(settings)}</ul>

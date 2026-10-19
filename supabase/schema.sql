@@ -153,6 +153,21 @@ end; $$;
 
 
 --
+-- Name: ambiguous_legacy_approval(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.ambiguous_legacy_approval(p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists(select 1 from public.leave_request_approvals a join public.leave_requests r on r.id=a.request_id
+    where a.request_id=p_request and r.status='pending' and a.step_id is null
+    and (select count(*) from public.approval_steps candidate where candidate.role=a.step_role
+      and private.request_step_applies(p_request,candidate.id))>1);
+$$;
+
+
+--
 -- Name: apply_due_separations(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -204,6 +219,266 @@ end; $$;
 
 
 --
+-- Name: approval_after_authority_mutation(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_after_authority_mutation() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; v_old_company uuid; v_new_company uuid;
+begin
+  if tg_table_name='profiles' then
+    if tg_op='UPDATE' then
+      if new.active is not distinct from old.active and new.manager_id is not distinct from old.manager_id
+        and new.department_id is not distinct from old.department_id and new.company_id is not distinct from old.company_id then
+        return new;
+      end if;
+    end if;
+  end if;
+  if tg_op<>'INSERT' then v_old_company:=private.approval_mutation_company(tg_table_name,to_jsonb(old)); end if;
+  if tg_op<>'DELETE' then v_new_company:=private.approval_mutation_company(tg_table_name,to_jsonb(new)); end if;
+  for v_company in select distinct company from unnest(array[v_old_company,v_new_company]) company
+    where company is not null order by company loop
+    if tg_table_name='approval_steps' then
+      update public.approval_request_policy x set configuration_changed=true
+        where x.company_id=v_company and exists(select 1 from public.leave_requests r where r.id=x.request_id and r.status='pending');
+      -- Any chain edit terminates pending automatic entitlements; editing back cannot revive them.
+      update public.approval_auto_requests set state='invalidated',reason='approval chain configuration changed',
+        processed_at=clock_timestamp() where company_id=v_company and state in ('pending','blocked');
+    end if;
+    perform private.reconcile_approval_timers(v_company);
+  end loop;
+  if tg_op='DELETE' then return old; else return new; end if;
+end; $$;
+
+
+--
+-- Name: approval_before_authority_mutation(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_before_authority_mutation() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; v_old_company uuid; v_new_company uuid;
+begin
+  if tg_table_name='profiles' then
+    if tg_op='UPDATE' then
+      if new.active is not distinct from old.active and new.manager_id is not distinct from old.manager_id
+        and new.department_id is not distinct from old.department_id and new.company_id is not distinct from old.company_id then
+        return new;
+      end if;
+    end if;
+  end if;
+  if tg_op<>'INSERT' then v_old_company:=private.approval_mutation_company(tg_table_name,to_jsonb(old)); end if;
+  if tg_op<>'DELETE' then v_new_company:=private.approval_mutation_company(tg_table_name,to_jsonb(new)); end if;
+  for v_company in select distinct company from unnest(array[v_old_company,v_new_company]) company
+    where company is not null order by company loop
+    perform private.approval_lock(v_company);
+  end loop;
+  if tg_op='DELETE' then return old; else return new; end if;
+end; $$;
+
+
+--
+-- Name: approval_bounds(uuid, date, date, public.leave_unit, public.day_part, time without time zone, time without time zone); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_bounds(p_company uuid, p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_ws time; v_we time; v_mid time; v_start timestamptz; v_end timestamptz;
+begin
+  if p_start is null or p_end is null or p_end<p_start then
+    raise exception 'invalid delegation absence dates' using errcode='22023'; end if;
+  select work_start,work_end into v_ws,v_we from public.work_settings where company_id=p_company limit 1;
+  v_ws:=coalesce(v_ws,'07:00'::time); v_we:=coalesce(v_we,'15:00'::time);
+  v_mid:=v_ws+(v_we-v_ws)/2;
+  if p_unit='hour' then
+    if p_start<>p_end or p_start_time is null or p_end_time is null or p_end_time<=p_start_time then
+      raise exception 'invalid delegation absence times' using errcode='22023'; end if;
+    v_start:=(p_start+p_start_time) at time zone 'Asia/Tehran';
+    v_end:=(p_end+p_end_time) at time zone 'Asia/Tehran';
+  elsif p_day_part='full' then
+    v_start:=p_start::timestamp at time zone 'Asia/Tehran';
+    v_end:=(p_end+1)::timestamp at time zone 'Asia/Tehran';
+  else
+    if p_start<>p_end then raise exception 'half-day delegation requires one date' using errcode='22023'; end if;
+    v_start:=(p_start+case when p_day_part='am' then v_ws else v_mid end) at time zone 'Asia/Tehran';
+    v_end:=(p_end+case when p_day_part='am' then v_mid else v_we end) at time zone 'Asia/Tehran';
+  end if;
+  return jsonb_build_object('starts_at',v_start,'ends_at',v_end,
+    'work_start',v_ws,'work_end',v_we,'timezone','Asia/Tehran');
+end; $$;
+
+
+--
+-- Name: approval_fallback_allowed(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_fallback_allowed(p_uid uuid, p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(exists(select 1 from public.leave_requests r
+    join public.profiles caller on caller.id=p_uid and caller.company_id=r.company_id and caller.active
+    where r.id=p_request and (private.is_admin(p_uid)
+      or (r.employee_id<>p_uid and (private.is_manager_of(p_uid,r.employee_id)
+        or exists(select 1 from public.profiles emp
+          cross join lateral private.effective_approval_delegate(emp.manager_id) d
+          where emp.id=r.employee_id and d.delegate_id=p_uid
+            and d.source_request_id is distinct from r.id
+            and private.is_manager_of(d.principal_id,r.employee_id)))))),false);
+$$;
+
+
+--
+-- Name: approval_grant_json(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_grant_json(p_id uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select jsonb_build_object('grant_id',d.id,'delegate_id',d.delegate_id,'delegate_name',p.full_name,
+    'ceo_authorized',d.ceo_authorized,'source_request_id',d.source_request_id,
+    'starts_at',d.starts_at,'ends_at',d.ends_at)
+  from public.approval_delegations d join public.profiles p on p.id=d.delegate_id where d.id=p_id;
+$$;
+
+
+--
+-- Name: approval_lock(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_lock(p_company uuid) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('approval:' || p_company::text,0));
+$$;
+
+
+--
+-- Name: approval_mutation_company(text, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_mutation_company(p_table text, p_row jsonb) RETURNS uuid
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid;
+begin
+  if p_row ? 'company_id' then return (p_row->>'company_id')::uuid; end if;
+  if p_table='user_roles' then
+    select company_id into v_company from public.profiles where id=(p_row->>'user_id')::uuid;
+  elsif p_table='role_permissions' then
+    select company_id into v_company from public.roles where id=(p_row->>'role_id')::uuid;
+  end if;
+  return v_company;
+end; $$;
+
+
+--
+-- Name: approval_source_lifecycle(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_source_lifecycle() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare g public.approval_delegations%rowtype;
+begin
+  if tg_op='UPDATE' and new.status is distinct from old.status then
+    select * into g from public.approval_delegations where source_request_id=new.id and revoked_at is null;
+    if g.id is not null then
+      if new.status='approved' then
+        if exists(select 1 from public.approval_delegations other join public.leave_requests r on r.id=other.source_request_id
+          where other.principal_id=g.principal_id and other.id<>g.id and other.revoked_at is null
+            and r.status='approved' and other.starts_at<g.ends_at and other.ends_at>g.starts_at) then
+          raise exception 'overlapping temporary approval delegation' using errcode='22023'; end if;
+        update public.approval_delegations set activated_at=coalesce(activated_at,clock_timestamp()) where id=g.id;
+      elsif new.status in ('cancelled','rejected') then
+        update public.approval_delegations set revoked_at=clock_timestamp() where id=g.id;
+      end if;
+    end if;
+    -- The request's own automatic policy also stops permanently on rejection/cancellation.
+    if new.status in ('cancelled','rejected') then
+      update public.approval_auto_requests set state='invalidated',reason='request '||new.status::text,
+        processed_at=clock_timestamp() where request_id=new.id and state in ('pending','blocked');
+    end if;
+    perform private.reconcile_approval_timers(new.company_id);
+  end if;
+  return new;
+end; $$;
+
+
+--
+-- Name: approval_step_snapshot(uuid, uuid[]); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_step_snapshot(p_request uuid, p_ids uuid[] DEFAULT NULL::uuid[]) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object('step_id',s.id,'step_role',s.role,
+    'step_order',s.step_order,'manager_scope',s.manager_scope,'approver_id',s.approver_id,
+    'expected_name',p.full_name,'applies_to',s.applies_to) order by s.step_order,s.id),'[]')
+  from public.leave_requests r join public.approval_steps s on s.company_id=r.company_id
+    and s.active and r.kind=any(s.applies_to) and private.step_applies(s.manager_scope,r.employee_id)
+    left join public.profiles p on p.id=case when s.approver_id is not null then s.approver_id
+      when s.role='manager' and s.manager_scope='department' then private.department_manager_for(r.employee_id)
+      when s.role='manager' then (select e.manager_id from public.profiles e where e.id=r.employee_id) end
+  where r.id=p_request and (p_ids is null or s.id=any(p_ids));
+$$;
+
+
+--
+-- Name: approval_timer_invalid_reason(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_timer_invalid_reason(p_request uuid) RETURNS text
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare a public.approval_auto_requests%rowtype; d public.approval_delegations%rowtype;
+  v_effective uuid; x public.approval_executive_settings%rowtype;
+begin
+  select * into a from public.approval_auto_requests where request_id=p_request;
+  if not found then return 'missing enrollment'; end if;
+  if not exists (select 1 from public.leave_requests where id=p_request and status='pending') then
+    return 'request no longer pending'; end if;
+  select * into d from public.approval_delegations where id=a.authority_id;
+  select * into x from public.approval_executive_settings where company_id=a.company_id;
+  if x.ceo_id is distinct from a.principal_id or x.version is distinct from a.settings_version then
+    return 'executive configuration changed'; end if;
+  select id into v_effective from private.effective_approval_delegate(a.principal_id);
+  if v_effective is distinct from a.authority_id or not d.ceo_authorized then
+    return 'CEO authority revoked or superseded'; end if;
+  if exists (select 1 from unnest(a.step_ids) id
+      where not private.natural_step_authority(a.principal_id,p_request,id))
+    or (select jsonb_agg(item-'expected_name') from jsonb_array_elements(private.approval_step_snapshot(p_request,a.step_ids)) item)
+      is distinct from (select jsonb_agg(item-'expected_name') from jsonb_array_elements(a.step_snapshot) item) then
+    return 'CEO step authority or configuration changed'; end if;
+  -- Persisted activation/revocation intervals cover A -> temporary B -> A even with no worker run.
+  if exists (select 1 from public.approval_delegations other
+      where other.principal_id=a.principal_id and other.id<>a.authority_id
+        and other.source_request_id is not null and other.activated_at is not null
+        and greatest(other.starts_at,other.activated_at)<least(other.ends_at,
+          coalesce(other.revoked_at,'infinity'::timestamptz),clock_timestamp())
+        and greatest(other.starts_at,other.activated_at)<clock_timestamp()
+        and least(other.ends_at,coalesce(other.revoked_at,'infinity'::timestamptz))>a.submitted_at) then
+    return 'CEO authority was interrupted by temporary delegation'; end if;
+  if d.source_request_id is not null and
+      (d.starts_at>a.submitted_at or d.ends_at<=clock_timestamp() or d.activated_at>a.submitted_at) then
+    return 'temporary CEO authority ended or changed'; end if;
+  return null;
+end; $$;
+
+
+--
 -- Name: attach_request_signature(uuid, text, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -227,7 +502,7 @@ begin
 
   update public.leave_requests
      set signature_data = p_signature_data,
-         signature_consent_at = now()
+         signature_consent_at = clock_timestamp()
    where id = p_request_id
      and signature_data is null
      and signature_consent_at is null;
@@ -393,6 +668,20 @@ $$;
 
 
 --
+-- Name: can_approve_step(uuid, uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_approve_step(p_uid uuid, p_request uuid, p_step uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.request_step_applies(p_request,p_step) and
+    (private.natural_step_authority(p_uid,p_request,p_step)
+     or exists (select 1 from private.step_delegation(p_uid,p_request,p_step)));
+$$;
+
+
+--
 -- Name: can_read_all(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -412,6 +701,26 @@ $$;
 --
 
 COMMENT ON FUNCTION private.can_read_all(uid uuid) IS 'Broad-read predicate: admin, manager, security, or hr. Write access is never implied — managers write only to direct reports, and hr writes only through guarded RPCs. FR-17/FR-18/FR-35.';
+
+
+--
+-- Name: can_read_approval_request(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_read_approval_request(p_uid uuid, p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(private.is_active(p_uid) and exists (
+    select 1 from public.leave_requests r join public.profiles p on p.id=p_uid and p.company_id=r.company_id
+    where r.id=p_request and (r.employee_id=p_uid or private.is_manager_of(p_uid,r.employee_id)
+      or private.has_perm(p_uid,'leave_requests','read')
+      or exists (select 1 from public.approval_steps s
+        where private.can_approve_step(p_uid,r.id,s.id))
+      or (not exists(select 1 from public.approval_steps s where s.company_id=r.company_id
+        and s.active and r.kind=any(s.applies_to) and private.step_applies(s.manager_scope,r.employee_id))
+        and private.approval_fallback_allowed(p_uid,r.id)))),false);
+$$;
 
 
 --
@@ -445,6 +754,28 @@ CREATE FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) RETURNS
     SET search_path TO ''
     AS $$
   select coalesce(private.is_admin(p_caller), false);
+$$;
+
+
+--
+-- Name: ceo_delegate_configuration_ready(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.ceo_delegate_configuration_ready(p_ceo uuid, p_delegate uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.delegate_eligible(p_ceo,p_delegate) and not exists(
+    select 1 from unnest(array['leave','errand']::public.request_kind[]) kind
+    where not exists(select 1 from public.approval_steps s
+      join public.profiles target on target.id=p_delegate and target.company_id=s.company_id
+      where s.active and kind=any(s.applies_to) and private.step_applies(s.manager_scope,p_delegate)
+        and not exists(select 1 from public.approval_executive_settings x where x.company_id=s.company_id
+          and x.hr_head_id=p_delegate and s.id=any(x.hr_step_ids))
+        and case when s.approver_id is not null then s.approver_id=p_ceo
+          when s.role='manager' and s.manager_scope='department' then private.is_department_manager_of(p_ceo,p_delegate)
+          when s.role='manager' then private.is_manager_of(p_ceo,p_delegate)
+          else private.has_role(p_ceo,s.role) end));
 $$;
 
 
@@ -564,6 +895,163 @@ end; $_$;
 
 
 --
+-- Name: decide_approval_request(uuid, uuid, uuid, public.leave_status, text, boolean, boolean, bigint, text, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.decide_approval_request(p_id uuid, p_step_id uuid, p_actor uuid, p_decision public.leave_status, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint, p_reason text, p_auto_authority uuid DEFAULT NULL::uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; s public.approval_steps%rowtype;
+  d public.approval_delegations%rowtype; a public.approval_auto_requests%rowtype;
+  v_steps uuid[]; v_step uuid; v_total integer; v_admin boolean:=false; v_override boolean:=false;
+  v_kind text; v_principal uuid; v_principal_name text; v_actor_name text; v_evidence jsonb;
+  v_now timestamptz; v_filled_hr boolean:=false; v_note text:=nullif(btrim(p_reason),'');
+begin
+  select * into r from public.leave_requests where id=p_id;
+  if r.id is null then raise exception 'request not found' using errcode='P0002'; end if;
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:'||r.employee_id::text,0));
+  select * into r from public.leave_requests where id=p_id for update;
+  v_now:=clock_timestamp();
+  if r.status<>'pending' then raise exception 'only pending requests can be decided' using errcode='22023'; end if;
+  if p_decision not in ('approved','rejected') then raise exception 'invalid decision' using errcode='22023'; end if;
+  if length(v_note)>500 then raise exception 'rejection note is too long (max 500 characters)' using errcode='22023'; end if;
+  if p_auto_authority is null then
+    if not private.is_active(p_actor) or not exists (select 1 from public.profiles where id=p_actor and company_id=r.company_id) then
+      raise exception 'not allowed to decide this request' using errcode='42501'; end if;
+    v_admin:=private.is_admin(p_actor);
+    select full_name into v_actor_name from public.profiles where id=p_actor;
+    if p_decision='approved' then perform private.separation_check_signature(p_signature_data,p_signature_authorized); end if;
+  else
+    select * into a from public.approval_auto_requests where request_id=p_id;
+    if p_actor is not null or p_decision<>'approved' or a.authority_id is distinct from p_auto_authority
+      or a.state not in ('pending','blocked') or a.due_at>v_now
+      or private.approval_timer_invalid_reason(p_id) is not null
+      or not (p_step_id=any(a.step_ids)) then
+      raise exception 'automatic CEO authority is no longer valid' using errcode='42501'; end if;
+    if p_signature_data is not null or p_per_diem_rials is not null then
+      raise exception 'automatic decisions cannot carry human signatures or per diem' using errcode='22023'; end if;
+  end if;
+  if p_per_diem_rials<0 then raise exception 'per diem must be 0 or more' using errcode='22023'; end if;
+  select count(*) into v_total from public.approval_steps st where private.request_step_applies(p_id,st.id);
+  if p_auto_authority is not null then v_steps:=array[p_step_id];
+  elsif v_total=0 and not exists (select 1 from public.approval_steps st
+    where st.company_id=r.company_id and st.active and r.kind=any(st.applies_to)
+      and private.step_applies(st.manager_scope,r.employee_id)) then
+    -- Legacy no-chain fallback; delegation remains approval-only and cannot sign own requests.
+    if not (v_admin or private.is_manager_of(p_actor,r.employee_id)) then
+      select g.* into d from public.profiles emp
+        cross join lateral private.effective_approval_delegate(emp.manager_id) g
+        where emp.id=r.employee_id and g.delegate_id=p_actor and r.employee_id<>p_actor
+          and g.source_request_id is distinct from p_id and private.is_manager_of(g.principal_id,r.employee_id);
+      if d.id is null then raise exception 'not allowed to decide this request' using errcode='42501'; end if;
+    end if;
+    v_steps:=array[null::uuid];
+  else
+    if p_step_id is not null then
+      if not private.request_step_applies(p_id,p_step_id) then
+        raise exception 'approval step is no longer applicable' using errcode='22023'; end if;
+      if not private.can_approve_step(p_actor,p_id,p_step_id) and not v_admin then
+        raise exception 'not allowed to decide this request' using errcode='42501'; end if;
+      v_step:=p_step_id;
+    else
+      select st.id into v_step from public.approval_steps st
+      where private.can_approve_step(p_actor,p_id,st.id) and not private.request_step_decided(p_id,st.id)
+        order by st.step_order,st.id limit 1;
+    end if;
+    v_override:=v_admin and (coalesce(p_override,false) or v_step is null
+      or not private.can_approve_step(p_actor,p_id,v_step));
+    if v_override then
+      select array_agg(st.id order by st.step_order,st.id) into v_steps from public.approval_steps st
+        where private.request_step_applies(p_id,st.id) and not private.request_step_decided(p_id,st.id);
+    elsif v_step is not null then v_steps:=array[v_step];
+    else raise exception 'not allowed to decide this request' using errcode='42501'; end if;
+  end if;
+  if cardinality(coalesce(v_steps,'{}'))=0 then raise exception 'you have already signed this request' using errcode='22023'; end if;
+  foreach v_step in array v_steps loop
+    s:=null;
+    if v_step is not null then select * into s from public.approval_steps where id=v_step;
+      if private.request_step_decided(p_id,s.id) then
+        raise exception 'you have already signed this request' using errcode='22023'; end if;
+      if p_auto_authority is null and not v_override and p_decision='approved'
+        and exists (select 1 from public.work_settings w where w.company_id=r.company_id and w.approval_order_enforced)
+        and exists (select 1 from public.approval_steps prev where private.request_step_applies(p_id,prev.id)
+          and prev.step_order<s.step_order and not private.request_step_decided(p_id,prev.id,'approved')) then
+        raise exception 'an earlier approval is still required' using errcode='22023'; end if;
+    end if;
+    v_evidence:='{}';
+    if p_auto_authority is not null then
+      v_kind:='automatic'; v_principal:=a.principal_id; v_principal_name:=a.principal_name;
+      v_evidence:=jsonb_build_object('authority_id',a.authority_id,'principal_name',a.principal_name,
+        'delegate_id',a.delegate_id,'delegate_name',a.delegate_name,'consent_at',a.consent_at,
+        'submitted_at',a.submitted_at,'due_at',a.due_at,'processed_at',v_now,'statement',
+        'Automatically approved under delegated CEO authority. The CEO review period elapsed without a CEO decision. The appointed delegate accepted responsibility under the recorded authorization.');
+    else
+      if v_step is not null then
+        d:=null;
+        if not v_override and not private.natural_step_authority(p_actor,p_id,v_step) then
+          select g.* into d from private.step_delegation(p_actor,p_id,v_step) g;
+        end if;
+      end if;
+      if d.id is not null then v_kind:='delegated';v_principal:=d.principal_id;v_principal_name:=d.principal_name;
+      else v_kind:='manual';v_principal:=p_actor;v_principal_name:=v_actor_name; end if;
+      v_evidence:=jsonb_build_object('admin_override',v_override,'actor_id',p_actor,
+        'principal_id',v_principal,'principal_name',v_principal_name,'signer_name',v_actor_name);
+    end if;
+    v_filled_hr:=v_filled_hr or coalesce(s.role='hr',false);
+    insert into public.leave_request_approvals(request_id,step_id,step_role,approver_id,decision,
+      signature_data,signature_consent_at,note,evidence_kind,principal_id,principal_name,signer_name_snapshot,authority_id,evidence,created_at)
+    values(p_id,v_step,coalesce(s.role,'manager'),p_actor,p_decision,
+      case when p_decision='approved' then p_signature_data end,
+      case when p_decision='approved' and p_signature_data is not null then v_now end,
+      v_note,v_kind,v_principal,v_principal_name,v_actor_name,
+      case when p_auto_authority is not null then p_auto_authority else d.id end,
+      v_evidence||jsonb_build_object('step_id',v_step,'step_role',coalesce(s.role,'manager'),
+        'step_order',coalesce(s.step_order,1),'manager_scope',coalesce(s.manager_scope,'direct'),
+        'named',s.approver_id is not null,'approver_id',s.approver_id,
+        'expected_name',case when s.approver_id is not null then
+          (select full_name from public.profiles where id=s.approver_id) else v_principal_name end),v_now);
+    if p_decision='rejected' then exit; end if;
+  end loop;
+  if p_decision='rejected' then
+    update public.leave_requests set status='rejected',decided_by=p_actor,decided_at=v_now,decision_note=v_note where id=p_id and status='pending';
+  else
+    if p_per_diem_rials is not null then
+      if r.kind<>'errand' or not v_filled_hr then
+        raise exception 'per diem can only be set on the hr step of an errand' using errcode='22023'; end if;
+      update public.leave_requests set per_diem_rials=p_per_diem_rials where id=p_id;
+    end if;
+    perform private.finalize_approval_request(p_id,p_actor,p_signature_data,v_now,
+      case when p_auto_authority is not null then 'automatic' else v_kind end);
+  end if;
+  insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+    (p_actor,case when p_decision='approved' then 'approve_leave_step' else 'reject_leave_request' end,
+     'leave_requests',p_id,jsonb_build_object('step_ids',v_steps,'evidence_kind',v_kind,'admin_override',v_override,
+       'authority_id',p_auto_authority,'per_diem_rials',p_per_diem_rials));
+end; $$;
+
+
+--
+-- Name: delegate_eligible(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.delegate_eligible(p_principal uuid, p_delegate uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(p_principal <> p_delegate
+    and private.has_perm(p_principal,'approval_delegate','edit')
+    and private.natural_approver(p_principal) and private.natural_approver(p_delegate)
+    and exists (select 1 from public.profiles p join public.profiles d on d.company_id=p.company_id
+      where p.id=p_principal and d.id=p_delegate and p.active and d.active
+      and (not exists (select 1 from public.approval_executive_settings x
+                        where x.company_id=p.company_id and x.ceo_id=p_principal)
+           or d.manager_id=p_principal)),false);
+$$;
+
+
+--
 -- Name: department_manager_for(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -592,6 +1080,63 @@ CREATE FUNCTION private.department_step_applies(p_emp uuid) RETURNS boolean
      and x.dm is distinct from (select manager_id from public.profiles where id = p_emp)
     from (select private.department_manager_for(p_emp) as dm) x;
 $$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- Name: approval_delegations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approval_delegations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    principal_id uuid NOT NULL,
+    delegate_id uuid NOT NULL,
+    principal_name text NOT NULL,
+    delegate_name text NOT NULL,
+    source_request_id uuid,
+    starts_at timestamp with time zone,
+    ends_at timestamp with time zone,
+    activated_at timestamp with time zone,
+    ceo_authorized boolean DEFAULT false NOT NULL,
+    configured_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    revoked_at timestamp with time zone,
+    CONSTRAINT approval_delegation_not_self CHECK ((principal_id <> delegate_id)),
+    CONSTRAINT approval_delegation_window CHECK ((((source_request_id IS NULL) AND (starts_at IS NULL) AND (ends_at IS NULL)) OR ((source_request_id IS NOT NULL) AND (starts_at IS NOT NULL) AND (ends_at > starts_at))))
+);
+
+
+--
+-- Name: effective_approval_delegate(uuid, timestamp with time zone); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.effective_approval_delegate(p_principal uuid, p_at timestamp with time zone DEFAULT clock_timestamp()) RETURNS SETOF public.approval_delegations
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_count integer;
+begin
+  select count(*) into v_count from public.approval_delegations d
+    join public.leave_requests r on r.id=d.source_request_id
+    where d.principal_id=p_principal and d.revoked_at is null and r.status='approved'
+      and d.starts_at<=p_at and p_at<d.ends_at and private.delegate_eligible(p_principal,d.delegate_id);
+  -- An ambiguous legacy overlap never silently picks a person or falls back to a saved grant.
+  if v_count>1 then return; end if;
+  if v_count=1 then
+    return query select d.* from public.approval_delegations d
+      join public.leave_requests r on r.id=d.source_request_id
+      where d.principal_id=p_principal and d.revoked_at is null and r.status='approved'
+        and d.starts_at<=p_at and p_at<d.ends_at and private.delegate_eligible(p_principal,d.delegate_id);
+  else
+    return query select d.* from public.approval_delegations d
+      where d.principal_id=p_principal and d.source_request_id is null and d.revoked_at is null
+        and private.delegate_eligible(p_principal,d.delegate_id);
+  end if;
+end; $$;
 
 
 --
@@ -737,6 +1282,122 @@ begin
     end if;
   end if;
   return new;
+end; $$;
+
+
+--
+-- Name: enroll_request_delegation(uuid, boolean, jsonb, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_consent boolean, p_preview jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; x public.approval_executive_settings%rowtype;
+  d public.approval_delegations%rowtype; v_preview jsonb; v_bounds jsonb; v_steps uuid[];
+  v_now timestamptz; v_temp uuid;
+begin
+  select * into r from public.leave_requests where id=p_request;
+  perform private.approval_lock(r.company_id);
+  select * into r from public.leave_requests where id=p_request;
+  v_now:=clock_timestamp();
+  v_preview:=public.app_request_delegation_preview(r.start_date,r.end_date,r.unit,r.day_part,
+    r.start_time,r.end_time,r.replacement_id);
+  if p_preview is not null and p_preview->>'preview_token' is distinct from v_preview->>'preview_token' then
+    raise exception 'delegation preview changed; refresh the request preview' using errcode='22023'; end if;
+  if r.day_part<>'full' and private.has_perm(r.employee_id,'approval_delegate','edit')
+      and r.replacement_id is not null and private.delegate_eligible(r.employee_id,r.replacement_id)
+      and p_preview is null then
+    raise exception 'delegation preview required; refresh the request preview' using errcode='22023'; end if;
+  v_bounds:=v_preview->'bounds';
+  select * into x from public.approval_executive_settings where company_id=r.company_id;
+  insert into public.approval_request_policy(request_id,company_id,starts_at,ends_at,hr_head_id,
+    hr_exempt_step_ids,step_snapshot)
+  values(r.id,r.company_id,(v_bounds->>'starts_at')::timestamptz,(v_bounds->>'ends_at')::timestamptz,
+    x.hr_head_id,case when r.employee_id=x.hr_head_id then coalesce((select array_agg(s.id)
+      from public.approval_steps s where s.company_id=r.company_id and s.active
+        and s.id=any(x.hr_step_ids) and r.kind=any(s.applies_to)
+        and private.step_applies(s.manager_scope,r.employee_id)),'{}') else '{}'::uuid[] end,
+    private.approval_step_snapshot(r.id));
+  if r.replacement_id is not null and private.delegate_eligible(r.employee_id,r.replacement_id) then
+    if r.employee_id=x.ceo_id and p_temporary_ceo_authorized is not true then
+      raise exception 'temporary CEO delegation authorization required' using errcode='22023'; end if;
+    if r.employee_id=x.ceo_id and not private.ceo_delegate_configuration_ready(r.employee_id,r.replacement_id) then
+      raise exception 'CEO must naturally own applicable approval steps for leave and errand before automatic authority is authorized' using errcode='22023'; end if;
+    if exists (select 1 from public.approval_delegations g join public.leave_requests lr on lr.id=g.source_request_id
+      where g.principal_id=r.employee_id and g.revoked_at is null and lr.status in ('pending','approved')
+        and g.starts_at<(v_bounds->>'ends_at')::timestamptz and g.ends_at>(v_bounds->>'starts_at')::timestamptz) then
+      raise exception 'overlapping temporary approval delegation' using errcode='22023'; end if;
+    insert into public.approval_delegations(company_id,principal_id,delegate_id,principal_name,
+      delegate_name,source_request_id,starts_at,ends_at,ceo_authorized,configured_by)
+    select r.company_id,r.employee_id,r.replacement_id,p.full_name,q.full_name,r.id,
+      (v_bounds->>'starts_at')::timestamptz,(v_bounds->>'ends_at')::timestamptz,
+      -- Separate explicit attestation; the generic requester PNG does not authorize this policy.
+      r.employee_id=x.ceo_id and p_temporary_ceo_authorized is true,r.employee_id from public.profiles p,public.profiles q
+      where p.id=r.employee_id and q.id=r.replacement_id returning id into v_temp;
+  end if;
+  select g.* into d from private.effective_approval_delegate(x.ceo_id) g
+    where g.delegate_id=r.employee_id and g.ceo_authorized;
+  if d.id is not null then
+    if p_auto_consent is not true or r.signature_data is null or r.signature_consent_at is null then
+      raise exception 'CEO automatic approval responsibility consent required; refresh the request form' using errcode='22023'; end if;
+    select array_agg(s.id order by s.step_order,s.id) into v_steps from public.approval_steps s
+      where private.request_step_applies(r.id,s.id) and private.natural_step_authority(x.ceo_id,r.id,s.id);
+    if cardinality(coalesce(v_steps,'{}'))=0 then
+      raise exception 'CEO has no natural applicable approval step; correct executive approval configuration' using errcode='22023'; end if;
+    insert into public.approval_auto_requests(request_id,company_id,authority_id,principal_id,delegate_id,
+      principal_name,delegate_name,settings_version,step_ids,step_snapshot,consent_at,submitted_at,due_at,window_minutes)
+    values(r.id,r.company_id,d.id,x.ceo_id,r.employee_id,d.principal_name,d.delegate_name,x.version,
+      v_steps,private.approval_step_snapshot(r.id,v_steps),v_now,r.created_at,r.created_at+make_interval(mins=>x.auto_approval_minutes),x.auto_approval_minutes);
+  elsif p_auto_consent then
+    raise exception 'CEO automatic approval authority changed; refresh the request preview' using errcode='22023';
+  end if;
+end; $$;
+
+
+--
+-- Name: finalize_approval_request(uuid, uuid, text, timestamp with time zone, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.finalize_approval_request(p_id uuid, p_actor uuid, p_signature text, p_consent_at timestamp with time zone, p_origin text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; v_affects boolean; v_is_paid boolean;
+  v_prev integer:=0; v_paid integer:=0; v_unpaid integer:=0;
+begin
+  select * into r from public.leave_requests where id=p_id;
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:'||r.employee_id::text,0));
+  select * into r from public.leave_requests where id=p_id for update;
+  if r.status<>'pending' then return false; end if;
+  if exists (select 1 from public.approval_steps s where private.request_step_applies(p_id,s.id)
+    and not private.request_step_decided(p_id,s.id,'approved')) then return false; end if;
+  if exists (select 1 from public.leave_requests lr where lr.employee_id=r.employee_id and lr.id<>r.id
+    and lr.status='approved' and lr.start_date<=r.end_date and lr.end_date>=r.start_date
+    and (lr.unit='day' or r.unit='day' or (lr.start_time<r.end_time and lr.end_time>r.start_time))) then
+    raise exception 'overlapping approved leave exists' using errcode='22023'; end if;
+  if r.replacement_id is not null and private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,
+    r.unit,r.start_time,r.end_time) then raise exception 'replacement is on leave during this period' using errcode='22023'; end if;
+  select affects_balance,is_paid into v_affects,v_is_paid from public.leave_types where id=r.leave_type_id;
+  if v_affects then
+    v_prev:=public.current_leave_balance(r.employee_id,r.leave_type_id);
+    v_paid:=least(r.requested_minutes,greatest(v_prev,0)); v_unpaid:=r.requested_minutes-v_paid;
+  elsif r.leave_type_id is not null and not coalesce(v_is_paid,false) then v_unpaid:=r.requested_minutes; end if;
+  update public.leave_requests set status='approved',unpaid_minutes=v_unpaid,decided_by=p_actor,
+    decided_at=clock_timestamp(),approver_signature_data=p_signature,
+    approver_signature_consent_at=case when p_signature is null then null else p_consent_at end
+    where id=p_id and status='pending';
+  if not found then return false; end if;
+  if v_affects and v_paid>0 then
+    insert into public.leave_ledger(employee_id,leave_type_id,request_id,entry_type,delta_minutes,balance_after_minutes,note)
+    values(r.employee_id,r.leave_type_id,p_id,'consumption',-v_paid,v_prev-v_paid,'paid portion consumed on approval');
+  end if;
+  insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+    (p_actor,'approve_leave_request','leave_requests',p_id,jsonb_build_object('employee_id',r.employee_id,
+      'requested_minutes',r.requested_minutes,'paid_minutes',v_paid,'unpaid_minutes',v_unpaid,
+      'replacement_id',r.replacement_id,'origin',p_origin));
+  return true;
 end; $$;
 
 
@@ -1001,6 +1662,45 @@ end; $_$;
 
 
 --
+-- Name: natural_approver(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.natural_approver(p_uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(private.is_active(p_uid) and (
+    private.has_role(p_uid,'manager') or private.is_admin(p_uid)
+    or exists (select 1 from public.departments d where d.manager_id=p_uid)
+    or exists (select 1 from public.approval_steps s
+      join public.profiles p on p.id=p_uid and p.company_id=s.company_id
+      where s.active and (s.approver_id=p_uid
+        or (s.approver_id is null and s.role <> 'manager' and private.has_role(p_uid,s.role))))),false);
+$$;
+
+
+--
+-- Name: natural_step_authority(uuid, uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.natural_step_authority(p_uid uuid, p_request uuid, p_step uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(exists (select 1 from public.leave_requests r
+    join public.profiles p on p.id=p_uid and p.company_id=r.company_id and p.active
+    join public.approval_steps s on s.id=p_step and s.company_id=r.company_id and s.active
+      and r.kind=any(s.applies_to) and private.step_applies(s.manager_scope,r.employee_id)
+    where r.id=p_request and r.employee_id<>p_uid and
+      case when s.approver_id is not null then s.approver_id=p_uid
+      when s.role='manager' and s.manager_scope='department'
+        then private.is_department_manager_of(p_uid,r.employee_id)
+      when s.role='manager' then private.is_manager_of(p_uid,r.employee_id)
+      else private.has_role(p_uid,s.role) end),false);
+$$;
+
+
+--
 -- Name: perm_level(uuid, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1034,14 +1734,11 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     AS $$
   select case
     when p_key in ('people_create','role_manager','role_assign','leave_accrual',
-                   'personal_info_own','special_leave')
-      then p_level = 'edit'
+      'personal_info_own','special_leave','approval_delegate') then p_level = 'edit'
     when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
-                   'leave_requests','approval_steps','work_settings','holidays')
-      then p_level in ('read','edit')
-    else false
-  end;
+      'leave_requests','approval_steps','work_settings','holidays') then p_level in ('read','edit')
+    else false end;
 $$;
 
 
@@ -1077,8 +1774,8 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     AS $$
   select unnest(array['people','people_create','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
-    'special_leave','leave_requests','calendar','reports','absences','approval_steps','work_settings',
-    'holidays','finance']);
+    'special_leave','leave_requests','calendar','reports','absences','approval_steps','approval_delegate',
+    'work_settings','holidays','finance']);
 $$;
 
 
@@ -1129,6 +1826,56 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: process_approval_auto_requests(integer); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.process_approval_auto_requests(p_limit integer DEFAULT 100) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare candidate record; a public.approval_auto_requests%rowtype; v_reason text; v_step uuid;
+  v_run bigint; v_examined integer:=0; v_completed integer:=0; v_blocked integer:=0;
+begin
+  insert into public.approval_worker_runs default values returning id into v_run;
+  for candidate in select request_id,company_id from public.approval_auto_requests
+    where state in ('pending','blocked') and due_at<=clock_timestamp() and attempts<60
+      and (state='pending' or attempted_at is null or attempted_at<=clock_timestamp()-
+        make_interval(mins=>least(60,greatest(1,power(2,least(attempts,6))::integer))))
+    order by case when state='pending' then 0 else 1 end,due_at,request_id limit greatest(1,least(coalesce(p_limit,100),500)) loop
+    perform private.approval_lock(candidate.company_id);
+    select * into a from public.approval_auto_requests where request_id=candidate.request_id for update;
+    if a.state not in ('pending','blocked') or a.due_at>clock_timestamp() then continue; end if;
+    v_examined:=v_examined+1;
+    v_reason:=private.approval_timer_invalid_reason(a.request_id);
+    if v_reason is not null then
+      update public.approval_auto_requests set state='invalidated',reason=v_reason,
+        attempted_at=clock_timestamp(),processed_at=clock_timestamp(),attempts=attempts+1 where request_id=a.request_id;
+      continue;
+    end if;
+    begin
+      foreach v_step in array a.step_ids loop
+        if not exists(select 1 from public.leave_request_approvals decision where decision.request_id=a.request_id
+          and decision.step_id=v_step and decision.decision='approved') then
+          perform private.decide_approval_request(a.request_id,v_step,null,'approved',null,false,false,null,null,a.authority_id);
+        end if;
+      end loop;
+      update public.approval_auto_requests set state='completed',reason=null,attempted_at=clock_timestamp(),
+        processed_at=clock_timestamp(),attempts=attempts+1 where request_id=a.request_id;
+      v_completed:=v_completed+1;
+    exception when others then
+      -- Subtransaction rolls back all decision/accounting writes for this request, then records the failure.
+      update public.approval_auto_requests set state='blocked',reason=left(sqlstate||': '||sqlerrm,1000),
+        attempted_at=clock_timestamp(),attempts=attempts+1 where request_id=a.request_id;
+      v_blocked:=v_blocked+1;
+    end;
+  end loop;
+  update public.approval_worker_runs set finished_at=clock_timestamp(),examined=v_examined,
+    completed=v_completed,blocked=v_blocked where id=v_run;
+  return jsonb_build_object('examined',v_examined,'completed',v_completed,'blocked',v_blocked);
+end; $$;
 
 
 --
@@ -1184,6 +1931,25 @@ $$;
 
 
 --
+-- Name: reconcile_approval_timers(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.reconcile_approval_timers(p_company uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r record; v_reason text;
+begin
+  for r in select request_id from public.approval_auto_requests
+    where company_id=p_company and state in ('pending','blocked') loop
+    v_reason:=private.approval_timer_invalid_reason(r.request_id);
+    if v_reason is not null then update public.approval_auto_requests
+      set state='invalidated',reason=v_reason,processed_at=clock_timestamp() where request_id=r.request_id; end if;
+  end loop;
+end; $$;
+
+
+--
 -- Name: refresh_separation_status(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1219,6 +1985,54 @@ CREATE FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date,
          or (r.start_time < p_end_time and r.end_time > p_start_time)
        )
   );
+$$;
+
+
+--
+-- Name: request_hr_exempt(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_hr_exempt(p_request uuid, p_step uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists(select 1 from public.approval_request_policy x
+    join public.approval_steps s on s.id=p_step
+    cross join lateral jsonb_array_elements(x.step_snapshot) snapshot
+    where x.request_id=p_request and s.id=any(x.hr_exempt_step_ids)
+      and snapshot-'expected_name'=jsonb_build_object('step_id',s.id,'step_role',s.role,
+        'step_order',s.step_order,'manager_scope',s.manager_scope,'approver_id',s.approver_id,'applies_to',s.applies_to));
+$$;
+
+
+--
+-- Name: request_step_applies(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_step_applies(p_request uuid, p_step uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.leave_requests r join public.approval_steps s
+    on s.id=p_step and s.company_id=r.company_id and s.active and r.kind=any(s.applies_to)
+    where r.id=p_request and private.step_applies(s.manager_scope,r.employee_id)
+      and not private.request_hr_exempt(p_request,p_step));
+$$;
+
+
+--
+-- Name: request_step_decided(uuid, uuid, public.leave_status); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_step_decided(p_request uuid, p_step uuid, p_decision public.leave_status DEFAULT NULL::public.leave_status) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists(select 1 from public.leave_request_approvals a join public.approval_steps s on s.id=p_step
+    where a.request_id=p_request and (p_decision is null or a.decision=p_decision)
+      and (a.step_id=s.id or (a.step_id is null and a.step_role=s.role
+        and (select count(*) from public.approval_steps candidate where candidate.role=s.role
+          and private.request_step_applies(p_request,candidate.id))=1)));
 $$;
 
 
@@ -1506,6 +2320,25 @@ $$;
 
 
 --
+-- Name: step_delegation(uuid, uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.step_delegation(p_uid uuid, p_request uuid, p_step uuid) RETURNS SETOF public.approval_delegations
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select d.* from public.profiles p
+    cross join lateral private.effective_approval_delegate(p.id) d
+    join public.leave_requests r on r.id=p_request and r.company_id=p.company_id
+  where d.delegate_id=p_uid and r.employee_id<>p_uid
+    and d.source_request_id is distinct from p_request
+    and private.natural_step_authority(p.id,p_request,p_step)
+    and private.request_step_applies(p_request,p_step)
+  order by d.created_at,d.id limit 1;
+$$;
+
+
+--
 -- Name: submit_leave_impl(uuid, date, date, public.day_part, text, public.leave_unit, time without time zone, time without time zone, uuid, public.request_kind, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1537,6 +2370,14 @@ begin
   select company_id, department_id into v_company, v_dept
     from public.profiles where id = v_uid;
   if v_company is null then raise exception 'no profile for caller' using errcode = '42501'; end if;
+  perform private.approval_lock(v_company);
+  -- Authentication in the public wrapper happened before this possible wait.
+  -- Refresh both caller activity/company and the department used for cover rules.
+  select department_id into v_dept from public.profiles
+    where id=v_uid and company_id=v_company and active;
+  if not found then
+    raise exception 'not allowed to submit this request' using errcode='42501';
+  end if;
 
   if p_start is null or p_end is null then
     raise exception 'start and end dates are required' using errcode = '22023';
@@ -1616,8 +2457,8 @@ begin
        where p.id = v_replacement
          and p.active
          and p.company_id = v_company
-         and v_dept is not null
-         and p.department_id = v_dept
+         and ((v_dept is not null and p.department_id = v_dept)
+              or private.delegate_eligible(v_uid,p.id))
          and p.id <> v_uid
     ) then
       raise exception 'replacement must be an active colleague in your department'
@@ -1707,12 +2548,12 @@ begin
   insert into public.leave_requests(
     employee_id, leave_type_id, start_date, end_date, day_part,
     unit, start_time, end_time, requested_minutes, unpaid_minutes, status, reason,
-    replacement_id, company_id, serial_year, serial_seq, kind, errand_location
+    replacement_id, company_id, serial_year, serial_seq, kind, errand_location, created_at
   )
   values (
     v_uid, p_leave_type_id, p_start, p_end, p_day_part,
     p_unit, p_start_time, p_end_time, v_minutes, v_unpaid, 'pending', p_reason,
-    v_replacement, v_company, v_jyear, v_seq, p_kind, v_location
+    v_replacement, v_company, v_jyear, v_seq, p_kind, v_location, clock_timestamp()
   )
   returning id into v_req;
 
@@ -2018,6 +2859,70 @@ end; $$;
 
 
 --
+-- Name: app_approval_capabilities(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_approval_capabilities() RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select jsonb_build_object('is_admin',private.is_admin(auth.uid()),
+    'can_delegate',private.has_perm(auth.uid(),'approval_delegate','edit'),
+    'can_approve',private.natural_approver(auth.uid()) or exists (
+      select 1 from public.approval_delegations d
+      cross join lateral private.effective_approval_delegate(d.principal_id) e
+      where e.id=d.id and d.delegate_id=auth.uid()));
+$$;
+
+
+--
+-- Name: app_approval_queue(public.leave_status); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_approval_queue(p_status public.leave_status DEFAULT 'pending'::public.leave_status) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_agg(public.app_request_approval_context(r.id) order by r.created_at),'[]')
+    from public.leave_requests r where r.status=p_status and private.can_read_approval_request(auth.uid(),r.id)
+      and (r.employee_id<>auth.uid() or private.is_admin(auth.uid()));
+$$;
+
+
+--
+-- Name: app_approval_worker_health(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_approval_worker_health() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_result jsonb; v_job jsonb; v_company uuid; v_admin boolean; v_ceo boolean; v_last_run jsonb;
+begin
+  select company_id into v_company from public.profiles where id=auth.uid() and active;
+  v_admin:=private.is_admin(auth.uid());
+  v_ceo:=exists(select 1 from public.approval_executive_settings where company_id=v_company and ceo_id=auth.uid());
+  if v_company is null or not(v_admin or v_ceo) then
+    raise exception 'admin or designated CEO required' using errcode='42501'; end if;
+  if to_regclass('cron.job') is not null then
+    execute 'select jsonb_build_object(''job_id'',jobid,''schedule'',schedule,''active'',active)
+      from cron.job where jobname=''bj-approval-delegation''' into v_job;
+  end if;
+  if not v_admin and v_job is not null then v_job:=jsonb_build_object('active',v_job->'active'); end if;
+  select case when v_admin then jsonb_build_object('started_at',run.started_at,'finished_at',run.finished_at)
+    else jsonb_build_object('finished_at',run.finished_at) end into v_last_run
+    from public.approval_worker_runs run order by id desc limit 1;
+  select jsonb_build_object('job',v_job,
+    'overdue',(select count(*) from public.approval_auto_requests a where a.company_id=v_company
+      and (v_admin or a.principal_id=auth.uid()) and a.state in ('pending','blocked') and a.due_at<=clock_timestamp()),
+    'blocked',(select count(*) from public.approval_auto_requests a where a.company_id=v_company
+      and (v_admin or a.principal_id=auth.uid()) and a.state='blocked'),
+    'last_run',v_last_run) into v_result;
+  return v_result;
+end; $$;
+
+
+--
 -- Name: app_bulk_create_employees(uuid, jsonb, jsonb, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2270,6 +3175,19 @@ begin
   if p_company_id is distinct from (select company_id from public.profiles where id = v_caller) then
     raise exception 'not allowed to import into another company' using errcode = '42501';
   end if;
+  -- Acquire this before any profile row or employee leave lock. The profile
+  -- trigger intentionally skips updates that do not change approval authority.
+  perform private.approval_lock(p_company_id);
+  v_is_admin := private.is_admin(v_caller);
+  v_bulk_hr := private.has_perm(v_caller, 'people_create', 'edit') and not v_is_admin;
+  if not (v_is_admin or v_bulk_hr) then
+    raise exception 'admin or hr role required' using errcode = '42501';
+  end if;
+  if p_company_id is distinct from (select company_id from public.profiles where id = v_caller) then
+    raise exception 'not allowed to import into another company' using errcode = '42501';
+  end if;
+  v_today := (clock_timestamp() at time zone 'Asia/Tehran')::date;
+
   if p_mode is null or p_mode not in ('add', 'update', 'replace') then
     raise exception 'import mode must be add, update or replace' using errcode = '22023';
   end if;
@@ -2641,6 +3559,18 @@ $$;
 
 
 --
+-- Name: app_can_read_approval_request(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_can_read_approval_request(p_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.can_read_approval_request(auth.uid(),p_id);
+$$;
+
+
+--
 -- Name: app_cancel_separation(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2974,6 +3904,43 @@ begin
   perform private.apply_due_separations(v_id);
   return v_id;
 end; $_$;
+
+
+--
+-- Name: app_delegation_context(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_delegation_context(p_principal_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid:=auth.uid(); v_principal uuid:=coalesce(p_principal_id,auth.uid());
+  v_company uuid; v_name text; v_saved uuid; v_effective uuid; v_admin boolean; v_settings jsonb;
+begin
+  if not private.is_active(v_uid) then raise exception 'not authenticated' using errcode='42501'; end if;
+  select company_id into v_company from public.profiles where id=v_uid;
+  v_admin:=private.is_admin(v_uid);
+  if (v_principal<>v_uid and not v_admin) or not exists (select 1 from public.profiles
+      where id=v_principal and company_id=v_company) then raise exception 'not permitted' using errcode='42501'; end if;
+  select full_name into v_name from public.profiles where id=v_principal;
+  select id into v_saved from public.approval_delegations where principal_id=v_principal
+    and source_request_id is null and revoked_at is null;
+  select id into v_effective from private.effective_approval_delegate(v_principal);
+  select jsonb_build_object('ceo_id',x.ceo_id,'hr_head_id',x.hr_head_id,'hr_step_ids',x.hr_step_ids,
+    'version',x.version,'auto_approval_minutes',x.auto_approval_minutes) into v_settings from public.approval_executive_settings x where company_id=v_company;
+  return jsonb_build_object('principal_id',v_principal,'principal_name',v_name,'is_admin',v_admin,
+    'can_delegate',private.has_perm(v_principal,'approval_delegate','edit'),
+    'can_approve',private.natural_approver(v_principal),
+    'saved',private.approval_grant_json(v_saved),'effective',private.approval_grant_json(v_effective),
+    'executive_settings',coalesce(v_settings,'{}'),
+    'principals',case when v_admin then coalesce((select jsonb_agg(jsonb_build_object(
+      'profile_id',p.id,'full_name',p.full_name,'employee_code',p.employee_code) order by p.full_name)
+      from public.profiles p where p.company_id=v_company and p.active),'[]') else '[]'::jsonb end,
+    'hr_steps',case when v_admin then coalesce((select jsonb_agg(jsonb_build_object(
+      'step_id',s.id,'step_role',s.role,'step_order',s.step_order,'expected_name',p.full_name) order by s.step_order)
+      from public.approval_steps s left join public.profiles p on p.id=s.approver_id
+      where s.company_id=v_company and s.active),'[]') else '[]'::jsonb end);
+end; $$;
 
 
 --
@@ -3341,6 +4308,196 @@ $$;
 
 
 --
+-- Name: app_request_approval_context(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_request_approval_context(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; v_progress jsonb; v_result jsonb;
+begin
+  if not private.can_read_approval_request(auth.uid(),p_id) then
+    raise exception 'request not found' using errcode='P0002'; end if;
+  select * into r from public.leave_requests where id=p_id;
+  v_progress:=public.app_request_approval_progress(p_id);
+  select (to_jsonb(r)-'signature_data'-'approver_signature_data')||jsonb_build_object(
+    'employee_name',p.full_name,'employee_code',p.employee_code,
+    'personnel_no',case when p.id=auth.uid() or private.reads_people(auth.uid()) or private.is_manager_of(auth.uid(),p.id) then p.personnel_no end,
+    'job_title',case when p.id=auth.uid() or private.reads_people(auth.uid()) or private.is_manager_of(auth.uid(),p.id) then p.job_title end,
+    'employee_manager_id',p.manager_id,'department_id',p.department_id,
+    'department_name',dep.name_fa,'department_name_fa',dep.name_fa,'department_name_en',dep.name_en,
+    'employee_department_manager_id',private.department_manager_for(p.id),
+    'leave_type_name_fa',lt.name_fa,'leave_type_name_en',lt.name_en,'affects_balance',lt.affects_balance,
+    'leave_type_affects_balance',lt.affects_balance,'is_paid',lt.is_paid,
+    'replacement_name',rp.full_name,'decided_by_name',dp.full_name,
+    'replacement_conflict',case when r.replacement_id is null then false else
+      private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,r.unit,r.start_time,r.end_time) end,
+    'can_override',r.status='pending' and private.is_admin(auth.uid()),
+    'can_approve',r.status='pending' and (private.is_admin(auth.uid()) or exists
+      (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_approve')::boolean)),
+    'can_reject',r.status='pending' and (private.is_admin(auth.uid()) or exists
+      (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_reject')::boolean)),
+    'configuration_changed',coalesce(pol.configuration_changed,false),
+    'legacy_reconciliation_required',private.ambiguous_legacy_approval(r.id),
+    'automatic_approval',case when ar.request_id is not null then jsonb_build_object(
+      'state',ar.state,'reason',ar.reason,'authority_id',ar.authority_id,'due_at',ar.due_at,
+      'consent_at',ar.consent_at,'submitted_at',ar.submitted_at,'processed_at',ar.processed_at,
+      'step_ids',ar.step_ids,'delegate_name',ar.delegate_name,'principal_name',ar.principal_name) end,
+    'progress',v_progress)
+  into v_result from public.profiles p left join public.departments dep on dep.id=p.department_id
+    left join public.leave_types lt on lt.id=r.leave_type_id
+    left join public.profiles rp on rp.id=r.replacement_id left join public.profiles dp on dp.id=r.decided_by
+    left join public.approval_request_policy pol on pol.request_id=r.id
+    left join public.approval_auto_requests ar on ar.request_id=r.id where p.id=r.employee_id;
+  return v_result;
+end; $$;
+
+
+--
+-- Name: app_request_approval_progress(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_request_approval_progress(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; v_result jsonb:='[]'; v_item jsonb;
+  v_policy public.approval_request_policy%rowtype; v_done record; s record; v_snapshot jsonb;
+  d public.approval_delegations%rowtype; v_natural boolean; v_allowed boolean; v_can_approve boolean; v_expected text;
+begin
+  if not private.can_read_approval_request(auth.uid(),p_id) then
+    raise exception 'request not found' using errcode='P0002'; end if;
+  select * into r from public.leave_requests where id=p_id;
+  select * into v_policy from public.approval_request_policy where request_id=p_id;
+  for v_done in select a.*,st.step_order,st.manager_scope,st.approver_id as expected_id,
+      sp.full_name as live_signer,np.full_name as live_expected
+    from public.leave_request_approvals a left join public.approval_steps st on st.id=a.step_id
+      left join public.profiles sp on sp.id=a.approver_id left join public.profiles np on np.id=st.approver_id
+    where a.request_id=p_id order by coalesce((a.evidence->>'step_order')::integer,st.step_order,1),a.created_at,a.id loop
+    v_snapshot:=null;
+    select item into v_snapshot from jsonb_array_elements(coalesce(v_policy.step_snapshot,'[]')) item
+      where item->>'step_id'=v_done.step_id::text;
+    v_result:=v_result||jsonb_build_array(jsonb_build_object(
+      'step_id',v_done.step_id,'step_role',v_done.step_role,
+      'step_order',coalesce((v_done.evidence->>'step_order')::integer,(v_snapshot->>'step_order')::integer,v_done.step_order,1),
+      'manager_scope',coalesce(v_done.evidence->>'manager_scope',v_snapshot->>'manager_scope',v_done.manager_scope,'direct'),
+      'named',coalesce((v_done.evidence->>'named')::boolean,case when v_snapshot is not null
+        then (v_snapshot->>'approver_id') is not null else v_done.expected_id is not null end),
+      'expected_name',coalesce(v_done.evidence->>'expected_name',v_snapshot->>'expected_name',v_done.live_expected,v_done.principal_name),
+      'signer_name',case when v_done.evidence_kind='automatic' then null else coalesce(v_done.signer_name_snapshot,v_done.live_signer) end,
+      'signed_at',v_done.created_at,'principal_name',v_done.principal_name,'principal_id',v_done.principal_id,
+      'grant_id',v_done.authority_id,'authority_id',v_done.authority_id,'authority_ref',v_done.authority_id,
+      'evidence_kind',v_done.evidence_kind,'decision',v_done.decision,
+      'is_delegated',v_done.evidence_kind='delegated','can_approve',false,'can_reject',false,
+      'per_diem_allowed',false,'statement',v_done.evidence->>'statement','evidence',v_done.evidence));
+  end loop;
+  for s in select st.* from public.approval_steps st
+    where r.status='pending' and st.company_id=r.company_id and st.active and r.kind=any(st.applies_to)
+      and private.step_applies(st.manager_scope,r.employee_id)
+      and not private.request_step_decided(p_id,st.id)
+    order by st.step_order,st.id loop
+    v_snapshot:=null;
+    select item into v_snapshot from jsonb_array_elements(coalesce(v_policy.step_snapshot,'[]')) item
+      where item->>'step_id'=s.id::text;
+    v_expected:=null;
+    if s.approver_id is not null then select full_name into v_expected from public.profiles where id=s.approver_id;
+    elsif s.role='manager' then select full_name into v_expected from public.profiles where id=
+      case when s.manager_scope='department' then private.department_manager_for(r.employee_id)
+      else (select manager_id from public.profiles where id=r.employee_id) end; end if;
+    if private.request_hr_exempt(p_id,s.id) then
+      v_expected:=v_snapshot->>'expected_name';
+      v_item:=jsonb_build_object('evidence_kind','hr_exempt','can_approve',false,'can_reject',false,
+        'is_delegated',false,'per_diem_allowed',false,'statement','Not required — request submitted by the Head of HR');
+    else
+      v_natural:=private.natural_step_authority(auth.uid(),p_id,s.id);
+      d:=null;
+      if not v_natural then select g.* into d from private.step_delegation(auth.uid(),p_id,s.id) g; end if;
+      v_allowed:=r.status='pending' and (v_natural or d.id is not null);
+      v_can_approve:=v_allowed and not (exists(select 1 from public.work_settings w
+        where w.company_id=r.company_id and w.approval_order_enforced)
+        and exists(select 1 from public.approval_steps earlier where private.request_step_applies(p_id,earlier.id)
+          and earlier.step_order<s.step_order and not private.request_step_decided(p_id,earlier.id,'approved')));
+      v_item:=jsonb_build_object('evidence_kind','pending','can_approve',v_can_approve,
+        'can_reject',r.status='pending' and (v_allowed or private.is_admin(auth.uid())),
+        'is_delegated',d.id is not null,'principal_id',d.principal_id,
+        'principal_name',d.principal_name,'grant_id',d.id,'authority_id',d.id,
+        'per_diem_allowed',v_can_approve and s.role='hr' and r.kind='errand');
+    end if;
+    v_result:=v_result||jsonb_build_array(v_item||jsonb_build_object('step_id',s.id,
+      'step_role',s.role,'step_order',s.step_order,'manager_scope',s.manager_scope,
+      'named',s.approver_id is not null,'expected_name',v_expected,'signer_name',null,
+      'signed_at',null,'decision',null,
+      'configuration_changed',coalesce(v_policy.configuration_changed,false),
+      'historical_hr_exemption',case when s.id=any(coalesce(v_policy.hr_exempt_step_ids,'{}'))
+        and not private.request_hr_exempt(p_id,s.id) then v_snapshot end));
+  end loop;
+  -- Preserve the exemption if the administrator later removes its configured step.
+  for v_snapshot in select item from jsonb_array_elements(coalesce(v_policy.step_snapshot,'[]')) item
+    where (item->>'step_id')::uuid=any(coalesce(v_policy.hr_exempt_step_ids,'{}'))
+      and not exists(select 1 from jsonb_array_elements(v_result) shown where shown->>'step_id'=item->>'step_id') loop
+    v_result:=v_result||jsonb_build_array(v_snapshot||jsonb_build_object('evidence_kind','hr_exempt',
+      'named',(v_snapshot->>'approver_id') is not null,'principal_id',v_policy.hr_head_id,
+      'can_approve',false,'can_reject',false,'is_delegated',false,'per_diem_allowed',false,
+      'signer_name',null,'signed_at',null,'decision',null,
+      'statement','Not required — request submitted by the Head of HR'));
+  end loop;
+  if jsonb_array_length(v_result)=0 and r.status='pending' then
+    v_allowed:=private.approval_fallback_allowed(auth.uid(),p_id);
+    v_result:=jsonb_build_array(jsonb_build_object('step_id',null,'step_role','manager','step_order',1,
+      'manager_scope','direct','named',false,
+      'expected_name',(select p.full_name from public.profiles emp join public.profiles p on p.id=emp.manager_id where emp.id=r.employee_id),
+      'evidence_kind','pending','decision',null,'signer_name',null,'signed_at',null,
+      'can_approve',v_allowed,'can_reject',v_allowed,'per_diem_allowed',false,
+      'is_delegated',v_allowed and not private.is_manager_of(auth.uid(),r.employee_id) and not private.is_admin(auth.uid())));
+  end if;
+  return (select coalesce(jsonb_agg(item order by coalesce((item->>'step_order')::integer,1),item->>'step_id'),'[]')
+    from jsonb_array_elements(v_result) item);
+end; $$;
+
+
+--
+-- Name: app_request_delegation_preview(date, date, public.leave_unit, public.day_part, time without time zone, time without time zone, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit DEFAULT 'day'::public.leave_unit, p_day_part public.day_part DEFAULT 'full'::public.day_part, p_start_time time without time zone DEFAULT NULL::time without time zone, p_end_time time without time zone DEFAULT NULL::time without time zone, p_replacement_id uuid DEFAULT NULL::uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid:=auth.uid(); v_company uuid; v_bounds jsonb; v_saved uuid; v_effective uuid;
+  v_authority uuid; v_temporary boolean; v_auto boolean; v_result jsonb; v_window int;
+begin
+  if not private.is_active(v_uid) then raise exception 'not authenticated' using errcode='42501'; end if;
+  select company_id into v_company from public.profiles where id=v_uid;
+  v_bounds:=private.approval_bounds(v_company,p_start,p_end,p_unit,p_day_part,p_start_time,p_end_time);
+  select id into v_saved from public.approval_delegations where principal_id=v_uid
+    and source_request_id is null and revoked_at is null and private.delegate_eligible(v_uid,delegate_id);
+  select id into v_effective from private.effective_approval_delegate(v_uid);
+  v_temporary:=p_replacement_id is not null and private.delegate_eligible(v_uid,p_replacement_id);
+  select d.id into v_authority from public.approval_executive_settings x
+    cross join lateral private.effective_approval_delegate(x.ceo_id) d
+    where x.company_id=v_company and d.delegate_id=v_uid and d.ceo_authorized;
+  v_auto:=v_authority is not null;
+  -- Admin-set review window; the token covers it, so a change forces a fresh preview + consent.
+  v_window:=coalesce((select auto_approval_minutes from public.approval_executive_settings where company_id=v_company),120);
+  v_result:=jsonb_build_object('principal_id',v_uid,'bounds',v_bounds,'saved',private.approval_grant_json(v_saved),
+    'effective',private.approval_grant_json(v_effective),
+    'temporary',case when v_temporary then jsonb_build_object('delegate_id',p_replacement_id,
+      'delegate_name',(select full_name from public.profiles where id=p_replacement_id),
+      'starts_at',v_bounds->'starts_at','ends_at',v_bounds->'ends_at') else null end,
+    'can_approve',private.natural_approver(v_uid),'can_delegate',private.has_perm(v_uid,'approval_delegate','edit'),
+    'auto_approval_eligible',v_auto,'auto_approval_minutes',v_window,'authority_id',v_authority,
+    'is_ceo',exists(select 1 from public.approval_executive_settings where company_id=v_company and ceo_id=v_uid),
+    'temporary_eligible',v_temporary,'temporary_delegate_name',case when v_temporary then (select full_name from public.profiles where id=p_replacement_id) end,
+    'authority_ends_at',(select ends_at from public.approval_delegations where id=v_authority),
+    'authority_expires_before_deadline',coalesce((select ends_at<clock_timestamp()+make_interval(mins=>v_window) from public.approval_delegations where id=v_authority),false),
+    'replacement_id',p_replacement_id,'start',p_start,'end',p_end,'unit',p_unit,'day_part',p_day_part,
+    'start_time',p_start_time,'end_time',p_end_time);
+  return v_result||jsonb_build_object('preview_token',md5(v_result::text));
+end; $$;
+
+
+--
 -- Name: app_revoke_special_leave(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3567,6 +4724,28 @@ end; $$;
 
 
 --
+-- Name: app_search_delegates(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_search_delegates(p_principal_id uuid, p_search text DEFAULT ''::text) RETURNS TABLE(profile_id uuid, full_name text, employee_code text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.is_active(auth.uid()) or not (auth.uid()=p_principal_id or private.is_admin(auth.uid()))
+     or not exists (select 1 from public.profiles p join public.profiles c on c.company_id=p.company_id
+        where p.id=p_principal_id and c.id=auth.uid())
+     or not private.has_perm(p_principal_id,'approval_delegate','edit') then
+    raise exception 'not permitted to select a delegate' using errcode='42501'; end if;
+  return query select p.id,p.full_name,p.employee_code from public.profiles p
+    where private.delegate_eligible(p_principal_id,p.id)
+      and (coalesce(btrim(p_search),'')='' or p.full_name ilike '%'||btrim(p_search)||'%'
+        or p.employee_code ilike '%'||btrim(p_search)||'%')
+    order by p.full_name,p.id limit 50;
+end; $$;
+
+
+--
 -- Name: app_separation_balances(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3625,6 +4804,56 @@ end; $$;
 
 
 --
+-- Name: app_set_approval_delegate(uuid, uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid DEFAULT NULL::uuid, p_ceo_authorized boolean DEFAULT false) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; v_ceo uuid; v_id uuid; v_old uuid;
+begin
+  select p.company_id into v_company from public.profiles p join public.profiles c
+    on c.company_id=p.company_id and c.id=auth.uid() where p.id=p_principal_id;
+  if v_company is null or not private.is_active(auth.uid()) or
+      not (auth.uid()=p_principal_id or private.is_admin(auth.uid())) then
+    raise exception 'not permitted to select a delegate' using errcode='42501'; end if;
+  perform private.approval_lock(v_company);
+  -- A waiting former admin or deactivated caller cannot keep pre-lock authority.
+  if not private.is_active(auth.uid()) or not exists (
+      select 1 from public.profiles p join public.profiles c
+        on c.id=auth.uid() and c.company_id=p.company_id
+      where p.id=p_principal_id and p.company_id=v_company)
+      or not (auth.uid()=p_principal_id or private.is_admin(auth.uid())) then
+    raise exception 'not permitted to select a delegate' using errcode='42501'; end if;
+  if not private.has_perm(p_principal_id,'approval_delegate','edit')
+    or not private.natural_approver(p_principal_id) then
+    raise exception 'principal needs approval delegation permission and natural approval duties' using errcode='42501'; end if;
+  select ceo_id into v_ceo from public.approval_executive_settings where company_id=v_company;
+  if p_delegate_id is not null and not private.delegate_eligible(p_principal_id,p_delegate_id) then
+    raise exception 'delegate must be an active eligible approver; CEO delegates must be direct reports' using errcode='22023'; end if;
+  if coalesce(p_ceo_authorized,false) and (v_ceo is distinct from p_principal_id or p_delegate_id is null) then
+    raise exception 'automatic approval authorization requires the designated CEO appointment' using errcode='22023'; end if;
+  if coalesce(p_ceo_authorized,false) and not private.ceo_delegate_configuration_ready(p_principal_id,p_delegate_id) then
+    raise exception 'CEO must naturally own applicable approval steps for leave and errand before automatic authority is authorized' using errcode='22023'; end if;
+  select id into v_old from public.approval_delegations where principal_id=p_principal_id
+    and source_request_id is null and revoked_at is null;
+  update public.approval_delegations set revoked_at=clock_timestamp() where id=v_old;
+  if p_delegate_id is not null then
+    insert into public.approval_delegations(company_id,principal_id,delegate_id,principal_name,delegate_name,
+      configured_by,ceo_authorized)
+    select v_company,p_principal_id,p_delegate_id,p.full_name,d.full_name,auth.uid(),coalesce(p_ceo_authorized,false)
+      from public.profiles p,public.profiles d where p.id=p_principal_id and d.id=p_delegate_id returning id into v_id;
+  end if;
+  perform private.reconcile_approval_timers(v_company);
+  insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+    (auth.uid(),'set_approval_delegate','approval_delegations',v_id,
+      jsonb_build_object('principal_id',p_principal_id,'delegate_id',p_delegate_id,
+        'previous_grant_id',v_old,'ceo_authorized',coalesce(p_ceo_authorized,false)));
+end; $$;
+
+
+--
 -- Name: app_set_approval_order_enforced(boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3652,6 +4881,35 @@ begin
         updated_by = excluded.updated_by,
         updated_at = excluded.updated_at;
 end $$;
+
+
+--
+-- Name: app_set_auto_approval_window(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_auto_approval_window(p_minutes integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; v_before integer;
+begin
+  if not private.is_admin(auth.uid()) then raise exception 'admin required' using errcode='42501'; end if;
+  select company_id into v_company from public.profiles where id=auth.uid();
+  perform private.approval_lock(v_company);
+  if not private.is_admin(auth.uid()) or not exists (
+      select 1 from public.profiles where id=auth.uid() and company_id=v_company) then
+    raise exception 'admin required' using errcode='42501'; end if;
+  if p_minutes is null or p_minutes not between 1 and 1440 then
+    raise exception 'automatic approval window must be 1 to 1440 minutes' using errcode='22023'; end if;
+  select auto_approval_minutes into v_before from public.approval_executive_settings where company_id=v_company;
+  insert into public.approval_executive_settings(company_id,auto_approval_minutes,configured_by)
+    values(v_company,p_minutes,auth.uid())
+    on conflict(company_id) do update set auto_approval_minutes=excluded.auto_approval_minutes,
+      configured_by=excluded.configured_by,configured_at=clock_timestamp();
+  insert into public.audit_log(actor_id,action,entity,entity_id,before,after) values
+    (auth.uid(),'set_auto_approval_window','approval_executive_settings',v_company,
+      jsonb_build_object('minutes',coalesce(v_before,120)),jsonb_build_object('minutes',p_minutes));
+end; $$;
 
 
 --
@@ -3696,6 +4954,40 @@ begin
   values (auth.uid(), 'reset_password', 'auth.users', p_user_id);
 end;
 $$;
+
+
+--
+-- Name: app_set_executive_settings(uuid, uuid, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid;
+begin
+  if not private.is_admin(auth.uid()) then raise exception 'admin required' using errcode='42501'; end if;
+  select company_id into v_company from public.profiles where id=auth.uid();
+  perform private.approval_lock(v_company);
+  if not private.is_admin(auth.uid()) or not exists (
+      select 1 from public.profiles where id=auth.uid() and company_id=v_company) then
+    raise exception 'admin required' using errcode='42501'; end if;
+  if exists (select 1 from unnest(array[p_ceo_id,p_hr_head_id]) id where id is not null
+      and not exists (select 1 from public.profiles p where p.id=id and p.company_id=v_company and p.active)) then
+    raise exception 'executive must be active in your company' using errcode='22023'; end if;
+  if exists (select 1 from unnest(coalesce(p_hr_step_ids,'{}')) id where not exists
+      (select 1 from public.approval_steps s where s.id=id and s.company_id=v_company and s.active)) then
+    raise exception 'HR review step must be an active company approval step' using errcode='22023'; end if;
+  insert into public.approval_executive_settings(company_id,ceo_id,hr_head_id,hr_step_ids,configured_by)
+    values(v_company,p_ceo_id,p_hr_head_id,coalesce(p_hr_step_ids,'{}'),auth.uid())
+    on conflict(company_id) do update set ceo_id=excluded.ceo_id,hr_head_id=excluded.hr_head_id,
+      hr_step_ids=excluded.hr_step_ids,configured_by=excluded.configured_by,
+      configured_at=clock_timestamp(),version=public.approval_executive_settings.version+1;
+  perform private.reconcile_approval_timers(v_company);
+  insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+    (auth.uid(),'set_approval_executives','approval_executive_settings',v_company,
+      jsonb_build_object('ceo_id',p_ceo_id,'hr_head_id',p_hr_head_id,'hr_step_ids',p_hr_step_ids));
+end; $$;
 
 
 --
@@ -4125,331 +5417,24 @@ end; $$;
 --
 
 CREATE FUNCTION public.approve_leave_request(p_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean DEFAULT false, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
+    LANGUAGE sql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
-declare
-  v_uid        uuid := auth.uid();
-  v_emp        uuid;
-  v_company    uuid;
-  v_kind       public.request_kind;
-  v_type       uuid;
-  v_minutes    int;
-  v_status     public.leave_status;
-  v_start      date;
-  v_end        date;
-  v_unit       public.leave_unit;
-  v_st         time;
-  v_et         time;
-  v_repl       uuid;
-  v_affects    boolean;
-  v_is_paid    boolean;
-  v_prev       int := 0;
-  v_paid       int := 0;
-  v_unpaid     int := 0;
-  v_rows       int;
-  v_consent_at timestamptz := now();
-  v_is_admin   boolean;
-  v_is_mgr     boolean;
-  v_step_role  public.app_role;
-  v_step_id    uuid;
-  v_step_order int;
-  v_total      int;
-  v_remaining  int;
-  v_enforce    boolean;
-  v_override   boolean := false;
-  v_filled     int := 1;
-  v_filled_hr  boolean := false;
-begin
-  if v_uid is null then
-    raise exception 'not authenticated' using errcode = '42501';
-  end if;
-  if p_signature_authorized is not true then
-    raise exception 'signature authorization is required' using errcode = '22023';
-  end if;
-  if p_signature_data is null or p_signature_data = '' then
-    raise exception 'signature is required' using errcode = '22023';
-  end if;
-  if length(p_signature_data) not between 100 and 350000
-     or mod(length(p_signature_data), 4) <> 2
-     or p_signature_data !~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'
-  then
-    raise exception 'signature data is invalid' using errcode = '22023';
-  end if;
-  if p_per_diem_rials is not null and p_per_diem_rials < 0 then
-    raise exception 'per diem must be 0 or more' using errcode = '22023';
-  end if;
+    AS $$
+  select public.approve_leave_request_v2(p_id,null,p_signature_data,p_signature_authorized,p_override,p_per_diem_rials);
+$$;
 
-  select employee_id, company_id, kind into v_emp, v_company, v_kind
-    from public.leave_requests where id = p_id;
-  if v_emp is null then
-    raise exception 'request not found' using errcode = 'P0002';
-  end if;
 
-  v_is_admin := private.is_admin(v_uid);
-  v_is_mgr := private.is_manager_of(v_uid, v_emp);
+--
+-- Name: approve_leave_request_v2(uuid, uuid, text, boolean, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
+--
 
-  -- Serialise the whole sequence per employee, not just the ledger write.
-  perform pg_advisory_xact_lock(hashtextextended('leave:' || v_emp::text, 0));
-
-  select leave_type_id, requested_minutes, status, start_date, end_date,
-         unit, start_time, end_time, replacement_id
-    into v_type, v_minutes, v_status, v_start, v_end,
-         v_unit, v_st, v_et, v_repl
-    from public.leave_requests
-   where id = p_id;
-
-  if v_status <> 'pending' then
-    raise exception 'only pending requests can be approved' using errcode = '22023';
-  end if;
-
-  select count(*) into v_total
-    from public.approval_steps s
-   where s.company_id = v_company and s.active and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp);
-
-  if v_total = 0 then
-    -- No chain configured: behave exactly as before FR-36.
-    if not (v_is_mgr or v_is_admin) then
-      raise exception 'not allowed to decide this request' using errcode = '42501';
-    end if;
-    v_step_role := 'manager';
-    v_step_order := 1;
-  else
-    -- The lowest-ordered outstanding step this caller fills IN THEIR OWN RIGHT
-    -- (FR-58: holding `admin` no longer entitles anyone to a step; the admin
-    -- path is the override below). Nobody signs their own request this way.
-    select s.role, s.step_order, s.id into v_step_role, v_step_order, v_step_id
-      from public.approval_steps s
-     where s.company_id = v_company
-       and s.active
-       and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-       and not exists (
-             select 1 from public.leave_request_approvals a
-              where a.request_id = p_id
-                and (a.step_id = s.id
-                     or (a.step_id is null and a.step_role = s.role)))
-       and (
-             case when s.approver_id is not null then
-                    s.approver_id = v_uid and private.is_active(v_uid)
-                  else
-                    ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
-                    or (s.role <> 'manager' and private.has_role(v_uid, s.role))
-             end
-           )
-       and v_emp <> v_uid
-     order by s.step_order, s.role
-     limit 1;
-
-    -- FR-58: an admin overrides on request, or whenever they have no step of
-    -- their own to sign.
-    v_override := v_is_admin and (coalesce(p_override, false) or v_step_role is null);
-
-    if v_override then
-      select coalesce(bool_or(s.role = 'hr'), false) into v_filled_hr
-        from public.approval_steps s
-       where s.company_id = v_company and s.active
-         and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-         and not exists (
-               select 1 from public.leave_request_approvals a
-                where a.request_id = p_id
-                  and (a.step_id = s.id
-                       or (a.step_id is null and a.step_role = s.role)));
-
-      -- One signed row per outstanding step, so each box on the printed form
-      -- shows who filled it. Order enforcement does not bind the override.
-      insert into public.leave_request_approvals (
-        request_id, step_id, step_role, approver_id, decision, signature_data, signature_consent_at
-      )
-      select p_id, s.id, s.role, v_uid, 'approved', p_signature_data, v_consent_at
-        from public.approval_steps s
-       where s.company_id = v_company and s.active
-         and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-         and not exists (
-               select 1 from public.leave_request_approvals a
-                where a.request_id = p_id
-                  and (a.step_id = s.id
-                       or (a.step_id is null and a.step_role = s.role)));
-      get diagnostics v_filled = row_count;
-      v_step_role := 'admin';
-      v_step_id := null;
-    else
-      if v_step_role is null then
-        -- Distinguish "already signed by you" from "not your step", because the
-        -- two need different things from the person reading the message.
-        if exists (
-          select 1 from public.leave_request_approvals a
-           where a.request_id = p_id
-             and (a.approver_id = v_uid
-                  or exists (
-                       select 1 from public.approval_steps s
-                        where s.company_id = v_company and s.active
-                          and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-                          and (a.step_id = s.id
-                               or (a.step_id is null and a.step_role = s.role))
-                          and case when s.approver_id is not null
-                                   then s.approver_id = v_uid
-                                   else ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
-                                        or (s.role <> 'manager'
-                                            and private.has_role(v_uid, s.role))
-                              end))
-        ) then
-          raise exception 'you have already signed this request' using errcode = '22023';
-        end if;
-        raise exception 'not allowed to decide this request' using errcode = '42501';
-      end if;
-
-      select coalesce(approval_order_enforced, false) into v_enforce
-        from public.work_settings where company_id = v_company limit 1;
-
-      if coalesce(v_enforce, false) then
-        if exists (
-          select 1 from public.approval_steps s
-           where s.company_id = v_company and s.active
-             and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-             and s.step_order < v_step_order
-             and not exists (
-                   select 1 from public.leave_request_approvals a
-                    where a.request_id = p_id
-                      and (a.step_id = s.id
-                           or (a.step_id is null and a.step_role = s.role))
-                      and a.decision = 'approved')
-        ) then
-          raise exception 'an earlier approval is still required' using errcode = '22023';
-        end if;
-      end if;
-      v_filled_hr := v_step_role = 'hr';
-    end if;
-  end if;
-
-  if not v_override then
-    -- The unique (request_id, step_id) index is what actually stops double-signing;
-    -- rows predating FR-42 are covered by the sibling index on (request_id, step_role).
-    insert into public.leave_request_approvals (
-      request_id, step_id, step_role, approver_id, decision, signature_data, signature_consent_at
-    ) values (
-      p_id, v_step_id, v_step_role, v_uid, 'approved', p_signature_data, v_consent_at
-    );
-  end if;
-
-  -- FR-61: per diem belongs to HR's step on an errand.
-  if p_per_diem_rials is not null then
-    if v_kind <> 'errand' or not v_filled_hr then
-      raise exception 'per diem can only be set on the hr step of an errand' using errcode = '22023';
-    end if;
-    update public.leave_requests set per_diem_rials = p_per_diem_rials where id = p_id;
-  end if;
-
-  select count(*) into v_remaining
-    from public.approval_steps s
-   where s.company_id = v_company and s.active
-     and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-     and not exists (
-           select 1 from public.leave_request_approvals a
-            where a.request_id = p_id
-              and (a.step_id = s.id
-                   or (a.step_id is null and a.step_role = s.role))
-              and a.decision = 'approved');
-
-  insert into public.audit_log(actor_id, action, entity, entity_id, after)
-  values (
-    v_uid, 'approve_leave_step', 'leave_requests', p_id,
-    jsonb_build_object(
-      'employee_id', v_emp,
-      'step_role', v_step_role,
-      'admin_override', v_override,
-      'steps_filled', v_filled,
-      'per_diem_rials', p_per_diem_rials,
-      'steps_remaining', v_remaining,
-      'digital_signature_authorized', true,
-      'signature_consent_at', v_consent_at
-    )
-  );
-
-  -- Still waiting on someone else: the request stays pending and the ledger is
-  -- untouched. This early return is the whole point of the chain.
-  if v_remaining > 0 then
-    return;
-  end if;
-
-  -- ── final step: everything FR-14 used to do on the single decision ────────
-  if exists (
-    select 1 from public.leave_requests r
-     where r.employee_id = v_emp
-       and r.id <> p_id
-       and r.status = 'approved'
-       and r.start_date <= v_end
-       and r.end_date >= v_start
-       and (
-         r.unit = 'day' or v_unit = 'day'
-         or (r.start_time < v_et and r.end_time > v_st)
-       )
-  ) then
-    raise exception 'overlapping approved leave exists' using errcode = '22023';
-  end if;
-
-  if v_repl is not null
-     and private.replacement_is_away(v_repl, v_start, v_end, v_unit, v_st, v_et)
-  then
-    raise exception 'replacement is on leave during this period' using errcode = '22023';
-  end if;
-
-  select affects_balance, is_paid into v_affects, v_is_paid
-    from public.leave_types where id = v_type;
-
-  if v_affects then
-    v_prev := public.current_leave_balance(v_emp, v_type);
-    v_paid := least(v_minutes, greatest(v_prev, 0));
-    v_unpaid := v_minutes - v_paid;
-  elsif v_type is not null and not coalesce(v_is_paid, false) then
-    v_unpaid := v_minutes;
-  end if;
-
-  update public.leave_requests
-     set status = 'approved',
-         unpaid_minutes = v_unpaid,
-         decided_by = v_uid,
-         decided_at = v_consent_at,
-         -- Legacy columns keep the pre-chain readers working (the existing
-         -- approver-signature viewer, the calendar metadata query). They record
-         -- whoever COMPLETED the chain; the per-step evidence lives in
-         -- leave_request_approvals.
-         approver_signature_data = p_signature_data,
-         approver_signature_consent_at = v_consent_at
-   where id = p_id
-     and status = 'pending';
-  get diagnostics v_rows = row_count;
-  if v_rows <> 1 then
-    raise exception 'request was already decided' using errcode = '22023';
-  end if;
-
-  if v_affects and v_paid > 0 then
-    insert into public.leave_ledger(
-      employee_id, leave_type_id, request_id, entry_type,
-      delta_minutes, balance_after_minutes, note
-    ) values (
-      v_emp, v_type, p_id, 'consumption',
-      -v_paid, v_prev - v_paid, 'paid portion consumed on approval'
-    );
-  end if;
-
-  insert into public.audit_log(actor_id, action, entity, entity_id, after)
-  values (
-    v_uid, 'approve_leave_request', 'leave_requests', p_id,
-    jsonb_build_object(
-      'employee_id', v_emp,
-      'requested_minutes', v_minutes,
-      'paid_minutes', v_paid,
-      'unpaid_minutes', v_unpaid,
-      'affects_balance', coalesce(v_affects, false),
-      'replacement_id', v_repl,
-      'completed_by_step', v_step_role,
-      'admin_override', v_override,
-      'digital_signature_authorized', true,
-      'signature_consent_at', v_consent_at
-    )
-  );
-end;
-$_$;
+CREATE FUNCTION public.approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean DEFAULT false, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.decide_approval_request(p_id,p_step_id,auth.uid(),'approved',p_signature_data,
+    p_signature_authorized,p_override,p_per_diem_rials,null);
+$$;
 
 
 --
@@ -4463,6 +5448,8 @@ CREATE FUNCTION public.cancel_leave_request(p_id uuid) RETURNS void
 declare
   v_uid uuid := auth.uid();
   v_owner uuid;
+  v_company uuid;
+  v_now timestamptz;
   v_status public.leave_status;
   v_start date;
   v_type uuid;
@@ -4473,14 +5460,14 @@ declare
   v_affects boolean;
   v_prev int;
   v_rows int;
-  v_today date := (now() at time zone 'Asia/Tehran')::date;
+  v_today date;
 begin
   if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
   if not private.is_active(v_uid) then
     raise exception 'account is inactive' using errcode = '42501';
   end if;
 
-  select employee_id into v_owner from public.leave_requests where id = p_id;
+  select employee_id, company_id into v_owner, v_company from public.leave_requests where id = p_id;
   if v_owner is null then raise exception 'request not found' using errcode = 'P0002'; end if;
   if not (v_owner = v_uid
           or private.is_admin(v_uid)
@@ -4493,16 +5480,32 @@ begin
     raise exception 'not allowed to cancel this request' using errcode = '42501';
   end if;
 
+  perform private.approval_lock(v_company);
   perform pg_advisory_xact_lock(hashtextextended('leave:' || v_owner::text, 0));
 
   select status, start_date, leave_type_id, requested_minutes, unpaid_minutes, kind
     into v_status, v_start, v_type, v_minutes, v_unpaid, v_kind
-    from public.leave_requests where id = p_id;
+    from public.leave_requests where id = p_id for update;
+  v_now := clock_timestamp();
+  v_today := (v_now at time zone 'Asia/Tehran')::date;
+  if not private.is_active(v_uid) or not exists (
+      select 1 from public.profiles where id=v_uid and company_id=v_company) then
+    raise exception 'not allowed to cancel this request' using errcode='42501';
+  end if;
+  if not (v_owner = v_uid
+          or private.is_admin(v_uid)
+          or (private.has_perm(v_uid, 'leave_requests', 'edit')
+              and exists (select 1 from public.profiles o
+                            join public.profiles c on c.company_id=o.company_id and c.id=v_uid
+                           where o.id=v_owner)
+              and not exists (select 1 from public.user_roles where user_id=v_owner and role='admin'))) then
+    raise exception 'not allowed to cancel this request' using errcode='42501';
+  end if;
   v_paid := greatest(v_minutes - coalesce(v_unpaid, 0), 0);
 
   if v_status = 'pending' then
     update public.leave_requests
-       set status = 'cancelled', decided_by = v_uid, decided_at = now()
+       set status = 'cancelled', decided_by = v_uid, decided_at = v_now
      where id = p_id and status = 'pending';
     get diagnostics v_rows = row_count;
     if v_rows <> 1 then
@@ -4512,7 +5515,7 @@ begin
         and (v_start > v_today or (v_kind = 'errand' and v_start >= v_today))
   then
     update public.leave_requests
-       set status = 'cancelled', decided_by = v_uid, decided_at = now()
+       set status = 'cancelled', decided_by = v_uid, decided_at = v_now
      where id = p_id and status = 'approved';
     get diagnostics v_rows = row_count;
     if v_rows <> 1 then
@@ -4721,6 +5724,32 @@ end; $$;
 
 
 --
+-- Name: get_leave_request_signatures(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_leave_request_signatures(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_result jsonb; v_progress jsonb;
+begin
+  if not private.can_read_approval_request(auth.uid(),p_id) then
+    raise exception 'request not found' using errcode='P0002'; end if;
+  v_progress:=public.app_request_approval_progress(p_id);
+  select jsonb_build_object('requester_signature_data',r.signature_data,
+    'requester_consent_at',r.signature_consent_at,'approver_signature_data',r.approver_signature_data,
+    'approver_signature_consent_at',r.approver_signature_consent_at,
+    'approvals',coalesce((select jsonb_agg(item||jsonb_build_object('signature_data',a.signature_data,
+      'signature_consent_at',a.signature_consent_at) order by (item->>'step_order')::integer)
+      from jsonb_array_elements(v_progress) item left join public.leave_request_approvals a
+        on a.request_id=r.id and (a.step_id=(item->>'step_id')::uuid
+          or (a.step_id is null and item->>'step_id' is null and a.step_role::text=item->>'step_role'))),'[]'))
+    into v_result from public.leave_requests r where r.id=p_id;
+  return v_result;
+end; $$;
+
+
+--
 -- Name: get_my_cover_conflicts(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4852,15 +5881,11 @@ CREATE FUNCTION public.get_replacement_candidates(p_start date, p_end date, p_un
     on p.company_id = me.company_id
    and p.active
    and p.id <> me.id
-   and me.department_id is not null
-   and p.department_id = me.department_id
+   and ((me.department_id is not null and p.department_id = me.department_id)
+        or private.delegate_eligible(me.id,p.id))
   order by p.full_name;
 $$;
 
-
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
 
 --
 -- Name: jalali_months; Type: TABLE; Schema: public; Owner: -
@@ -4900,98 +5925,22 @@ end; $$;
 --
 
 CREATE FUNCTION public.reject_leave_request(p_id uuid, p_reason text DEFAULT NULL::text) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
+    LANGUAGE sql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare
-  v_uid       uuid := auth.uid();
-  v_emp       uuid;
-  v_company   uuid;
-  v_kind      public.request_kind;
-  v_status    public.leave_status;
-  v_rows      int;
-  v_note      text := nullif(btrim(coalesce(p_reason, '')), '');
-  v_is_admin  boolean;
-  v_is_mgr    boolean;
-  v_step_role public.app_role;
-  v_step_id   uuid;
-  v_total     int;
-begin
-  if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  select public.reject_leave_request_v2(p_id,null,p_reason);
+$$;
 
-  if length(v_note) > 500 then
-    raise exception 'rejection note is too long (max 500 characters)' using errcode = '22023';
-  end if;
 
-  select employee_id, company_id, kind, status
-    into v_emp, v_company, v_kind, v_status
-    from public.leave_requests where id = p_id;
-  if v_emp is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+--
+-- Name: reject_leave_request_v2(uuid, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
 
-  v_is_admin := private.is_admin(v_uid);
-  v_is_mgr := private.is_manager_of(v_uid, v_emp);
-
-  perform pg_advisory_xact_lock(hashtextextended('leave:' || v_emp::text, 0));
-
-  select count(*) into v_total
-    from public.approval_steps s
-   where s.company_id = v_company and s.active and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp);
-
-  if v_total = 0 then
-    if not (v_is_mgr or v_is_admin) then
-      raise exception 'not allowed to decide this request' using errcode = '42501';
-    end if;
-    v_step_role := 'manager';
-  else
-    select s.role, s.id into v_step_role, v_step_id
-      from public.approval_steps s
-     where s.company_id = v_company and s.active
-       and v_kind = any(s.applies_to) and private.step_applies(s.manager_scope, v_emp)
-       and not exists (
-             select 1 from public.leave_request_approvals a
-              where a.request_id = p_id
-                and (a.step_id = s.id
-                     or (a.step_id is null and a.step_role = s.role)))
-       and (
-             -- FR-58: an admin may reject any pending request, a step naming a
-             -- person included; everyone else only a step they are entitled to.
-             v_is_admin or
-             case when s.approver_id is not null then
-                    s.approver_id = v_uid and private.is_active(v_uid)
-                  else
-                    ((s.role = 'manager' and s.manager_scope = 'direct' and v_is_mgr) or (s.role = 'manager' and s.manager_scope = 'department' and private.is_department_manager_of(v_uid, v_emp)))
-                    or (s.role <> 'manager' and private.has_role(v_uid, s.role))
-             end
-           )
-       and (v_is_admin or v_emp <> v_uid)
-     order by s.step_order, s.role
-     limit 1;
-
-    if v_step_role is null then
-      raise exception 'not allowed to decide this request' using errcode = '42501';
-    end if;
-  end if;
-
-  if v_status <> 'pending' then
-    raise exception 'only pending requests can be rejected' using errcode = '22023';
-  end if;
-
-  insert into public.leave_request_approvals (
-    request_id, step_id, step_role, approver_id, decision, note
-  ) values (
-    p_id, v_step_id, v_step_role, v_uid, 'rejected', v_note
-  );
-
-  update public.leave_requests
-     set status = 'rejected', decided_by = v_uid, decided_at = now(), decision_note = v_note
-   where id = p_id and status = 'pending';
-  get diagnostics v_rows = row_count;
-  if v_rows <> 1 then raise exception 'request was already decided' using errcode = '22023'; end if;
-
-  insert into public.audit_log(actor_id, action, entity, entity_id, after)
-  values (v_uid, 'reject_leave_request', 'leave_requests', p_id,
-          jsonb_build_object('employee_id', v_emp, 'step_role', v_step_role, 'reason', v_note));
-end;
+CREATE FUNCTION public.reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text DEFAULT NULL::text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.decide_approval_request(p_id,p_step_id,auth.uid(),'rejected',null,false,false,null,p_reason);
 $$;
 
 
@@ -5000,100 +5949,14 @@ $$;
 --
 
 CREATE FUNCTION public.request_approval_progress(p_id uuid) RETURNS TABLE(step_order integer, step_role public.app_role, manager_scope text, named boolean, expected_name text, decision public.leave_status, signer_name text, signed_at timestamp with time zone)
-    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare
-  v_uid     uuid := auth.uid();
-  v_emp     uuid;
-  v_company uuid;
-  v_kind    public.request_kind;
-  v_status  public.leave_status;
-begin
-  if v_uid is null then
-    raise exception 'not authenticated' using errcode = '42501';
-  end if;
-
-  select r.employee_id, r.company_id, r.kind, r.status
-    into v_emp, v_company, v_kind, v_status
-    from public.leave_requests r where r.id = p_id;
-  if v_emp is null then
-    raise exception 'request not found' using errcode = 'P0002';
-  end if;
-
-  if not (private.is_active(v_uid)
-          and (v_emp = v_uid
-               or private.is_manager_of(v_uid, v_emp)
-               or private.has_perm(v_uid, 'leave_requests', 'read'))) then
-    raise exception 'request not found' using errcode = 'P0002';
-  end if;
-
-  return query
-  with decided as (
-    select coalesce(s.step_order, 1) as step_order,
-           a.step_role,
-           coalesce(s.manager_scope, 'direct') as manager_scope,
-           s.approver_id,
-           a.decision,
-           sp.full_name as signer_name,
-           a.created_at as signed_at,
-           a.step_id
-      from public.leave_request_approvals a
-      left join public.approval_steps s on s.id = a.step_id
-      left join public.profiles sp on sp.id = a.approver_id
-     where a.request_id = p_id
-  ),
-  outstanding as (
-    select s.step_order, s.role as step_role, s.manager_scope, s.approver_id
-      from public.approval_steps s
-     where v_status = 'pending'
-       and s.company_id = v_company
-       and s.active
-       and v_kind = any(s.applies_to)
-       and private.step_applies(s.manager_scope, v_emp)
-       and not exists (
-             select 1 from public.leave_request_approvals a
-              where a.request_id = p_id
-                and (a.step_id = s.id or (a.step_id is null and a.step_role = s.role)))
-  ),
-  -- No chain configured at all: a pending request waits on the direct manager
-  -- (the FR-36 degrade branch of approve_leave_request).
-  fallback as (
-    select 1 as step_order, 'manager'::public.app_role as step_role,
-           'direct'::text as manager_scope, null::uuid as approver_id
-     where v_status = 'pending'
-       and not exists (select 1 from outstanding)
-       and not exists (select 1 from decided)
-       and not exists (
-             select 1 from public.approval_steps s
-              where s.company_id = v_company and s.active
-                and v_kind = any(s.applies_to)
-                and private.step_applies(s.manager_scope, v_emp))
-  ),
-  waiting as (
-    select * from outstanding
-    union all
-    select * from fallback
-  )
-  select d.step_order, d.step_role, d.manager_scope, d.approver_id is not null,
-         -- A named step keeps its person's name even when an admin override signed it.
-         (select np.full_name from public.profiles np where np.id = d.approver_id),
-         d.decision, d.signer_name, d.signed_at
-    from decided d
-  union all
-  select w.step_order, w.step_role, w.manager_scope, w.approver_id is not null,
-         (select ep.full_name from public.profiles ep
-           where ep.id = case
-                           when w.approver_id is not null then w.approver_id
-                           when w.step_role = 'manager' and w.manager_scope = 'department'
-                             then private.department_manager_for(v_emp)
-                           when w.step_role = 'manager'
-                             then (select pm.manager_id from public.profiles pm where pm.id = v_emp)
-                         end),
-         null::public.leave_status, null::text, null::timestamptz
-    from waiting w
-  order by 1, 8 nulls last, 2;
-end; $$;
+  select (item->>'step_order')::integer,(item->>'step_role')::public.app_role,
+    item->>'manager_scope',coalesce((item->>'named')::boolean,false),item->>'expected_name',
+    (item->>'decision')::public.leave_status,item->>'signer_name',(item->>'signed_at')::timestamptz
+  from jsonb_array_elements(public.app_request_approval_progress(p_id)) item;
+$$;
 
 
 --
@@ -5275,6 +6138,18 @@ $$;
 --
 
 CREATE FUNCTION public.submit_daily_errand_request(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select public.submit_daily_errand_request_v2(p_start,p_end,p_location,p_signature_data,p_signature_authorized,p_description,false,null,false);
+$$;
+
+
+--
+-- Name: submit_daily_errand_request_v2(date, date, text, text, boolean, text, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5292,6 +6167,13 @@ begin
   perform private.attach_request_signature(
     v_request_id, p_signature_data, p_signature_authorized
   );
+  perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
+  if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
+      and cardinality(x.hr_exempt_step_ids)>0)
+     and not exists (select 1 from public.approval_steps st where private.request_step_applies(v_request_id,st.id)) then
+    perform private.finalize_approval_request(v_request_id,null,null,null,'hr_exempt');
+  end if;
   return v_request_id;
 end;
 $$;
@@ -5302,6 +6184,18 @@ $$;
 --
 
 CREATE FUNCTION public.submit_errand_request(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select public.submit_errand_request_v2(p_date,p_start_time,p_end_time,p_location,p_signature_data,p_signature_authorized,p_description,false,null,false);
+$$;
+
+
+--
+-- Name: submit_errand_request_v2(date, time without time zone, time without time zone, text, text, boolean, text, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5319,6 +6213,13 @@ begin
   perform private.attach_request_signature(
     v_request_id, p_signature_data, p_signature_authorized
   );
+  perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
+  if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
+      and cardinality(x.hr_exempt_step_ids)>0)
+     and not exists (select 1 from public.approval_steps st where private.request_step_applies(v_request_id,st.id)) then
+    perform private.finalize_approval_request(v_request_id,null,null,null,'hr_exempt');
+  end if;
   return v_request_id;
 end;
 $$;
@@ -5329,6 +6230,18 @@ $$;
 --
 
 CREATE FUNCTION public.submit_hourly_leave_request(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text DEFAULT NULL::text, p_replacement_id uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select public.submit_hourly_leave_request_v2(p_leave_type_id,p_date,p_start_time,p_end_time,p_signature_data,p_signature_authorized,p_reason,p_replacement_id,false,null,false);
+$$;
+
+
+--
+-- Name: submit_hourly_leave_request_v2(uuid, date, time without time zone, time without time zone, text, boolean, text, uuid, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text DEFAULT NULL::text, p_replacement_id uuid DEFAULT NULL::uuid, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5346,6 +6259,13 @@ begin
   perform private.attach_request_signature(
     v_request_id, p_signature_data, p_signature_authorized
   );
+  perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
+  if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
+      and cardinality(x.hr_exempt_step_ids)>0)
+     and not exists (select 1 from public.approval_steps st where private.request_step_applies(v_request_id,st.id)) then
+    perform private.finalize_approval_request(v_request_id,null,null,null,'hr_exempt');
+  end if;
   return v_request_id;
 end;
 $$;
@@ -5356,6 +6276,18 @@ $$;
 --
 
 CREATE FUNCTION public.submit_leave_request(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text DEFAULT NULL::text, p_replacement_id uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select public.submit_leave_request_v2(p_leave_type_id,p_start,p_end,p_day_part,p_signature_data,p_signature_authorized,p_reason,p_replacement_id,false,null,false);
+$$;
+
+
+--
+-- Name: submit_leave_request_v2(uuid, date, date, public.day_part, text, boolean, text, uuid, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text DEFAULT NULL::text, p_replacement_id uuid DEFAULT NULL::uuid, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5373,9 +6305,82 @@ begin
   perform private.attach_request_signature(
     v_request_id, p_signature_data, p_signature_authorized
   );
+  perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
+  if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
+      and cardinality(x.hr_exempt_step_ids)>0)
+     and not exists (select 1 from public.approval_steps st where private.request_step_applies(v_request_id,st.id)) then
+    perform private.finalize_approval_request(v_request_id,null,null,null,'hr_exempt');
+  end if;
   return v_request_id;
 end;
 $$;
+
+
+--
+-- Name: approval_auto_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approval_auto_requests (
+    request_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    authority_id uuid NOT NULL,
+    principal_id uuid NOT NULL,
+    delegate_id uuid NOT NULL,
+    principal_name text NOT NULL,
+    delegate_name text NOT NULL,
+    settings_version bigint NOT NULL,
+    step_ids uuid[] NOT NULL,
+    step_snapshot jsonb NOT NULL,
+    consent_at timestamp with time zone NOT NULL,
+    submitted_at timestamp with time zone NOT NULL,
+    due_at timestamp with time zone NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    reason text,
+    attempted_at timestamp with time zone,
+    processed_at timestamp with time zone,
+    attempts integer DEFAULT 0 NOT NULL,
+    window_minutes integer DEFAULT 120 NOT NULL,
+    CONSTRAINT approval_auto_requests_due_check CHECK ((due_at = (submitted_at + make_interval(mins => window_minutes)))),
+    CONSTRAINT approval_auto_requests_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'blocked'::text, 'completed'::text, 'invalidated'::text]))),
+    CONSTRAINT approval_auto_requests_step_ids_check CHECK ((cardinality(step_ids) > 0)),
+    CONSTRAINT approval_auto_requests_window_check CHECK (((window_minutes >= 1) AND (window_minutes <= 1440)))
+);
+
+
+--
+-- Name: approval_executive_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approval_executive_settings (
+    company_id uuid NOT NULL,
+    ceo_id uuid,
+    hr_head_id uuid,
+    hr_step_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    version bigint DEFAULT 1 NOT NULL,
+    configured_by uuid,
+    configured_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    auto_approval_minutes integer DEFAULT 120 NOT NULL,
+    CONSTRAINT approval_executive_settings_auto_window_check CHECK (((auto_approval_minutes >= 1) AND (auto_approval_minutes <= 1440)))
+);
+
+
+--
+-- Name: approval_request_policy; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approval_request_policy (
+    request_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    starts_at timestamp with time zone NOT NULL,
+    ends_at timestamp with time zone NOT NULL,
+    hr_head_id uuid,
+    hr_exempt_step_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    step_snapshot jsonb DEFAULT '[]'::jsonb NOT NULL,
+    configuration_changed boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT approval_request_policy_check CHECK ((ends_at > starts_at))
+);
 
 
 --
@@ -5412,6 +6417,34 @@ COMMENT ON TABLE public.approval_steps IS 'FR-36: which roles must sign a reques
 --
 
 COMMENT ON COLUMN public.approval_steps.approver_id IS 'FR-42: when set, ONLY this person may fill the step. NULL = filled by anyone holding `role` (the pre-FR-42 behaviour).';
+
+
+--
+-- Name: approval_worker_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.approval_worker_runs (
+    id bigint NOT NULL,
+    started_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    finished_at timestamp with time zone,
+    examined integer DEFAULT 0 NOT NULL,
+    completed integer DEFAULT 0 NOT NULL,
+    blocked integer DEFAULT 0 NOT NULL
+);
+
+
+--
+-- Name: approval_worker_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_worker_runs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.approval_worker_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
 
 
 --
@@ -5631,6 +6664,14 @@ CREATE TABLE public.leave_request_approvals (
     note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     step_id uuid,
+    evidence_kind text DEFAULT 'legacy'::text NOT NULL,
+    principal_id uuid,
+    principal_name text,
+    signer_name_snapshot text,
+    authority_id uuid,
+    evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT leave_approval_automatic_shape CHECK (((evidence_kind <> 'automatic'::text) OR ((approver_id IS NULL) AND (signature_data IS NULL) AND (signature_consent_at IS NULL) AND (principal_id IS NOT NULL) AND (authority_id IS NOT NULL) AND (step_id IS NOT NULL)))),
+    CONSTRAINT leave_approval_evidence_kind CHECK ((evidence_kind = ANY (ARRAY['legacy'::text, 'manual'::text, 'delegated'::text, 'automatic'::text]))),
     CONSTRAINT leave_request_approvals_decision CHECK ((decision = ANY (ARRAY['approved'::public.leave_status, 'rejected'::public.leave_status]))),
     CONSTRAINT leave_request_approvals_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
     CONSTRAINT leave_request_approvals_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
@@ -6086,11 +7127,51 @@ ALTER TABLE ONLY public.leave_ledger ALTER COLUMN seq SET DEFAULT nextval('publi
 
 
 --
+-- Name: approval_auto_requests approval_auto_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_pkey PRIMARY KEY (request_id);
+
+
+--
+-- Name: approval_delegations approval_delegations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: approval_executive_settings approval_executive_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_executive_settings
+    ADD CONSTRAINT approval_executive_settings_pkey PRIMARY KEY (company_id);
+
+
+--
+-- Name: approval_request_policy approval_request_policy_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_request_policy
+    ADD CONSTRAINT approval_request_policy_pkey PRIMARY KEY (request_id);
+
+
+--
 -- Name: approval_steps approval_steps_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.approval_steps
     ADD CONSTRAINT approval_steps_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: approval_worker_runs approval_worker_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_worker_runs
+    ADD CONSTRAINT approval_worker_runs_pkey PRIMARY KEY (id);
 
 
 --
@@ -6307,6 +7388,34 @@ ALTER TABLE ONLY public.user_signatures
 
 ALTER TABLE ONLY public.work_settings
     ADD CONSTRAINT work_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: approval_auto_requests_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX approval_auto_requests_due ON public.approval_auto_requests USING btree (due_at) WHERE (state = ANY (ARRAY['pending'::text, 'blocked'::text]));
+
+
+--
+-- Name: approval_delegations_resolve; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX approval_delegations_resolve ON public.approval_delegations USING btree (principal_id, starts_at, ends_at);
+
+
+--
+-- Name: approval_delegations_saved_current; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX approval_delegations_saved_current ON public.approval_delegations USING btree (principal_id) WHERE ((source_request_id IS NULL) AND (revoked_at IS NULL));
+
+
+--
+-- Name: approval_delegations_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX approval_delegations_source ON public.approval_delegations USING btree (source_request_id) WHERE (source_request_id IS NOT NULL);
 
 
 --
@@ -6681,6 +7790,132 @@ CREATE INDEX work_settings_updated_by_idx ON public.work_settings USING btree (u
 
 
 --
+-- Name: approval_delegations approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.approval_delegations FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: approval_executive_settings approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.approval_executive_settings FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: approval_steps approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.approval_steps FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: departments approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: profiles approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: role_permissions approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.role_permissions FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: roles approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.roles FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: user_roles approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.user_roles FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: approval_delegations approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.approval_delegations FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: approval_executive_settings approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.approval_executive_settings FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: approval_steps approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.approval_steps FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: departments approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.departments FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: profiles approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: role_permissions approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.role_permissions FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: roles approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.roles FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: user_roles approval_authority_reconcile; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_authority_reconcile AFTER INSERT OR DELETE OR UPDATE ON public.user_roles FOR EACH ROW EXECUTE FUNCTION private.approval_after_authority_mutation();
+
+
+--
+-- Name: leave_requests approval_request_authority_lock; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_request_authority_lock BEFORE INSERT OR DELETE OR UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.approval_before_authority_mutation();
+
+
+--
+-- Name: leave_requests approval_request_source_lifecycle; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_request_source_lifecycle AFTER UPDATE ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.approval_source_lifecycle();
+
+
+--
 -- Name: approval_steps approval_steps_set_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -6825,6 +8060,134 @@ CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.wor
 --
 
 CREATE TRIGGER work_settings_set_updated_at BEFORE UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: approval_auto_requests approval_auto_requests_authority_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_authority_id_fkey FOREIGN KEY (authority_id) REFERENCES public.approval_delegations(id);
+
+
+--
+-- Name: approval_auto_requests approval_auto_requests_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: approval_auto_requests approval_auto_requests_delegate_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_delegate_id_fkey FOREIGN KEY (delegate_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_auto_requests approval_auto_requests_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_auto_requests approval_auto_requests_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_auto_requests
+    ADD CONSTRAINT approval_auto_requests_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: approval_delegations approval_delegations_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: approval_delegations approval_delegations_configured_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_configured_by_fkey FOREIGN KEY (configured_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_delegations approval_delegations_delegate_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_delegate_id_fkey FOREIGN KEY (delegate_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_delegations approval_delegations_principal_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_principal_id_fkey FOREIGN KEY (principal_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_delegations approval_delegations_source_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_delegations
+    ADD CONSTRAINT approval_delegations_source_request_id_fkey FOREIGN KEY (source_request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: approval_executive_settings approval_executive_settings_ceo_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_executive_settings
+    ADD CONSTRAINT approval_executive_settings_ceo_id_fkey FOREIGN KEY (ceo_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_executive_settings approval_executive_settings_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_executive_settings
+    ADD CONSTRAINT approval_executive_settings_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: approval_executive_settings approval_executive_settings_configured_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_executive_settings
+    ADD CONSTRAINT approval_executive_settings_configured_by_fkey FOREIGN KEY (configured_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_executive_settings approval_executive_settings_hr_head_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_executive_settings
+    ADD CONSTRAINT approval_executive_settings_hr_head_id_fkey FOREIGN KEY (hr_head_id) REFERENCES public.profiles(id);
+
+
+--
+-- Name: approval_request_policy approval_request_policy_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_request_policy
+    ADD CONSTRAINT approval_request_policy_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: approval_request_policy approval_request_policy_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approval_request_policy
+    ADD CONSTRAINT approval_request_policy_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
 
 
 --
@@ -7268,6 +8631,62 @@ ALTER TABLE ONLY public.work_settings
 
 
 --
+-- Name: approval_auto_requests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_auto_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: approval_auto_requests approval_auto_requests_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY approval_auto_requests_select ON public.approval_auto_requests FOR SELECT TO authenticated USING (public.app_can_read_approval_request(request_id));
+
+
+--
+-- Name: approval_delegations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_delegations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: approval_delegations approval_delegations_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY approval_delegations_select ON public.approval_delegations FOR SELECT TO authenticated USING ((private.is_active(auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.profiles me
+  WHERE ((me.id = auth.uid()) AND (me.company_id = approval_delegations.company_id)))) AND ((principal_id = auth.uid()) OR (delegate_id = auth.uid()) OR private.is_admin(auth.uid()))));
+
+
+--
+-- Name: approval_executive_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_executive_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: approval_executive_settings approval_executive_settings_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY approval_executive_settings_select ON public.approval_executive_settings FOR SELECT TO authenticated USING ((private.is_active(auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.profiles p
+  WHERE ((p.id = auth.uid()) AND (p.company_id = approval_executive_settings.company_id))))));
+
+
+--
+-- Name: approval_request_policy; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_request_policy ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: approval_request_policy approval_request_policy_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY approval_request_policy_select ON public.approval_request_policy FOR SELECT TO authenticated USING (public.app_can_read_approval_request(request_id));
+
+
+--
 -- Name: approval_steps; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -7299,6 +8718,19 @@ CREATE POLICY approval_steps_select ON public.approval_steps FOR SELECT TO authe
 --
 
 CREATE POLICY approval_steps_update_config ON public.approval_steps FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company)))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+
+
+--
+-- Name: approval_worker_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.approval_worker_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: approval_worker_runs approval_worker_runs_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY approval_worker_runs_select ON public.approval_worker_runs FOR SELECT TO authenticated USING (private.is_admin(auth.uid()));
 
 
 --
@@ -7497,9 +8929,7 @@ ALTER TABLE public.leave_request_approvals ENABLE ROW LEVEL SECURITY;
 -- Name: leave_request_approvals leave_request_approvals_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_request_approvals_select ON public.leave_request_approvals FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1
-   FROM public.leave_requests r
-  WHERE ((r.id = leave_request_approvals.request_id) AND ((r.employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), r.employee_id) OR private.has_perm(( SELECT auth.uid() AS uid), 'leave_requests'::text, 'read'::text)))))));
+CREATE POLICY leave_request_approvals_select ON public.leave_request_approvals FOR SELECT TO authenticated USING (public.app_can_read_approval_request(request_id));
 
 
 --
@@ -7518,14 +8948,7 @@ ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 -- Name: leave_requests leave_requests_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_requests_select ON public.leave_requests FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.has_perm(( SELECT auth.uid() AS uid), 'leave_requests'::text, 'read'::text))));
-
-
---
--- Name: POLICY leave_requests_select ON leave_requests; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON POLICY leave_requests_select ON public.leave_requests IS 'Full base row: own, direct manager, or leave_requests read (admin; the hr and security presets) (FR-38, FR-55). Teammates read the reason-less team_leave_calendar view instead — FR-25.';
+CREATE POLICY leave_requests_select ON public.leave_requests FOR SELECT TO authenticated USING (public.app_can_read_approval_request(id));
 
 
 --
@@ -7796,10 +9219,87 @@ REVOKE ALL ON FUNCTION private.allocate_leave_impl(p_actor uuid, p_employee_id u
 
 
 --
+-- Name: FUNCTION ambiguous_legacy_approval(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.ambiguous_legacy_approval(p_request uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION apply_due_separations(p_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.apply_due_separations(p_id uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_after_authority_mutation(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_after_authority_mutation() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_before_authority_mutation(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_before_authority_mutation() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_bounds(p_company uuid, p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_bounds(p_company uuid, p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_fallback_allowed(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_fallback_allowed(p_uid uuid, p_request uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_grant_json(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_grant_json(p_id uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_lock(p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_lock(p_company uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_mutation_company(p_table text, p_row jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_mutation_company(p_table text, p_row jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_source_lifecycle(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_source_lifecycle() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_step_snapshot(p_request uuid, p_ids uuid[]); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_step_snapshot(p_request uuid, p_ids uuid[]) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION approval_timer_invalid_reason(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_timer_invalid_reason(p_request uuid) FROM PUBLIC;
 
 
 --
@@ -7833,11 +9333,25 @@ GRANT ALL ON FUNCTION private.can_act_on(p_caller uuid, p_target uuid) TO authen
 
 
 --
+-- Name: FUNCTION can_approve_step(p_uid uuid, p_request uuid, p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_approve_step(p_uid uuid, p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION can_read_all(uid uuid); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.can_read_all(uid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.can_read_all(uid uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION can_read_approval_request(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_read_approval_request(p_uid uuid, p_request uuid) FROM PUBLIC;
 
 
 --
@@ -7857,6 +9371,13 @@ GRANT ALL ON FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) T
 
 
 --
+-- Name: FUNCTION ceo_delegate_configuration_ready(p_ceo uuid, p_delegate uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.ceo_delegate_configuration_ready(p_ceo uuid, p_delegate uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION company_minutes_per_day(p_company_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -7871,6 +9392,20 @@ REVOKE ALL ON FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p
 
 
 --
+-- Name: FUNCTION decide_approval_request(p_id uuid, p_step_id uuid, p_actor uuid, p_decision public.leave_status, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint, p_reason text, p_auto_authority uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.decide_approval_request(p_id uuid, p_step_id uuid, p_actor uuid, p_decision public.leave_status, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint, p_reason text, p_auto_authority uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION delegate_eligible(p_principal uuid, p_delegate uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.delegate_eligible(p_principal uuid, p_delegate uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION department_manager_for(p_emp uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -7882,6 +9417,36 @@ REVOKE ALL ON FUNCTION private.department_manager_for(p_emp uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.department_step_applies(p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: TABLE approval_delegations; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.approval_delegations TO postgres;
+GRANT ALL ON TABLE public.approval_delegations TO service_role;
+GRANT SELECT ON TABLE public.approval_delegations TO authenticated;
+
+
+--
+-- Name: FUNCTION effective_approval_delegate(p_principal uuid, p_at timestamp with time zone); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.effective_approval_delegate(p_principal uuid, p_at timestamp with time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION enroll_request_delegation(p_request uuid, p_auto_consent boolean, p_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_consent boolean, p_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION finalize_approval_request(p_id uuid, p_actor uuid, p_signature text, p_consent_at timestamp with time zone, p_origin text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.finalize_approval_request(p_id uuid, p_actor uuid, p_signature text, p_consent_at timestamp with time zone, p_origin text) FROM PUBLIC;
 
 
 --
@@ -7969,12 +9534,26 @@ GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
 
 
 --
+-- Name: FUNCTION natural_approver(p_uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.natural_approver(p_uid uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION natural_step_authority(p_uid uuid, p_request uuid, p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.natural_step_authority(p_uid uuid, p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION perm_level(uid uuid, p_key text); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.perm_level(uid uuid, p_key text) FROM PUBLIC;
-GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO authenticated;
 GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO supabase_auth_admin;
+GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO authenticated;
 
 
 --
@@ -7982,8 +9561,8 @@ GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO supabase_auth_
 --
 
 REVOKE ALL ON FUNCTION private.permission_allows(p_key text, p_level text) FROM PUBLIC;
-GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO authenticated;
 GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO supabase_auth_admin;
+GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO authenticated;
 
 
 --
@@ -7999,8 +9578,8 @@ GRANT ALL ON FUNCTION private.permission_deps() TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION private.permission_keys() FROM PUBLIC;
-GRANT ALL ON FUNCTION private.permission_keys() TO authenticated;
 GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
+GRANT ALL ON FUNCTION private.permission_keys() TO authenticated;
 
 
 --
@@ -8008,6 +9587,13 @@ GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
 --
 
 REVOKE ALL ON FUNCTION private.preserve_active_admin() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION process_approval_auto_requests(p_limit integer); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.process_approval_auto_requests(p_limit integer) FROM PUBLIC;
 
 
 --
@@ -8035,6 +9621,13 @@ GRANT ALL ON FUNCTION private.reads_people(uid uuid) TO authenticated;
 
 
 --
+-- Name: FUNCTION reconcile_approval_timers(p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.reconcile_approval_timers(p_company uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION refresh_separation_status(p_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -8046,6 +9639,27 @@ REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date, p_end date, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_hr_exempt(p_request uuid, p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_hr_exempt(p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_step_applies(p_request uuid, p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_step_applies(p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_step_decided(p_request uuid, p_step uuid, p_decision public.leave_status); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_step_decided(p_request uuid, p_step uuid, p_decision public.leave_status) FROM PUBLIC;
 
 
 --
@@ -8128,6 +9742,13 @@ REVOKE ALL ON FUNCTION private.step_applies(p_scope text, p_emp uuid) FROM PUBLI
 
 
 --
+-- Name: FUNCTION step_delegation(p_uid uuid, p_request uuid, p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.step_delegation(p_uid uuid, p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION submit_leave_impl(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_reason text, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid, p_kind public.request_kind, p_location text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -8185,6 +9806,36 @@ GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id 
 
 
 --
+-- Name: FUNCTION app_approval_capabilities(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_approval_capabilities() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_approval_capabilities() TO postgres;
+GRANT ALL ON FUNCTION public.app_approval_capabilities() TO service_role;
+GRANT ALL ON FUNCTION public.app_approval_capabilities() TO authenticated;
+
+
+--
+-- Name: FUNCTION app_approval_queue(p_status public.leave_status); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO postgres;
+GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO service_role;
+GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_approval_worker_health(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_approval_worker_health() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_approval_worker_health() TO postgres;
+GRANT ALL ON FUNCTION public.app_approval_worker_health() TO service_role;
+GRANT ALL ON FUNCTION public.app_approval_worker_health() TO authenticated;
+
+
+--
 -- Name: FUNCTION app_bulk_create_employees(p_company_id uuid, p_rows jsonb, p_departments jsonb, p_balance_as_of date); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8212,6 +9863,16 @@ REVOKE ALL ON FUNCTION public.app_bulk_set_employee_passwords(p_resets jsonb) FR
 GRANT ALL ON FUNCTION public.app_bulk_set_employee_passwords(p_resets jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_bulk_set_employee_passwords(p_resets jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_bulk_set_employee_passwords(p_resets jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_can_read_approval_request(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_can_read_approval_request(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_can_read_approval_request(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_can_read_approval_request(p_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.app_can_read_approval_request(p_id uuid) TO authenticated;
 
 
 --
@@ -8262,6 +9923,16 @@ REVOKE ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason text, p_last_working_day date, p_father_name text, p_birth_cert_no text, p_note text, p_rows jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_delegation_context(p_principal_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_delegation_context(p_principal_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_delegation_context(p_principal_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_delegation_context(p_principal_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.app_delegation_context(p_principal_id uuid) TO authenticated;
 
 
 --
@@ -8355,6 +10026,36 @@ GRANT ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) TO servic
 
 
 --
+-- Name: FUNCTION app_request_approval_context(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_request_approval_context(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_request_approval_context(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_request_approval_context(p_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.app_request_approval_context(p_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_request_approval_progress(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_request_approval_progress(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_request_approval_progress(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_request_approval_progress(p_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.app_request_approval_progress(p_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION app_revoke_special_leave(p_grant_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8395,6 +10096,16 @@ GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO service
 
 
 --
+-- Name: FUNCTION app_search_delegates(p_principal_id uuid, p_search text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_search_delegates(p_principal_id uuid, p_search text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_search_delegates(p_principal_id uuid, p_search text) TO postgres;
+GRANT ALL ON FUNCTION public.app_search_delegates(p_principal_id uuid, p_search text) TO service_role;
+GRANT ALL ON FUNCTION public.app_search_delegates(p_principal_id uuid, p_search text) TO authenticated;
+
+
+--
 -- Name: FUNCTION app_separation_balances(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8415,6 +10126,16 @@ GRANT ALL ON FUNCTION public.app_separation_warnings(p_employee_id uuid) TO serv
 
 
 --
+-- Name: FUNCTION app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid, p_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid, p_ceo_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid, p_ceo_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid, p_ceo_authorized boolean) TO service_role;
+GRANT ALL ON FUNCTION public.app_set_approval_delegate(p_principal_id uuid, p_delegate_id uuid, p_ceo_authorized boolean) TO authenticated;
+
+
+--
 -- Name: FUNCTION app_set_approval_order_enforced(p_enforced boolean); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8425,6 +10146,16 @@ GRANT ALL ON FUNCTION public.app_set_approval_order_enforced(p_enforced boolean)
 
 
 --
+-- Name: FUNCTION app_set_auto_approval_window(p_minutes integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_auto_approval_window(p_minutes integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_auto_approval_window(p_minutes integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_auto_approval_window(p_minutes integer) TO service_role;
+GRANT ALL ON FUNCTION public.app_set_auto_approval_window(p_minutes integer) TO authenticated;
+
+
+--
 -- Name: FUNCTION app_set_employee_password(p_user_id uuid, p_password text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8432,6 +10163,16 @@ REVOKE ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_passwo
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]) TO service_role;
+GRANT ALL ON FUNCTION public.app_set_executive_settings(p_ceo_id uuid, p_hr_head_id uuid, p_hr_step_ids uuid[]) TO authenticated;
 
 
 --
@@ -8526,6 +10267,16 @@ GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data t
 
 
 --
+-- Name: FUNCTION approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO postgres;
+GRANT ALL ON FUNCTION public.approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO service_role;
+GRANT ALL ON FUNCTION public.approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint) TO authenticated;
+
+
+--
 -- Name: FUNCTION cancel_leave_request(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8558,9 +10309,9 @@ GRANT ALL ON FUNCTION public.current_leave_balance(p_employee_id uuid, p_leave_t
 --
 
 REVOKE ALL ON FUNCTION public.custom_access_token_hook(event jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO supabase_auth_admin;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO service_role;
-GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO supabase_auth_admin;
 
 
 --
@@ -8572,6 +10323,16 @@ GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) T
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO anon;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO authenticated;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO service_role;
+
+
+--
+-- Name: FUNCTION get_leave_request_signatures(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.get_leave_request_signatures(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.get_leave_request_signatures(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.get_leave_request_signatures(p_id uuid) TO service_role;
+GRANT ALL ON FUNCTION public.get_leave_request_signatures(p_id uuid) TO authenticated;
 
 
 --
@@ -8645,6 +10406,16 @@ GRANT ALL ON FUNCTION public.reject_leave_request(p_id uuid, p_reason text) TO s
 
 
 --
+-- Name: FUNCTION reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text) TO postgres;
+GRANT ALL ON FUNCTION public.reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text) TO service_role;
+GRANT ALL ON FUNCTION public.reject_leave_request_v2(p_id uuid, p_step_id uuid, p_reason text) TO authenticated;
+
+
+--
 -- Name: FUNCTION request_approval_progress(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8705,6 +10476,16 @@ GRANT ALL ON FUNCTION public.submit_daily_errand_request(p_start date, p_end dat
 
 
 --
+-- Name: FUNCTION submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+
+
+--
 -- Name: FUNCTION submit_errand_request(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8712,6 +10493,16 @@ REVOKE ALL ON FUNCTION public.submit_errand_request(p_date date, p_start_time ti
 GRANT ALL ON FUNCTION public.submit_errand_request(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text) TO postgres;
 GRANT ALL ON FUNCTION public.submit_errand_request(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text) TO authenticated;
 GRANT ALL ON FUNCTION public.submit_errand_request(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text) TO service_role;
+
+
+--
+-- Name: FUNCTION submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
 
 
 --
@@ -8725,6 +10516,16 @@ GRANT ALL ON FUNCTION public.submit_hourly_leave_request(p_leave_type_id uuid, p
 
 
 --
+-- Name: FUNCTION submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
+GRANT ALL ON FUNCTION public.submit_hourly_leave_request_v2(p_leave_type_id uuid, p_date date, p_start_time time without time zone, p_end_time time without time zone, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+
+
+--
 -- Name: FUNCTION submit_leave_request(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -8735,12 +10536,68 @@ GRANT ALL ON FUNCTION public.submit_leave_request(p_leave_type_id uuid, p_start 
 
 
 --
+-- Name: FUNCTION submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
+GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+
+
+--
+-- Name: TABLE approval_auto_requests; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.approval_auto_requests TO postgres;
+GRANT ALL ON TABLE public.approval_auto_requests TO service_role;
+GRANT SELECT ON TABLE public.approval_auto_requests TO authenticated;
+
+
+--
+-- Name: TABLE approval_executive_settings; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.approval_executive_settings TO postgres;
+GRANT ALL ON TABLE public.approval_executive_settings TO service_role;
+GRANT SELECT ON TABLE public.approval_executive_settings TO authenticated;
+
+
+--
+-- Name: TABLE approval_request_policy; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.approval_request_policy TO postgres;
+GRANT ALL ON TABLE public.approval_request_policy TO service_role;
+GRANT SELECT ON TABLE public.approval_request_policy TO authenticated;
+
+
+--
 -- Name: TABLE approval_steps; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.approval_steps TO postgres;
 GRANT ALL ON TABLE public.approval_steps TO authenticated;
 GRANT ALL ON TABLE public.approval_steps TO service_role;
+
+
+--
+-- Name: TABLE approval_worker_runs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.approval_worker_runs TO postgres;
+GRANT ALL ON TABLE public.approval_worker_runs TO service_role;
+GRANT SELECT ON TABLE public.approval_worker_runs TO authenticated;
+
+
+--
+-- Name: SEQUENCE approval_worker_runs_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON SEQUENCE public.approval_worker_runs_id_seq TO postgres;
+GRANT ALL ON SEQUENCE public.approval_worker_runs_id_seq TO anon;
+GRANT ALL ON SEQUENCE public.approval_worker_runs_id_seq TO authenticated;
+GRANT ALL ON SEQUENCE public.approval_worker_runs_id_seq TO service_role;
 
 
 --
@@ -8904,20 +10761,20 @@ GRANT SELECT(active) ON TABLE public.profiles TO supabase_auth_admin;
 -- Name: TABLE role_permissions; Type: ACL; Schema: public; Owner: -
 --
 
+GRANT SELECT ON TABLE public.role_permissions TO supabase_auth_admin;
 GRANT ALL ON TABLE public.role_permissions TO postgres;
 GRANT ALL ON TABLE public.role_permissions TO service_role;
 GRANT SELECT ON TABLE public.role_permissions TO authenticated;
-GRANT SELECT ON TABLE public.role_permissions TO supabase_auth_admin;
 
 
 --
 -- Name: TABLE roles; Type: ACL; Schema: public; Owner: -
 --
 
+GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 GRANT ALL ON TABLE public.roles TO postgres;
 GRANT ALL ON TABLE public.roles TO service_role;
 GRANT SELECT ON TABLE public.roles TO authenticated;
-GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 
 
 --
@@ -8970,11 +10827,11 @@ GRANT SELECT ON TABLE public.team_leave_calendar TO authenticated;
 -- Name: TABLE user_roles; Type: ACL; Schema: public; Owner: -
 --
 
+GRANT SELECT ON TABLE public.user_roles TO supabase_auth_admin;
 GRANT ALL ON TABLE public.user_roles TO postgres;
 GRANT ALL ON TABLE public.user_roles TO anon;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE ON TABLE public.user_roles TO authenticated;
 GRANT ALL ON TABLE public.user_roles TO service_role;
-GRANT SELECT ON TABLE public.user_roles TO supabase_auth_admin;
 
 
 --

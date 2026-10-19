@@ -52,7 +52,7 @@ const BASE: Tab[] = [
   { key: 'organization', href: '/organization', labelKey: 'organization', desktopOnly: true },
 ];
 
-type ManageEntry = NavItem & { allowed: (roles: string[], perms: Perms) => boolean };
+type ManageEntry = NavItem & { allowed: (roles: string[], perms: Perms, canApprove?: boolean) => boolean };
 
 // Approvals are identity-based (the approval chain routes to a person), not a permission.
 const isApprover = (roles: string[]) => ['admin', 'manager', 'hr'].some((r) => roles.includes(r));
@@ -74,7 +74,7 @@ const MANAGE: ManageEntry[] = [
   { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (roles, perms) => roles.includes('manager') || can(perms, 'people', 'read') },
   // FR-51: departments permission (read lists, edit creates/renames/sets managers).
   { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: (_roles, perms) => can(perms, 'departments', 'read') },
-  { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles) => isApprover(roles) },
+  { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles, _perms, canApprove) => canApprove ?? isApprover(roles) },
   // FR-38 review screen: leave_requests read.
   { key: 'requests', href: '/manage/requests', labelKey: 'requests', testId: 'nav-requests', allowed: (_roles, perms) => can(perms, 'leave_requests', 'read') },
   // FR-42: approval_steps permission.
@@ -85,26 +85,28 @@ const MANAGE: ManageEntry[] = [
   // implicit for the admin); other holders see it on Home (homeAbsencesBoard).
   { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: isAdmin },
   // FR-62: inside Manage only for someone who has a Manage group anyway.
-  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms) },
+  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove) },
 ];
 
 /** True when the caller reaches a Manage page other than Finance (which follows the group). */
-function hasManageGroup(roles: string[], perms: Perms) {
-  return MANAGE.some((i) => i.key !== 'finance' && i.allowed(roles, perms));
+function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean) {
+  return MANAGE.some((i) => i.key !== 'finance' && i.allowed(roles, perms, canApprove));
 }
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
-export function tabsForRoles(roles: string[], perms: Perms): Tab[] {
+export function tabsForRoles(roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean): Tab[] {
   const tabs = [...BASE];
-  const manage = hasManageGroup(roles, perms);
+  const manage = hasManageGroup(roles, perms, canApprove) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (manage) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
   return tabs;
 }
 
 /** The labelled Manage group, filtered to what this caller can reach. */
-export function manageItemsForRoles(roles: string[], perms: Perms): NavItem[] {
-  return MANAGE.filter((item) => item.allowed(roles, perms)).map(({ key, href, labelKey, testId }) => ({
+export function manageItemsForRoles(roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean): NavItem[] {
+  return MANAGE.filter((item) => item.key === 'finance' && canDelegate === true
+    ? can(perms, 'finance', 'read')
+    : item.allowed(roles, perms, canApprove)).map(({ key, href, labelKey, testId }) => ({
     key,
     href,
     labelKey,
@@ -117,9 +119,10 @@ export function manageItemsForRoles(roles: string[], perms: Perms): NavItem[] {
  * settings permission at read (FR-55). Main's FR-59 "admin and hr" is the HR
  * preset holding work_settings and holidays edit.
  */
-export function settingsItemForRoles(roles: string[], perms: Perms): NavItem | null {
-  return isAdmin(roles) || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read')
-    ? { key: 'settings', href: '/settings', labelKey: 'settings', testId: 'nav-settings' }
+export function settingsItemForRoles(roles: string[], perms: Perms, canDelegate?: boolean): NavItem | null {
+  const general = isAdmin(roles) || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read');
+  return general || canDelegate === true || (canDelegate === undefined && can(perms, 'approval_delegate'))
+    ? { key: 'settings', href: general ? '/settings' : '/settings/roles', labelKey: 'settings', testId: 'nav-settings' }
     : null;
 }
 

@@ -8,7 +8,7 @@ const t = {
   sensitive: 'Sensitive when allowed',
   title: 'Leave',
   items: Object.fromEntries(ALL_KEYS.map((k) => [k, { label: `L:${k}`, description: `D:${k}` }])) as Record<PermKey, { label: string; description: string }>,
-  levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only' },
+  levels: { edit: 'Allowed', read: 'Read only', none: 'Not allowed', noRead: 'No read', noEdit: 'View only', yes: 'Yes', no: 'No' },
   summary: { custom: 'Custom', allow: 'Allowed', read: 'Read only', none: 'Not allowed' },
   raisedBy: (by: string) => `Raised by ${by}`,
   loweredBy: (by: string) => `Lowered by ${by}`,

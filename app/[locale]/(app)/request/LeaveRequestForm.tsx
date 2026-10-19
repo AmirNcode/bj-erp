@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { RequestDelegationFields } from './_components/RequestDelegationFields';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed, type PickerDate } from '@/lib/leave/dateConvert';
 import { daysToMinutes } from '@/lib/leave/duration';
@@ -18,6 +19,7 @@ import {
   useReplacementCandidates,
   useRequestSubmit,
   useSignature,
+  useRequestDelegation,
 } from './_components/useRequestForm';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave/reference';
 import { Card, CardContent } from '@/components/ui/card';
@@ -102,13 +104,15 @@ export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: P
   const balance = useLeaveBalance(selectedTypeId, requestedMinutes);
   const replacement = useReplacementCandidates(start && end ? { start, end, unit: 'day' } : null);
 
+  const delegation = useRequestDelegation(start && end ? { start, end, unit: 'day', dayPart: effectiveDayPart, replacementId: replacement.replacementId || null } : null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const problem = !selectedTypeId
       ? labels.validationSelectType
       : !start || !end
         ? labels.validationSelectDate
-        : signature.problem(labels.signature);
+        : signature.problem(labels.signature) ?? delegation.problem();
 
     submit(
       problem,
@@ -122,6 +126,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: P
           replacementId: replacement.replacementId || null,
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
+          ...delegation.submission,
         }),
       () => {
         setStartDate(null);
@@ -177,7 +182,8 @@ export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: P
             </div>
           )}
 
-          <ReplacementField replacement={replacement} labels={labels} />
+          <ReplacementField replacement={replacement} labels={labels} delegationEnabled={delegation.preview?.can_delegate} />
+          <RequestDelegationFields idPrefix="daily" delegation={delegation} locale={locale} hasReplacement={!!replacement.replacementId} />
 
           <div className="space-y-1.5">
             <Label htmlFor="reason">{labels.reason}</Label>
@@ -216,7 +222,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: P
             errorTestId="error-msg"
           />
 
-          <Button type="submit" disabled={isPending} className="w-full">
+          <Button type="submit" disabled={isPending || delegation.blocked} className="w-full">
             {isPending ? '...' : labels.submit}
           </Button>
         </form>

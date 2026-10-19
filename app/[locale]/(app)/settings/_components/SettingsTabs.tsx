@@ -1,11 +1,10 @@
-/**
- * Settings › General | Roles (FR-55). Admin only: the Roles tab is the role
- * editor, which no permission can grant (D2). Two links styled as the
- * employees toolbar's segmented filter.
- */
+/** Settings tabs: role authoring remains admin-only; delegates get their own panel. */
 
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
+import { can } from '@/lib/permissions/catalog';
 import { cn } from '@/lib/utils';
 
 export async function SettingsTabs({
@@ -17,10 +16,14 @@ export async function SettingsTabs({
 }) {
   const t = await getTranslations('rolesAdmin.tabs');
   const tNav = await getTranslations('nav');
+  const user = await getCachedUser();
+  if (!user) return null;
+  const [roles, perms, capabilities] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id), getApprovalCapabilities()]);
+  const general = roles.includes('admin') || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read');
   const tabs = [
     { key: 'general' as const, href: `/${locale}/settings`, label: t('general') },
-    { key: 'roles' as const, href: `/${locale}/settings/roles`, label: t('roles') },
-  ];
+    { key: 'roles' as const, href: `/${locale}/settings/roles`, label: capabilities.isAdmin ? t('roles') : t('myDelegate') },
+  ].filter((tab) => tab.key === 'general' ? general : capabilities.isAdmin || capabilities.canDelegate);
   return (
     <nav aria-label={tNav('settings')} className="flex w-fit max-w-full rounded-[10px] bg-muted p-[3px]">
       {tabs.map((tab) => {

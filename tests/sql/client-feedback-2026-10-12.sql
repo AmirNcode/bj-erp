@@ -304,8 +304,10 @@ select pg_temp.expect('a decided request shows the recorded signatures only',
 select pg_temp.expect('an override-signed named step keeps its person as the title',
   pg_temp.val_as('emp', format($q$select expected_name || '/' || signer_name
       from public.request_approval_progress(%s) where named$q$, pg_temp.id('l3'))), 'CF named/CF adm');
-select pg_temp.expect('a colleague may not read someone else''s progress',
-  pg_temp.val_as('named', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 'ERR:P0002');
+select pg_temp.expect('an assigned named approver may read scoped progress',
+  pg_temp.val_as('named', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), '3');
+select pg_temp.expect('an unrelated colleague may not read progress',
+  pg_temp.val_as('carrier', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 'ERR:P0002');
 select pg_temp.expect('the manager may read their report''s progress',
   left(pg_temp.val_as('mgr', format('select count(*) from public.request_approval_progress(%s)', pg_temp.id('l5'))), 4) <> 'ERR:', 'true');
 
