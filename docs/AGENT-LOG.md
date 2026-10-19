@@ -188,7 +188,11 @@ Farsi redirect loop, six extra races, remaining browser validation, final checks
   print inspected: submitted 18:24, automatic 18:26). Older 120-minute timers still due 15:42 UTC.
 - Found, not fixed (TASKS): save notices vanish after page re-render (keyed remount); recorded authority
   statement prints in English on Farsi forms.
-- State: isolated company window **left at 2 minutes**; cron inactive; uncommitted.
+- State: isolated company window **left at 2 minutes**; cron inactive.
+- Owner then asked for a PR: committed everything as `e728c25` (secret scan of all 77 changed files
+  against `test.env`/`qa-login.json` values: no hits), pushed `codex/approval-delegation`, opened
+  https://github.com/AmirNcode/bj-erp/pull/7 → `main`. No PR CI exists; **merging deploys to Liara**
+  (push to `main`). Not merged, not deployed; production worker activation not done.
 
 ## 2026-10-19 — Approval delegation review, isolated races/cron and second handoff
 
