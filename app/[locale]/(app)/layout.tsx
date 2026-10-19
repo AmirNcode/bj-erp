@@ -6,6 +6,7 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { ROLE_PRIORITY, subtitleRole } from '@/lib/auth/roleSubtitle';
 import { parsePermsClaim, type Perms } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
@@ -26,10 +27,11 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const [roles, profile, perms] = await Promise.all([
+  const [roles, profile, perms, capabilities] = await Promise.all([
     getCachedRoles(user.id),
     getCachedProfile(user.id),
     getCachedPermissions(user.id),
+    getApprovalCapabilities(),
   ]);
   if (!profile?.active) {
     redirect(`/${locale}/login`);
@@ -95,8 +97,7 @@ export default async function AppLayout({ children, params }: Props) {
 
   // Approvals badge. Not awaited: the promise streams into the side panel so
   // the shell paints without waiting on the queue read.
-  const canApprove =
-    roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
+  const canApprove = capabilities.canApprove;
   const pendingCount = canApprove
     ? getPendingApprovals()
         .then((r) => (r.ok ? r.requests.length : 0))
@@ -112,6 +113,8 @@ export default async function AppLayout({ children, params }: Props) {
     <AppShell
       roles={roles}
       perms={perms}
+      canApprove={canApprove}
+      canDelegate={capabilities.canDelegate}
       locale={locale}
       labels={labels}
       appName={t('appName')}

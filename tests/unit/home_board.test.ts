@@ -71,3 +71,13 @@ describe('buildHomeBoard', () => {
     ]);
   });
 });
+
+
+describe('live Home approval capability', () => {
+  it('shows the queue to a named employee approver with no manager role', () => {
+    expect(buildHomeBoard({ roles: ['employee'], canApprove: true, requests: [], team: [], pendingCount: 2 }).showApprovals).toBe(true);
+  });
+  it('honors a live authority loss even while the role hint remains', () => {
+    expect(buildHomeBoard({ roles: ['manager'], canApprove: false, requests: [], team: [], pendingCount: 0 }).showApprovals).toBe(false);
+  });
+});

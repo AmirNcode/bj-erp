@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedProfile, getCachedPermissions, getCachedRoles } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { PageHeader } from '../_components/PageHeader';
@@ -41,7 +42,8 @@ export default async function ProfilePage({ params }: Props) {
     getCachedPermissions(user.id),
     getCachedRoles(user.id),
   ]);
-  const settingsItem = settingsItemForRoles(roles, perms);
+  const capabilities = await getApprovalCapabilities();
+  const settingsItem = settingsItemForRoles(roles, perms, capabilities.canDelegate);
   const tNav = await getTranslations('nav');
   const tSig = await getTranslations('profile.signature');
   const tPi = await getTranslations('personalInfo');

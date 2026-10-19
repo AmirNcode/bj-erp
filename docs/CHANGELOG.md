@@ -9,6 +9,21 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Approval delegation and automatic CEO step — branch `codex/approval-delegation` (PR #7, not merged or deployed)
+
+Local branch only; nothing below is live. Spec `docs/specs/2026-10-17-ceo-delegate-approval-design.md`.
+Migration `20261018011333_approval_delegation.sql`.
+- New Yes/No **approval delegate** permission (twentieth access item). Settings › Roles gains a saved
+  approval delegate (admin for anyone; holders for themselves) and admin CEO/HR-head/HR-step mapping.
+- An eligible leave replacement becomes a temporary delegate for the exact absence (half days use the
+  configured workday halves, previewed on the form); otherwise the saved delegate continues.
+- When the CEO's appointed delegate (for example the head of HR) submits their own request with a
+  separate responsibility confirmation, the CEO step is approved automatically at once; other
+  required steps still apply. Every other request needing the CEO can be signed by the CEO or the
+  delegate ("on behalf of").
+- Approval queue, home inbox, progress and print keep exact step identity; automatic approvals print
+  their recorded authority statement with no fictitious signature.
+
 ### Sensitive role access — 2026-10-15
 
 - Admin confirms sensitive permissions before saving a new or existing role; write-capable items

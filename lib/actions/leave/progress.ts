@@ -10,9 +10,15 @@
 import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import type { StepLabel } from '@/lib/leave/approvals';
+import { progressLabel, type ApprovalContextRow, type ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 
 export type ProgressStep = {
   order: number;
+  stepId: string | null;
+  evidenceKind: ApprovalEvidenceKind;
+  principalName: string | null;
+  authorityRef: string | null;
+  historicalHrExemption?: boolean;
   /** Role label, or `departmentManager`; a named step is labelled by its person. */
   label: StepLabel;
   named: boolean;
@@ -25,21 +31,26 @@ export type ProgressStep = {
 
 export async function getRequestProgress(
   requestId: string
-): Promise<{ ok: true; steps: ProgressStep[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean } | { ok: false; error: string }> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { data, error } = await c.supabase.rpc('request_approval_progress', { p_id: requestId });
+  const { data, error } = await c.supabase.rpc('app_request_approval_context', { p_id: requestId });
   if (error) return dbErr(error.message);
 
+  const context = data as unknown as ApprovalContextRow;
   return {
     ok: true,
-    steps: (data ?? []).map((r) => ({
+    configurationChanged: context.configuration_changed,
+    legacyReconciliationRequired: context.legacy_reconciliation_required,
+    steps: context.progress.map((r) => ({
+      stepId: r.step_id,
+      evidenceKind: r.evidence_kind,
+      principalName: r.principal_name,
+      authorityRef: r.authority_ref ?? null,
+      historicalHrExemption: !!r.historical_hr_exemption,
       order: r.step_order,
-      label:
-        r.step_role === 'manager' && r.manager_scope === 'department'
-          ? 'departmentManager'
-          : (r.step_role as StepLabel),
+      label: progressLabel(r),
       named: r.named,
       expectedName: r.expected_name,
       decision: r.decision === 'approved' || r.decision === 'rejected' ? r.decision : null,

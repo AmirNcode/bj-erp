@@ -49,6 +49,81 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
+  under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
+  holders select their own). Eligible delegates: active managers/approvers. Leave replacement becomes
+  temporary delegate only if eligible, during approved absence, then saved delegate resumes. Ordinary
+  employees remain work cover only. **Owner simplification 2026-10-19:** no timer, worker or review
+  window — when the CEO's attested delegate (e.g. HR head) submits their own request with consent, the
+  CEO step is approved at submission; other CEO-step requests go to the CEO or the delegate. Non-HR
+  delegates still need HR; only the designated HR head skips the HR signature. Spec:
+  `docs/specs/2026-10-17-ceo-delegate-approval-design.md` (amendment). Open as
+  https://github.com/AmirNcode/bj-erp/pull/7; one squashed migration `20261018011333`, applied only to
+  the rebuilt isolated test DB. Review findings addressed: `step_delegation` performance (10–20× on
+  production data), narrower read RLS, CEO re-designation, e2e-cleanup FKs, queue order. Remaining,
+  each needing owner authorization: second review, merge (= deploy), pre-deploy backup + restore
+  drill, post-deploy smoke. Credential/session hardening stays deferred (risk R9). Second review done
+  2026-10-19 (no blocker; follow-ups in the next item).
+
+- ☐ **PR #7 second-review follow-ups** (review of `def6861`, 2026-10-19; none blocks deploy). Migration
+  `20261018011333` is frozen once deployed, so SQL fixes go in a new migration. Line numbers refer to it.
+  - **Revoke blocked while principal is ineligible (most important):** `app_set_approval_delegate`
+    (:389-391) demands the principal's `approval_delegate` permission + `natural_approver` even when
+    `p_delegate_id` is null. If the CEO is deactivated or loses the manager role/permission, admin cannot
+    clear the appointment; when restored, the saved `ceo_authorized` grant silently takes effect again.
+    Workaround until fixed: unset and re-set the CEO in executive settings (clears `ceo_authorized`).
+    Fix: skip those checks for a revoke; SQL test: role removed → revoke → role restored → no auto step.
+  - **`app_set_executive_settings` validation is a no-op** (:425-430): `from unnest(...) id ... where
+    p.id=id` / `s.id=id` resolve `id` to the inner table column, so inactive or other-company CEO/HR head
+    and any step UUID pass. Fix: `unnest(...) as v(eid)`, compare `v.eid`; add negative tests.
+  - **Automatic set can include an HR-mapped step** (`enroll_request_delegation` :531): if the CEO owns
+    a step listed in `hr_step_ids` (e.g. named approver), a non-HR-head delegate's HR step is auto-approved.
+    Add `and not s.id = any(x.hr_step_ids)`.
+  - **Config drift blocks the delegate's submission** (:533-534): if the CEO no longer owns a step for a
+    request kind, submit raises "CEO has no natural applicable approval step" while the preview still asks
+    for consent. Skip the automatic path instead, or reflect it in `auto_approval_eligible`.
+  - **Admin can nominate themselves** as someone's delegate (`delegate_eligible` :108 checks only
+    principal ≠ delegate); spec §4 says nobody may. Reject `p_delegate_id = auth.uid()`.
+  - **e2e testid contract broken:** `ApprovalQueue.tsx:170` is now `chain-<id>-<step_id>`;
+    `tests/e2e/hr-role.spec.ts:355-380` still expects `chain-<id>-manager` / `-hr`. Restore a role-based
+    testid or update the spec.
+  - **HR head errand per diem can never be set:** an errand whose only applicable step is the exempt HR
+    step is finalized at submission; per diem is settable only on a pending HR step. Ask the owner.
+  - **Wider `leave_requests` RLS reaches unscoped queries:** `lib/actions/reports.ts:119` and
+    `lib/actions/absences.ts:44` have no employee filter, so named step approvers now also see pending /
+    self-decided requests there. Confirm intended or filter.
+  - **Nits:** trigger `approval_before_authority_mutation` does `to_jsonb(new)` on full `leave_requests`
+    rows (signature PNGs) just to read `company_id` (:1803); `app_approval_queue(p_status)` accepts any
+    status (HR could build whole-company history) — pin to pending; queue sort changed from `start_date`
+    to `created_at`; separate responsibility consent is not stored distinctly (evidence `consent_at` =
+    signature consent); legacy `approve_leave_request` / `request_approval_progress` still granted to
+    `anon` (pre-existing, safe, revocable).
+  - **Test gaps:** no SQL tests for executive-settings negatives, automatic approval refused when the CEO
+    is inactive / lost the permission, the revoke path, the HR-step exclusion; multi-session lock races not
+    rerun after the timer removal.
+  - **Before deploy (read-only):** count pending requests holding a legacy `step_id is null` manager
+    approval where both manager steps apply — the new mapping no longer lets one row fill both, so those
+    show "reconciliation required" and need an admin override.
+
+- ☐ **Settings › Roles save notices vanish ~1 s after saving** (branch `codex/approval-delegation`,
+  found 2026-10-19): `settings/roles/page.tsx` keys `DelegationPanel` on `JSON.stringify(context)`;
+  the save action's `invalidateAppCache()` re-renders the page, the key changes and the panel remounts,
+  dropping the "saved" status for delegate and executive saves. Values do update. Fix by
+  keying on `principal_id` only (state is already refreshed client-side) and re-run the browser phases.
+- ☐ **Farsi print shows the recorded automatic-authority statement in English** (same branch): the
+  statement is stored immutable evidence text written by SQL in English.
+- ☐ **e2e cleanup fails when a throwaway approver signed a throwaway user's request** (pre-existing,
+  found 2026-10-19; same FKs on `main`): one `delete from auth.users` removes both, and the approver's
+  `ON DELETE SET NULL` update on `leave_request_approvals` re-checks a request row already cascaded
+  away (23503). Delete the junk users' `leave_requests` first inside `app_cleanup_e2e_users`. Decide whether to store both
+  languages at decision time or print a localized summary beside the recorded original.
+
+- ☐ **Farsi route prefetch takes two redirects per tab** (pre-existing, found 2026-10-19):
+  `RoutePrefetcher.tsx` prefetches `/${locale}${href}`, so in Farsi every `/fa/…?_rsc` prefetch is
+  307'd to `/…` and again to `/…?_rsc`. Harmless but wasted round-trips on the nav-perf path; use the
+  next-intl router/`Link` locale handling (as-needed: no `fa` prefix) and verify with a network trace.
+  The language switch's soft navigation similarly leaves `/fa/profile` in the address bar until reload.
+
 - ☐ **Encrypt backups** now that they hold national IDs and bank details (FR-53): the Liara backup
   copies on the owner's Mac belong on an encrypted disk (owner action), or encrypt the dump files.
 
@@ -88,6 +163,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
     someone who decides for you) and issuer tracking + session revocation ("Tier 2"). Before
     re-delegating password resets, decide these and add SQL scenarios for every path. D3 is not
     fully protected until then.
+    **Reaffirmed 2026-10-17 during delegation review:** owner chose to keep credential/session
+    protection outside the delegation release and record the residual risk. Retained credentials or
+    sessions may be used to configure or exercise another account's delegated approval authority;
+    delegation does not close this gap. See `docs/REVIEW-2026-10-17-approval-delegation.md`, R9.
   - Owner questions pending, the D7 analogues: a `people` editor setting themselves as a report's
     manager (and a Manager doing so for their own reports), an `approval_steps` editor naming
     themselves as approver, a `clearance` editor naming themselves as signer, a `people_create`

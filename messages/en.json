@@ -1022,7 +1022,19 @@
     "annualTypeMissing": "The Annual Leave type was not found.",
     "specialLeaveAlreadyRevoked": "This grant was already removed.",
     "specialLeaveNoteRequired": "A note is required for bereavement leave.",
-    "specialLeaveNoteTooLong": "The note is too long (500 characters at most)."
+    "specialLeaveNoteTooLong": "The note is too long (500 characters at most).",
+    "delegationPreview": "Approval coverage changed. Refresh the request preview and confirm it again.",
+    "automaticConsent": "Accept responsibility for automatic approval before submitting.",
+    "temporaryCeoConsent": "Explicit CEO authorization is required for this temporary appointment.",
+    "ceoApprovalConfiguration": "The CEO must naturally own an applicable approval step for each covered request type. Ask the admin to correct the approval chain.",
+    "delegateIneligible": "Choose an active manager or approver. A CEO delegate must already report directly to the CEO.",
+    "delegationPrincipal": "This person needs delegation permission and their own approval duties.",
+    "delegationNotPermitted": "You cannot select a delegate for this person.",
+    "delegationOverlap": "Another approved absence already appoints a delegate during this period.",
+    "hrStepInvalid": "Choose active HR review steps from this company.",
+    "executiveInvalid": "Choose an active person in this company.",
+    "ceoAuthorityInvalid": "Automatic approval authority can only be granted for the designated CEO’s delegate.",
+    "approvalStepChanged": "This approval step changed. Refresh the request before deciding."
   },
   "roles": {
     "admin": "Admin",
@@ -1483,6 +1495,10 @@
       "holidays": {
         "label": "Official holidays",
         "description": "Add, edit, delete and upload holidays."
+      },
+      "approval_delegate": {
+        "label": "Approval delegation",
+        "description": "Choose your own approval delegate. This does not grant role editing or access to other people’s delegation settings."
       }
     },
     "levels": {
@@ -1490,7 +1506,9 @@
       "read": "Read only",
       "none": "Not allowed",
       "noRead": "This item has no read-only level",
-      "noEdit": "This item can only be viewed"
+      "noEdit": "This item can only be viewed",
+      "yes": "Yes",
+      "no": "No"
     },
     "summary": {
       "custom": "Custom",
@@ -1507,7 +1525,8 @@
     "sensitiveProceed": "I understand — save role",
     "tabs": {
       "general": "General",
-      "roles": "Roles"
+      "roles": "Roles",
+      "myDelegate": "My delegate"
     },
     "title": "Roles",
     "intro": "Who can do what. A role covers the whole company, but never its holder's own record or the admin.",
@@ -1575,5 +1594,88 @@
       "cancel": "Cancel",
       "loadFailed": "Could not load the employee list."
     }
+  },
+  "rolesDelegation": {
+    "title": "Approval delegates",
+    "myTitle": "My approval delegate",
+    "stepRoles": {
+      "admin": "Admin",
+      "manager": "Manager",
+      "employee": "Named employee",
+      "hr": "Human resources",
+      "security": "Security",
+      "finance": "Finance"
+    },
+    "permissionRequired": "This person needs approval duties and Approval delegation set to Yes. The admin can assign a supplementary custom role; the built-in Manager role stays locked.",
+    "hint": "Choose who may sign approvals on behalf of the selected approver. This does not change anyone’s role or personnel access.",
+    "principal": "Approver",
+    "defaultDelegate": "Saved default delegate",
+    "activeDelegate": "Currently active delegate",
+    "none": "None",
+    "temporaryUntil": "Temporary appointment until {date} (Tehran time).",
+    "temporary": "Temporary appointment during approved absence.",
+    "fallback": "After the absence, the eligible saved delegate resumes: {name}.",
+    "search": "Find an eligible delegate",
+    "searchButton": "Search",
+    "selectDelegate": "Saved approval delegate",
+    "eligibility": "Candidates must be active managers or existing approvers in this company. You cannot select yourself.",
+    "ceoEligibility": "The CEO’s delegate must already directly report to the designated CEO and be an eligible approver.",
+    "ceoAttestation": "I confirm that I am authorized by the CEO to make this appointment and authorize automatic approval of the CEO step on this delegate’s own requests when they submit them. This does not waive other required approvals.",
+    "retainedAuthority": "The original approver keeps authority. A delegate cannot use this appointment to sign their own request. Temporary eligible cover takes precedence only during the approved absence.",
+    "save": "Save delegate",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "executiveTitle": "CEO and HR review configuration",
+    "executiveHint": "Designate the CEO and HR head explicitly. The server validates natural approval authority and applicable steps before activating the policy. Changes may invalidate pending timers.",
+    "ceo": "Designated CEO",
+    "hrHead": "Designated HR head",
+    "hrSteps": "HR department review steps",
+    "hrStepsHint": "Select only genuine HR review steps. The designated HR head is exempt from these steps on their own requests. Other named approvers remain required.",
+    "noSteps": "No approval steps are available. Configure the approval chain first.",
+    "step": "Step {order}: {name}",
+    "saveExecutive": "Save executive configuration"
+  },
+  "delegation": {
+    "title": "Approval coverage and authorization",
+    "loading": "Checking approval coverage…",
+    "previewFailed": "Approval coverage could not be checked. Refresh the preview before submitting.",
+    "previewRequired": "Refresh the approval coverage preview before submitting.",
+    "refresh": "Refresh preview",
+    "bounds": "Delegation window: {start} to {end}, ending exclusively (Tehran time).",
+    "replacementHint": "Choose work cover from your department or an eligible approval delegate from across the company.",
+    "temporary": "{name} will be your temporary approval delegate during this absence.",
+    "temporaryConditions": "Authority starts only after the absence is approved and its start time is reached, and ends at the displayed end. This appointment cannot be used to approve the absence that creates it.",
+    "savedResumes": "After the absence, your eligible saved delegate resumes: {name}.",
+    "noSavedFallback": "There is no saved fallback delegate. After this absence, you remain responsible for approvals.",
+    "savedContinues": "Your saved approval delegate, {name}, will continue to handle approvals.",
+    "workCoverFallback": "Your replacement covers work only and cannot sign approvals on your behalf. Your saved approval delegate, {name}, will continue to handle approvals.",
+    "noDelegateWarning": "You have no approval delegate or replacement. If a request requires your approval while you are away, you must respond yourself or select a replacement/delegate now.",
+    "workCoverWarning": "Your replacement covers work only and cannot sign approvals on your behalf. You have no approval delegate, so you must respond to approval requests yourself or arrange a delegate.",
+    "configureDelegate": "Choose my saved delegate",
+    "contactAdmin": "Contact the admin to arrange an approval delegate. You can still submit this request.",
+    "autoPolicy": "Because you are the CEO’s appointed delegate, the CEO approval step on this request is approved automatically when you submit it, under the recorded CEO authorization. Other required approvals still apply.",
+    "ownConsent": "I accept responsibility for this request. Under the CEO’s explicit authorization recorded in the system, the CEO approval step will be completed automatically when I submit it. Any other required approval steps still apply.",
+    "ownConsentRequired": "Accept responsibility for this request and the recorded CEO automatic approval policy before submitting.",
+    "temporaryCeoAuthorization": "I explicitly authorize {name} as my temporary CEO delegate during the approved absence. While the appointment is in effect, the CEO step on their own eligible requests is approved automatically when they submit them. Other required approvals still apply.",
+    "temporaryConsentRequired": "Explicit CEO authorization for this temporary delegate is required before submitting."
+  },
+  "approvalEvidence": {
+    "selectStep": "Approval step",
+    "onBehalf": "On behalf of {name}",
+    "automaticShort": "Automatically approved",
+    "hrExempt": "Not required — request submitted by the Head of HR",
+    "automaticStatement": "Automatically approved under explicit authority from CEO {principal}. The requester accepted responsibility for this automatic approval. This is not the CEO’s handwritten signature.",
+    "delegatedSignature": "Signed by {signer} on behalf of {principal}",
+    "delegatedRejection": "Rejected by {signer} on behalf of {principal}",
+    "authorityRef": "Authority reference: {ref}",
+    "stepLabel": "Step {order}: {name}",
+    "responsibleDelegate": "Appointed delegate accepting responsibility: {name}",
+    "submittedAt": "Submitted: {at}",
+    "responsibilityAcceptedAt": "Responsibility accepted: {at}",
+    "automaticallyApprovedAt": "Automatically approved: {at}",
+    "recordedAuthority": "Recorded authority statement:",
+    "configurationChanged": "The approval chain has changed since submission. The current required steps are shown below.",
+    "legacyReconciliation": "Older approval evidence cannot identify the required steps unambiguously. The remaining steps need explicit decisions; contact the admin if clarification is needed.",
+    "historicalHrExemption": "HR review was not required when submitted. This step has since changed and now requires review."
   }
 }

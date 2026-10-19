@@ -11,6 +11,7 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import type { StepRole } from '@/lib/leave/approvals';
+import type { ApprovalContextRow, ApprovalSignatures, ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { DayPart } from './shared';
 
 export type ReviewRequestRow = {
@@ -144,7 +145,18 @@ export type PrintableRequest = ReviewRequestRow & {
      * the direct manager's, so only the step id tells them apart.
      */
     departmentStep: boolean;
-    decision: 'approved' | 'rejected';
+    stepId?: string | null;
+    stepOrder?: number;
+    named?: boolean;
+    expectedName?: string | null;
+    evidenceKind?: ApprovalEvidenceKind;
+    principalName?: string | null;
+    authorityRef?: string | null;
+    authorityStatement?: string | null;
+    delegateName?: string | null;
+    submittedAt?: string | null;
+    responsibilityConsentAt?: string | null;
+    decision: 'approved' | 'rejected' | null;
     approverName: string | null;
     signatureData: string | null;
     signatureConsentAt: string | null;
@@ -171,97 +183,17 @@ export async function getRequestForPrint(
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select(
-      `id, kind, unit, status, start_date, end_date, start_time, end_time, day_part,
-       requested_minutes, unpaid_minutes, serial_year, serial_seq, reason, errand_location,
-       decision_note, decided_at, signature_data, signature_consent_at,
-       approver_signature_data, approver_signature_consent_at, created_at, leave_type_id,
-       employee_id,
-       profiles!leave_requests_employee_id_fkey(
-         full_name, personnel_no, employee_code, job_title,
-         departments!profiles_department_id_fkey(name_fa, name_en)
-       ),
-       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
-       decider:profiles!leave_requests_decided_by_fkey(full_name),
-       leave_types(name_fa, name_en)`
-    )
-    .eq('id', requestId)
-    .maybeSingle();
-
-  if (error) return dbErr(error.message);
-  // RLS turns "not allowed" into "no row", which is the behaviour we want: the
-  // caller learns nothing about a request they may not read.
-  if (!data) return dbErr('request not found');
-
-  const row = data as unknown as {
-    id: string;
-    kind: Database['public']['Enums']['request_kind'];
-    unit: Database['public']['Enums']['leave_unit'];
-    status: Database['public']['Enums']['leave_status'];
-    start_date: string;
-    end_date: string;
-    start_time: string | null;
-    end_time: string | null;
-    day_part: DayPart;
-    requested_minutes: number;
-    unpaid_minutes: number;
-    serial_year: number;
-    serial_seq: number;
-    reason: string | null;
-    errand_location: string | null;
-    decision_note: string | null;
-    decided_at: string | null;
-    signature_data: string | null;
-    signature_consent_at: string | null;
-    approver_signature_data: string | null;
-    approver_signature_consent_at: string | null;
-    created_at: string;
-    leave_type_id: string | null;
-    employee_id: string;
-    profiles: {
-      full_name: string;
-      personnel_no: string | null;
-      employee_code: string;
-      job_title: string | null;
-      departments: { name_fa: string; name_en: string | null } | null;
-    } | null;
-    replacement: { full_name: string } | null;
-    decider: { full_name: string } | null;
-    leave_types: { name_fa: string; name_en: string | null } | null;
-  };
-
-  // Per-step signatures for the form's boxes. Same RLS as the request row.
-  const [{ data: approvalRows }, { data: departmentSteps }] = await Promise.all([
-    c.supabase
-      .from('leave_request_approvals')
-      .select(
-        'step_id, step_role, decision, signature_data, signature_consent_at, approver:profiles!leave_request_approvals_approver_id_fkey(full_name)'
-      )
-      .eq('request_id', requestId),
-    c.supabase.from('approval_steps').select('id').eq('manager_scope', 'department'),
+  const [context, signatures] = await Promise.all([
+    c.supabase.rpc('app_request_approval_context', { p_id: requestId }),
+    c.supabase.rpc('get_leave_request_signatures', { p_id: requestId }),
   ]);
-  const departmentStepIds = new Set((departmentSteps ?? []).map((s) => s.id));
+  if (context.error) return dbErr(context.error.message);
+  if (signatures.error) return dbErr(signatures.error.message);
+  if (!context.data || !signatures.data) return dbErr('request not found');
+  const row = context.data as unknown as ApprovalContextRow;
+  const evidence = signatures.data as unknown as ApprovalSignatures;
 
-  const approvals = ((approvalRows ?? []) as unknown as {
-    step_id: string | null;
-    step_role: string;
-    decision: string;
-    signature_data: string | null;
-    signature_consent_at: string | null;
-    approver: { full_name: string } | null;
-  }[]).map((a) => ({
-    stepRole: a.step_role as StepRole,
-    departmentStep: !!a.step_id && departmentStepIds.has(a.step_id),
-    decision: a.decision as 'approved' | 'rejected',
-    approverName: a.approver?.full_name ?? null,
-    signatureData: a.signature_data,
-    signatureConsentAt: a.signature_consent_at,
-  }));
-
-  // The 50210 balance line. Read through the ledger's own RLS, so an HR user
-  // gets it (can_read_all) and nobody else gains anything new.
+  // Keep ledger visibility unchanged. No visible ledger row is not proof of zero balance.
   let currentBalance: number | null = null;
   if (row.leave_type_id) {
     const { data: ledger } = await c.supabase
@@ -271,45 +203,35 @@ export async function getRequestForPrint(
       .eq('leave_type_id', row.leave_type_id)
       .order('seq', { ascending: false })
       .limit(1);
-    currentBalance = ledger?.[0]?.balance_after_minutes ?? 0;
+    currentBalance = ledger?.[0]?.balance_after_minutes ?? null;
   }
-
   return {
     ok: true,
     request: {
-      id: row.id,
-      kind: row.kind ?? 'leave',
-      unit: row.unit ?? 'day',
-      status: row.status,
-      employee_name: row.profiles?.full_name ?? '—',
-      personnel_no: row.profiles?.personnel_no ?? null,
-      employee_code: row.profiles?.employee_code ?? '—',
-      job_title: row.profiles?.job_title ?? null,
-      department_name_fa: row.profiles?.departments?.name_fa ?? null,
-      department_name_en: row.profiles?.departments?.name_en ?? null,
-      leave_type_name_fa: row.leave_types?.name_fa ?? null,
-      leave_type_name_en: row.leave_types?.name_en ?? null,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      start_time: row.start_time,
-      end_time: row.end_time,
-      day_part: row.day_part,
-      requested_minutes: row.requested_minutes,
-      unpaid_minutes: row.unpaid_minutes ?? 0,
-      serial_year: row.serial_year,
-      serial_seq: row.serial_seq,
-      reason: row.reason ?? null,
-      errand_location: row.errand_location ?? null,
-      decision_note: row.decision_note ?? null,
-      replacement_name: row.replacement?.full_name ?? null,
-      decided_by_name: row.decider?.full_name ?? null,
-      decided_at: row.decided_at ?? null,
-      signature_data: row.signature_data ?? null,
-      signature_consent_at: row.signature_consent_at ?? null,
-      approver_signature_data: row.approver_signature_data ?? null,
-      approver_signature_consent_at: row.approver_signature_consent_at ?? null,
-      created_at: row.created_at,
-      approvals,
+      ...row,
+      signature_data: evidence.requester_signature_data,
+      approver_signature_data: evidence.approver_signature_data ?? null,
+      approvals: evidence.approvals.filter((a) => a.decision || a.evidence_kind === 'hr_exempt').map((a) => ({
+        stepId: a.step_id,
+        stepOrder: a.step_order,
+        named: a.named,
+        expectedName: a.expected_name,
+        stepRole: a.step_role,
+        departmentStep: a.manager_scope === 'department' && !a.named,
+        evidenceKind: a.evidence_kind,
+        principalName: a.principal_name,
+        authorityRef: a.authority_ref ?? a.grant_id,
+        authorityStatement: a.statement ?? a.authority_statement
+          ?? (typeof a.evidence?.statement === 'string' ? a.evidence.statement : null),
+        delegateName: typeof a.evidence?.delegate_name === 'string' ? a.evidence.delegate_name : null,
+        submittedAt: typeof a.evidence?.submitted_at === 'string' ? a.evidence.submitted_at : null,
+        responsibilityConsentAt: typeof a.evidence?.consent_at === 'string' ? a.evidence.consent_at : null,
+        decision: a.decision,
+        approverName: a.signer_name,
+        // Automatic and exempt steps can never display a person's signature.
+        signatureData: ['automatic', 'hr_exempt'].includes(a.evidence_kind) ? null : a.signature_data ?? null,
+        signatureConsentAt: a.signed_at,
+      })),
       current_balance_minutes: currentBalance,
     },
   };

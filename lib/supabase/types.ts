@@ -20,6 +20,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      approval_executive_settings: {
+        Row: {
+          company_id: string
+          ceo_id: string | null
+          hr_head_id: string | null
+          hr_step_ids: string[]
+          version: number
+          configured_by: string | null
+          configured_at: string
+        }
+        Insert: {
+          company_id: string
+          ceo_id?: string | null
+          hr_head_id?: string | null
+          hr_step_ids?: string[]
+          version?: number
+          configured_by?: string | null
+          configured_at?: string
+        }
+        Update: {
+          company_id?: string
+          ceo_id?: string | null
+          hr_head_id?: string | null
+          hr_step_ids?: string[]
+          version?: number
+          configured_by?: string | null
+          configured_at?: string
+        }
+        Relationships: []
+      }
+      approval_delegations: {
+        Row: {
+          id: string
+          company_id: string
+          principal_id: string
+          delegate_id: string
+          principal_name: string
+          delegate_name: string
+          source_request_id: string | null
+          starts_at: string | null
+          ends_at: string | null
+          activated_at: string | null
+          ceo_authorized: boolean
+          configured_by: string
+          created_at: string
+          revoked_at: string | null
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          principal_id: string
+          delegate_id: string
+          principal_name: string
+          delegate_name: string
+          source_request_id?: string | null
+          starts_at?: string | null
+          ends_at?: string | null
+          activated_at?: string | null
+          ceo_authorized?: boolean
+          configured_by: string
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          principal_id?: string
+          delegate_id?: string
+          principal_name?: string
+          delegate_name?: string
+          source_request_id?: string | null
+          starts_at?: string | null
+          ends_at?: string | null
+          activated_at?: string | null
+          ceo_authorized?: boolean
+          configured_by?: string
+          created_at?: string
+          revoked_at?: string | null
+        }
+        Relationships: []
+      }
+      approval_request_policy: {
+        Row: {
+          request_id: string
+          company_id: string
+          starts_at: string
+          ends_at: string
+          hr_head_id: string | null
+          hr_exempt_step_ids: string[]
+          step_snapshot: Json
+          configuration_changed: boolean
+          created_at: string
+        }
+        Insert: {
+          request_id: string
+          company_id: string
+          starts_at: string
+          ends_at: string
+          hr_head_id?: string | null
+          hr_exempt_step_ids?: string[]
+          step_snapshot?: Json
+          configuration_changed?: boolean
+          created_at?: string
+        }
+        Update: {
+          request_id?: string
+          company_id?: string
+          starts_at?: string
+          ends_at?: string
+          hr_head_id?: string | null
+          hr_exempt_step_ids?: string[]
+          step_snapshot?: Json
+          configuration_changed?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -521,6 +638,12 @@ export type Database = {
       }
       leave_request_approvals: {
         Row: {
+          evidence_kind: string
+          principal_id: string | null
+          principal_name: string | null
+          signer_name_snapshot: string | null
+          authority_id: string | null
+          evidence: Json
           step_id: string | null
           id: string
           request_id: string
@@ -533,6 +656,12 @@ export type Database = {
           created_at: string
         }
         Insert: {
+          evidence_kind?: string
+          principal_id?: string | null
+          principal_name?: string | null
+          signer_name_snapshot?: string | null
+          authority_id?: string | null
+          evidence?: Json
           step_id?: string | null
           id?: string
           request_id: string
@@ -545,6 +674,12 @@ export type Database = {
           created_at?: string
         }
         Update: {
+          evidence_kind?: string
+          principal_id?: string | null
+          principal_name?: string | null
+          signer_name_snapshot?: string | null
+          authority_id?: string | null
+          evidence?: Json
           step_id?: string | null
           id?: string
           request_id?: string
@@ -1355,6 +1490,49 @@ export type Database = {
       }
     }
     Functions: {
+      app_approval_capabilities: { Args: never; Returns: Json }
+      app_delegation_context: { Args: { p_principal_id?: string }; Returns: Json }
+      app_search_delegates: {
+        Args: { p_principal_id: string; p_search?: string }
+        Returns: { profile_id: string; full_name: string; employee_code: string }[]
+      }
+      app_set_approval_delegate: {
+        Args: { p_principal_id: string; p_delegate_id?: string | null; p_ceo_authorized?: boolean }
+        Returns: undefined
+      }
+      app_set_executive_settings: {
+        Args: { p_ceo_id: string | null; p_hr_head_id: string | null; p_hr_step_ids: string[] }
+        Returns: undefined
+      }
+      app_request_delegation_preview: {
+        Args: { p_start: string; p_end: string; p_unit?: 'day' | 'hour'; p_day_part?: 'full' | 'am' | 'pm'; p_start_time?: string; p_end_time?: string; p_replacement_id?: string }
+        Returns: Json
+      }
+      submit_leave_request_v2: {
+        Args: Database['public']['Functions']['submit_leave_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Returns: string
+      }
+      submit_hourly_leave_request_v2: {
+        Args: Database['public']['Functions']['submit_hourly_leave_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Returns: string
+      }
+      submit_errand_request_v2: {
+        Args: Database['public']['Functions']['submit_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Returns: string
+      }
+      submit_daily_errand_request_v2: {
+        Args: Database['public']['Functions']['submit_daily_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Returns: string
+      }
+      approve_leave_request_v2: {
+        Args: Database['public']['Functions']['approve_leave_request']['Args'] & { p_step_id: string | null }
+        Returns: undefined
+      }
+      reject_leave_request_v2: { Args: { p_id: string; p_step_id: string | null; p_reason?: string }; Returns: undefined }
+      app_approval_queue: { Args: { p_status?: Database['public']['Enums']['leave_status'] }; Returns: Json }
+      app_request_approval_context: { Args: { p_id: string }; Returns: Json }
+      app_request_approval_progress: { Args: { p_id: string }; Returns: Json }
+      get_leave_request_signatures: { Args: { p_id: string }; Returns: Json }
       search_approver_candidates: {
         Args: { p_query: string }
         Returns: {

@@ -22,18 +22,26 @@ export function RequestProgress({
   defaultOpen?: boolean;
 }) {
   const t = useTranslations('requestProgress');
+  const te = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
   const locale = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
   const [error, setError] = useState('');
+  const [configurationChanged, setConfigurationChanged] = useState(false);
+  const [legacyReconciliation, setLegacyReconciliation] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback(
     () =>
       startTransition(async () => {
         const res = await getRequestProgress(requestId);
-        if (res.ok) setSteps(res.steps);
+        if (res.ok) {
+          setSteps(res.steps);
+          setConfigurationChanged(res.configurationChanged === true);
+          setLegacyReconciliation(res.legacyReconciliationRequired === true);
+          setError('');
+        }
         else setError(res.error);
       }),
     [requestId]
@@ -84,6 +92,8 @@ export function RequestProgress({
               {error}
             </p>
           )}
+          {legacyReconciliation && <p className="mb-2 text-xs text-warning">{te('legacyReconciliation')}</p>}
+          {configurationChanged && <p className="mb-2 text-xs text-warning">{te('configurationChanged')}</p>}
           {steps !== null && steps.length === 0 && (
             <p className="text-xs text-muted-foreground">{t('none')}</p>
           )}
@@ -93,12 +103,12 @@ export function RequestProgress({
                 const title = s.named ? (s.expectedName ?? s.signerName ?? stepName.employee) : stepName[s.label];
                 return (
                   <li
-                    key={i}
+                    key={s.stepId ?? `legacy-${i}`}
                     className="flex items-start gap-2.5"
                     data-testid={`progress-step-${requestId}-${i}`}
                     data-state={s.decision ?? 'waiting'}
                   >
-                    {s.decision === 'approved' ? (
+                    {s.decision === 'approved' || s.evidenceKind === 'hr_exempt' ? (
                       <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
                     ) : s.decision === 'rejected' ? (
                       <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />
@@ -110,8 +120,15 @@ export function RequestProgress({
                         <span className="text-muted-foreground">{formatNumber(i + 1, locale)}. </span>
                         {title}
                       </p>
+                      {s.historicalHrExemption && <p className="text-warning">{te('historicalHrExemption')}</p>}
                       <p className="text-muted-foreground">
-                        {s.decision === 'approved'
+                        {s.evidenceKind === 'automatic'
+                          ? te('automaticStatement', { principal: s.principalName ?? '—' })
+                          : s.evidenceKind === 'hr_exempt'
+                            ? te('hrExempt')
+                            : s.evidenceKind === 'delegated'
+                              ? te(s.decision === 'rejected' ? 'delegatedRejection' : 'delegatedSignature', { signer: s.signerName ?? '—', principal: s.principalName ?? '—' })
+                              : s.decision === 'approved'
                           ? t('approvedBy', { name: s.signerName ?? '—' })
                           : s.decision === 'rejected'
                             ? t('rejectedBy', { name: s.signerName ?? '—' })
@@ -119,6 +136,7 @@ export function RequestProgress({
                               ? t('waitingOnPerson', { name: s.expectedName })
                               : t('waiting')}
                         {s.signedAt && <> · {formatPersianConsentTimestamp(s.signedAt, locale)}</>}
+                        {s.authorityRef && <span className="block break-all">{te('authorityRef', { ref: s.authorityRef })}</span>}
                       </p>
                     </div>
                   </li>

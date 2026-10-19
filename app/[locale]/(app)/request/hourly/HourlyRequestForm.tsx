@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
 import { submitHourlyRequest } from '@/lib/actions/leave/requests';
@@ -17,6 +18,7 @@ import {
   useReplacementCandidates,
   useRequestSubmit,
   useSignature,
+  useRequestDelegation,
 } from '../_components/useRequestForm';
 import type { LeaveType, WorkSettings } from '@/lib/actions/leave/reference';
 import { PersianDateField } from '@/components/PersianDateField';
@@ -93,6 +95,8 @@ export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: 
       : null
   );
 
+  const delegation = useRequestDelegation(isoDate && durationMinutes > 0 ? { start: isoDate, end: isoDate, unit: 'hour', startTime, endTime, replacementId: replacement.replacementId || null } : null);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const problem = !selectedTypeId
@@ -101,7 +105,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: 
         ? labels.validationSelectDate
         : durationMinutes <= 0
           ? labels.validationTimes
-          : signature.problem(labels.signature);
+          : signature.problem(labels.signature) ?? delegation.problem();
 
     submit(
       problem,
@@ -115,6 +119,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: 
           replacementId: replacement.replacementId || null,
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
+          ...delegation.submission,
         }),
       () => {
         setDate(null);
@@ -159,7 +164,8 @@ export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: 
 
           <p className="text-sm text-muted-foreground">{labels.dailyLimitHint}</p>
 
-          <ReplacementField replacement={replacement} labels={labels} />
+          <ReplacementField replacement={replacement} labels={labels} delegationEnabled={delegation.preview?.can_delegate} />
+          <RequestDelegationFields idPrefix="hourly" delegation={delegation} locale={locale} hasReplacement={!!replacement.replacementId} />
 
           <div className="space-y-1.5">
             <Label htmlFor="hourly_reason">{labels.reason}</Label>
@@ -200,7 +206,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: 
 
           <Button
             type="submit"
-            disabled={isPending || overLimit}
+            disabled={isPending || overLimit || delegation.blocked}
             className="w-full"
             data-testid="hourly-submit"
           >

@@ -78,6 +78,713 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-19 — Second review of PR #7 (approval delegation), findings recorded
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `def6861` (PR #7), main @ `984b661`.
+**Trigger:** Owner asked for a second, read-only review of PR #7, then to record the findings for a
+later fix session if nothing blocks deploy.
+
+**What changed**
+- `docs/TASKS.md` — new item "PR #7 second-review follow-ups" (all findings with file:line and fixes);
+  approval-delegation item notes the second review is done.
+- `CLAUDE.md` — two gotchas: company approval lock before the employee leave lock (trigger-taken on
+  authority tables); unnest alias shadowing in SQL subqueries.
+- No code or SQL changed.
+
+**Actions outside the repo**
+- None. No SQL against bj-erp-db-1 or Liara; no push, merge or deploy.
+
+**Verification**
+- `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run test:unit` (879 tests / 82 files),
+  `npm run test:deploy` — all pass. Not run: `tests/sql/*` (needs a DB), e2e, `npm run build`.
+- `supabase/schema.sql` vs main + migration: statement-level set diff clean (only GRANT reordering).
+- Confirmed by reading: automatic CEO step reachable only via the four `submit_*_v2` →
+  `enroll_request_delegation`; lock order company → employee everywhere a triggered table is written;
+  new tables RLS + select-only; private helpers revoked; no timer leftovers outside historical docs.
+
+**State left behind**
+- `docs/TASKS.md`, `docs/AGENT-LOG.md`, `CLAUDE.md` edited on `codex/approval-delegation`, uncommitted.
+
+**For the next agent**
+- Verdict: no blocker, safe to deploy. Most important follow-up: admin cannot revoke a delegate while
+  the principal is ineligible (stale `ceo_authorized` grant revives); workaround = unset/re-set the CEO.
+- e2e `hr-role.spec.ts:355-380` will fail until the `chain-<id>-<role>` testid is restored.
+
+## 2026-10-19 — Approval delegation simplified (no timer), PR #7 review fixes, squashed migration
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `6d18273` (PR #7 open).
+**Trigger:** Owner pasted the PR #7 review, chose fixes (hide out-of-order queue rows, pending-only
+reads, measure perf on a production dump), then simplified the design mid-turn: drop the timed
+auto-approval; the CEO's delegate's own requests get the CEO step approved right away; other CEO
+requests go to the delegate. Owner chose: squash migrations + rebuild test DB, keep the consent
+checkbox, approve at submission even before HR.
+
+**What changed**
+- `supabase/migrations/20261018011333_approval_delegation.sql` — squashed replacement of the five
+  unreleased delegation migrations (`…231551`, `…143148`, `…143601`, unapplied `…153137` deleted).
+  Assembled from the latest version of every function, then: dropped `approval_auto_requests`,
+  `approval_worker_runs`, worker, worker health, timer-invalid-reason, reconcile, window setter, cron
+  registration; `enroll_request_delegation` approves CEO-owned steps at submission via
+  `decide_approval_request`'s automatic branch (authority re-validated directly); after-mutation trigger
+  only on `approval_steps`. Review fixes kept: `step_delegation` from caller's own grants + partial index
+  `approval_delegations_delegate_live`; `can_read_approval_request` adds approval reads only while pending
+  or where the caller decided; CEO change clears outgoing CEO's `ceo_authorized`; `app_cleanup_e2e_users`
+  clears delegation/executive rows of junk accounts; FR-25 policy comment restored. 1978 lines, SHA256
+  `eb458f61988ace3f69a61a8929045493d72de97d65b965b6a3c2464903f276e5`.
+- `tests/sql/approval-delegation.sql` — timer/worker/window cases replaced by at-submission cases
+  (four forms, HR-head delegate approved at submission, delegate switch A→B→A, permission removal,
+  temporary delegate, read scope, one-hop, CEO re-designation, cleanup). `make_due` removed.
+- App: removed `ApprovalWorkerHealthCard`, window card, `getApprovalWorkerHealth`,
+  `setAutoApprovalWindow`, window helpers/types, timer status in `RequestProgress`, `automatic_approval`
+  context field, worker/window messages; EN/FA consent/policy/attestation text now says "approved
+  automatically when you submit it". `lib/actions/leave/approvals.ts` queue filter back to `main`'s rule
+  (`can_override || decision_steps`); new `tests/unit/approval-queue-order.test.ts`.
+- Docs: DATA_MODEL/PERMISSIONS/REQUIREMENTS rewritten for at-submission behavior; spec amendment
+  replaces the window amendment; superseded notes on plan, RPC contract, review, both handoffs, resume
+  prompt; TASKS/CHANGELOG updated; new TASKS item for the pre-existing e2e-cleanup cascade FK error.
+
+**Actions outside the repo** (isolated `bj-delegation-*` stack only)
+- Destroyed and rebuilt volume `bj-delegation_db-data` twice (second for a variable-name fix in the
+  squashed migration) with new `.bj-deploy/delegation/resume-tools/bj-delegation-rebuild.sh`: `main`
+  baseline (only `schema "public" already exists`), `restore-acls.sql` + PUBLIC execute on the three
+  private validators, seed, calendar, GoTrue up, bootstrap admin, ledger apply. Re-seeded 7 QA users
+  (`/tmp/bj-delegation-qa.py seed`; new `qa-login.json`). cron job no longer exists.
+- Production-data perf: copied the verified local dump `~/Backups/bj-erp/daily-20261019T020147Z.dump`
+  (sha256 OK; never touched the server) into the container, restored into separate database `bj_perf`
+  (only cron/graphql objects failed), applied the squashed migration in a rolled-back transaction with
+  80 synthetic pending requests + 5 saved delegations, timed `app_approval_queue('pending')` (best of 3):
+  admin 3539→236 ms, HR 2523→206, top manager 2987→288, delegate 3022→292, employee 3433→166
+  (original vs new `step_delegation`). Printed only timings/counts. Then dropped `bj_perf` and deleted
+  the dump copy from the container (verified). Script: `resume-tools/bj-delegation-perf.sql.txt`.
+- App rebuilt (Webpack) and restarted on `localhost:3002`.
+
+**Verification**
+- SQL: 6 suites on the rebuilt DB — 772 PASS / 0 FAIL / 0 ERROR (delegation 165 incl. new cases).
+- `npm run lint` 0, `npx tsc --noEmit` 0, `npm run test:unit` 879 / 82 files, Webpack build 0,
+  `npm run test:deploy` all passed. `schema.sql` dumped with `BJ_DB_CONTAINER`; GRANT/REVOKE vs `main`:
+  none removed, no additions on non-delegation objects after restoring the validators' grants.
+- Browser (`/tmp/bj-delegation-browser-rest.cjs smoke forms warn exact mobile print`), all PASS:
+  no worker/window cards; stale preview refused; four forms show "approved automatically when you
+  submit it", DB shows one automatic CEO row each (no signer/PNG, consent recorded), HR pending;
+  no-delegate warning; employee errand exact steps (HR → A on behalf of CEO → A named); Farsi mobile
+  RTL; EN/FA print (automatic + exact), no broken images (Farsi print inspected).
+- Dead ends: `g` variable collided with an alias in `decide_approval_request` (42702) → renamed
+  `v_auth`, rebuilt; baseline needs no ON_ERROR_STOP; GoTrue must migrate `auth` before bootstrap;
+  `supabase migration new` waits on stdin; e2e cleanup in SQL tests hit a pre-existing cascade FK
+  error and the fixture admin matching the junk pattern (scoped test, logged in TASKS).
+- Not rerun: real concurrent lock races (worker races are moot; RPC lock order unchanged).
+
+**State left behind**
+- Uncommitted until the PR push below; PR #7 not merged; nothing deployed. Isolated DB rebuilt with
+  fresh synthetic fixtures; production untouched.
+
+**For the next agent**
+- Until merge, change SQL by editing the squashed file and running the rebuild script (see handoff
+  top section), not a new migration. Second review of PR #7 pending.
+
+## 2026-10-19 — Approval delegation: lint fix, Farsi loop root cause, races and full browser pass
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents used.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `984b661`; all prior uncommitted work preserved.
+**Trigger:** Owner asked to resume from `docs/plans/2026-10-19-approval-delegation-handoff.md`: lint fix,
+Farsi redirect loop, six extra races, remaining browser validation, final checks and docs.
+
+**What changed**
+- `lib/actions/approval-delegation.ts:93`, `lib/leave/delegation.ts:66` — worker-health DTO gains
+  `observed_at` (server read time). `ApprovalWorkerHealthCard.tsx:27` measures staleness against it
+  instead of `Date.now()` in render (`react-hooks/purity`). Tests updated:
+  `tests/unit/approval-worker-health.test.tsx` (fixed `observed_at`, no fake timers),
+  `tests/unit/approval-delegation-actions.test.ts` (fake clock, asserts `observed_at`).
+- Docs: `MEMORY.md` lesson (loopback hostname loop); `TASKS.md` delegation status + new pre-existing
+  item (Farsi prefetch double redirect); `CHANGELOG.md` Unreleased entry marked branch-only/not deployed;
+  plan status; status section atop the 2026-10-19 handoff.
+- No SQL, migration, routing or product config change.
+
+**Actions outside the repo** (isolated stack only — `bj-delegation-*` containers, synthetic data)
+- Farsi loop diagnosis: curl on running `next start --hostname 127.0.0.1` showed `/login` → 307,
+  `x-middleware-rewrite: http://localhost:3002/fa/login`, `location: /login`. A second server on
+  `--hostname localhost --port 3003` returned `/login` 200 with relative rewrite `/fa/login`. Cause:
+  `next/dist/server/web/next-url.js:15` normalizes loopback to `localhost`; `resolve-routes.js`
+  builds `initUrl` from `--hostname`, so `getRelativeURL` keeps the rewrite absolute and Next proxies
+  it externally into next-intl's prefix-strip redirect. Not an app bug; prod image uses `0.0.0.0`.
+- Stopped old servers (PIDs 60152/60175 and the 3003 probe). Launchers `/tmp/bj-delegation-prod.cjs`
+  and `-start.cjs` now bind `localhost`. Webpack production build (`build-final2.log`, exit 0), then
+  started production server on `localhost:3002` (`app-prod2.log`).
+- `.bj-deploy/delegation/Caddyfile`: CORS matcher now `header_regexp` for `127.0.0.1|localhost:3002`,
+  echoing the request origin; reloaded `bj-delegation-gateway-1` only. Verified: both origins echoed,
+  foreign origin gets no ACAO header.
+- Ran `/tmp/bj-delegation-additional-races.py` (Python 3.13): all 6 PASS. Post-check: one admin
+  (`admin`), cron `bj-approval-delegation` active=false, 8 profiles, HR `leave_requests` back to `read`,
+  both ledger hashes unchanged.
+- Browser (new `/tmp/bj-delegation-browser-rest.cjs`, phased) created synthetic requests via the UI:
+  A's four forms (Nov 20–23 2026), employee errand Nov 25; HR/A/CEO approvals; admin changed CEO saved
+  delegate A→B→A once (stale-preview test, ends at A). Language prefs toggled and restored
+  (CEO fa, admin en).
+
+**Verification**
+- `npm run lint` exit 0 (after renaming `resume-tools/*.cjs` → `.cjs.txt`; ESLint scanned those
+  untracked copies — product-only `eslint --ignore-pattern '.bj-deploy/**'` also exit 0).
+  `npx tsc --noEmit` exit 0. `npm run test:unit` 895 tests / 82 files passed. Build exit 0.
+  SQL suites not rerun (no SQL change since the 761-assertion pass). Deploy tests not rerun (no change).
+- Additional races PASS: cancel with permission revoked during lock wait (42501, request stays pending);
+  former admin cannot change executive settings / another principal's delegate after admin transfer
+  (42501, original admin restored); decision created/consent/decided timestamps ≥ lock release;
+  bulk import vs worker both orders (observed employee gate + company-first ordering, one automatic
+  CEO row, one consumption, approved).
+- Browser, all PASS (console/page errors none): rebuilt admin settings + worker card `inactive`;
+  stale preview after A→B→A shows "Approval coverage changed…", no request row created, refresh +
+  re-consent then submits; daily/hourly/errand/daily-errand submitted by A with consent + drawn PNG;
+  DB enrollment for all four: pending timer, CEO step only, `due_at = submitted_at + 120 min`;
+  A reaches queue without manager role; HR (natural approver, no saved delegate) sees
+  `daily-no-approval-delegate`; employee errand offered no auto consent; HR approves step 1, A approves
+  delegated CEO step ("On behalf of QA ceo"), queue reload keeps the request, A approves named step 3;
+  evidence hr=manual, ceo=`delegated` (approver A, principal CEO), named=manual (no principal),
+  approved; CEO early manual approval in Farsi → manual row, no automatic row, timer `invalidated`
+  (status trigger, by design); Farsi mobile 390×844 home/settings/request(+preview)/approvals/profile
+  RTL with no horizontal overflow; language fa→en→fa via profile without loop; EN/FA print of cron
+  automatic fixture and exact-step errand (screenshots + PDFs, inspected).
+- Dead ends: system `python3` (anaconda 3.11) rejected the harness f-string; first exact-step assertion
+  wrongly expected `manual` for the delegate row (schema value is `delegated`); `healthy()` blank-page
+  check fired before streamed content (now polls); authed `/login` does not redirect to `/home` (by
+  design); soft language switch can leave `/fa/profile` in the address bar until reload (pre-existing).
+- Observation: automatic print of the SQL cron fixture shows broken requester/HR images — that
+  fixture's `pg_temp.sig()` is a 122-byte placeholder, not a PNG. Browser-drawn rows (8958 bytes) render.
+  Natural-deadline automatic print with real PNGs: see addendum below.
+
+**State left behind**
+- All work uncommitted, unpushed, undeployed. Real roster DB and production untouched. Isolated cron
+  inactive. Production-mode app running on `localhost:3002` (launcher `/tmp/bj-delegation-prod.cjs`).
+- Artifacts: `.bj-deploy/delegation/additional-races.{log,json}`, `browser-rest-state.json`,
+  `browser/*.png|pdf`, `lint-final2.log`, `typecheck-final2.log`, `unit-final2.log`, `build-final2.log`.
+
+**For the next agent**
+- Remaining are release gates needing owner authorization only (commit/PR, recovery evidence,
+  production migration, worker activation, smoke). Start servers with `--hostname localhost`.
+
+**Addendum (same session) — admin-adjustable automatic approval window**
+- Trigger: owner asked to make the 2-hour window admin-adjustable, set it to 2 minutes and rerun the
+  automatic-approval test.
+- SQL: `supabase/migrations/20261019143148_approval_auto_window.sql` — `approval_executive_settings.
+  auto_approval_minutes` (default 120, 1–1440), `approval_auto_requests.window_minutes` snapshot with
+  check `due_at = submitted_at + window_minutes` (replaces fixed 120 check), admin-only audited RPC
+  `app_set_auto_approval_window` (company lock, post-lock admin recheck, no version bump), full
+  replacements of `private.enroll_request_delegation`, `app_request_delegation_preview` (returns
+  `auto_approval_minutes`; token covers it) and `app_delegation_context`. Its dump showed Supabase's
+  default **anon EXECUTE** on the new RPC; fixed by `20261019143601_approval_auto_window_acl.sql`
+  (authenticated only). Both dry-run in rollback, then applied via ledger to `bj-delegation-db` only;
+  `schema.sql` dumped with `BJ_DB_CONTAINER`; ACL artifacts of the three private validators still match
+  HEAD. 21 new SQL assertions + window-aware `pg_temp.make_due`.
+- App: `lib/actions/approval-delegation.ts` `setAutoApprovalWindow` + context default; types; error key
+  `dbErrors.autoWindowInvalid`; admin-only `AutoApprovalWindowPanel` in `DelegationPanel.tsx`; consent,
+  policy, attestation and expiry text now take `{window}` (`approvalWindow.hours|minutes`, keeps "two
+  hours"/«دو ساعت» at 120); worker overdue hint made duration-neutral. 18 new unit tests.
+- Dead ends: `supabase migration new` hung waiting on stdin (killed; file written by hand). SQL suites on
+  the isolated DB failed before isolation (QA codes 9990018xxx collide; QA Delegation role makes 7 roles)
+  — identical on baseline, fixed by rolled-back isolation in `resume-tools/bj-delegation-suites-isolated.py`.
+  Browser phase first failed because Save is disabled when the value is unchanged (correct behavior).
+- Verification: SQL 782 PASS / 0 FAIL / 0 ERROR (candidate and applied). Unit 913/82, lint 0, tsc 0,
+  build 0 (rebuilt twice; server restarted on `localhost:3002`). Browser `window`: CEO has no control;
+  admin 0 refused, 3→2 saved, label "Current: 2 minutes"; A's hourly (Nov 24) + errand (Nov 27) show
+  "after 2 minutes"/"2 minutes after submission", timers `window_minutes=2`, due = submitted + 2 min;
+  HR approved step 1. Explicit worker before deadline: examined 0. After: completed 2 (one automatic row
+  each, hourly approved with one consumption; errand pending on its named step 3, as designed); repeat
+  call idempotent. `autoprint2` EN/FA: automatic statement, drawn PNGs, no broken images (Farsi hourly
+  print inspected: submitted 18:24, automatic 18:26). Older 120-minute timers still due 15:42 UTC.
+- Found, not fixed (TASKS): save notices vanish after page re-render (keyed remount); recorded authority
+  statement prints in English on Farsi forms.
+- State: isolated company window **left at 2 minutes**; cron inactive.
+- Owner then asked for a PR: committed everything as `e728c25` (secret scan of all 77 changed files
+  against `test.env`/`qa-login.json` values: no hits), pushed `codex/approval-delegation`, opened
+  https://github.com/AmirNcode/bj-erp/pull/7 → `main`. No PR CI exists; **merging deploys to Liara**
+  (push to `main`). Not merged, not deployed; production worker activation not done.
+
+## 2026-10-19 — Approval delegation review, isolated races/cron and second handoff
+
+**Agent:** Codex lead; SQL reviewer `gpt-6.1-sol`/`xhigh`, UI/docs reviewer
+`gpt-6.1-sol`/`high`; at most two subagents, no nesting. Lead owned DB/tests/schema/journal.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `984b661`; prior changes preserved.
+**Trigger:** Continue implementation from the first handoff; owner later requested another handoff
+because of usage interruptions and session length.
+
+**What changed**
+- Added CLI-created forward migration `20261018231551_approval_delegation_lock_rechecks.sql`:
+  post-lock caller/tenant checks, company-first bulk import lock, post-wait submission/decision clocks.
+  Eight full function replacements preserve ACLs/signatures; original migration untouched.
+- Added12 SQL regression assertions; worker health stale/future state and action validation; exact-step
+  print labels and immutable automatic authority/delegate/submitted/consent/processing evidence;
+  bilingual deadline-eligibility wording and unit tests.
+- Updated `DATA_MODEL.md`, `PERMISSIONS.md`, `REQUIREMENTS.md` as unreleased; retained credential risk.
+- Created current `docs/plans/2026-10-19-approval-delegation-handoff.md` and matching resume prompt;
+  updated plan/TASKS with actual completion boundaries. No CHANGELOG release claim.
+
+**Actions outside the repo**
+- Applied only new forward migration to `bj-delegation-db/postgres` through deployment ledger;
+  SHA256 `6602cc226ee41870724c8adf8e63978bfb6d25d701a15cc55816acb96b449621`.
+  Both migrations now frozen. Restored3 private validation-function PUBLIC grants to exact baseline
+  ACLs (isolated import artifacts), then dumped schema with explicit BJ_DB_CONTAINER.
+- Created7 synthetic browser users with guarded admin RPCs; eight profiles total. Kept IDs/login data
+  in ignored `.bj-deploy/delegation/`; no real roster or production operations.
+- Ran12 competing worker/manual/reject/cancel/revoke/permission/worker sessions, both orders, with
+  observer-confirmed lock waits; temporary-source cancellation both orders plus submission wait.
+- Enabled only isolated cron for actual runs1/2 at23:46/23:47UTC Oct18, with browser closed; tested
+  failed-item isolation/backoff/retry/evidence/idempotence. Returned job inactive; handoff rechecked.
+- Repaired test-only gateway CORS (explicit app origin and remove duplicate upstream header).
+  Stopped task dev server for build; left production-mode app on3002 using isolated API8092.
+- Saved temporary QA scripts under ignored `resume-tools/` for recovery; chmod0600 browser auth state.
+
+**Verification**
+- All6 SQL suites passed candidate rollback and again after apply:761 assertions (154 delegation,
+  355 FR55,83 FR54,59 FR52/53,70 feedback,40 FR51), zero FAIL/ERROR. Before persistent browser fixtures.
+- Unit895/82files passed; final TypeScript passed; Webpack production build passed; deploy shell tests
+  all passed. Final lint FAILED: worker card line26 Date.now during render, react-hooks/purity.
+- Schema source review: no unexpected existing-object/ACL drift after restoration; function bodies
+  match frozen migrations; remaining dump churn cosmetic/expected.
+- English browser passed admin delegate A→B→A, executive mapping, keyboard binary control, CEO
+  self-service isolation, AM/PM bounds/consent reset and eligible/ordinary/no-replacement cases.
+  Initial admin screenshot inspected and console clean. RTL/mobile/4form submissions/print/queue
+  decisions not reached: Farsi default route redirect loop. Reproduced dev and next-start production
+  mode; curl /login returns307 with localhost rewrite and /login Location. Hostname-origin mismatch
+  is a hypothesis, not a fix; no routing code changed. See handoff for exact investigation point.
+- Additional6race harness initially failed before-lock assertion because HR preset is read-only;
+  corrected temporary edit fixture exists but not rerun. Agent hit usage limit after writing correction.
+- Dead ends recorded: wrong ledger column names in first read-only query; extra parenthesis in new
+  SQL test corrected before passing run; temporary synthetic-history overlap/interval interference
+  corrected; browser control selectors corrected; CORS missing/duplicate headers corrected; Farsi
+  direct-prefix alone insufficient because stored preference applies after prefix stripping.
+
+**State left behind**
+- All work uncommitted, unpushed, undeployed. Shared roster/production untouched. Isolated cron inactive,
+  eight synthetic profiles and one active original admin verified. Latest local server launcher PID60152,
+  next-server60175 (recheck before signalling). No browser/race harness left running.
+- Not complete: lint fix, Farsi routing diagnosis, additional races, remaining rendered checks and final
+  documentation/checks. Full operational details and artifacts are in new handoff; older handoff's
+  one-profile/one-migration/unrun-concurrency state is superseded.
+
+**For the next agent**
+- Read new handoff first; do not repeat broad exploration or reopen settled policies. Both migration
+  files frozen. Keep operational tasks under lead, original admin and worker state preserved.
+- QA role now has delegation permission, so global default-No SQL assertion needs isolated fixture
+  handling for reruns. Do not reuse apply scripts or broadly clean E2E users/real roster.
+- A useful future CLAUDE.md one-line addition: “For isolated default-locale QA, verify that the Next
+  runtime hostname and middleware rewrite origin agree before interpreting redirect loops.” This is
+  provisional until the current loop diagnosis is confirmed; no CLAUDE change made.
+
+
+
+## 2026-10-18 — Approval delegation implementation paused for owner-requested handoff
+
+**Agent:** Codex lead; database subagent `gpt-6.1-sol` / `xhigh`, settings subagent
+`gpt-6.1-sol` / `high`; no nested delegation. Lead retained DB/shared tests/schema/journal.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `984b661`; all work uncommitted.
+**Trigger:** Owner requested a handoff to another build agent after repeated usage interruptions.
+
+**What changed**
+- Created `docs/plans/2026-10-18-approval-delegation-handoff.md`: approved policy, source map,
+  implemented/unverified boundaries, exact DB state, checks, traps and ordered continuation steps.
+- Updated active plan/backlog status to reflect implementation and pending validation. This entry
+  supersedes the preceding implementation entry's earlier "not yet applied/frozen" state.
+- Since that earlier entry: integrated exact-step decisions, scoped progress/signatures/print,
+  automatic/delegated/HR-exempt evidence, configuration/legacy warnings, hand-maintained types,
+  bilingual errors and tests. Settings agent's worker health card/action/locales/tests exist but
+  its last turn hit the usage limit; these latest files need validation.
+- Database review fixed historical HR exemption loss, ambiguous legacy null-step role matching,
+  old/new-company invalidation, no-chain delegated visibility and admin override attribution.
+  Worker backoff/pending-first processing and scoped CEO/admin health added before freeze.
+
+**Actions outside the repo**
+- Applied `20261018011333_approval_delegation.sql` ONLY to isolated `bj-delegation-db/postgres`,
+  through `bj_apply_and_record_migration` and ledger, release `delegation-isolated-qa`.
+  SHA256 `db34edf28e38646b84ca9953d3424ff1f9621b1400c60026be99f1fc81830b31`.
+  **Migration is frozen; future SQL fixes require a new forward migration.**
+- Regenerated `supabase/schema.sql` using `BJ_DB_CONTAINER=bj-delegation-db npm run schema:dump`.
+- Corrected isolated schema-restore ACL artifacts by replaying the exact baseline ACLs for131
+  objects; fresh-image default grants had caused false regression failures. No production fix implied.
+- Started isolated app on `127.0.0.1:3002` with Webpack and API8092. Bootstrap admin remains the
+  only profile; browser/concurrency fixtures have not been created. No real roster copied.
+- Handoff read-only recheck confirmed ledger checksum, one synthetic profile and inactive
+  `bj-approval-delegation` minute cron job. Initial inline SQL verification quote failed; heredoc retry
+  succeeded. Shared local roster and hosted systems were not migrated/tested/deployed.
+
+**Verification**
+- Latest rollback-only delegation suite:142 PASS,0 FAIL,0 ERROR. Existing SQL latest logs:
+  FR-51 40, FR-52/53 59, FR-54 83, FR-55 355, client feedback70 PASS, zeroFAIL/ERROR.
+  Some existing suites precede final migration refinements; rerun all against applied schema.
+- Full unit run earlier:862 passed/3 catalog failures (old schema/count). Count corrected and schema
+  regenerated afterward; full suite has NOT been rerun. Focused4files/28tests passed before worker UI.
+- Earlier typecheck/lint passed. Webpack production build passed; Turbopack sandbox and escalated
+  attempts failed compiler port binding. Latest UI/types/warnings still require final checks.
+- `git diff --check` passed during handoff. Actual concurrent SQL sessions, actual cron execution,
+  browser/RTL/mobile/print and deploy-script tests remain unrun. See handoff for exact chronology.
+
+**State left behind**
+- Everything uncommitted, unpushed and undeployed. Worker inactive. Implementation is not yet
+  validated as complete. Owner asked to hand off; no further implementation in this handoff turn.
+- Ignored test stack/logs retained at `.bj-deploy/delegation/`; temporary start/apply scripts in `/tmp`.
+  Do not rerun already-applied migration or generated wrappers that prepend it.
+
+**For the next agent**
+- Start with the handoff. Preserve two-agent/no-nesting limits and lead-only operational ownership.
+- Finish real concurrency/cron/browser and final application checks, then domain docs and release
+  readiness. Credential/session hardening remains explicitly deferred with R9 risk; no new gate.
+- Never use `bj-erp-db-1/postgres` for these tests. Do not commit/push/deploy without owner instruction.
+
+
+## 2026-10-17 — Approval delegation implementation and isolated validation (in progress)
+
+**Agent:** Codex lead (current chat model/effort not exposed); two subagents explicitly configured:
+`delegation_database` = `gpt-6.1-sol` / `xhigh`, `delegation_settings` = `gpt-6.1-sol` / `high`.
+No nested agents. Lead owns all database operations, shared tests, schema regeneration and this journal.
+**Branch / HEAD at start:** `main` @ `984b661`, existing design/spec/review/backlog/journal preserved;
+implementation on `codex/approval-delegation`.
+**Trigger:** Owner authorized implementation; resumed after usage interruptions.
+
+**What changed**
+- Database migration `20261018011333_approval_delegation.sql` is a candidate, not yet applied/frozen.
+  Adds saved/temporary approval-only grants, explicit executive/HR configuration, Yes/No permission,
+  scoped live capabilities/context/signatures, v2 submissions/decisions, immutable evidence and
+  durable two-hour enrollment/invalidation, shared finalization, inactive minute worker.
+- Settings role panel/permission, live navigation guards, all four request forms, exact absence
+  previews and separate explicit CEO temporary-authority and own-request responsibility consent.
+- Lead integrates exact-step selection, Home/queue refresh, scoped progress/print/signature reads,
+  automatic responsibility/authority evidence and explicit HR exemption with bilingual messages.
+- Added focused UI/action/evidence and SQL regression scenarios. Credential/session protection remains
+  deferred by owner; retained credentials/sessions can impersonate principals or delegates (R9).
+
+**Actions outside the repo**
+- Created isolated synthetic-only Docker stack `bj-delegation`: DB `bj-delegation-db`, auth/rest/gateway,
+  gateway `127.0.0.1:8092`; configuration/secrets in ignored `.bj-deploy/delegation/` (env mode0600).
+  Loaded HEAD schema, company seed, synthetic admin and Jalali calendar; pg_cron installed there.
+  No real roster copied. Shared `bj-erp-db-1/postgres` and hosted systems were not migrated or tested.
+- Supabase CLI created migration after sandbox telemetry-path failure; escalated CLI succeeded.
+  Branch and Docker escalations succeeded; no automatic-approval rejection.
+
+**Verification (in progress; not a release claim)**
+- Initial migration-only BEGIN/ROLLBACK succeeded. Combined migration/scenarios exposed generic
+  trigger `NEW.active` access on non-profile tables; database agent correcting with nested guards.
+- `npx tsc --noEmit`, `npm run lint` passed initially. Unit run: 862 pass, 3 catalog failures from
+  not-yet-regenerated schema / old count19. Count corrected to20; schema regeneration pending.
+- Focused evidence/action/forms: 19 passed. Later review edits require another shared run.
+- Next.js docs paths are `.md`, not `.mdx`; initial guessed docs/form/test paths failed then corrected.
+  Supabase changelog Markdown fetch unsupported; official changelog page fallback read.
+
+**State left behind**
+- Work uncommitted, unpushed, undeployed. Migration not frozen, isolated worker inactive.
+- Finish SQL scenarios/concurrency/scheduler validation, regenerate schema from isolated container,
+  full application checks and rendered local UI verification, then update this entry with outcomes.
+
+**For the next agent**
+- Do not touch shared local roster or production. Use `bj-delegation-db` explicitly for every DB command.
+- Do not add credential/session hardening or a new activation prerequisite; preserve disclosed R9 risk.
+- Both subagents may author owned code/tests; only lead executes DB/shared tests and changes journal.
+
+## 2026-10-17 — Final half-day and credential-scope decisions recorded
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; prior review/spec/plan/backlog/journal uncommitted.
+**Trigger:** Owner answered the two remaining review questions: configured-workday half-day
+delegation, and continued deferral of credential/session protection with explicit residual risk.
+
+**What changed**
+- Updated spec, plan, review and backlog to settle all review clarification questions. AM/PM
+  delegation uses the first/second half of work_start–work_end, shown before submission and
+  snapshotted server-side with exclusive end bounds. Added stale-preview and midpoint test cases.
+- Recorded the owner's decision to keep credential/session protection outside this release.
+  R9 remains an open security risk, not fixed or a delegation activation prerequisite. Future
+  remediation/tests are explicitly separate. Password resets remain admin-only.
+- Reaffirmed the residual impersonation risk in the existing deferred FR-55 task. Did not alter
+  prior journal entries; their pending-question state is superseded by this entry.
+
+**Actions outside the repo**
+- None. No database, account, runtime, server or deployment operations.
+
+**Verification**
+- `git diff --check` and whitespace checks for the untracked spec/plan/review passed.
+- Checked active documents for stale pending-question and credential-gate wording. No application
+  tests: this turn only records confirmed design/scope decisions.
+
+**State left behind**
+- Documentation uncommitted. Review clarifications complete; corrected implementation plan prepared.
+- No application code, migrations, commit, push or deployment. No new implementation instruction
+  inferred from these clarification answers.
+
+**For the next agent**
+- Do not re-ask these questions or add credential/session hardening as a release prerequisite.
+  Preserve and disclose the open risk; retain all in-scope delegation authorization safeguards.
+- Implement/test R1–R8 when implementation is requested; R9 remediation stays deferred.
+
+## 2026-10-17 — Final approval-delegation design and security review
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; earlier spec/plan/backlog/journal uncommitted.
+**Trigger:** Owner requested a final design/spec/plan review before implementation, then asked
+to resume after a usage interruption.
+
+**What changed**
+- Added `docs/REVIEW-2026-10-17-approval-delegation.md`: nine findings with source evidence,
+  impact, proposed resolutions and regression scenarios. Updated discussion spec/plan/backlog.
+- Owner resolved three questions: CEO delegates must already directly report to CEO; automatic
+  CEO step bypasses earlier unfinished HR at two hours while HR remains required; ordinary
+  employees remain operational replacements, retaining saved approval delegate or showing warning.
+- Found missing half-day bounds, durable invalidation across A→B→A/worker downtime, named-approver
+  inbox/profile-read gaps, locked Manager role and D4 effects, and ambiguous HR-step classification.
+  Plan now includes corresponding safeguards and validation cases. Retain Manager lock and current
+  D4 behavior; use a supplementary custom delegation role assigned by admin.
+- Flagged the previously deferred creator-known-password/session risk as amplified by delegation,
+  without claiming a new reproduction. Two asynchronous questions remain pending: half-day timing
+  policy and whether credential/session protection belongs in scope before delegation activation.
+- Checked rejection's post-update row-count exception too; do not describe its pre-lock status
+  read alone as proof of a committed double decision. Existing planned locked re-read is retained.
+
+**Actions outside the repo**
+- Read local memory guidance and Supabase skill. No database, account, Docker, server or deployment
+  changes. No subagents. No production or hosted-runtime inspection.
+
+**Verification**
+- Inspected current schema/functions and source for permissions, roles, replacement, approvals,
+  navigation/Home and evidence. `git diff --check` passed; checked new document whitespace separately.
+- Source/document review only. No application, SQL, concurrency, scheduler or browser tests run.
+
+**State left behind**
+- Review/spec/plan/backlog/journal uncommitted; no implementation, migration, commit, push or deploy.
+- Plan is not yet marked implementation-ready: two policy/scope answers pending, then final review
+  of the corrected plan. Earlier entries saying all questions were settled predate these findings.
+
+**For the next agent**
+- Preserve the latest three answers; do not re-ask them. Keep actual HR-head exemption separate
+  from CEO-delegate identity. Code should not start as part of this review-only request.
+- Credential reset remains admin-only. Do not claim a password-change flag or reset alone closes
+  the existing retained-session risk. Validate any selected auth mechanism against installed runtime.
+- Shared local DB contains the real roster; future implementation/tests need isolated fixtures/DB.
+
+## 2026-10-17 — General delegation permission and replacement integration design
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; preceding spec/plan/backlog/journal uncommitted.
+**Trigger:** Owner requested delegate management on `/settings/roles`, a Yes/No permission
+under Approval chain, manager replacement integration and a non-blocking missing-delegate warning.
+
+**What changed**
+- Rewrote the discussion spec and implementation plan around reusable approval delegation,
+  superseding the separate Manage page and CEO-only identity-bound selection right. Updated backlog.
+- Owner answered: replacement automatically delegates only during approved absence and then saved
+  delegate resumes; candidates are existing managers/approvers; the two-hour rule follows whoever
+  is currently CEO delegate. Follow-up answered: other CEO delegates still need normal HR review;
+  only HR head is exempt. All clarification questions from this revision are settled.
+- Verified role-page admin guard, role editor's three-segment toggle, catalog action-only shapes,
+  shared ReplacementPicker/null behavior, nav gates and D2/D3/D4 permission rules. Plan requires a
+  true two-option control, narrow self-service page access and unchanged admin-only role editing.
+- Screenshots used only as layout references. No images/personnel artifacts copied into repository.
+- Proposed cross-department eligible-approver picker for delegation-enabled replacement mode,
+  with coordinated server validation; ordinary operational replacement stays department-scoped.
+
+**Actions outside the repo**
+- Read relevant local memory guidance. No network, database, account, server or deployment changes.
+
+**Verification**
+- `git diff --check` and consistency search of revised documents; no application tests for docs only.
+
+**State left behind**
+- Revised spec/plan/backlog/journal uncommitted. No code, migrations, commit, push or deployment.
+
+**For the next agent**
+- Revised plan is ready for the repository's implementation review gate. Do not re-ask answered
+  policy questions. HR-head designation is independent of effective CEO delegation; do not label
+  every CEO delegate HR head or waive HR review for them.
+- General delegation must not broaden `is_manager_of` or role creation rights. A temporary
+  appointment cannot approve the absence that would activate it. Permission/appointment lifecycle
+  must be rechecked live, including during the two-hour automatic decision.
+
+## 2026-10-17 — CEO delegation implementation plan prepared
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; discussion spec/backlog/journal uncommitted.
+**Trigger:** Owner requested the next step after approving delegation, automatic approval and
+the HR-head signature exemption. Next agreed step was implementation planning.
+
+**What changed**
+- `docs/plans/2026-10-17-ceo-delegate-approval.md` — concrete authority/evidence model, database
+  and UI units, affected file map, worker/concurrency behavior, verification matrix and release gates.
+- Spec and backlog link the plan as ready for review, not implemented.
+- Verified current decision/submission/progress/print/signature/nav paths. Delegation must not
+  extend `is_manager_of`, which also grants employee-write authority. Automatic evidence cannot
+  pass through the current manual-signature path. HR exemption affects ordering as well as completion.
+- Plan preserves unsigned legacy records, shared accounting behavior, actual manual signatures
+  and RLS visibility; job activation is separate from schema installation and application rollout.
+
+**Actions outside the repo**
+- Read local memory guidance. Fetched current pg_cron docs via Context7 `/citusdata/pg_cron`,
+  covering serialized job runs, cross-database scheduling permissions and execution logs.
+- No database, Docker, server, account or deployment changes. No agents delegated.
+
+**Verification**
+- Source inspection and `git diff --check`; no application tests for documentation-only work.
+- Initial read of `lib/actions/approval-steps.ts` failed (not present); discovered and inspected
+  actual approval settings references in `lib/actions/settings.ts` and the approval-steps page.
+- Installed cron runtime/permissions and live routing remain unverified; plan calls for those
+  checks in the isolated implementation environment before enabling any job.
+
+**State left behind**
+- Plan/spec/backlog/journal uncommitted. No application changes, migration, commit, push or deploy.
+
+**For the next agent**
+- Policy questions are settled. Review implementation plan under CLAUDE.md before coding.
+- Real scheduler verification should use a disposable isolated cluster so the shared real-roster
+  database and its cron metadata/jobs remain untouched. Dump schema from the explicit test DB.
+
+## 2026-10-17 — HR-head signature exemption and early CEO approval confirmed
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; prior design/backlog/journal changes uncommitted.
+**Trigger:** Owner confirmed early CEO approval uses the CEO's actual signature as manual approval
+and clarified that the HR head's own request requires no additional HR-department signature.
+
+**What changed**
+- Delegate design and backlog now mark the HR step not required for the appointed HR head's own
+  request. This supersedes the earlier two-automatic-decision interpretation: do not fabricate an
+  HR approval or duplicate the CEO's signature in that box.
+- CEO manual approval before the deadline is confirmed. Timed approval applies to the outstanding
+  CEO step; manual evidence is preserved. The specific policy questions are resolved.
+
+**Actions outside the repo**
+- None.
+
+**Verification**
+- `git diff --check`; no application tests for documentation-only changes.
+
+**State left behind**
+- Documentation uncommitted; no application, database or deployment changes.
+
+**For the next agent**
+- Proceed to implementation planning under the repository review gates; do not re-ask the
+  approved policy. Handle the HR exemption in ordering/completion/read/print consistently and
+  distinguish not-required evidence from approval decisions.
+
+## 2026-10-17 — Automatic approval covers both CEO and HR steps
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; preceding design/journal/backlog uncommitted.
+**Trigger:** Owner answered: "Complete both CEO and HR steps" after the two-hour deadline.
+
+**What changed**
+- Updated delegate design and backlog to record the confirmed coverage, per-step automatic
+  evidence and explicit labels in both signature boxes. Other mandatory steps remain required.
+- Proposed (not adopted) that an earlier CEO approval also completes these two steps, using the
+  CEO's actual signature and manual decision attribution. This separate policy choice remains open.
+
+**Actions outside the repo**
+- None.
+
+**Verification**
+- `git diff --check`; no application tests for documentation-only changes.
+
+**State left behind**
+- Documentation uncommitted; application unchanged. No database operation, commit or deployment.
+
+**For the next agent**
+- Do not re-ask timed step coverage: both CEO and HR is confirmed. Resolve only the remaining
+  early-manual-approval path and follow the repository's design/plan review process.
+
+## 2026-10-17 — HR delegate two-hour automatic approval design
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; prior journal entries uncommitted.
+**Trigger:** Owner chose HR head as CEO delegate and automatic approval of their own requests
+after two hours, with CEO authority and delegate responsibility stated instead of CEO signature.
+
+**What changed**
+- `docs/specs/2026-10-17-ceo-delegate-approval-design.md` — draft separates approved policy from
+  proposed implementation details, consent/printed wording, clock/state rules and change map.
+- `docs/TASKS.md` — tracks design and unresolved step coverage.
+- Asked whether automation completes both CEO/HR steps or CEO only. Early manual CEO approval
+  also needs a defined HR-step path. No answer recorded at the time of this entry.
+- Reviewed current approval SQL, evidence constraints, signature helpers, print mapping and
+  existing clearance cron migration. No application code written.
+
+**Actions outside the repo**
+- Read local memory guidance and Supabase skill; no database, network, server or account changes.
+
+**Verification**
+- Source inspection and `git diff --check`; no application tests for documentation-only work.
+
+**State left behind**
+- Draft and journal/backlog uncommitted; no migration, commit, push or deployment.
+
+**For the next agent**
+- Follow CLAUDE.md's design/spec/plan review gates. Owner has approved the two-hour exception;
+  do not re-ask that policy decision. Resolve the remaining step coverage and review concrete design.
+- The Supabase skill's ad hoc schema workflow does not override this repo's forward-migration
+  requirements. Fetch current relevant docs before implementation; inspect actual test DB state.
+
+## 2026-10-17 — Delegate appointment decision and own-request discussion
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661`; preceding advisory journal entry uncommitted.
+**Trigger:** Owner selected delegation, appointed by the CEO or admin, and asked whether a
+delegate's own requests should be automatically approved.
+
+**What changed**
+- `docs/AGENT-LOG.md` only. Recorded the owner's decision: CEO or admin may appoint the delegate.
+- Recommended, not yet adopted: delegate cannot exercise delegated authority over their own
+  request; route that step to CEO or an explicitly appointed alternate. No auto-approval merely
+  because the requester is a delegate. Appointment authority does not itself confer signing authority.
+- Flagged the separate HR-step case: if the delegate is also the HR head, define another eligible
+  HR reviewer or an explicit CEO substitute for that step; replacing the CEO step alone is insufficient.
+
+**Actions outside the repo**
+- None.
+
+**Verification**
+- `git diff --check`; no application tests needed for this advisory journal entry.
+
+**State left behind**
+- Journal changes uncommitted; no code/configuration changes, commit, push or deployment.
+
+**For the next agent**
+- CEO/admin appointment is a user decision; self-request fallback and HR-step substitution remain
+  recommendations awaiting policy agreement. Do not treat this entry as feature implementation.
+
+## 2026-10-17 — Executive approval delegation options (advisory)
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `984b661` (clean)
+**Trigger:** Owner asked how BJ can handle routine leave and errand requests from CEO direct
+reports without requiring the CEO to personally approve each request, and how other organizations do it.
+
+**What changed**
+- `docs/AGENT-LOG.md` only — this entry. Reviewed onboarding, newest journal entries, open tasks,
+  approval requirements/data/permission docs and `lib/leave/approvals.ts`.
+- Recommendation for discussion: scoped standing authority for a designated delegate, CEO review
+  of exceptions, HR checks retained, a separate temporary substitute, and attributable signatures.
+  Reporting relationships should stay independent of approval delegation. No policy adopted.
+- Current source has direct/department/named steps and FR-58 admin override; the override completes
+  all outstanding steps and is not a narrow CEO delegation mechanism. Older no-override passages
+  are superseded by FR-58. No scoped on-behalf delegation found in the inspected approval code.
+
+**Actions outside the repo**
+- Read public policies: University of Nevada Reno UAM 505 (explicit leave delegation), William &
+  Mary Workday delegation guidance, UQ Delegations Policy, and GitLab leadership material.
+  GitLab's PTO page could not be opened because it redirected to authentication. Public institutional
+  policies illustrate mechanisms; they do not establish private-company prevalence or BJ policy.
+- No account, database, server, or deployment action.
+
+**Verification**
+- Read-only source inspection; no tests run because no application code changed.
+- An initial journal tail read returned older entries; corrected to read the newest entries at top.
+- One search named nonexistent `lib/actions/leave/decisions.ts`; subsequent search used the actual
+  `lib/actions/leave` directory. No files created for that path.
+- `git diff --check` run after the journal edit.
+
+**State left behind**
+- Journal entry uncommitted; no commit or push. Application behavior unchanged.
+
+**For the next agent**
+- Delegate identity, scope, thresholds, conflicts, backup and CEO visibility remain business
+  decisions for the owner/client. This discussion does not authorize implementation or configuration.
+- For a future design, record the actual signer and delegated authority and define handling of
+  self-requests, revoked/expired delegation and pending requests; do not repurpose admin override.
+
 ## 2026-10-15 — Authorized FR-55 release
 
 **Agent:** Codex

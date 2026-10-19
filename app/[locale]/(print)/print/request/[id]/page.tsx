@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
 import Image from 'next/image';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
-import { getRequestForPrint } from '@/lib/actions/leave/review';
+import { getRequestForPrint, type PrintableRequest } from '@/lib/actions/leave/review';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { paperFormFor, leaveTypeCheckbox, signatureSourceFor } from '@/lib/leave/paperForm';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
@@ -31,7 +31,7 @@ import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatNumber, formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { PrintToolbar } from './PrintToolbar';
 
 type Props = { params: Promise<{ locale: string; id: string }> };
@@ -68,6 +68,8 @@ export default async function PrintRequestPage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('print');
+  const te = await getTranslations('approvalEvidence');
+  const ts = await getTranslations('approvals.steps');
   const tLeave = await getTranslations('leave');
   const durationLabels = durationLabelsFrom(tLeave);
   // Explicit map rather than tLeave(`status.${...}`): a dynamic message key has
@@ -115,49 +117,58 @@ export default async function PrintRequestPage({ params }: Props) {
     r.department_name_fa ??
     r.department_name_en;
 
-  // FR-36: each box resolves to either the request's own signature or one step
-  // of the approval chain, so the HR box fills itself once HR has signed.
-  // FR-47: the department manager's signature also carries role `manager`; it
-  // prints in the strip below, never in the direct manager's box.
-  const stepByRole = new Map(
-    r.approvals.filter((a) => !a.departmentStep).map((a) => [a.stepRole, a])
-  );
-
-  // FR-42: a step may be added beyond the four boxes the client's stationery
-  // has — most obviously one naming a specific person, which carries the neutral
-  // `employee` role. Those signatures print in a strip below the boxes rather
-  // than being dropped, because a sheet that silently omits a captured signature
-  // is a false record of who approved.
-  //
-  // Caveat worth knowing: a person-step created with one of the box roles (the
-  // Add dialog never does, but SQL could) prints inside that box instead, and two
-  // such steps would collide in `stepByRole`. The strip covers everything else.
-  const boxStepRoles = new Set(
-    form.boxes
-      .map((b) => signatureSourceFor(b))
-      .filter((src): src is { kind: 'step'; role: 'manager' | 'hr' | 'security' } => src?.kind === 'step')
-      .map((src) => src.role)
-  );
-  const extraApprovals = r.approvals.filter(
-    (a) =>
-      a.decision === 'approved' &&
-      (a.departmentStep || !boxStepRoles.has(a.stepRole as 'manager' | 'hr' | 'security'))
+  // Allocate each exact step once; additional same-role approvals stay visible.
+  const displayed = r.approvals.filter((a) => a.decision === 'approved' || a.evidenceKind === 'hr_exempt');
+  const stepByRole = new Map<string, PrintableRequest['approvals'][number]>();
+  for (const box of form.boxes) {
+    const source = signatureSourceFor(box);
+    if (source?.kind !== 'step' || stepByRole.has(source.role)) continue;
+    const step = displayed.find((a) => !a.departmentStep && a.stepRole === source.role);
+    if (step) stepByRole.set(source.role, step);
+  }
+  const allocated = new Set(stepByRole.values());
+  const extraApprovals = displayed.filter((a) => !allocated.has(a));
+  const stepLabels = {
+    manager: ts('manager'), departmentManager: ts('departmentManager'), hr: ts('hr'),
+    security: ts('security'), admin: ts('admin'), employee: ts('employee'),
+  };
+  const timestamp = (at?: string | null) => at && Number.isFinite(Date.parse(at))
+    ? formatPersianConsentTimestamp(at, locale) : '—';
+  const evidenceText = (step: PrintableRequest['approvals'][number]) => {
+    if (step.evidenceKind === 'automatic') return te('automaticStatement', { principal: step.principalName ?? '—' });
+    if (step.evidenceKind === 'hr_exempt') return te('hrExempt');
+    if (step.evidenceKind === 'delegated') return te('delegatedSignature', { signer: step.approverName ?? '—', principal: step.principalName ?? '—' });
+    return null;
+  };
+  const renderEvidence = (step: PrintableRequest['approvals'][number]) => (
+    <div className="mt-1 space-y-1 text-[10px] leading-4" data-approval-step-id={step.stepId ?? 'legacy'}>
+      <p className="font-semibold">{te('stepLabel', {
+        order: step.stepOrder === undefined ? '—' : formatNumber(step.stepOrder, locale),
+        name: step.named ? step.expectedName ?? stepLabels.employee
+          : stepLabels[step.departmentStep ? 'departmentManager' : step.stepRole],
+      })}</p>
+      {evidenceText(step) ? <p>{evidenceText(step)}</p> : null}
+      {step.evidenceKind === 'automatic' ? <>
+        <p>{te('responsibleDelegate', { name: step.delegateName ?? '—' })}</p>
+        <p>{te('submittedAt', { at: timestamp(step.submittedAt) })}</p>
+        <p>{te('responsibilityAcceptedAt', { at: timestamp(step.responsibilityConsentAt) })}</p>
+        <p>{te('automaticallyApprovedAt', { at: timestamp(step.signatureConsentAt) })}</p>
+        {step.authorityStatement ? <p>{te('recordedAuthority')} <span dir="auto">{step.authorityStatement}</span></p> : null}
+      </> : null}
+      {step.authorityRef ? <p className="break-all text-[8px]">{te('authorityRef', { ref: step.authorityRef })}</p> : null}
+    </div>
   );
   const resolveBox = (box: Parameters<typeof signatureSourceFor>[0]) => {
     const source = signatureSourceFor(box);
     if (!source) return null;
-    if (source.kind === 'requester') {
-      return {
-        data: r.signature_data,
-        at: r.signature_consent_at,
-        name: r.employee_name,
-      };
-    }
+    if (source.kind === 'requester') return {
+      data: r.signature_data, at: r.signature_consent_at, name: r.employee_name,
+      step: null,
+    };
     const step = stepByRole.get(source.role);
-    // A rejected step is a decision, not an approval — never print its name in a
-    // box that reads as authorisation.
-    if (!step || step.decision !== 'approved') return null;
-    return { data: step.signatureData, at: step.signatureConsentAt, name: step.approverName };
+    if (!step) return null;
+    return { data: step.signatureData, at: step.signatureConsentAt, name: step.approverName,
+      step };
   };
 
   return (
@@ -333,6 +344,8 @@ export default async function PrintRequestPage({ params }: Props) {
                   {box !== 'replacement' && box !== 'requester' && sig?.name ? (
                     <div className="mt-1 text-center text-[11px]">{sig.name}</div>
                   ) : null}
+                  {sig?.step ? renderEvidence(sig.step) : null}
+                  {!sig?.data && sig?.at && sig.step?.evidenceKind !== 'automatic' ? <p className="mt-1 text-[9px]">{formatPersianConsentTimestamp(sig.at, locale)}</p> : null}
                   {sig?.data ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -360,21 +373,18 @@ export default async function PrintRequestPage({ params }: Props) {
             <div className="border-b border-black px-2 py-0.5 text-[11px] font-semibold">
               {t('additionalApprovals')}
             </div>
-            <div className="flex">
+            <div className="grid grid-cols-2 sm:grid-cols-3">
               {extraApprovals.map((a, i) => (
                 <div
-                  key={a.stepRole + i}
+                  key={a.stepId ?? `legacy-${i}`}
                   className={`min-h-24 flex-1 px-2 py-1 ${
                     i < extraApprovals.length - 1 ? 'border-e border-black' : ''
                   }`}
                   data-testid={`print-extra-approval-${i}`}
                 >
-                  {a.departmentStep ? (
-                    <div className="text-center text-[10px] font-semibold">
-                      {t('departmentManager')}
-                    </div>
-                  ) : null}
                   <div className="text-center text-[11px]">{a.approverName ?? '—'}</div>
+                  {renderEvidence(a)}
+                  {!a.signatureData && a.signatureConsentAt && a.evidenceKind !== 'automatic' ? <p className="mt-1 text-[9px]">{formatPersianConsentTimestamp(a.signatureConsentAt, locale)}</p> : null}
                   {a.signatureData ? (
                     <>
                       {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -9,6 +9,7 @@
 
 import { redirect } from 'next/navigation';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { manageItemsForRoles } from '@/lib/nav/tabs';
 
 type Props = {
@@ -24,8 +25,8 @@ export default async function ManageLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
-  const canAccess = manageItemsForRoles(roles, perms).length > 0;
+  const [roles, perms, capabilities] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id), getApprovalCapabilities()]);
+  const canAccess = manageItemsForRoles(roles, perms, capabilities.canApprove).length > 0 || capabilities.canDelegate;
 
   if (!canAccess) {
     redirect(`/${locale}/home`);

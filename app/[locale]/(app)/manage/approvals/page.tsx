@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
+import { getCachedUser } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
@@ -107,8 +108,8 @@ export default async function ApprovalsPage({ params }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const roles = await getCachedRoles(user.id);
-  if (!['admin', 'manager', 'hr'].some((r) => roles.includes(r))) redirect(`/${locale}/home`);
+  const capabilities = await getApprovalCapabilities();
+  if (!capabilities.canApprove) redirect(`/${locale}/home`);
 
   const t = await getTranslations('approvals');
 

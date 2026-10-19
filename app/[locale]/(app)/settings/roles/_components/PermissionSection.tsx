@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, ChevronDown, TriangleAlert } from 'lucide-react';
-import { Collapsible, DropdownMenu } from 'radix-ui';
+import { Collapsible, DropdownMenu, ToggleGroup } from 'radix-ui';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export function PermissionSection({
     title: string;
     /** Labels for all 16 keys: a note can name an item from another section. */
     items: Record<PermKey, { label: string; description: string }>;
-    levels: { edit: string; read: string; none: string; noRead: string; noEdit: string };
+    levels: { edit: string; read: string; none: string; noRead: string; noEdit: string; yes: string; no: string };
     summary: Record<SectionChoice, string>;
     raisedBy: (byLabel: string) => string;
     loweredBy: (byLabel: string) => string;
@@ -128,14 +128,29 @@ export function PermissionSection({
                   </div>
                 )}
               </div>
-              <TriStateToggle
+              {k === 'approval_delegate' ? (
+                <ToggleGroup.Root
+                  type="single"
+                  value={level === 'edit' ? 'edit' : 'none'}
+                  onValueChange={(v) => { if (v === 'edit' || v === 'none') setRow(k, v); }}
+                  aria-label={t.items[k].label}
+                  data-testid={`perm-${k}`}
+                  className="inline-flex shrink-0 self-start rounded-lg bg-muted p-1"
+                >
+                  {(['edit', 'none'] as const).map((v) => (
+                    <ToggleGroup.Item key={v} value={v} data-testid={`perm-${k}-${v}`} className="min-h-10 min-w-16 rounded-md px-3 text-sm data-[state=on]:bg-card data-[state=on]:font-semibold data-[state=on]:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      {v === 'edit' ? t.levels.yes : t.levels.no}
+                    </ToggleGroup.Item>
+                  ))}
+                </ToggleGroup.Root>
+              ) : <TriStateToggle
                 value={level ?? 'none'}
                 onChange={(v) => setRow(k, v)}
                 shape={SHAPES[k]}
                 labels={t.levels}
                 name={t.items[k].label}
                 testId={`perm-${k}`}
-              />
+              />}
             </div>
           );
         })}

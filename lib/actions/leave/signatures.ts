@@ -8,6 +8,7 @@
 import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import { isValidSignatureData } from '@/lib/leave/signature';
+import type { ApprovalSignatures } from '@/lib/leave/approval-context';
 
 export async function getRequestSignature(requestId: string): Promise<
   | { ok: true; signatureData: string; consentAt: string }
@@ -16,24 +17,21 @@ export async function getRequestSignature(requestId: string): Promise<
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select('signature_data, signature_consent_at')
-    .eq('id', requestId)
-    .maybeSingle();
+  const { data: raw, error } = await c.supabase.rpc('get_leave_request_signatures', { p_id: requestId });
+  const data = raw as unknown as ApprovalSignatures | null;
 
   if (error) return dbErr(error.message);
   if (
-    !data?.signature_consent_at ||
-    !isValidSignatureData(data.signature_data)
+    !data?.requester_consent_at ||
+    !isValidSignatureData(data.requester_signature_data)
   ) {
     return dbErr('request signature not found');
   }
 
   return {
     ok: true,
-    signatureData: data.signature_data,
-    consentAt: data.signature_consent_at,
+    signatureData: data.requester_signature_data,
+    consentAt: data.requester_consent_at,
   };
 }
 
@@ -45,11 +43,8 @@ export async function getApproverSignature(requestId: string): Promise<
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select('approver_signature_data, approver_signature_consent_at')
-    .eq('id', requestId)
-    .maybeSingle();
+  const { data: raw, error } = await c.supabase.rpc('get_leave_request_signatures', { p_id: requestId });
+  const data = raw as unknown as ApprovalSignatures | null;
 
   if (error) return dbErr(error.message);
   if (

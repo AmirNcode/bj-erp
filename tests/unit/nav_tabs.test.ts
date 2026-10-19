@@ -186,3 +186,28 @@ describe('homeAbsencesBoard', () => {
     expect(homeAbsencesBoard(['employee'], {})).toBe(false);
   });
 });
+
+
+describe('live approval and delegation capabilities', () => {
+  it('opens only approvals to an employee named approver or delegate', () => {
+    expect(manageItemsForRoles(['employee'], {}, true).map((i) => i.key)).toEqual(['approvals']);
+    expect(tabsForRoles(['employee'], {}, true).some((i) => i.key === 'manage')).toBe(true);
+    expect(settingsItemForRoles(['employee'], {}, false)).toBeNull();
+  });
+
+  it('a live denial overrides the legacy approver role hint', () => {
+    expect(manageItemsForRoles(['hr'], {}, false)).toEqual([]);
+  });
+
+  it('offers self-service settings without personnel or role authoring access', () => {
+    expect(settingsItemForRoles(['employee'], {}, true)?.href).toBe('/settings/roles');
+    expect(manageItemsForRoles(['employee'], {}, false)).toEqual([]);
+    expect(tabsForRoles(['employee'], {}, false, true).some((i) => i.key === 'manage')).toBe(true);
+    expect(settingsItemForRoles(['employee'], { approval_delegate: 'edit' }, false)).toBeNull();
+  });
+});
+
+
+it('keeps Finance reachable when self-service delegation creates the Manage tab', () => {
+  expect(manageItemsForRoles(['employee'], { finance: 'read' }, false, true).map((i) => i.key)).toEqual(['finance']);
+});

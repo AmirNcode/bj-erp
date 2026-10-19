@@ -9,20 +9,8 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
-import {
-  approvalAction,
-  departmentStepApplies,
-  filterApprovable,
-  perDiemApplies,
-  outstandingSteps,
-  stepLabel,
-  type ApprovalStep,
-  type ManagerScope,
-  type SignedStep,
-  type StepLabel,
-  type StepRole,
-} from '@/lib/leave/approvals';
-import { leavePeriodsOverlap } from '@/lib/leave/hourly';
+import type { ApprovalStep, ManagerScope, SignedStep, StepLabel, StepRole } from '@/lib/leave/approvals';
+import { approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
 import { isValidSignatureData } from '@/lib/leave/signature';
 import type { DayPart } from './shared';
 
@@ -31,6 +19,8 @@ export type DecisionResult = { ok: true } | { ok: false; error: string };
 export type ApproveRequestInput = {
   signatureData: string;
   signatureAuthorized: boolean;
+  /** Exact natural or delegated step selected by the signer. */
+  stepId?: string | null;
   /** FR-58: admin only — sign every outstanding step at once. */
   override?: boolean;
   /** FR-61: per diem in Rials, only with an hr step on an errand. */
@@ -57,8 +47,9 @@ export async function approveRequest(
     return dbErr('per diem must be 0 or more');
   }
 
-  const { error } = await c.supabase.rpc('approve_leave_request', {
+  const { error } = await c.supabase.rpc('approve_leave_request_v2', {
     p_id: requestId,
+    p_step_id: input.stepId ?? null,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
     p_override: input.override ?? false,
@@ -76,15 +67,17 @@ export async function approveRequest(
  */
 export async function rejectRequest(
   requestId: string,
-  reason?: string
+  reason?: string,
+  stepId?: string | null
 ): Promise<DecisionResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
   const note = reason?.trim() ? reason.trim().slice(0, 500) : undefined;
 
-  const { error } = await c.supabase.rpc('reject_leave_request', {
+  const { error } = await c.supabase.rpc('reject_leave_request_v2', {
     p_id: requestId,
+    p_step_id: stepId ?? null,
     p_reason: note,
   });
   if (error) return dbErr(error.message);
@@ -141,6 +134,12 @@ export type PendingApproval = {
   /** FR-61: whether signing the natural step / the override takes a per diem. */
   per_diem_natural: boolean;
   per_diem_override: boolean;
+  decision_steps?: ApprovalChoice[];
+  rejection_steps?: ApprovalChoice[];
+  progress?: ApprovalProgressRow[];
+  configuration_changed?: boolean;
+  legacy_reconciliation_required?: boolean;
+  can_reject?: boolean;
 };
 
 /**
@@ -184,204 +183,65 @@ export async function getApprovalConfig(): Promise<{
   };
 }
 
-/**
- * Pending requests the caller may act on **right now** (FR-36).
- *
- * Since the chain, this is no longer "admin → all, manager → own reports": an
- * HR user has no reports at all, and a manager who has already signed should
- * stop seeing the request. `fillableStep` decides, mirroring the SQL, which
- * re-checks on write.
- */
+/** Pending request context and exact decision entitlements projected by the database. */
 export async function getPendingApprovals(): Promise<
   { ok: true; requests: PendingApproval[] } | { ok: false; error: string }
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select(
-      `id, employee_id, kind, errand_location, created_at, leave_type_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, serial_year, serial_seq, reason, replacement_id, signature_consent_at,
-       replacement:profiles!leave_requests_replacement_id_fkey(full_name),
-       profiles!leave_requests_employee_id_fkey(full_name, manager_id, department_id, departments!profiles_department_id_fkey(name_fa, name_en, manager_id, manager:profiles!departments_manager_id_fkey(active))),
-       leave_types(name_fa, name_en, affects_balance)`
-    )
-    .eq('status', 'pending')
-    .order('start_date', { ascending: true });
-
+  const { data, error } = await c.supabase.rpc('app_approval_queue', { p_status: 'pending' });
   if (error) return dbErr(error.message);
-
-  type Row = {
-    id: string;
-    employee_id: string;
-    kind: Database['public']['Enums']['request_kind'];
-    errand_location: string | null;
-    created_at: string;
-    leave_type_id: string | null;
-    start_date: string;
-    end_date: string;
-    day_part: DayPart;
-    unit: Database['public']['Enums']['leave_unit'];
-    start_time: string | null;
-    end_time: string | null;
-    requested_minutes: number;
-    reason: string | null;
-    replacement_id: string | null;
-    replacement: { full_name: string } | null;
-    serial_year: number;
-    serial_seq: number;
-    signature_consent_at: string | null;
-    profiles: {
-      full_name: string;
-      manager_id: string | null;
-      department_id: string | null;
-      departments: {
-        name_fa: string;
-        name_en: string | null;
-        manager_id: string | null;
-        manager: { active: boolean } | null;
-      } | null;
-    } | null;
-    leave_types: { name_fa: string; name_en: string | null; affects_balance: boolean } | null;
-  };
-
-  const mapped: PendingApproval[] = ((data ?? []) as unknown as Row[]).map((r) => ({
-    id: r.id,
-    kind: r.kind ?? 'leave',
-    errand_location: r.errand_location ?? null,
-    employee_name: r.profiles?.full_name ?? '—',
-    employee_manager_id: r.profiles?.manager_id ?? null,
-    department_id: r.profiles?.department_id ?? null,
-    department_name_fa: r.profiles?.departments?.name_fa ?? null,
-    department_name_en: r.profiles?.departments?.name_en ?? null,
-    submitted_at: r.created_at,
-    leave_type_id: r.leave_type_id ?? null,
-    affects_balance: r.kind !== 'errand' && (r.leave_types?.affects_balance ?? false),
-    leave_type_name_fa: r.leave_types?.name_fa ?? '—',
-    leave_type_name_en: r.leave_types?.name_en ?? null,
-    start_date: r.start_date,
-    end_date: r.end_date,
-    day_part: r.day_part,
-    unit: r.unit,
-    start_time: r.start_time,
-    end_time: r.end_time,
-    requested_minutes: r.requested_minutes,
-    reason: r.reason ?? null,
-    replacement_name: r.replacement?.full_name ?? null,
-    serial_year: r.serial_year,
-    serial_seq: r.serial_seq,
-    signature_consent_at: r.signature_consent_at ?? null,
-    employee_id: r.employee_id,
-    employee_department_manager_id: r.profiles?.departments?.manager_id ?? null,
-    department_step_applies: departmentStepApplies({
-      employeeId: r.employee_id,
-      employeeManagerId: r.profiles?.manager_id ?? null,
-      departmentManagerId: r.profiles?.departments?.manager_id ?? null,
-      // The embed is hidden only from callers who cannot read company-wide, and
-      // those are never approvers; the database decides on write regardless.
-      departmentManagerActive: r.profiles?.departments?.manager?.active ?? true,
-    }),
-    signed: [] as SignedStep[],
-    approved: [] as StepLabel[],
-    outstanding: [] as StepLabel[],
-    natural_step: null,
-    can_override: false,
-    per_diem_natural: false,
-    per_diem_override: false,
-    // Filled below: a cover can book leave between submission and approval, and
-    // the manager should see that before deciding (spec §2.1). approve_leave_request
-    // also refuses it, so this is a heads-up rather than the guard.
-    replacement_conflict: false,
-  }));
-
-  // Who has already signed each pending request. One query for the whole queue.
-  const { steps, orderEnforced } = await getApprovalConfig();
-  const ids = mapped.map((r) => r.id);
-  if (ids.length > 0) {
-    const { data: approvals } = await c.supabase
-      .from('leave_request_approvals')
-      .select('request_id, step_id, step_role, decision')
-      .in('request_id', ids);
-    const byRequest = new Map<string, SignedStep[]>();
-    for (const a of approvals ?? []) {
-      const list = byRequest.get(a.request_id) ?? [];
-      list.push({
-        stepId: a.step_id ?? null,
-        stepRole: a.step_role as StepRole,
-        decision: a.decision as 'approved' | 'rejected',
-      });
-      byRequest.set(a.request_id, list);
-    }
-    const stepById = new Map(steps.map((s) => [s.id, s]));
-    for (const r of mapped) {
-      r.signed = byRequest.get(r.id) ?? [];
-      r.approved = r.signed
-        .filter((d) => d.decision === 'approved')
-        .map((d) => {
-          const step = d.stepId ? stepById.get(d.stepId) : undefined;
-          return step ? stepLabel(step) : d.stepRole;
-        });
-      r.outstanding = outstandingSteps(steps, r.signed, r.kind, r.department_step_applies);
-    }
-  }
-
-  const scoped = filterApprovable(mapped, c.user.id, c.roles, steps, orderEnforced);
-  for (const r of scoped) {
-    const action = approvalAction({
-      steps,
-      signed: r.signed,
-      kind: r.kind,
-      callerRoles: c.roles,
-      isDirectManager: r.employee_manager_id === c.user.id,
-      isDepartmentManager: r.employee_department_manager_id === c.user.id,
-      departmentStepApplies: r.department_step_applies,
-      isSelf: r.employee_id === c.user.id,
-      orderEnforced,
-      callerId: c.user.id,
-    });
-    r.natural_step = action?.natural ? stepLabel(action.natural) : null;
-    r.can_override = (action?.override.length ?? 0) > 0;
-    r.per_diem_natural = perDiemApplies(r.kind, [action?.natural ?? null]);
-    r.per_diem_override = perDiemApplies(r.kind, action?.override ?? []);
-  }
-
-  // One round-trip for the whole queue rather than per row.
-  const withCover = ((data ?? []) as unknown as Row[]).filter((r) => r.replacement_id);
-  if (withCover.length > 0) {
-    const coverIds = [...new Set(withCover.map((r) => r.replacement_id as string))];
-    const { data: coverLeave } = await c.supabase
-      .from('leave_requests')
-      .select('employee_id, start_date, end_date, unit, start_time, end_time')
-      .in('employee_id', coverIds)
-      .in('status', ['pending', 'approved']);
-
-    for (const req of scoped) {
-      const raw = withCover.find((r) => r.id === req.id);
-      if (!raw?.replacement_id) continue;
-      req.replacement_conflict = (coverLeave ?? []).some(
-        (l) =>
-          l.employee_id === raw.replacement_id &&
-          leavePeriodsOverlap(
-            {
-              startDate: l.start_date,
-              endDate: l.end_date,
-              unit: l.unit,
-              startTime: l.start_time,
-              endTime: l.end_time,
-            },
-            {
-              startDate: req.start_date,
-              endDate: req.end_date,
-              unit: req.unit,
-              startTime: req.start_time,
-              endTime: req.end_time,
-            }
-          )
-      );
-    }
-  }
-
-  return { ok: true, requests: scoped };
+  const rows = (Array.isArray(data) ? data : []) as unknown as ApprovalContextRow[];
+  const requests: PendingApproval[] = rows.map((row) => {
+    const progress = row.progress ?? [];
+    const choices = approvalChoices(progress, 'approve');
+    const rejections = approvalChoices(progress, 'reject');
+    // Old no-chain requests still need their explicitly authorized legacy action.
+    if (!progress.length && row.can_approve) choices.push({ stepId: null, label: 'manager', name: null, principalName: null, delegated: false, perDiem: false });
+    return {
+      id: row.id,
+      kind: row.kind,
+      errand_location: row.errand_location,
+      employee_name: row.employee_name,
+      employee_id: row.employee_id,
+      employee_manager_id: row.employee_manager_id,
+      department_id: row.department_id,
+      department_name_fa: row.department_name_fa,
+      department_name_en: row.department_name_en,
+      submitted_at: row.created_at,
+      leave_type_id: row.leave_type_id,
+      affects_balance: row.affects_balance,
+      leave_type_name_fa: row.leave_type_name_fa ?? '—',
+      leave_type_name_en: row.leave_type_name_en,
+      start_date: row.start_date, end_date: row.end_date, day_part: row.day_part,
+      unit: row.unit, start_time: row.start_time, end_time: row.end_time,
+      requested_minutes: row.requested_minutes,
+      reason: row.reason,
+      replacement_name: row.replacement_name,
+      replacement_conflict: row.replacement_conflict,
+      serial_year: row.serial_year, serial_seq: row.serial_seq,
+      signature_consent_at: row.signature_consent_at,
+      employee_department_manager_id: row.employee_department_manager_id,
+      department_step_applies: progress.some((step) => progressLabel(step) === 'departmentManager'),
+      signed: progress.filter((step) => step.decision).map((step) => ({ stepId: step.step_id, stepRole: step.step_role, decision: step.decision as 'approved' | 'rejected' })),
+      approved: progress.filter((step) => step.decision === 'approved').map(progressLabel),
+      outstanding: progress.filter((step) => !step.decision && step.evidence_kind !== 'hr_exempt').map(progressLabel),
+      natural_step: choices[0]?.label ?? null,
+      can_override: row.can_override === true,
+      per_diem_natural: choices[0]?.perDiem ?? false,
+      per_diem_override: row.can_override === true && row.kind === 'errand' && progress.some((step) => step.step_role === 'hr' && !step.decision && step.evidence_kind !== 'hr_exempt'),
+      decision_steps: choices,
+      rejection_steps: rejections,
+      progress,
+      configuration_changed: row.configuration_changed,
+      legacy_reconciliation_required: row.legacy_reconciliation_required,
+      can_reject: row.can_reject === true || rejections.length > 0,
+    };
+  });
+  // Like main: only what the caller can act on now. A later step waiting on an earlier one
+  // (approval order enforced) stays out of the queue and badge, even though SQL lets it reject.
+  return { ok: true, requests: requests.filter((r) => r.can_override || !!r.decision_steps?.length) };
 }
 
 /**

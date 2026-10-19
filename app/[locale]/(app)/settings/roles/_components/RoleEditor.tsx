@@ -107,7 +107,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
       sections,
       section: {
         items: tp.raw('items') as Record<PermKey, { label: string; description: string }>,
-        levels: tp.raw('levels') as { edit: string; read: string; none: string; noRead: string; noEdit: string },
+        levels: tp.raw('levels') as { edit: string; read: string; none: string; noRead: string; noEdit: string; yes: string; no: string },
         summary: tp.raw('summary') as Record<SectionChoice, string>,
         raisedBy: (item: string) => tp('raisedBy', { item }),
         loweredBy: (item: string) => tp('loweredBy', { item }),

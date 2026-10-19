@@ -8,12 +8,13 @@
 import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
+import type { DelegationSubmissionInput } from '@/lib/leave/delegation';
 import type { Database } from '@/lib/supabase/types';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import { isValidSignatureData } from '@/lib/leave/signature';
 import { accrueBeforeRead, type DayPart } from './shared';
 
-export type SubmitRequestInput = {
+export type SubmitRequestInput = DelegationSubmissionInput & {
   leaveTypeId: string;
   start: string; // YYYY-MM-DD Gregorian
   end: string;   // YYYY-MM-DD Gregorian
@@ -37,13 +38,14 @@ export async function submitRequest(
   if (!input.signatureAuthorized) return dbErr('signature authorization is required');
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
 
   // Accrue first: a worker whose newly-earned day makes this request affordable
   // must not be refused by a stale balance.
   const accrualError = await accrueBeforeRead(c.supabase);
   if (accrualError) return dbErr(accrualError);
 
-  const { data, error } = await c.supabase.rpc('submit_leave_request', {
+  const { data, error } = await c.supabase.rpc('submit_leave_request_v2', {
     p_leave_type_id: input.leaveTypeId,
     p_start: input.start,
     p_end: input.end,
@@ -52,6 +54,9 @@ export async function submitRequest(
     p_replacement_id: input.replacementId ?? undefined,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
+    p_auto_approval_consent: input.autoApprovalConsent,
+    p_delegation_preview: input.delegationPreview,
+    p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
   });
 
   if (error) {
@@ -85,7 +90,7 @@ export async function cancelRequest(
   return { ok: true };
 }
 
-export type SubmitHourlyInput = {
+export type SubmitHourlyInput = DelegationSubmissionInput & {
   leaveTypeId: string;
   /** Optional cover; null/undefined is valid. */
   replacementId?: string | null;
@@ -107,12 +112,13 @@ export async function submitHourlyRequest(
   if (!input.signatureAuthorized) return dbErr('signature authorization is required');
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
 
   // Same reason as the daily path: a freshly-accrued hour must be spendable.
   const accrualError = await accrueBeforeRead(c.supabase);
   if (accrualError) return dbErr(accrualError);
 
-  const { data, error } = await c.supabase.rpc('submit_hourly_leave_request', {
+  const { data, error } = await c.supabase.rpc('submit_hourly_leave_request_v2', {
     p_leave_type_id: input.leaveTypeId,
     p_date: input.date,
     p_start_time: input.startTime,
@@ -121,6 +127,9 @@ export async function submitHourlyRequest(
     p_replacement_id: input.replacementId ?? undefined,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
+    p_auto_approval_consent: input.autoApprovalConsent,
+    p_delegation_preview: input.delegationPreview,
+    p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
   });
 
   if (error) return dbErr(error.message);
@@ -129,7 +138,7 @@ export async function submitHourlyRequest(
   return { ok: true, requestId: data as string };
 }
 
-export type SubmitErrandInput = {
+export type SubmitErrandInput = DelegationSubmissionInput & {
   /** Gregorian YYYY-MM-DD — one date only. */
   date: string;
   /** 'HH:MM', company-local. */
@@ -151,10 +160,11 @@ export async function submitErrandRequest(
   if (!input.signatureAuthorized) return dbErr('signature authorization is required');
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
 
   // No accrual pass here, unlike the two leave paths: an errand is work. It
   // spends no balance, so there is nothing a freshly-accrued hour could unlock.
-  const { data, error } = await c.supabase.rpc('submit_errand_request', {
+  const { data, error } = await c.supabase.rpc('submit_errand_request_v2', {
     p_date: input.date,
     p_start_time: input.startTime,
     p_end_time: input.endTime,
@@ -162,6 +172,9 @@ export async function submitErrandRequest(
     p_description: input.description ?? undefined,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
+    p_auto_approval_consent: input.autoApprovalConsent,
+    p_delegation_preview: input.delegationPreview,
+    p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
   });
 
   if (error) return dbErr(error.message);
@@ -170,7 +183,7 @@ export async function submitErrandRequest(
   return { ok: true, requestId: data as string };
 }
 
-export type SubmitDailyErrandInput = {
+export type SubmitDailyErrandInput = DelegationSubmissionInput & {
   /** Gregorian YYYY-MM-DD values; the UI displays Persian dates. */
   start: string;
   end: string;
@@ -190,14 +203,18 @@ export async function submitDailyErrandRequest(
   if (!input.signatureAuthorized) return dbErr('signature authorization is required');
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
 
-  const { data, error } = await c.supabase.rpc('submit_daily_errand_request', {
+  const { data, error } = await c.supabase.rpc('submit_daily_errand_request_v2', {
     p_start: input.start,
     p_end: input.end,
     p_location: input.location,
     p_description: input.description ?? undefined,
     p_signature_data: input.signatureData,
     p_signature_authorized: input.signatureAuthorized,
+    p_auto_approval_consent: input.autoApprovalConsent,
+    p_delegation_preview: input.delegationPreview,
+    p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
   });
 
   if (error) return dbErr(error.message);

@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { homeAbsencesBoard } from '@/lib/nav/tabs';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
@@ -67,7 +68,7 @@ function greetingKey(at: Date = new Date()) {
 
 // ── async child that owns all data fetching ────────────────────────────────
 async function HomeBoardData({ locale, userId }: { locale: string; userId: string }) {
-  const [t, tLeave, tRepl, tErrand, tApprovals, tSignature, roles] = await Promise.all([
+  const [t, tLeave, tRepl, tErrand, tApprovals, tSignature, roles, capabilities] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
     getTranslations('replacement'),
@@ -75,9 +76,9 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     getTranslations('approvals'),
     getTranslations('signature'),
     getCachedRoles(userId),
+    getApprovalCapabilities(),
   ]);
-  const canApprove =
-    roles.includes('admin') || roles.includes('manager') || roles.includes('hr');
+  const canApprove = capabilities.canApprove;
 
   // Upcoming time off for the team directory (non-approvers only). "Today" in
   // the company timezone, not the server's (UTC).
@@ -130,6 +131,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
 
   const board = buildHomeBoard({
     roles,
+    canApprove,
     requests: requestsRes.ok ? requestsRes.requests : [],
     team: calendarRes?.ok ? calendarRes.entries : [],
     directory: directoryRes?.ok ? directoryRes.members : [],
@@ -211,7 +213,10 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         others !== null && departmentName
           ? t('shortStaffed', { count: num(others), department: departmentName })
           : null,
+      rejectionSteps: r.rejection_steps,
+      canReject: r.can_reject,
       approveOptions: {
+        steps: r.decision_steps,
         hasNaturalStep: r.natural_step !== null,
         canOverride: r.can_override,
         perDiemNatural: r.per_diem_natural,
