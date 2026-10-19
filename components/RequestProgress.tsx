@@ -13,7 +13,6 @@ import { CircleCheck, CircleDashed, CircleX, ChevronDown } from 'lucide-react';
 import { getRequestProgress, type ProgressStep } from '@/lib/actions/leave/progress';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
-import type { ApprovalContextRow } from '@/lib/leave/approval-context';
 
 export function RequestProgress({
   requestId,
@@ -29,7 +28,6 @@ export function RequestProgress({
   const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
   const [error, setError] = useState('');
-  const [automatic, setAutomatic] = useState<ApprovalContextRow['automatic_approval']>(null);
   const [configurationChanged, setConfigurationChanged] = useState(false);
   const [legacyReconciliation, setLegacyReconciliation] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -40,7 +38,6 @@ export function RequestProgress({
         const res = await getRequestProgress(requestId);
         if (res.ok) {
           setSteps(res.steps);
-          setAutomatic(res.automatic);
           setConfigurationChanged(res.configurationChanged === true);
           setLegacyReconciliation(res.legacyReconciliationRequired === true);
           setError('');
@@ -97,9 +94,6 @@ export function RequestProgress({
           )}
           {legacyReconciliation && <p className="mb-2 text-xs text-warning">{te('legacyReconciliation')}</p>}
           {configurationChanged && <p className="mb-2 text-xs text-warning">{te('configurationChanged')}</p>}
-          {automatic?.state === 'pending' && <p className="mb-2 text-xs text-muted-foreground">{te('automaticDue', { at: formatPersianConsentTimestamp(automatic.due_at, locale) })}</p>}
-          {automatic?.state === 'blocked' && <p className="mb-2 text-xs text-warning">{te('automaticBlocked')}</p>}
-          {automatic?.state === 'invalidated' && <p className="mb-2 text-xs text-warning">{te('automaticInvalidated')}</p>}
           {steps !== null && steps.length === 0 && (
             <p className="text-xs text-muted-foreground">{t('none')}</p>
           )}

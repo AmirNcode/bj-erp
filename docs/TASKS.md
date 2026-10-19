@@ -49,40 +49,32 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
-- ◐ **Approval delegation, replacements and CEO timer:** new Yes/No delegation permission under
-  Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
-  holders select their own). Eligible delegates: active managers/approvers. Leave replacement
-  becomes temporary delegate only if eligible, during approved absence, then saved delegate resumes.
-  Ordinary employees remain valid work cover; they do not gain approval authority. No Replacement
-  or ordinary work cover retains saved approval delegate; none available produces a non-blocking warning.
-  Two-hour CEO-step automatic approval follows the effective CEO delegate, including alternates;
-  CEO delegates must already be CEO direct reports. Non-HR delegates still require HR review;
-  automatic CEO approval may precede outstanding HR even when order is enforced. Only the
-  designated HR head skips the HR signature.
-  Early CEO approval records the actual signature. Revised spec:
-  `docs/specs/2026-10-17-ceo-delegate-approval-design.md`; implementation plan:
-  `docs/plans/2026-10-17-ceo-delegate-approval.md`. Final review found nine design/integration issues:
-  `docs/REVIEW-2026-10-17-approval-delegation.md`. Owner resolved routing, ordering and ordinary-cover
-  questions; half-days use the first/second half of the configured workday with hours previewed
-  and snapshotted. Owner chose to defer credential/session protection and explicitly retain its
-  impersonation risk (R9); it is outside this release, not an activation prerequisite.
-  Corrections include permanent timer invalidation, explicit HR-step mapping, scoped inbox reads,
-  supplementary role for locked Manager and preserved D4 editing restrictions. All review clarification
-  questions answered. Implementation complete and locally validated but **uncommitted** on
-  `codex/approval-delegation`; two migrations applied only to the isolated synthetic test stack and
-  frozen, worker inactive. SQL 761, unit 895, lint, typecheck, Webpack build, deploy tests, 21 real lock
-  scenarios, two actual cron runs and the full rendered browser checklist passed (2026-10-19). Remaining,
-  each needing owner authorization: commit/PR review, recovery evidence (pre-deploy dump + restore
-  drill), production migration, worker configuration/activation and post-deploy smoke. See
-  `docs/plans/2026-10-19-approval-delegation-handoff.md` → "Status after second continuation".
+- ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
+  under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
+  holders select their own). Eligible delegates: active managers/approvers. Leave replacement becomes
+  temporary delegate only if eligible, during approved absence, then saved delegate resumes. Ordinary
+  employees remain work cover only. **Owner simplification 2026-10-19:** no timer, worker or review
+  window — when the CEO's attested delegate (e.g. HR head) submits their own request with consent, the
+  CEO step is approved at submission; other CEO-step requests go to the CEO or the delegate. Non-HR
+  delegates still need HR; only the designated HR head skips the HR signature. Spec:
+  `docs/specs/2026-10-17-ceo-delegate-approval-design.md` (amendment). Open as
+  https://github.com/AmirNcode/bj-erp/pull/7; one squashed migration `20261018011333`, applied only to
+  the rebuilt isolated test DB. Review findings addressed: `step_delegation` performance (10–20× on
+  production data), narrower read RLS, CEO re-designation, e2e-cleanup FKs, queue order. Remaining,
+  each needing owner authorization: second review, merge (= deploy), pre-deploy backup + restore
+  drill, post-deploy smoke. Credential/session hardening stays deferred (risk R9).
 
 - ☐ **Settings › Roles save notices vanish ~1 s after saving** (branch `codex/approval-delegation`,
   found 2026-10-19): `settings/roles/page.tsx` keys `DelegationPanel` on `JSON.stringify(context)`;
   the save action's `invalidateAppCache()` re-renders the page, the key changes and the panel remounts,
-  dropping the "saved" status for delegate, executive and window saves. Values do update. Fix by
+  dropping the "saved" status for delegate and executive saves. Values do update. Fix by
   keying on `principal_id` only (state is already refreshed client-side) and re-run the browser phases.
 - ☐ **Farsi print shows the recorded automatic-authority statement in English** (same branch): the
-  statement is stored immutable evidence text written by SQL in English. Decide whether to store both
+  statement is stored immutable evidence text written by SQL in English.
+- ☐ **e2e cleanup fails when a throwaway approver signed a throwaway user's request** (pre-existing,
+  found 2026-10-19; same FKs on `main`): one `delete from auth.users` removes both, and the approver's
+  `ON DELETE SET NULL` update on `leave_request_approvals` re-checks a request row already cascaded
+  away (23503). Delete the junk users' `leave_requests` first inside `app_cleanup_e2e_users`. Decide whether to store both
   languages at decision time or print a localized summary beside the recorded original.
 
 - ☐ **Farsi route prefetch takes two redirects per tab** (pre-existing, found 2026-10-19):

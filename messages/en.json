@@ -1034,8 +1034,7 @@
     "hrStepInvalid": "Choose active HR review steps from this company.",
     "executiveInvalid": "Choose an active person in this company.",
     "ceoAuthorityInvalid": "Automatic approval authority can only be granted for the designated CEO’s delegate.",
-    "approvalStepChanged": "This approval step changed. Refresh the request before deciding.",
-    "autoWindowInvalid": "Enter a review window from 1 to 1440 minutes (one day)."
+    "approvalStepChanged": "This approval step changed. Refresh the request before deciding."
   },
   "roles": {
     "admin": "Admin",
@@ -1597,28 +1596,6 @@
     }
   },
   "rolesDelegation": {
-    "worker": {
-      "title": "Automatic CEO approval status",
-      "inactive": "Inactive",
-      "inactiveHint": "Automatic CEO approval is inactive. Original approvers can still review requests manually.",
-      "blocked": "Requests need review",
-      "blockedHint": "Some requests could not complete automatic approval. Review the request status and resolve the reported reason; the server will retry eligible requests.",
-      "overdue": "Awaiting processing",
-      "overdueHint": "Some eligible requests have reached their review deadline and are waiting for a successful server run. The review window is the eligibility time, not a guaranteed completion time.",
-      "notRun": "No completed run recorded",
-      "notRunHint": "Automatic approval is active, but no completed execution is recorded for the latest run.",
-      "stale": "Recent execution not confirmed",
-      "staleHint": "The latest completed execution is over five minutes old or has an inconsistent timestamp. Automatic processing may be delayed; ask the admin to check the scheduled worker.",
-      "healthy": "No requests need attention",
-      "healthyHint": "A completed execution was recorded within the last five minutes. No overdue or blocked requests were found in this view.",
-      "overdueCount": "Past the review deadline",
-      "blockedCount": "Blocked requests",
-      "lastExecution": "Last completed execution (Tehran)",
-      "noExecution": "Not recorded yet",
-      "inactiveOutstanding": "Outstanding requests still need manual review while automatic approval is inactive.",
-      "scopeHint": "The admin sees company counts. The designated CEO sees only timers under their authority.",
-      "queryFailed": "Could not load automatic approval status."
-    },
     "title": "Approval delegates",
     "myTitle": "My approval delegate",
     "stepRoles": {
@@ -1643,7 +1620,7 @@
     "selectDelegate": "Saved approval delegate",
     "eligibility": "Candidates must be active managers or existing approvers in this company. You cannot select yourself.",
     "ceoEligibility": "The CEO’s delegate must already directly report to the designated CEO and be an eligible approver.",
-    "ceoAttestation": "I confirm that I am authorized by the CEO to make this appointment and authorize the CEO approval step on this delegate’s own requests after {window}. This does not waive other required approvals.",
+    "ceoAttestation": "I confirm that I am authorized by the CEO to make this appointment and authorize automatic approval of the CEO step on this delegate’s own requests when they submit them. This does not waive other required approvals.",
     "retainedAuthority": "The original approver keeps authority. A delegate cannot use this appointment to sign their own request. Temporary eligible cover takes precedence only during the approved absence.",
     "save": "Save delegate",
     "saving": "Saving…",
@@ -1656,15 +1633,7 @@
     "hrStepsHint": "Select only genuine HR review steps. The designated HR head is exempt from these steps on their own requests. Other named approvers remain required.",
     "noSteps": "No approval steps are available. Configure the approval chain first.",
     "step": "Step {order}: {name}",
-    "saveExecutive": "Save executive configuration",
-    "autoWindow": {
-      "title": "CEO automatic approval window",
-      "hint": "How long the CEO step waits before the CEO’s delegate’s own request can be approved automatically. Only the admin can change it. Requests already submitted keep the window they were submitted with.",
-      "label": "Review window (minutes)",
-      "current": "Current: {window}",
-      "save": "Save window",
-      "saved": "Review window saved."
-    }
+    "saveExecutive": "Save executive configuration"
   },
   "delegation": {
     "title": "Approval coverage and authorization",
@@ -1684,12 +1653,11 @@
     "workCoverWarning": "Your replacement covers work only and cannot sign approvals on your behalf. You have no approval delegate, so you must respond to approval requests yourself or arrange a delegate.",
     "configureDelegate": "Choose my saved delegate",
     "contactAdmin": "Contact the admin to arrange an approval delegate. You can still submit this request.",
-    "autoPolicy": "If the CEO step is still pending after {window}, it may be approved automatically under the recorded CEO authorization. Other required approvals still apply. Processing occurs on the next successful server run.",
-    "ownConsent": "I accept responsibility for this request. Under the CEO’s explicit authorization recorded in the system, the CEO approval step may be completed automatically {window} after submission if that step remains pending and the authorization remains valid. Any other required approval steps still apply.",
+    "autoPolicy": "Because you are the CEO’s appointed delegate, the CEO approval step on this request is approved automatically when you submit it, under the recorded CEO authorization. Other required approvals still apply.",
+    "ownConsent": "I accept responsibility for this request. Under the CEO’s explicit authorization recorded in the system, the CEO approval step will be completed automatically when I submit it. Any other required approval steps still apply.",
     "ownConsentRequired": "Accept responsibility for this request and the recorded CEO automatic approval policy before submitting.",
-    "temporaryCeoAuthorization": "I explicitly authorize {name} as my temporary CEO delegate during the approved absence and authorize automatic completion of the CEO step on their own eligible requests after {window}. Other required approvals still apply.",
-    "temporaryConsentRequired": "Explicit CEO authorization for this temporary delegate is required before submitting.",
-    "expiresBeforeDeadline": "This CEO appointment expires before the review deadline ({window}). Manual CEO review will be needed."
+    "temporaryCeoAuthorization": "I explicitly authorize {name} as my temporary CEO delegate during the approved absence. While the appointment is in effect, the CEO step on their own eligible requests is approved automatically when they submit them. Other required approvals still apply.",
+    "temporaryConsentRequired": "Explicit CEO authorization for this temporary delegate is required before submitting."
   },
   "approvalEvidence": {
     "selectStep": "Approval step",
@@ -1707,14 +1675,7 @@
     "automaticallyApprovedAt": "Automatically approved: {at}",
     "recordedAuthority": "Recorded authority statement:",
     "configurationChanged": "The approval chain has changed since submission. The current required steps are shown below.",
-    "automaticDue": "The CEO step becomes eligible for automatic approval at {at}, subject to the appointment remaining valid. Processing occurs on the next successful server run and may be later. Other required approvals still apply.",
-    "automaticBlocked": "Automatic completion could not pass the final request checks. The request remains pending; contact an authorized approver or admin.",
-    "automaticInvalidated": "Automatic approval authority changed or expired. This request now requires manual approval; restoring the appointment will not restart its timer.",
     "legacyReconciliation": "Older approval evidence cannot identify the required steps unambiguously. The remaining steps need explicit decisions; contact the admin if clarification is needed.",
     "historicalHrExemption": "HR review was not required when submitted. This step has since changed and now requires review."
-  },
-  "approvalWindow": {
-    "hours": "{count, plural, =1 {one hour} =2 {two hours} other {# hours}}",
-    "minutes": "{count, plural, =1 {one minute} other {# minutes}}"
   }
 }

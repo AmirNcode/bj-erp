@@ -31,7 +31,7 @@ export type ProgressStep = {
 
 export async function getRequestProgress(
   requestId: string
-): Promise<{ ok: true; steps: ProgressStep[]; automatic?: ApprovalContextRow['automatic_approval']; configurationChanged?: boolean; legacyReconciliationRequired?: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean } | { ok: false; error: string }> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -41,7 +41,6 @@ export async function getRequestProgress(
   const context = data as unknown as ApprovalContextRow;
   return {
     ok: true,
-    automatic: context.automatic_approval,
     configurationChanged: context.configuration_changed,
     legacyReconciliationRequired: context.legacy_reconciliation_required,
     steps: context.progress.map((r) => ({

@@ -4,10 +4,9 @@ Source of truth for the schema. Postgres (Supabase). All employee-data tables ge
 (`docs/PERMISSIONS.md`). Current exact SQL is in `supabase/schema.sql`; versioned changes live in
 `supabase/migrations/`.
 
-**Unreleased local branch (2026-10-18):** approval delegation below is implemented on
-`codex/approval-delegation`. Migrations `20261018011333` and `20261018231551` have been applied only
-to the isolated synthetic test database, not production. They are frozen; later SQL fixes require
-forward migrations. The worker is registered inactive by the migration; production activation is separate.
+**Unreleased local branch (2026-10-19):** approval delegation below is implemented on
+`codex/approval-delegation` as one migration, `20261018011333`, applied only to the isolated
+synthetic test database, not production.
 
 ## Conventions
 
@@ -478,52 +477,48 @@ outstanding steps and both finalize, debiting twice.
 `leave_requests.approver_signature_data`/`_consent_at` retain the final human signature when present;
 they are null for automatic finalization. Per-step evidence remains authoritative.
 
-### Approval delegation and automatic CEO steps (unreleased, 2026-10-18)
+### Approval delegation and automatic CEO steps (unreleased, migration `20261018011333`)
 
-- **`approval_executive_settings`** — company PK; `auto_approval_minutes` (CEO review window,
-  default 120, 1–1440; admin-only via `app_set_auto_approval_window`, audited, does not bump
-  `version`, so pending timers keep their snapshotted deadline; migration `20261019143148`);
-  explicit `ceo_id`, `hr_head_id`, `hr_step_ids[]`,
+- **`approval_executive_settings`** — company PK; explicit `ceo_id`, `hr_head_id`, `hr_step_ids[]`,
   monotonic `version`, configuring actor/time. No identities or appointments are seeded. HR exemptions
-  use explicitly mapped step IDs, never role names or a person's job title.
+  use explicitly mapped step IDs, never role names or a person's job title. Changing `ceo_id` clears
+  `ceo_authorized` on the outgoing CEO's live grants (re-designation never revives an old attestation).
 - **`approval_delegations`** — company/principal/delegate IDs and immutable name snapshots; optional
   `source_request_id`, `starts_at`/`ends_at`, activation/revocation times, configuring actor and
   `ceo_authorized`. One current saved grant per principal; temporary grants belong to a source
   leave request. Temporary authority applies only while that source is approved and current time is
   in `[starts_at, ends_at)`, taking precedence over the saved grant; the eligible saved grant resumes
-  afterward. A pending absence never grants authority to approve itself.
+  afterward. A pending absence never grants authority to approve itself. Index
+  `approval_delegations_delegate_live(delegate_id) where revoked_at is null` serves `step_delegation`,
+  which resolves only the caller's own grants (production-data timing in AGENT-LOG 2026-10-19).
 - **`approval_request_policy`** — request PK, company, snapshotted absence interval, designated HR
   head, exact exempt HR-step IDs, full step snapshot and `configuration_changed`. Full-day boundaries
   use Asia/Tehran calendar dates; hourly bounds use exact times. AM/PM split the configured
   `work_start`–`work_end` at its midpoint. Server preview JSON binds those bounds to submission;
   stale settings/authority require a refreshed preview. Later settings do not move recorded bounds.
-- **`approval_auto_requests`** — request PK; grant/principal/delegate IDs and names, executive
-  settings version, exact CEO-step IDs/snapshot, responsibility consent, submission, due and actual
-  processing/attempt times, attempts and reason. `window_minutes` snapshots the company window at
-  enrollment and `due_at = submitted_at + window_minutes` (check constraint); states are
-  `pending | blocked | completed | invalidated`. New eligible requests alone enroll, atomically with
-  requester signature and explicit responsibility consent. Saved and temporary CEO appointments
-  require separate explicit authority attestations. No old-request enrollment or timer transfer.
-- **`approval_worker_runs`** — identity PK, actual start/finish times, examined/completed/blocked
-  totals. Minute worker batches prioritize new due work and back off blocked retries (maximum 60
-  attempts); due time is eligibility, not guaranteed completion time. Execution requires no browser.
+
+**Automatic CEO step at submission.** When the requester is the CEO's effective delegate and that
+grant is `ceo_authorized`, submission requires the requester PNG plus separate responsibility consent;
+`private.enroll_request_delegation` then approves every CEO-owned applicable step at once through the
+automatic branch of `private.decide_approval_request` (authority re-validated: grant live, still the
+CEO's effective delegate, requester is the delegate, CEO naturally owns the step). The request
+finalizes immediately if no other step remains (e.g. the designated HR head as CEO delegate);
+otherwise HR and other steps still sign. There are no timers, worker or scheduled job. A later change
+of delegate affects only later submissions.
 
 `leave_request_approvals` adds `evidence_kind` (`legacy | manual | delegated | automatic`),
 principal ID/name, actual signer-name snapshot, authority ID and immutable `evidence` JSON.
 Automatic rows require null human approver/PNG/consent, plus principal, grant and exact step ID;
-evidence retains submission, responsibility consent, actual processing time and authority statement.
+evidence retains submission time, responsibility consent, processing time and authority statement.
 HR exemption is a policy snapshot/progress projection, not a fabricated signed approval row.
 Print preserves exact step labels, historical authority/delegate identity and these timestamps.
 
 All decisions and authority changes serialize on the company approval lock before the employee
-leave lock. Forward migration `20261018231551` rechecks caller authority after waits and records
-submission/decision/signature evidence using actual clock time after lock acquisition. Shared
-finalization prevents duplicate consumption. Revocation, expiry, role/permission/profile/company or
-executive/step changes permanently invalidate affected pending timers, including A→B→A and temporary
-interruptions that begin and end while the worker is offline. Restoration never revives an old timer.
-Automatic CEO steps may precede unfinished HR review; they do not waive remaining steps or activate
-an absence until the full chain completes. Closed progress retains immutable decisions/exemptions;
-changed pending HR-step meaning exposes historical exemption metadata for review.
+leave lock; caller authority is rechecked after waits and evidence uses the actual post-wait clock.
+Shared finalization prevents duplicate consumption. Automatic CEO steps may precede unfinished HR
+review; they do not waive remaining steps or activate an absence until the full chain completes.
+Closed progress retains immutable decisions/exemptions; changed pending HR-step meaning exposes
+historical exemption metadata for review.
 
 RPC payloads and authorization: `docs/plans/approval-delegation-rpc-contract.md` and
 `docs/PERMISSIONS.md`. Credential/session hardening remains explicitly deferred: retained initial

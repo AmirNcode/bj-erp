@@ -1,5 +1,17 @@
 # Approval delegation continuation handoff — 2026-10-19
 
+## Current status — design simplified after PR #7 review (2026-10-19, later)
+
+**Read this first; everything below is history.** Owner removed the timer: the CEO's attested delegate
+(e.g. HR head) gets the CEO step approved **at submission**; there is no worker, cron job, worker-health
+card or review window. All delegation SQL is one squashed migration `20261018011333_approval_delegation.sql`
+(none of the earlier five ever ran outside the disposable test DB). The isolated DB was **rebuilt** with
+`.bj-deploy/delegation/resume-tools/bj-delegation-rebuild.sh` (baseline = `main` schema, ACL repair incl. the
+three private validators, seed, calendar, GoTrue, bootstrap admin, ledger apply) and re-seeded with
+`/tmp/bj-delegation-qa.py seed`. Until PR #7 merges, an SQL change means: edit the squashed file, rerun
+the rebuild script, re-seed, rerun tests — not a forward migration. Validation and perf numbers: AGENT-LOG
+2026-10-19 "simplified". PR #7 is open, not merged; merging deploys.
+
 ## Status after second continuation (2026-10-19, Claude Opus 5.5)
 
 Everything this handoff listed as outstanding is now done; sections below are history. Still

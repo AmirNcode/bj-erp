@@ -41,7 +41,6 @@ const RULES: Rule[] = [
   { re: /not permitted to select a delegate/i, key: 'delegationNotPermitted' },
   { re: /overlapping temporary approval delegation/i, key: 'delegationOverlap' },
   { re: /HR review step must be an active company approval step/i, key: 'hrStepInvalid' },
-  { re: /automatic approval window must be 1 to 1440 minutes/i, key: 'autoWindowInvalid' },
   { re: /executive must be active in your company/i, key: 'executiveInvalid' },
   { re: /automatic approval authorization requires the designated CEO appointment/i, key: 'ceoAuthorityInvalid' },
   { re: /approval step is no longer applicable/i, key: 'approvalStepChanged' },

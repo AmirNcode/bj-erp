@@ -1,8 +1,8 @@
 -- Approval delegation regression scenarios. Run ONLY in the disposable synthetic test database.
 -- The lead owns database orchestration. This file starts and rolls back its own transaction.
 -- Use the image superuser (supabase_admin). No real identities, credentials or calendar jobs run.
--- Deliberately fail on any incorrect assertion; worker calls below are explicit and transactional.
--- Genuine concurrent-session and real pg_cron execution checks are separate lead-run checks.
+-- Deliberately fail on any incorrect assertion. Concurrent-session checks are separate lead-run checks.
+-- The CEO's delegate's own requests get the CEO step approved at submission (no timers).
 \set ON_ERROR_STOP on
 begin;
 drop index public.user_roles_one_admin;
@@ -58,16 +58,6 @@ begin
   if left(v_id,6)='ERROR ' then raise exception 'submission failed for %: %',p_actor,v_id; end if;
   return v_id::uuid;
 end; $$;
-create function pg_temp.make_due(p_request uuid) returns void language plpgsql as $$
-declare v_now timestamptz:=clock_timestamp();
-begin
-  -- Backdate by the request's own snapshotted window plus one minute.
-  update public.approval_auto_requests
-    set submitted_at=v_now-make_interval(mins=>window_minutes+1),
-        due_at=v_now-make_interval(mins=>window_minutes+1)+make_interval(mins=>window_minutes)
-    where request_id=p_request;
-end; $$;
-
 -- Synthetic company avoids changing the configured identities/steps of any existing deployment.
 do $$
 declare v_company uuid:=gen_random_uuid(); v_dept uuid:=gen_random_uuid(); v_other_dept uuid:=gen_random_uuid();
@@ -147,7 +137,6 @@ select pg_temp.expect('permission holder cannot change another principal',pg_tem
   'select public.app_set_approval_delegate(%L,%L,false)',pg_temp.fx('b'),pg_temp.fx('a'))),'42501');
 select pg_temp.expect('delegate cannot onward delegate borrowed authority',pg_temp.as_call('a',format(
   'select public.app_set_approval_delegate(%L,%L,false)',pg_temp.fx('a'),pg_temp.fx('b'))),'42501');
-select pg_temp.expect('private worker is not client executable',pg_temp.as_call('a','select private.process_approval_auto_requests()'),'42501');
 select pg_temp.expect('direct appointment insert is denied',pg_temp.as_call('a',format(
   'insert into public.approval_delegations(company_id,principal_id,delegate_id,principal_name,delegate_name,configured_by) values(%L,%L,%L,''x'',''y'',%L)',
   pg_temp.fx('company'),pg_temp.fx('ceo'),pg_temp.fx('a'),pg_temp.fx('a'))),'42501');
@@ -164,10 +153,11 @@ declare v_before timestamptz; v_request uuid;
 begin
   v_before:=clock_timestamp();
   v_request:=pg_temp.submit('a','2026-12-01',true);
-  perform pg_temp.assert('request creation and full CEO window use actual submission clock',exists(
-    select 1 from public.leave_requests r join public.approval_auto_requests a on a.request_id=r.id
-      where r.id=v_request and r.created_at>=v_before and a.submitted_at=r.created_at
-        and a.due_at>=v_before+interval '120 minutes'));
+  perform pg_temp.assert('automatic CEO evidence uses the actual submission clock',exists(
+    select 1 from public.leave_requests r join public.leave_request_approvals a on a.request_id=r.id
+      where r.id=v_request and r.created_at>=v_before and a.evidence_kind='automatic'
+        and a.created_at>=r.created_at and (a.evidence->>'processed_at')::timestamptz=a.created_at
+        and (a.evidence->>'submitted_at')::timestamptz=r.created_at));
   perform pg_temp.assert('requester consent is recorded after actual request creation',exists(
     select 1 from public.leave_requests where id=v_request and signature_consent_at>=created_at));
   v_before:=clock_timestamp();
@@ -176,12 +166,6 @@ begin
   perform pg_temp.assert('manual signature evidence uses execution clock',exists(
     select 1 from public.leave_request_approvals where request_id=v_request and step_id=pg_temp.fx('hr_step')
       and created_at>=v_before and signature_consent_at=created_at));
-  perform pg_temp.make_due(v_request);
-  v_before:=clock_timestamp();
-  perform private.process_approval_auto_requests();
-  perform pg_temp.assert('automatic evidence uses execution clock',exists(
-    select 1 from public.leave_request_approvals where request_id=v_request and evidence_kind='automatic'
-      and created_at>=v_before and (evidence->>'processed_at')::timestamptz=created_at));
 end; $$;
 rollback to savepoint delegation_clock_regressions;
 release savepoint delegation_clock_regressions;
@@ -317,10 +301,15 @@ select pg_temp.expect('delegate uses own actual PNG for CEO step',pg_temp.as_cal
 select pg_temp.assert('delegated evidence records both actor and principal',exists(select 1 from public.leave_request_approvals
   where request_id=pg_temp.fx('incoming') and step_id=pg_temp.fx('ceo_step') and evidence_kind='delegated'
     and approver_id=pg_temp.fx('a') and principal_id=pg_temp.fx('ceo') and signature_data=pg_temp.sig()));
-select pg_temp.expect('delegate cannot approve own request through appointment',pg_temp.as_call('a',format(
-  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.submit('a','2026-11-07',true),pg_temp.fx('ceo_step'),pg_temp.sig())),'42501');
+insert into delegation_fx values('own_auto',pg_temp.submit('a','2026-11-07',true));
+select pg_temp.expect('delegate cannot sign another step of their own request',pg_temp.as_call('a',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('own_auto'),pg_temp.fx('hr_step'),pg_temp.sig())),'42501');
+select pg_temp.expect('delegate cannot sign the CEO step of their own request',pg_temp.as_call('a',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('own_auto'),pg_temp.fx('ceo_step'),pg_temp.sig())),'42501');
+select pg_temp.expect('own request already carries the automatic CEO step',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('own_auto') and evidence_kind='automatic'),'1');
 
--- Consent required on every old client; all four v2 forms enroll atomically with PNG.
+-- Consent required on every old client; all four v2 forms approve the CEO step at submission.
 select pg_temp.expect('legacy eligible submission demands responsibility consent',pg_temp.as_call('a',format(
   'select public.submit_leave_request(%L,''2026-11-08'',''2026-11-08'',''full'',%L,true)',pg_temp.fx('leave_type'),pg_temp.sig())),'22023');
 insert into delegation_fx values('auto_leave',pg_temp.submit('a','2026-11-09',true));
@@ -331,71 +320,115 @@ insert into delegation_fx values('auto_errand',pg_temp.as_scalar('a',format(
   'select public.submit_errand_request_v2(''2026-11-11'',''08:00'',''09:00'',''Fixture location'',%L,true,null,true,null,false)',pg_temp.sig()))::uuid);
 insert into delegation_fx values('auto_daily_errand',pg_temp.as_scalar('a',format(
   'select public.submit_daily_errand_request_v2(''2026-11-12'',''2026-11-12'',''Fixture location'',%L,true,null,true,null,false)',pg_temp.sig()))::uuid);
-select pg_temp.expect('all four v2 kinds enroll',
-  (select count(*)::text from public.approval_auto_requests where request_id in
-    (pg_temp.fx('auto_leave'),pg_temp.fx('auto_hourly'),pg_temp.fx('auto_errand'),pg_temp.fx('auto_daily_errand'))),'4');
-select pg_temp.assert('atomic responsibility timestamp and exact elapsed deadline',not exists(select 1 from public.approval_auto_requests a
-  join public.leave_requests r on r.id=a.request_id where a.company_id=pg_temp.fx('company')
-    and (a.due_at<>r.created_at+interval '120 minutes' or a.consent_at is null or r.signature_data is null)));
-select pg_temp.assert('no timer is already due at submission',not exists(select 1 from public.approval_auto_requests
-  where company_id=pg_temp.fx('company') and due_at<=clock_timestamp()));
+select pg_temp.expect('all four v2 kinds approve the CEO step at submission',
+  (select count(*)::text from public.leave_request_approvals where step_id=pg_temp.fx('ceo_step') and evidence_kind='automatic'
+    and request_id in (pg_temp.fx('auto_leave'),pg_temp.fx('auto_hourly'),pg_temp.fx('auto_errand'),pg_temp.fx('auto_daily_errand'))),'4');
+select pg_temp.assert('automatic evidence records requester consent and submission time',not exists(select 1 from public.leave_request_approvals a
+  join public.leave_requests r on r.id=a.request_id where a.evidence_kind='automatic' and r.company_id=pg_temp.fx('company')
+    and ((a.evidence->>'consent_at')::timestamptz is distinct from r.signature_consent_at
+      or (a.evidence->>'submitted_at')::timestamptz is distinct from r.created_at or r.signature_data is null)));
 
--- Admin-adjustable review window (20261019143148). Rolled back to keep later cases on 120 minutes.
-savepoint auto_window;
-select pg_temp.expect('window defaults to 120 minutes',pg_temp.as_scalar('admin',
-  'select public.app_delegation_context()->''executive_settings''->>''auto_approval_minutes'''),'120');
-select pg_temp.expect('preview reports the review window',pg_temp.as_scalar('a',
-  'select public.app_request_delegation_preview(''2027-01-05'',''2027-01-05'')->>''auto_approval_minutes'''),'120');
-create temp table auto_window_before as select
-  pg_temp.as_scalar('a','select public.app_request_delegation_preview(''2027-01-05'',''2027-01-05'')')::jsonb as preview_unused,
-  (select due_at from public.approval_auto_requests where request_id=pg_temp.fx('auto_leave')) as existing_due,
-  (select version from public.approval_executive_settings where company_id=pg_temp.fx('company')) as version;
-select pg_temp.assert('anon cannot execute the window setter',not has_function_privilege('anon','public.app_set_auto_approval_window(integer)','EXECUTE'));
-select pg_temp.expect('non-admin CEO cannot set the window',pg_temp.as_call('ceo','select public.app_set_auto_approval_window(2)'),'42501');
-select pg_temp.expect('delegate cannot set the window',pg_temp.as_call('a','select public.app_set_auto_approval_window(2)'),'42501');
-select pg_temp.expect('zero minutes rejected',pg_temp.as_call('admin','select public.app_set_auto_approval_window(0)'),'22023');
-select pg_temp.expect('over one day rejected',pg_temp.as_call('admin','select public.app_set_auto_approval_window(1441)'),'22023');
-select pg_temp.expect('null window rejected',pg_temp.as_call('admin','select public.app_set_auto_approval_window(null)'),'22023');
-select pg_temp.expect('admin sets two minutes',pg_temp.as_call('admin','select public.app_set_auto_approval_window(2)'),'ok');
-select pg_temp.expect('window change does not bump settings version (no mass timer invalidation)',
-  (select version::text from public.approval_executive_settings where company_id=pg_temp.fx('company')),
-  (select version::text from auto_window_before));
-select pg_temp.expect('CEO self-service context shows new window',pg_temp.as_scalar('ceo',
-  'select public.app_delegation_context()->''executive_settings''->>''auto_approval_minutes'''),'2');
-select pg_temp.assert('window change is audited with before and after',exists(select 1 from public.audit_log
-  where action='set_auto_approval_window' and entity_id=pg_temp.fx('company') and actor_id=pg_temp.fx('admin')
-    and before->>'minutes'='120' and after->>'minutes'='2'));
-select pg_temp.expect('existing pending timer keeps its deadline',
-  (select due_at::text from public.approval_auto_requests where request_id=pg_temp.fx('auto_leave')),
-  (select existing_due::text from auto_window_before));
-select pg_temp.expect('existing pending timer stays pending',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('auto_leave')),'pending');
-select pg_temp.assert('preview token changes with the window',
-  (select preview_unused->>'preview_token' from auto_window_before) is distinct from
-  pg_temp.as_scalar('a','select public.app_request_delegation_preview(''2027-01-05'',''2027-01-05'')->>''preview_token'''));
-select pg_temp.expect('submission with preview from old window is refused',pg_temp.as_call('a',format(
-  'select public.submit_leave_request_v2(%L,''2027-01-05'',''2027-01-05'',''full'',%L,true,null,null,true,%L::jsonb,false)',
-  pg_temp.fx('leave_type'),pg_temp.sig(),(select preview_unused from auto_window_before))),'22023');
-insert into delegation_fx values('short_window',pg_temp.submit('a','2027-01-05',true));
-select pg_temp.assert('new timer snapshots two-minute window',exists(select 1 from public.approval_auto_requests a
-  join public.leave_requests r on r.id=a.request_id where a.request_id=pg_temp.fx('short_window')
-    and a.window_minutes=2 and a.due_at=r.created_at+interval '2 minutes'));
-do $$ begin
-  begin
-    update public.approval_auto_requests set due_at=submitted_at+interval '120 minutes' where request_id=pg_temp.fx('short_window');
-    raise exception 'FAIL due check accepted a mismatched deadline';
-  exception when check_violation then raise notice 'PASS due check rejects a deadline that ignores the window'; end;
-end $$;
-select pg_temp.expect('later window change leaves new timer deadline alone',pg_temp.as_call('admin','select public.app_set_auto_approval_window(60)'),'ok');
-select pg_temp.assert('short timer still due at two minutes',exists(select 1 from public.approval_auto_requests a
-  join public.leave_requests r on r.id=a.request_id where a.request_id=pg_temp.fx('short_window')
-    and a.window_minutes=2 and a.due_at=r.created_at+interval '2 minutes'));
-rollback to savepoint auto_window;
-select private.process_approval_auto_requests();
-select pg_temp.expect('not-yet-due CEO step stays pending',
-  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('auto_leave')),'0');
-select pg_temp.make_due(pg_temp.fx('auto_leave'));
-select private.process_approval_auto_requests();
+-- Owner example: the HR head as the CEO's delegate. Their own request needs no HR signature
+-- (mapped exemption) and the CEO step is automatic, so it is approved at submission.
+savepoint hr_head_delegate;
+select pg_temp.expect('admin appoints the HR head as CEO delegate',pg_temp.as_call('admin',format(
+  'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('hr'))),'ok');
+insert into public.leave_ledger(employee_id,leave_type_id,entry_type,delta_minutes,balance_after_minutes,note)
+  values(pg_temp.fx('hr'),pg_temp.fx('leave_type'),'adjustment',4800,4800,'fixture balance');
+insert into delegation_fx values('hr_head_auto',pg_temp.submit('hr','2027-01-08',true));
+select pg_temp.expect('HR head delegate request approved at submission',
+  (select status::text from public.leave_requests where id=pg_temp.fx('hr_head_auto')),'approved');
+select pg_temp.expect('one automatic CEO row and no fabricated HR signature',
+  (select string_agg(evidence_kind,',' order by evidence_kind) from public.leave_request_approvals where request_id=pg_temp.fx('hr_head_auto')),'automatic');
+select pg_temp.expect('approval at submission consumes leave once',
+  (select count(*)::text from public.leave_ledger where request_id=pg_temp.fx('hr_head_auto') and entry_type='consumption'),'1');
+select pg_temp.expect('former delegate A is no longer offered automatic approval',pg_temp.as_scalar('a',
+  'select public.app_request_delegation_preview(''2027-01-09'',''2027-01-09'')->>''auto_approval_eligible'''),'false');
+rollback to savepoint hr_head_delegate;
+
+-- PR #7 review fixes. Rolled back so later cases see the original state.
+savepoint review_fixes;
+select pg_temp.assert('anon executes no delegation RPC',not exists(select 1 from pg_proc p
+  where p.pronamespace='public'::regnamespace and p.proname in('app_can_read_approval_request','app_approval_capabilities',
+    'app_delegation_context','app_search_delegates','app_set_approval_delegate','app_set_executive_settings',
+    'app_request_delegation_preview','submit_leave_request_v2','submit_hourly_leave_request_v2','submit_errand_request_v2',
+    'submit_daily_errand_request_v2','approve_leave_request_v2','reject_leave_request_v2','app_request_approval_progress',
+    'app_request_approval_context','app_approval_queue','get_leave_request_signatures')
+    and has_function_privilege('anon',p.oid,'EXECUTE')));
+select pg_temp.assert('step_delegation uses the delegate index',exists(select 1 from pg_indexes
+  where schemaname='public' and indexname='approval_delegations_delegate_live'));
+
+-- The CEO cannot sign a CEO step already approved automatically; other steps still apply.
+select pg_temp.expect('CEO cannot re-sign an automatically approved CEO step',pg_temp.as_call('ceo',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('auto_errand'),pg_temp.fx('ceo_step'),pg_temp.sig())),'22023');
+select pg_temp.expect('HR signs the auto-approved errand',pg_temp.as_call('hr',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('auto_errand'),pg_temp.fx('hr_step'),pg_temp.sig())),'ok');
+select pg_temp.expect('errand still waits for its named step',
+  (select status::text from public.leave_requests where id=pg_temp.fx('auto_errand')),'pending');
+
+-- Read scope: delegate reads pending work and requests they decided, not decided history.
+insert into public.leave_ledger(employee_id,leave_type_id,entry_type,delta_minutes,balance_after_minutes,note)
+  values(pg_temp.fx('employee'),pg_temp.fx('leave_type'),'adjustment',4800,4800,'review-fix balance');
+insert into delegation_fx values('history',pg_temp.submit('employee','2027-01-06'));
+select pg_temp.expect('delegate reads a pending request they can act on',pg_temp.as_scalar('a',format(
+  'select count(*) from public.leave_requests where id=%L',pg_temp.fx('history'))),'1');
+select pg_temp.expect('HR signs history request',pg_temp.as_call('hr',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('history'),pg_temp.fx('hr_step'),pg_temp.sig())),'ok');
+
+-- One hop only: A's own delegate B cannot sign the CEO step A holds by delegation.
+select pg_temp.expect('A gains delegation permission',pg_temp.as_call('admin',format(
+  'select public.app_set_user_role_ids(%L,array[%L,%L]::uuid[])',pg_temp.fx('a'),
+  (select id from public.roles where company_id=pg_temp.fx('company') and system_key='employee'),pg_temp.fx('delegation_role'))),'ok');
+select pg_temp.expect('admin sets B as A''s saved delegate',pg_temp.as_call('admin',format(
+  'select public.app_set_approval_delegate(%L,%L,false)',pg_temp.fx('a'),pg_temp.fx('b'))),'ok');
+select pg_temp.expect('delegate of a delegate cannot sign the principal''s step',pg_temp.as_call('b',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('history'),pg_temp.fx('ceo_step'),pg_temp.sig())),'42501');
+
+select pg_temp.expect('CEO signs history request',pg_temp.as_call('ceo',format(
+  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('history'),pg_temp.fx('ceo_step'),pg_temp.sig())),'ok');
+select pg_temp.expect('history request approved',(select status::text from public.leave_requests where id=pg_temp.fx('history')),'approved');
+select pg_temp.expect('delegate no longer reads a decided request they did not sign',pg_temp.as_scalar('a',format(
+  'select count(*) from public.leave_requests where id=%L',pg_temp.fx('history'))),'0');
+select pg_temp.expect('delegate no longer reads its decision rows',pg_temp.as_scalar('a',format(
+  'select count(*) from public.leave_request_approvals where request_id=%L',pg_temp.fx('history'))),'0');
+select pg_temp.expect('requester still reads own decided request',pg_temp.as_scalar('employee',format(
+  'select count(*) from public.leave_requests where id=%L',pg_temp.fx('history'))),'1');
+select pg_temp.expect('delegate who signed keeps reading that request',pg_temp.as_scalar('a',format(
+  'select count(*) from public.leave_requests where id=%L',pg_temp.fx('incoming'))),'1');
+
+-- Re-designating a former CEO does not revive the earlier attestation.
+select pg_temp.assert('CEO saved grant is CEO-authorized before the change',exists(select 1 from public.approval_delegations
+  where principal_id=pg_temp.fx('ceo') and source_request_id is null and revoked_at is null and ceo_authorized));
+select pg_temp.expect('admin designates another CEO',pg_temp.as_call('admin',format(
+  'select public.app_set_executive_settings(%L,%L,%L::uuid[])',pg_temp.fx('b'),
+  (select hr_head_id from public.approval_executive_settings where company_id=pg_temp.fx('company')),
+  (select hr_step_ids::text from public.approval_executive_settings where company_id=pg_temp.fx('company')))),'ok');
+select pg_temp.expect('admin restores the former CEO',pg_temp.as_call('admin',format(
+  'select public.app_set_executive_settings(%L,%L,%L::uuid[])',pg_temp.fx('ceo'),
+  (select hr_head_id from public.approval_executive_settings where company_id=pg_temp.fx('company')),
+  (select hr_step_ids::text from public.approval_executive_settings where company_id=pg_temp.fx('company')))),'ok');
+select pg_temp.assert('former CEO''s attestation is not revived',not exists(select 1 from public.approval_delegations
+  where principal_id=pg_temp.fx('ceo') and revoked_at is null and ceo_authorized));
+select pg_temp.expect('delegate is no longer offered automatic approval',pg_temp.as_scalar('a',
+  'select public.app_request_delegation_preview(''2027-01-07'',''2027-01-07'')->>''auto_approval_eligible'''),'false');
+
+-- e2e cleanup no longer trips over delegation history (all fixture codes match its junk pattern).
+-- Requests are removed first: a junk approver plus the junk requester they signed for hits a
+-- pre-existing cascade-order FK error on leave_request_approvals (same FKs on main; see TASKS).
+delete from public.leave_requests where company_id=pg_temp.fx('company');
+-- The fixture admin's own code matches the junk pattern; keep the caller out of the deletion.
+set local session_replication_role=replica;
+update public.profiles set employee_code='fixture-admin' where id=pg_temp.fx('admin');
+set local session_replication_role=origin;
+select pg_temp.assert('saved delegation and executive rows still reference fixture accounts',
+  exists(select 1 from public.approval_delegations where company_id=pg_temp.fx('company') and revoked_at is null)
+  and exists(select 1 from public.approval_executive_settings where company_id=pg_temp.fx('company') and ceo_id is not null));
+select pg_temp.expect('e2e cleanup succeeds with delegation rows present',
+  left(pg_temp.as_call('admin','select public.app_cleanup_e2e_users()'),2),'ok');
+select pg_temp.assert('cleanup removed delegation rows of throwaway accounts',not exists(select 1 from public.approval_delegations
+  where company_id=pg_temp.fx('company')) and (select ceo_id is null and hr_head_id is null
+  from public.approval_executive_settings where company_id=pg_temp.fx('company')));
+rollback to savepoint review_fixes;
 select pg_temp.assert('automatic CEO evidence has null human signer and PNG',exists(select 1 from public.leave_request_approvals
   where request_id=pg_temp.fx('auto_leave') and step_id=pg_temp.fx('ceo_step') and evidence_kind='automatic'
     and approver_id is null and signature_data is null and signature_consent_at is null
@@ -413,35 +446,18 @@ select pg_temp.expect('shared finalizer approves only after HR',
   (select status::text from public.leave_requests where id=pg_temp.fx('auto_leave')),'approved');
 select pg_temp.expect('shared finalizer consumes leave once',
   (select count(*)::text from public.leave_ledger where request_id=pg_temp.fx('auto_leave') and entry_type='consumption'),'1');
-select private.process_approval_auto_requests();
-select pg_temp.expect('worker retry does not duplicate ledger',
-  (select count(*)::text from public.leave_ledger where request_id=pg_temp.fx('auto_leave') and entry_type='consumption'),'1');
-select pg_temp.make_due(pg_temp.fx('auto_errand'));
-select private.process_approval_auto_requests();
 select pg_temp.assert('automatic errand step never assigns per diem',
   (select per_diem_rials is null from public.leave_requests where id=pg_temp.fx('auto_errand')));
 
--- Actual manual CEO signature wins; rejection and cancellation stop the timer.
-insert into delegation_fx values('manual_ceo',pg_temp.submit('a','2026-11-13',true));
-select pg_temp.expect('HR signs before early CEO signature',pg_temp.as_call('hr',format(
-  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('manual_ceo'),pg_temp.fx('hr_step'),pg_temp.sig())),'ok');
-select pg_temp.expect('early CEO signs manually',pg_temp.as_call('ceo',format(
-  'select public.approve_leave_request_v2(%L,%L,%L,true)',pg_temp.fx('manual_ceo'),pg_temp.fx('ceo_step'),pg_temp.sig())),'ok');
-select pg_temp.make_due(pg_temp.fx('manual_ceo'));
-select private.process_approval_auto_requests();
-select pg_temp.assert('manual CEO evidence is preserved by worker',exists(select 1 from public.leave_request_approvals
-  where request_id=pg_temp.fx('manual_ceo') and step_id=pg_temp.fx('ceo_step') and approver_id=pg_temp.fx('ceo')
-    and evidence_kind='manual' and signature_data=pg_temp.sig()));
+-- Rejection and cancellation still work after the automatic CEO step.
 insert into delegation_fx values('rejected_auto',pg_temp.submit('a','2026-11-14',true));
-select pg_temp.expect('CEO may reject before deadline',pg_temp.as_call('ceo',format(
-  'select public.reject_leave_request_v2(%L,%L,''Fixture rejection'')',pg_temp.fx('rejected_auto'),pg_temp.fx('ceo_step'))),'ok');
+select pg_temp.expect('HR may still reject after automatic CEO approval',pg_temp.as_call('hr',format(
+  'select public.reject_leave_request_v2(%L,%L,''Fixture rejection'')',pg_temp.fx('rejected_auto'),pg_temp.fx('hr_step'))),'ok');
 insert into delegation_fx values('cancelled_auto',pg_temp.submit('a','2026-11-15',true));
-select pg_temp.expect('requester cancels before deadline',pg_temp.as_call('a',format(
+select pg_temp.expect('requester cancels after automatic CEO approval',pg_temp.as_call('a',format(
   'select public.cancel_leave_request(%L)',pg_temp.fx('cancelled_auto'))),'ok');
-select pg_temp.make_due(pg_temp.fx('rejected_auto')); select pg_temp.make_due(pg_temp.fx('cancelled_auto'));
-select private.process_approval_auto_requests();
-select pg_temp.expect('rejected and cancelled requests never auto approve',
-  (select count(*)::text from public.leave_request_approvals where request_id in (pg_temp.fx('rejected_auto'),pg_temp.fx('cancelled_auto')) and evidence_kind='automatic'),'0');
+select pg_temp.expect('rejected and cancelled requests consume nothing',
+  (select count(*)::text from public.leave_ledger where request_id in (pg_temp.fx('rejected_auto'),pg_temp.fx('cancelled_auto')) and entry_type='consumption'),'0');
 
 -- HR head exemption is exact and independent of CEO delegate identity.
 insert into delegation_fx values('hr_own',pg_temp.submit('hr','2026-11-16'));
@@ -451,52 +467,38 @@ select pg_temp.expect('HR exemption is not fabricated approval evidence',
   (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('hr_own') and step_id=pg_temp.fx('hr_step')),'0');
 select pg_temp.expect('HR-head exemption visible in progress',pg_temp.as_scalar('hr',format(
   'select count(*) from jsonb_array_elements(public.app_request_approval_progress(%L)) p where p->>''evidence_kind''=''hr_exempt''',pg_temp.fx('hr_own'))),'1');
-select pg_temp.expect('HR head has no CEO timer when someone else is CEO delegate',
-  (select count(*)::text from public.approval_auto_requests where request_id=pg_temp.fx('hr_own')),'0');
+select pg_temp.expect('HR head gets no automatic CEO approval when someone else is CEO delegate',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('hr_own') and evidence_kind='automatic'),'0');
 
--- Permanent invalidation: saved A -> B -> A and permission/reactivation/reporting transitions.
-insert into delegation_fx values('aba',pg_temp.submit('a','2026-11-17',true));
+-- Authority is checked at submission: switching the CEO's delegate moves the entitlement.
 select pg_temp.expect('admin switches saved authority to B',pg_temp.as_call('admin',format(
   'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('b'))),'ok');
+select pg_temp.expect('former delegate''s consent is refused',pg_temp.as_call('a',format(
+  'select public.submit_leave_request_v2(%L,''2026-11-17'',''2026-11-17'',''full'',%L,true,null,null,true,null,false)',
+  pg_temp.fx('leave_type'),pg_temp.sig())),'22023');
+insert into delegation_fx values('aba',pg_temp.submit('a','2026-11-17'));
+select pg_temp.expect('former delegate''s request waits for the CEO',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('aba')),'0');
+insert into public.leave_ledger(employee_id,leave_type_id,entry_type,delta_minutes,balance_after_minutes,note)
+  values(pg_temp.fx('b'),pg_temp.fx('leave_type'),'adjustment',4800,4800,'fixture balance');
+insert into delegation_fx values('b_auto',pg_temp.submit('b','2026-11-18',true));
+select pg_temp.expect('new delegate''s own request gets the CEO step at once',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('b_auto') and evidence_kind='automatic'),'1');
 select pg_temp.expect('admin switches saved authority back to A',pg_temp.as_call('admin',format(
   'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('a'))),'ok');
-select pg_temp.expect('saved A to B to A does not revive old timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('aba')),'invalidated');
-select pg_temp.make_due(pg_temp.fx('aba')); select private.process_approval_auto_requests();
-select pg_temp.expect('worker does not process revived saved authority',
-  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('aba') and evidence_kind='automatic'),'0');
-insert into delegation_fx values('permission_loss',pg_temp.submit('a','2026-11-18',true));
 select pg_temp.expect('admin removes principal delegation permission',pg_temp.as_call('admin',format(
   'select public.app_save_role(%L,''Delegation fixture'',''{}''::jsonb)',pg_temp.fx('delegation_role'))),'ok');
+select pg_temp.expect('no automatic approval while the CEO lacks delegation permission',pg_temp.as_scalar('a',
+  'select public.app_request_delegation_preview(''2026-11-19'',''2026-11-19'')->>''auto_approval_eligible'''),'false');
 select pg_temp.expect('admin restores principal delegation permission',pg_temp.as_call('admin',format(
   'select public.app_save_role(%L,''Delegation fixture'',''{"approval_delegate":"edit"}''::jsonb)',pg_temp.fx('delegation_role'))),'ok');
-select pg_temp.expect('permission restoration does not revive old timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('permission_loss')),'invalidated');
-insert into delegation_fx values('reactivation',pg_temp.submit('a','2026-11-19',true));
-select pg_temp.login('admin');
-update public.profiles set active=false where id=pg_temp.fx('a');
-update public.profiles set active=true where id=pg_temp.fx('a');
-select pg_temp.expect('deactivation/reactivation does not revive old timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('reactivation')),'invalidated');
-insert into delegation_fx values('reporting_change',pg_temp.submit('a','2026-11-20',true));
-select pg_temp.login('admin');
-update public.profiles set manager_id=pg_temp.fx('b') where id=pg_temp.fx('a');
-update public.profiles set manager_id=pg_temp.fx('ceo') where id=pg_temp.fx('a');
-select pg_temp.expect('reporting-line restoration does not revive old timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('reporting_change')),'invalidated');
-insert into delegation_fx values('company_move',pg_temp.submit('a','2026-11-26',true));
-select pg_temp.login('admin');
-update public.profiles set company_id=pg_temp.fx('outside_company') where id=pg_temp.fx('a');
-update public.profiles set company_id=pg_temp.fx('company') where id=pg_temp.fx('a');
-select pg_temp.expect('company move away and back permanently invalidates origin timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('company_move')),'invalidated');
+select pg_temp.expect('restored permission makes A eligible again',pg_temp.as_scalar('a',
+  'select public.app_request_delegation_preview(''2026-11-19'',''2026-11-19'')->>''auto_approval_eligible'''),'true');
 
-insert into delegation_fx values('step_change',pg_temp.submit('a','2026-11-21',true));
+insert into delegation_fx values('step_change',pg_temp.submit('employee','2026-11-21'));
 select pg_temp.login('admin');
 update public.approval_steps set approver_id=pg_temp.fx('b') where id=pg_temp.fx('ceo_step');
 update public.approval_steps set approver_id=null where id=pg_temp.fx('ceo_step');
-select pg_temp.expect('CEO step edit/restoration does not revive old timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('step_change')),'invalidated');
 select pg_temp.assert('pending configuration changes are surfaced',
   (select configuration_changed from public.approval_request_policy where request_id=pg_temp.fx('step_change')));
 select pg_temp.login('admin');
@@ -516,21 +518,13 @@ select pg_temp.expect('saved delegate handles instant before AM starts',
 select pg_temp.expect('AM end is exclusive and saved delegate resumes at noon',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'),'2026-11-03 12:00 Asia/Tehran')),pg_temp.fx('a')::text);
 
--- Simulate a worker outage across an entire temporary interval using retained historical rows.
--- Only the fixture owner changes timestamps; no application endpoint accepts these clocks.
-insert into delegation_fx values('offline_interval',pg_temp.submit('a','2026-11-22',true));
+-- A temporary interval that has fully ended leaves the saved delegate effective.
 select pg_temp.login('admin');
 update public.approval_delegations set starts_at=clock_timestamp()-interval '70 minutes',
   ends_at=clock_timestamp()-interval '30 minutes',activated_at=clock_timestamp()-interval '90 minutes'
   where source_request_id=pg_temp.fx('half_day');
 select pg_temp.expect('saved A currently effective after whole temporary interval',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('a')::text);
-select pg_temp.make_due(pg_temp.fx('offline_interval'));
-select private.process_approval_auto_requests();
-select pg_temp.expect('worker detects retained interruption after A returned',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('offline_interval')),'invalidated');
-select pg_temp.assert('worker records durable interruption reason',
-  (select reason like '%interrupted%' from public.approval_auto_requests where request_id=pg_temp.fx('offline_interval')));
 
 -- Retain the interval as history, but end that fixture before nominating another same-day source.
 select pg_temp.login('admin');
@@ -550,21 +544,14 @@ select pg_temp.expect('CEO default may be edited during temporary absence',pg_te
   'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('a'))),'ok');
 select pg_temp.expect('editing saved fallback leaves active temporary B in place',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('b')::text);
-select pg_temp.expect('former saved A request does not retroactively enroll',
-  (select count(*)::text from public.approval_auto_requests where request_id=pg_temp.fx('incoming')),'0');
-select pg_temp.login('admin');
-update public.approval_delegations set ends_at=clock_timestamp()+interval '30 minutes'
-  where source_request_id=pg_temp.fx('temporary_now');
-select pg_temp.expect('preview warns authority expires before deadline',pg_temp.as_scalar('b',
-  'select public.app_request_delegation_preview(''2026-11-23'',''2026-11-23'')->>''authority_expires_before_deadline'''),'true');
 insert into delegation_fx values('temporary_auto',pg_temp.submit('b','2026-11-23',true));
-select pg_temp.expect('effective temporary CEO delegate gets own-request policy',
-  (select count(*)::text from public.approval_auto_requests where request_id=pg_temp.fx('temporary_auto')),'1');
+select pg_temp.expect('effective temporary CEO delegate gets the CEO step at once',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('temporary_auto') and evidence_kind='automatic'),'1');
 select pg_temp.login('admin');
 update public.approval_delegations set ends_at=clock_timestamp()-interval '1 second'
   where source_request_id=pg_temp.fx('temporary_now');
-select pg_temp.expect('temporary expiry invalidates own-request timer',
-  (select state from public.approval_auto_requests where request_id=pg_temp.fx('temporary_auto')),'invalidated');
+select pg_temp.expect('expired temporary delegate is no longer offered automatic approval',pg_temp.as_scalar('b',
+  'select public.app_request_delegation_preview(''2026-11-24'',''2026-11-24'')->>''auto_approval_eligible'''),'false');
 select pg_temp.expect('saved A resumes after temporary expiry',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('a')::text);
 -- Internal lifecycle fixture: cancellation revokes the historical source grant immediately.
@@ -686,27 +673,11 @@ select pg_temp.expect('pending changed exemption exposes immutable historical ev
   pg_temp.fx('hr_named_distinction'),pg_temp.fx('hr_step'))),'1');
 
 select pg_temp.assert('all new tables have RLS',not exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
-  where n.nspname='public' and c.relname in('approval_executive_settings','approval_delegations','approval_request_policy','approval_auto_requests','approval_worker_runs') and not c.relrowsecurity));
-select pg_temp.assert('worker and reusable authority helpers have no authenticated execute',not exists(select 1 from pg_proc p
-  where p.pronamespace='private'::regnamespace and p.proname in('process_approval_auto_requests','decide_approval_request','effective_approval_delegate','approval_timer_invalid_reason')
+  where n.nspname='public' and c.relname in('approval_executive_settings','approval_delegations','approval_request_policy') and not c.relrowsecurity));
+select pg_temp.assert('reusable authority helpers have no authenticated execute',not exists(select 1 from pg_proc p
+  where p.pronamespace='private'::regnamespace and p.proname in('decide_approval_request','effective_approval_delegate','enroll_request_delegation','step_delegation')
     and has_function_privilege('authenticated',p.oid,'EXECUTE')));
-select pg_temp.expect('cron worker is installed inactive',
-  (select active::text from cron.job where jobname='bj-approval-delegation'),'false');
-select pg_temp.expect('cron worker has one-minute schedule',
-  (select schedule from cron.job where jobname='bj-approval-delegation'),'* * * * *');
-select pg_temp.expect('designated CEO can see worker active flag',pg_temp.as_scalar('ceo',
-  'select public.app_approval_worker_health()->''job''->>''active'''),'false');
-select pg_temp.expect('CEO worker health contains no job ID or schedule',pg_temp.as_scalar('ceo',
-  'select ((public.app_approval_worker_health()->''job'') ? ''job_id'' or (public.app_approval_worker_health()->''job'') ? ''schedule'')::text'),'false');
-select pg_temp.expect('CEO overdue count is scoped to own authority',pg_temp.as_scalar('ceo',
-  'select public.app_approval_worker_health()->>''overdue'''),
-  (select count(*)::text from public.approval_auto_requests where company_id=pg_temp.fx('company') and principal_id=pg_temp.fx('ceo')
-    and state in('pending','blocked') and due_at<=clock_timestamp()));
-select pg_temp.expect('CEO blocked count is scoped to own authority',pg_temp.as_scalar('ceo',
-  'select public.app_approval_worker_health()->>''blocked'''),
-  (select count(*)::text from public.approval_auto_requests where company_id=pg_temp.fx('company') and principal_id=pg_temp.fx('ceo') and state='blocked'));
-
-select pg_temp.expect('nonadmin cannot inspect worker internals',pg_temp.as_call('a','select public.app_approval_worker_health()'),'42501');
-select pg_temp.expect('admin sees inactive worker health',pg_temp.as_scalar('admin',
-  'select public.app_approval_worker_health()->''job''->>''active'''),'false');
+select pg_temp.assert('no timer or worker objects remain',to_regclass('public.approval_auto_requests') is null
+  and to_regclass('public.approval_worker_runs') is null
+  and not exists(select 1 from pg_proc where proname in('process_approval_auto_requests','app_approval_worker_health','app_set_auto_approval_window')));
 rollback;

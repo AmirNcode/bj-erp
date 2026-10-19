@@ -3,9 +3,9 @@
 Source of truth for access control. Enforced by **Postgres Row-Level Security (RLS)** — the UI
 only mirrors it. Every table holding employee data has policies.
 
-**Unreleased local branch (2026-10-18):** delegation/timer amendments below describe
-`codex/approval-delegation`, including migrations `20261018011333` and `20261018231551` applied only
-to the isolated synthetic test database. They do not claim production release or scheduler activation.
+**Unreleased local branch (2026-10-19):** delegation amendments below describe
+`codex/approval-delegation` (single migration `20261018011333`, applied only to the isolated synthetic
+test database). They do not claim production release.
 
 ## Roles
 
@@ -275,7 +275,7 @@ SECURITY DEFINER; answers only when the caller may read the request (own · dire
 `leave_requests` read, as `leave_requests_select`), else `request not found`. Returns step order,
 role, expected person, decision, signer name and time — no signatures, no notes.
 The unreleased app uses `app_request_approval_context` / `app_request_approval_progress` for exact
-step IDs and scoped names, delegated/automatic/exempt evidence and timer/configuration warnings.
+step IDs and scoped names, delegated/automatic/exempt evidence and configuration warnings.
 Queue/context responses contain no PNGs; `get_leave_request_signatures` authorizes each on-demand
 or print read through the same request scope. A named approver does not need broad personnel read.
 
@@ -354,25 +354,21 @@ or print read through the same request scope. A named approver does not need bro
   authority to approve themselves. Cancellation ends temporary authority; eligible saved default
   resumes afterward. Preview refresh is required after input/settings/authority changes.
 - **CEO/HR policy:** saved and temporary CEO automatic authority each need explicit attestation;
-  the requester's own responsibility consent is separate. Only new requests by the effective
-  attested CEO delegate enroll. After the snapshotted review window (company setting, default 120
-  minutes; only the admin changes it, `app_set_auto_approval_window`, execute granted to
-  `authenticated` only and checked in the body), pending exact CEO steps become eligible
-  for worker completion, even before earlier HR review. Only the explicitly designated HR head
-  receives the snapshot exemption from mapped HR-review IDs; other CEO delegates still need HR.
-  Early CEO approval records the CEO's actual signature; rejection/cancel stops automation.
-- **Persistence and races:** revoke/expire/replacement, role/permission, activation/company or
-  executive/step changes invalidate affected timers permanently, including A→B→A and downtime
-  interruptions. Restoring authority never restarts old requests. Company approval lock precedes
-  employee leave lock. Forward migration `20261018231551` rechecks caller/company authority after
-  waits and timestamps decisions/submission evidence with the actual post-wait clock.
+  the requester's own responsibility consent is separate. When the effective, attested CEO delegate
+  submits their own request (with consent and PNG), the exact CEO step(s) are approved automatically
+  at submission, even before earlier HR review; other steps still apply. Every other request needing
+  the CEO is signed by the CEO or the CEO's delegate. Only the explicitly designated HR head receives
+  the snapshot exemption from mapped HR-review IDs, so an HR-head delegate's request can be approved
+  at submission; other CEO delegates still need HR. Changing the designated CEO clears the outgoing
+  CEO's `ceo_authorized` grants. Authority is evaluated at submission only; no timers exist.
+- **Locks:** company approval lock precedes employee leave lock; caller/company authority is
+  rechecked after waits and decisions/submission evidence use the actual post-wait clock.
 - **Read/write surfaces:** executive settings are same-company active-member readable; grants are
-  same-company principal/delegate/admin readable; request-policy/timer rows require scoped request
-  read; worker-run rows are admin-only. All five tables reject direct client writes. Mutations use
-  live caller/company checks in guarded RPCs; private worker/helpers are not browser-executable.
-  `app_approval_worker_health` grants admin same-company counts and designated CEO own-principal
-  counts only; CEO job/run metadata is masked. Others are denied. Registration is inactive by
-  default; activation is separate. Stale execution is distinguished from recent completed work.
+  same-company principal/delegate/admin readable; request-policy rows require scoped request read.
+  All three tables reject direct client writes. Mutations use live caller/company checks in guarded
+  RPCs; private helpers are not browser-executable. Base-row `leave_requests` / `leave_request_approvals`
+  reads add approval authority only while the request is pending, or for a request on which the caller
+  recorded a decision (no decided history for delegates or role-step holders who did not sign).
 - **Evidence:** exact-step manual/delegated decisions retain actual signer and authority attribution.
   Automatic decisions retain immutable authority, delegate, consent, submission and actual processing
   evidence with null human signer/PNG. HR exemption never fabricates a signature. Closed history
@@ -713,5 +709,5 @@ because the client's own BJ-F 50210 / 50208 / 50207 forms already carry an
 `approver_signature_consent_at` follow that identical visibility model. The old unsigned
 `approve_leave_request(uuid)` endpoint is dropped; manual approval and admin override require
 actual signature evidence. The unreleased app calls the guarded `_v2` exact-step RPC; automatic
-CEO decisions are a private server-worker path with separate immutable authority evidence, not
-an unsigned browser approval endpoint.
+CEO decisions happen only inside submission (private path, immutable authority evidence), not
+through an unsigned browser approval endpoint.

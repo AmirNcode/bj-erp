@@ -132,8 +132,8 @@ describe('approval evidence boundaries', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('renders automatic responsibility, authority reference, HR exemption and invalidation without inventing a signer', async () => {
-    mocks.progress.mockResolvedValue({ ok: true, automatic: { state: 'invalidated' }, steps: [
+  it('renders automatic responsibility, authority reference and HR exemption without inventing a signer', async () => {
+    mocks.progress.mockResolvedValue({ ok: true, steps: [
       { stepId: 'ceo', order: 1, label: 'manager', named: false, expectedName: 'CEO', decision: 'approved', signerName: null,
         signedAt: '2026-10-20T09:00:00Z', principalName: 'CEO', authorityRef: 'grant-123', evidenceKind: 'automatic' },
       { stepId: 'hr', order: 2, label: 'hr', named: false, expectedName: null, decision: null, signerName: null,
@@ -143,7 +143,6 @@ describe('approval evidence boundaries', () => {
     expect(await screen.findByText(/requester accepted responsibility/)).toBeTruthy();
     expect(screen.getByText(/Authority reference: grant-123/)).toBeTruthy();
     expect(screen.getByText(/Not required — request submitted by the Head of HR/)).toBeTruthy();
-    expect(screen.getByText(/restoring the appointment will not restart its timer/)).toBeTruthy();
     expect(screen.queryByText('Approved by —')).toBeNull();
   });
 });

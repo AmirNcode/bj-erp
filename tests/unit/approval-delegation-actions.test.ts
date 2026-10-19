@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getApprovalWorkerHealth, getDelegationContext, setAutoApprovalWindow } from '@/lib/actions/approval-delegation';
-import { approvalWindowLabel } from '@/lib/leave/delegation';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getDelegationContext } from '@/lib/actions/approval-delegation';
 import { getRequestDelegationPreview } from '@/lib/actions/leave/delegation';
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), caller: vi.fn() }));
@@ -55,79 +54,5 @@ describe('delegation action contracts', () => {
     mocks.caller.mockResolvedValue({ ok: false, error: 'not authenticated' });
     expect(await getRequestDelegationPreview({ start: '2026-10-20', end: '2026-10-20' })).toEqual({ ok: false, error: 'not authenticated' });
     expect(mocks.rpc).not.toHaveBeenCalled();
-  });
-});
-
-
-describe('worker health action', () => {
-  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-18T10:32:00Z')); });
-  afterEach(() => { vi.useRealTimers(); });
-
-  it('uses the server-scoped RPC without accepting a caller-supplied principal', async () => {
-    const health = { job: { active: false }, overdue: 2, blocked: 1, last_run: null };
-    mocks.rpc.mockResolvedValue({ data: health, error: null });
-    expect(await getApprovalWorkerHealth()).toEqual({ ok: true,
-      health: { ...health, observed_at: '2026-10-18T10:32:00.000Z' } });
-    expect(mocks.rpc).toHaveBeenCalledWith('app_approval_worker_health');
-  });
-
-  it('surfaces authorization/query errors without inventing a healthy result', async () => {
-    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'worker status not allowed' } });
-    expect(await getApprovalWorkerHealth()).toEqual({ ok: false, error: 'worker status not allowed' });
-  });
-
-  it('rejects malformed counts rather than displaying an unreliable status', async () => {
-    mocks.rpc.mockResolvedValue({ data: { overdue: -1, blocked: 0 }, error: null });
-    expect(await getApprovalWorkerHealth()).toMatchObject({ ok: false });
-  });
-
-  it.each([
-    { job: { active: 'true' }, overdue: 0, blocked: 0, last_run: null },
-    { job: { active: true }, overdue: 0.5, blocked: 0, last_run: null },
-    { job: { active: true }, overdue: 0, blocked: 0, last_run: { finished_at: 'invalid' } },
-    { job: { active: true }, overdue: 0, blocked: 0, last_run: {} },
-    { overdue: 0, blocked: 0, last_run: null },
-  ])('rejects malformed scheduling or execution evidence: %j', async (health) => {
-    mocks.rpc.mockResolvedValue({ data: health, error: null });
-    expect(await getApprovalWorkerHealth()).toMatchObject({ ok: false });
-  });
-
-  it('returns only the status fields the card needs', async () => {
-    mocks.rpc.mockResolvedValue({ data: {
-      job: { active: true, schedule: '* * * * *', job_id: 12 }, overdue: 0, blocked: 0,
-      last_run: { started_at: '2026-10-18T10:30:00Z', finished_at: '2026-10-18T10:30:01Z' },
-      internal_metadata: 'omit',
-    }, error: null });
-    expect(await getApprovalWorkerHealth()).toEqual({ ok: true, health: {
-      job: { active: true }, overdue: 0, blocked: 0,
-      last_run: { finished_at: '2026-10-18T10:30:01Z' },
-      observed_at: '2026-10-18T10:32:00.000Z',
-    } });
-  });
-});
-
-
-describe('automatic approval window', () => {
-  it.each([0, 1441, 2.5, Number.NaN])('rejects %s without calling SQL', async (minutes) => {
-    expect(await setAutoApprovalWindow(minutes)).toMatchObject({ ok: false });
-    expect(mocks.rpc).not.toHaveBeenCalledWith('app_set_auto_approval_window', expect.anything());
-  });
-
-  it('sends whole minutes to the admin-only RPC and surfaces its refusal', async () => {
-    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'admin required' } });
-    expect(await setAutoApprovalWindow(2)).toMatchObject({ ok: false });
-    expect(mocks.rpc).toHaveBeenCalledWith('app_set_auto_approval_window', { p_minutes: 2 });
-  });
-
-  it('defaults the context window to 120 minutes when never configured', async () => {
-    mocks.rpc.mockResolvedValue({ data: { principal_id: 'p', executive_settings: {} }, error: null });
-    expect(await getDelegationContext()).toMatchObject({ ok: true, context: { auto_approval_minutes: 120 } });
-  });
-
-  it('labels whole hours as hours and everything else as minutes', () => {
-    const t = (key: string, values: { count: number }) => `${values.count} ${key}`;
-    expect(approvalWindowLabel(t, 120)).toBe('2 hours');
-    expect(approvalWindowLabel(t, 2)).toBe('2 minutes');
-    expect(approvalWindowLabel(t, 90)).toBe('90 minutes');
   });
 });

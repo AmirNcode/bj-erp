@@ -69,7 +69,6 @@ export type ApprovalContextRow = {
   approver_signature_consent_at: string | null;
   configuration_changed?: boolean;
   legacy_reconciliation_required?: boolean;
-  automatic_approval?: { state: string; reason: string | null; due_at: string; submitted_at: string; consent_at: string; processed_at: string | null; authority_id: string; principal_name: string; delegate_name: string } | null;
   progress: ApprovalProgressRow[];
   can_override: boolean;
   can_approve: boolean;

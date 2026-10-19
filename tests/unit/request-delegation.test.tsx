@@ -152,16 +152,4 @@ describe('request delegation messages', () => {
     expect(screen.getByTestId('daily-delegation-bounds').textContent).toContain('bounds');
   });
 
-  it('words the policy and consent with the snapshotted review window', () => {
-    render(fields({ ...preview, auto_approval_eligible: true, auto_approval_minutes: 2, authority_expires_before_deadline: true }));
-    const window = JSON.stringify({ window: 'minutes:{"count":2}' });
-    expect(screen.getByText(`autoPolicy:${window}`)).toBeTruthy();
-    expect(screen.getByText(`ownConsent:${window}`)).toBeTruthy();
-    expect(screen.getByText(`expiresBeforeDeadline:${window}`)).toBeTruthy();
-  });
-
-  it('falls back to two hours when an older preview carries no window', () => {
-    render(fields({ ...preview, auto_approval_eligible: true }));
-    expect(screen.getByText(`autoPolicy:${JSON.stringify({ window: 'hours:{"count":2}' })}`)).toBeTruthy();
-  });
 });

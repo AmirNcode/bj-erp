@@ -239,7 +239,9 @@ export async function getPendingApprovals(): Promise<
       can_reject: row.can_reject === true || rejections.length > 0,
     };
   });
-  return { ok: true, requests: requests.filter((r) => r.can_override || r.can_reject || !!r.decision_steps?.length) };
+  // Like main: only what the caller can act on now. A later step waiting on an earlier one
+  // (approval order enforced) stays out of the queue and badge, even though SQL lets it reject.
+  return { ok: true, requests: requests.filter((r) => r.can_override || !!r.decision_steps?.length) };
 }
 
 /**

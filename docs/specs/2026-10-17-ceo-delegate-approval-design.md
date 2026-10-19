@@ -49,9 +49,13 @@ This revision supersedes the earlier CEO-only setup page and HR-only automatic a
 
 ## 3. CEO delegate's own requests — updated confirmed rule
 
-- **Amendment 2026-10-19 (owner):** the two-hour window is now an admin-only company setting
-  (1–1440 minutes, default 120). Each request snapshots the window at submission; later changes never
-  move existing deadlines. "Two hours" below means the configured window.
+- **Amendment 2026-10-19 (owner) — supersedes every timer rule below.** There is no waiting
+  period, timer, worker or scheduled job. When the CEO's effective, CEO-authorized delegate (e.g. the
+  head of HR) submits their own request with responsibility consent, the CEO step(s) are approved
+  automatically at submission; other steps (HR unless exempt, named approvers) still apply. Every
+  other request that needs the CEO goes to the CEO or the CEO's delegate for a signed decision.
+  Read "two-hour automatic approval" below as "automatic approval at submission"; rules about
+  deadlines, timer invalidation, worker health and the review window no longer apply.
 - The two-hour automatic approval entitlement follows **whoever is currently the CEO's delegate**,
   including an effective temporary delegate. It is no longer limited to the HR head.
 - An eligible own request starts its review window at server submission. If the CEO approves

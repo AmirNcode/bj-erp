@@ -1,5 +1,11 @@
 # Approval delegation — final design and implementation-plan review
 
+> **Superseded in part (2026-10-19, owner):** the CEO timer, worker, scheduled job, worker-health card
+> and adjustable review window were removed. The CEO delegate's own requests now get the CEO step
+> approved at submission. Current behavior: spec amendment in
+> `docs/specs/2026-10-17-ceo-delegate-approval-design.md`, `docs/DATA_MODEL.md`, `docs/PERMISSIONS.md`.
+> The migrations were squashed into `20261018011333_approval_delegation.sql`.
+
 Date: 2026-10-17. Baseline: `main` at `984b661`, with uncommitted discussion documents.
 Scope: source-based review of the proposed design and plan, not implementation or production testing.
 Reviewed: `docs/specs/2026-10-17-ceo-delegate-approval-design.md` and

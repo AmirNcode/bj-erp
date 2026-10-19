@@ -22,19 +22,7 @@ export type DelegationContext = {
   executive_settings: ExecutiveSettings;
   principals: DelegateCandidate[];
   hr_steps: { step_id: string; step_role: string; step_order: number; expected_name: string | null }[];
-  /** Admin-set CEO review window in minutes (company setting; 120 when never configured). */
-  auto_approval_minutes: number;
 };
-
-export const DEFAULT_AUTO_APPROVAL_MINUTES = 120;
-export const MAX_AUTO_APPROVAL_MINUTES = 1440;
-
-/** "two hours" / "2 minutes" etc. Whole hours read as hours; anything else as minutes. */
-export function approvalWindowLabel(
-  t: (key: 'hours' | 'minutes', values: { count: number }) => string, minutes: number,
-): string {
-  return minutes % 60 === 0 ? t('hours', { count: minutes / 60 }) : t('minutes', { count: minutes });
-}
 
 export type DelegationPreviewQuery = {
   start: string;
@@ -58,9 +46,6 @@ export type RequestDelegationPreview = {
   can_delegate: boolean;
   is_ceo: boolean;
   auto_approval_eligible: boolean;
-  /** Review window the timer would snapshot; covered by preview_token. */
-  auto_approval_minutes?: number;
-  authority_expires_before_deadline?: boolean;
   authority_id: string | null;
   preview_token: string;
 };
@@ -69,13 +54,4 @@ export type DelegationSubmissionInput = {
   delegationPreview: import('@/lib/supabase/types').Json | null;
   autoApprovalConsent: boolean;
   temporaryCeoAuthorized: boolean;
-};
-
-export type ApprovalWorkerHealth = {
-  job: { active: boolean; schedule?: string; job_id?: number } | null;
-  overdue: number;
-  blocked: number;
-  last_run: { finished_at: string | null; started_at?: string } | null;
-  /** Server clock when the status was read; staleness is judged against it, not render time. */
-  observed_at: string;
 };

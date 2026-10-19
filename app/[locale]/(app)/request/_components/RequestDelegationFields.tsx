@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { formatPersianConsentTimestamp } from '@/lib/i18n/format';
-import { approvalWindowLabel, DEFAULT_AUTO_APPROVAL_MINUTES } from '@/lib/leave/delegation';
 import type { useRequestDelegation } from './useRequestForm';
 
 /** Preview is advisory about cover, but required to bind consent and exact absence hours. */
@@ -17,12 +16,10 @@ export function RequestDelegationFields({ delegation, locale, idPrefix, hasRepla
   showCover?: boolean;
 }) {
   const t = useTranslations('delegation');
-  const tWindow = useTranslations('approvalWindow');
   const { preview, loading, error } = delegation;
   if (!preview && !loading && !error) return null;
   const fallback = preview?.saved;
   const needsCover = preview?.can_approve === true;
-  const window = approvalWindowLabel(tWindow, preview?.auto_approval_minutes ?? DEFAULT_AUTO_APPROVAL_MINUTES);
   return (
     <fieldset className="space-y-3 rounded-lg border p-4" data-testid={`${idPrefix}-delegation`} aria-busy={loading}>
       <legend className="px-1 text-sm font-semibold">{t('title')}</legend>
@@ -45,14 +42,13 @@ export function RequestDelegationFields({ delegation, locale, idPrefix, hasRepla
         </div>}
         {preview.is_ceo && preview.temporary_eligible && <div className="flex items-start gap-2 rounded-md border p-3">
           <input id={`${idPrefix}-temporary-ceo-authorized`} type="checkbox" checked={delegation.temporaryCeoAuthorized} onChange={(e) => delegation.setTemporaryCeoAuthorized(e.target.checked)} aria-required="true" className="mt-0.5 size-4 shrink-0 accent-primary" data-testid={`${idPrefix}-temporary-ceo-authorized`} />
-          <Label htmlFor={`${idPrefix}-temporary-ceo-authorized`} className="text-sm font-normal leading-5">{t('temporaryCeoAuthorization', { name: preview.temporary_delegate_name ?? '', window })}</Label>
+          <Label htmlFor={`${idPrefix}-temporary-ceo-authorized`} className="text-sm font-normal leading-5">{t('temporaryCeoAuthorization', { name: preview.temporary_delegate_name ?? '' })}</Label>
         </div>}
         {preview.auto_approval_eligible && <div className="space-y-2" data-testid={`${idPrefix}-auto-approval-policy`}>
-          <p className="text-sm">{t('autoPolicy', { window })}</p>
-          {preview.authority_expires_before_deadline && <p className="text-sm text-amber-800 dark:text-amber-300">{t('expiresBeforeDeadline', { window })}</p>}
+          <p className="text-sm">{t('autoPolicy')}</p>
           <div className="flex items-start gap-2">
             <input id={`${idPrefix}-auto-approval-consent`} type="checkbox" checked={delegation.autoApprovalConsent} onChange={(e) => delegation.setAutoApprovalConsent(e.target.checked)} aria-required="true" className="mt-0.5 size-4 shrink-0 accent-primary" data-testid={`${idPrefix}-auto-approval-consent`} />
-            <Label htmlFor={`${idPrefix}-auto-approval-consent`} className="text-sm font-normal leading-5">{t('ownConsent', { window })}</Label>
+            <Label htmlFor={`${idPrefix}-auto-approval-consent`} className="text-sm font-normal leading-5">{t('ownConsent')}</Label>
           </div>
         </div>}
         <Button type="button" variant="ghost" size="sm" onClick={delegation.refresh} data-testid={`${idPrefix}-delegation-refresh`}>{t('refresh')}</Button>

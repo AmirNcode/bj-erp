@@ -27,7 +27,6 @@ export type Database = {
           hr_head_id: string | null
           hr_step_ids: string[]
           version: number
-          auto_approval_minutes: number
           configured_by: string | null
           configured_at: string
         }
@@ -37,7 +36,6 @@ export type Database = {
           hr_head_id?: string | null
           hr_step_ids?: string[]
           version?: number
-          auto_approval_minutes?: number
           configured_by?: string | null
           configured_at?: string
         }
@@ -47,7 +45,6 @@ export type Database = {
           hr_head_id?: string | null
           hr_step_ids?: string[]
           version?: number
-          auto_approval_minutes?: number
           configured_by?: string | null
           configured_at?: string
         }
@@ -137,99 +134,6 @@ export type Database = {
           step_snapshot?: Json
           configuration_changed?: boolean
           created_at?: string
-        }
-        Relationships: []
-      }
-      approval_auto_requests: {
-        Row: {
-          request_id: string
-          company_id: string
-          authority_id: string
-          principal_id: string
-          delegate_id: string
-          principal_name: string
-          delegate_name: string
-          settings_version: number
-          step_ids: string[]
-          step_snapshot: Json
-          consent_at: string
-          submitted_at: string
-          due_at: string
-          window_minutes: number
-          state: string
-          reason: string | null
-          attempted_at: string | null
-          processed_at: string | null
-          attempts: number
-        }
-        Insert: {
-          request_id: string
-          company_id: string
-          authority_id: string
-          principal_id: string
-          delegate_id: string
-          principal_name: string
-          delegate_name: string
-          settings_version: number
-          step_ids: string[]
-          step_snapshot: Json
-          consent_at: string
-          submitted_at: string
-          due_at: string
-          window_minutes?: number
-          state?: string
-          reason?: string | null
-          attempted_at?: string | null
-          processed_at?: string | null
-          attempts?: number
-        }
-        Update: {
-          request_id?: string
-          company_id?: string
-          authority_id?: string
-          principal_id?: string
-          delegate_id?: string
-          principal_name?: string
-          delegate_name?: string
-          settings_version?: number
-          step_ids?: string[]
-          step_snapshot?: Json
-          consent_at?: string
-          submitted_at?: string
-          due_at?: string
-          window_minutes?: number
-          state?: string
-          reason?: string | null
-          attempted_at?: string | null
-          processed_at?: string | null
-          attempts?: number
-        }
-        Relationships: []
-      }
-      approval_worker_runs: {
-        Row: {
-          id: number
-          started_at: string
-          finished_at: string | null
-          examined: number
-          completed: number
-          blocked: number
-        }
-        Insert: {
-          id?: number
-          started_at?: string
-          finished_at?: string | null
-          examined?: number
-          completed?: number
-          blocked?: number
-        }
-        Update: {
-          id?: number
-          started_at?: string
-          finished_at?: string | null
-          examined?: number
-          completed?: number
-          blocked?: number
         }
         Relationships: []
       }
@@ -1596,10 +1500,6 @@ export type Database = {
         Args: { p_principal_id: string; p_delegate_id?: string | null; p_ceo_authorized?: boolean }
         Returns: undefined
       }
-      app_set_auto_approval_window: {
-        Args: { p_minutes: number }
-        Returns: undefined
-      }
       app_set_executive_settings: {
         Args: { p_ceo_id: string | null; p_hr_head_id: string | null; p_hr_step_ids: string[] }
         Returns: undefined
@@ -1633,7 +1533,6 @@ export type Database = {
       app_request_approval_context: { Args: { p_id: string }; Returns: Json }
       app_request_approval_progress: { Args: { p_id: string }; Returns: Json }
       get_leave_request_signatures: { Args: { p_id: string }; Returns: Json }
-      app_approval_worker_health: { Args: never; Returns: Json }
       search_approver_candidates: {
         Args: { p_query: string }
         Returns: {

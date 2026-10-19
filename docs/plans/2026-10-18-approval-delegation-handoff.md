@@ -1,5 +1,11 @@
 # Approval delegation implementation handoff — 2026-10-18
 
+> **Superseded in part (2026-10-19, owner):** the CEO timer, worker, scheduled job, worker-health card
+> and adjustable review window were removed. The CEO delegate's own requests now get the CEO step
+> approved at submission. Current behavior: spec amendment in
+> `docs/specs/2026-10-17-ceo-delegate-approval-design.md`, `docs/DATA_MODEL.md`, `docs/PERMISSIONS.md`.
+> The migrations were squashed into `20261018011333_approval_delegation.sql`.
+
 ## Read this first
 
 The owner requested a handoff after repeated usage interruptions. Continue the authorized implementation;

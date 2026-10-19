@@ -78,6 +78,79 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-19 — Approval delegation simplified (no timer), PR #7 review fixes, squashed migration
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `6d18273` (PR #7 open).
+**Trigger:** Owner pasted the PR #7 review, chose fixes (hide out-of-order queue rows, pending-only
+reads, measure perf on a production dump), then simplified the design mid-turn: drop the timed
+auto-approval; the CEO's delegate's own requests get the CEO step approved right away; other CEO
+requests go to the delegate. Owner chose: squash migrations + rebuild test DB, keep the consent
+checkbox, approve at submission even before HR.
+
+**What changed**
+- `supabase/migrations/20261018011333_approval_delegation.sql` — squashed replacement of the five
+  unreleased delegation migrations (`…231551`, `…143148`, `…143601`, unapplied `…153137` deleted).
+  Assembled from the latest version of every function, then: dropped `approval_auto_requests`,
+  `approval_worker_runs`, worker, worker health, timer-invalid-reason, reconcile, window setter, cron
+  registration; `enroll_request_delegation` approves CEO-owned steps at submission via
+  `decide_approval_request`'s automatic branch (authority re-validated directly); after-mutation trigger
+  only on `approval_steps`. Review fixes kept: `step_delegation` from caller's own grants + partial index
+  `approval_delegations_delegate_live`; `can_read_approval_request` adds approval reads only while pending
+  or where the caller decided; CEO change clears outgoing CEO's `ceo_authorized`; `app_cleanup_e2e_users`
+  clears delegation/executive rows of junk accounts; FR-25 policy comment restored. 1978 lines, SHA256
+  `eb458f61988ace3f69a61a8929045493d72de97d65b965b6a3c2464903f276e5`.
+- `tests/sql/approval-delegation.sql` — timer/worker/window cases replaced by at-submission cases
+  (four forms, HR-head delegate approved at submission, delegate switch A→B→A, permission removal,
+  temporary delegate, read scope, one-hop, CEO re-designation, cleanup). `make_due` removed.
+- App: removed `ApprovalWorkerHealthCard`, window card, `getApprovalWorkerHealth`,
+  `setAutoApprovalWindow`, window helpers/types, timer status in `RequestProgress`, `automatic_approval`
+  context field, worker/window messages; EN/FA consent/policy/attestation text now says "approved
+  automatically when you submit it". `lib/actions/leave/approvals.ts` queue filter back to `main`'s rule
+  (`can_override || decision_steps`); new `tests/unit/approval-queue-order.test.ts`.
+- Docs: DATA_MODEL/PERMISSIONS/REQUIREMENTS rewritten for at-submission behavior; spec amendment
+  replaces the window amendment; superseded notes on plan, RPC contract, review, both handoffs, resume
+  prompt; TASKS/CHANGELOG updated; new TASKS item for the pre-existing e2e-cleanup cascade FK error.
+
+**Actions outside the repo** (isolated `bj-delegation-*` stack only)
+- Destroyed and rebuilt volume `bj-delegation_db-data` twice (second for a variable-name fix in the
+  squashed migration) with new `.bj-deploy/delegation/resume-tools/bj-delegation-rebuild.sh`: `main`
+  baseline (only `schema "public" already exists`), `restore-acls.sql` + PUBLIC execute on the three
+  private validators, seed, calendar, GoTrue up, bootstrap admin, ledger apply. Re-seeded 7 QA users
+  (`/tmp/bj-delegation-qa.py seed`; new `qa-login.json`). cron job no longer exists.
+- Production-data perf: copied the verified local dump `~/Backups/bj-erp/daily-20261019T020147Z.dump`
+  (sha256 OK; never touched the server) into the container, restored into separate database `bj_perf`
+  (only cron/graphql objects failed), applied the squashed migration in a rolled-back transaction with
+  80 synthetic pending requests + 5 saved delegations, timed `app_approval_queue('pending')` (best of 3):
+  admin 3539→236 ms, HR 2523→206, top manager 2987→288, delegate 3022→292, employee 3433→166
+  (original vs new `step_delegation`). Printed only timings/counts. Then dropped `bj_perf` and deleted
+  the dump copy from the container (verified). Script: `resume-tools/bj-delegation-perf.sql.txt`.
+- App rebuilt (Webpack) and restarted on `localhost:3002`.
+
+**Verification**
+- SQL: 6 suites on the rebuilt DB — 772 PASS / 0 FAIL / 0 ERROR (delegation 165 incl. new cases).
+- `npm run lint` 0, `npx tsc --noEmit` 0, `npm run test:unit` 879 / 82 files, Webpack build 0,
+  `npm run test:deploy` all passed. `schema.sql` dumped with `BJ_DB_CONTAINER`; GRANT/REVOKE vs `main`:
+  none removed, no additions on non-delegation objects after restoring the validators' grants.
+- Browser (`/tmp/bj-delegation-browser-rest.cjs smoke forms warn exact mobile print`), all PASS:
+  no worker/window cards; stale preview refused; four forms show "approved automatically when you
+  submit it", DB shows one automatic CEO row each (no signer/PNG, consent recorded), HR pending;
+  no-delegate warning; employee errand exact steps (HR → A on behalf of CEO → A named); Farsi mobile
+  RTL; EN/FA print (automatic + exact), no broken images (Farsi print inspected).
+- Dead ends: `g` variable collided with an alias in `decide_approval_request` (42702) → renamed
+  `v_auth`, rebuilt; baseline needs no ON_ERROR_STOP; GoTrue must migrate `auth` before bootstrap;
+  `supabase migration new` waits on stdin; e2e cleanup in SQL tests hit a pre-existing cascade FK
+  error and the fixture admin matching the junk pattern (scoped test, logged in TASKS).
+- Not rerun: real concurrent lock races (worker races are moot; RPC lock order unchanged).
+
+**State left behind**
+- Uncommitted until the PR push below; PR #7 not merged; nothing deployed. Isolated DB rebuilt with
+  fresh synthetic fixtures; production untouched.
+
+**For the next agent**
+- Until merge, change SQL by editing the squashed file and running the rebuild script (see handoff
+  top section), not a new migration. Second review of PR #7 pending.
+
 ## 2026-10-19 — Approval delegation: lint fix, Farsi loop root cause, races and full browser pass
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents used.

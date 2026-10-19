@@ -3,10 +3,10 @@
 Numbered and traceable. `FR` = functional, `NFR` = non-functional. Status: ☐ todo · ◐ partial ·
 ☑ done. Statuses reflect the current build: v1 (Phases 0–6) is complete and merged to `main`.
 
-**Unreleased amendment (2026-10-18):** approval delegation/timers are implemented locally on
-`codex/approval-delegation`; migrations `20261018011333` and `20261018231551` are applied only to
-the isolated synthetic test database. References below to this amendment do not indicate a
-production release or worker activation. Validation/release status stays in `docs/TASKS.md`.
+**Unreleased amendment (2026-10-19):** approval delegation is implemented locally on
+`codex/approval-delegation` (one migration, `20261018011333`, applied only to the isolated synthetic
+test database). References below to this amendment do not indicate a production release.
+Validation/release status stays in `docs/TASKS.md`.
 
 ## Functional — Identity & Org
 
@@ -328,7 +328,7 @@ production release or worker activation. Validation/release status stays in `doc
   («مراحل تأیید») to show every step in order: who signed and when, who rejected, and who it still
   waits on (the person, for a manager or named step; the role, e.g. HR, otherwise). Via
   `request_approval_progress(id)`, names and times only. *(2026-10-13.)*
-  **Unreleased:** scoped context adds exact-step delegated/automatic/exempt evidence, timer status,
+  **Unreleased:** scoped context adds exact-step delegated/automatic/exempt evidence,
   changed configuration and historical HR-exemption/legacy-reconciliation warnings, without PNGs.
   Closed request evidence survives later approval-chain changes.
 
@@ -346,7 +346,7 @@ production release or worker activation. Validation/release status stays in `doc
   number, is selected automatically; several results show «… نفر پیدا شد؛ یکی را انتخاب کنید».
   Approval-step dialog and every PersonSearch box. *(2026-10-13.)*
 
-### Unreleased approval delegation and CEO timer amendment
+### Unreleased approval delegation amendment
 
 - ◐ **Saved and temporary approval delegates.** `approval_delegate` lets natural approvers manage
   only their own saved delegate at `/settings/roles`; admin manages other principals and explicit
@@ -364,25 +364,23 @@ production release or worker activation. Validation/release status stays in `doc
 - ◐ **CEO delegate's own new requests.** Saved/temporary CEO automatic appointments need their
   own explicit authority attestation; the request also needs requester signature and separate
   responsibility consent. The CEO must naturally own applicable steps for both leave and errand
-  before authorizing that policy. After the review window elapses (admin-set per company, 1–1440
-  minutes, default 120; each request keeps the window it was submitted under, and the form's
-  consent text names it), eligible pending CEO steps may complete
-  on the next successful server run, even before earlier HR review. Only the explicitly designated
-  HR head is exempt from mapped HR-review steps; non-HR delegates still need HR. Early manual CEO
-  approval records the real CEO signature. Automatic evidence has no human signer/PNG or per-diem
-  self-approval. Other required steps still govern overall approval, absence activation and ledger use.
-- ◐ **Durable lifecycle and concurrency.** No retroactive enrollment, timer transfer or revival after
-  authority is revoked, expired, interrupted or changed, including A→B→A, reactivation and worker
-  downtime. Rejection/cancel stops automation. Company approval lock precedes employee leave lock;
-  caller/company authority is rechecked after waiting and timestamps use actual post-wait time
-  (`20261018231551` forward correction). Shared finalization prevents duplicate consumption.
+  before authorizing that policy. *(Owner amendment 2026-10-19: no waiting period.)* The CEO
+  step(s) on the delegate's own request are approved automatically **at submission**, even before
+  earlier HR review; every other request needing the CEO goes to the CEO or the CEO's delegate.
+  Only the explicitly designated HR head is exempt from mapped HR-review steps, so an HR-head
+  delegate's request is approved at submission; non-HR delegates still need HR. Automatic evidence
+  has no human signer/PNG or per-diem self-approval. Other required steps still govern overall
+  approval, absence activation and ledger use. Re-designating a former CEO never revives their old
+  attestation.
+- ◐ **Concurrency.** Authority is evaluated at submission/decision time only. Company approval lock
+  precedes employee leave lock; caller/company authority is rechecked after waiting and timestamps
+  use actual post-wait time. Shared finalization prevents duplicate consumption.
 - ◐ **Scoped inbox and operations.** Named/custom-role approvers and delegates reach authorized
   Home/Manage inbox actions through live capabilities; no broad personnel permission is required.
-  Exact-step decisions refresh the queue when another step remains for the same actor. Minute worker
-  runs without browsers, isolates failed items, backs off retries and caps attempts at 60. Registration
-  is inactive; production activation is separate. Admin sees company health counts; designated CEO
-  sees own-principal counts with masked job/run metadata, within the existing settings page guard.
-  UI distinguishes inactive, overdue, blocked, no completed execution and stale execution.
+  Exact-step decisions refresh the queue when another step remains for the same actor. Like before,
+  the queue and badge show only requests the caller can act on now (later steps wait for earlier
+  ones when approval order is enforced). Delegates and role-step holders read full request rows
+  only while pending, or for requests they decided.
 
 Contract: `docs/plans/approval-delegation-rpc-contract.md`; policy:
 `docs/specs/2026-10-17-ceo-delegate-approval-design.md`. Credential/session hardening is explicitly

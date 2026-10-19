@@ -3,7 +3,6 @@
  */
 export const dynamic = 'force-dynamic';
 
-import { Suspense } from 'react';
 import { setRequestLocale } from 'next-intl/server';
 import { getRoleHolders, listRoles } from '@/lib/actions/roles';
 import { SettingsTabs } from '../_components/SettingsTabs';
@@ -12,7 +11,6 @@ import { getCachedUser } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { getDelegationContext, searchDelegates } from '@/lib/actions/approval-delegation';
 import { DelegationPanel } from './_components/DelegationPanel';
-import { ApprovalWorkerHealthCard } from './_components/ApprovalWorkerHealthCard';
 import { RolesList } from './_components/RolesList';
 
 type Props = { params: Promise<{ locale: string }> };
@@ -48,9 +46,6 @@ export default async function RolesPage({ params }: Props) {
       {!context.ok && <p role="alert" className="text-sm text-destructive">{context.error}</p>}
       {context.ok && <DelegationPanel key={JSON.stringify(context.context)} initial={context.context} initialCandidates={candidates?.ok ? candidates.candidates : []} locale={locale} />}
       {candidates && !candidates.ok && <p role="alert" className="text-sm text-destructive">{candidates.error}</p>}
-      {(capabilities.isAdmin || (context.ok && context.context.principal_id === context.context.executive_settings.ceo_id)) && (
-        <Suspense fallback={null}><ApprovalWorkerHealthCard locale={locale} /></Suspense>
-      )}
       {capabilities.isAdmin && <RolesList roles={roles} adminHolder={adminHolder} locale={locale} />}
     </div>
   );

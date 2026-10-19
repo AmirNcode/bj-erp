@@ -1,13 +1,14 @@
 # Approval delegation and CEO automatic approval — revised implementation plan
 
-Status (2026-10-19, second continuation): implementation and local validation complete on
-`codex/approval-delegation`, **uncommitted, undeployed**. All policy decisions settled; credential/session
-protection deferred (retained risk R9). Both migrations applied only to the isolated synthetic stack and
-frozen; worker inactive. SQL 761, unit 895, lint, typecheck, Webpack build, deploy tests, 21 real lock
-scenarios (12 + 3 + 6), two actual cron runs, and the full rendered browser checklist passed (four forms,
-stale preview, exact-step decisions, early manual CEO, mobile RTL, EN/FA print). The Farsi redirect loop
-was a local `--hostname 127.0.0.1` artifact, not an app bug (`docs/MEMORY.md`). Remaining work is only
-the separately authorized release gates in the 2026-10-19 handoff. Baseline: `main` at `984b661`.
+> **Superseded in part (2026-10-19, owner):** the CEO timer, worker, scheduled job, worker-health card
+> and adjustable review window were removed. The CEO delegate's own requests now get the CEO step
+> approved at submission. Current behavior: spec amendment in
+> `docs/specs/2026-10-17-ceo-delegate-approval-design.md`, `docs/DATA_MODEL.md`, `docs/PERMISSIONS.md`.
+> The migrations were squashed into `20261018011333_approval_delegation.sql`.
+
+Status (2026-10-19, after PR #7 review): owner simplified the design — no timer/worker; the CEO
+delegate's own requests get the CEO step approved at submission. Migrations squashed into
+`20261018011333`; isolated DB rebuilt. Open as PR #7, not merged or deployed. Baseline: `main` at `984b661`.
 Policy: `docs/specs/2026-10-17-ceo-delegate-approval-design.md`.
 Review: `docs/REVIEW-2026-10-17-approval-delegation.md`.
 This replaces the former CEO-only design, separate Manage page and identity-only appointment right.

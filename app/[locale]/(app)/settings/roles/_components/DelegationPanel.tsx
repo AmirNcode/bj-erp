@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getDelegationContext, searchDelegates, setApprovalDelegate, setAutoApprovalWindow, setExecutiveSettings } from '@/lib/actions/approval-delegation';
-import { approvalWindowLabel, MAX_AUTO_APPROVAL_MINUTES, type DelegateCandidate, type DelegationContext, type ExecutiveSettings } from '@/lib/leave/delegation';
+import { getDelegationContext, searchDelegates, setApprovalDelegate, setExecutiveSettings } from '@/lib/actions/approval-delegation';
+import type { DelegateCandidate, DelegationContext, ExecutiveSettings } from '@/lib/leave/delegation';
 
 const selectClass = 'min-h-11 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
@@ -18,7 +18,6 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
   initial: DelegationContext; initialCandidates: DelegateCandidate[]; locale: string;
 }) {
   const t = useTranslations('rolesDelegation');
-  const tWindow = useTranslations('approvalWindow');
   const router = useRouter();
   const [context, setContext] = useState(initial);
   const [candidates, setCandidates] = useState(initialCandidates);
@@ -109,7 +108,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
             </select>
             <p className="text-xs text-muted-foreground">{isCeo ? t('ceoEligibility') : t('eligibility')}</p>
           </div>
-          {isCeo && delegateId && <label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} disabled={isPending} className="mt-1 size-4 shrink-0 accent-primary" data-testid="delegate-ceo-attestation" /><span>{t('ceoAttestation', { window: approvalWindowLabel(tWindow, context.auto_approval_minutes) })}</span></label>}
+          {isCeo && delegateId && <label className="flex items-start gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={authorized} onChange={(e) => setAuthorized(e.target.checked)} disabled={isPending} className="mt-1 size-4 shrink-0 accent-primary" data-testid="delegate-ceo-attestation" /><span>{t('ceoAttestation')}</span></label>}
           <p className="text-xs text-muted-foreground">{t('retainedAuthority')}</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
@@ -117,7 +116,6 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
         </CardContent>
       </Card>
       {context.is_admin && <ExecutiveSettingsPanel key={JSON.stringify(context.executive_settings)} context={context} onSaved={() => refreshPrincipal(context.principal_id)} />}
-      {context.is_admin && <AutoApprovalWindowPanel minutes={context.auto_approval_minutes} onSaved={() => refreshPrincipal(context.principal_id)} />}
     </>
   );
 }
@@ -151,43 +149,3 @@ function ExecutiveSettingsPanel({ context, onSaved }: { context: DelegationConte
   );
 }
 
-/** Admin only (the SQL setter also refuses everyone else). Submitted requests keep their own window. */
-function AutoApprovalWindowPanel({ minutes, onSaved }: { minutes: number; onSaved: () => Promise<void> }) {
-  const t = useTranslations('rolesDelegation.autoWindow');
-  const tRoot = useTranslations('rolesDelegation');
-  const tWindow = useTranslations('approvalWindow');
-  const tErr = useTranslations('dbErrors');
-  const [value, setValue] = useState(String(minutes));
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [isPending, startTransition] = useTransition();
-  const parsed = /^\d+$/.test(value.trim()) ? Number(value.trim()) : NaN;
-  const valid = Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= MAX_AUTO_APPROVAL_MINUTES;
-  return (
-    <Card data-testid="auto-approval-window"><CardHeader><CardTitle>{t('title')}</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">{t('hint')}</p>
-        <p className="text-sm" data-testid="auto-window-current">{t('current', { window: approvalWindowLabel(tWindow, minutes) })}</p>
-        <div className="space-y-2">
-          <Label htmlFor="auto-window-minutes">{t('label')}</Label>
-          <Input id="auto-window-minutes" data-testid="auto-window-minutes" inputMode="numeric" dir="ltr" autoComplete="off"
-            className="max-w-40" value={value} disabled={isPending} aria-invalid={!valid}
-            onChange={(e) => { setValue(e.target.value); setNotice(''); }} />
-          {!valid && <p role="alert" className="text-sm text-destructive">{tErr('autoWindowInvalid')}</p>}
-        </div>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-        <Button disabled={isPending || !valid || parsed === minutes} data-testid="auto-window-save" onClick={() => {
-          setError(''); setNotice('');
-          startTransition(async () => {
-            const result = await setAutoApprovalWindow(parsed);
-            if (!result.ok) { setError(result.error); return; }
-            // No router.refresh(): the page keys this panel on its context, so a refresh would
-            // remount it and drop the notice. onSaved already reloads the context.
-            await onSaved(); setNotice(t('saved'));
-          });
-        }}>{isPending ? tRoot('saving') : t('save')}</Button>
-      </CardContent>
-    </Card>
-  );
-}
