@@ -78,6 +78,39 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-19 — Second review of PR #7 (approval delegation), findings recorded
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `def6861` (PR #7), main @ `984b661`.
+**Trigger:** Owner asked for a second, read-only review of PR #7, then to record the findings for a
+later fix session if nothing blocks deploy.
+
+**What changed**
+- `docs/TASKS.md` — new item "PR #7 second-review follow-ups" (all findings with file:line and fixes);
+  approval-delegation item notes the second review is done.
+- `CLAUDE.md` — two gotchas: company approval lock before the employee leave lock (trigger-taken on
+  authority tables); unnest alias shadowing in SQL subqueries.
+- No code or SQL changed.
+
+**Actions outside the repo**
+- None. No SQL against bj-erp-db-1 or Liara; no push, merge or deploy.
+
+**Verification**
+- `npm ci`, `npm run lint`, `npx tsc --noEmit`, `npm run test:unit` (879 tests / 82 files),
+  `npm run test:deploy` — all pass. Not run: `tests/sql/*` (needs a DB), e2e, `npm run build`.
+- `supabase/schema.sql` vs main + migration: statement-level set diff clean (only GRANT reordering).
+- Confirmed by reading: automatic CEO step reachable only via the four `submit_*_v2` →
+  `enroll_request_delegation`; lock order company → employee everywhere a triggered table is written;
+  new tables RLS + select-only; private helpers revoked; no timer leftovers outside historical docs.
+
+**State left behind**
+- `docs/TASKS.md`, `docs/AGENT-LOG.md`, `CLAUDE.md` edited on `codex/approval-delegation`, uncommitted.
+
+**For the next agent**
+- Verdict: no blocker, safe to deploy. Most important follow-up: admin cannot revoke a delegate while
+  the principal is ineligible (stale `ceo_authorized` grant revives); workaround = unset/re-set the CEO.
+- e2e `hr-role.spec.ts:355-380` will fail until the `chain-<id>-<role>` testid is restored.
+
 ## 2026-10-19 — Approval delegation simplified (no timer), PR #7 review fixes, squashed migration
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
