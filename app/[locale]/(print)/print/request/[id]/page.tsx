@@ -30,6 +30,7 @@ import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
+import { formatRials } from '@/lib/leave/perDiem';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatNumber, formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { PrintToolbar } from './PrintToolbar';
@@ -248,6 +249,13 @@ export default async function PrintRequestPage({ params }: Props) {
                   </>
                 )}
               </div>
+              {r.per_diem_rials != null && (
+                <div className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-per-diem">
+                  <span className="text-[10px] text-neutral-700">{t('fields.perDiem')} :</span>{' '}
+                  <strong>{formatRials(r.per_diem_rials, locale)}</strong>
+                  {r.per_diem_by_requester && <span className="text-[10px]"> — {t('perDiemByRequester')}</span>}
+                </div>
+              )}
               <div className="min-h-28 border-b border-black px-2 py-1.5">
                 <span className="text-[10px] text-neutral-700">{t('fields.description')} :</span>
                 <p className="mt-1 text-[12px] whitespace-pre-wrap">{r.reason ?? ''}</p>

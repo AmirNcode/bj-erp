@@ -125,6 +125,10 @@ export type PrintableRequest = ReviewRequestRow & {
   job_title: string | null;
   reason: string | null;
   errand_location: string | null;
+  /** FR-61 whole Rials; errands only. */
+  per_diem_rials?: number | null;
+  /** The Head of HR entered it on their own errand at submission. */
+  per_diem_by_requester?: boolean;
   decision_note: string | null;
   replacement_name: string | null;
   decided_by_name: string | null;

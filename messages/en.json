@@ -195,7 +195,12 @@
     "success": "Errand request submitted.",
     "validationSelectDate": "Pick a date.",
     "validationTimes": "The return time must be after the departure time.",
-    "validationLocation": "Enter the errand location."
+    "validationLocation": "Enter the errand location.",
+    "ownPerDiemLabel": "Your per diem (Rials)",
+    "ownPerDiemHint": "You are the Head of HR, so you enter your own per diem here. Optional. It cannot be changed after you submit.",
+    "ownPerDiemInvalid": "Enter the per diem as a whole number of Rials.",
+    "perDiem": "Per diem (Rials)",
+    "perDiemByRequester": "Entered by requester (Head of HR)"
   },
   "dailyErrand": {
     "title": "Daily Work Errand Request",
@@ -394,7 +399,8 @@
       "reason": "Notes",
       "status": "Status",
       "leaveType": "Leave type",
-      "decisionNote": "Decision note"
+      "decisionNote": "Decision note",
+      "perDiem": "Per diem (Rials)"
     },
     "types": {
       "annual": "Annual",
@@ -411,7 +417,8 @@
       "hrOffice": "Administrative & HR Office"
     },
     "hrExpert": "Administrative & HR Officer",
-    "balanceLine": "The applicant has {duration} of annual leave remaining."
+    "balanceLine": "The applicant has {duration} of annual leave remaining.",
+    "perDiemByRequester": "Entered by requester (Head of HR)"
   },
   "reports": {
     "from": "From month",
@@ -1034,7 +1041,8 @@
     "hrStepInvalid": "Choose active HR review steps from this company.",
     "executiveInvalid": "Choose an active person in this company.",
     "ceoAuthorityInvalid": "Automatic approval authority can only be granted for the designated CEO’s delegate.",
-    "approvalStepChanged": "This approval step changed. Refresh the request before deciding."
+    "approvalStepChanged": "This approval step changed. Refresh the request before deciding.",
+    "perDiemOwnNotAllowed": "Only the Head of HR can enter a per diem on their own errand."
   },
   "roles": {
     "admin": "Admin",
@@ -1379,8 +1387,12 @@
       "days": "Days",
       "unpaidDays": "Unpaid days",
       "location": "Errand location",
-      "perDiem": "Per diem (Rials)"
-    }
+      "perDiem": "Per diem (Rials)",
+      "perDiemBy": "Per diem entered by",
+      "perDiemByRequester": "Requester (Head of HR)",
+      "perDiemByHr": "HR approval"
+    },
+    "perDiemByRequester": "Entered by requester (Head of HR)"
   },
   "requestProgress": {
     "toggle": "Approval steps",

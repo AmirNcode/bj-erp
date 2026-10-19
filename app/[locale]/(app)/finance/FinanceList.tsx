@@ -102,6 +102,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       t('csv.unpaidDays'),
       t('csv.location'),
       t('csv.perDiem'),
+      t('csv.perDiemBy'),
     ];
     const body = shown.map((r) => [
       formatSerial(r.serial_year, r.serial_seq),
@@ -118,6 +119,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       days(r.unpaid_minutes),
       r.errand_location ?? '',
       r.per_diem_rials === null ? '' : String(r.per_diem_rials),
+      r.per_diem_rials === null ? '' : r.per_diem_by_requester ? t('csv.perDiemByRequester') : t('csv.perDiemByHr'),
     ]);
     const csv = buildCsv([header, ...body].map((row) => row.map(safeCell)));
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -240,6 +242,11 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                   <td className="px-3 py-2">{r.errand_location ?? '—'}</td>
                   <td className="px-3 py-2 text-end tabular-nums">
                     {r.per_diem_rials === null ? '—' : formatRials(r.per_diem_rials, locale)}
+                    {r.per_diem_by_requester && (
+                      <div className="text-xs text-muted-foreground" data-testid={`finance-per-diem-by-requester-${r.id}`}>
+                        {t('perDiemByRequester')}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

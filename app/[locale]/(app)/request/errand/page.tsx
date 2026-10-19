@@ -13,6 +13,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
@@ -34,7 +35,7 @@ async function ErrandRequestData({ locale }: { locale: string }) {
   const user = await getCachedUser();
   if (!user) return null;
 
-  const workSettingsResult = await getWorkSettings();
+  const [workSettingsResult, perDiemAllowed] = await Promise.all([getWorkSettings(), isCallerHrHead()]);
   const workSettings = workSettingsResult.ok ? workSettingsResult.settings : WORK_SETTINGS_FALLBACK;
 
   const labels = {
@@ -54,6 +55,9 @@ async function ErrandRequestData({ locale }: { locale: string }) {
     validationTimes: tErrand('validationTimes'),
     validationLocation: tErrand('validationLocation'),
     signature: signatureLabelsFrom(tSignature),
+    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
+    ownPerDiemHint: tErrand('ownPerDiemHint'),
+    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
     ...durationLabelsFrom(tLeave),
   };
 
@@ -62,6 +66,7 @@ async function ErrandRequestData({ locale }: { locale: string }) {
       workSettings={workSettings}
       labels={labels}
       locale={locale}
+      perDiemAllowed={perDiemAllowed}
     />
   );
 }

@@ -78,6 +78,69 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-19 — FR-68: Head of HR enters their own per diem
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-delegation` @ `b28a8f4`; mid-session the owner said PR #7 was
+merged, so the work moved to new branch `codex/hr-head-per-diem` on `origin/main` @ `5424351` (same tree).
+**Trigger:** Owner: the designated HR head cannot set per diem on their own errand. Their HR step is
+`hr_exempt` and the CEO step may auto-approve at submission, so no approval dialog ever offers the
+field. Owner asked for clarifying questions, then said to build it the best way (went straight to code;
+small enough, decisions already settled).
+
+**Owner decisions (2026-10-19)**
+- Entered on the hourly/daily errand form, saved at submission. Only the designated HR head
+  (`approval_executive_settings.hr_head_id`, recorded per request in `approval_request_policy.hr_head_id`).
+- Set at submission only (no edit screen; cancel and refile). Optional; blank = none, 0 allowed.
+- Marked as self-entered on My Requests, print form, finance list + CSV, and in the audit log.
+
+**What changed**
+- `supabase/migrations/20261019120000_hr_head_own_per_diem.sql` — `leave_requests.per_diem_by_requester`
+  (+ CHECK it needs an amount); `private.set_requester_per_diem` (errand + policy HR head = requester,
+  else 42501; audit `set_own_per_diem`); `submit_errand_request_v2` / `submit_daily_errand_request_v2`
+  dropped and recreated with trailing `p_per_diem_rials bigint default null` (v1 wrappers still work
+  positionally); `decide_approval_request` copied from `schema.sql`, only change: hr-step per diem
+  resets the marker; `finance_approved_requests` dropped/recreated with `per_diem_by_requester`
+  (anon execute no longer granted). `supabase/schema.sql` re-dumped from `bj-delegation-db`.
+- `tests/sql/hr-head-own-per-diem.sql` — 24 scenarios (store/marker/audit, 0 and blank, negative,
+  non-head employee and other hr user refused with no row left, v1 wrapper, finance marker,
+  hr signer override clears marker, CEO-delegate auto-approval keeps amount, grants).
+- App: `lib/actions/leave/requests.ts` (inputs + validation + RPC param, list query selects the new
+  columns), `lib/actions/approval-delegation.ts` `isCallerHrHead()`, errand/daily-errand pages + forms,
+  `OwnPerDiemField` in `request/_components/FormParts.tsx`, `MyRequestsList.tsx`, print page,
+  `FinanceList.tsx` (marker + CSV column "Per diem entered by"), `lib/leave/approval-context.ts`,
+  `lib/actions/leave/review.ts`, `lib/supabase/types.ts`, `lib/errors/db-error.ts`, `messages/{fa,en}.json`.
+- `tests/unit/hr-head-own-per-diem.test.tsx` — 5 tests (action param, validation, `isCallerHrHead`, list line).
+- Docs: REQUIREMENTS FR-68, DATA_MODEL column, PERMISSIONS FR-68 note, CHANGELOG Unreleased entry.
+
+**Actions outside the repo** (isolated `bj-delegation-*` stack only, synthetic data)
+- Dry-ran migration + new suite in `begin … rollback`, then applied the migration to `bj-delegation-db`
+  via `bj_apply_and_record_migration` (ledger note `delegation-isolated-qa`); restarted `bj-delegation-rest-1`.
+- Killed the stale prior-session `next-server` on :3002 (gateway CORS only allows that origin) and started
+  a dev server there from git-ignored `.bj-deploy/delegation/start-3002.cjs`; left running.
+- Browser: logged in as QA hr (`9990018005`), submitted one hourly errand (Mehr 29 1405, "Bandar Abbas
+  port (QA)", per diem typed in Persian digits) — request `509ffdf7-…` stays in that DB, pending.
+- A shell `sed` meant to redact `.bj-deploy/delegation/test.env` failed (BSD sed), so its synthetic local
+  secrets were printed into this session's tool output. Local isolated stack only; nothing sent anywhere.
+- Nothing against `bj-erp-db-1` or Liara.
+
+**Verification**
+- SQL, isolated runner `bj-delegation-suites-isolated.py applied`: 7 suites, 796 PASS / 0 FAIL / 0 ERROR.
+  (Running suites without that runner fails on QA fixture code clashes — pre-existing, not this change.)
+- `npx tsc --noEmit` 0, `npm run lint` 0, `npm run test:unit` 83 files / 884 tests, `npm run test:deploy` all passed, `npm run build` 0.
+- Browser (EN): field shown to HR head with hint; submit OK; DB row 1250000 / true / pending;
+  print form shows "Per diem (Rials): 1,250,000 — Entered by requester (Head of HR)"; My Requests
+  line shows the same. Not checked in browser: non-head user sees no field (covered by unit + SQL),
+  Farsi rendering, finance page (covered by SQL; QA hr has no finance read).
+
+**State left behind**
+- Committed on `codex/hr-head-per-diem`, pushed, PR opened against `main` (owner asked). Not merged or
+  deployed; merging to `main` deploys to Liara and runs the migration there.
+
+**For the next agent**
+- Server re-checks the HR head identity at submission; the form flag is only a UI hint.
+- `decide_approval_request` now has a 10th full definition in history; copy from `schema.sql` when editing.
+
 ## 2026-10-19 — Second review of PR #7 (approval delegation), findings recorded
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

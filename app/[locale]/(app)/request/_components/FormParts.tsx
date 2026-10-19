@@ -357,3 +357,39 @@ export function FormFeedback({
     </>
   );
 }
+
+/**
+ * The designated Head of HR's own per diem (whole Rials). Their HR step is exempt,
+ * so no approver ever sees a per diem field for their errand; they enter it here,
+ * once, at submission. Shown only to that person; the database re-checks.
+ */
+export function OwnPerDiemField({
+  idPrefix,
+  testIdPrefix,
+  value,
+  onChange,
+  labels,
+}: {
+  idPrefix: string;
+  testIdPrefix: string;
+  value: string;
+  onChange: (value: string) => void;
+  labels: { ownPerDiemLabel: string; ownPerDiemHint: string };
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={`${idPrefix}_per_diem`}>{labels.ownPerDiemLabel}</Label>
+      <Input
+        id={`${idPrefix}_per_diem`}
+        inputMode="numeric"
+        dir="ltr"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
+        data-testid={`${testIdPrefix}-per-diem`}
+      />
+      <p className="text-xs text-muted-foreground">{labels.ownPerDiemHint}</p>
+    </div>
+  );
+}

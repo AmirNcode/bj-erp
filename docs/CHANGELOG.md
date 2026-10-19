@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Head of HR enters their own per diem — branch `codex/hr-head-per-diem` (FR-68, not deployed)
+
+Migration `20261019120000_hr_head_own_per_diem.sql`.
+- The designated Head of HR's hourly and daily errand forms ask for their own per diem (optional,
+  whole Rials). Their HR step is exempt, so before this no one could ever enter it.
+- Saved at submission and not editable afterwards. Shown as "Entered by requester (Head of HR)" on
+  My Requests, the printed form and the finance list and CSV.
+
 ### Approval delegation and automatic CEO step — branch `codex/approval-delegation` (PR #7, not merged or deployed)
 
 Local branch only; nothing below is live. Spec `docs/specs/2026-10-17-ceo-delegate-approval-design.md`.

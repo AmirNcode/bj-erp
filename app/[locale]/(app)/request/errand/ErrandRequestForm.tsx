@@ -13,7 +13,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
-import { ErrandDetailsFields, FormFeedback, TimeRangeFields } from '../_components/FormParts';
+import { ErrandDetailsFields, FormFeedback, OwnPerDiemField, TimeRangeFields } from '../_components/FormParts';
+import { parseRials } from '@/lib/leave/perDiem';
 import { useRequestSubmit, useSignature, useRequestDelegation } from '../_components/useRequestForm';
 
 type Labels = {
@@ -33,6 +34,9 @@ type Labels = {
   validationTimes: string;
   validationLocation: string;
   signature: SignatureLabels;
+  ownPerDiemLabel: string;
+  ownPerDiemHint: string;
+  ownPerDiemInvalid: string;
   days: string;
   hours: string;
   minutes: string;
@@ -44,6 +48,8 @@ type Props = {
   workSettings: WorkSettings;
   labels: Labels;
   locale: string;
+  /** The caller is the designated Head of HR: they enter their own per diem. */
+  perDiemAllowed: boolean;
 };
 
 /**
@@ -70,7 +76,7 @@ function slotIndexAtOrAfter(time: string): number {
  * No leave type, no balance line, no replacement picker: an errand is work, so
  * none of those apply.
  */
-export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
+export function ErrandRequestForm({ workSettings, labels, locale, perDiemAllowed }: Props) {
   const defaultFrom = slotIndexAtOrAfter(workSettings.workStart);
 
   const [date, setDate] = useState<PickerDate | null>(null);
@@ -80,6 +86,7 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
   );
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [perDiem, setPerDiem] = useState('');
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
 
@@ -90,13 +97,16 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const perDiemRials = perDiemAllowed && perDiem.trim() !== '' ? parseRials(perDiem) : null;
     const problem = !isoDate
       ? labels.validationSelectDate
       : durationMinutes <= 0
         ? labels.validationTimes
         : !isValidErrandLocation(location)
           ? labels.validationLocation
-          : signature.problem(labels.signature) ?? delegation.problem();
+          : Number.isNaN(perDiemRials)
+            ? labels.ownPerDiemInvalid
+            : signature.problem(labels.signature) ?? delegation.problem();
 
     submit(
       problem,
@@ -109,12 +119,14 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
           description: description || undefined,
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
+          perDiemRials,
           ...delegation.submission,
         }),
       () => {
         setDate(null);
         setLocation('');
         setDescription('');
+        setPerDiem('');
         signature.reset();
       }
     );
@@ -158,6 +170,10 @@ export function ErrandRequestForm({ workSettings, labels, locale }: Props) {
             onDescriptionChange={setDescription}
             labels={labels}
           />
+
+          {perDiemAllowed && (
+            <OwnPerDiemField idPrefix="errand" testIdPrefix="errand" value={perDiem} onChange={setPerDiem} labels={labels} />
+          )}
 
           <RequestDelegationFields idPrefix="errand" delegation={delegation} locale={locale} showCover={false} />
 

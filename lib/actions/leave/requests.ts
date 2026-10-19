@@ -150,6 +150,8 @@ export type SubmitErrandInput = DelegationSubmissionInput & {
   description?: string;
   signatureData: string;
   signatureAuthorized: boolean;
+  /** Whole Rials. Only the designated Head of HR may send it, for their own errand (the DB checks). */
+  perDiemRials?: number | null;
 };
 
 export async function submitErrandRequest(
@@ -161,6 +163,10 @@ export async function submitErrandRequest(
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
   if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const perDiem = input.perDiemRials ?? null;
+  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
+    return dbErr('per diem must be 0 or more');
+  }
 
   // No accrual pass here, unlike the two leave paths: an errand is work. It
   // spends no balance, so there is nothing a freshly-accrued hour could unlock.
@@ -175,6 +181,7 @@ export async function submitErrandRequest(
     p_auto_approval_consent: input.autoApprovalConsent,
     p_delegation_preview: input.delegationPreview,
     p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
+    p_per_diem_rials: perDiem ?? undefined,
   });
 
   if (error) return dbErr(error.message);
@@ -193,6 +200,8 @@ export type SubmitDailyErrandInput = DelegationSubmissionInput & {
   description?: string;
   signatureData: string;
   signatureAuthorized: boolean;
+  /** Whole Rials. Only the designated Head of HR may send it, for their own errand (the DB checks). */
+  perDiemRials?: number | null;
 };
 
 export async function submitDailyErrandRequest(
@@ -204,6 +213,10 @@ export async function submitDailyErrandRequest(
   if (!input.signatureData) return dbErr('signature is required');
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
   if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const perDiem = input.perDiemRials ?? null;
+  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
+    return dbErr('per diem must be 0 or more');
+  }
 
   const { data, error } = await c.supabase.rpc('submit_daily_errand_request_v2', {
     p_start: input.start,
@@ -215,6 +228,7 @@ export async function submitDailyErrandRequest(
     p_auto_approval_consent: input.autoApprovalConsent,
     p_delegation_preview: input.delegationPreview,
     p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
+    p_per_diem_rials: perDiem ?? undefined,
   });
 
   if (error) return dbErr(error.message);
@@ -232,6 +246,10 @@ export type LeaveRequestWithType = {
   kind: Database['public']['Enums']['request_kind'];
   /** محل ماموریت. Set only on errands; never exposed to teammates. */
   errand_location: string | null;
+  /** FR-61 whole Rials; errands only. */
+  per_diem_rials: number | null;
+  /** The Head of HR entered it on their own errand at submission. */
+  per_diem_by_requester: boolean;
   start_date: string;
   end_date: string;
   day_part: DayPart;
@@ -271,7 +289,7 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await c.supabase
     .from('leave_requests')
     .select(
-      `id, kind, errand_location, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, unpaid_minutes, serial_year, serial_seq, status, reason, decision_note, signature_consent_at, approver_signature_consent_at, created_at,
+      `id, kind, errand_location, per_diem_rials, per_diem_by_requester, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, unpaid_minutes, serial_year, serial_seq, status, reason, decision_note, signature_consent_at, approver_signature_consent_at, created_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
        leave_types(id, name_fa, name_en, color)`
     )
