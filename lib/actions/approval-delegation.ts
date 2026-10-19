@@ -25,6 +25,12 @@ export async function getDelegationContext(principalId?: string): Promise<
   } };
 }
 
+/** The caller is the designated Head of HR (their own errand form then asks for per diem). */
+export async function isCallerHrHead(): Promise<boolean> {
+  const result = await getDelegationContext();
+  return result.ok && result.context.executive_settings.hr_head_id === result.context.principal_id;
+}
+
 export async function searchDelegates(principalId: string, search = ''): Promise<
   { ok: true; candidates: DelegateCandidate[] } | DbErrorResult
 > {

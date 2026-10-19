@@ -7,6 +7,7 @@ import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
+import { formatRials } from '@/lib/leave/perDiem';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { StatusBadge } from '@/components/StatusBadge';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
@@ -61,6 +62,7 @@ export function MyRequestsList({
   showAll = false,
 }: Props) {
   const t = useTranslations('request');
+  const tErrand = useTranslations('errand');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -137,6 +139,12 @@ export function MyRequestsList({
                         </div>
                       )}
                     </div>
+                    {req.kind === 'errand' && req.per_diem_rials != null && (
+                      <div className="text-xs text-muted-foreground mt-0.5" data-testid={`per-diem-${req.id}`}>
+                        {tErrand('perDiem')}: {formatRials(req.per_diem_rials, locale)}
+                        {req.per_diem_by_requester && <> · {tErrand('perDiemByRequester')}</>}
+                      </div>
+                    )}
                     {/* Date range */}
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {labels.from} {formatCalendarDate(req.start_date, locale)}{' '}

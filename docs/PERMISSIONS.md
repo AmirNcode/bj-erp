@@ -318,6 +318,10 @@ or print read through the same request scope. A named approver does not need bro
   admin sign EVERY outstanding step at once (named ones included) — automatically when they have no
   step of their own. `reject_leave_request` lets an admin reject any pending request. The
   `approval_steps_role_allowed` CHECK admits `security`/`admin` only on an inactive row.
+- **FR-68 (2026-10-19) own per diem:** `submit_errand_request_v2` / `submit_daily_errand_request_v2`
+  take an optional `p_per_diem_rials`. `private.set_requester_per_diem` (no client execute) accepts it
+  only on an errand whose `approval_request_policy.hr_head_id` is the requester, i.e. the designated
+  HR head at submission; others get `42501`. No later edit path exists.
 - **Who may fill which step**: an admin may fill any outstanding step; the `manager` step needs
   `is_manager_of` (holding the manager role is not enough); any other step needs that role. A
   non-admin can never manually sign a step on their **own** request, including through a delegate

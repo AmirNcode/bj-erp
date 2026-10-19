@@ -752,6 +752,7 @@ export type Database = {
           end_time: string | null
           errand_location: string | null
           per_diem_rials: number | null
+          per_diem_by_requester: boolean
           id: string
           kind: Database["public"]["Enums"]["request_kind"]
           leave_type_id: string | null
@@ -782,6 +783,7 @@ export type Database = {
           end_time?: string | null
           errand_location?: string | null
           per_diem_rials?: number | null
+          per_diem_by_requester?: boolean
           id?: string
           kind?: Database["public"]["Enums"]["request_kind"]
           leave_type_id?: string | null
@@ -811,6 +813,7 @@ export type Database = {
           end_time?: string | null
           errand_location?: string | null
           per_diem_rials?: number | null
+          per_diem_by_requester?: boolean
           id?: string
           kind?: Database["public"]["Enums"]["request_kind"]
           leave_type_id?: string | null
@@ -1517,11 +1520,11 @@ export type Database = {
         Returns: string
       }
       submit_errand_request_v2: {
-        Args: Database['public']['Functions']['submit_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Args: Database['public']['Functions']['submit_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean; p_per_diem_rials?: number }
         Returns: string
       }
       submit_daily_errand_request_v2: {
-        Args: Database['public']['Functions']['submit_daily_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean }
+        Args: Database['public']['Functions']['submit_daily_errand_request']['Args'] & { p_auto_approval_consent?: boolean; p_delegation_preview?: Json; p_temporary_ceo_authorized?: boolean; p_per_diem_rials?: number }
         Returns: string
       }
       approve_leave_request_v2: {
@@ -1822,6 +1825,7 @@ export type Database = {
           unpaid_minutes: number
           errand_location: string | null
           per_diem_rials: number | null
+          per_diem_by_requester: boolean
           decided_at: string | null
         }[]
       }

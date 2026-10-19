@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
@@ -21,11 +22,12 @@ async function DailyErrandData({ locale }: { locale: string }) {
   const tDailyErrand = await getTranslations('dailyErrand');
   const tLeave = await getTranslations('leave');
   const tSignature = await getTranslations('signature');
+  const tErrand = await getTranslations('errand');
 
   const user = await getCachedUser();
   if (!user) return null;
 
-  const workSettingsResult = await getWorkSettings();
+  const [workSettingsResult, perDiemAllowed] = await Promise.all([getWorkSettings(), isCallerHrHead()]);
   const workSettings = workSettingsResult.ok
     ? workSettingsResult.settings
     : WORK_SETTINGS_FALLBACK;
@@ -45,6 +47,9 @@ async function DailyErrandData({ locale }: { locale: string }) {
     validationSelectDate: tDailyErrand('validationSelectDate'),
     validationLocation: tDailyErrand('validationLocation'),
     signature: signatureLabelsFrom(tSignature),
+    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
+    ownPerDiemHint: tErrand('ownPerDiemHint'),
+    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
     ...durationLabelsFrom(tLeave),
   };
 
@@ -53,6 +58,7 @@ async function DailyErrandData({ locale }: { locale: string }) {
       workSettings={workSettings}
       labels={labels}
       locale={locale}
+      perDiemAllowed={perDiemAllowed}
     />
   );
 }

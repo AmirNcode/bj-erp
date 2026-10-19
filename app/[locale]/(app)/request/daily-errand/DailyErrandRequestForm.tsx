@@ -11,7 +11,8 @@ import type { WorkSettings } from '@/lib/actions/leave/reference';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
-import { DateRangeFields, ErrandDetailsFields, FormFeedback } from '../_components/FormParts';
+import { DateRangeFields, ErrandDetailsFields, FormFeedback, OwnPerDiemField } from '../_components/FormParts';
+import { parseRials } from '@/lib/leave/perDiem';
 import { useRequestSubmit, useSignature, useRequestDelegation } from '../_components/useRequestForm';
 
 type Labels = {
@@ -29,6 +30,9 @@ type Labels = {
   validationSelectDate: string;
   validationLocation: string;
   signature: SignatureLabels;
+  ownPerDiemLabel: string;
+  ownPerDiemHint: string;
+  ownPerDiemInvalid: string;
   days: string;
   hours: string;
   minutes: string;
@@ -39,13 +43,16 @@ type Props = {
   workSettings: WorkSettings;
   labels: Labels;
   locale: string;
+  /** The caller is the designated Head of HR: they enter their own per diem. */
+  perDiemAllowed: boolean;
 };
 
-export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) {
+export function DailyErrandRequestForm({ workSettings, labels, locale, perDiemAllowed }: Props) {
   const [startDate, setStartDate] = useState<PickerDate | null>(null);
   const [endDate, setEndDate] = useState<PickerDate | null>(null);
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
+  const [perDiem, setPerDiem] = useState('');
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
 
@@ -58,12 +65,15 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    const perDiemRials = perDiemAllowed && perDiem.trim() !== '' ? parseRials(perDiem) : null;
     const problem =
       !startIso || !endIso
         ? labels.validationSelectDate
         : !isValidErrandLocation(location)
           ? labels.validationLocation
-          : signature.problem(labels.signature) ?? delegation.problem();
+          : Number.isNaN(perDiemRials)
+            ? labels.ownPerDiemInvalid
+            : signature.problem(labels.signature) ?? delegation.problem();
 
     submit(
       problem,
@@ -75,6 +85,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
           description: description || undefined,
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
+          perDiemRials,
           ...delegation.submission,
         }),
       () => {
@@ -82,6 +93,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
         setEndDate(null);
         setLocation('');
         setDescription('');
+        setPerDiem('');
         signature.reset();
       }
     );
@@ -123,6 +135,10 @@ export function DailyErrandRequestForm({ workSettings, labels, locale }: Props) 
             onDescriptionChange={setDescription}
             labels={labels}
           />
+
+          {perDiemAllowed && (
+            <OwnPerDiemField idPrefix="daily_errand" testIdPrefix="daily-errand" value={perDiem} onChange={setPerDiem} labels={labels} />
+          )}
 
           <RequestDelegationFields idPrefix="daily-errand" delegation={delegation} locale={locale} showCover={false} />
 

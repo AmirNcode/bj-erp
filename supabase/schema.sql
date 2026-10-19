@@ -975,7 +975,7 @@ begin
     if p_per_diem_rials is not null then
       if r.kind<>'errand' or not v_filled_hr then
         raise exception 'per diem can only be set on the hr step of an errand' using errcode='22023'; end if;
-      update public.leave_requests set per_diem_rials=p_per_diem_rials where id=p_id;
+      update public.leave_requests set per_diem_rials=p_per_diem_rials,per_diem_by_requester=false where id=p_id;
     end if;
     perform private.finalize_approval_request(p_id,p_actor,p_signature_data,v_now,
       case when p_auto_authority is not null then 'automatic' else v_kind end);
@@ -2154,6 +2154,28 @@ begin
     return v_signer;
   end if;
   return null;
+end; $$;
+
+
+--
+-- Name: set_requester_per_diem(uuid, bigint); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.set_requester_per_diem(p_request uuid, p_per_diem_rials bigint) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype;
+begin
+  if p_per_diem_rials is null then return; end if;
+  if p_per_diem_rials<0 then raise exception 'per diem must be 0 or more' using errcode='22023'; end if;
+  select * into r from public.leave_requests where id=p_request;
+  if r.kind<>'errand' or not exists (select 1 from public.approval_request_policy x
+      where x.request_id=r.id and x.hr_head_id=r.employee_id) then
+    raise exception 'only the Head of HR can enter per diem on their own errand' using errcode='42501'; end if;
+  update public.leave_requests set per_diem_rials=p_per_diem_rials,per_diem_by_requester=true where id=r.id;
+  insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+    (r.employee_id,'set_own_per_diem','leave_requests',r.id,jsonb_build_object('per_diem_rials',p_per_diem_rials));
 end; $$;
 
 
@@ -5518,7 +5540,7 @@ $$;
 -- Name: finance_approved_requests(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.finance_approved_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, decided_at timestamp with time zone)
+CREATE FUNCTION public.finance_approved_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5547,7 +5569,7 @@ begin
            t.name_fa, t.name_en, t.is_paid,
            r.start_date, r.end_date, r.unit, r.start_time, r.end_time,
            r.requested_minutes, r.unpaid_minutes,
-           r.errand_location, r.per_diem_rials, r.decided_at
+           r.errand_location, r.per_diem_rials, r.per_diem_by_requester, r.decided_at
       from public.leave_requests r
       join public.profiles p on p.id = r.employee_id
       left join public.departments d on d.id = p.department_id
@@ -5983,10 +6005,10 @@ $$;
 
 
 --
--- Name: submit_daily_errand_request_v2(date, date, text, text, boolean, text, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+-- Name: submit_daily_errand_request_v2(date, date, text, text, boolean, text, boolean, jsonb, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
+CREATE FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -6005,6 +6027,7 @@ begin
     v_request_id, p_signature_data, p_signature_authorized
   );
   perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  perform private.set_requester_per_diem(v_request_id,p_per_diem_rials);
   -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
   if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
       and cardinality(x.hr_exempt_step_ids)>0)
@@ -6029,10 +6052,10 @@ $$;
 
 
 --
--- Name: submit_errand_request_v2(date, time without time zone, time without time zone, text, text, boolean, text, boolean, jsonb, boolean); Type: FUNCTION; Schema: public; Owner: -
+-- Name: submit_errand_request_v2(date, time without time zone, time without time zone, text, text, boolean, text, boolean, jsonb, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false) RETURNS uuid
+CREATE FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text DEFAULT NULL::text, p_auto_approval_consent boolean DEFAULT false, p_delegation_preview jsonb DEFAULT NULL::jsonb, p_temporary_ceo_authorized boolean DEFAULT false, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -6051,6 +6074,7 @@ begin
     v_request_id, p_signature_data, p_signature_authorized
   );
   perform private.enroll_request_delegation(v_request_id,p_auto_approval_consent,p_delegation_preview,p_temporary_ceo_authorized);
+  perform private.set_requester_per_diem(v_request_id,p_per_diem_rials);
   -- A configured chain made entirely exempt for the HR head needs no fabricated human decision.
   if exists (select 1 from public.approval_request_policy x where x.request_id=v_request_id
       and cardinality(x.hr_exempt_step_ids)>0)
@@ -6514,9 +6538,11 @@ CREATE TABLE public.leave_requests (
     approver_signature_consent_at timestamp with time zone,
     unpaid_minutes integer DEFAULT 0 NOT NULL,
     per_diem_rials bigint,
+    per_diem_by_requester boolean DEFAULT false NOT NULL,
     CONSTRAINT leave_requests_approver_signature_shape CHECK ((((approver_signature_data IS NULL) AND (approver_signature_consent_at IS NULL)) OR ((status = ANY (ARRAY['approved'::public.leave_status, 'cancelled'::public.leave_status])) AND (approver_signature_data IS NOT NULL) AND (approver_signature_consent_at IS NOT NULL) AND ((length(approver_signature_data) >= 100) AND (length(approver_signature_data) <= 350000)) AND (mod(length(approver_signature_data), 4) = 2) AND (approver_signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
     CONSTRAINT leave_requests_decision_note_len CHECK (((decision_note IS NULL) OR (length(decision_note) <= 500))),
     CONSTRAINT leave_requests_kind_shape CHECK ((((kind = 'leave'::public.request_kind) AND (leave_type_id IS NOT NULL) AND (errand_location IS NULL)) OR ((kind = 'errand'::public.request_kind) AND (leave_type_id IS NULL) AND (replacement_id IS NULL) AND (errand_location IS NOT NULL) AND (btrim(errand_location) <> ''::text) AND (length(errand_location) <= 200)))),
+    CONSTRAINT leave_requests_per_diem_by_requester_shape CHECK (((NOT per_diem_by_requester) OR (per_diem_rials IS NOT NULL))),
     CONSTRAINT leave_requests_per_diem_shape CHECK (((per_diem_rials IS NULL) OR ((per_diem_rials >= 0) AND (kind = 'errand'::public.request_kind)))),
     CONSTRAINT leave_requests_reason_len CHECK (((reason IS NULL) OR (length(reason) <= 500))),
     CONSTRAINT leave_requests_replacement_not_self CHECK (((replacement_id IS NULL) OR (replacement_id <> employee_id))),
@@ -6573,6 +6599,13 @@ COMMENT ON COLUMN public.leave_requests.unpaid_minutes IS 'Minutes of this reque
 --
 
 COMMENT ON COLUMN public.leave_requests.per_diem_rials IS 'FR-61: per diem in Rials, entered on the hr approval step of an errand. Read by finance through finance_approved_requests().';
+
+
+--
+-- Name: COLUMN leave_requests.per_diem_by_requester; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.per_diem_by_requester IS 'True when the designated Head of HR entered per diem on their own errand at submission; false when an hr step signer entered it.';
 
 
 --
@@ -9359,6 +9392,13 @@ REVOKE ALL ON FUNCTION private.separation_row_signer(p_company uuid, p_employee 
 
 
 --
+-- Name: FUNCTION set_requester_per_diem(p_request uuid, p_per_diem_rials bigint); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.set_requester_per_diem(p_request uuid, p_per_diem_rials bigint) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION special_leave_target(p_actor uuid, p_employee uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -9931,7 +9971,6 @@ GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO service_ro
 
 REVOKE ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO postgres;
-GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO anon;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO authenticated;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO service_role;
 
@@ -10087,13 +10126,13 @@ GRANT ALL ON FUNCTION public.submit_daily_errand_request(p_start date, p_end dat
 
 
 --
--- Name: FUNCTION submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
-GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
-GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+REVOKE ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO postgres;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO service_role;
+GRANT ALL ON FUNCTION public.submit_daily_errand_request_v2(p_start date, p_end date, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO authenticated;
 
 
 --
@@ -10107,13 +10146,13 @@ GRANT ALL ON FUNCTION public.submit_errand_request(p_date date, p_start_time tim
 
 
 --
--- Name: FUNCTION submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
-GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
-GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+REVOKE ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO postgres;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO service_role;
+GRANT ALL ON FUNCTION public.submit_errand_request_v2(p_date date, p_start_time time without time zone, p_end_time time without time zone, p_location text, p_signature_data text, p_signature_authorized boolean, p_description text, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean, p_per_diem_rials bigint) TO authenticated;
 
 
 --

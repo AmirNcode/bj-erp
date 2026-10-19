@@ -345,6 +345,14 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-67** ☑ **Person pickers choose a single match.** One search result, or an exact personnel
   number, is selected automatically; several results show «… نفر پیدا شد؛ یکی را انتخاب کنید».
   Approval-step dialog and every PersonSearch box. *(2026-10-13.)*
+- **FR-68** ☑ **Head of HR enters their own per diem.** Amends FR-61. The designated HR head's own
+  HR step is exempt (and their CEO step may approve at submission), so no approver is offered the
+  per diem field. Their hourly and daily errand forms show an optional per diem (whole Rials, 0
+  allowed), saved at submission and never editable afterwards (cancel and refile). Only the HR head
+  recorded on the request's approval policy; anyone else sending it is refused. The amount is shown
+  as "Entered by requester (Head of HR)" on My Requests, the print form and `/finance` (+ CSV
+  column), and audited as `set_own_per_diem`. A later hr step signer who enters per diem replaces it
+  and clears the marker. *(2026-10-19.)*
 
 ### Unreleased approval delegation amendment
 

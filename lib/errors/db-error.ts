@@ -153,6 +153,7 @@ const RULES: Rule[] = [
   // FR-61 per diem.
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
+  { re: /only the Head of HR can enter per diem on their own errand/, key: 'perDiemOwnNotAllowed' },
   // FR-59: hr edits settings, but hours per day stays admin-only.
   { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
   // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).
