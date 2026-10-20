@@ -1,9 +1,10 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 20 items:
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 21 items:
  * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
  * the FR-55 review decision) plus main's absences, finance, personal_info_own (own
- * personal information, an explicit exception to D3) and special_leave. Pure. Drives
+ * personal information, an explicit exception to D3) and special_leave, and FR-70's
+ * travel_booking (20261020120001). Pure. Drives
  * the role editor, the nav and the edit capabilities. The database is the
  * authority; tests/unit/permissions-catalog.test.ts keeps the two in step.
  */
@@ -13,11 +14,12 @@ export type PermKey =
   | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
   | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'absences' | 'reports'
-  | 'finance' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays';
+  | 'finance' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
+  | 'travel_booking';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
-export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'approvalChain' | 'settings';
+export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'procurement' | 'approvalChain' | 'settings';
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
@@ -27,6 +29,8 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   // after reports. Order is display only: the tests compare sets and counts, so keep both as is.
   { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports'] },
   { key: 'finance', items: ['finance'] },
+  // FR-70: procurement books approved out-of-town trips.
+  { key: 'procurement', items: ['travel_booking'] },
   { key: 'approvalChain', items: ['approval_steps', 'approval_delegate'] },
   { key: 'settings', items: ['work_settings', 'holidays'] },
 ];
@@ -37,6 +41,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
   calendar: 'R', absences: 'R', reports: 'R', finance: 'R',
   approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
+  travel_booking: 'E',
 };
 
 export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);

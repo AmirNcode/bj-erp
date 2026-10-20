@@ -106,8 +106,8 @@ begin
 end $$;
 
 -- ── tables (Task 1) ─────────────────────────────────────────────────────────
-select pg_temp.expect('six roles seeded for the company',
-  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'company')), '6');
+select pg_temp.expect('seven roles seeded for the company (FR-70 added Procurement)',
+  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'company')), '7');
 select pg_temp.expect('enum-only insert gets role_id',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k = 'hr') and r.system_key = 'hr'), '1');
@@ -141,10 +141,10 @@ select pg_temp.expect('finance preset contents',
   'clearance=read,finance=read');
 select pg_temp.expect('personal_info_own is on no preset of any company',
   (select count(*)::text from public.role_permissions where permission = 'personal_info_own'), '0');
-select pg_temp.expect('catalog: 20 keys (approval_delegate added; passwords remain admin-only) incl. absences, finance, personal_info_own, special_leave',
+select pg_temp.expect('catalog: 21 keys (approval_delegate, FR-70 travel_booking added; passwords remain admin-only) incl. absences, finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '20:4');
+  '21:4');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -170,8 +170,8 @@ begin
   insert into public.companies (name) values ('FR55 Other Co') returning id into v_new;
   insert into fx values ('other_company', v_new);
 end $$;
-select pg_temp.expect('a new company gets its six roles',
-  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'other_company')), '6');
+select pg_temp.expect('a new company gets its seven roles',
+  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'other_company')), '7');
 do $$
 begin
   begin
@@ -259,7 +259,7 @@ select pg_temp.expect('… to finance',
 select pg_temp.expect('(cleanup) emp2 back to employee',
   pg_temp.try_su(format('update public.user_roles set role_id = %s where user_id = %s', pg_temp.role_id('company', 'employee'), pg_temp.id('emp2'))), 'ok:1');
 select pg_temp.expect('a member reads their own company''s roles',
-  pg_temp.try_as('emp', format('select 1 from public.roles where company_id = %s', pg_temp.id('company'))), 'ok:6');
+  pg_temp.try_as('emp', format('select 1 from public.roles where company_id = %s', pg_temp.id('company'))), 'ok:7');
 select pg_temp.expect('nobody reads another company''s roles (not even the admin)',
   pg_temp.try_as('admin', format('select 1 from public.roles where company_id = %s', pg_temp.id('other_company'))), 'ok:0');
 select pg_temp.expect('nobody reads another company''s role permissions',
@@ -779,7 +779,7 @@ select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwor
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '20');
+            -> 'claims' -> 'app_perms'))::text), '21');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');
