@@ -19,7 +19,7 @@ import {
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('approvals');
   const tLeave = useTranslations('leave');

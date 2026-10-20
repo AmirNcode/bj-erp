@@ -40,7 +40,7 @@ import {
   RequestSignatureViewer,
 } from '../request/_components/RequestSignature';
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('calendar');
   const tLeave = useTranslations('leave');

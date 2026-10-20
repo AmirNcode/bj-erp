@@ -41,7 +41,7 @@ type InitialLeaveType = {
   default_carryover_cap_minutes: number;
 };
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('manage');
   return {

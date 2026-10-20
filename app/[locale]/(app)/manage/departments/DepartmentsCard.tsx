@@ -19,7 +19,7 @@ type Department = {
   manager_name: string | null;
 };
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('manage.settings');
   return {

@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('review');
   const tLeave = useTranslations('leave');

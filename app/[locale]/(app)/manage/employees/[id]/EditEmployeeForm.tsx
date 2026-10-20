@@ -57,7 +57,7 @@ type Profile = {
   language_pref: string;
 };
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('manage');
   const tTeam = useTranslations('team');

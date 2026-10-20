@@ -15,7 +15,7 @@ import { RequestCancelButton } from '../request/_components/RequestCancelButton'
 import { RequestProgress } from '@/components/RequestProgress';
 import { PendingApprovalsCard, type PendingRow } from './PendingApprovalsCard';
 
-/** The screen's copy; every key was a `labels` prop built by the page. */
+/** This screen's copy. */
 function useLabels() {
   const t = useTranslations('home');
   const tLeave = useTranslations('leave');
