@@ -29,10 +29,7 @@ export default async function DepartmentsPage({ params }: Props) {
   const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
   if (!can(perms, 'departments', 'read')) redirect(`/${locale}/manage/employees`);
 
-  const [tNav, t] = await Promise.all([
-    getTranslations('nav'),
-    getTranslations('manage.settings'),
-  ]);
+  const tNav = await getTranslations('nav');
   const supabase = await createClient();
   // A non-admin may not pick the manager of their own department: that person
   // signs the department-manager step on the caller's own requests.
@@ -79,28 +76,6 @@ export default async function DepartmentsPage({ params }: Props) {
             loadError={departmentsError?.message ?? null}
             canEdit={can(perms, 'departments', 'edit')}
             locale={locale}
-            labels={{
-              title: t('departments.title'),
-              hint: t('departments.hint'),
-              addNew: t('departments.addNew'),
-              empty: t('departments.empty'),
-              managersLabel: t('departments.managersLabel'),
-              workersLabel: t('departments.workersLabel'),
-              noMembers: t('departments.noMembers'),
-              loading: t('departments.loading'),
-              close: t('departments.close'),
-              managerLabel: t('departments.managerLabel'),
-              noManager: t('departments.noManager'),
-              managerSaved: t('departments.managerSaved'),
-              rename: t('departments.rename'),
-              nameFa: t('departments.nameFa'),
-              nameEn: t('departments.nameEn'),
-              save: t('departments.save'),
-              cancel: t('departments.cancel'),
-              renamed: t('departments.renamed'),
-              ownDepartmentManager: t('departments.ownDepartmentManager'),
-              errorLabel: t('error'),
-            }}
           />
         </CardContent>
       </Card>
@@ -108,19 +83,7 @@ export default async function DepartmentsPage({ params }: Props) {
       {can(perms, 'leave_accrual') && (
       <Card>
         <CardContent>
-          <AccrualRunner
-            locale={locale}
-            labels={{
-              title: t('accrual.title'),
-              hint: t('accrual.hint'),
-              run: t('accrual.run'),
-              resultTitle: t('accrual.resultTitle'),
-              employeesLabel: t('accrual.employeesLabel'),
-              rowsLabel: t('accrual.rowsLabel'),
-              nothingToDo: t('accrual.nothingToDo'),
-              errorLabel: t('error'),
-            }}
-          />
+          <AccrualRunner locale={locale} />
         </CardContent>
       </Card>
       )}
