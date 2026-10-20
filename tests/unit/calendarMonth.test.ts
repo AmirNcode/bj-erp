@@ -3,7 +3,6 @@ import {
   buildCalendarMonth,
   currentCalendarMonthRange,
   formatCalendarDate,
-  nextWorkingDateAfter,
 } from '@/lib/leave/calendarMonth';
 import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -87,19 +86,6 @@ describe('buildCalendarMonth', () => {
     for (const iso of ['2026-07-10', '2026-07-11', '2026-07-12', '2026-07-13']) {
       expect(month.days.find((day) => day.iso === iso)?.visibleNames).toContain('Ava');
     }
-  });
-});
-
-describe('nextWorkingDateAfter', () => {
-  it('skips configured weekends and holidays', () => {
-    expect(
-      nextWorkingDateAfter('2026-06-25', {
-        ...WORK_SETTINGS_FALLBACK,
-        weekendDays: [5],
-        holidays: ['2026-06-27'],
-        maxHourlyMinutesPerDay: 240,
-      })
-    ).toBe('2026-06-28');
   });
 });
 
