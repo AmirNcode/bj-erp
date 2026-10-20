@@ -20,7 +20,6 @@ import { nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { CalendarView } from './CalendarView';
 import { PageHeader } from '../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -29,10 +28,6 @@ type Props = {
 // ── async child that owns all data fetching ────────────────────────────────
 async function CalendarData({ locale }: { locale: string }) {
   const t = await getTranslations('calendar');
-  const tLeave = await getTranslations('leave');
-  const tApprovals = await getTranslations('approvals');
-  const tErrand = await getTranslations('errand');
-  const tSignature = await getTranslations('signature');
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -64,28 +59,6 @@ async function CalendarData({ locale }: { locale: string }) {
   const signatureConsents =
     signaturesResult && signaturesResult.ok ? signaturesResult.signatures : [];
 
-  const labels = {
-    empty: t('empty'),
-    listView: t('listView'),
-    monthView: t('monthView'),
-    offOn: t('offOn'),
-    noOffThisDay: t('noOffThisDay'),
-    returns: t('returns'),
-    statusPending: tLeave('status.pending'),
-    statusApproved: tLeave('status.approved'),
-    approve: tApprovals('approve'),
-    reject: tApprovals('reject'),
-    approveConfirm: tApprovals('approveConfirm'),
-    rejectConfirm: tApprovals('rejectConfirm'),
-    rejectReasonLabel: tApprovals('rejectReasonLabel'),
-    rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
-    approveSuccess: tApprovals('approveSuccess'),
-    rejectSuccess: tApprovals('rejectSuccess'),
-    errandBadge: tErrand('badge'),
-    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
-    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
-  };
-
   return (
     <>
       {loadError && (
@@ -100,7 +73,6 @@ async function CalendarData({ locale }: { locale: string }) {
         rangeEnd={rangeEnd}
         monthLabel={monthLabel}
         workSettings={workSettings}
-        labels={labels}
         decidableIds={decidableIds}
         signatureConsents={signatureConsents}
         todayIso={todayInAppTz()}
