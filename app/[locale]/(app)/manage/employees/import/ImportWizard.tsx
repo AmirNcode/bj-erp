@@ -8,7 +8,8 @@
  */
 
 import { useMemo, useState } from 'react';
-import { parseCsv, buildCsv } from '@/lib/csv/parse';
+import { parseCsv } from '@/lib/csv/parse';
+import { downloadCsv } from '@/lib/csv/download';
 import {
   IMPORT_COLUMNS,
   importColumns,
@@ -158,13 +159,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
   const exampleRows = EXAMPLE_ROWS.map((cells) => cells.filter((_, i) => columns.includes(IMPORT_COLUMNS[i])));
 
   const downloadTemplate = () => {
-    const blob = new Blob([buildCsv([templateHeader({ balances })])], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bj-employees-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv([templateHeader({ balances })], 'bj-employees-template.csv');
   };
 
   const onFile = async (file: File | undefined) => {

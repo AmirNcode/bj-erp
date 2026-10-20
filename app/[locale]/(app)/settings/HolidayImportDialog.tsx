@@ -15,7 +15,8 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { parseCsv, buildCsv } from '@/lib/csv/parse';
+import { parseCsv } from '@/lib/csv/parse';
+import { downloadCsv } from '@/lib/csv/download';
 import {
   holidayTemplateHeader,
   holidayTemplateRows,
@@ -99,14 +100,7 @@ export function HolidayImportDialog({
   };
 
   const downloadTemplate = () => {
-    const csv = buildCsv([holidayTemplateHeader(), ...holidayTemplateRows()]);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'bj-holidays-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv([holidayTemplateHeader(), ...holidayTemplateRows()], 'bj-holidays-template.csv');
   };
 
   const onFile = async (file: File | undefined) => {

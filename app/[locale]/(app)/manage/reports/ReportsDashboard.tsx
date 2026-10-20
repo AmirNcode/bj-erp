@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download, TriangleAlert } from 'lucide-react';
-import { buildCsv } from '@/lib/csv/parse';
+import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatNumber } from '@/lib/i18n/format';
 import {
@@ -26,7 +26,6 @@ import {
   buildRequestSummary,
   tableToCsvRows,
   type CapacityRow,
-  type ReportTable,
 } from '@/lib/reports/reports';
 import type { ReportData, JalaliMonthOption } from '@/lib/actions/reports';
 import { Card } from '@/components/ui/card';
@@ -91,16 +90,6 @@ type Props = {
   labels: Labels;
   locale: string;
 };
-
-function downloadCsv(table: ReportTable, filename: string) {
-  const blob = new Blob([buildCsv(tableToCsvRows(table))], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 /** One Excel button; a small menu picks which report to export. */
 function ExportMenu({
@@ -257,7 +246,7 @@ export function ReportsDashboard({ data, months, capacity, labels, locale }: Pro
     id: r.id,
     title: r.title,
     disabled: r.table.rows.length === 0,
-    onSelect: () => downloadCsv(r.table, `${stem}-${r.file}.csv`),
+    onSelect: () => downloadCsv(tableToCsvRows(r.table), `${stem}-${r.file}.csv`),
   }));
 
   const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-[10px] bg-card');
