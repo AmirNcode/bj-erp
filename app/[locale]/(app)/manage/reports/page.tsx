@@ -41,13 +41,7 @@ async function ReportsData({
   /** Admin or hr: getTodayPulse is company-wide only for them (FR-55 M10). */
   companyWidePulse: boolean;
 }) {
-  const [t, tLeave, tReview, tSteps, tNav] = await Promise.all([
-    getTranslations('reports'),
-    getTranslations('leave'),
-    getTranslations('review'),
-    getTranslations('approvals.steps'),
-    getTranslations('nav'),
-  ]);
+  const t = await getTranslations('reports');
 
   const supabase = await createClient();
   const [months, pulseRes, { data: departments }] = await Promise.all([
@@ -108,81 +102,6 @@ async function ReportsData({
       months={months}
       capacity={capacity}
       locale={locale}
-      labels={{
-        breadcrumb: tNav('manage'),
-        title: tNav('reports'),
-        from: t('from'),
-        to: t('to'),
-        rangeJoin: t('rangeJoin'),
-        export: t('export'),
-        download: t('download'),
-        empty: t('empty'),
-        capacityTitle: t('capacityTitle'),
-        capacitySub: t('capacitySub'),
-        lowCapacity: t('lowCapacity'),
-        // .raw(): the dashboard fills these as the period and totals change.
-        absenceChartTitle: t('absenceChartTitle'),
-        absenceChartSub: t.raw('absenceChartSub'),
-        totalDays: t.raw('totalDays'),
-        daysValue: t.raw('daysValue'),
-        months: {
-          m1: t('months.m1'), m2: t('months.m2'), m3: t('months.m3'), m4: t('months.m4'),
-          m5: t('months.m5'), m6: t('months.m6'), m7: t('months.m7'), m8: t('months.m8'),
-          m9: t('months.m9'), m10: t('months.m10'), m11: t('months.m11'), m12: t('months.m12'),
-        },
-        balances: {
-          title: t('balances.title'),
-          name: t('balances.name'),
-          code: t('balances.code'),
-          department: t('balances.department'),
-          manager: t('balances.manager'),
-        },
-        requests: {
-          title: t('requests.title'),
-          kind: t('requests.kind'),
-          status: t('requests.status'),
-          count: t('requests.count'),
-          days: t('requests.days'),
-          unpaidDays: t('requests.unpaidDays'),
-        },
-        absence: {
-          title: t('absence.title'),
-          department: t('absence.department'),
-          people: t('absence.people'),
-          requests: t('absence.requests'),
-          days: t('absence.days'),
-        },
-        ageing: {
-          title: t('ageing.title'),
-          name: t('ageing.name'),
-          department: t('ageing.department'),
-          submitted: t('ageing.submitted'),
-          waitingDays: t('ageing.waitingDays'),
-          days: t('ageing.days'),
-          waitingOn: t('ageing.waitingOn'),
-        },
-        headcount: {
-          title: t('headcount.title'),
-          department: t('headcount.department'),
-          headcount: t('headcount.headcount'),
-          joiners: t('headcount.joiners'),
-        },
-        kindLeave: tReview('kindLeave'),
-        kindErrand: tReview('kindErrand'),
-        statuses: {
-          pending: tLeave('status.pending'),
-          approved: tLeave('status.approved'),
-          rejected: tLeave('status.rejected'),
-          cancelled: tLeave('status.cancelled'),
-        },
-        stepLabels: {
-          manager: tSteps('manager'),
-          departmentManager: tSteps('departmentManager'),
-          hr: tSteps('hr'),
-          security: tSteps('security'),
-          admin: tSteps('admin'),
-        },
-      }}
     />
   );
 }
