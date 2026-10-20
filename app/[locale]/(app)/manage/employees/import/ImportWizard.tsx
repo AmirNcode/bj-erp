@@ -7,6 +7,7 @@
  * database re-checks inside `app_bulk_create_employees`.
  */
 
+import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import { parseCsv } from '@/lib/csv/parse';
 import { downloadCsv } from '@/lib/csv/download';
@@ -55,6 +56,126 @@ import {
 } from '@/lib/leave/dateConvert';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 
+type Labels = {
+  intro: string;
+  template: string;
+  templateHint: string;
+  upload: string;
+  rowsValid: string;
+  rowsInvalid: string;
+  line: string;
+  column: string;
+  problem: string;
+  import: string;
+  importing: string;
+  errorLabel: string;
+  errors: Record<RowError['messageKey'], string>;
+  warningsTitle: string;
+  warnings: Record<RowWarning['messageKey'], string>;
+  balanceDate: string;
+  balanceDateHint: string;
+  /** Shown instead of the balance columns when the caller lacks leave_balances edit. */
+  balancesSkipped: string;
+  balanceDateFuture: string;
+  /** Raw template: {month} {start}. */
+  accrualStarts: string;
+  departmentsTitle: string;
+  departmentsHint: string;
+  deptCode: string;
+  deptName: string;
+  deptManager: string;
+  deptStatus: string;
+  deptNew: string;
+  deptNewGenerated: string;
+  deptExisting: string;
+  deptKept: string;
+  noManager: string;
+  ackDepartments: string;
+  deptRenamed: string;
+  deptManagerChanged: string;
+  modes: {
+    title: string;
+    add: string;
+    addHint: string;
+    update: string;
+    updateHint: string;
+    replace: string;
+    replaceHint: string;
+    overwriteBalances: string;
+    overwriteBalancesHint: string;
+    replaceConfirmTitle: string;
+    /** Raw: {deactivate} {deleteDepartments} {update} {create}. */
+    replaceConfirmBody: string;
+    replaceConfirm: string;
+    cancel: string;
+    doneTitle: string;
+    /** Raw: {created} {updated} {deactivated}. */
+    doneSummary: string;
+    /** Raw: {codes}. */
+    doneNotDeleted: string;
+  };
+  plan: PlanLabels;
+};
+
+const errorKeys = [
+  'missingColumn', 'required', 'badPersonnelNo', 'dupInFile', 'dupExisting', 'badDeptCode',
+  'deptNamesRequired', 'deptCodeConflict', 'unknownSupervisor', 'unknownManager', 'refNotManager',
+  'selfReference', 'cycle', 'badDate', 'badRole', 'badBalance', 'mixedSign', 'hoursTooLarge',
+  'deptManagerTie',
+] as const;
+const warningKeys = ['supervisorManagerMismatch', 'deptNamesDiffer', 'deptManagerKept', 'bothSign'] as const;
+
+/** The wizard's copy (manage.import). Raw messages keep their {placeholders} for `fill`. */
+function useLabels(): Labels {
+  const t = useTranslations('manage.import');
+  return {
+    intro: t('intro'),
+    template: t('template'),
+    templateHint: t('templateHint'),
+    upload: t('upload'),
+    rowsValid: t('rowsValid'),
+    rowsInvalid: t('rowsInvalid'),
+    line: t('line'),
+    column: t('column'),
+    problem: t('problem'),
+    import: t('import'),
+    importing: t('importing'),
+    errorLabel: t('error'),
+    errors: Object.fromEntries(errorKeys.map((k) => [k, t(`errors.${k}`)])) as Record<
+      (typeof errorKeys)[number],
+      string
+    >,
+    warningsTitle: t('warningsTitle'),
+    // Raw: the wizard fills {placeholders} per row.
+    warnings: Object.fromEntries(warningKeys.map((k) => [k, t.raw(`warnings.${k}`) as string])) as Record<
+      (typeof warningKeys)[number],
+      string
+    >,
+    balanceDate: t('balanceDate'),
+    balanceDateHint: t('balanceDateHint'),
+    balancesSkipped: t('balancesSkipped'),
+    balanceDateFuture: t('balanceDateFuture'),
+    accrualStarts: t.raw('accrualStarts') as string,
+    departmentsTitle: t('departmentsTitle'),
+    departmentsHint: t('departmentsHint'),
+    deptCode: t('deptCode'),
+    deptName: t('deptName'),
+    deptManager: t('deptManager'),
+    deptStatus: t('deptStatus'),
+    deptNew: t('deptNew'),
+    deptNewGenerated: t('deptNewGenerated'),
+    deptExisting: t('deptExisting'),
+    deptKept: t('deptKept'),
+    noManager: t('noManager'),
+    ackDepartments: t('ackDepartments'),
+    deptRenamed: t('deptRenamed'),
+    deptManagerChanged: t('deptManagerChanged'),
+    // Raw: templates with {placeholders} are filled in the wizard.
+    modes: t.raw('modes') as Labels['modes'],
+    plan: t.raw('plan') as Labels['plan'],
+  };
+}
+
 type Props = {
   context: ImportContext;
   /** FR-49: the app's current people and departments, for the plan. */
@@ -65,66 +186,6 @@ type Props = {
   locale: string;
   /** Today in Asia/Tehran, Gregorian ISO — the balance date may not be later. */
   today: string;
-  labels: {
-    intro: string;
-    template: string;
-    templateHint: string;
-    upload: string;
-    rowsValid: string;
-    rowsInvalid: string;
-    line: string;
-    column: string;
-    problem: string;
-    import: string;
-    importing: string;
-    errorLabel: string;
-    errors: Record<RowError['messageKey'], string>;
-    warningsTitle: string;
-    warnings: Record<RowWarning['messageKey'], string>;
-    balanceDate: string;
-    balanceDateHint: string;
-    /** Shown instead of the balance columns when the caller lacks leave_balances edit. */
-    balancesSkipped: string;
-    balanceDateFuture: string;
-    /** Raw template: {month} {start}. */
-    accrualStarts: string;
-    departmentsTitle: string;
-    departmentsHint: string;
-    deptCode: string;
-    deptName: string;
-    deptManager: string;
-    deptStatus: string;
-    deptNew: string;
-    deptNewGenerated: string;
-    deptExisting: string;
-    deptKept: string;
-    noManager: string;
-    ackDepartments: string;
-    deptRenamed: string;
-    deptManagerChanged: string;
-    modes: {
-      title: string;
-      add: string;
-      addHint: string;
-      update: string;
-      updateHint: string;
-      replace: string;
-      replaceHint: string;
-      overwriteBalances: string;
-      overwriteBalancesHint: string;
-      replaceConfirmTitle: string;
-      /** Raw: {deactivate} {deleteDepartments} {update} {create}. */
-      replaceConfirmBody: string;
-      replaceConfirm: string;
-      cancel: string;
-      doneTitle: string;
-      /** Raw: {created} {updated} {deactivated}. */
-      doneSummary: string;
-      /** Raw: {codes}. */
-      doneNotDeleted: string;
-    };
-    plan: PlanLabels;
-  };
 };
 
 /** Fills `{name}` placeholders in a raw message. */
@@ -137,7 +198,8 @@ const EXAMPLE_ROWS = [
   ['علی رضایی', '1043', 'جوشکار', 'employee', 'PROD', '', '', '1042', '1001', '', '-1', '-4'],
 ];
 
-export function ImportWizard({ context, employees, existingDepartments, isAdmin, locale, today, labels }: Props) {
+export function ImportWizard({ context, employees, existingDepartments, isAdmin, locale, today }: Props) {
+  const labels = useLabels();
   const [csvRows, setCsvRows] = useState<string[][] | null>(null);
   const [mode, setMode] = useState<ImportMode>('add');
   const [choices, setChoices] = useState<ImportChoices>(DEFAULT_CHOICES);

@@ -16,8 +16,6 @@ import { todayInAppTz } from '@/lib/appDate';
 import { PageHeader } from '../../../_components/PageHeader';
 import { ImportWizard } from './ImportWizard';
 
-type WizardLabels = Parameters<typeof ImportWizard>[0]['labels'];
-
 type Props = { params: Promise<{ locale: string }> };
 
 export default async function ImportPage({ params }: Props) {
@@ -77,14 +75,6 @@ export default async function ImportPage({ params }: Props) {
     if (p.department_id) memberCount.set(p.department_id, (memberCount.get(p.department_id) ?? 0) + 1);
   }
 
-  const errorKeys = [
-    'missingColumn', 'required', 'badPersonnelNo', 'dupInFile', 'dupExisting', 'badDeptCode',
-    'deptNamesRequired', 'deptCodeConflict', 'unknownSupervisor', 'unknownManager', 'refNotManager',
-    'selfReference', 'cycle', 'badDate', 'badRole', 'badBalance', 'mixedSign', 'hoursTooLarge',
-    'deptManagerTie',
-  ] as const;
-  const warningKeys = ['supervisorManagerMismatch', 'deptNamesDiffer', 'deptManagerKept', 'bothSign'] as const;
-
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6">
       <PageHeader title={t('title')} />
@@ -126,52 +116,6 @@ export default async function ImportPage({ params }: Props) {
         }}
         locale={locale}
         today={todayInAppTz()}
-        labels={{
-          intro: t('intro'),
-          template: t('template'),
-          templateHint: t('templateHint'),
-          upload: t('upload'),
-          rowsValid: t('rowsValid'),
-          rowsInvalid: t('rowsInvalid'),
-          line: t('line'),
-          column: t('column'),
-          problem: t('problem'),
-          import: t('import'),
-          importing: t('importing'),
-          errorLabel: t('error'),
-          errors: Object.fromEntries(errorKeys.map((k) => [k, t(`errors.${k}`)])) as Record<
-            (typeof errorKeys)[number],
-            string
-          >,
-          warningsTitle: t('warningsTitle'),
-          // Raw: the wizard fills {placeholders} per row.
-          warnings: Object.fromEntries(warningKeys.map((k) => [k, t.raw(`warnings.${k}`) as string])) as Record<
-            (typeof warningKeys)[number],
-            string
-          >,
-          balanceDate: t('balanceDate'),
-          balanceDateHint: t('balanceDateHint'),
-          balancesSkipped: t('balancesSkipped'),
-          balanceDateFuture: t('balanceDateFuture'),
-          accrualStarts: t.raw('accrualStarts') as string,
-          departmentsTitle: t('departmentsTitle'),
-          departmentsHint: t('departmentsHint'),
-          deptCode: t('deptCode'),
-          deptName: t('deptName'),
-          deptManager: t('deptManager'),
-          deptStatus: t('deptStatus'),
-          deptNew: t('deptNew'),
-          deptNewGenerated: t('deptNewGenerated'),
-          deptExisting: t('deptExisting'),
-          deptKept: t('deptKept'),
-          noManager: t('noManager'),
-          ackDepartments: t('ackDepartments'),
-          deptRenamed: t('deptRenamed'),
-          deptManagerChanged: t('deptManagerChanged'),
-          // Raw: templates with {placeholders} are filled in the wizard.
-          modes: t.raw('modes') as WizardLabels['modes'],
-          plan: t.raw('plan') as WizardLabels['plan'],
-        }}
       />
     </main>
   );
