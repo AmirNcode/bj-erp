@@ -77,6 +77,7 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
       const res = await action(id);
       if (res.ok) {
         toast.success(successMsg);
+        if (res.warning) toast.warning(res.warning);
         // Re-fetch server data so badges/counts elsewhere reflect the decision.
         router.refresh();
       } else {
@@ -212,6 +213,7 @@ export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) 
                           perDiemNatural: req.per_diem_natural,
                           perDiemOverride: req.per_diem_override,
                           steps: req.decision_steps,
+                          travel: req.travel,
                         }}
                         onApprove={(signatureData, signatureAuthorized, extras) =>
                           decide(req.id, labels.approveSuccess, (id) =>

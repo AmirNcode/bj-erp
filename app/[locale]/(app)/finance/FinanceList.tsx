@@ -19,6 +19,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { tripTotal } from '@/lib/travel/totals';
 
 type Props = {
   rows: FinanceRow[];
@@ -43,6 +44,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
   const t = useTranslations('finance');
   const tLeave = useTranslations('leave');
   const tReports = useTranslations('reports');
+  const tTravel = useTranslations('travel');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [kind, setKind] = useState<KindFilter>('all');
@@ -67,6 +69,12 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
 
   const shown = useMemo(() => (kind === 'all' ? rows : rows.filter((r) => r.kind === kind)), [rows, kind]);
   const totalPerDiem = shown.reduce((sum, r) => sum + (r.per_diem_rials ?? 0), 0);
+  // FR-70: per diem + ticket + hotel, or what a cancelled trip lost.
+  const grandTotal = shown.reduce((sum, r) => sum + tripTotal(r), 0);
+  const transportName = (r: FinanceRow) =>
+    r.transport === 'flight' || r.transport === 'company_car' ? tTravel(`transportOptions.${r.transport}`) : '';
+  const amount = (v: number | null) => (v === null ? '—' : formatRials(v, locale));
+  const plain = (v: number | null) => (v === null ? '' : String(v));
 
   const typeName = (r: FinanceRow) =>
     r.kind === 'errand'
@@ -103,6 +111,12 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       t('csv.location'),
       t('csv.perDiem'),
       t('csv.perDiemBy'),
+      t('csv.transport'),
+      t('csv.flightCost'),
+      t('csv.hotelCost'),
+      t('csv.lost'),
+      t('csv.total'),
+      t('csv.status'),
     ];
     const body = shown.map((r) => [
       formatSerial(r.serial_year, r.serial_seq),
@@ -120,6 +134,12 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       r.errand_location ?? '',
       r.per_diem_rials === null ? '' : String(r.per_diem_rials),
       r.per_diem_rials === null ? '' : r.per_diem_by_requester ? t('csv.perDiemByRequester') : t('csv.perDiemByHr'),
+      transportName(r),
+      plain(r.flight_cost_rials),
+      plain(r.hotel_cost_rials),
+      plain(r.lost_rials),
+      String(tripTotal(r)),
+      r.status === 'cancelled' ? t('cancelled') : t('approved'),
     ]);
     const csv = buildCsv([header, ...body].map((row) => row.map(safeCell)));
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -187,7 +207,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card className="gap-1 px-4 py-3">
           <span className="text-xs text-muted-foreground">{t('count')}</span>
           <span className="text-xl font-semibold tabular-nums" data-testid="finance-count">
@@ -200,13 +220,19 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
             {formatRials(totalPerDiem, locale)} <span className="text-sm font-normal">{t('rials')}</span>
           </span>
         </Card>
+        <Card className="gap-1 px-4 py-3">
+          <span className="text-xs text-muted-foreground">{t('grandTotal')}</span>
+          <span className="text-xl font-semibold tabular-nums" data-testid="finance-grand-total">
+            {formatRials(grandTotal, locale)} <span className="text-sm font-normal">{t('rials')}</span>
+          </span>
+        </Card>
       </div>
 
       {shown.length === 0 ? (
         <EmptyState message={t('empty')} />
       ) : (
         <Card className="overflow-x-auto p-0">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
               <tr className="text-start">
                 <th className="px-3 py-2 text-start font-medium">{t('trackingNo')}</th>
@@ -216,6 +242,11 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                 <th className="px-3 py-2 text-start font-medium">{t('duration')}</th>
                 <th className="px-3 py-2 text-start font-medium">{t('location')}</th>
                 <th className="px-3 py-2 text-end font-medium">{t('perDiem')}</th>
+                <th className="px-3 py-2 text-start font-medium">{t('transport')}</th>
+                <th className="px-3 py-2 text-end font-medium">{t('flightCost')}</th>
+                <th className="px-3 py-2 text-end font-medium">{t('hotelCost')}</th>
+                <th className="px-3 py-2 text-end font-medium">{t('lost')}</th>
+                <th className="px-3 py-2 text-end font-medium">{t('total')}</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -229,7 +260,14 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                       {dept(r)}
                     </div>
                   </td>
-                  <td className="px-3 py-2">{typeName(r)}</td>
+                  <td className="px-3 py-2">
+                    {typeName(r)}
+                    {r.status === 'cancelled' && (
+                      <div className="mt-0.5 inline-block rounded bg-destructive/10 px-1.5 text-xs text-destructive" data-testid={`finance-cancelled-${r.id}`}>
+                        {t('cancelled')}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-3 py-2 tabular-nums">{dates(r)}</td>
                   <td className="px-3 py-2">
                     {formatDuration(r.requested_minutes, hoursPerDay, locale, durationLabels)}
@@ -247,6 +285,13 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                         {t('perDiemByRequester')}
                       </div>
                     )}
+                  </td>
+                  <td className="px-3 py-2">{transportName(r) || '—'}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.flight_cost_rials)}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.hotel_cost_rials)}</td>
+                  <td className="px-3 py-2 text-end tabular-nums">{amount(r.lost_rials)}</td>
+                  <td className="px-3 py-2 text-end font-medium tabular-nums" data-testid={`finance-row-total-${r.id}`}>
+                    {formatRials(tripTotal(r), locale)}
                   </td>
                 </tr>
               ))}

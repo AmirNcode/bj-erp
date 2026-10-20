@@ -15,6 +15,7 @@ import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getReviewRequests } from '@/lib/actions/leave/review';
+import { getTravelTicks } from '@/lib/actions/travel';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { PageHeader } from '../../_components/PageHeader';
@@ -28,9 +29,10 @@ async function ReviewData({ locale }: { locale: string }) {
   const tLeave = await getTranslations('leave');
   const tErrand = await getTranslations('errand');
 
-  const [result, settingsResult] = await Promise.all([
+  const [result, settingsResult, travelTicks] = await Promise.all([
     getReviewRequests(),
     getWorkSettings(),
+    getTravelTicks(),
   ]);
 
   if (!result.ok) {
@@ -50,6 +52,7 @@ async function ReviewData({ locale }: { locale: string }) {
       requests={result.requests}
       locale={locale}
       hoursPerDay={hoursPerDay}
+      travelTicks={travelTicks}
       labels={{
         search: t('search'),
         searchPlaceholder: t('searchPlaceholder'),

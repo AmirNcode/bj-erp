@@ -63,6 +63,7 @@ export default async function AppLayout({ children, params }: Props) {
     reports: t('reports'),
     absences: t('absences'),
     finance: t('finance'),
+    procurement: t('procurement'),
     settings: t('settings'),
     language: t('language'),
     langFa: tProfile('langFa'),

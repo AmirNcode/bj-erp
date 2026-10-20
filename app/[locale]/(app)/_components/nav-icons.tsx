@@ -5,6 +5,7 @@ import {
   CircleCheck,
   DoorOpen,
   Network,
+  Plane,
   Settings,
   Users,
   Workflow,
@@ -78,6 +79,12 @@ export const NAV_ICONS: Record<TabKey, React.ReactNode> = {
       <path d="M6 10v4M18 10v4" />
     </Svg>
   ),
+  // FR-70: a plane — travel booking.
+  procurement: (
+    <Svg>
+      <path d="M2.5 13.5l7-2.5 5.5-6.5a1.6 1.6 0 0 1 2.3 2.3L10.8 12.3l-2.5 7-1.8-1.8.9-4.1-4.1.9z" />
+    </Svg>
+  ),
   manage: (
     <Svg>
       <rect x="4" y="4" width="7" height="7" rx="1" />
@@ -100,5 +107,6 @@ export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
   reports: <ChartNoAxesColumn {...itemIcon} />,
   absences: <DoorOpen {...itemIcon} />,
   finance: <Banknote {...itemIcon} />,
+  procurement: <Plane {...itemIcon} />,
   settings: <Settings {...itemIcon} />,
 };

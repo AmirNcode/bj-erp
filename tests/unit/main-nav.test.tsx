@@ -40,6 +40,7 @@ const labels = {
   reports: 'گزارش‌ها',
   absences: 'غایبین',
   finance: 'امور مالی',
+  procurement: 'تدارکات',
   settings: 'تنظیمات',
   language: 'زبان',
   langFa: 'فارسی',

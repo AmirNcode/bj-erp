@@ -92,6 +92,7 @@ describe('AppShell side panel', () => {
     reports: 'Reports',
     absences: 'Absences',
     finance: 'Finance',
+    procurement: 'Procurement',
     settings: 'Settings',
     language: 'Language',
     langFa: 'فارسی',

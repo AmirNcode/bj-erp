@@ -8,6 +8,7 @@ import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatRials } from '@/lib/leave/perDiem';
+import type { Transport } from '@/lib/actions/travel';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { StatusBadge } from '@/components/StatusBadge';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
@@ -52,6 +53,8 @@ type Props = {
   hoursPerDay: number;
   /** Open with every request shown (`?all=1`, e.g. from the outcome banner). */
   showAll?: boolean;
+  /** FR-70: procurement's transport and note on the caller's booked trips. */
+  travelBookings?: Record<string, { transport: Transport | null; note: string | null }>;
 };
 
 export function MyRequestsList({
@@ -60,8 +63,10 @@ export function MyRequestsList({
   locale,
   hoursPerDay,
   showAll = false,
+  travelBookings = {},
 }: Props) {
   const t = useTranslations('request');
+  const tTravel = useTranslations('travel');
   const tErrand = useTranslations('errand');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
@@ -143,6 +148,14 @@ export function MyRequestsList({
                       <div className="text-xs text-muted-foreground mt-0.5" data-testid={`per-diem-${req.id}`}>
                         {tErrand('perDiem')}: {formatRials(req.per_diem_rials, locale)}
                         {req.per_diem_by_requester && <> · {tErrand('perDiemByRequester')}</>}
+                      </div>
+                    )}
+                    {travelBookings[req.id] && (
+                      <div className="mt-1 rounded-md bg-secondary px-2 py-1 text-xs" data-testid={`travel-note-${req.id}`}>
+                        {travelBookings[req.id].transport && (
+                          <div>{tTravel('myTransport')}: {tTravel(`transportOptions.${travelBookings[req.id].transport}`)}</div>
+                        )}
+                        {travelBookings[req.id].note && <div>{tTravel('myNote')}: {travelBookings[req.id].note}</div>}
                       </div>
                     )}
                     {/* Date range */}
