@@ -49,6 +49,12 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **FR-70 travel booking (procurement → finance):** built on branch `codex/travel-booking`
+  (uncommitted), migrations `20261020120000`–`…06` applied only to the scratch DB `bj_travel`.
+  Open: **confirm the traveller field list with procurement** (placeholder: full name, national ID,
+  birth date, mobile, gender — `private.travel_traveller_fields()` + `lib/travel/fields.ts`); manual
+  walk-through on a stack pointed at `bj_travel`; owner review, commit, PR.
+
 - ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
   under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
   holders select their own). Eligible delegates: active managers/approvers. Leave replacement becomes

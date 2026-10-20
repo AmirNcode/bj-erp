@@ -359,6 +359,22 @@ Validation/release status stays in `docs/TASKS.md`.
   `approval_bounds`). Display only. The approval coverage box shows only to approvers, the CEO and the
   CEO's delegate. *(2026-10-20.)*
 
+- **FR-70** ☐ **Travel booking for out-of-town work errands (procurement → finance).** HR (an hr role
+  holder or the admin, never on their own request) ticks «نیاز به رزرو سفر» on a daily work errand at
+  its HR step, or after approval until the trip ends (Head of HR's exempt trips, admin override);
+  missing traveller details (placeholder: full name, national ID, birth date, mobile, gender) are
+  warned about, not required. Once the whole chain approves, the trip reaches procurement — a new
+  Yes/No `travel_booking` permission and a Procurement preset — on `/procurement`: the traveller's
+  details read live (only while the booking is open; never own trips), transport (flight / company
+  car), ticket and hotel cost (whole Rials), and a note the traveller sees on My Requests (no costs).
+  Booking is fulfilment, not an approval step. The direct manager extends an approved trip (new end
+  date + required reason); HR alone approves (signed, may change per diem) or rejects; the end date
+  moves, the booking returns to procurement, the print form keeps the signed date plus "extended to".
+  The Head of HR's own extension is exempt and keeps its per diem. HR (or the requester) cancels;
+  every opened booking returns to procurement to record the amount lost (0 allowed). `/finance` shows
+  a travel trip only once booked (per diem + ticket + hotel + total) or settled (amount lost only).
+  *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; unreleased.)*
+
 ### Unreleased approval delegation amendment
 
 - ◐ **Saved and temporary approval delegates.** `approval_delegate` lets natural approvers manage

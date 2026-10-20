@@ -78,6 +78,48 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-20 — Travel booking (procurement → finance) design draft
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** `codex/per-diem-wording` @ `ec52114` (other agents' uncommitted work in tree, untouched)
+**Trigger:** HR wants out-of-town errands routed to procurement (flight/hotel) and then finance; flesh the idea out before any code.
+
+- Drafted HR questions, then mapped HR/administration's answers and the owner's decisions into
+  `docs/specs/2026-10-20-travel-booking-design.md` (FR-70 placeholder). Key decisions: HR ticks
+  «نیاز به رزرو سفر» on daily errands; booking is fulfilment after approval, not an approval step;
+  new `travel_booking` catalog item + Procurement preset; live personal info (5-field placeholder);
+  manager-initiated extension edits end date, HR alone re-approves; cancellation always returns to
+  procurement for the amount lost, which alone shows on `/finance`.
+- Builder-check subagent raised six questions; five folded in as marked "my call" items
+  (no `can_act_on`, no self-booking, booking opens at chain end, original end date kept, delegation
+  not extended). Owner then settled the Head of HR's own extension: exempt, no signature, per diem unchanged.
+  Only open item: personal-info field list, pending procurement.
+- Owner approved the spec; wrote `docs/plans/2026-10-20-travel-booking.md` (7 tasks, 6 migrations
+  `20261020120000`–`…06`, one `tests/sql/travel-booking.sql`). Design calls made in the plan:
+  booking state derived from request status + timestamps; HR's tick saved by a separate RPC right
+  after approval; pending-extension days conflict-checked at request and again at HR approval (not
+  in `submit_leave_impl`). Added a coordination section for the parallel `docs/REFACTOR_PLAN.md` work
+  (R-03/05/06/07/09/10/12) after the owner said another agent is refactoring.
+- Owner chose inline execution. Built FR-70 in worktree `.claude/worktrees/travel-booking`, branch
+  `codex/travel-booking` from `ec52114` (spec + plan moved there; main checkout's copies removed and its
+  AGENT-LOG hunk reverted). Six migrations `20261020120000`–`…06`; `tests/sql/travel-booking.sql`
+  (143 assertions); 13 new unit test files. Ledger with every ruling:
+  `.superpowers/sdd/2026-10-20-travel-booking/progress.md` (git-ignored).
+- **Out-of-repo DB action:** created scratch database `bj_travel` inside container `bj-erp-db-1`
+  (`pg_dump -Fc postgres | pg_restore`, only pg_cron/graphql objects failed) and applied the six
+  migrations there by `psql` as `supabase_admin`. The shared `postgres` DB (real roster) was NOT
+  touched; `bj-deploy update local` NOT run; Liara untouched. `schema.sql` dumped from `bj_travel`
+  (pg_dump reorders a few GRANT lines — noise). Drop `bj_travel` when done: `dropdb -U supabase_admin bj_travel`.
+- Verified: all 8 `tests/sql/*.sql` scenarios 939 PASS / 0 FAIL on `bj_travel` (updated 5 count checks in
+  `fr55-roles-permissions.sql`: 7 roles, 21 keys); `npm run test:unit` 941 passed / 5 skipped; `tsc` 0;
+  `npm run lint` 0; `npm run build` ok. NOT done: manual browser walk-through (no app stack on `bj_travel`).
+- Final review (fresh reviewer): 0 critical, 5 important — all fixed in migration `20261020120006`
+  + UI (HR delegates act as HR; failed post-approval tick is a warning; manager sees delegation warning;
+  traveller note survives re-booking; company-car cost trap). Also added `notify pgrst, 'reload schema'`
+  (the release recreates only `app`). 9 minors deferred (listed in the ledger). After fixes: SQL 950/950,
+  unit 943 passed, tsc/lint/build ok.
+- Nothing committed (CLAUDE.md). Traveller field list is still the placeholder pending procurement.
+
 ## 2026-10-19 — Roles-page wording and Farsi per diem term
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

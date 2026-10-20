@@ -527,6 +527,27 @@ RPC payloads and authorization: `docs/plans/approval-delegation-rpc-contract.md`
 credentials or sessions can impersonate a principal/delegate, and password resets do not revoke
 existing sessions. This is recorded residual risk, not an added activation gate; resets stay admin-only.
 
+### Travel booking (2026-10-20, FR-70, unreleased)
+Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies**, RPCs only.
+- **`travel_bookings`** — one per request, created when HR ticks «نیاز به رزرو سفر» (daily errands only):
+  `request_id` PK → leave_requests (cascade) · `company_id` · `ticked_by/at` · `opened_at` (set when the
+  request is or becomes approved, trigger `travel_booking_open`) · `transport` (`flight|company_car`) ·
+  `flight_cost_rials`, `hotel_cost_rials`, `lost_rials` (bigint ≥ 0) · `traveller_note`, `lost_note`
+  (≤ 500) · `first_saved_at` (untick refused once set) · `done_by/at` · `first_done_at` (trigger; the traveller's note stays visible through re-bookings) · `settled_by/at` · `updated_at`.
+- **`errand_extensions`** — `request_id` · `old_end_date` (the originally signed end) · `new_end_date`
+  (> old) · `reason` (1–1000) · `requested_by/at` · `status` (`pending|approved|rejected|cancelled`; at
+  most one pending per request) · `evidence` (`manual|exempt`) · `decided_by/at` · `signature_data`,
+  `signature_consent_at` · `decision_note` · `per_diem_before/after`. Approval sets
+  `leave_requests.end_date` and recomputes `requested_minutes`, and clears `travel_bookings.done_at`.
+- **State** (`private.travel_booking_state(status, booking)`): `awaiting_approval` (pending, or not
+  opened) · `to_book` · `extension` (approved extension, not re-booked) · `done` · `cancel_undo`
+  (cancelled after opening, not settled) · `settled` · `hidden` (rejected, or cancelled before opening).
+- **Traveller fields**: `private.travel_traveller_fields()` (placeholder list, mirrored by
+  `lib/travel/fields.ts`); read live from `profiles.full_name` + `employee_personal_info`.
+- **Finance**: `finance_approved_requests` gains `status, travel_state, transport, flight_cost_rials,
+  hotel_cost_rials, lost_rials`; travel trips only when `done` (approved) or `settled` (cancelled, per
+  diem and costs null). `team_leave_calendar` adds a pending row for a pending extension's extra days.
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`

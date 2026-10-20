@@ -9,6 +9,19 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, not committed or deployed)
+
+Migrations `20261020120000`–`20261020120006`.
+- HR ticks «نیاز به رزرو سفر» on a daily work errand when approving (or later on the Requests page),
+  with a warning when the traveller's details are missing.
+- New Procurement preset and «رزرو سفر» permission; `/procurement` lists approved trips to book, with
+  the traveller's details live; procurement records transport, ticket and hotel cost and a note the
+  traveller sees on My Requests.
+- Managers extend a trip (new end date + reason) from Approvals; HR approves (signed) or rejects;
+  procurement updates the booking. The print form shows the signed end date and "extended to".
+- HR can cancel travel trips; procurement records the amount lost.
+- `/finance` adds transport, ticket, hotel, lost and total columns (and CSV), and a total-cost card.
+
 ### Wording — branch `codex/per-diem-wording` (not committed or deployed)
 
 - Settings › Roles: shorter delegate and CEO / Head of HR descriptions (Farsi and English).

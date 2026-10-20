@@ -488,6 +488,7 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | | `absences` | R | `people`, `leave_requests` |
 | | `reports` | R | `people`, `leave_balances`, `leave_requests` |
 | Finance | `finance` | R | — |
+| Procurement | `travel_booking` | E (Yes/No) | — |
 | Approval chain | `approval_steps` | R/E | `people` |
 | | `approval_delegate` (unreleased) | E, Yes/No | — |
 | Settings | `work_settings` | R/E | — |
@@ -500,6 +501,7 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `absences`, `reports`, `finance` at read |
 | **Security** | `people`, `leave_balances`, `leave_requests`, `calendar`, `absences` at read |
 | **Finance** | `clearance`, `finance` at read |
+| **Procurement** (FR-70) | `travel_booking` at edit |
 
 `personal_info_own`, `role_assign` and unreleased `approval_delegate` are on no preset. The released
 catalog has 19 items; delegation adds the twentieth. `passwords` was
@@ -564,6 +566,7 @@ their holders.
 |---|---|
 | Employees / Departments / Request archive / Approval steps / Reports pages | `manager` or `people` read · `departments` read · `leave_requests` read · `approval_steps` read · `reports` read |
 | Finance page | `finance` read (a Manage item for callers who already have the Manage group, else a bottom tab) |
+| Procurement page (FR-70) | `travel_booking` edit (same tab/Manage rule as Finance) |
 | Settings | admin, or `work_settings` read, or `holidays` read; unreleased delegate holders also reach their own Roles-tab panel, while role authoring stays admin-only |
 | `app_list_roles()` | any active member (the employee forms render the role boxes) |
 | `app_role_holders`, `app_save_role`, `app_delete_role`, `app_transfer_admin` | admin only |
@@ -715,3 +718,22 @@ because the client's own BJ-F 50210 / 50208 / 50207 forms already carry an
 actual signature evidence. The unreleased app calls the guarded `_v2` exact-step RPC; automatic
 CEO decisions happen only inside submission (private path, immutable authority evidence), not
 through an unsigned browser approval endpoint.
+
+## Travel booking (FR-70, 2026-10-20, unreleased)
+
+- `travel_bookings` and `errand_extensions`: RLS enabled, **no policies**, all client privileges revoked.
+- **Tick / untick / cancel a travel trip / decide extensions** — `private.is_travel_hr(uid, request)`:
+  active, same company, not the requester, and admin, an `hr` role holder, or the current effective
+  approval delegate of an active `hr` holder (`private.acts_as_travel_hr`, migration 06). Cancelling goes through
+  `cancel_leave_request`, which admits this branch only when the request has a `travel_bookings` row
+  (HR still cannot cancel other requests: the hr preset holds `leave_requests` at read).
+- **Book / settle / read traveller details** — `private.is_procurement(uid, request)`: active, same
+  company, not the requester, and admin or `travel_booking` edit. **Deliberately no
+  `private.can_act_on`**: procurement must book for the CEO, the Head of HR or the admin. No
+  self-booking: own trips are excluded from the list and refused by every booking RPC.
+- Traveller details (only `travel_traveller_fields()`) are returned only while the booking is open
+  (`to_book`, `extension`, `cancel_undo`, or `done` before the trip ends).
+- **Request an extension** — the requester's direct manager (`profiles.manager_id`) or the admin, never
+  the requester. Extension history: `request_errand_extensions(id)` behind
+  `private.can_read_approval_request`.
+- The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).
