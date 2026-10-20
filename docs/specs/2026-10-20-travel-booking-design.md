@@ -1,7 +1,7 @@
 # Travel booking for out-of-town work errands (procurement → finance)
 
 Status: design draft 2026-10-20, from HR/administration's description of today's paper process
-and the owner's decisions in chat; builder check done. **Approved by owner 2026-10-20.** Implemented on branch `codex/travel-booking` (uncommitted, 2026-10-20).
+and the owner's decisions in chat; builder check done. **Approved by owner 2026-10-20.** Implemented on branch `codex/travel-booking` (PR #10); owner review amendments in §11.
 Plan: `docs/plans/2026-10-20-travel-booking.md`. Traveller field list stays a placeholder until procurement confirms.
 Requirement number when it lands: **FR-70** (placeholder).
 
@@ -129,7 +129,8 @@ the costs. *(My call.)*
 
 ## 6. Extension
 
-1. The **direct manager** (or admin) opens an approved, travel-booked trip that has not ended and
+1. The **direct manager** (or admin) — or, on their **own** trip, a holder of the built-in Manager
+   role (*amended 2026-10-20, §11*) — opens an approved, travel-booked trip that has not ended and
    chooses **Extend trip / تمدید ماموریت**: a new end date, later than the current one, and a
    **required reason**. Only one pending extension at a time.
 2. The extra days are conflict-checked against the traveller's leave and errands, as for a new
@@ -170,6 +171,9 @@ the costs. *(My call.)*
 
 ## 8. Finance (`/finance`, FR-62)
 
+> **Superseded in part by §11 (owner review, 2026-10-20):** approved travel trips show at once, and
+> `/finance` also lists pending requests. The text below is the original design.
+
 - Today `finance_approved_requests(from, to)` returns `status = 'approved'` rows overlapping the
   range. Change:
   - A travel-booked trip appears **only once its booking is done** (HR: "last step, summary sent to
@@ -204,3 +208,24 @@ the costs. *(My call.)*
 - **Personal-info field list** (§5) — owner is confirming with procurement. Airlines may also need
   father's name or birth certificate number; both already exist in `employee_personal_info`.
   Anything not there (e.g. passport number) would add a column, HR editing and CSV-import changes.
+
+## 11. Owner review amendments (2026-10-20, PR #10)
+
+- **Finance sees pending and approved (FR-62/FR-70).** `/finance` lists every request in the range,
+  leave and errands, in two sections: **Fully approved** and **Pending approval**, each with its own
+  count and totals; the headline totals count approved only. A pending row shows the step it waits on
+  as a label only (Direct manager, HR, …): no approver names, signatures or reason. An approved
+  travel-booked trip shows as soon as it is approved, booked or not; costs not yet recorded show "—"
+  with a **booking not finished** marker (costs procurement already saved show and count). Cancelled
+  trips keep the rule above: shown once settled, amount lost only, under Fully approved. The CSV covers
+  both sections with a status column (and the step waited on). New `finance_requests(from, to)`
+  (migration `20261020120007`); `finance_approved_requests` stays unchanged for the old app during a
+  release.
+- **Manager's own trip.** A holder of the built-in Manager role may request an extension of their own
+  approved, travel-booked trip (migration `20261020120008`). HR still decides; the Head of HR's exempt
+  path is unchanged, and their own HR-exempt trip is excluded even if they hold the Manager role (it
+  would approve itself; migration `…09`); the manager's direct reports never can. After a rejection, a new extension may be
+  sent (one pending at a time).
+- **Reject extension** asks for confirmation, like approve.
+- Deferred (see `docs/TASKS.md`): an hr holder's delegate acting on that hr holder's own trip; the
+  unlocked status read in `app_set_travel_booking`; HR approving an extension after the trip ended.

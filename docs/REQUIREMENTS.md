@@ -316,7 +316,11 @@ Validation/release status stays in `docs/TASKS.md`.
   entered when an hr step of an errand is signed. *(2026-10-12.)*
 - **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
-  *(2026-10-12.)*
+  *(2026-10-12.)* **Amended 2026-10-20 (owner review of FR-70):** leave and errands in two sections,
+  "Fully approved" and "Pending approval", each with its own totals; the headline totals count approved
+  only. A pending row shows the step it waits on as a label (Direct manager, HR, …), never approver
+  names, signatures or the reason. The CSV covers both, with a status column. Via `finance_requests()`
+  (unreleased).
 
 - **FR-63** ☑ **Own personal information is view only.** Users see theirs on Profile but cannot
   change it; hr and admin edit other people's (hr never an admin's). Editing one's own needs
@@ -372,8 +376,10 @@ Validation/release status stays in `docs/TASKS.md`.
   moves, the booking returns to procurement, the print form keeps the signed date plus "extended to".
   The Head of HR's own extension is exempt and keeps its per diem. HR (or the requester) cancels;
   every opened booking returns to procurement to record the amount lost (0 allowed). `/finance` shows
-  a travel trip only once booked (per diem + ticket + hotel + total) or settled (amount lost only).
-  *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; unreleased.)*
+  an approved travel trip at once (per diem + ticket + hotel + total; costs not yet recorded show "—"
+  with a "booking not finished" marker) and a cancelled one once settled (amount lost only).
+  A Manager-role holder may also ask to extend their own trip; HR decides.
+  *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; owner review 2026-10-20; unreleased.)*
 
 ### Unreleased approval delegation amendment
 

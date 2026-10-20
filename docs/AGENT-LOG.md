@@ -78,6 +78,66 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-20 — PR #10: merge main, owner review changes (finance pending, manager extension, fixes)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/travel-booking` @ `ad8cf49` (+ one uncommitted AGENT-LOG entry), worktree `.claude/worktrees/travel-booking`.
+**Trigger:** Owner brief: merge `main` (PR #9) into the branch, then make the PR #10 review changes; ask before pushing.
+
+**What changed**
+- `e27fa74` committed the previous session's log entry alone. `e19b3e4` merged `origin/main`: exactly the 9
+  expected conflicts, resolved as briefed (main's side for `(app)/layout.tsx` and the two nav tests; requests
+  page keeps `getTravelTicks()`/`travelTicks`; `RequestsReview` keeps `useLabels()` + `travelTicks` + `today`;
+  `approvals.ts` takes `perDiemProblem`/`signatureProblem` + `TravellerField`, `DecisionResult = { ok: true;
+  warning?: string } | DbErrorResult`; `progress.ts` `DbErrorResult` + `extensions`; docs keep both sides).
+  Only extra fix: `tests/unit/my-travel-note.test.tsx`, `requests-review-travel.test.tsx` dropped `labels` props
+  (tsc). Nav reads «تدارکات» via `nav.procurement` (`MainNav` `t(item.key)`); `manage/page.tsx` map already had it.
+- `b0d9446` finance: migration `20261020120007_finance_requests.sql` adds `public.finance_requests(from,to)`
+  (`has_perm finance read`): approved (any `travel_state`; costs as recorded), pending (+ `waiting_step`, first
+  open step's label: same filter as `app_request_approval_progress`, label as `progressLabel`), settled
+  cancelled trips. `finance_approved_requests` untouched. `lib/actions/finance.ts` calls it; `FinanceList.tsx`
+  two sections ("Fully approved" incl. settled cancellations / "Pending approval"), each with count / per diem
+  / total; "Waiting on: <step>" badge; "Booking not finished" marker; CSV = both sections, status column
+  (+ "Waiting on" column). `types.ts` hand-added `finance_requests`. Finance title/empty/permission text updated.
+  Call made: costs procurement saved on an unfinished booking show and count in the approved total.
+- `1d64388` `/manage/requests`: `viewerId` from the page; no travel switch / Cancel trip on own rows.
+- `97a3ceb` `Intl.ListFormat(locale, { type: 'conjunction' })` in `DecisionDialogs.tsx` and `TravelTickToggle.tsx`
+  (API checked in Context7 `/mdn/content`).
+- `d0b85c7` Reject extension confirm dialog (`ExtensionDecisionCard.tsx`, new `travel.extension.rejectTitle/
+  rejectBody`); migration `20261020120008_manager_own_trip_extension.sql`: own trip allowed for
+  `private.has_role(uid,'manager')` in `app_request_errand_extension` + `app_extendable_trips`.
+- `70e1e17` `travel.homeWaiting` ICU plural (fa `other` only, like `rolesAdmin.holders`); raw count in `TravelBookingCard`.
+- `ada98c3` **Security fix found by the automated review of `…08`:** a Head of HR holding Manager could
+  self-request an extension on their own HR-exempt trip, which auto-approves (nobody else involved). Migration
+  `20261020120009_own_extension_not_hr_exempt.sql` adds `private.request_has_hr_exemption(request)` and
+  excludes HR-exempt trips from the own-trip branch; their manager/admin still extends on the exempt path.
+  Proved: suite without `…09` fails at that case ("expected 42501, got ok").
+- Docs: `PERMISSIONS.md`, `DATA_MODEL.md`, `REQUIREMENTS.md` (FR-62 amended, FR-70), spec §6/§8 + new §11,
+  `TASKS.md` (the three deferred items: delegate on hr holder's own trip, unlocked status read in
+  `app_set_travel_booking`, extension approval after trip end), `CHANGELOG.md`.
+
+**Actions outside the repo**
+- Scratch DB `bj_travel` only (container `bj-erp-db-1`, `psql` as `supabase_admin`): dry-ran each new migration +
+  `tests/sql/travel-booking.sql` inside `begin … rollback`, then applied `…07`, `…08`, `…09` by `psql -1`
+  (no `bj_deploy.schema_migrations` rows, same as `…00`–`…06`). `schema.sql` dumped with `pg_dump -d bj_travel`.
+  Shared `postgres` DB, `bj-deploy`, Liara: untouched. Nothing pushed.
+
+**Verification**
+- After merge: tsc 0, lint 0, unit 941 passed / 5 skipped, build ok. `git merge-tree origin/main HEAD`: no conflicts.
+- Final: `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 99 files, 954 passed / 5 skipped ·
+  `npm run build` ok · `tests/sql/*.sql` on `bj_travel`: 8 suites, 991 PASS / 0 FAIL (travel-booking 195).
+- fa/en keys 1554 each; placeholder differences only the 3 pre-existing plural keys.
+- NOT done: browser walk-through (no app stack points at `bj_travel`); `test:deploy` not run (no deploy files).
+
+**State left behind**
+- 8 local commits on `codex/travel-booking` (plus this docs commit), **not pushed**; waiting for the owner.
+- `bj_travel` now has `…00`–`…09`.
+
+**For the next agent**
+- `…07`–`…09` are frozen (applied to `bj_travel`). Fix forward with `…10`+.
+- In `tests/sql/travel-booking.sql`, sections after "owner review" change fixtures (mgr2 → mgr, proc2 → mgr2,
+  head gains Manager); add new sections after them or re-check.
+
 ## 2026-10-20 — Travel booking committed, PR #10 opened and reviewed
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop), side session started by the PR #9 session

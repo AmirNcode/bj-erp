@@ -15,7 +15,7 @@ test database). They do not claim production release.
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar, and the approved-absences board (`/absences`, FR-56). **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
-| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only. *(FR-54; added 2026-10-07.)* |
+| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only; since 2026-10-20 (owner review of FR-70) also pending requests, through `finance_requests()`. *(FR-54; added 2026-10-07.)* |
 | **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
 | **Custom roles** (FR-55) | Created by the admin in Settings › Roles: an English name and a level per catalog item (Allowed / Read only / Not allowed). Assignable like any role; see *Configurable roles (FR-55)* below. Not approval-step roles (`approval_steps.role` stays on the `app_role` enum). |
 
@@ -255,7 +255,11 @@ information").
   `approval_order_enforced` without `approval_steps` edit.
 - `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
   `finance` read (alias `finance.view`); caller's company; approved rows only; no signatures, no
-  reason.
+  reason. Kept unchanged for the previous app during a release; the app now calls:
+- `public.finance_requests(from, to)` (migration `20261020120007`): SECURITY DEFINER, active caller with
+  `finance` read (`private.has_perm`); caller's company; approved and **pending** rows, plus settled
+  cancelled travel trips. A pending row carries only `waiting_step`, the label of the first open step
+  (`manager`, `departmentManager`, `hr`, …): no approver or signer names, no signatures, no reason.
 - The approved-absences board (`getAbsences`) needs `absences` read; rows come through
   `leave_requests_select`, hence the dependency on `people` and `leave_requests`.
 
@@ -733,7 +737,10 @@ through an unsigned browser approval endpoint.
   self-booking: own trips are excluded from the list and refused by every booking RPC.
 - Traveller details (only `travel_traveller_fields()`) are returned only while the booking is open
   (`to_book`, `extension`, `cancel_undo`, or `done` before the trip ends).
-- **Request an extension** — the requester's direct manager (`profiles.manager_id`) or the admin, never
-  the requester. Extension history: `request_errand_extensions(id)` behind
+- **Request an extension** — the requester's direct manager (`profiles.manager_id`) or the admin; on
+  their **own** trip only a holder of the built-in Manager role (`private.has_role(uid, 'manager')`,
+  migration `20261020120008`), and never on an HR-exempt trip (the Head of HR's own, migration `…09`:
+  it would approve itself). HR still decides it (`is_travel_hr` excludes the traveller); the Head of
+  HR's exempt path is unchanged; a manager's direct reports never extend the manager's trip. Extension history: `request_errand_extensions(id)` behind
   `private.can_read_approval_request`.
 - The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).

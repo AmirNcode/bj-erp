@@ -546,7 +546,10 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   `lib/travel/fields.ts`); read live from `profiles.full_name` + `employee_personal_info`.
 - **Finance**: `finance_approved_requests` gains `status, travel_state, transport, flight_cost_rials,
   hotel_cost_rials, lost_rials`; travel trips only when `done` (approved) or `settled` (cancelled, per
-  diem and costs null). `team_leave_calendar` adds a pending row for a pending extension's extra days.
+  diem and costs null). Kept for the old app; `/finance` reads `finance_requests` (migration `…07`):
+  same columns plus `waiting_step text` (pending rows: first open step's label, else null); every
+  approved row whatever its `travel_state` (costs as recorded so far, null = none), every pending row,
+  and settled cancelled trips. `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

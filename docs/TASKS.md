@@ -49,11 +49,21 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
-- ◐ **FR-70 travel booking (procurement → finance):** built on branch `codex/travel-booking`
-  (uncommitted), migrations `20261020120000`–`…06` applied only to the scratch DB `bj_travel`.
+- ◐ **FR-70 travel booking (procurement → finance):** [PR #10](https://github.com/AmirNcode/bj-erp/pull/10),
+  branch `codex/travel-booking`; migrations `20261020120000`–`…09` applied only to the scratch DB
+  `bj_travel`. Owner review changes done (finance pending + approved, manager's own extension, UI fixes).
   Open: **confirm the traveller field list with procurement** (placeholder: full name, national ID,
   birth date, mobile, gender — `private.travel_traveller_fields()` + `lib/travel/fields.ts`); manual
-  walk-through on a stack pointed at `bj_travel`; owner review, commit, PR.
+  walk-through on a stack pointed at `bj_travel`; merge.
+  **Deferred by the owner (2026-10-20 review), no code yet:**
+  - An hr holder's approval delegate can tick, cancel or decide extensions on that hr holder's OWN trip
+    (`private.acts_as_travel_hr` / `is_travel_hr`, migration `…06`, check only `employee_id <> delegate`).
+    Accepted for now as an HR exception to the no-delegated-self-signing rule.
+  - `app_set_travel_booking` reads the request status without a lock, so ticking at the instant of
+    final approval can leave `travel_bookings.opened_at` null for good (narrow race; the trip never
+    reaches procurement).
+  - HR can approve an extension after the trip has ended (`app_decide_errand_extension` has no end-date
+    check). Kept on purpose as a last-minute buffer; revisit with real data.
 
 - ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
   under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission

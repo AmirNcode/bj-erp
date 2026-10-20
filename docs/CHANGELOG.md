@@ -9,9 +9,9 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
-### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, not committed or deployed)
+### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, PR #10, not deployed)
 
-Migrations `20261020120000`–`20261020120006`.
+Migrations `20261020120000`–`20261020120009`.
 - HR ticks «نیاز به رزرو سفر» on a daily work errand when approving (or later on the Requests page),
   with a warning when the traveller's details are missing.
 - New Procurement preset and «رزرو سفر» permission; `/procurement` lists approved trips to book, with
@@ -21,6 +21,14 @@ Migrations `20261020120000`–`20261020120006`.
   procurement updates the booking. The print form shows the signed end date and "extended to".
 - HR can cancel travel trips; procurement records the amount lost.
 - `/finance` adds transport, ticket, hotel, lost and total columns (and CSV), and a total-cost card.
+- Owner review: `/finance` lists pending requests too, in a "Pending approval" section with its own
+  totals and the step each one waits on (label only); approved travel trips show at once, marked
+  "booking not finished" until procurement is done; the CSV covers both with a status column
+  (`finance_requests`, migration `…07`; `finance_approved_requests` kept for the old app).
+- Owner review: a Manager-role holder can ask to extend their own trip (HR decides, `…08`; not on an
+  HR-exempt trip, which would approve itself, `…09`); Reject
+  extension asks for confirmation; the travel switch and Cancel trip are hidden on the viewer's own
+  requests; missing-field lists use the locale's "and"; "1 trip waiting on procurement" is singular.
 
 ### Internal cleanup — branch `codex/refactor-cleanup` (not merged or deployed)
 
