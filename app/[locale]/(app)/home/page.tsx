@@ -28,7 +28,6 @@ import { APP_TIME_ZONE, nowInAppTz, todayInAppTz } from '@/lib/appDate';
 import { buildHomeBoard } from '@/lib/home/board';
 import { daysAgo, shortStaffedOthers } from '@/lib/home/pulse';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
@@ -68,13 +67,11 @@ function greetingKey(at: Date = new Date()) {
 
 // ── async child that owns all data fetching ────────────────────────────────
 async function HomeBoardData({ locale, userId }: { locale: string; userId: string }) {
-  const [t, tLeave, tRepl, tErrand, tApprovals, tSignature, roles, capabilities] = await Promise.all([
+  const [t, tLeave, tRepl, tErrand, roles, capabilities] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
     getTranslations('replacement'),
     getTranslations('errand'),
-    getTranslations('approvals'),
-    getTranslations('signature'),
     getCachedRoles(userId),
     getApprovalCapabilities(),
   ]);
@@ -255,49 +252,6 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
       }
     : null;
 
-  const labels = {
-    balancesTitle: t('balancesTitle'),
-    recentTitle: t('recentTitle'),
-    teamTitle: t('teamTitle'),
-    managerLabel: t('managerLabel'),
-    teammatesLabel: t('teammatesLabel'),
-    rolesLabel: t('rolesLabel'),
-    titleLabel: t('titleLabel'),
-    upcomingLabel: t('upcomingLabel'),
-    noUpcoming: t('noUpcoming'),
-    noRecent: t('noRecent'),
-    noTeam: t('noTeam'),
-    coveringTitle: tRepl('coveringTitle'),
-    coveringFor: tRepl('coveringFor'),
-    errandBadge: tErrand('badge'),
-    ...durationLabels, // provides days/hours/minutes/and
-    statusPending: tLeave('status.pending'),
-    statusApproved: tLeave('status.approved'),
-    statusRejected: tLeave('status.rejected'),
-    statusCancelled: tLeave('status.cancelled'),
-    pulsePresent: t('pulsePresent'),
-    pulseOnLeave: t('pulseOnLeave'),
-    pulseErrand: t('pulseErrand'),
-    pulsePending: t('pulsePending'),
-    nextHolidayTitle: t('nextHolidayTitle'),
-    noHoliday: t('noHoliday'),
-  };
-
-  const pendingLabels = {
-    title: t('pendingTitle'),
-    allApprovals: t('allApprovals'),
-    empty: t('noPending'),
-    approve: tApprovals('approve'),
-    reject: tApprovals('reject'),
-    approveConfirm: tApprovals('approveConfirm'),
-    rejectConfirm: tApprovals('rejectConfirm'),
-    rejectReasonLabel: tApprovals('rejectReasonLabel'),
-    rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
-    approveSuccess: tApprovals('approveSuccess'),
-    rejectSuccess: tApprovals('rejectSuccess'),
-    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
-  };
-
   return (
     <div className="flex flex-col gap-5" data-testid="home-board">
       {canApprove && <NewRequestsBanner currentIds={pending.map((r) => r.id)} />}
@@ -314,13 +268,12 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
       </div>
       <HomeBoard
         board={board}
-        labels={labels}
         locale={locale}
         hoursPerDay={hoursPerDay}
         pulse={pulse}
         pending={
           board.showApprovals
-            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount, labels: pendingLabels }
+            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount }
             : null
         }
         usage={usage}
