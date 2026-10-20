@@ -475,5 +475,37 @@ select pg_temp.expect('traveller still sees the note during re-booking',pg_temp.
 select pg_temp.expect('a never-finished draft stays hidden from the traveller',pg_temp.as_scalar('worker2',format(
   'select count(*)::text from public.my_travel_bookings() where request_id=%L',pg_temp.fx('dlg_req'))),'0');
 
+-- ============================================================ owner review: finance pending + approved (…07)
+create function pg_temp.fin2(p_actor text,p_req text) returns text language sql as $$
+  select pg_temp.as_scalar(p_actor,format(
+    'select concat_ws(''/'',status,coalesce(travel_state,''-''),coalesce(transport,''-''),coalesce(per_diem_rials::text,''-''),'
+    'coalesce(flight_cost_rials::text,''-''),coalesce(hotel_cost_rials::text,''-''),coalesce(lost_rials::text,''-''),'
+    'coalesce(waiting_step,''-'')) from public.finance_requests(''2027-03-01'',''2027-12-31'') where id=%L',pg_temp.fx(p_req)));
+$$;
+insert into tb_fx values('fr_pend',pg_temp.daily('worker','2027-04-10','2027-04-11')::uuid);
+select pg_temp.expect('finance2: pending request waits on the manager',pg_temp.fin2('admin','fr_pend'),'pending/-/-/-/-/-/-/manager');
+select pg_temp.expect('old finance function still hides pending',pg_temp.fin('fr_pend'),null);
+select pg_temp.expect('fr: manager approves',pg_temp.approve('mgr','fr_pend','mgr_step'),'ok');
+select pg_temp.expect('finance2: then waits on HR',pg_temp.fin2('admin','fr_pend'),'pending/-/-/-/-/-/-/hr');
+select pg_temp.expect('fr: hr approves with per diem',pg_temp.approve('hr','fr_pend','hr_step',false,200000),'ok');
+select pg_temp.expect('fr: hr ticks',pg_temp.err(pg_temp.as_scalar('hr',format(
+  'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('fr_pend')))),'ok');
+select pg_temp.expect('finance2: unbooked approved trip shows as approved',pg_temp.fin2('admin','fr_pend'),'approved/to_book/-/200000/-/-/-/-');
+select pg_temp.expect('old finance function still hides the unbooked trip',pg_temp.fin('fr_pend'),null);
+select pg_temp.expect('fr: procurement saves a draft',pg_temp.save('proc','fr_pend','flight',1000000,null,null,false),'ok');
+select pg_temp.expect('finance2: draft costs show before the booking is finished',pg_temp.fin2('admin','fr_pend'),'approved/to_book/flight/200000/1000000/-/-/-');
+select pg_temp.expect('finance2: trip awaiting re-booking after an extension shows',pg_temp.fin2('admin','head_req'),'approved/extension/-/500000/-/-/-/-');
+select pg_temp.expect('finance2: non-travel approved errand',pg_temp.fin2('admin','plain_req'),'approved/-/-/-/-/-/-/-');
+select pg_temp.expect('finance2: settled cancelled trip shows lost only',pg_temp.fin2('admin','w2_req'),'cancelled/settled/company_car/-/-/-/400000/-');
+select pg_temp.expect('finance2: unsettled or never-approved cancelled trip stays hidden',pg_temp.fin2('admin','pend_req'),null);
+select pg_temp.expect('finance2: employee refused',left(pg_temp.as_scalar('worker',
+  'select count(*)::text from public.finance_requests(''2027-03-01'',''2027-12-31'')'),11),'ERROR 42501');
+select pg_temp.expect('finance2: hr preset reads it',pg_temp.err(pg_temp.as_scalar('hr',
+  'select count(*)::text from public.finance_requests(''2027-03-01'',''2027-12-31'')')),'ok');
+select pg_temp.expect('finance2: range checked',left(pg_temp.as_scalar('admin',
+  'select count(*)::text from public.finance_requests(''2027-03-01'',''2026-03-01'')'),11),'ERROR 22023');
+select pg_temp.assert('anon cannot call finance_requests',
+  not has_function_privilege('anon','public.finance_requests(date,date)','EXECUTE'));
+
 -- @@ next section
 rollback;

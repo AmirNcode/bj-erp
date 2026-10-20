@@ -1902,6 +1902,40 @@ export type Database = {
           lost_rials: number | null
         }[]
       }
+      finance_requests: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          id: string
+          serial_year: number
+          serial_seq: number
+          kind: Database["public"]["Enums"]["request_kind"]
+          employee_name: string
+          personnel_no: string | null
+          department_name_fa: string | null
+          department_name_en: string | null
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          is_paid: boolean | null
+          start_date: string
+          end_date: string
+          unit: Database["public"]["Enums"]["leave_unit"]
+          start_time: string | null
+          end_time: string | null
+          requested_minutes: number
+          unpaid_minutes: number
+          errand_location: string | null
+          per_diem_rials: number | null
+          per_diem_by_requester: boolean
+          decided_at: string | null
+          status: Database["public"]["Enums"]["leave_status"]
+          travel_state: string | null
+          transport: string | null
+          flight_cost_rials: number | null
+          hotel_cost_rials: number | null
+          lost_rials: number | null
+          waiting_step: string | null
+        }[]
+      }
       app_settle_travel_booking: {
         Args: { p_request: string; p_lost: number; p_note: string }
         Returns: undefined

@@ -1,15 +1,16 @@
 'use server';
 
 /**
- * Completed approvals for finance (FR-62) — finance read (FR-55).
+ * Requests for finance (FR-62) — finance read (FR-55).
  *
- * Finance accounts for per diem and other costs once a request is fully
- * approved. Reads go through `public.finance_approved_requests`, a guarded
- * SECURITY DEFINER function (`finance.view` → finance read): finance has no RLS read on
- * `leave_requests`, and the function returns approved rows only, without
- * signatures or the private reason. FR-70: a travel-booked trip appears once
- * procurement has booked it (with ticket and hotel cost); a cancelled one once
- * procurement has recorded the amount lost (`status` = cancelled).
+ * Reads go through `public.finance_requests`, a guarded SECURITY DEFINER
+ * function (finance read): finance has no RLS read on `leave_requests`. It
+ * returns approved and pending requests, without signatures, approver names or
+ * the private reason; a pending row carries only the label of the step it waits
+ * on (`waiting_step`). FR-70: a travel-booked trip appears as soon as it is
+ * approved (`travel_state` says whether procurement has finished); a cancelled
+ * one once procurement has recorded the amount lost (`status` = cancelled).
+ * `finance_approved_requests` stays for the previous app during a release.
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -18,7 +19,7 @@ import { isValidIsoDate } from '@/lib/leave/settings-validation';
 import type { Database } from '@/lib/supabase/types';
 
 export type FinanceRow =
-  Database['public']['Functions']['finance_approved_requests']['Returns'][number];
+  Database['public']['Functions']['finance_requests']['Returns'][number];
 
 export async function getFinanceApprovals(
   from: string,
@@ -28,7 +29,7 @@ export async function getFinanceApprovals(
   if (!c.ok) return c;
   if (!isValidIsoDate(from) || !isValidIsoDate(to) || to < from) return dbErr('invalid date range');
 
-  const { data, error } = await c.supabase.rpc('finance_approved_requests', {
+  const { data, error } = await c.supabase.rpc('finance_requests', {
     p_from: from,
     p_to: to,
   });

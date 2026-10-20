@@ -1356,7 +1356,7 @@
     "dailyErrand": "Daily work errand"
   },
   "finance": {
-    "title": "Finance — completed approvals",
+    "title": "Finance — requests",
     "kind": "Kind",
     "all": "All requests",
     "errands": "Work errands",
@@ -1365,7 +1365,7 @@
     "count": "Approved requests",
     "totalPerDiem": "Total per diem",
     "rials": "Rials",
-    "empty": "No fully approved requests in this period.",
+    "empty": "No requests in this period.",
     "trackingNo": "Tracking no.",
     "employee": "Employee",
     "type": "Type",
@@ -1401,7 +1401,8 @@
       "hotelCost": "Hotel cost",
       "lost": "Amount lost",
       "total": "Total",
-      "status": "Status"
+      "status": "Status",
+      "waitingOn": "Waiting on"
     },
     "perDiemByRequester": "Entered by requester (Head of HR)",
     "grandTotal": "Total cost",
@@ -1411,7 +1412,15 @@
     "lost": "Lost",
     "total": "Total",
     "cancelled": "Cancelled",
-    "approved": "Approved"
+    "approved": "Approved",
+    "sectionApproved": "Fully approved",
+    "sectionPending": "Pending approval",
+    "pendingCount": "Pending requests",
+    "sectionEmpty": "None in this period.",
+    "waitingOn": "Waiting on: {step}",
+    "waitingUnknown": "Waiting for approval",
+    "bookingOpen": "Booking not finished",
+    "pending": "Pending"
   },
   "requestProgress": {
     "toggle": "Approval steps",
@@ -1466,7 +1475,7 @@
       },
       "finance": {
         "label": "Finance",
-        "description": "See every fully approved request with its per diem, and export it."
+        "description": "See approved and pending requests with per diem and travel costs, and export them."
       },
       "people": {
         "label": "Employee records",
