@@ -60,10 +60,9 @@ async function EmployeesData({
   canBulkReset: boolean;
   showLocks: boolean;
 }) {
-  const [t, tl, tr, tErrand, rolesRes] = await Promise.all([
+  const [t, tl, tErrand, rolesRes] = await Promise.all([
     getTranslations('manage.employees'),
     getTranslations('manage.employees.list'),
-    getTranslations('manage.employees.regen'),
     getTranslations('errand'),
     listRoles(),
   ]);
@@ -172,29 +171,6 @@ async function EmployeesData({
         canBulkReset={canBulkReset}
         showLocks={showLocks}
         locale={locale}
-        labels={{
-          employee: tl('employee'),
-          hireDate: t('hireDate'),
-          department: t('department'),
-          roles: t('roles'),
-          upcomingLeave: tl('upcomingLeave'),
-          edit: t('edit'),
-          locked: tl('locked'),
-          noEmployees: t('noEmployees'),
-          errorLabel: t('error'),
-          // .raw(): EmployeesTable substitutes {count} itself once a selection
-          // exists. Calling it with no value throws FORMATTING_ERROR under
-          // `next dev` (docs/MEMORY.md).
-          selected: tl.raw('selected'),
-          clearSelection: tl('clearSelection'),
-          regen: {
-            button: tr('button'),
-            confirmTitle: tr('confirmTitle'),
-            confirmBody: tr.raw('confirmBody'),
-            cancel: tr('cancel'),
-            confirm: tr('confirm'),
-          },
-        }}
       />
 
       {/* Mobile cards */}
@@ -390,16 +366,6 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           id: d.id,
           name: localizedLeaveTypeName(d, locale),
         }))}
-        labels={{
-          filterLabel: tl('filterLabel'),
-          filterAll: tl('filterAll'),
-          filterReports: tl('filterReports'),
-          filterInactive: tl('filterInactive'),
-          filterIncomplete: tl('filterIncomplete'),
-          search: tl('search'),
-          department: tl('department'),
-          allDepartments: tl('allDepartments'),
-        }}
       />
 
       {/* Managers edit only name and hire date of their direct reports. */}

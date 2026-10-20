@@ -1,6 +1,6 @@
 import type { Perms } from '@/lib/permissions/catalog';
 import { Toaster } from '@/components/ui/sonner';
-import { MainNav, type NavLabels } from './MainNav';
+import { MainNav } from './MainNav';
 import { RoutePrefetcher } from './RoutePrefetcher';
 import { RequestOutcomeBanner } from './RequestOutcomeBanner';
 import type { WatchedRequest } from '@/lib/actions/leave/outcomes';
@@ -12,7 +12,6 @@ type Props = {
   canApprove?: boolean;
   canDelegate?: boolean;
   locale: string;
-  labels: NavLabels;
   appName: string;
   /** Side-panel footer identity: name and "{role} ، profile". */
   profile?: { name: string; subtitle: string };
@@ -33,7 +32,6 @@ export function AppShell({
   canApprove,
   canDelegate,
   locale,
-  labels,
   appName,
   profile,
   pendingCount,
@@ -54,7 +52,6 @@ export function AppShell({
         canApprove={canApprove}
         canDelegate={canDelegate}
         locale={locale}
-        labels={labels}
         appName={appName}
         profile={profile}
         initialUpdatedAt={initialUpdatedAt}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { useTranslations } from 'next-intl';
-import { buildCsv } from '@/lib/csv/parse';
+import { downloadCsv, fileDateStamp } from '@/lib/csv/download';
 import type { IssuedCredential } from '@/lib/actions/employees';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,14 +40,7 @@ export function CredentialsDownload({ credentials }: Props) {
       [t('name'), t('code'), t('password')],
       ...credentials.map((c) => [c.fullName, c.employeeCode, c.password]),
     ];
-    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const blob = new Blob([buildCsv(rows)], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bj-credentials-${stamp}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(rows, `bj-credentials-${fileDateStamp()}.csv`);
     setSaved(true);
   };
 

@@ -30,26 +30,11 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'node:fs';
 import { ADMIN_CODE, ADMIN_PASSWORD } from './_helpers';
-
-
-function loadEnv() {
-  try {
-    const txt = readFileSync('.env.local', 'utf8');
-    for (const line of txt.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_.]+)\s*=\s*(.*)\s*$/i);
-      if (m && process.env[m[1]] === undefined) {
-        process.env[m[1]] = m[2].replace(/^["']|["']$/g, '').trim();
-      }
-    }
-  } catch {
-    /* env may already be in the environment */
-  }
-}
+import { loadEnvLocal } from '../../scripts/load-env.mjs';
 
 export default async function globalSetup() {
-  loadEnv();
+  loadEnvLocal();
 
   const url = process.env.E2E_BASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

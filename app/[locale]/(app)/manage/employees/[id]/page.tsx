@@ -67,7 +67,6 @@ export default async function EditEmployeePage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('manage');
-  const tTeam = await getTranslations('team');
   const supabase = await createClient();
 
   const user = await getCachedUser();
@@ -184,41 +183,6 @@ export default async function EditEmployeePage({ params }: Props) {
         typeDefaults={typeDefaults ?? []}
         accrualStartMonth={accrualStartMonth}
         locale={locale}
-        labels={{
-          code: t('employees.code'),
-          name: t('employees.name'),
-          department: t('employees.department'),
-          manager: t('employees.manager'),
-          roles: t('employees.roles'),
-          adminTransferHint: t('employees.adminTransferHint'),
-          hireDate: t('employees.hireDate'),
-          jobTitle: t('employees.jobTitle'),
-          save: t('employees.save'),
-          cancel: t('employees.cancel'),
-          resetPwd: t('employees.resetPwd'),
-          activate: t('employees.activate'),
-          deactivate: t('employees.deactivate'),
-          deactivateConfirmTitle: t('employees.deactivateConfirmTitle'),
-          deactivateConfirmBody: t.raw('employees.deactivateConfirmBody') as string,
-          tempPasswordLabel: t('employees.tempPasswordLabel'),
-          tempPasswordHint: t('employees.tempPasswordHint'),
-          errorLabel: t('employees.error'),
-          selectDept: t('employees.selectDept'),
-          selectMgr: t('employees.selectMgr'),
-          noneOption: t('employees.none'),
-          saved: t('employees.saved'),
-          managerNote: tTeam('managerNote'),
-          balancesTitle: t('employees.balancesTitle'),
-          policyTitle: t('employees.policyTitle'),
-          policyHint: t('employees.policyHint'),
-          policyRate: t('employees.policyRate'),
-          policyRateHint: t('employees.policyRateHint'),
-          policyAnnualCap: t('employees.policyAnnualCap'),
-          policyAnnualCapHint: t('employees.policyAnnualCapHint'),
-          policyCarryCap: t('employees.policyCarryCap'),
-          policyCarryCapHint: t('employees.policyCarryCapHint'),
-          policyWarn: t('employees.policyWarn'),
-        }}
       />
       {personalInfoRes?.ok && (
         <Card data-testid="employee-personal-info">

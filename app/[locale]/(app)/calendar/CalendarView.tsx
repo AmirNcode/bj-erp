@@ -5,6 +5,7 @@
  * `reason` is never part of CalendarEntry, so it cannot leak here (FR-25).
  */
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -37,31 +38,39 @@ import {
 import {
   RequestSignatureFields,
   RequestSignatureViewer,
-  type SignatureLabels,
 } from '../request/_components/RequestSignature';
 
-type Labels = {
-  empty: string;
-  listView: string;
-  monthView: string;
-  offOn: string;
-  noOffThisDay: string;
-  returns: string;
-  statusPending: string;
-  statusApproved: string;
-  approve: string;
-  reject: string;
-  approveConfirm: string;
-  rejectConfirm: string;
-  rejectReasonLabel: string;
-  rejectReasonPlaceholder: string;
-  approveSuccess: string;
-  rejectSuccess: string;
-  /** Tag for a work errand — it has no leave type to name. */
-  errandBadge: string;
-  requesterSignature: SignatureLabels;
-  approverSignature: SignatureLabels;
-};
+/** This screen's copy. */
+function useLabels() {
+  const t = useTranslations('calendar');
+  const tLeave = useTranslations('leave');
+  const tApprovals = useTranslations('approvals');
+  const tErrand = useTranslations('errand');
+  const tSignature = useTranslations('signature');
+  return {
+    empty: t('empty'),
+    listView: t('listView'),
+    monthView: t('monthView'),
+    offOn: t('offOn'),
+    noOffThisDay: t('noOffThisDay'),
+    returns: t('returns'),
+    statusPending: tLeave('status.pending'),
+    statusApproved: tLeave('status.approved'),
+    approve: tApprovals('approve'),
+    reject: tApprovals('reject'),
+    approveConfirm: tApprovals('approveConfirm'),
+    rejectConfirm: tApprovals('rejectConfirm'),
+    rejectReasonLabel: tApprovals('rejectReasonLabel'),
+    rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
+    approveSuccess: tApprovals('approveSuccess'),
+    rejectSuccess: tApprovals('rejectSuccess'),
+    errandBadge: tErrand('badge'),
+    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
+  };
+}
+
+type Labels = ReturnType<typeof useLabels>;
 
 type Props = {
   entries: CalendarEntry[];
@@ -70,7 +79,6 @@ type Props = {
   rangeEnd: string;
   monthLabel: string;
   workSettings: WorkSettings;
-  labels: Labels;
   /** Pending request ids the viewer may decide (admin: all; manager: own reports). */
   decidableIds?: string[];
   /** Signature metadata already scoped by base-table RLS; images remain lazy. */
@@ -216,11 +224,11 @@ export function CalendarView({
   rangeEnd,
   monthLabel,
   workSettings,
-  labels,
   decidableIds,
   signatureConsents,
   todayIso,
 }: Props) {
+  const labels = useLabels();
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();

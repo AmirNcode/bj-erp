@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -18,6 +19,33 @@ type Department = {
   manager_name: string | null;
 };
 
+/** This screen's copy. */
+function useLabels() {
+  const t = useTranslations('manage.settings');
+  return {
+    title: t('departments.title'),
+    hint: t('departments.hint'),
+    addNew: t('departments.addNew'),
+    empty: t('departments.empty'),
+    managersLabel: t('departments.managersLabel'),
+    workersLabel: t('departments.workersLabel'),
+    noMembers: t('departments.noMembers'),
+    loading: t('departments.loading'),
+    close: t('departments.close'),
+    managerLabel: t('departments.managerLabel'),
+    noManager: t('departments.noManager'),
+    managerSaved: t('departments.managerSaved'),
+    rename: t('departments.rename'),
+    nameFa: t('departments.nameFa'),
+    nameEn: t('departments.nameEn'),
+    save: t('departments.save'),
+    cancel: t('departments.cancel'),
+    renamed: t('departments.renamed'),
+    ownDepartmentManager: t('departments.ownDepartmentManager'),
+    errorLabel: t('error'),
+  };
+}
+
 type Props = {
   departments: Department[];
   /** Active holders of the `manager` role — the department-manager picker's options. */
@@ -35,28 +63,6 @@ type Props = {
    */
   canEdit?: boolean;
   locale: string;
-  labels: {
-    title: string;
-    hint: string;
-    addNew: string;
-    empty: string;
-    managersLabel: string;
-    workersLabel: string;
-    noMembers: string;
-    loading: string;
-    close: string;
-    managerLabel: string;
-    noManager: string;
-    managerSaved: string;
-    rename: string;
-    nameFa: string;
-    nameEn: string;
-    save: string;
-    cancel: string;
-    renamed: string;
-    ownDepartmentManager: string;
-    errorLabel: string;
-  };
 };
 
 /** Stable, latin, human-readable testid suffix. */
@@ -78,8 +84,8 @@ export function DepartmentsCard({
   loadError = null,
   canEdit = true,
   locale,
-  labels,
 }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   const [open, setOpen] = useState<DialogDepartment | null>(null);
   const [isPending, startTransition] = useTransition();

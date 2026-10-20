@@ -43,6 +43,7 @@ import {
   type SignoffRow,
 } from '@/lib/clearance/model';
 import { RowsEditor } from '../_components/RowsEditor';
+import type { DbErrorResult } from '@/lib/errors/db-error';
 
 type Props = {
   id: string;
@@ -95,7 +96,7 @@ export function ManageActions(props: Props) {
   const rowsOpen = props.status === 'in_progress';
   if (!open) return null;
 
-  const run = (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
+  const run = (action: () => Promise<{ ok: true } | DbErrorResult>) => {
     setError('');
     startTransition(async () => {
       const res = await action();

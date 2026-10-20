@@ -9,7 +9,8 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { buildCsv, parseCsv } from '@/lib/csv/parse';
+import { parseCsv } from '@/lib/csv/parse';
+import { downloadCsv, fileDateStamp } from '@/lib/csv/download';
 import {
   exportPersonalInfo,
   getImportablePersonnelNos,
@@ -26,14 +27,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 function download(rows: string[][], name: string) {
-  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-  const blob = new Blob([buildCsv(rows)], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${name}-${stamp}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadCsv(rows, `${name}-${fileDateStamp()}.csv`);
 }
 
 /** `canImport` (personal_info edit) shows the import card; export needs only read. */

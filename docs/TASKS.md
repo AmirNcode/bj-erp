@@ -207,6 +207,12 @@ Plan and status: `docs/CLEANUP-AUDIT-2026-10-04.md` (§0 says what was applied o
 - ☐ Local disk, owner to confirm: the `.claude/worktrees/peaceful-williams-9c1cf9` worktree and
   its branch (its one lesson is now in `docs/MEMORY.md`); 18 old `bj-erp-app` Docker image tags
   and ~18 GB of Docker build cache.
-- ☐ Incremental, when touching the area: move client components from translated `labels` props to
-  `useTranslations` (audit D3); SQL-level tests instead of TS mirrors (D9); trim history from
-  comments (D10); drop the vestigial `profiles.calendar_pref` (C8).
+- ☐ Incremental, when touching the area: SQL-level tests instead of TS mirrors (D9); trim history
+  from comments (D10); drop the vestigial `profiles.calendar_pref` (C8). (D3, labels props →
+  `useTranslations`, is done on branch `codex/refactor-cleanup`.)
+- ⊘ **R-10 of `docs/REFACTOR_PLAN.md`** (delete the test-only TS mirrors in `lib/leave/approvals.ts`,
+  `hourly.ts`, `accrual.ts`, `personal-info/fields.ts`): blocked until `tests/sql/*.sql` run in CI
+  (a Postgres service job); add SQL cases for order enforcement, self-signing and hourly overlap first.
+- ☐ Owner decisions left open by the refactor plan: Q2 (one definition of "approver"), Q3
+  (formula-injection guard on all CSV exports; not on credentials, passwords may start with `@`),
+  Q5 (delete `personnel-clean-csv.test.ts` with the roster CSV).

@@ -16,13 +16,12 @@ const row = (id: string, over: Partial<ReviewRequestRow> = {}): ReviewRequestRow
   requested_minutes: 960, serial_year: 1405, serial_seq: 1, signature_consent_at: null, approver_signature_consent_at: null,
   created_at: '2026-10-01T00:00:00Z', ...over,
 });
-const labels = new Proxy({}, { get: (_t, k) => String(k) }) as never;
 
 describe('Requests page: travel trips (FR-70)', () => {
   it('HR can cancel a ticked travel trip from the row; other rows get no cancel', () => {
     render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <RequestsReview requests={[row('t1'), row('p1')]} labels={labels} locale="en" hoursPerDay={8} travelTicks={{ t1: { started: true } }} />
+        <RequestsReview requests={[row('t1'), row('p1')]} locale="en" hoursPerDay={8} travelTicks={{ t1: { started: true } }} />
       </NextIntlClientProvider>
     );
     expect(screen.getByTestId('cancel-t1')).toBeTruthy();
@@ -34,7 +33,7 @@ describe('Requests page: travel trips (FR-70)', () => {
   it('without tick rights there is neither switch nor cancel', () => {
     render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <RequestsReview requests={[row('t1')]} labels={labels} locale="en" hoursPerDay={8} travelTicks={null} />
+        <RequestsReview requests={[row('t1')]} locale="en" hoursPerDay={8} travelTicks={null} />
       </NextIntlClientProvider>
     );
     expect(screen.queryByTestId('cancel-t1')).toBeNull();

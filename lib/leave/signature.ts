@@ -35,3 +35,24 @@ export function isValidSignatureData(value: unknown): value is string {
     PNG_DATA_URL_RE.test(value)
   );
 }
+
+/**
+ * The first reason a signed submission is refused before it reaches the
+ * database, as the raw message `dbErr` localizes, or null. Order matters: the
+ * authorization box is reported before a missing drawing.
+ */
+export function signatureProblem(input: {
+  signatureData: string;
+  signatureAuthorized: boolean;
+}): string | null {
+  if (!input.signatureAuthorized) return 'signature authorization is required';
+  if (!input.signatureData) return 'signature is required';
+  if (!isValidSignatureData(input.signatureData)) return 'signature data is invalid';
+  return null;
+}
+
+/** A per diem (FR-61) is absent, or whole Rials of 0 or more. */
+export function perDiemProblem(rials: number | null | undefined): string | null {
+  if (rials === null || rials === undefined) return null;
+  return Number.isSafeInteger(rials) && rials >= 0 ? null : 'per diem must be 0 or more';
+}

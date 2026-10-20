@@ -8,7 +8,7 @@
 
 import { getTranslations } from 'next-intl/server';
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
@@ -29,7 +29,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** The caller's own pending requests, labelled for the outcome banner. */
 export async function getMyPendingRequests(
   locale: string
-): Promise<{ ok: true; requests: WatchedRequest[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; requests: WatchedRequest[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -65,7 +65,7 @@ export async function getMyPendingRequests(
  */
 export async function getMyRequestOutcomes(
   ids: string[]
-): Promise<{ ok: true; outcomes: RequestOutcome[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; outcomes: RequestOutcome[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   // Server actions are publicly POSTable; keep the input to what the banner sends.

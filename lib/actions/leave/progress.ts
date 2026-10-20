@@ -8,7 +8,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { StepLabel } from '@/lib/leave/approvals';
 import { progressLabel, type ApprovalContextRow, type ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { RequestExtension } from '@/lib/actions/travel';
@@ -32,7 +32,7 @@ export type ProgressStep = {
 
 export async function getRequestProgress(
   requestId: string
-): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean; extensions?: RequestExtension[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean; extensions?: RequestExtension[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 

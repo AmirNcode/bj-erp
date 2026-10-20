@@ -10,20 +10,9 @@
 // =============================================================================
 
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'node:fs';
+import { loadEnvLocal } from './load-env.mjs';
 
-// --- minimal .env.local loader (no dotenv dep; run from the project root) ----
-try {
-  const txt = readFileSync('.env.local', 'utf8');
-  for (const line of txt.split('\n')) {
-    const m = line.match(/^\s*([A-Z0-9_.]+)\s*=\s*(.*)\s*$/i);
-    if (m && process.env[m[1]] === undefined) {
-      process.env[m[1]] = m[2].replace(/^["']|["']$/g, '').trim();
-    }
-  }
-} catch {
-  /* env may already be in the environment */
-}
+loadEnvLocal();
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

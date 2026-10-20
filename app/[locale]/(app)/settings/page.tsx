@@ -18,6 +18,7 @@ import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { can } from '@/lib/permissions/catalog';
 import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { getCompanyHolidays } from '@/lib/actions/settings';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
 import { SettingsTabs } from './_components/SettingsTabs';
@@ -38,30 +39,12 @@ export default async function SettingsPage({ params }: Props) {
   const canEditWork = can(perms, 'work_settings');
   const canEditHolidays = can(perms, 'holidays');
 
-  const [tNav, t, tImport] = await Promise.all([
-    getTranslations('nav'),
-    getTranslations('manage.settings'),
-    getTranslations('manage.settings.holidayImport'),
-  ]);
+  const tNav = await getTranslations('nav');
   const data = await getCompanyHolidays();
-  const weekendDays = data.ok ? data.weekendDays : [5];
-  const biweeklyWeekendDays = data.ok ? data.biweeklyWeekendDays : [];
-  const biweeklyAnchor = data.ok ? data.biweeklyAnchor : null;
-  const workStart = data.ok ? data.workStart : '07:00';
-  const workEnd = data.ok ? data.workEnd : '15:00';
-  const hourlyCapMinutes = data.ok ? data.maxHourlyMinutesPerDay : 240;
+  const { weekendDays, biweeklyWeekendDays, biweeklyAnchor, workStart, workEnd, maxHourlyMinutesPerDay: hourlyCapMinutes } =
+    data.ok ? data : WORK_SETTINGS_FALLBACK;
   const holidays = data.ok ? data.holidays : [];
   const updatedAt = data.ok ? data.updatedAt : null;
-
-  const days = {
-    sat: t('days.sat'),
-    sun: t('days.sun'),
-    mon: t('days.mon'),
-    tue: t('days.tue'),
-    wed: t('days.wed'),
-    thu: t('days.thu'),
-    fri: t('days.fri'),
-  };
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
@@ -79,95 +62,9 @@ export default async function SettingsPage({ params }: Props) {
         initialWorkEnd={workEnd}
         initialHourlyCapMinutes={hourlyCapMinutes}
         readOnly={!canEditWork}
-        labels={{
-          weekendTitle: t('weekendTitle'),
-          weekendHint: t('weekendHint'),
-          hoursTitle: t('hoursTitle'),
-          hoursHint: t('hoursHint'),
-          workStart: t('workStart'),
-          workEnd: t('workEnd'),
-          hourlyCap: t('hourlyCap'),
-          save: t('save'),
-          // .raw(): the form substitutes {date} itself after each save.
-          lastSaved: t.raw('lastSaved'),
-          saved: t('saved'),
-          errorLabel: t('error'),
-          days,
-          frequencyWeekly: t('frequencyWeekly'),
-          frequencyBiweekly: t('frequencyBiweekly'),
-          anchorLabel: t('anchorLabel'),
-          anchorHint: t('anchorHint'),
-          dayNone: t('dayNone'),
-          addDay: t('addDay'),
-          removeDay: t('removeDay'),
-        }}
       />
 
-      <HolidayEditor
-        initial={holidays}
-        readOnly={!canEditHolidays}
-        locale={locale}
-        labels={{
-          holidaysTitle: t('holidaysTitle'),
-          // .raw(): the editor substitutes {count} as rows come and go.
-          holidaysCount: t.raw('holidaysCount'),
-          addHoliday: t('addHoliday'),
-          dateLabel: t('dateLabel'),
-          nameFaLabel: t('nameFaLabel'),
-          nameEnLabel: t('nameEnLabel'),
-          recurringLabel: t('recurringLabel'),
-          recurringHint: t('recurringHint'),
-          delete: t('delete'),
-          noHolidays: t('noHolidays'),
-          errorLabel: t('error'),
-          // FR-40 bulk upload. Built as one object so a new label is added
-          // in one place rather than threaded through two components.
-          holidayImport: {
-            button: tImport('button'),
-            title: tImport('title'),
-            intro: tImport('intro'),
-            template: tImport('template'),
-            templateHint: tImport('templateHint'),
-            upload: tImport('upload'),
-            recurringWarning: tImport('recurringWarning'),
-            previewTitle: tImport('previewTitle'),
-            // .raw() on purpose for the three strings carrying {count} /
-            // {added} / {updated}: the dialog substitutes them itself once a
-            // file has been parsed. Calling tImport('willAdd') with no value
-            // only "works" via a production-only fast path in use-intl that
-            // skips compilation — under `next dev` it renders the dotted key
-            // path instead of a sentence. Same trap, same fix, as the
-            // password-regen dialog in manage/employees/page.tsx.
-            willAdd: tImport.raw('willAdd'),
-            willUpdate: tImport.raw('willUpdate'),
-            problemsTitle: tImport('problemsTitle'),
-            line: tImport('line'),
-            problem: tImport('problem'),
-            confirm: tImport('confirm'),
-            importing: tImport('importing'),
-            done: tImport.raw('done'),
-            cancel: tImport('cancel'),
-            columnDate: tImport('columnDate'),
-            columnNameFa: tImport('columnNameFa'),
-            columnNameEn: tImport('columnNameEn'),
-            columnRecurring: tImport('columnRecurring'),
-            yes: tImport('yes'),
-            no: tImport('no'),
-            // Explicit map rather than tImport(`errors.${key}`): a dynamic
-            // message key has already caused a production-only failure in
-            // this codebase (docs/MEMORY.md).
-            errors: {
-              missingColumn: tImport('errors.missingColumn'),
-              required: tImport('errors.required'),
-              badDate: tImport('errors.badDate'),
-              badRecurring: tImport('errors.badRecurring'),
-              nameTooLong: tImport('errors.nameTooLong'),
-              dupInFile: tImport('errors.dupInFile'),
-              noRows: tImport('errors.noRows'),
-            },
-          },
-        }}
-      />
+      <HolidayEditor initial={holidays} readOnly={!canEditHolidays} locale={locale} />
     </div>
   );
 }

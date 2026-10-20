@@ -10,6 +10,8 @@
  * filters into the query rather than adding a second filtering path here.
  */
 
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { useTranslations } from 'next-intl';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { ReviewRequestRow } from '@/lib/actions/leave/review';
@@ -28,37 +30,39 @@ import { todayInAppTz } from '@/lib/appDate';
 import { TravelTickToggle } from './TravelTickToggle';
 import { RequestCancelButton } from '../../request/_components/RequestCancelButton';
 
-type Labels = {
-  search: string;
-  searchPlaceholder: string;
-  status: string;
-  kind: string;
-  all: string;
-  kindLeave: string;
-  kindErrand: string;
-  trackingNo: string;
-  employee: string;
-  dates: string;
-  duration: string;
-  signatures: string;
-  print: string;
-  empty: string;
-  signedRequester: string;
-  signedApprover: string;
-  errandBadge: string;
-  statusPending: string;
-  statusApproved: string;
-  statusRejected: string;
-  statusCancelled: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  and: string;
-};
+/** This screen's copy. */
+function useLabels() {
+  const t = useTranslations('review');
+  const tLeave = useTranslations('leave');
+  const tErrand = useTranslations('errand');
+  return {
+    search: t('search'),
+    searchPlaceholder: t('searchPlaceholder'),
+    status: t('status'),
+    kind: t('kind'),
+    all: t('all'),
+    kindLeave: t('kindLeave'),
+    kindErrand: t('kindErrand'),
+    trackingNo: t('trackingNo'),
+    employee: t('employee'),
+    dates: t('dates'),
+    duration: t('duration'),
+    signatures: t('signatures'),
+    print: t('print'),
+    empty: t('empty'),
+    signedRequester: t('signedRequester'),
+    signedApprover: t('signedApprover'),
+    errandBadge: tErrand('badge'),
+    statusPending: tLeave('status.pending'),
+    statusApproved: tLeave('status.approved'),
+    statusRejected: tLeave('status.rejected'),
+    statusCancelled: tLeave('status.cancelled'),
+    ...durationLabelsFrom(tLeave),
+  };
+}
 
 type Props = {
   requests: ReviewRequestRow[];
-  labels: Labels;
   locale: string;
   hoursPerDay: number;
   /** FR-70: ticked requests (hr and admin only); null hides the travel switch. */
@@ -67,7 +71,8 @@ type Props = {
 
 const STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
 
-export function RequestsReview({ requests, labels, locale, hoursPerDay, travelTicks = null }: Props) {
+export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null }: Props) {
+  const labels = useLabels();
   const today = todayInAppTz();
   const [status, setStatus] = useState<string>('all');
   const [kind, setKind] = useState<string>('all');

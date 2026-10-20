@@ -11,7 +11,7 @@
 
 import { requireCaller } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
 import { todayInAppTz } from '@/lib/appDate';
@@ -24,7 +24,7 @@ import { accrueBeforeRead } from './shared';
  */
 export async function getMyBalance(
   leaveTypeId: string
-): Promise<{ ok: true; balanceMinutes: number | null } | { ok: false; error: string }> {
+): Promise<{ ok: true; balanceMinutes: number | null } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -47,7 +47,7 @@ export async function getMyBalance(
 }
 
 export async function getMyBalances(): Promise<
-  { ok: true; balances: BalanceItem[] } | { ok: false; error: string }
+  { ok: true; balances: BalanceItem[] } | DbErrorResult
 > {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
@@ -84,7 +84,7 @@ export async function getMyBalances(): Promise<
 
 export async function getEmployeeBalances(
   employeeId: string
-): Promise<{ ok: true; balances: BalanceItem[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; balances: BalanceItem[] } | DbErrorResult> {
   const c = await requireCaller({ perm: ['leave_balances', 'read'], company: true });
   if (!c.ok) return c;
 
@@ -130,7 +130,7 @@ export type AllocateLeaveInput = {
 
 export type AllocateLeaveResult =
   | { ok: true }
-  | { ok: false; error: string };
+  | DbErrorResult;
 
 export async function allocateLeave(
   input: AllocateLeaveInput
@@ -156,7 +156,7 @@ export async function allocateLeave(
 
 export type SetLeaveBalanceResult =
   | { ok: true }
-  | { ok: false; error: string };
+  | DbErrorResult;
 
 /**
  * Sets an employee's current balance for a leave type to an absolute target.
@@ -203,7 +203,7 @@ export type LeavePolicyRow = {
 
 export async function setEmployeeLeavePolicy(
   input: LeavePolicyInput
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
   if (!c.ok) return c;
 
@@ -224,7 +224,7 @@ export async function setEmployeeLeavePolicy(
 /** Existing policies for one employee, for pre-filling the edit form. */
 export async function getEmployeePolicies(
   employeeId: string
-): Promise<{ ok: true; policies: LeavePolicyRow[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; policies: LeavePolicyRow[] } | DbErrorResult> {
   const c = await requireCaller({ perm: ['leave_balances', 'read'] });
   if (!c.ok) return c;
 
@@ -250,7 +250,7 @@ export async function getEmployeePolicies(
 
 /** "Post accruals now" (`leave_accrual` edit). Returns what actually happened, for the UI to show. */
 export async function runAllAccruals(): Promise<
-  { ok: true; employees: number; rowsPosted: number } | { ok: false; error: string }
+  { ok: true; employees: number; rowsPosted: number } | DbErrorResult
 > {
   // FR-55: accrue_all_leave checks leave_accrual edit (FR-51's accruals.run).
   const c = await requireCaller({ perm: ['leave_accrual', 'edit'] });

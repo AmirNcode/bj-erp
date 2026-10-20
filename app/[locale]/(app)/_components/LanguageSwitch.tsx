@@ -1,13 +1,13 @@
 'use client';
 
 import { useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { updateMyPrefs } from '@/lib/actions/profile';
 import { cn } from '@/lib/utils';
 
 type Props = {
   locale: string;
-  labels: { label: string; fa: string; en: string };
   /** Test-id prefix for the two buttons (`${prefix}-fa`, `${prefix}-en`). */
   testIdPrefix?: string;
   className?: string;
@@ -18,7 +18,8 @@ type Props = {
  * current page. Used in the side panel and on the Profile page (the mobile
  * path, where there is no side panel).
  */
-export function LanguageSwitch({ locale, labels, testIdPrefix = 'nav-lang', className }: Props) {
+export function LanguageSwitch({ locale, testIdPrefix = 'nav-lang', className }: Props) {
+  const t = useTranslations('profile');
   const router = useRouter();
   const pathname = usePathname();
   const [isPending, startTransition] = useTransition();
@@ -32,14 +33,14 @@ export function LanguageSwitch({ locale, labels, testIdPrefix = 'nav-lang', clas
   };
 
   const options = [
-    { value: 'fa' as const, label: labels.fa, dir: 'rtl' },
-    { value: 'en' as const, label: labels.en, dir: 'ltr' },
+    { value: 'fa' as const, label: t('langFa'), dir: 'rtl' },
+    { value: 'en' as const, label: t('langEn'), dir: 'ltr' },
   ];
 
   return (
     <div
       role="group"
-      aria-label={labels.label}
+      aria-label={t('language')}
       className={cn(
         'grid grid-cols-2 gap-0.5 rounded-[10px] border border-muted bg-background p-[3px]',
         className

@@ -3,7 +3,6 @@ import {
   validateWeekendDays,
   isWeekendDate,
   isoWeekdayOf,
-  frequencyOf,
   WEEKDAYS,
 } from '@/lib/leave/weekend';
 
@@ -200,19 +199,5 @@ describe('isWeekendDate', () => {
     // ...and the following Iranian week is worked.
     expect(isWeekendDate('2026-08-29', anchoredOnSaturday)).toBe(false);
     expect(isWeekendDate('2026-09-03', anchoredOnSaturday)).toBe(false);
-  });
-});
-
-describe('frequencyOf', () => {
-  it('reports the per-weekday state a settings UI edits', () => {
-    expect(frequencyOf(5, [5], [4])).toBe('weekly');
-    expect(frequencyOf(4, [5], [4])).toBe('biweekly');
-    expect(frequencyOf(1, [5], [4])).toBe('working');
-  });
-
-  it('lets the weekly list win if a day somehow appears in both', () => {
-    // validateWeekendDays refuses this, but the UI must still render something
-    // deterministic for a row that reached it from older data.
-    expect(frequencyOf(4, [4], [4])).toBe('weekly');
   });
 });

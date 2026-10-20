@@ -9,9 +9,9 @@
 
 import { requireCaller } from '@/lib/auth/context';
 import { can, type Perms } from '@/lib/permissions/catalog';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
-import { isValidSignatureData } from '@/lib/leave/signature';
+import { signatureProblem } from '@/lib/leave/signature';
 import {
   canManageClearance,
   isSeparationReason,
@@ -24,7 +24,7 @@ import {
   type UnitRow,
 } from '@/lib/clearance/model';
 
-type Fail = { ok: false; error: string };
+type Fail = DbErrorResult;
 type Done = { ok: true } | Fail;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -479,17 +479,10 @@ export async function cancelClearance(id: string): Promise<Done> {
 
 export type SignInput = { signatureData: string; signatureAuthorized: boolean; note: string | null };
 
-function checkSignature(input: SignInput): string | null {
-  if (!input.signatureAuthorized) return 'signature authorization is required';
-  if (!input.signatureData) return 'signature is required';
-  if (!isValidSignatureData(input.signatureData)) return 'signature data is invalid';
-  return null;
-}
-
 export async function signClearanceRow(rowId: string, input: SignInput): Promise<Done> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  const bad = checkSignature(input);
+  const bad = signatureProblem(input);
   if (bad) return dbErr(bad);
 
   const { error } = await c.supabase.rpc('app_sign_separation_row', {
@@ -509,7 +502,7 @@ export async function signClearanceFinance(
 ): Promise<Done> {
   const c = await requireCaller({ anyOf: ['finance'] });
   if (!c.ok) return c;
-  const bad = checkSignature(input);
+  const bad = signatureProblem(input);
   if (bad) return dbErr(bad);
   if (input.settlementDate && !ISO_DATE.test(input.settlementDate)) return dbErr('invalid date');
 

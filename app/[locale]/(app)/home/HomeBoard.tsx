@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { useTranslations } from 'next-intl';
 import type { ReactNode } from 'react';
 import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
@@ -13,36 +15,42 @@ import { RequestCancelButton } from '../request/_components/RequestCancelButton'
 import { RequestProgress } from '@/components/RequestProgress';
 import { PendingApprovalsCard, type PendingRow } from './PendingApprovalsCard';
 
-type Labels = {
-  balancesTitle: string;
-  recentTitle: string;
-  teamTitle: string;
-  managerLabel: string;
-  teammatesLabel: string;
-  rolesLabel: string;
-  titleLabel: string;
-  upcomingLabel: string;
-  noUpcoming: string;
-  noRecent: string;
-  noTeam: string;
-  errandBadge: string;
-  coveringTitle: string;
-  coveringFor: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  and: string;
-  statusPending: string;
-  statusApproved: string;
-  statusRejected: string;
-  statusCancelled: string;
-  pulsePresent: string;
-  pulseOnLeave: string;
-  pulseErrand: string;
-  pulsePending: string;
-  nextHolidayTitle: string;
-  noHoliday: string;
-};
+/** This screen's copy. */
+function useLabels() {
+  const t = useTranslations('home');
+  const tLeave = useTranslations('leave');
+  const tRepl = useTranslations('replacement');
+  const tErrand = useTranslations('errand');
+  return {
+    balancesTitle: t('balancesTitle'),
+    recentTitle: t('recentTitle'),
+    teamTitle: t('teamTitle'),
+    managerLabel: t('managerLabel'),
+    teammatesLabel: t('teammatesLabel'),
+    rolesLabel: t('rolesLabel'),
+    titleLabel: t('titleLabel'),
+    upcomingLabel: t('upcomingLabel'),
+    noUpcoming: t('noUpcoming'),
+    noRecent: t('noRecent'),
+    noTeam: t('noTeam'),
+    coveringTitle: tRepl('coveringTitle'),
+    coveringFor: tRepl('coveringFor'),
+    errandBadge: tErrand('badge'),
+    ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
+    statusPending: tLeave('status.pending'),
+    statusApproved: tLeave('status.approved'),
+    statusRejected: tLeave('status.rejected'),
+    statusCancelled: tLeave('status.cancelled'),
+    pulsePresent: t('pulsePresent'),
+    pulseOnLeave: t('pulseOnLeave'),
+    pulseErrand: t('pulseErrand'),
+    pulsePending: t('pulsePending'),
+    nextHolidayTitle: t('nextHolidayTitle'),
+    noHoliday: t('noHoliday'),
+  };
+}
+
+type Labels = ReturnType<typeof useLabels>;
 
 /** Pre-formatted pulse band figures (server-side, locale digits). */
 export type PulseCards = {
@@ -67,7 +75,6 @@ type UsageRow = {
 
 type Props = {
   board: HomeBoardData;
-  labels: Labels;
   locale: string;
   /** Company day length — balances and durations are stored in minutes. */
   hoursPerDay: number;
@@ -77,7 +84,6 @@ type Props = {
     rows: PendingRow[];
     total: string;
     count: number;
-    labels: React.ComponentProps<typeof PendingApprovalsCard>['labels'];
   } | null;
   usage: UsageRow[];
   nextHoliday: { name: string; month: string; day: string; when: string } | null;
@@ -141,7 +147,6 @@ function PulseCard({
 
 export function HomeBoard({
   board,
-  labels,
   locale,
   hoursPerDay,
   pulse,
@@ -150,6 +155,7 @@ export function HomeBoard({
   nextHoliday,
   coverDuties,
 }: Props) {
+  const labels = useLabels();
   const statusLabels = {
     pending: labels.statusPending,
     approved: labels.statusApproved,
@@ -210,7 +216,6 @@ export function HomeBoard({
               rows={pending.rows}
               total={pending.total}
               count={pending.count}
-              labels={pending.labels}
               locale={locale}
             />
           )}

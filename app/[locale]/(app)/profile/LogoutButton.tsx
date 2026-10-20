@@ -1,6 +1,7 @@
 'use client';
 
 import { useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { signOut } from '@/lib/actions/profile';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,13 +18,6 @@ import {
 
 type Props = {
   locale: string;
-  labels: {
-    trigger: string;
-    title: string;
-    body: string;
-    cancel: string;
-    confirm: string;
-  };
 };
 
 /**
@@ -31,7 +25,8 @@ type Props = {
  * Keeps the `settings-logout` testid contract; the confirm action is
  * `logout-confirm`.
  */
-export function LogoutButton({ locale, labels }: Props) {
+export function LogoutButton({ locale }: Props) {
+  const t = useTranslations('profile.logoutConfirm');
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -44,22 +39,22 @@ export function LogoutButton({ locale, labels }: Props) {
           disabled={isPending}
           className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
         >
-          {labels.trigger}
+          {t('trigger')}
         </Button>
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{labels.title}</AlertDialogTitle>
-          <AlertDialogDescription>{labels.body}</AlertDialogDescription>
+          <AlertDialogTitle>{t('title')}</AlertDialogTitle>
+          <AlertDialogDescription>{t('body')}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel data-testid="logout-cancel">{labels.cancel}</AlertDialogCancel>
+          <AlertDialogCancel data-testid="logout-cancel">{t('cancel')}</AlertDialogCancel>
           <AlertDialogAction
             data-testid="logout-confirm"
             className="bg-destructive text-white hover:bg-destructive/90"
             onClick={() => startTransition(async () => { await signOut(locale); })}
           >
-            {labels.confirm}
+            {t('confirm')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

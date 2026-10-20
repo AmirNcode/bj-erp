@@ -26,7 +26,6 @@ type Props = {
 
 // ── async child that owns all data fetching ────────────────────────────────
 async function NewDepartmentData({ locale }: { locale: string }) {
-  const t = await getTranslations('manage.departments');
   const supabase = await createClient();
 
   const { data: existing } = await supabase
@@ -38,23 +37,6 @@ async function NewDepartmentData({ locale }: { locale: string }) {
     <NewDepartmentForm
       existing={existing ?? []}
       locale={locale}
-      labels={{
-        nameFa: t('nameFa'),
-        nameEn: t('nameEn'),
-        kind: t('kind'),
-        kindTeam: t('kindTeam'),
-        kindOffice: t('kindOffice'),
-        kindSecurity: t('kindSecurity'),
-        create: t('create'),
-        cancel: t('cancel'),
-        existingTitle: t('existingTitle'),
-        createdTitle: t('createdTitle'),
-        createdHint: t('createdHint'),
-        addEmployee: t('addEmployee'),
-        backToSettings: t('backToSettings'),
-        nameRequired: t('nameRequired'),
-        errorLabel: t('error'),
-      }}
     />
   );
 }

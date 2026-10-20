@@ -1,5 +1,6 @@
 'use client';
 
+import { useRequestLabels } from './_components/useRequestLabels';
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
@@ -17,37 +18,10 @@ import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
 import {
   RequestSignatureViewer,
-  type SignatureLabels,
 } from './_components/RequestSignature';
-
-type Labels = {
-  myRequests: string;
-  noRequests: string;
-  errorLabel: string;
-  statusPending: string;
-  statusApproved: string;
-  statusRejected: string;
-  statusCancelled: string;
-  dayPartLabels: { full: string; am: string; pm: string };
-  coverLabel: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  and: string;
-  from: string;
-  to: string;
-  rejectedReason: string;
-  trackingNo: string;
-  errandBadge: string;
-  errandLocation: string;
-  unpaidTimeOffLabel: string;
-  requesterSignature: SignatureLabels;
-  approverSignature: SignatureLabels;
-};
 
 type Props = {
   requests: LeaveRequestWithType[];
-  labels: Labels;
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
@@ -59,12 +33,12 @@ type Props = {
 
 export function MyRequestsList({
   requests,
-  labels,
   locale,
   hoursPerDay,
   showAll = false,
   travelBookings = {},
 }: Props) {
+  const labels = useRequestLabels();
   const t = useTranslations('request');
   const tTravel = useTranslations('travel');
   const tErrand = useTranslations('errand');

@@ -2,11 +2,12 @@
 
 /**
  * Company reference data the request and settings forms read: active leave
- * types, work settings with holidays, and the employee list.
+ * types and work settings with holidays.
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 /**
  * Fetches active leave types for the caller's company.
@@ -26,7 +27,7 @@ export type LeaveType = {
 export async function getActiveLeaveTypes(): Promise<{
   ok: true;
   types: LeaveType[];
-} | { ok: false; error: string }> {
+} | DbErrorResult> {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
 
@@ -65,7 +66,7 @@ export type WorkSettings = {
 export async function getWorkSettings(): Promise<{
   ok: true;
   settings: WorkSettings;
-} | { ok: false; error: string }> {
+} | DbErrorResult> {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
 
@@ -86,44 +87,19 @@ export async function getWorkSettings(): Promise<{
   if (wsError) return dbErr(wsError.message);
   if (holsError) return dbErr(holsError.message);
 
+  // Column defaults (Fri off, 8h day, 07:00-15:00, 4h hourly cap) for a company with no row yet.
+  const d = WORK_SETTINGS_FALLBACK;
   return {
     ok: true,
     settings: {
-      weekendDays: ws?.weekend_days ?? [5], // default Fri only to match SQL compute_requested_minutes
-      biweeklyWeekendDays: ws?.biweekly_weekend_days ?? [],
-      biweeklyAnchor: ws?.biweekly_anchor ?? null,
+      weekendDays: ws?.weekend_days ?? d.weekendDays,
+      biweeklyWeekendDays: ws?.biweekly_weekend_days ?? d.biweeklyWeekendDays,
+      biweeklyAnchor: ws?.biweekly_anchor ?? d.biweeklyAnchor,
       holidays: (hols ?? []).map((h) => h.holiday_date),
-      hoursPerDay: ws?.hours_per_day ?? 8, // matches the work_settings column default
-      workStart: ws?.work_start ?? '07:00',
-      workEnd: ws?.work_end ?? '15:00',
-      maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
+      hoursPerDay: ws?.hours_per_day ?? d.hoursPerDay,
+      workStart: ws?.work_start ?? d.workStart,
+      workEnd: ws?.work_end ?? d.workEnd,
+      maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? d.maxHourlyMinutesPerDay,
     },
   };
-}
-
-/**
- * Fetches all employees for admin use (allocation UI).
- */
-export type EmployeeOption = {
-  id: string;
-  full_name: string;
-  employee_code: string;
-};
-
-export async function getAllEmployees(): Promise<{
-  ok: true;
-  employees: EmployeeOption[];
-} | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
-  if (!c.ok) return c;
-
-  const { data, error } = await c.supabase
-    .from('profiles')
-    .select('id, full_name, employee_code')
-    .eq('active', true)
-    .order('full_name');
-
-  if (error) return dbErr(error.message);
-
-  return { ok: true, employees: (data ?? []) as EmployeeOption[] };
 }

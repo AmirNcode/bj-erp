@@ -34,7 +34,8 @@ afterEach(() => {
 });
 
 const messages = {
-  nav: { primary: 'Primary' },
+  nav: { primary: 'Primary', home: 'Home', request: 'Request', calendar: 'Calendar', organization: 'Organization', profile: 'Profile', manage: 'Manage', employees: 'Employees', departments: 'Departments', approvals: 'Approvals', requests: 'Request archive', approvalSteps: 'Approval steps', reports: 'Reports', absences: 'Absences', finance: 'Finance', settings: 'Settings', language: 'Language' },
+  profile: { language: 'Language', langFa: 'فارسی', langEn: 'English' },
   refresh: {
     updated: 'Updated {time}',
     pending: 'Updating...',
@@ -76,28 +77,6 @@ describe('PageHeader', () => {
 });
 
 describe('AppShell side panel', () => {
-  const labels = {
-    home: 'Home',
-    request: 'Request',
-    calendar: 'Calendar',
-    organization: 'Organization',
-    profile: 'Profile',
-    manage: 'Manage',
-    manageGroup: 'Manage',
-    employees: 'Employees',
-    departments: 'Departments',
-    approvals: 'Approvals',
-    requests: 'Request archive',
-    approvalSteps: 'Approval steps',
-    reports: 'Reports',
-    absences: 'Absences',
-    finance: 'Finance',
-    procurement: 'Procurement',
-    settings: 'Settings',
-    language: 'Language',
-    langFa: 'فارسی',
-    langEn: 'English',
-  };
 
   it.each(['en', 'fa'])('in %s, has no header and one refresh control just before the profile link', (locale) => {
     const { container } = renderWithIntl(
@@ -105,7 +84,6 @@ describe('AppShell side panel', () => {
         roles={['employee']}
         perms={{}}
         locale={locale}
-        labels={labels}
         appName="BJ"
         profile={{ name: 'Amir', subtitle: 'Employee, profile' }}
       >

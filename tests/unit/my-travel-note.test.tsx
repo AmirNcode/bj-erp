@@ -17,13 +17,12 @@ const errand = {
   approver_signature_consent_at: null, created_at: '2026-10-13T10:00:00Z', replacement_name: null, leave_types: null,
   per_diem_rials: null, per_diem_by_requester: false,
 } as unknown as LeaveRequestWithType;
-const labels = new Proxy({}, { get: (_t, k) => (k === 'dayPartLabels' ? { full: 'Full', am: 'AM', pm: 'PM' } : String(k)) }) as never;
 
 describe('My Requests: travel booking note (FR-70)', () => {
   it('shows procurement transport and note on a booked trip, never costs', () => {
     render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <MyRequestsList requests={[errand]} labels={labels} locale="en" hoursPerDay={8}
+        <MyRequestsList requests={[errand]} locale="en" hoursPerDay={8}
           travelBookings={{ e1: { transport: 'flight', note: 'IR452 08:00, Hotel Zand' } }} />
       </NextIntlClientProvider>
     );

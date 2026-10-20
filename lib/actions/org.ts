@@ -1,7 +1,7 @@
 'use server';
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { OrgPerson } from '@/lib/org/tree';
 
 /**
@@ -10,7 +10,7 @@ import type { OrgPerson } from '@/lib/org/tree';
  * returns names, titles, departments and reporting lines only.
  */
 export async function getOrgChart(): Promise<
-  { ok: true; people: OrgPerson[]; myId: string } | { ok: false; error: string }
+  { ok: true; people: OrgPerson[]; myId: string } | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;

@@ -1,5 +1,7 @@
 'use client';
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
+import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,8 +17,6 @@ import {
   ApproveDialog,
   RejectDialog,
   type ApproveOptions,
-  type ApproveDialogLabels,
-  type RejectDialogLabels,
 } from '../manage/approvals/DecisionDialogs';
 
 /** One pending request, pre-formatted on the server. */
@@ -36,21 +36,11 @@ export type PendingRow = {
   canReject?: boolean;
 };
 
-type Labels = ApproveDialogLabels &
-  RejectDialogLabels & {
-    title: string;
-    allApprovals: string;
-    empty: string;
-    approveSuccess: string;
-    rejectSuccess: string;
-  };
-
 type Props = {
   rows: PendingRow[];
   /** Formatted total pending (may exceed the rows shown). */
   total: string;
   count: number;
-  labels: Labels;
   locale: string;
 };
 
@@ -58,7 +48,29 @@ type Props = {
  * Home dashboard's pending queue with inline approve / reject. Decisions go
  * through the same dialogs and actions as /manage/approvals.
  */
-export function PendingApprovalsCard({ rows, total, count, labels, locale }: Props) {
+/** The card's copy: home.* titles plus the shared approve/reject dialog text. */
+function useLabels() {
+  const t = useTranslations('home');
+  const tApprovals = useTranslations('approvals');
+  const tSignature = useTranslations('signature');
+  return {
+    title: t('pendingTitle'),
+    allApprovals: t('allApprovals'),
+    empty: t('noPending'),
+    approve: tApprovals('approve'),
+    reject: tApprovals('reject'),
+    approveConfirm: tApprovals('approveConfirm'),
+    rejectConfirm: tApprovals('rejectConfirm'),
+    rejectReasonLabel: tApprovals('rejectReasonLabel'),
+    rejectReasonPlaceholder: tApprovals('rejectReasonPlaceholder'),
+    approveSuccess: tApprovals('approveSuccess'),
+    rejectSuccess: tApprovals('rejectSuccess'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
+  };
+}
+
+export function PendingApprovalsCard({ rows, total, count, locale }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   // One decision may leave another step for this caller. Refresh the complete queue.
   const localRows = rows;

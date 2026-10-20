@@ -13,7 +13,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { todayInAppTz } from '@/lib/appDate';
 import {
   departmentStepApplies,
@@ -82,7 +82,7 @@ export async function getReportMonths(): Promise<JalaliMonthOption[]> {
 export async function getReportData(
   rangeStart: string,
   rangeEnd: string
-): Promise<{ ok: true; data: ReportData } | { ok: false; error: string }> {
+): Promise<{ ok: true; data: ReportData } | DbErrorResult> {
   const c = await requireCaller({ perm: ['reports', 'read'], company: true });
   if (!c.ok) return c;
 

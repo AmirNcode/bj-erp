@@ -1,3 +1,5 @@
+import { addDays } from './isoDate';
+
 // ISO weekday numbers: Mon=1 .. Sun=7. The Iranian/Persian week is shown Sat..Fri.
 export const WEEKDAYS: { iso: number; key: string }[] = [
   { iso: 6, key: 'sat' },
@@ -8,14 +10,6 @@ export const WEEKDAYS: { iso: number; key: string }[] = [
   { iso: 4, key: 'thu' },
   { iso: 5, key: 'fri' },
 ];
-
-/**
- * How often a weekday is off (FR-41).
- *
- * The client's real week is Friday off every week and Thursday off every other
- * week, which a single list of weekday numbers cannot express.
- */
-export type WeekendFrequency = 'working' | 'weekly' | 'biweekly';
 
 /**
  * MIRRORS `private.is_company_weekend`
@@ -83,6 +77,26 @@ export function isWeekendDate(iso: string, rule: WeekendRule): boolean {
   return Math.abs(weekIndex(dateMs) - weekIndex(anchorMs)) % 2 === 0;
 }
 
+/** A weekend rule plus the company's official holidays. */
+export type WorkingDayRule = WeekendRule & { holidays: string[] };
+
+/** True when the date is neither a weekend day under the rule nor a holiday. */
+export function isWorkingDate(iso: string, rule: WorkingDayRule): boolean {
+  return !isWeekendDate(iso, rule) && !rule.holidays.includes(iso);
+}
+
+/** Safety stop: a year of consecutive days off means the settings are wrong. */
+const MAX_DAYS_AHEAD = 366;
+
+/** First working day strictly after `iso`, or null if none within a year. */
+export function nextWorkingDay(iso: string, rule: WorkingDayRule): string | null {
+  for (let i = 1; i <= MAX_DAYS_AHEAD; i++) {
+    const day = addDays(iso, i);
+    if (isWorkingDate(day, rule)) return day;
+  }
+  return null;
+}
+
 export type WeekendValidation =
   | { ok: true; days: number[]; biweeklyDays: number[]; anchor: string | null }
   | { ok: false; reason: 'out_of_range' | 'all_week' | 'anchor_required' | 'overlap' };
@@ -129,15 +143,4 @@ export function validateWeekendDays(
     // a value nothing reads.
     anchor: uniqBi.length > 0 ? anchor : null,
   };
-}
-
-/** The per-weekday frequency a settings UI edits, derived from the two lists. */
-export function frequencyOf(
-  iso: number,
-  weekendDays: number[],
-  biweeklyDays: number[]
-): WeekendFrequency {
-  if (weekendDays.includes(iso)) return 'weekly';
-  if (biweeklyDays.includes(iso)) return 'biweekly';
-  return 'working';
 }

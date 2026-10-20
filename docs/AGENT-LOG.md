@@ -162,6 +162,89 @@ Copy this block verbatim and fill it in.
   unit 943 passed, tsc/lint/build ok.
 - Nothing committed (CLAUDE.md). Traveller field list is still the placeholder pending procurement.
 
+## 2026-10-20 — Review and merge of PR #9 (refactor plan)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/per-diem-wording @ ec52114 (main checkout untouched; review ran in a scratch worktree of `origin/codex/refactor-cleanup` @ 3848657)
+**Trigger:** Review PR #9; merge if clean, otherwise report issues and wait.
+
+**What changed**
+- No code changes. Merged PR #9 into `main` as merge commit `07a4d26` (`gh pr merge 9 --merge`).
+- This log entry (pushed to `main` with `[skip ci]`).
+- Deleted branch `codex/refactor-cleanup` (remote and local).
+
+**Actions outside the repo**
+- The merge push started the Liara deploy: GitHub Actions run 39503363859 (Deploy Liara).
+
+**Verification**
+- On the PR branch: `tsc --noEmit` ok, `npm run lint` clean, `npm run test:unit` 892 passed / 5 skipped,
+  `npm run build` ok (needs a real `npm ci`; a symlinked `node_modules` makes Turbopack fail with
+  "Symlink [project]/node_modules is invalid"), `npm run test:deploy` all four suites passed.
+- R-12 translations: a throwaway script checked all 1,606 literal `t('…')` calls in the changed
+  app/components files against `messages/en.json` and `fa.json`: every key exists and every
+  `{placeholder}` gets a value (the hits it reported were scoping false positives, checked by hand).
+  Diffed the removed page `labels` entries against the added ones: nothing lost; only the unused
+  hourly `durationLabel` was dropped.
+- Read the R-03/R-04/R-05/R-06/R-09 helper swaps against the old copies: same messages, defaults,
+  file names and working-day logic.
+- Not run: full Playwright e2e and `tests/sql` (the PR author did not run them either).
+
+**State left behind**
+- PR #9 merged; deploy run 39503363859 completed with success.
+
+**For the next agent**
+- If bjeng.app shows a screen with a raw key or missing text, suspect R-12 first; the e2e suite was not run on it.
+
+## 2026-10-19/20 — Refactor review and its implementation (`docs/REFACTOR_PLAN.md`)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/per-diem-wording` @ `3d81b08` (review), then a new worktree branch
+`codex/refactor-cleanup` from `ec52114` (implementation; other sessions' uncommitted work in the main
+checkout left untouched).
+**Trigger:** Write a simplification plan for the whole codebase; then "go with your recommendations,
+commit changes".
+
+**What changed**
+- 2026-10-19: wrote `docs/REFACTOR_PLAN.md` (12 tasks, 6 owner questions). Another agent committed it in
+  `ec52114`.
+- 2026-10-20: one commit per task on `codex/refactor-cleanup`: R-01 `getAllEmployees` removed ·
+  R-02 `lib/device.ts`, `lib/auth/permissions.ts`, `frequencyOf` removed · R-03 `signatureProblem` /
+  `perDiemProblem` (`lib/leave/signature.ts`) · R-04 `WORK_SETTINGS_FALLBACK` everywhere · R-05
+  `lib/csv/download.ts` · R-06 `appLocale`/`formatNumber`/`APP_TIME_ZONE` reuse, `i18n/routing.ts`
+  reads `APP_LOCALES` · R-07 `DbErrorResult` in place of 75 ad-hoc unions · R-08
+  `scripts/load-env.mjs` · R-09 `lib/leave/isoDate.ts`, `isWorkingDate`/`nextWorkingDay` in
+  `weekend.ts` · R-11 `test:deploy` runs all suites · R-12 every listed screen reads its own
+  translations (14 commits), then removed the unused `nav.language` key.
+- R-10 deferred (owner question Q1): the SQL scenario files are not in CI. Logged in TASKS.
+
+**Actions outside the repo**
+- Read-only queries on the local DB (`bj-erp-db-1`: migration ledger, function count).
+- Dev server from the worktree on :3100 (stopped). Read-only Playwright smoke signed in as the local
+  admin with the e2e default credentials. The test account 124 login was refused (its password in
+  `.env.test-accounts` looks stale). No writes, no server or Liara actions.
+
+**Verification**
+- `tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 892 passed / 5 skipped · `npm run
+  test:deploy` all four suites pass · `npm run build` 0.
+- Temporary smoke spec (deleted, not committed): 19 routes (all converted screens plus one
+  edit-employee page) in fa (`bj-locale=fa` cookie) and en. No MISSING_MESSAGE, FORMATTING_ERROR,
+  hydration errors, raw keys or unfilled `{placeholders}`. A static scan found all 731 `t('…')` keys in
+  the touched files in both message files.
+- Not run: the full e2e suite (several specs change company-wide settings on the real-roster local DB),
+  and `tests/sql`.
+
+**State left behind**
+- Branch `codex/refactor-cleanup` in worktree `.claude/worktrees/refactor-cleanup`: committed, **not
+  pushed**. It sits on top of `codex/per-diem-wording` (`ec52114`), which is not merged either. Merge
+  that first, or rebase this onto `main` once it lands.
+
+**For the next agent**
+- Pattern for new screens: the client component calls `useTranslations` (or a local `useLabels()`); do
+  not pass translated `labels` from pages (CLAUDE.md gotcha).
+- `hookify`-style moves kept every message call as it was, including the `t.raw()` templates some
+  components fill themselves (`EditEmployeeForm` deactivate body, settings `lastSaved`, import wizard).
+- Open owner questions: Q2, Q3, Q5 (TASKS.md, Codebase cleanup).
+
 ## 2026-10-19 — Roles-page wording and Farsi per diem term
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

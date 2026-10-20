@@ -84,7 +84,7 @@ export type UpdateEmployeeFields = Partial<{
 export async function updateEmployee(
   id: string,
   fields: UpdateEmployeeFields
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -119,7 +119,7 @@ export async function updateEmployee(
 export async function setRoles(
   id: string,
   roleIds: string[]
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -141,7 +141,7 @@ export async function setRoles(
 export async function setActive(
   id: string,
   active: boolean
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['people', 'edit'] });
   if (!c.ok) return c;
 
@@ -164,7 +164,7 @@ export async function setActive(
  */
 export async function resetPassword(
   id: string
-): Promise<{ ok: true; tempPassword: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; tempPassword: string } | DbErrorResult> {
   const c = await requireCaller({ anyOf: ['admin'] }) // admin-only (20261013200007);
   if (!c.ok) return c;
 
@@ -245,7 +245,7 @@ export type ImportEmployeesResult = {
  */
 export async function importEmployees(
   input: ImportEmployeesInput
-): Promise<({ ok: true } & ImportEmployeesResult) | { ok: false; error: string }> {
+): Promise<({ ok: true } & ImportEmployeesResult) | DbErrorResult> {
   const c = await requireCaller({ perm: ['people_create', 'edit'], company: true });
   if (!c.ok) return c;
   // `update` and `replace` rewrite existing people: admin only (SQL enforces it too).
@@ -330,7 +330,7 @@ export async function importEmployees(
  */
 export async function bulkResetPasswords(
   userIds: string[]
-): Promise<{ ok: true; credentials: IssuedCredential[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; credentials: IssuedCredential[] } | DbErrorResult> {
   const c = await requireCaller({ anyOf: ['admin'] }); // admin-only (20261013200007)
   if (!c.ok) return c;
   if (userIds.length === 0) return dbErr('no employees selected');
