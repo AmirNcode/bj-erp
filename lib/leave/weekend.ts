@@ -10,14 +10,6 @@ export const WEEKDAYS: { iso: number; key: string }[] = [
 ];
 
 /**
- * How often a weekday is off (FR-41).
- *
- * The client's real week is Friday off every week and Thursday off every other
- * week, which a single list of weekday numbers cannot express.
- */
-export type WeekendFrequency = 'working' | 'weekly' | 'biweekly';
-
-/**
  * MIRRORS `private.is_company_weekend`
  * (supabase/migrations/20260818170001_weekend_frequency.sql).
  *
@@ -129,15 +121,4 @@ export function validateWeekendDays(
     // a value nothing reads.
     anchor: uniqBi.length > 0 ? anchor : null,
   };
-}
-
-/** The per-weekday frequency a settings UI edits, derived from the two lists. */
-export function frequencyOf(
-  iso: number,
-  weekendDays: number[],
-  biweeklyDays: number[]
-): WeekendFrequency {
-  if (weekendDays.includes(iso)) return 'weekly';
-  if (biweeklyDays.includes(iso)) return 'biweekly';
-  return 'working';
 }
