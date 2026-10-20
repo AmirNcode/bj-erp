@@ -11,8 +11,25 @@ import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { DelegationSubmissionInput } from '@/lib/leave/delegation';
 import type { Database } from '@/lib/supabase/types';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
-import { isValidSignatureData } from '@/lib/leave/signature';
+import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import { accrueBeforeRead, type DayPart } from './shared';
+
+/**
+ * Checks every submit path runs before any write: the requester's signature,
+ * a fresh delegation preview, then an optional per diem. Raw messages; the
+ * caller localizes them with `dbErr`.
+ */
+function submissionProblem(input: DelegationSubmissionInput & {
+  signatureData: string;
+  signatureAuthorized: boolean;
+  perDiemRials?: number | null;
+}): string | null {
+  return (
+    signatureProblem(input) ??
+    (input.delegationPreview ? null : 'delegation preview refresh required') ??
+    perDiemProblem(input.perDiemRials)
+  );
+}
 
 export type SubmitRequestInput = DelegationSubmissionInput & {
   leaveTypeId: string;
@@ -35,10 +52,8 @@ export async function submitRequest(
 ): Promise<SubmitRequestResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
-  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const bad = submissionProblem(input);
+  if (bad) return dbErr(bad);
 
   // Accrue first: a worker whose newly-earned day makes this request affordable
   // must not be refused by a stale balance.
@@ -109,10 +124,8 @@ export async function submitHourlyRequest(
 ): Promise<SubmitRequestResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
-  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const bad = submissionProblem(input);
+  if (bad) return dbErr(bad);
 
   // Same reason as the daily path: a freshly-accrued hour must be spendable.
   const accrualError = await accrueBeforeRead(c.supabase);
@@ -159,14 +172,9 @@ export async function submitErrandRequest(
 ): Promise<SubmitRequestResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
-  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const bad = submissionProblem(input);
+  if (bad) return dbErr(bad);
   const perDiem = input.perDiemRials ?? null;
-  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
-    return dbErr('per diem must be 0 or more');
-  }
 
   // No accrual pass here, unlike the two leave paths: an errand is work. It
   // spends no balance, so there is nothing a freshly-accrued hour could unlock.
@@ -209,14 +217,9 @@ export async function submitDailyErrandRequest(
 ): Promise<SubmitRequestResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
-  if (!input.delegationPreview) return dbErr('delegation preview refresh required');
+  const bad = submissionProblem(input);
+  if (bad) return dbErr(bad);
   const perDiem = input.perDiemRials ?? null;
-  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
-    return dbErr('per diem must be 0 or more');
-  }
 
   const { data, error } = await c.supabase.rpc('submit_daily_errand_request_v2', {
     p_start: input.start,

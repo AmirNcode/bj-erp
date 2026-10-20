@@ -11,7 +11,7 @@ import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
 import type { ApprovalStep, ManagerScope, SignedStep, StepLabel, StepRole } from '@/lib/leave/approvals';
 import { approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
-import { isValidSignatureData } from '@/lib/leave/signature';
+import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import type { DayPart } from './shared';
 
 export type DecisionResult = { ok: true } | { ok: false; error: string };
@@ -39,13 +39,9 @@ export async function approveRequest(
 ): Promise<DecisionResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  const bad = signatureProblem(input) ?? perDiemProblem(input.perDiemRials);
+  if (bad) return dbErr(bad);
   const perDiem = input.perDiemRials ?? null;
-  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
-    return dbErr('per diem must be 0 or more');
-  }
 
   const { error } = await c.supabase.rpc('approve_leave_request_v2', {
     p_id: requestId,
