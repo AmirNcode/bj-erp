@@ -39,3 +39,50 @@ export function formatPersianConsentTimestamp(value: string, locale: string): st
     { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Tehran' }
   ).format(new Date(value));
 }
+
+/**
+ * ICU's Farsi pattern for this style is «۱۴۰۵ آبان ۶, چهارشنبه», which reads
+ * backwards to a Farsi reader, so Farsi is assembled as «چهارشنبه ۶ آبان ۱۴۰۵».
+ */
+const persianLongDate = (locale: string, timeZone: string) => {
+  const fa = appLocale(locale) === 'fa';
+  const fmt = new Intl.DateTimeFormat(fa ? 'fa-IR-u-ca-persian' : 'en-US-u-ca-persian',
+    { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone });
+  return {
+    format(date: Date): string {
+      if (!fa) return fmt.format(date);
+      const part = (type: Intl.DateTimeFormatPartTypes) =>
+        fmt.formatToParts(date).find((p) => p.type === type)?.value ?? '';
+      return `${part('weekday')} ${part('day')} ${part('month')} ${part('year')}`;
+    },
+  };
+};
+
+/** "Saturday, Aban 1, 1405 AP" / «شنبه ۱ آبان ۱۴۰۵» for a Gregorian `YYYY-MM-DD` day. */
+export function formatLongPersianDate(isoDate: string, locale: string): string {
+  return persianLongDate(locale, 'UTC').format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+/**
+ * One edge of an absence window, as a Persian day plus a Tehran clock time.
+ * Midnight has no useful clock time: a window starting at 00:00 starts at the
+ * beginning of that day, and one ending at 00:00 (exclusive) ends with the
+ * previous day, so `time` is null for both and the caller says "start/end of day".
+ */
+export function formatTehranWindowEdge(
+  value: string,
+  locale: string,
+  edge: 'start' | 'end'
+): { date: string; time: string | null } {
+  const at = new Date(value);
+  const clock = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Tehran',
+  }).format(at);
+  if (clock === '00:00') {
+    const day = edge === 'end' ? new Date(at.getTime() - 1) : at;
+    return { date: persianLongDate(locale, 'Asia/Tehran').format(day), time: null };
+  }
+  const [h, m] = clock.split(':');
+  const digits = (n: string) => formatNumber(Number(n), locale, { minimumIntegerDigits: 2, useGrouping: false });
+  return { date: persianLongDate(locale, 'Asia/Tehran').format(at), time: `${digits(h)}:${digits(m)}` };
+}

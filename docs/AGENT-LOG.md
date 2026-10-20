@@ -78,6 +78,56 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-19 — Roles-page wording and Farsi per diem term
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** new `codex/per-diem-wording` from `origin/main` @ `3d81b08` (PR #8 merged by owner).
+**Trigger:** Owner (testing locally as `hr-101`) could not find the per diem field. Cause: local DB has no
+`approval_executive_settings` row, so nobody is the designated HR head (the `hr` role alone does not count).
+Local stack verified: installed from `810d269` (same tree as `main`), FR-68 migration applied. Owner then
+asked to simplify the roles-page settings text and rename the Farsi per diem term; no commit, no push.
+
+**What changed**
+- `messages/{en,fa}.json` `rolesDelegation.*` — shorter hints/labels (CEO, Head of HR, HR approval steps,
+  delegate eligibility, CEO attestation, retained authority); dropped the stale "pending timers" sentence;
+  Farsi uses «مدیر منابع انسانی» (was «رئیس منابع انسانی تعیین‌شده») to match the errand form.
+- `messages/fa.json` — every «فوق‌العاده ماموریت» → «حق ماموریت روزانه» (15 strings, incl. finance CSV header).
+- `lib/leave/perDiem.ts` header comment. `docs/CHANGELOG.md` Unreleased note.
+- Left as is on purpose: applied migration `20261012120003_admin_override_per_diem.sql` (frozen), the frozen
+  spec `docs/specs/2026-10-12-…`, and the old shipped CHANGELOG entry, which still say «فوق‌العاده ماموریت».
+- Local only: moved my git-ignored `.bj-deploy/delegation/start-3002.cjs` to
+  `resume-tools/bj-delegation-start-3002.cjs.txt`, because ESLint was linting it locally.
+
+**Actions outside the repo**
+- Read-only SQL on `bj-erp-db-1` (migration ledger, executive settings, `hr-101` roles, approval steps). No writes.
+
+**Verification**
+- `npm run lint` 0, `npx tsc --noEmit` 0, `npm run test:unit` 83 files / 884 tests. No browser check;
+  the owner will redeploy locally and look.
+
+**Follow-up in the same session: coverage box + back-at-work day (FR-69)**
+- Owner: hide the "Approval coverage" box for non-approvers, lay it out line by line, add a return-to-work
+  day (weekends + holidays). Answers: show it to everyone; all four forms; AM half = same day, PM = next day.
+- `lib/leave/returnToWork.ts` (pure; reuses `isWeekendDate`, midpoint = `approval_bounds`); hourly ending at/after
+  work end or on a day off → next working day; before work start → work start.
+- `lib/i18n/format.ts`: `formatLongPersianDate`, `formatTehranWindowEdge` (00:00 → start/end of day). ICU's fa
+  pattern reads backwards («۱۴۰۵ آبان ۶, چهارشنبه»), so Farsi is assembled as «چهارشنبه ۶ آبان ۱۴۰۵».
+- `RequestDelegationFields.tsx`: box only if error, `can_approve`, `auto_approval_eligible` or CEO temporary
+  case; otherwise just the back-at-work line. Removed the "Checking approval coverage…" line (no box while
+  loading). New `workSettings` prop on all four forms; `useRequestDelegation` returns `query`.
+  Messages: `delegation.bounds` removed; `awayFrom`, `until`, `startOfDay`, `endOfDay`, `backAtWork` added.
+- Tests: `tests/unit/return-to-work.test.ts` (12), `request-delegation.test.tsx` (+4 cases). Unit 84 files /
+  899 tests, lint 0, tsc 0.
+- Browser (isolated stack, temp `.claude/launch.json` entry reverted afterwards): QA employee daily leave on
+  Aban 6 → no box, "Back at work: Thursday, Aban 7, 1405 AP"; QA manager b hourly (fa) → box with
+  از / تا / بازگشت به کار on three lines. Pane screenshots rendered tiny, so checked via DOM text.
+
+**State left behind**
+- Uncommitted on `codex/per-diem-wording`. Nothing pushed or deployed.
+
+**For the next agent**
+- To see the per diem field, admin must save Settings › Roles › CEO and Head of HR (Head of HR set).
+
 ## 2026-10-19 — FR-68: Head of HR enters their own per diem
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

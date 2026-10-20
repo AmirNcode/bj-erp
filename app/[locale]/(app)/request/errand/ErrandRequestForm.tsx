@@ -175,7 +175,7 @@ export function ErrandRequestForm({ workSettings, labels, locale, perDiemAllowed
             <OwnPerDiemField idPrefix="errand" testIdPrefix="errand" value={perDiem} onChange={setPerDiem} labels={labels} />
           )}
 
-          <RequestDelegationFields idPrefix="errand" delegation={delegation} locale={locale} showCover={false} />
+          <RequestDelegationFields idPrefix="errand" delegation={delegation} workSettings={workSettings} locale={locale} showCover={false} />
 
           <RequestSignatureFields idPrefix="errand" {...signature.fieldProps} labels={labels.signature} />
 

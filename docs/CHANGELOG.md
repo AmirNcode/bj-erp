@@ -9,6 +9,15 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Wording — branch `codex/per-diem-wording` (not committed or deployed)
+
+- Settings › Roles: shorter delegate and CEO / Head of HR descriptions (Farsi and English).
+- Farsi now calls per diem «حق ماموریت روزانه» everywhere in the app (was «فوق‌العاده ماموریت»).
+- Request forms: the approval coverage box is hidden from people who approve nothing. For approvers it
+  lists "Away from", "Until" and "Back at work" on separate lines, saying start/end of day instead of
+  midnight. Everyone sees "Back at work" (next working day, skipping weekends and holidays; same day
+  with a time after hourly leave/errands and morning half days).
+
 ### Head of HR enters their own per diem — branch `codex/hr-head-per-diem` (FR-68, not deployed)
 
 Migration `20261019120000_hr_head_own_per_diem.sql`.

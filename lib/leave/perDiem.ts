@@ -1,5 +1,5 @@
 /**
- * Per diem (فوق‌العاده ماموریت, FR-61) amounts: whole Rials.
+ * Per diem (حق ماموریت روزانه, FR-61) amounts: whole Rials.
  */
 
 /**

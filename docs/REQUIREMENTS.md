@@ -353,6 +353,11 @@ Validation/release status stays in `docs/TASKS.md`.
   as "Entered by requester (Head of HR)" on My Requests, the print form and `/finance` (+ CSV
   column), and audited as `set_own_per_diem`. A later hr step signer who enters per diem replaces it
   and clears the marker. *(2026-10-19.)*
+- **FR-69** ☑ **Back-at-work day on request forms.** All four forms show when the requester is back:
+  the next working day (weekly/fortnightly weekends and holidays skipped); the same day with a time
+  for hourly requests ending before work end and for morning half days (midpoint as in
+  `approval_bounds`). Display only. The approval coverage box shows only to approvers, the CEO and the
+  CEO's delegate. *(2026-10-20.)*
 
 ### Unreleased approval delegation amendment
 

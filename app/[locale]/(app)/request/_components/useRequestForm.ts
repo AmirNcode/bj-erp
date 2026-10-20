@@ -195,6 +195,8 @@ export function useRequestDelegation(query: DelegationPreviewQuery | null) {
         : null;
 
   return {
+    /** The absence these results describe; the form also derives the return-to-work day from it. */
+    query,
     preview, loading, error,
     blocked: !!key && problem() !== null,
     autoApprovalConsent,

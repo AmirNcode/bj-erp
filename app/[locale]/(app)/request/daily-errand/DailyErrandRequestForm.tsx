@@ -140,7 +140,7 @@ export function DailyErrandRequestForm({ workSettings, labels, locale, perDiemAl
             <OwnPerDiemField idPrefix="daily_errand" testIdPrefix="daily-errand" value={perDiem} onChange={setPerDiem} labels={labels} />
           )}
 
-          <RequestDelegationFields idPrefix="daily-errand" delegation={delegation} locale={locale} showCover={false} />
+          <RequestDelegationFields idPrefix="daily-errand" delegation={delegation} workSettings={workSettings} locale={locale} showCover={false} />
 
           <RequestSignatureFields
             idPrefix="daily-errand"

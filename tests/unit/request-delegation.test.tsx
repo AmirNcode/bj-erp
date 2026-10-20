@@ -115,9 +115,14 @@ describe('request delegation preview and consent', () => {
   });
 });
 
-function fields(view: RequestDelegationPreview, props: { hasReplacement?: boolean; showCover?: boolean } = {}) {
-  return <RequestDelegationFields locale="en" idPrefix="daily" {...props} delegation={{
-    preview: view, loading: false, error: '', blocked: false,
+const workSettings = {
+  weekendDays: [5], biweeklyWeekendDays: [], biweeklyAnchor: null, holidays: ['2026-10-21'],
+  hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240,
+};
+
+function fields(view: RequestDelegationPreview, props: { hasReplacement?: boolean; showCover?: boolean } = {}, absence: DelegationPreviewQuery = query) {
+  return <RequestDelegationFields locale="en" idPrefix="daily" workSettings={workSettings} {...props} delegation={{
+    query: absence, preview: view, loading: false, error: '', blocked: false,
     autoApprovalConsent: false, temporaryCeoAuthorized: false,
     setAutoApprovalConsent: vi.fn(), setTemporaryCeoAuthorized: vi.fn(), refresh: vi.fn(), problem: () => null,
     submission: { delegationPreview: null, autoApprovalConsent: false, temporaryCeoAuthorized: false },
@@ -140,16 +145,42 @@ describe('request delegation messages', () => {
     expect(screen.queryByRole('link')).toBeNull();
   });
 
-  it('does not give ordinary employees an approval responsibility warning', () => {
+  it('hides the coverage box from ordinary employees but still shows their return day', () => {
     render(fields({ ...preview, can_approve: false, can_delegate: true }));
+    expect(screen.queryByTestId('daily-delegation')).toBeNull();
     expect(screen.queryByTestId('daily-no-approval-delegate')).toBeNull();
+    // Morning off on Tue 2026-10-20: back the same day at midday.
+    expect(screen.getByTestId('daily-return-to-work').textContent).toMatch(/^backAtWork:.*Tuesday.*· 11:00$/);
+  });
+
+  it('skips weekends and holidays for the return day', () => {
+    // Full day Tue 20 → Wed 21 is a holiday → back Thu 22.
+    render(fields({ ...preview, can_approve: false }, {}, { ...query, dayPart: 'full' }));
+    expect(screen.getByTestId('daily-return-to-work').textContent).toMatch(/Thursday/);
+  });
+
+  it('lists the window line by line for approvers, with the return day inside the box', () => {
+    render(fields(preview));
+    const lines = screen.getByTestId('daily-delegation-bounds').querySelectorAll('div');
+    expect(lines).toHaveLength(3);
+    expect(lines[0].textContent).toMatch(/^awayFrom:.*Tuesday.*· 07:00$/);
+    expect(lines[1].textContent).toMatch(/^until:.*Tuesday.*· 11:00$/);
+    expect(lines[2].textContent).toMatch(/^backAtWork:/);
+  });
+
+  it('says start and end of day instead of midnight for whole days', () => {
+    const whole = { ...preview, bounds: { starts_at: '2026-10-19T20:30:00Z', ends_at: '2026-10-20T20:30:00Z' } };
+    render(fields(whole, {}, { ...query, dayPart: 'full' }));
+    const lines = screen.getByTestId('daily-delegation-bounds').querySelectorAll('div');
+    expect(lines[0].textContent).toMatch(/Tuesday.*· startOfDay$/);
+    expect(lines[1].textContent).toMatch(/Tuesday.*· endOfDay$/);
   });
 
   it('shows auto-approval consent on errands without adding cover controls', () => {
     render(fields({ ...preview, auto_approval_eligible: true }, { showCover: false }));
     expect(screen.getByTestId('daily-auto-approval-consent')).toBeTruthy();
     expect(screen.queryByTestId('daily-approval-cover')).toBeNull();
-    expect(screen.getByTestId('daily-delegation-bounds').textContent).toContain('bounds');
+    expect(screen.getByTestId('daily-delegation-bounds').textContent).toContain('awayFrom');
   });
 
 });
