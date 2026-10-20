@@ -9,6 +9,7 @@
 
 import type { ImportChoices, ImportPlan, MissingDecision } from '@/lib/csv/import-plan';
 import type { ImportMode } from '@/lib/csv/import-rows';
+import { formatNumber } from '@/lib/i18n/format';
 
 export type PlanLabels = {
   summaryTitle: string;
@@ -62,7 +63,7 @@ function fill(template: string, params: Record<string, string | number> = {}): s
 }
 
 export function ImportPlanPanel({ plan, mode, choices, onChoices, labels, locale }: Props) {
-  const fmt = (n: number) => new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(n);
+  const fmt = (n: number) => formatNumber(n, locale);
   const count = (template: string, n: number) => fill(template, { count: fmt(n) });
 
   const deptCreates = plan.departments.filter((d) => d.create).length;

@@ -7,6 +7,7 @@ import persian_fa from 'react-date-object/locales/persian_fa';
 import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import type { WorkSettings } from '@/lib/actions/leave/reference';
 import { isWeekendDate } from './weekend';
+import { appLocale } from '@/lib/i18n/format';
 
 export type CalendarDayEntry = CalendarEntry & {
   returnDate: string;
@@ -30,12 +31,8 @@ export type CalendarMonth = {
 
 const MS_PER_DAY = 86_400_000;
 
-function normalizedLocale(locale: string): 'fa' | 'en' {
-  return locale === 'fa' ? 'fa' : 'en';
-}
-
 function displayConfig(locale: string) {
-  const lang = normalizedLocale(locale);
+  const lang = appLocale(locale);
 
   return {
     calendar: persian,
@@ -151,7 +148,7 @@ export function currentCalendarMonthRange(
 
 function weekdayLabels(weekStartsOn: number, locale: string): string[] {
   const labels: string[] = [];
-  const formatter = new Intl.DateTimeFormat(normalizedLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
+  const formatter = new Intl.DateTimeFormat(appLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
     weekday: 'short',
     timeZone: 'UTC',
   });

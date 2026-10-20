@@ -1,3 +1,5 @@
+import { APP_TIME_ZONE } from '@/lib/appDate';
+
 export function appLocale(locale: string): 'fa' | 'en' {
   return locale === 'fa' ? 'fa' : 'en';
 }
@@ -36,7 +38,7 @@ export function localizedLeaveTypeName(
 export function formatPersianConsentTimestamp(value: string, locale: string): string {
   return new Intl.DateTimeFormat(
     appLocale(locale) === 'fa' ? 'fa-IR-u-ca-persian' : 'en-US-u-ca-persian',
-    { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Tehran' }
+    { dateStyle: 'medium', timeStyle: 'short', timeZone: APP_TIME_ZONE }
   ).format(new Date(value));
 }
 
@@ -76,13 +78,13 @@ export function formatTehranWindowEdge(
 ): { date: string; time: string | null } {
   const at = new Date(value);
   const clock = new Intl.DateTimeFormat('en-GB', {
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Asia/Tehran',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: APP_TIME_ZONE,
   }).format(at);
   if (clock === '00:00') {
     const day = edge === 'end' ? new Date(at.getTime() - 1) : at;
-    return { date: persianLongDate(locale, 'Asia/Tehran').format(day), time: null };
+    return { date: persianLongDate(locale, APP_TIME_ZONE).format(day), time: null };
   }
   const [h, m] = clock.split(':');
   const digits = (n: string) => formatNumber(Number(n), locale, { minimumIntegerDigits: 2, useGrouping: false });
-  return { date: persianLongDate(locale, 'Asia/Tehran').format(at), time: `${digits(h)}:${digits(m)}` };
+  return { date: persianLongDate(locale, APP_TIME_ZONE).format(at), time: `${digits(h)}:${digits(m)}` };
 }

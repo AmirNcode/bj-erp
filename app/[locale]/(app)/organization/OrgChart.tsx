@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatNumber } from '@/lib/i18n/format';
 import {
   buildOrgIndex,
   chainTo,
@@ -72,7 +73,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const fmt = (n: number) => new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(n);
+  const fmt = (n: number) => formatNumber(n, locale);
   const deptName = (p: OrgPerson) =>
     (locale === 'fa' ? p.departmentNameFa : p.departmentNameEn) ?? p.departmentNameFa ?? p.departmentNameEn;
 
