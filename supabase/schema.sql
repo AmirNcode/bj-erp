@@ -1993,6 +1993,19 @@ $$;
 
 
 --
+-- Name: request_has_hr_exemption(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_has_hr_exemption(p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.approval_request_policy x
+                  where x.request_id = p_request and cardinality(x.hr_exempt_step_ids) > 0);
+$$;
+
+
+--
 -- Name: request_hr_exempt(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4216,7 +4229,7 @@ begin
      where r.status = 'approved' and b.opened_at is not null
        and r.end_date >= (now() at time zone 'Asia/Tehran')::date
        and case when r.employee_id = v_uid
-                then private.has_role(v_uid, 'manager')
+                then private.has_role(v_uid, 'manager') and not private.request_has_hr_exemption(r.id)
                 else p.manager_id = v_uid or private.is_admin(v_uid) end
      order by r.start_date, r.serial_year, r.serial_seq;
 end; $$;
@@ -4746,7 +4759,7 @@ begin
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
   select manager_id into v_manager from public.profiles where id = r.employee_id;
   if not (case when r.employee_id = v_uid
-               then private.has_role(v_uid, 'manager')
+               then private.has_role(v_uid, 'manager') and not private.request_has_hr_exemption(r.id)
                else v_manager = v_uid
                     or (private.is_admin(v_uid)
                         and exists (select 1 from public.profiles c where c.id = v_uid and c.company_id = r.company_id))
@@ -4786,8 +4799,7 @@ begin
 
   -- The Head of HR's own trip: its HR step was exempt, so the extension is too
   -- (owner, 2026-10-20): approved at once, no signature, per diem unchanged.
-  if exists (select 1 from public.approval_request_policy x
-              where x.request_id = r.id and cardinality(x.hr_exempt_step_ids) > 0) then
+  if private.request_has_hr_exemption(r.id) then
     perform private.apply_errand_extension(v_id, null, 'exempt', null, null, null);
   end if;
   return v_id;
@@ -10342,6 +10354,14 @@ REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date, p_end date, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_has_hr_exemption(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_has_hr_exemption(p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.request_has_hr_exemption(p_request uuid) TO authenticated;
 
 
 --
