@@ -2,7 +2,7 @@
 
 /**
  * Company reference data the request and settings forms read: active leave
- * types, work settings with holidays, and the employee list.
+ * types and work settings with holidays.
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -99,31 +99,4 @@ export async function getWorkSettings(): Promise<{
       maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
     },
   };
-}
-
-/**
- * Fetches all employees for admin use (allocation UI).
- */
-export type EmployeeOption = {
-  id: string;
-  full_name: string;
-  employee_code: string;
-};
-
-export async function getAllEmployees(): Promise<{
-  ok: true;
-  employees: EmployeeOption[];
-} | { ok: false; error: string }> {
-  const c = await requireCaller({ anyOf: ['admin'] });
-  if (!c.ok) return c;
-
-  const { data, error } = await c.supabase
-    .from('profiles')
-    .select('id, full_name, employee_code')
-    .eq('active', true)
-    .order('full_name');
-
-  if (error) return dbErr(error.message);
-
-  return { ok: true, employees: (data ?? []) as EmployeeOption[] };
 }
