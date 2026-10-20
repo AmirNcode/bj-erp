@@ -12,9 +12,11 @@ import type { Database } from '@/lib/supabase/types';
 import type { ApprovalStep, ManagerScope, SignedStep, StepLabel, StepRole } from '@/lib/leave/approvals';
 import { approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
 import { isValidSignatureData } from '@/lib/leave/signature';
+import type { TravellerField } from '@/lib/travel/fields';
 import type { DayPart } from './shared';
 
-export type DecisionResult = { ok: true } | { ok: false; error: string };
+/** `warning`: the decision is saved but a follow-up step (FR-70 travel tick) was not. */
+export type DecisionResult = { ok: true; warning?: string } | { ok: false; error: string };
 
 export type ApproveRequestInput = {
   signatureData: string;
@@ -25,6 +27,8 @@ export type ApproveRequestInput = {
   override?: boolean;
   /** FR-61: per diem in Rials, only with an hr step on an errand. */
   perDiemRials?: number | null;
+  /** FR-70: mark the daily errand «نیاز به رزرو سفر» once the approval is saved. */
+  travelBooking?: boolean;
 };
 
 /**
@@ -57,6 +61,12 @@ export async function approveRequest(
   });
   if (error) return dbErr(error.message);
   invalidateAppCache();
+  if (input.travelBooking) {
+    // A separate call after the signature is saved: the approval stands even if this
+    // fails, and HR can tick it later from the Requests page.
+    const { error: tickError } = await c.supabase.rpc('app_set_travel_booking', { p_request: requestId, p_on: true });
+    if (tickError) return { ok: true, warning: (await dbErr('travel booking not saved')).error };
+  }
   return { ok: true };
 }
 
@@ -134,6 +144,11 @@ export type PendingApproval = {
   /** FR-61: whether signing the natural step / the override takes a per diem. */
   per_diem_natural: boolean;
   per_diem_override: boolean;
+  /**
+   * FR-70: a daily errand whose HR step (or override) may mark it «نیاز به رزرو سفر»,
+   * with the traveller details still missing. Null when the box does not apply.
+   */
+  travel: { employeeId: string; missingFields: TravellerField[] } | null;
   decision_steps?: ApprovalChoice[];
   rejection_steps?: ApprovalChoice[];
   progress?: ApprovalProgressRow[];
@@ -231,6 +246,7 @@ export async function getPendingApprovals(): Promise<
       can_override: row.can_override === true,
       per_diem_natural: choices[0]?.perDiem ?? false,
       per_diem_override: row.can_override === true && row.kind === 'errand' && progress.some((step) => step.step_role === 'hr' && !step.decision && step.evidence_kind !== 'hr_exempt'),
+      travel: null,
       decision_steps: choices,
       rejection_steps: rejections,
       progress,
@@ -241,7 +257,16 @@ export async function getPendingApprovals(): Promise<
   });
   // Like main: only what the caller can act on now. A later step waiting on an earlier one
   // (approval order enforced) stays out of the queue and badge, even though SQL lets it reject.
-  return { ok: true, requests: requests.filter((r) => r.can_override || !!r.decision_steps?.length) };
+  const actionable = requests.filter((r) => r.can_override || !!r.decision_steps?.length);
+  // FR-70: daily errands at an hr step get the travel-booking box and its missing-details hint.
+  await Promise.all(actionable.map(async (r) => {
+    const hrStep = r.per_diem_override || !!r.decision_steps?.some((step) => step.perDiem);
+    if (r.kind !== 'errand' || r.unit !== 'day' || !hrStep) return;
+    const { data, error: missingError } = await c.supabase.rpc('app_travel_missing_fields', { p_request: r.id });
+    if (missingError) return;
+    r.travel = { employeeId: r.employee_id, missingFields: (data ?? []) as TravellerField[] };
+  }));
+  return { ok: true, requests: actionable };
 }
 
 /**

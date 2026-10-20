@@ -123,6 +123,7 @@ describe('manageItemsForRoles', () => {
       'reports',
       'absences',
       'finance',
+      'procurement',
     ]);
   });
   it('hr preset gets Finance in Manage, never Manage › Absences (that board is on Home)', () => {
@@ -210,4 +211,26 @@ describe('live approval and delegation capabilities', () => {
 
 it('keeps Finance reachable when self-service delegation creates the Manage tab', () => {
   expect(manageItemsForRoles(['employee'], { finance: 'read' }, false, true).map((i) => i.key)).toEqual(['finance']);
+});
+
+describe('procurement (FR-70)', () => {
+  const PROC: Perms = { travel_booking: 'edit' };
+  it('procurement preset gets a Procurement tab and no Manage', () => {
+    const tabs = tabsForRoles(['employee', 'procurement'], PROC);
+    expect(tabs.map((t) => t.key)).toEqual(['home', 'request', 'calendar', 'organization', 'procurement']);
+    expect(tabs.find((t) => t.key === 'procurement')).toMatchObject({ href: '/procurement' });
+    expect(manageItemsForRoles(['employee', 'procurement'], PROC)).toEqual([]);
+  });
+  it('hr with travel_booking finds it under Manage, not as a tab', () => {
+    const perms = { ...HR, travel_booking: 'edit' } as Perms;
+    expect(tabsForRoles(['employee', 'hr'], perms).map((t) => t.key)).not.toContain('procurement');
+    expect(manageItemsForRoles(['employee', 'hr'], perms).map((i) => i.key)).toContain('procurement');
+  });
+  it('admin sees it under Manage', () => {
+    expect(manageItemsForRoles(['admin'], fullPerms()).map((i) => i.key)).toContain('procurement');
+  });
+  it('employee and hr without the permission get none', () => {
+    expect(tabsForRoles(['employee'], {}).map((t) => t.key)).not.toContain('procurement');
+    expect(manageItemsForRoles(['employee', 'hr'], HR).map((i) => i.key)).not.toContain('procurement');
+  });
 });

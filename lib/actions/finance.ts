@@ -7,7 +7,9 @@
  * approved. Reads go through `public.finance_approved_requests`, a guarded
  * SECURITY DEFINER function (`finance.view` → finance read): finance has no RLS read on
  * `leave_requests`, and the function returns approved rows only, without
- * signatures or the private reason.
+ * signatures or the private reason. FR-70: a travel-booked trip appears once
+ * procurement has booked it (with ticket and hotel cost); a cancelled one once
+ * procurement has recorded the amount lost (`status` = cancelled).
  */
 
 import { requireCaller } from '@/lib/auth/context';

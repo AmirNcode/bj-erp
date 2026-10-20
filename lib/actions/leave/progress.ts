@@ -11,6 +11,7 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr } from '@/lib/errors/db-error';
 import type { StepLabel } from '@/lib/leave/approvals';
 import { progressLabel, type ApprovalContextRow, type ApprovalEvidenceKind } from '@/lib/leave/approval-context';
+import type { RequestExtension } from '@/lib/actions/travel';
 
 export type ProgressStep = {
   order: number;
@@ -31,7 +32,7 @@ export type ProgressStep = {
 
 export async function getRequestProgress(
   requestId: string
-): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean; extensions?: RequestExtension[] } | { ok: false; error: string }> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -39,8 +40,15 @@ export async function getRequestProgress(
   if (error) return dbErr(error.message);
 
   const context = data as unknown as ApprovalContextRow;
+  // FR-70: a daily errand may carry trip extensions; they follow the steps.
+  let extensions: RequestExtension[] = [];
+  if (context.kind === 'errand' && context.unit === 'day') {
+    const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
+    if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
+  }
   return {
     ok: true,
+    extensions,
     configurationChanged: context.configuration_changed,
     legacyReconciliationRequired: context.legacy_reconciliation_required,
     steps: context.progress.map((r) => ({

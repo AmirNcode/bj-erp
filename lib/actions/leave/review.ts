@@ -13,9 +13,11 @@ import type { Database } from '@/lib/supabase/types';
 import type { StepRole } from '@/lib/leave/approvals';
 import type { ApprovalContextRow, ApprovalSignatures, ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { DayPart } from './shared';
+import type { RequestExtension } from '@/lib/actions/travel';
 
 export type ReviewRequestRow = {
   id: string;
+  employee_id: string;
   kind: Database['public']['Enums']['request_kind'];
   unit: Database['public']['Enums']['leave_unit'];
   status: Database['public']['Enums']['leave_status'];
@@ -55,7 +57,7 @@ export async function getReviewRequests(): Promise<
   const { data, error } = await c.supabase
     .from('leave_requests')
     .select(
-      `id, kind, unit, status, start_date, end_date, start_time, end_time, day_part,
+      `id, employee_id, kind, unit, status, start_date, end_date, start_time, end_time, day_part,
        requested_minutes, serial_year, serial_seq, signature_consent_at,
        approver_signature_consent_at, created_at,
        profiles!leave_requests_employee_id_fkey(
@@ -70,6 +72,7 @@ export async function getReviewRequests(): Promise<
 
   type Row = {
     id: string;
+    employee_id: string;
     kind: Database['public']['Enums']['request_kind'];
     unit: Database['public']['Enums']['leave_unit'];
     status: Database['public']['Enums']['leave_status'];
@@ -96,6 +99,7 @@ export async function getReviewRequests(): Promise<
     ok: true,
     requests: ((data ?? []) as unknown as Row[]).map((r) => ({
       id: r.id,
+      employee_id: r.employee_id,
       kind: r.kind ?? 'leave',
       unit: r.unit ?? 'day',
       status: r.status,
@@ -142,6 +146,8 @@ export type PrintableRequest = ReviewRequestRow & {
    * signature in its own box (تصویب کننده = manager, HR box = hr, …) instead of
    * assuming a single approver.
    */
+  /** FR-70: extensions of a daily errand (the print form lists the approved ones). */
+  extensions?: RequestExtension[];
   approvals: {
     stepRole: StepRole;
     /**
@@ -196,6 +202,11 @@ export async function getRequestForPrint(
   if (!context.data || !signatures.data) return dbErr('request not found');
   const row = context.data as unknown as ApprovalContextRow;
   const evidence = signatures.data as unknown as ApprovalSignatures;
+  let extensions: RequestExtension[] = [];
+  if (row.kind === 'errand' && row.unit === 'day') {
+    const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
+    if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
+  }
 
   // Keep ledger visibility unchanged. No visible ledger row is not proof of zero balance.
   let currentBalance: number | null = null;
@@ -213,6 +224,7 @@ export async function getRequestForPrint(
     ok: true,
     request: {
       ...row,
+      extensions,
       signature_data: evidence.requester_signature_data,
       approver_signature_data: evidence.approver_signature_data ?? null,
       approvals: evidence.approvals.filter((a) => a.decision || a.evidence_kind === 'hr_exempt').map((a) => ({
