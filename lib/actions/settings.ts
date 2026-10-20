@@ -5,6 +5,7 @@ import { validateWeekendDays } from '@/lib/leave/weekend';
 import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr } from '@/lib/errors/db-error';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 /**
  * Work settings and holidays writes: the matching FR-55 item at edit (the admin
@@ -56,15 +57,16 @@ export async function getCompanyHolidays(): Promise<
   ]);
   if (he) return dbErr(he.message);
   if (we) return dbErr(we.message);
+  const d = WORK_SETTINGS_FALLBACK;
   return {
     ok: true,
     holidays: (hols ?? []) as Holiday[],
-    weekendDays: ws?.weekend_days ?? [5],
-    biweeklyWeekendDays: ws?.biweekly_weekend_days ?? [],
-    biweeklyAnchor: ws?.biweekly_anchor ?? null,
-    workStart: ws?.work_start ?? '07:00',
-    workEnd: ws?.work_end ?? '15:00',
-    maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
+    weekendDays: ws?.weekend_days ?? d.weekendDays,
+    biweeklyWeekendDays: ws?.biweekly_weekend_days ?? d.biweeklyWeekendDays,
+    biweeklyAnchor: ws?.biweekly_anchor ?? d.biweeklyAnchor,
+    workStart: ws?.work_start ?? d.workStart,
+    workEnd: ws?.work_end ?? d.workEnd,
+    maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? d.maxHourlyMinutesPerDay,
     updatedAt: ws?.updated_at ?? null,
   };
 }

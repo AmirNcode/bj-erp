@@ -18,6 +18,7 @@ import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { can } from '@/lib/permissions/catalog';
 import { settingsItemForRoles } from '@/lib/nav/tabs';
 import { getCompanyHolidays } from '@/lib/actions/settings';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { WorkSettingsForm } from './WorkSettingsForm';
 import { HolidayEditor } from './HolidayEditor';
 import { SettingsTabs } from './_components/SettingsTabs';
@@ -44,12 +45,8 @@ export default async function SettingsPage({ params }: Props) {
     getTranslations('manage.settings.holidayImport'),
   ]);
   const data = await getCompanyHolidays();
-  const weekendDays = data.ok ? data.weekendDays : [5];
-  const biweeklyWeekendDays = data.ok ? data.biweeklyWeekendDays : [];
-  const biweeklyAnchor = data.ok ? data.biweeklyAnchor : null;
-  const workStart = data.ok ? data.workStart : '07:00';
-  const workEnd = data.ok ? data.workEnd : '15:00';
-  const hourlyCapMinutes = data.ok ? data.maxHourlyMinutesPerDay : 240;
+  const { weekendDays, biweeklyWeekendDays, biweeklyAnchor, workStart, workEnd, maxHourlyMinutesPerDay: hourlyCapMinutes } =
+    data.ok ? data : WORK_SETTINGS_FALLBACK;
   const holidays = data.ok ? data.holidays : [];
   const updatedAt = data.ok ? data.updatedAt : null;
 
