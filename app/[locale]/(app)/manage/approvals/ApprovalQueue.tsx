@@ -1,5 +1,7 @@
 'use client';
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -14,50 +16,63 @@ import { formatSerialLocalized } from '@/lib/leave/serial';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   RequestSignatureViewer,
-  type SignatureLabels,
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
 
-type Labels = {
-  empty: string;
-  reason: string;
-  approve: string;
-  reject: string;
-  approveConfirm: string;
-  rejectConfirm: string;
-  rejectReasonLabel: string;
-  rejectReasonPlaceholder: string;
-  errorLabel: string;
-  approveSuccess: string;
-  rejectSuccess: string;
-  coverLabel: string;
-  coverConflict: string;
-  trackingNo: string;
-  errandBadge: string;
-  errandLocation: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  and: string;
-  dayPartLabels: { full: string; am: string; pm: string };
-  requesterSignature: SignatureLabels;
-  approverSignature: SignatureLabels;
-  /** FR-36 chain progress. */
-  chainTitle: string;
-  awaiting: string;
-  signed: string;
-  stepLabels: Record<string, string>;
-};
+/** The screen's copy; every key was a `labels` prop built by the page. */
+function useLabels() {
+  const t = useTranslations('approvals');
+  const tLeave = useTranslations('leave');
+  const tRepl = useTranslations('replacement');
+  const tErrand = useTranslations('errand');
+  const tSignature = useTranslations('signature');
+  return {
+    empty: t('empty'),
+    reason: t('reason'),
+    approve: t('approve'),
+    reject: t('reject'),
+    approveConfirm: t('approveConfirm'),
+    rejectConfirm: t('rejectConfirm'),
+    rejectReasonLabel: t('rejectReasonLabel'),
+    rejectReasonPlaceholder: t('rejectReasonPlaceholder'),
+    errorLabel: t('error'),
+    approveSuccess: t('approveSuccess'),
+    rejectSuccess: t('rejectSuccess'),
+    coverLabel: tRepl('coverLabel'),
+    coverConflict: tRepl('coverConflict'),
+    trackingNo: tLeave('trackingNo'),
+    errandBadge: tErrand('badge'),
+    errandLocation: tErrand('location'),
+    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
+    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
+    chainTitle: t('chainTitle'),
+    awaiting: t('awaiting'),
+    signed: t('signed'),
+    stepLabels: {
+      manager: t('steps.manager'),
+      departmentManager: t('steps.departmentManager'),
+      hr: t('steps.hr'),
+      security: t('steps.security'),
+      admin: t('steps.admin'),
+    } as Record<string, string>,
+    ...durationLabelsFrom(tLeave), // days/hours/minutes/and
+    dayPartLabels: {
+      full: tLeave('dayPart.full'),
+      am: tLeave('dayPart.am'),
+      pm: tLeave('dayPart.pm'),
+    },
+  };
+}
 
 type Props = {
   requests: PendingApproval[];
-  labels: Labels;
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
 };
 
-export function ApprovalQueue({ requests, labels, locale, hoursPerDay }: Props) {
+export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   // A decision can leave another step for the same signer; refresh the live queue.
   const tEvidence = useTranslations('approvalEvidence');
