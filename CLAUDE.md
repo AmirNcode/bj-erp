@@ -151,6 +151,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Lock order: `private.approval_lock(company)` before any `'leave:'||employee` advisory lock.** Since approval delegation, a trigger takes the company lock on every write to `leave_requests`, `profiles` (active/manager/department), `departments`, `roles`, `role_permissions`, `user_roles`, `approval_steps`; a function that takes the employee lock first and then writes one of these can deadlock.
 - **SQL scoping trap:** in `from unnest(arr) id where not exists (select 1 from t where t.id = id)`, the bare `id` binds to `t.id` (always true). Alias the unnest column (`unnest(arr) as v(eid)`) and compare `v.eid`.
 - **Dry-run migrations first:** run the migration + `tests/sql/*` scenarios inside `begin … rollback` as `supabase_admin` before `bj-deploy update local` (applying freezes it).
+- **UI copy:** a `'use client'` component reads its text with `useTranslations` (or a local `useLabels()` hook); pages never build translated `labels` props — the whole catalog already reaches the client.
 - **Leave amounts in forms:** minutes, edited as whole days + hours via `DaysHoursField` / `leaveAmountReader` (`EmployeeFormParts`); never a decimal-days input.
 - **Local SQL as superuser:** `postgres` is not one in the db image; use `supabase_admin` with `PGPASSWORD` from `deploy/.env` (see `tests/sql/*` header).
 - More: `docs/MEMORY.md`.

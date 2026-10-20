@@ -1,5 +1,26 @@
 # Refactor Plan
 
+## 0. Status (2026-10-20)
+
+Applied on branch `codex/refactor-cleanup` (stacked on `codex/per-diem-wording` @ `ec52114`), one
+commit per task, not pushed or merged. Owner said "go with your recommendations", so the open
+questions were settled as below.
+
+| Task | Result |
+|---|---|
+| R-01 to R-09, R-11 | Done as written. R-07 named the failure type `DbErrorResult` everywhere; the `ActionResult` alias was not needed. |
+| R-10 | **Deferred (Q1).** The `tests/sql` scenarios are not run in CI and the shared local DB holds real data, so the TS mirrors stay until a CI Postgres job exists. |
+| R-12 | Done for every screen listed. Complex client components build their copy in a local `useLabels()` hook (same keys and message calls the page used); small ones call `t()` directly. The request page's two components share `request/_components/useRequestLabels.ts`. `durationLabelsFrom` / `signatureLabelsFrom` stay: client hooks reuse them. Print pages (Server Components) were out of scope. |
+| Q1 | Defer R-10 (above). |
+| Q2, Q3, Q5 | Left open: each changes behavior and has no task. Q3 note: a blanket `safeCell` would corrupt credentials CSVs, since generated passwords can start with `@`. |
+| Q4 | Yes: `npm run test:deploy` runs all four suites and needs Docker. |
+| Q6 | Yes: `lib/device.ts` deleted. |
+
+Verification at the end: `tsc`, lint, 892 unit tests, `npm run test:deploy`, `npm run build`. A
+read-only Playwright smoke as the local admin covered the 18 converted routes plus an edit-employee
+page, in Farsi and English: no translation errors, hydration errors or raw keys. A static check
+confirmed all 731 `t()` keys in the touched files exist in both message files.
+
 Review date: 2026-10-19, at commit `3d81b08` on branch `codex/per-diem-wording`, which has
 uncommitted work. Every task cites files and lines as they were then. Re-check a range before you
 edit it, because line numbers drift.
