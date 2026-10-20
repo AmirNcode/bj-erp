@@ -42,18 +42,83 @@ type Labels = {
   holidayImport: HolidayImportLabels;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const t = useTranslations('manage.settings');
+  const tImport = useTranslations('manage.settings.holidayImport');
+  return {
+    holidaysTitle: t('holidaysTitle'),
+    // .raw(): the editor substitutes {count} as rows come and go.
+    holidaysCount: t.raw('holidaysCount'),
+    addHoliday: t('addHoliday'),
+    dateLabel: t('dateLabel'),
+    nameFaLabel: t('nameFaLabel'),
+    nameEnLabel: t('nameEnLabel'),
+    recurringLabel: t('recurringLabel'),
+    recurringHint: t('recurringHint'),
+    delete: t('delete'),
+    noHolidays: t('noHolidays'),
+    errorLabel: t('error'),
+    // FR-40 bulk upload. Built as one object so a new label is added
+    // in one place rather than threaded through two components.
+    holidayImport: {
+      button: tImport('button'),
+      title: tImport('title'),
+      intro: tImport('intro'),
+      template: tImport('template'),
+      templateHint: tImport('templateHint'),
+      upload: tImport('upload'),
+      recurringWarning: tImport('recurringWarning'),
+      previewTitle: tImport('previewTitle'),
+      // .raw() on purpose for the three strings carrying {count} /
+      // {added} / {updated}: the dialog substitutes them itself once a
+      // file has been parsed. Calling tImport('willAdd') with no value
+      // only "works" via a production-only fast path in use-intl that
+      // skips compilation — under `next dev` it renders the dotted key
+      // path instead of a sentence. Same trap, same fix, as the
+      // password-regen dialog in manage/employees/page.tsx.
+      willAdd: tImport.raw('willAdd'),
+      willUpdate: tImport.raw('willUpdate'),
+      problemsTitle: tImport('problemsTitle'),
+      line: tImport('line'),
+      problem: tImport('problem'),
+      confirm: tImport('confirm'),
+      importing: tImport('importing'),
+      done: tImport.raw('done'),
+      cancel: tImport('cancel'),
+      columnDate: tImport('columnDate'),
+      columnNameFa: tImport('columnNameFa'),
+      columnNameEn: tImport('columnNameEn'),
+      columnRecurring: tImport('columnRecurring'),
+      yes: tImport('yes'),
+      no: tImport('no'),
+      // Explicit map rather than tImport(`errors.${key}`): a dynamic
+      // message key has already caused a production-only failure in
+      // this codebase (docs/MEMORY.md).
+      errors: {
+        missingColumn: tImport('errors.missingColumn'),
+        required: tImport('errors.required'),
+        badDate: tImport('errors.badDate'),
+        badRecurring: tImport('errors.badRecurring'),
+        nameTooLong: tImport('errors.nameTooLong'),
+        dupInFile: tImport('errors.dupInFile'),
+        noRows: tImport('errors.noRows'),
+      },
+    },
+  };
+}
+
 export function HolidayEditor({
   initial,
   readOnly = false,
   locale,
-  labels,
 }: {
   initial: Holiday[];
   /** FR-55: a read-only viewer sees the list without the add form, import or delete buttons. */
   readOnly?: boolean;
   locale: string;
-  labels: Labels;
 }) {
+  const labels = useLabels();
   const tc = useTranslations('common');
   const { calendar, calLocale } = calendarPickerConfig(locale);
   const [holidays, setHolidays] = useState<Holiday[]>(initial);
