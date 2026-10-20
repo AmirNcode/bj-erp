@@ -78,6 +78,39 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-20 — Review and merge of PR #9 (refactor plan)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/per-diem-wording @ ec52114 (main checkout untouched; review ran in a scratch worktree of `origin/codex/refactor-cleanup` @ 3848657)
+**Trigger:** Review PR #9; merge if clean, otherwise report issues and wait.
+
+**What changed**
+- No code changes. Merged PR #9 into `main` as merge commit `07a4d26` (`gh pr merge 9 --merge`).
+- This log entry (pushed to `main` with `[skip ci]`).
+- Deleted branch `codex/refactor-cleanup` (remote and local).
+
+**Actions outside the repo**
+- The merge push started the Liara deploy: GitHub Actions run 39503363859 (Deploy Liara).
+
+**Verification**
+- On the PR branch: `tsc --noEmit` ok, `npm run lint` clean, `npm run test:unit` 892 passed / 5 skipped,
+  `npm run build` ok (needs a real `npm ci`; a symlinked `node_modules` makes Turbopack fail with
+  "Symlink [project]/node_modules is invalid"), `npm run test:deploy` all four suites passed.
+- R-12 translations: a throwaway script checked all 1,606 literal `t('…')` calls in the changed
+  app/components files against `messages/en.json` and `fa.json`: every key exists and every
+  `{placeholder}` gets a value (the hits it reported were scoping false positives, checked by hand).
+  Diffed the removed page `labels` entries against the added ones: nothing lost; only the unused
+  hourly `durationLabel` was dropped.
+- Read the R-03/R-04/R-05/R-06/R-09 helper swaps against the old copies: same messages, defaults,
+  file names and working-day logic.
+- Not run: full Playwright e2e and `tests/sql` (the PR author did not run them either).
+
+**State left behind**
+- PR #9 merged; deploy run 39503363859 completed with success.
+
+**For the next agent**
+- If bjeng.app shows a screen with a raw key or missing text, suspect R-12 first; the e2e suite was not run on it.
+
 ## 2026-10-19/20 — Refactor review and its implementation (`docs/REFACTOR_PLAN.md`)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
