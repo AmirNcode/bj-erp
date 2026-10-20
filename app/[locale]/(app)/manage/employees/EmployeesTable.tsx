@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Lock, Pencil } from 'lucide-react';
 import {
@@ -50,26 +51,6 @@ type Props = {
   /** Manager without people edit: department and roles are read-only for them. */
   showLocks: boolean;
   locale: string;
-  labels: {
-    employee: string;
-    hireDate: string;
-    department: string;
-    roles: string;
-    upcomingLeave: string;
-    edit: string;
-    locked: string;
-    noEmployees: string;
-    errorLabel: string;
-    selected: string; // contains {count}
-    clearSelection: string;
-    regen: {
-      button: string;
-      confirmTitle: string;
-      confirmBody: string; // contains {count}
-      cancel: string;
-      confirm: string;
-    };
-  };
 };
 
 export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
@@ -89,7 +70,10 @@ export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
  * opens a bar offering bulk password regeneration (the recovery path for a lost
  * one-time credentials file) — confirmed first: old passwords stop working.
  */
-export function EmployeesTable({ employees, canBulkReset, showLocks, locale, labels }: Props) {
+export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: Props) {
+  const t = useTranslations('manage.employees');
+  const tl = useTranslations('manage.employees.list');
+  const tr = useTranslations('manage.employees.regen');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<IssuedCredential[] | null>(null);
@@ -129,7 +113,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
   }
 
   const lock = showLocks ? (
-    <Lock aria-label={labels.locked} className="inline size-3 text-muted-foreground" />
+    <Lock aria-label={tl('locked')} className="inline size-3 text-muted-foreground" />
   ) : null;
   const th = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
   const colCount = (canBulkReset ? 1 : 0) + 6;
@@ -142,35 +126,35 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
           data-testid="emp-bulk-bar"
         >
           <span className="whitespace-nowrap text-sm font-semibold text-secondary-foreground">
-            {labels.selected.replace('{count}', formatNumber(selected.size, locale))}
+            {tl('selected', { count: formatNumber(selected.size, locale) })}
           </span>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" size="sm" disabled={isPending} data-testid="regen-passwords">
-                {labels.regen.button}
+                {tr('button')}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>{labels.regen.confirmTitle}</AlertDialogTitle>
+                <AlertDialogTitle>{tr('confirmTitle')}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  {labels.regen.confirmBody.replace('{count}', String(selected.size))}
+                  {tr('confirmBody', { count: String(selected.size) })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>{labels.regen.cancel}</AlertDialogCancel>
+                <AlertDialogCancel>{tr('cancel')}</AlertDialogCancel>
                 <AlertDialogAction data-testid="regen-confirm" onClick={regenerate}>
-                  {labels.regen.confirm}
+                  {tr('confirm')}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
           <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            {labels.clearSelection}
+            {tl('clearSelection')}
           </Button>
           {error && (
             <p role="alert" className="text-sm text-destructive">
-              {labels.errorLabel}: {error}
+              {t('error')}: {error}
             </p>
           )}
         </div>
@@ -193,23 +177,23 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
                     />
                   </th>
                 )}
-                <th className={th}>{labels.employee}</th>
-                <th className={th}>{labels.hireDate}</th>
+                <th className={th}>{tl('employee')}</th>
+                <th className={th}>{t('hireDate')}</th>
                 <th className={th}>
                   <span className="inline-flex items-center gap-1">
-                    {labels.department}
+                    {t('department')}
                     {lock}
                   </span>
                 </th>
                 <th className={th}>
                   <span className="inline-flex items-center gap-1">
-                    {labels.roles}
+                    {t('roles')}
                     {lock}
                   </span>
                 </th>
-                <th className={th}>{labels.upcomingLeave}</th>
+                <th className={th}>{tl('upcomingLeave')}</th>
                 <th className="w-12 px-4 py-3">
-                  <span className="sr-only">{labels.edit}</span>
+                  <span className="sr-only">{t('edit')}</span>
                 </th>
               </tr>
             </thead>
@@ -286,7 +270,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
                       <Link href={`/${locale}/manage/employees/${emp.id}`}>
                         <Pencil aria-hidden="true" />
                         {/* Visible to screen readers and to e2e `a:has-text("Edit")`. */}
-                        <span className="sr-only">{labels.edit}</span>
+                        <span className="sr-only">{t('edit')}</span>
                       </Link>
                     </Button>
                   </td>
@@ -295,7 +279,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, lab
               {employees.length === 0 && (
                 <tr>
                   <td colSpan={colCount} className="px-4 py-8 text-center text-muted-foreground">
-                    {labels.noEmployees}
+                    {t('noEmployees')}
                   </td>
                 </tr>
               )}

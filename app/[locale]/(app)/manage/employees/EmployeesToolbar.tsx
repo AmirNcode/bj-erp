@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,23 +16,14 @@ type Props = {
   /** Pre-formatted segment counts; `reports` is null for non-managers, `incomplete` for non-hr/admin. */
   counts: { all: string; reports: string | null; inactive: string; incomplete: string | null };
   departments: { id: string; name: string }[];
-  labels: {
-    filterLabel: string;
-    filterAll: string;
-    filterReports: string;
-    filterInactive: string;
-    filterIncomplete: string;
-    search: string;
-    department: string;
-    allDepartments: string;
-  };
 };
 
 /**
  * Filter segment, search and department select. All state lives in the URL
  * (q, dept, filter, page); changing anything resets to page 1.
  */
-export function EmployeesToolbar({ base, query, counts, departments, labels }: Props) {
+export function EmployeesToolbar({ base, query, counts, departments }: Props) {
+  const tl = useTranslations('manage.employees.list');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [q, setQ] = useState(query.q);
@@ -54,13 +46,13 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
   }, [q]);
 
   const segments: { key: EmployeesFilter; label: string; count: string | null }[] = [
-    { key: 'all', label: labels.filterAll, count: counts.all },
+    { key: 'all', label: tl('filterAll'), count: counts.all },
     ...(counts.reports !== null
-      ? [{ key: 'reports' as const, label: labels.filterReports, count: counts.reports }]
+      ? [{ key: 'reports' as const, label: tl('filterReports'), count: counts.reports }]
       : []),
-    { key: 'inactive', label: labels.filterInactive, count: counts.inactive },
+    { key: 'inactive', label: tl('filterInactive'), count: counts.inactive },
     ...(counts.incomplete !== null
-      ? [{ key: 'incomplete' as const, label: labels.filterIncomplete, count: counts.incomplete }]
+      ? [{ key: 'incomplete' as const, label: tl('filterIncomplete'), count: counts.incomplete }]
       : []),
   ];
 
@@ -70,7 +62,7 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
       aria-busy={isPending}
     >
       <nav
-        aria-label={labels.filterLabel}
+        aria-label={tl('filterLabel')}
         className="flex max-w-full shrink-0 overflow-x-auto rounded-[10px] bg-muted p-[3px]"
       >
         {segments.map((s) => {
@@ -118,21 +110,21 @@ export function EmployeesToolbar({ base, query, counts, departments, labels }: P
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder={labels.search}
-          aria-label={labels.search}
+          placeholder={tl('search')}
+          aria-label={tl('search')}
           data-testid="emp-search"
           className="h-9 w-full rounded-[10px] border border-input bg-card ps-9 pe-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
       </form>
 
       <select
-        aria-label={labels.department}
+        aria-label={tl('department')}
         data-testid="emp-dept-filter"
         value={query.dept ?? ''}
         onChange={(e) => go({ dept: e.target.value || null })}
         className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-[10px] sm:w-56')}
       >
-        <option value="">{labels.allDepartments}</option>
+        <option value="">{tl('allDepartments')}</option>
         {departments.map((d) => (
           <option key={d.id} value={d.id}>
             {d.name}
