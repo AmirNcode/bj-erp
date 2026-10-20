@@ -10,6 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
@@ -21,28 +22,10 @@ import {
   type OrgPerson,
 } from '@/lib/org/tree';
 
-type Labels = {
-  searchPlaceholder: string;
-  noResults: string;
-  top: string;
-  topTitle: string;
-  you: string;
-  departmentManager: string;
-  reportsTo: string;
-  /** Raw: {count}. */
-  directReports: string;
-  noReports: string;
-  /** Raw: {count}. */
-  people: string;
-  backToMe: string;
-  empty: string;
-};
-
 type Props = {
   people: OrgPerson[];
   myId: string;
   locale: string;
-  labels: Labels;
 };
 
 const TOP = 'top';
@@ -54,11 +37,8 @@ function initials(name: string): string {
   return `${first}${last ? '‌' + last : ''}`;
 }
 
-function fill(template: string, params: Record<string, string | number>): string {
-  return template.replace(/\{(\w+)\}/g, (_, k: string) => String(params[k] ?? `{${k}}`));
-}
-
-export function OrgChart({ people, myId, locale, labels }: Props) {
+export function OrgChart({ people, myId, locale }: Props) {
+  const t = useTranslations('org');
   const index = useMemo(() => buildOrgIndex(people), [people]);
   const searchParams = useSearchParams();
   const [query, setQuery] = useState('');
@@ -78,7 +58,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
     (locale === 'fa' ? p.departmentNameFa : p.departmentNameEn) ?? p.departmentNameFa ?? p.departmentNameEn;
 
   if (people.length === 0) {
-    return <p className="text-sm text-muted-foreground" data-testid="org-empty">{labels.empty}</p>;
+    return <p className="text-sm text-muted-foreground" data-testid="org-empty">{t('empty')}</p>;
   }
 
   const results = searchPeople(index, query);
@@ -111,7 +91,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
             <span className="truncate text-sm font-semibold">{person.fullName}</span>
             {person.id === myId && (
               <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
-                {labels.you}
+                {t('you')}
               </span>
             )}
           </span>
@@ -121,7 +101,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
         </span>
         {count > 0 && (
           <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-            {fill(labels.people, { count: fmt(count) })}
+            {t('people', { count: fmt(count) })}
           </span>
         )}
       </button>
@@ -140,8 +120,8 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={labels.searchPlaceholder}
-          aria-label={labels.searchPlaceholder}
+          placeholder={t('searchPlaceholder')}
+          aria-label={t('searchPlaceholder')}
           data-testid="org-search"
           className="h-10 w-full rounded-lg border border-input bg-card ps-9 pe-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
@@ -151,7 +131,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
             data-testid="org-search-results"
           >
             {results.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-muted-foreground">{labels.noResults}</li>
+              <li className="px-3 py-2 text-sm text-muted-foreground">{t('noResults')}</li>
             ) : (
               results.map((p) => (
                 <li key={p.id}>
@@ -174,7 +154,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
       </div>
 
       {/* Chain above the focus: top of the organisation first. */}
-      <nav aria-label={labels.reportsTo} className="space-y-1.5">
+      <nav aria-label={t('reportsTo')} className="space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -187,7 +167,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
                 : 'border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
             )}
           >
-            {labels.top}
+            {t('top')}
           </button>
           {focusId !== myId && index.byId.has(myId) && (
             <button
@@ -196,7 +176,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
               data-testid="org-back-to-me"
               className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary"
             >
-              {labels.backToMe}
+              {t('backToMe')}
             </button>
           )}
         </div>
@@ -243,7 +223,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
                 <h2 className="text-lg font-bold">{focus.fullName}</h2>
                 {focus.id === myId && (
                   <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
-                    {labels.you}
+                    {t('you')}
                   </span>
                 )}
                 {focus.isDepartmentManager && (
@@ -251,7 +231,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
                     className="rounded border border-primary/30 px-1.5 py-0.5 text-xs text-primary"
                     data-testid="org-focus-dept-manager"
                   >
-                    {labels.departmentManager}
+                    {t('departmentManager')}
                   </span>
                 )}
               </div>
@@ -263,7 +243,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
               )}
               {manager && (
                 <p className="text-xs text-muted-foreground">
-                  {labels.reportsTo}:{' '}
+                  {t('reportsTo')}:{' '}
                   <button
                     type="button"
                     onClick={() => go(manager.id)}
@@ -279,7 +259,7 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
         </section>
       ) : (
         <h2 className="text-base font-semibold" data-testid="org-roots-title">
-          {labels.topTitle}
+          {t('topTitle')}
         </h2>
       )}
 
@@ -287,12 +267,12 @@ export function OrgChart({ people, myId, locale, labels }: Props) {
       <section className="space-y-2">
         {focus && (
           <h3 className="text-sm font-semibold text-muted-foreground">
-            {fill(labels.directReports, { count: fmt(reports.length) })}
+            {t('directReports', { count: fmt(reports.length) })}
           </h3>
         )}
         {reports.length === 0 ? (
           <p className="text-sm text-muted-foreground" data-testid="org-no-reports">
-            {labels.noReports}
+            {t('noReports')}
           </p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid={focus ? 'org-reports' : 'org-roots'}>

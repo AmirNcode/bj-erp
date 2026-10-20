@@ -35,20 +35,6 @@ export default async function OrganizationPage({ params }: Props) {
             people={chart.people}
             myId={chart.myId}
             locale={locale}
-            labels={{
-              searchPlaceholder: t('searchPlaceholder'),
-              noResults: t('noResults'),
-              top: t('top'),
-              topTitle: t('topTitle'),
-              you: t('you'),
-              departmentManager: t('departmentManager'),
-              reportsTo: t('reportsTo'),
-              directReports: t.raw('directReports') as string,
-              noReports: t('noReports'),
-              people: t.raw('people') as string,
-              backToMe: t('backToMe'),
-              empty: t('empty'),
-            }}
           />
         </Suspense>
       ) : (
