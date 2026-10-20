@@ -9,7 +9,6 @@ import { getTranslations } from 'next-intl/server';
 import { getCachedPermissions } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { listTravelBookings } from '@/lib/actions/travel';
-import { formatNumber } from '@/lib/i18n/format';
 
 export async function TravelBookingCard({ locale, userId }: { locale: string; userId: string }) {
   if (!can(await getCachedPermissions(userId), 'travel_booking', 'edit')) return null;
@@ -25,7 +24,7 @@ export async function TravelBookingCard({ locale, userId }: { locale: string; us
       className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning-foreground p-4 text-warning transition-colors hover:border-warning/50"
       data-testid="home-travel-booking"
     >
-      <span className="text-sm font-semibold">{t('homeWaiting', { count: formatNumber(waiting, locale) })}</span>
+      <span className="text-sm font-semibold">{t('homeWaiting', { count: waiting })}</span>
       <span className="text-xs font-medium">{t('homeOpen')} ›</span>
     </Link>
   );

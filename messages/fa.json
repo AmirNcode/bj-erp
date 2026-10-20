@@ -1774,7 +1774,7 @@
     "detailsHidden": "این رزرو بسته شده است و مشخصات مسافر دیگر نمایش داده نمی‌شود.",
     "booking": "رزرو",
     "lostAmount": "مبلغ از دست رفته (ریال)",
-    "homeWaiting": "{count} ماموریت در انتظار تدارکات",
+    "homeWaiting": "{count, plural, other {# ماموریت در انتظار تدارکات}}",
     "homeOpen": "باز کردن",
     "myTransport": "وسیله سفر",
     "myNote": "توضیح تدارکات",

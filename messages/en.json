@@ -1774,7 +1774,7 @@
     "detailsHidden": "This booking is closed, so the traveller's details are no longer shown.",
     "booking": "Booking",
     "lostAmount": "Amount lost (Rials)",
-    "homeWaiting": "{count} trips waiting on procurement",
+    "homeWaiting": "{count, plural, one {# trip waiting on procurement} other {# trips waiting on procurement}}",
     "homeOpen": "Open",
     "myTransport": "Transport",
     "myNote": "Procurement's note",
