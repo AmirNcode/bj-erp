@@ -78,6 +78,48 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-20 — Travel booking committed, PR #10 opened and reviewed
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), side session started by the PR #9 session
+**Branch / HEAD at start:** `codex/travel-booking` @ `ec52114` (73 files uncommitted, worktree `.claude/worktrees/travel-booking`)
+**Trigger:** Commit the FR-70 travel-booking work in logical commits, open a PR against `main` (no merge), then review it.
+
+**What changed**
+- Five commits: `2e219e1` spec + plan, `f8c75a1` migrations `20261020120000`–`…06` + `schema.sql` + `types.ts` +
+  catalog + `tests/sql`, `e2e0a9d` server actions + `lib/travel/*` + nav, `23ee716` screens + messages + UI tests,
+  `ad8cf49` docs. Pushed; opened [PR #10](https://github.com/AmirNcode/bj-erp/pull/10). Not merged.
+- Review only, no code changed.
+
+**Actions outside the repo**
+- `git push -u origin codex/travel-booking`; `gh pr create` (PR #10). No DB or server actions.
+
+**Verification**
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 943 passed / 5 skipped · `npm run build` ok.
+  `test:deploy` not run (no deploy files changed). `tests/sql/*` not re-run (needs scratch DB `bj_travel`).
+- fa/en message keys match (1544 each); no new placeholder mismatches.
+- `git merge-tree origin/main HEAD`: 9 conflicts after PR #9 — `(app)/layout.tsx`, `manage/requests/RequestsReview.tsx`,
+  `manage/requests/page.tsx`, `lib/actions/leave/approvals.ts`, `lib/actions/leave/progress.ts`,
+  `tests/unit/main-nav.test.tsx`, `tests/unit/page-refresh-button.test.tsx`, `docs/AGENT-LOG.md`, `docs/CHANGELOG.md`.
+
+**Review findings (none fixed; waiting on the owner)**
+- Medium: `private.acts_as_travel_hr`/`is_travel_hr` (`…06`) let an hr holder's approval delegate tick, cancel
+  and decide extensions on that hr holder's **own** trip (only `employee_id <> delegate` is checked) — delegated
+  self-signing, which `docs/PERMISSIONS.md` forbids.
+- A ticked trip (and one with a newly approved extension) is hidden from `/finance`, per diem included, until
+  procurement presses «رزرو شد»; nothing surfaces trips procurement never finishes.
+- `app_decide_errand_extension` does not check the trip end date, so HR can approve after the trip ended.
+- `app_set_travel_booking` reads status without a lock: ticking at the moment of final approval can leave
+  `opened_at` null for good (narrow race).
+- Cosmetic: tick switch shows on HR's own request and then errors; English missing-fields list joined with «،»;
+  reject extension has no confirm; `travel.homeWaiting` has no plural ("1 trips").
+
+**State left behind**
+- PR #10 open, conflicting with `main`. This log entry uncommitted until the owner approves.
+- Scratch DB `bj_travel` (from the building session) still exists.
+
+**For the next agent**
+- Merge `main` into the branch before anything else; the owner resolves or approves conflict resolution.
+
 ## 2026-10-20 — Travel booking (procurement → finance) design draft
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
