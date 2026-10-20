@@ -104,7 +104,7 @@ npm run dev                    # http://localhost:3000 → boots fa-RTL at /logi
 ```
 
 Other commands: `npm run build` · `npm run lint` · `npm run test:unit` (Vitest) ·
-`npm run test:deploy` (deploy shell tests) · `npm run test:e2e` (Playwright — needs reachable
+`npm run test:deploy` (all `tests/deploy/*.test.sh`; needs Docker) · `npm run test:e2e` (Playwright — needs reachable
 Supabase + dev server; run serial `--workers=1`; `E2E_BASE_URL` targets an external server) ·
 `npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org) ·
 `npm run schema:dump` (regenerate `supabase/schema.sql` from the local DB).

@@ -26,9 +26,6 @@ jobs:
       - run: npm run lint
       - run: npm run test:unit
       - run: npm run test:deploy
-      - run: bash tests/deploy/rate-limit-config.test.sh
-      - run: bash tests/deploy/liara-config.test.sh
-      - run: bash tests/deploy/client-ip-runtime.test.sh
       - name: Build committed Linux release
         run: bash deploy/liara/package-release.sh "$GITHUB_SHA"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
