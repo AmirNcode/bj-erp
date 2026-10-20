@@ -6,8 +6,6 @@ import { getCachedUser } from '@/lib/auth/context';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { PageHeader } from '../../_components/PageHeader';
 import { FormSkeleton } from '@/components/Skeletons';
 import { RequestTypeTabs } from '../_components/RequestTypeTabs';
@@ -18,11 +16,6 @@ type Props = {
 };
 
 async function DailyErrandData({ locale }: { locale: string }) {
-  const t = await getTranslations('request');
-  const tDailyErrand = await getTranslations('dailyErrand');
-  const tLeave = await getTranslations('leave');
-  const tSignature = await getTranslations('signature');
-  const tErrand = await getTranslations('errand');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -32,31 +25,9 @@ async function DailyErrandData({ locale }: { locale: string }) {
     ? workSettingsResult.settings
     : WORK_SETTINGS_FALLBACK;
 
-  const labels = {
-    dateRange: t('dateRange'),
-    startDate: t('startDate'),
-    endDate: t('endDate'),
-    location: tDailyErrand('location'),
-    locationPlaceholder: tDailyErrand('locationPlaceholder'),
-    description: tDailyErrand('description'),
-    hint: tDailyErrand('hint'),
-    submit: tDailyErrand('submit'),
-    requestingLabel: t('requestingLabel'),
-    success: tDailyErrand('success'),
-    errorLabel: t('error'),
-    validationSelectDate: tDailyErrand('validationSelectDate'),
-    validationLocation: tDailyErrand('validationLocation'),
-    signature: signatureLabelsFrom(tSignature),
-    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
-    ownPerDiemHint: tErrand('ownPerDiemHint'),
-    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
-    ...durationLabelsFrom(tLeave),
-  };
-
   return (
     <DailyErrandRequestForm
       workSettings={workSettings}
-      labels={labels}
       locale={locale}
       perDiemAllowed={perDiemAllowed}
     />

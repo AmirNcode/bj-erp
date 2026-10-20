@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { submitDailyErrandRequest, submitErrandRequest, type LeaveRequestWithType } from '@/lib/actions/leave/requests';
 import { MyRequestsList } from '@/app/[locale]/(app)/request/MyRequestsList';
+import en from '@/messages/en.json';
 
 const mocks = vi.hoisted(() => ({ rpc: vi.fn(), caller: vi.fn() }));
 vi.mock('@/lib/auth/context', () => ({ requireCaller: mocks.caller }));
@@ -67,16 +68,9 @@ describe('isCallerHrHead', () => {
 
 describe('MyRequestsList per diem line', () => {
   const messages = {
-    request: { showPrevious: '{count} previous' },
-    errand: { perDiem: 'Per diem (Rials)', perDiemByRequester: 'Entered by requester (Head of HR)' },
-  };
-  const labels = {
-    myRequests: 'My Requests', noRequests: 'No requests', errorLabel: 'Error',
-    statusPending: 'Pending', statusApproved: 'Approved', statusRejected: 'Rejected', statusCancelled: 'Cancelled',
-    dayPartLabels: { full: 'Full day', am: 'AM', pm: 'PM' }, coverLabel: 'Replacement',
-    days: 'days', hours: 'hours', minutes: 'minutes', and: 'and', from: 'From', to: 'To',
-    rejectedReason: 'Reason', trackingNo: 'Tracking no.', errandBadge: 'Errand', errandLocation: 'Location',
-    unpaidTimeOffLabel: 'Unpaid', requesterSignature: {} as never, approverSignature: {} as never,
+    ...en,
+    request: { ...en.request, showPrevious: '{count} previous' },
+    errand: { ...en.errand, perDiem: 'Per diem (Rials)', perDiemByRequester: 'Entered by requester (Head of HR)' },
   };
   const errand = (id: string, perDiem: number | null, byRequester: boolean) => ({
     id, status: 'pending', kind: 'errand', errand_location: 'Port', per_diem_rials: perDiem,
@@ -91,7 +85,7 @@ describe('MyRequestsList per diem line', () => {
       <NextIntlClientProvider locale="en" messages={messages}>
         <MyRequestsList
           requests={[errand('self', 1_500_000, true), errand('hr', 900, false), errand('none', null, false)]}
-          labels={labels} locale="en" hoursPerDay={8} showAll
+          locale="en" hoursPerDay={8} showAll
         />
       </NextIntlClientProvider>
     );

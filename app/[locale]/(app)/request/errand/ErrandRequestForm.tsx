@@ -1,5 +1,8 @@
 'use client';
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
@@ -43,10 +46,39 @@ type Labels = {
   and: string;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const t = useTranslations('request');
+  const tErrand = useTranslations('errand');
+  const tLeave = useTranslations('leave');
+  const tSignature = useTranslations('signature');
+  return {
+    date: tErrand('date'),
+    fromTime: tErrand('fromTime'),
+    toTime: tErrand('toTime'),
+    location: tErrand('location'),
+    locationPlaceholder: tErrand('locationPlaceholder'),
+    description: tErrand('description'),
+    hint: tErrand('hint'),
+    submit: tErrand('submit'),
+    preview: tErrand('preview'),
+    durationLabel: tErrand('durationLabel'),
+    success: tErrand('success'),
+    errorLabel: t('error'),
+    validationSelectDate: tErrand('validationSelectDate'),
+    validationTimes: tErrand('validationTimes'),
+    validationLocation: tErrand('validationLocation'),
+    signature: signatureLabelsFrom(tSignature),
+    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
+    ownPerDiemHint: tErrand('ownPerDiemHint'),
+    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
+    ...durationLabelsFrom(tLeave),
+  };
+}
+
 type Props = {
   /** Only for hoursPerDay (duration rendering) and a sensible default time. */
   workSettings: WorkSettings;
-  labels: Labels;
   locale: string;
   /** The caller is the designated Head of HR: they enter their own per diem. */
   perDiemAllowed: boolean;
@@ -76,7 +108,8 @@ function slotIndexAtOrAfter(time: string): number {
  * No leave type, no balance line, no replacement picker: an errand is work, so
  * none of those apply.
  */
-export function ErrandRequestForm({ workSettings, labels, locale, perDiemAllowed }: Props) {
+export function ErrandRequestForm({ workSettings, locale, perDiemAllowed }: Props) {
+  const labels = useLabels();
   const defaultFrom = slotIndexAtOrAfter(workSettings.workStart);
 
   const [date, setDate] = useState<PickerDate | null>(null);

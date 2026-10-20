@@ -1,5 +1,8 @@
 'use client';
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
@@ -39,15 +42,44 @@ type Labels = {
   and: string;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const t = useTranslations('request');
+  const tDailyErrand = useTranslations('dailyErrand');
+  const tErrand = useTranslations('errand');
+  const tLeave = useTranslations('leave');
+  const tSignature = useTranslations('signature');
+  return {
+    dateRange: t('dateRange'),
+    startDate: t('startDate'),
+    endDate: t('endDate'),
+    location: tDailyErrand('location'),
+    locationPlaceholder: tDailyErrand('locationPlaceholder'),
+    description: tDailyErrand('description'),
+    hint: tDailyErrand('hint'),
+    submit: tDailyErrand('submit'),
+    requestingLabel: t('requestingLabel'),
+    success: tDailyErrand('success'),
+    errorLabel: t('error'),
+    validationSelectDate: tDailyErrand('validationSelectDate'),
+    validationLocation: tDailyErrand('validationLocation'),
+    signature: signatureLabelsFrom(tSignature),
+    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
+    ownPerDiemHint: tErrand('ownPerDiemHint'),
+    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
+    ...durationLabelsFrom(tLeave),
+  };
+}
+
 type Props = {
   workSettings: WorkSettings;
-  labels: Labels;
   locale: string;
   /** The caller is the designated Head of HR: they enter their own per diem. */
   perDiemAllowed: boolean;
 };
 
-export function DailyErrandRequestForm({ workSettings, labels, locale, perDiemAllowed }: Props) {
+export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }: Props) {
+  const labels = useLabels();
   const [startDate, setStartDate] = useState<PickerDate | null>(null);
   const [endDate, setEndDate] = useState<PickerDate | null>(null);
   const [location, setLocation] = useState('');

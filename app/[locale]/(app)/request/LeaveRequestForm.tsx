@@ -1,12 +1,13 @@
 'use client';
 
+import { useRequestLabels } from './_components/useRequestLabels';
 import { useState } from 'react';
 import { RequestDelegationFields } from './_components/RequestDelegationFields';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed, type PickerDate } from '@/lib/leave/dateConvert';
 import { daysToMinutes } from '@/lib/leave/duration';
 import { submitRequest } from '@/lib/actions/leave/requests';
-import { RequestSignatureFields, type SignatureLabels } from './_components/RequestSignature';
+import { RequestSignatureFields } from './_components/RequestSignature';
 import {
   DateRangeFields,
   FormFeedback,
@@ -29,51 +30,17 @@ import { Textarea } from '@/components/ui/textarea';
 
 type DayPart = 'full' | 'am' | 'pm';
 
-type Labels = {
-  leaveType: string;
-  selectType: string;
-  dateRange: string;
-  startDate: string;
-  endDate: string;
-  dayPart: string;
-  dayPartFull: string;
-  dayPartAm: string;
-  dayPartPm: string;
-  reason: string;
-  submit: string;
-  requestingLabel: string;
-  remainingBalanceLabel: string;
-  unpaidTimeOffLabel: string;
-  noBalance: string;
-  days: string;
-  hours: string;
-  minutes: string;
-  and: string;
-  success: string;
-  errorLabel: string;
-  validationSelectType: string;
-  validationSelectDate: string;
-  replacementTitle: string;
-  replacementHint: string;
-  replacementSelect: string;
-  replacementNoReplacement: string;
-  replacementOnLeave: string;
-  replacementLoading: string;
-  replacementEmpty: string;
-  signature: SignatureLabels;
-};
-
 type Props = {
   leaveTypes: LeaveType[];
   workSettings: WorkSettings;
-  labels: Labels;
   locale: string;
 };
 
 const selectClassName =
   'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
 
-export function LeaveRequestForm({ leaveTypes, workSettings, labels, locale }: Props) {
+export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
+  const labels = useRequestLabels();
   const [selectedTypeId, setSelectedTypeId] = useState('');
   const [startDate, setStartDate] = useState<PickerDate | null>(null);
   const [endDate, setEndDate] = useState<PickerDate | null>(null);

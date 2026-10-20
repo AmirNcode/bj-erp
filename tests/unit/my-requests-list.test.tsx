@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MyRequestsList } from '@/app/[locale]/(app)/request/MyRequestsList';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
+import en from '@/messages/en.json';
 
 // Leaf widgets that call server actions; only their presence matters here.
 vi.mock('@/components/RequestProgress', () => ({
@@ -19,35 +20,13 @@ vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({
 
 afterEach(cleanup);
 
+// Real copy, with the plural message pinned so the assertions below stay exact.
 const messages = {
+  ...en,
   request: {
+    ...en.request,
     showPrevious: '{count, plural, one {Show # previous request} other {Show # previous requests}}',
   },
-};
-
-const labels = {
-  myRequests: 'My Requests',
-  noRequests: 'No requests',
-  errorLabel: 'Error',
-  statusPending: 'Pending',
-  statusApproved: 'Approved',
-  statusRejected: 'Rejected',
-  statusCancelled: 'Cancelled',
-  dayPartLabels: { full: 'Full day', am: 'AM', pm: 'PM' },
-  coverLabel: 'Replacement',
-  days: 'days',
-  hours: 'hours',
-  minutes: 'minutes',
-  and: 'and',
-  from: 'From',
-  to: 'To',
-  rejectedReason: 'Reason',
-  trackingNo: 'Tracking no.',
-  errandBadge: 'Errand',
-  errandLocation: 'Location',
-  unpaidTimeOffLabel: 'Unpaid',
-  requesterSignature: {} as never,
-  approverSignature: {} as never,
 };
 
 function req(id: string, status: string): LeaveRequestWithType {
@@ -79,7 +58,7 @@ function req(id: string, status: string): LeaveRequestWithType {
 function renderList(requests: LeaveRequestWithType[], showAll = false) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <MyRequestsList requests={requests} labels={labels} locale="en" hoursPerDay={8} showAll={showAll} />
+      <MyRequestsList requests={requests} locale="en" hoursPerDay={8} showAll={showAll} />
     </NextIntlClientProvider>
   );
 }

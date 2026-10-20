@@ -13,8 +13,6 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { getActiveLeaveTypes, getWorkSettings } from '@/lib/actions/leave/reference';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { HourlyRequestForm } from './HourlyRequestForm';
 import { PageHeader } from '../../_components/PageHeader';
 import { RequestTypeTabs } from '../_components/RequestTypeTabs';
@@ -25,11 +23,7 @@ type Props = {
 };
 
 async function HourlyRequestData({ locale }: { locale: string }) {
-  const t = await getTranslations('request');
   const tHourly = await getTranslations('hourly');
-  const tLeave = await getTranslations('leave');
-  const tRepl = await getTranslations('replacement');
-  const tSignature = await getTranslations('signature');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -46,39 +40,6 @@ async function HourlyRequestData({ locale }: { locale: string }) {
   );
   const workSettings = workSettingsResult.ok ? workSettingsResult.settings : WORK_SETTINGS_FALLBACK;
 
-  const maxHours = Math.round((workSettings.maxHourlyMinutesPerDay / 60) * 10) / 10;
-
-  const labels = {
-    leaveType: t('leaveType'),
-    selectType: t('selectType'),
-    date: tHourly('date'),
-    fromTime: tHourly('fromTime'),
-    toTime: tHourly('toTime'),
-    reason: t('reason'),
-    submit: tHourly('submit'),
-    preview: t('preview'),
-    durationLabel: tHourly('durationLabel'),
-    requestingLabel: t('requestingLabel'),
-    remainingBalanceLabel: t('remainingBalanceLabel'),
-    unpaidTimeOffLabel: t('unpaidTimeOffLabel'),
-    noBalance: t('noBalance'),
-    success: t('success'),
-    errorLabel: t('error'),
-    validationSelectType: t('validationSelectType'),
-    validationSelectDate: t('validationSelectDate'),
-    validationTimes: tHourly('validationTimes'),
-    dailyLimitHint: tHourly('dailyLimitHint', { hours: maxHours }),
-    replacementTitle: tRepl('title'),
-    replacementHint: tRepl('hint'),
-    replacementSelect: tRepl('select'),
-    replacementNoReplacement: tRepl('noReplacement'),
-    replacementOnLeave: tRepl('onLeave'),
-    replacementLoading: tRepl('loading'),
-    replacementEmpty: tRepl('empty'),
-    signature: signatureLabelsFrom(tSignature),
-    ...durationLabelsFrom(tLeave),
-  };
-
   if (leaveTypes.length === 0) {
     return (
       <p
@@ -94,7 +55,6 @@ async function HourlyRequestData({ locale }: { locale: string }) {
     <HourlyRequestForm
       leaveTypes={leaveTypes}
       workSettings={workSettings}
-      labels={labels}
       locale={locale}
     />
   );
