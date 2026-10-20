@@ -9,6 +9,7 @@ import { getReplacementCandidates } from '@/lib/actions/leave/requests';
 import { projectLeaveBalance } from '@/lib/leave/duration';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { SignatureLabels } from './RequestSignature';
+import type { DbErrorResult } from '@/lib/errors/db-error';
 
 /**
  * Hooks shared by the four request forms. Fetching hooks set state only inside
@@ -25,7 +26,7 @@ export function useRequestSubmit(successText: string) {
 
   function submit(
     problem: string | null,
-    send: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    send: () => Promise<{ ok: true } | DbErrorResult>,
     onSuccess: () => void
   ) {
     setError('');

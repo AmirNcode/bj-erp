@@ -10,7 +10,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 
 export type SpecialLeaveKind = 'marriage' | 'bereavement';
@@ -25,7 +25,7 @@ export type SpecialLeaveGrant = {
 
 export async function getSpecialLeaveGrants(
   employeeId: string
-): Promise<{ ok: true; grants: SpecialLeaveGrant[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; grants: SpecialLeaveGrant[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const { data, error } = await c.supabase
@@ -51,7 +51,7 @@ export async function grantSpecialLeave(
   employeeId: string,
   kind: SpecialLeaveKind,
   note?: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['special_leave', 'edit'] });
   if (!c.ok) return c;
   const trimmed = note?.trim() ?? '';
@@ -67,7 +67,7 @@ export async function grantSpecialLeave(
   return { ok: true };
 }
 
-export async function revokeSpecialLeave(grantId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function revokeSpecialLeave(grantId: string): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['special_leave', 'edit'] });
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_revoke_special_leave', { p_grant_id: grantId });

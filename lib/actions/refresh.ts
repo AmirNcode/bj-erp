@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache';
 import { getCachedProfile, getCachedUser } from '@/lib/auth/context';
+import type { DbErrorResult } from '@/lib/errors/db-error';
 
 export type RefreshRouteResult =
   | { ok: true; refreshedAt: string }
-  | { ok: false; error: string };
+  | DbErrorResult;
 
 export async function refreshRoute(pathname: string): Promise<RefreshRouteResult> {
   // Server actions are publicly POSTable — don't let anonymous callers

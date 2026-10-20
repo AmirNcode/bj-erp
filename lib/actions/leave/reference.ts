@@ -6,7 +6,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 /**
@@ -27,7 +27,7 @@ export type LeaveType = {
 export async function getActiveLeaveTypes(): Promise<{
   ok: true;
   types: LeaveType[];
-} | { ok: false; error: string }> {
+} | DbErrorResult> {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
 
@@ -66,7 +66,7 @@ export type WorkSettings = {
 export async function getWorkSettings(): Promise<{
   ok: true;
   settings: WorkSettings;
-} | { ok: false; error: string }> {
+} | DbErrorResult> {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
 

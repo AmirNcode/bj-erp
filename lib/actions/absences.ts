@@ -13,7 +13,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { isValidIsoDate } from '@/lib/leave/settings-validation';
 import type { Database } from '@/lib/supabase/types';
 
@@ -35,7 +35,7 @@ export type Absence = {
 
 export async function getApprovedAbsences(
   date: string
-): Promise<{ ok: true; absences: Absence[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; absences: Absence[] } | DbErrorResult> {
   const c = await requireCaller({ perm: ['absences', 'read'] });
   if (!c.ok) return c;
   if (!isValidIsoDate(date)) return dbErr('invalid date');

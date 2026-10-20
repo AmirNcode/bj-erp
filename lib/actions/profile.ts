@@ -5,10 +5,10 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { LOCALE_COOKIE, LOCALE_COOKIE_ATTRS } from '@/lib/i18n/locale';
 
-export type UpdatePrefsResult = { ok: true } | { ok: false; error: string };
+export type UpdatePrefsResult = { ok: true } | DbErrorResult;
 
 /**
  * Self-update the caller's language preference. Persian is the only calendar,
@@ -57,7 +57,7 @@ export async function signOut(locale: string): Promise<void> {
   redirect(`/${locale}/login`);
 }
 
-export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+export type ChangePasswordResult = { ok: true } | DbErrorResult;
 
 /** Self-service password change. The RPC verifies the current password in-DB. */
 export async function changeMyPassword(

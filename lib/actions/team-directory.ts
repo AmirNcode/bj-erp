@@ -1,7 +1,7 @@
 'use server';
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { TeamDirectoryMember } from '@/lib/home/board';
 
 type TeamDirectoryRow = {
@@ -16,7 +16,7 @@ type TeamDirectoryRow = {
 };
 
 export async function getMyTeamDirectory(): Promise<
-  { ok: true; members: TeamDirectoryMember[] } | { ok: false; error: string }
+  { ok: true; members: TeamDirectoryMember[] } | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;

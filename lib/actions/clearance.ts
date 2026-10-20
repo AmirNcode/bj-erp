@@ -9,7 +9,7 @@
 
 import { requireCaller } from '@/lib/auth/context';
 import { can, type Perms } from '@/lib/permissions/catalog';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { signatureProblem } from '@/lib/leave/signature';
 import {
@@ -24,7 +24,7 @@ import {
   type UnitRow,
 } from '@/lib/clearance/model';
 
-type Fail = { ok: false; error: string };
+type Fail = DbErrorResult;
 type Done = { ok: true } | Fail;
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

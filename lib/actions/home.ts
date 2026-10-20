@@ -9,7 +9,7 @@
 
 import { requireCaller } from '@/lib/auth/context';
 import { createClient } from '@/lib/supabase/server';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { todayInAppTz } from '@/lib/appDate';
 import { latestBalances } from '@/lib/leave/balances';
 import { buildBalanceUsage, buildTodayPulse, type BalanceUsage, type TodayPulse } from '@/lib/home/pulse';
@@ -21,7 +21,7 @@ import { accrueBeforeRead } from './leave/shared';
  * their direct reports. RLS agrees — a manager cannot read other teams anyway.
  */
 export async function getTodayPulse(): Promise<
-  { ok: true; pulse: TodayPulse; companyWide: boolean } | { ok: false; error: string }
+  { ok: true; pulse: TodayPulse; companyWide: boolean } | DbErrorResult
 > {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
@@ -76,7 +76,7 @@ async function currentJalaliYearStart(
 
 /** The caller's own entitled / used / left per active leave type, this Jalali year. */
 export async function getMyBalanceUsage(): Promise<
-  { ok: true; usage: BalanceUsage[] } | { ok: false; error: string }
+  { ok: true; usage: BalanceUsage[] } | DbErrorResult
 > {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;

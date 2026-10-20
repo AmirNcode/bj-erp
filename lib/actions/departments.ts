@@ -3,7 +3,7 @@
 import type { Database } from '@/lib/supabase/types';
 import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import {
   generateDepartmentCode,
   isValidDepartmentCode,
@@ -39,7 +39,7 @@ const CODE_ATTEMPTS = 5;
  */
 export async function createDepartment(
   input: CreateDepartmentInput
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string } | DbErrorResult> {
   const c = await requireCaller({ perm: ['departments', 'edit'], company: true });
   if (!c.ok) return c;
 
@@ -101,7 +101,7 @@ export async function createDepartment(
 export async function updateDepartmentCode(
   id: string,
   code: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ anyOf: ['admin'] });
   if (!c.ok) return c;
 
@@ -130,7 +130,7 @@ export async function updateDepartmentCode(
 export async function setDepartmentManager(
   departmentId: string,
   managerId: string | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['departments', 'edit'] });
   if (!c.ok) return c;
 
@@ -155,7 +155,7 @@ export async function setDepartmentManager(
 export async function renameDepartment(
   departmentId: string,
   input: { name_fa: string; name_en: string }
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['departments', 'edit'] });
   if (!c.ok) return c;
 
@@ -207,7 +207,7 @@ function byName(a: DepartmentMember, b: DepartmentMember): number {
  */
 export async function getDepartmentMembers(
   departmentId: string
-): Promise<{ ok: true; members: DepartmentMembers } | { ok: false; error: string }> {
+): Promise<{ ok: true; members: DepartmentMembers } | DbErrorResult> {
   const c = await requireCaller({ perm: ['departments', 'read'] });
   if (!c.ok) return c;
 

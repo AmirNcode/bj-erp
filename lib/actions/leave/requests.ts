@@ -6,7 +6,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { DelegationSubmissionInput } from '@/lib/leave/delegation';
 import type { Database } from '@/lib/supabase/types';
@@ -45,7 +45,7 @@ export type SubmitRequestInput = DelegationSubmissionInput & {
 
 export type SubmitRequestResult =
   | { ok: true; requestId: string }
-  | { ok: false; error: string };
+  | DbErrorResult;
 
 export async function submitRequest(
   input: SubmitRequestInput
@@ -85,7 +85,7 @@ export async function submitRequest(
 
 export type CancelRequestResult =
   | { ok: true }
-  | { ok: false; error: string };
+  | DbErrorResult;
 
 export async function cancelRequest(
   requestId: string
@@ -285,7 +285,7 @@ export type LeaveRequestWithType = {
 export async function getMyLeaveRequests(): Promise<{
   ok: true;
   requests: LeaveRequestWithType[];
-} | { ok: false; error: string }> {
+} | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -319,7 +319,7 @@ export async function getReplacementCandidates(input: {
   startTime?: string | null;
   endTime?: string | null;
 }): Promise<
-  { ok: true; candidates: ReplacementCandidate[] } | { ok: false; error: string }
+  { ok: true; candidates: ReplacementCandidate[] } | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
@@ -365,7 +365,7 @@ export type CoverDuty = {
 export async function getMyCoverDuties(
   start: string,
   end: string
-): Promise<{ ok: true; duties: CoverDuty[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; duties: CoverDuty[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 

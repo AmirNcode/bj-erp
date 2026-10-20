@@ -8,7 +8,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import {
   PERSONAL_INFO_FIELDS,
   parsePersonalInfoForm,
@@ -25,7 +25,7 @@ export type PersonalInfoRecord = PersonalInfoValues & { complete: boolean; updat
 
 export async function getPersonalInfo(
   employeeId: string
-): Promise<{ ok: true; info: PersonalInfoRecord } | { ok: false; error: string }> {
+): Promise<{ ok: true; info: PersonalInfoRecord } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -77,7 +77,7 @@ export type PersonalInfoExportRow =
 
 /** Everyone's personal info for the CSV download. Audit-logged in the database. */
 export async function exportPersonalInfo(): Promise<
-  { ok: true; rows: PersonalInfoExportRow[] } | { ok: false; error: string }
+  { ok: true; rows: PersonalInfoExportRow[] } | DbErrorResult
 > {
   const c = await requireCaller({ perm: ['personal_info', 'read'] });
   if (!c.ok) return c;
@@ -88,7 +88,7 @@ export async function exportPersonalInfo(): Promise<
 
 /** Personnel numbers the caller may import onto (hr: everyone but admins). */
 export async function getImportablePersonnelNos(): Promise<
-  { ok: true; personnelNos: string[] } | { ok: false; error: string }
+  { ok: true; personnelNos: string[] } | DbErrorResult
 > {
   const c = await requireCaller({ perm: ['personal_info', 'read'] });
   if (!c.ok) return c;
@@ -111,7 +111,7 @@ export async function getImportablePersonnelNos(): Promise<
 
 export async function importPersonalInfo(
   rows: PersonalInfoImportRow[]
-): Promise<{ ok: true; updated: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; updated: number } | DbErrorResult> {
   const c = await requireCaller({ perm: ['personal_info', 'edit'] });
   if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no rows to import');

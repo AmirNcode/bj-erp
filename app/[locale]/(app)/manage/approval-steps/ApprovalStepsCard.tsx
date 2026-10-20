@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EmptyState } from '@/components/EmptyState';
+import type { DbErrorResult } from '@/lib/errors/db-error';
 
 type Labels = {
   title: string;
@@ -82,7 +83,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrde
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const run = (fn: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
+  const run = (fn: () => Promise<{ ok: true } | DbErrorResult>) => {
     setError('');
     startTransition(async () => {
       const result = await fn();

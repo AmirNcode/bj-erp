@@ -7,7 +7,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import type { DayPart } from './shared';
 
@@ -35,7 +35,7 @@ export type CalendarEntry = {
 export async function getCalendarEntries(
   rangeStart: string,
   rangeEnd: string
-): Promise<{ ok: true; entries: CalendarEntry[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; entries: CalendarEntry[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
