@@ -30,6 +30,19 @@ describe('Requests page: travel trips (FR-70)', () => {
     expect(screen.getByTestId('tick-p1')).toBeTruthy();
   });
 
+  it('on the viewer\'s own request there is neither switch nor cancel', () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RequestsReview requests={[row('own', { employee_id: 'me' }), row('other')]} locale="en" hoursPerDay={8}
+          travelTicks={{ own: { started: true }, other: { started: true } }} viewerId="me" />
+      </NextIntlClientProvider>
+    );
+    expect(screen.queryByTestId('tick-own')).toBeNull();
+    expect(screen.queryByTestId('cancel-own')).toBeNull();
+    expect(screen.getByTestId('tick-other')).toBeTruthy();
+    expect(screen.getByTestId('cancel-other')).toBeTruthy();
+  });
+
   it('without tick rights there is neither switch nor cancel', () => {
     render(
       <NextIntlClientProvider locale="en" messages={en}>

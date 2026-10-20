@@ -67,11 +67,13 @@ type Props = {
   hoursPerDay: number;
   /** FR-70: ticked requests (hr and admin only); null hides the travel switch. */
   travelTicks?: Record<string, { started: boolean }> | null;
+  /** The signed-in viewer: no travel switch or travel cancel on their own requests (the server refuses both). */
+  viewerId?: string | null;
 };
 
 const STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
 
-export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null }: Props) {
+export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null, viewerId = null }: Props) {
   const labels = useLabels();
   const today = todayInAppTz();
   const [status, setStatus] = useState<string>('all');
@@ -224,7 +226,7 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                   </div>
 
                   <div className="flex shrink-0 items-center gap-3">
-                    {travelTicks && r.kind === 'errand' && r.unit === 'day'
+                    {travelTicks && r.employee_id !== viewerId && r.kind === 'errand' && r.unit === 'day'
                       && (r.status === 'pending' || r.status === 'approved') && r.end_date >= today && (
                       <TravelTickToggle
                         requestId={r.id}
@@ -234,7 +236,7 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                       />
                     )}
                     {/* FR-70: the manager tells HR; HR cancels a travel-booked trip here. */}
-                    {travelTicks?.[r.id] && <RequestCancelButton requestId={r.id} status={r.status} startDate={r.start_date} />}
+                    {travelTicks?.[r.id] && r.employee_id !== viewerId && <RequestCancelButton requestId={r.id} status={r.status} startDate={r.start_date} />}
                     <StatusBadge status={r.status} labels={statusLabels} />
                     <Link
                       href={`/${locale}/print/request/${r.id}`}
