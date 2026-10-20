@@ -6,6 +6,7 @@ import en from '@/messages/en.json';
 import { gregorianToPersianDateObject } from '@/lib/leave/dateConvert';
 import { ExtendTripDialog } from '@/app/[locale]/(app)/manage/approvals/ExtendTripDialog';
 import { ExtensionDecisionCard } from '@/app/[locale]/(app)/manage/approvals/ExtensionDecisionCard';
+import { TripExtensions } from '@/app/[locale]/(app)/manage/approvals/TripExtensions';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), decide: vi.fn(), refresh: vi.fn() }));
 vi.mock('@/lib/actions/travel', () => ({ requestExtension: mocks.request, decideExtension: mocks.decide }));
@@ -95,10 +96,32 @@ describe('ExtensionDecisionCard (FR-70)', () => {
     expect(screen.getByTestId('extension-delegation-x1').textContent).toContain('does not cover the extra days');
   });
 
-  it('rejects with a note', async () => {
+  it('rejects with a note, after confirming', async () => {
     wrap(<ExtensionDecisionCard ext={ext} locale="en" />);
     fireEvent.change(screen.getByLabelText('Note (optional)'), { target: { value: 'Not justified' } });
+    expect(screen.queryByTestId('extension-reject-x1')).toBeNull();
+    fireEvent.click(screen.getByTestId('extension-reject-open-x1'));
+    expect(screen.getByText('Reject this extension?')).toBeTruthy();
+    expect(mocks.decide).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('extension-reject-x1'));
     await waitFor(() => expect(mocks.decide).toHaveBeenCalledWith(expect.objectContaining({ extensionId: 'x1', approve: false, note: 'Not justified' })));
+  });
+
+  it('dismissing the reject confirmation decides nothing', () => {
+    wrap(<ExtensionDecisionCard ext={ext} locale="en" />);
+    fireEvent.click(screen.getByTestId('extension-reject-open-x1'));
+    fireEvent.click(screen.getByRole('button', { name: en.common.dismiss }));
+    expect(mocks.decide).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('extension-reject-x1')).toBeNull();
+  });
+});
+
+describe('TripExtensions after a rejection (FR-70 review)', () => {
+  it('offers "Extend trip" again once nothing is pending', () => {
+    // app_extendable_trips reports pending_extension = false after HR rejects.
+    wrap(<TripExtensions trips={[trip]} pending={[]} locale="en" />);
+    const open = screen.getByTestId('extend-open-r1') as HTMLButtonElement;
+    expect(open.textContent).toBe('Extend trip');
+    expect(open.disabled).toBe(false);
   });
 });

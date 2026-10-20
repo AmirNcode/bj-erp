@@ -4213,9 +4213,11 @@ begin
       join public.leave_requests r on r.id = b.request_id
       join public.profiles p on p.id = r.employee_id
       join public.profiles c on c.id = v_uid and c.company_id = r.company_id
-     where r.status = 'approved' and b.opened_at is not null and r.employee_id <> v_uid
+     where r.status = 'approved' and b.opened_at is not null
        and r.end_date >= (now() at time zone 'Asia/Tehran')::date
-       and (p.manager_id = v_uid or private.is_admin(v_uid))
+       and case when r.employee_id = v_uid
+                then private.has_role(v_uid, 'manager')
+                else p.manager_id = v_uid or private.is_admin(v_uid) end
      order by r.start_date, r.serial_year, r.serial_seq;
 end; $$;
 
@@ -4743,10 +4745,12 @@ begin
   select * into r from public.leave_requests where id = p_request;
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
   select manager_id into v_manager from public.profiles where id = r.employee_id;
-  if r.employee_id = v_uid
-     or not (v_manager = v_uid
-             or (private.is_admin(v_uid)
-                 and exists (select 1 from public.profiles c where c.id = v_uid and c.company_id = r.company_id))) then
+  if not (case when r.employee_id = v_uid
+               then private.has_role(v_uid, 'manager')
+               else v_manager = v_uid
+                    or (private.is_admin(v_uid)
+                        and exists (select 1 from public.profiles c where c.id = v_uid and c.company_id = r.company_id))
+          end) then
     raise exception 'not allowed to extend this trip' using errcode = '42501';
   end if;
 

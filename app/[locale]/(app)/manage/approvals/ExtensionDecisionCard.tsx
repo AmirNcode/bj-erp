@@ -3,6 +3,7 @@
 /**
  * FR-70: HR decides a trip extension — HR alone, even when the errand's chain has
  * other steps. Approval is signed and may set the per diem; rejection takes a note.
+ * Both ask for confirmation.
  */
 
 import { useState, useTransition } from 'react';
@@ -110,9 +111,22 @@ export function ExtensionDecisionCard({ ext, locale }: { ext: PendingExtension; 
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <Button size="sm" variant="outline" disabled={pending} onClick={() => decide(false)} data-testid={`extension-reject-${id}`}>
-            {t('reject')}
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="outline" disabled={pending} data-testid={`extension-reject-open-${id}`}>{t('reject')}</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent size="default">
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('rejectTitle')}</AlertDialogTitle>
+                <AlertDialogDescription>{t('rejectBody', { date: date(ext.old_end_date) })}</AlertDialogDescription>
+              </AlertDialogHeader>
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+              <AlertDialogFooter>
+                <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
+                <Button variant="destructive" disabled={pending} onClick={() => decide(false)} data-testid={`extension-reject-${id}`}>{t('reject')}</Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </CardContent>
     </Card>

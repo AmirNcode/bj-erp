@@ -1797,6 +1797,8 @@
       "note": "Note (optional)",
       "approve": "Approve extension",
       "reject": "Reject extension",
+      "rejectTitle": "Reject this extension?",
+      "rejectBody": "The trip keeps its current end date ({date}). The manager can send a new extension.",
       "approveTitle": "Approve extension",
       "approveBody": "The trip will end on {date} and the booking goes back to procurement.",
       "perDiemHint": "If the per diem changes, enter the new total; leave blank to keep it.",

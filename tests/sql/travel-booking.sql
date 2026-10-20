@@ -507,5 +507,44 @@ select pg_temp.expect('finance2: range checked',left(pg_temp.as_scalar('admin',
 select pg_temp.assert('anon cannot call finance_requests',
   not has_function_privilege('anon','public.finance_requests(date,date)','EXECUTE'));
 
+-- ============================================================ owner review: extensions after rejection, manager's own trip (…08)
+-- After a rejection, a new extension may be sent for the same trip (one pending at a time).
+insert into tb_fx values('rej1',pg_temp.ext('mgr','fin_req','2027-09-05')::uuid);
+select pg_temp.expect('hr rejects the extension',pg_temp.decide('hr','rej1',false,null,null,'Not needed'),'ok');
+select pg_temp.expect('rejected',pg_temp.ext_status('rej1'),'rejected');
+select pg_temp.expect('extend trip offered again after rejection',pg_temp.as_scalar('mgr',format(
+  'select pending_extension::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('fin_req'))),'false');
+insert into tb_fx values('rej2',pg_temp.ext('mgr','fin_req','2027-09-04')::uuid);
+select pg_temp.expect('manager sends a new extension after rejection',pg_temp.ext_status('rej2'),'pending');
+select pg_temp.expect('end date unchanged while it waits',pg_temp.end_of('fin_req'),'2027-09-03');
+
+-- A Manager-role holder extends their own trip; HR decides.
+select pg_temp.login('admin');
+update public.profiles set manager_id=pg_temp.fx('mgr') where id=pg_temp.fx('mgr2');
+update public.profiles set manager_id=pg_temp.fx('mgr2') where id=pg_temp.fx('proc2');
+insert into tb_fx values('mgr2_req',pg_temp.daily('mgr2','2027-11-01','2027-11-02')::uuid);
+select pg_temp.expect('own: manager approves',pg_temp.approve('mgr','mgr2_req','mgr_step'),'ok');
+select pg_temp.expect('own: hr approves',pg_temp.approve('hr','mgr2_req','hr_step'),'ok');
+select pg_temp.expect('own: hr ticks',pg_temp.err(pg_temp.as_scalar('hr',format(
+  'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('mgr2_req')))),'ok');
+select pg_temp.expect('manager sees own trip as extendable',pg_temp.as_scalar('mgr2',format(
+  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('mgr2_req'))),'1');
+insert into tb_fx values('own1',pg_temp.ext('mgr2','mgr2_req','2027-11-03')::uuid);
+select pg_temp.expect('manager requests extension of own trip',pg_temp.ext_status('own1'),'pending');
+select pg_temp.expect('manager cannot decide own extension',pg_temp.decide('mgr2','own1',true,pg_temp.sig()),'42501');
+select pg_temp.expect('hr rejects own extension',pg_temp.decide('hr','own1',false,null),'ok');
+insert into tb_fx values('own2',pg_temp.ext('mgr2','mgr2_req','2027-11-03')::uuid);
+select pg_temp.expect('manager re-sends own extension after rejection',pg_temp.ext_status('own2'),'pending');
+select pg_temp.expect('hr approves own extension',pg_temp.decide('hr','own2',true,pg_temp.sig()),'ok');
+select pg_temp.expect('own trip extended',pg_temp.end_of('mgr2_req'),'2027-11-03');
+select pg_temp.expect('non-manager refused on own trip',pg_temp.err(pg_temp.ext('worker','fin_req','2027-09-06')),'42501');
+select pg_temp.expect('non-manager does not see own trip as extendable',pg_temp.as_scalar('worker',format(
+  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('fin_req'))),'0');
+select pg_temp.expect('manager''s direct report refused',pg_temp.err(pg_temp.ext('proc2','mgr2_req','2027-11-04')),'42501');
+select pg_temp.expect('direct report does not see the manager''s trip',pg_temp.as_scalar('proc2',format(
+  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('mgr2_req'))),'0');
+select pg_temp.expect('the manager''s own manager still may',pg_temp.as_scalar('mgr',format(
+  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('mgr2_req'))),'1');
+
 -- @@ next section
 rollback;
