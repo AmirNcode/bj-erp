@@ -42,33 +42,10 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/set-password`);
   }
 
-  const [t, tProfile, tRoles] = await Promise.all([
+  const [t, tRoles] = await Promise.all([
     getTranslations({ locale, namespace: 'nav' }),
-    getTranslations({ locale, namespace: 'profile' }),
     getTranslations({ locale, namespace: 'roles' }),
   ]);
-  const labels = {
-    home: t('home'),
-    request: t('request'),
-    calendar: t('calendar'),
-    organization: t('organization'),
-    profile: t('profile'),
-    manage: t('manage'),
-    manageGroup: t('manage'),
-    employees: t('employees'),
-    departments: t('departments'),
-    approvals: t('approvals'),
-    requests: t('requests'),
-    approvalSteps: t('approvalSteps'),
-    reports: t('reports'),
-    absences: t('absences'),
-    finance: t('finance'),
-    settings: t('settings'),
-    language: t('language'),
-    langFa: tProfile('langFa'),
-    langEn: tProfile('langEn'),
-  };
-
   // The role under the name: the most senior built-in one held; with none but
   // Employee, the caller's custom role with the most access (role names, FR-55).
   // Custom roles are read (own rows, RLS) only in that case.
@@ -116,7 +93,6 @@ export default async function AppLayout({ children, params }: Props) {
       canApprove={canApprove}
       canDelegate={capabilities.canDelegate}
       locale={locale}
-      labels={labels}
       appName={t('appName')}
       profile={profileSummary}
       pendingCount={pendingCount}

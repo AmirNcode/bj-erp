@@ -16,7 +16,6 @@ import { can } from '@/lib/permissions/catalog';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getReviewRequests } from '@/lib/actions/leave/review';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { PageHeader } from '../../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
 import { RequestsReview } from './RequestsReview';
@@ -24,9 +23,6 @@ import { RequestsReview } from './RequestsReview';
 type Props = { params: Promise<{ locale: string }> };
 
 async function ReviewData({ locale }: { locale: string }) {
-  const t = await getTranslations('review');
-  const tLeave = await getTranslations('leave');
-  const tErrand = await getTranslations('errand');
 
   const [result, settingsResult] = await Promise.all([
     getReviewRequests(),
@@ -50,30 +46,6 @@ async function ReviewData({ locale }: { locale: string }) {
       requests={result.requests}
       locale={locale}
       hoursPerDay={hoursPerDay}
-      labels={{
-        search: t('search'),
-        searchPlaceholder: t('searchPlaceholder'),
-        status: t('status'),
-        kind: t('kind'),
-        all: t('all'),
-        kindLeave: t('kindLeave'),
-        kindErrand: t('kindErrand'),
-        trackingNo: t('trackingNo'),
-        employee: t('employee'),
-        dates: t('dates'),
-        duration: t('duration'),
-        signatures: t('signatures'),
-        print: t('print'),
-        empty: t('empty'),
-        signedRequester: t('signedRequester'),
-        signedApprover: t('signedApprover'),
-        errandBadge: tErrand('badge'),
-        statusPending: tLeave('status.pending'),
-        statusApproved: tLeave('status.approved'),
-        statusRejected: tLeave('status.rejected'),
-        statusCancelled: tLeave('status.cancelled'),
-        ...durationLabelsFrom(tLeave),
-      }}
     />
   );
 }

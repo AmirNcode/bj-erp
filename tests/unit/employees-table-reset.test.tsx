@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextIntlClientProvider } from 'next-intl';
+import en from '@/messages/en.json';
 import {
   EmployeesTable,
   type EmployeeRow,
@@ -44,23 +46,12 @@ const ROWS: EmployeeRow[] = [
   row('mgr', '103', {}),
 ];
 
-const LABELS = {
-  employee: 'Employee',
-  hireDate: 'Hire date',
-  department: 'Department',
-  roles: 'Roles',
-  upcomingLeave: 'Upcoming',
-  edit: 'Edit',
-  locked: 'Locked',
-  noEmployees: 'None',
-  errorLabel: 'Error',
-  selected: '{count} selected',
-  clearSelection: 'Clear',
-  regen: { button: 'Regenerate', confirmTitle: 'Sure?', confirmBody: '{count} people', cancel: 'Cancel', confirm: 'Go' },
-};
-
 const renderTable = (rows = ROWS) =>
-  render(<EmployeesTable employees={rows} canBulkReset showLocks={false} locale="en" labels={LABELS} />);
+  render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <EmployeesTable employees={rows} canBulkReset showLocks={false} locale="en" />
+    </NextIntlClientProvider>
+  );
 
 describe('bulk password reset selection (Medium 2)', () => {
   it('offers a checkbox only on eligible rows', () => {

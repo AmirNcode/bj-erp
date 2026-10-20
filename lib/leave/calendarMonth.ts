@@ -6,7 +6,9 @@ import persian_en from 'react-date-object/locales/persian_en';
 import persian_fa from 'react-date-object/locales/persian_fa';
 import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import type { WorkSettings } from '@/lib/actions/leave/reference';
-import { isWeekendDate } from './weekend';
+import { isoWeekdayOf, nextWorkingDay } from './weekend';
+import { addDays, daysBetween } from './isoDate';
+import { appLocale } from '@/lib/i18n/format';
 
 export type CalendarDayEntry = CalendarEntry & {
   returnDate: string;
@@ -28,14 +30,8 @@ export type CalendarMonth = {
   weekdayLabels: string[];
 };
 
-const MS_PER_DAY = 86_400_000;
-
-function normalizedLocale(locale: string): 'fa' | 'en' {
-  return locale === 'fa' ? 'fa' : 'en';
-}
-
 function displayConfig(locale: string) {
-  const lang = normalizedLocale(locale);
+  const lang = appLocale(locale);
 
   return {
     calendar: persian,
@@ -51,43 +47,6 @@ function fromIso(iso: string): DateObject | null {
 
 function isoFromDateObject(date: DateObject): string {
   return date.convert(gregorian, gregorian_en).format('YYYY-MM-DD');
-}
-
-export function addDays(iso: string, days: number): string {
-  const ms = Date.parse(`${iso}T00:00:00Z`);
-  if (Number.isNaN(ms)) return iso;
-  return new Date(ms + days * MS_PER_DAY).toISOString().slice(0, 10);
-}
-
-function daysBetween(start: string, end: string): number {
-  const startMs = Date.parse(`${start}T00:00:00Z`);
-  const endMs = Date.parse(`${end}T00:00:00Z`);
-  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 0;
-  return Math.floor((endMs - startMs) / MS_PER_DAY);
-}
-
-function isoWeekday(iso: string): number {
-  const day = new Date(`${iso}T00:00:00Z`).getUTCDay();
-  return day === 0 ? 7 : day;
-}
-
-function isWorkingDate(iso: string, workSettings: WorkSettings): boolean {
-  // Via the shared rule, not a plain `includes`: since FR-41 a weekday may be off
-  // every OTHER week, and the shaded calendar must agree with the balance the
-  // ledger charges.
-  if (isWeekendDate(iso, workSettings)) return false;
-  return !workSettings.holidays.includes(iso);
-}
-
-export function nextWorkingDateAfter(iso: string, workSettings: WorkSettings): string {
-  let candidate = addDays(iso, 1);
-
-  for (let i = 0; i < 370; i++) {
-    if (isWorkingDate(candidate, workSettings)) return candidate;
-    candidate = addDays(candidate, 1);
-  }
-
-  return addDays(iso, 1);
 }
 
 export function formatCalendarDate(
@@ -151,7 +110,7 @@ export function currentCalendarMonthRange(
 
 function weekdayLabels(weekStartsOn: number, locale: string): string[] {
   const labels: string[] = [];
-  const formatter = new Intl.DateTimeFormat(normalizedLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
+  const formatter = new Intl.DateTimeFormat(appLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
     weekday: 'short',
     timeZone: 'UTC',
   });
@@ -180,7 +139,8 @@ export function buildCalendarMonth({
   maxVisibleNames?: number;
 }): CalendarMonth {
   const weekStartsOn = 6;
-  const leadDays = (isoWeekday(rangeStart) - weekStartsOn + 7) % 7;
+  // rangeStart comes from currentCalendarMonthRange, so it is always a valid date.
+  const leadDays = (isoWeekdayOf(rangeStart)! - weekStartsOn + 7) % 7;
   const gridStart = addDays(rangeStart, -leadDays);
   const cellCount = Math.ceil((daysBetween(gridStart, rangeEnd) + 1) / 7) * 7;
 
@@ -196,7 +156,7 @@ export function buildCalendarMonth({
           .filter((entry) => entry.start_date <= iso && entry.end_date >= iso)
           .map((entry) => ({
             ...entry,
-            returnDate: nextWorkingDateAfter(entry.end_date, workSettings),
+            returnDate: nextWorkingDay(entry.end_date, workSettings) ?? addDays(entry.end_date, 1),
           }))
       : [];
 

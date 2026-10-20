@@ -15,8 +15,6 @@ import { getCachedUser } from '@/lib/auth/context';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { ErrandRequestForm } from './ErrandRequestForm';
 import { PageHeader } from '../../_components/PageHeader';
 import { RequestTypeTabs } from '../_components/RequestTypeTabs';
@@ -27,10 +25,6 @@ type Props = {
 };
 
 async function ErrandRequestData({ locale }: { locale: string }) {
-  const t = await getTranslations('request');
-  const tErrand = await getTranslations('errand');
-  const tLeave = await getTranslations('leave');
-  const tSignature = await getTranslations('signature');
 
   const user = await getCachedUser();
   if (!user) return null;
@@ -38,33 +32,9 @@ async function ErrandRequestData({ locale }: { locale: string }) {
   const [workSettingsResult, perDiemAllowed] = await Promise.all([getWorkSettings(), isCallerHrHead()]);
   const workSettings = workSettingsResult.ok ? workSettingsResult.settings : WORK_SETTINGS_FALLBACK;
 
-  const labels = {
-    date: tErrand('date'),
-    fromTime: tErrand('fromTime'),
-    toTime: tErrand('toTime'),
-    location: tErrand('location'),
-    locationPlaceholder: tErrand('locationPlaceholder'),
-    description: tErrand('description'),
-    hint: tErrand('hint'),
-    submit: tErrand('submit'),
-    preview: tErrand('preview'),
-    durationLabel: tErrand('durationLabel'),
-    success: tErrand('success'),
-    errorLabel: t('error'),
-    validationSelectDate: tErrand('validationSelectDate'),
-    validationTimes: tErrand('validationTimes'),
-    validationLocation: tErrand('validationLocation'),
-    signature: signatureLabelsFrom(tSignature),
-    ownPerDiemLabel: tErrand('ownPerDiemLabel'),
-    ownPerDiemHint: tErrand('ownPerDiemHint'),
-    ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
-    ...durationLabelsFrom(tLeave),
-  };
-
   return (
     <ErrandRequestForm
       workSettings={workSettings}
-      labels={labels}
       locale={locale}
       perDiemAllowed={perDiemAllowed}
     />

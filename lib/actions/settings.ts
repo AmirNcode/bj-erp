@@ -4,7 +4,8 @@ import { requireCaller } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
 import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 
 /**
  * Work settings and holidays writes: the matching FR-55 item at edit (the admin
@@ -36,7 +37,7 @@ export async function getCompanyHolidays(): Promise<
       /** When work settings were last saved (null before the first save). */
       updatedAt: string | null;
     }
-  | { ok: false; error: string }
+  | DbErrorResult
 > {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
@@ -56,15 +57,16 @@ export async function getCompanyHolidays(): Promise<
   ]);
   if (he) return dbErr(he.message);
   if (we) return dbErr(we.message);
+  const d = WORK_SETTINGS_FALLBACK;
   return {
     ok: true,
     holidays: (hols ?? []) as Holiday[],
-    weekendDays: ws?.weekend_days ?? [5],
-    biweeklyWeekendDays: ws?.biweekly_weekend_days ?? [],
-    biweeklyAnchor: ws?.biweekly_anchor ?? null,
-    workStart: ws?.work_start ?? '07:00',
-    workEnd: ws?.work_end ?? '15:00',
-    maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? 240,
+    weekendDays: ws?.weekend_days ?? d.weekendDays,
+    biweeklyWeekendDays: ws?.biweekly_weekend_days ?? d.biweeklyWeekendDays,
+    biweeklyAnchor: ws?.biweekly_anchor ?? d.biweeklyAnchor,
+    workStart: ws?.work_start ?? d.workStart,
+    workEnd: ws?.work_end ?? d.workEnd,
+    maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? d.maxHourlyMinutesPerDay,
     updatedAt: ws?.updated_at ?? null,
   };
 }
@@ -84,7 +86,7 @@ export type WorkSettingsInput = {
 
 export async function updateWorkSettings(
   input: WorkSettingsInput
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const weekendDays = input.weekendDays;
   const c = await requireSettingsEditor('work_settings');
   if (!c.ok) return c;
@@ -145,7 +147,7 @@ export async function upsertHoliday(input: {
   nameFa: string;
   nameEn?: string;
   isRecurring?: boolean;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   const nameFa = input.nameFa.trim();
@@ -190,7 +192,7 @@ export async function upsertHoliday(input: {
  */
 export async function bulkUpsertHolidays(
   rows: { date: string; nameFa: string; nameEn?: string | null; isRecurring?: boolean }[]
-): Promise<{ ok: true; added: number; updated: number } | { ok: false; error: string }> {
+): Promise<{ ok: true; added: number; updated: number } | DbErrorResult> {
   const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   if (rows.length === 0) return dbErr('no holidays to import');
@@ -244,7 +246,7 @@ export async function bulkUpsertHolidays(
   return { ok: true, added: rows.length - updated, updated };
 }
 
-export async function deleteHoliday(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deleteHoliday(id: string): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireSettingsEditor('holidays');
   if (!c.ok) return c;
   const { data, error } = await c.supabase
@@ -292,7 +294,7 @@ export type ApprovalStepRow = {
 
 export async function getApprovalSteps(): Promise<
   | { ok: true; steps: ApprovalStepRow[]; orderEnforced: boolean }
-  | { ok: false; error: string }
+  | DbErrorResult
 > {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
@@ -339,7 +341,7 @@ export async function updateApprovalStep(input: {
   id: string;
   active?: boolean;
   stepOrder?: number;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
@@ -379,7 +381,7 @@ export async function createApprovalStep(input: {
   approverId?: string | null;
   stepOrder?: number;
   appliesTo?: ('leave' | 'errand')[];
-}): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+}): Promise<{ ok: true; id: string } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
@@ -426,7 +428,7 @@ export async function createApprovalStep(input: {
  */
 export async function deleteApprovalStep(
   id: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
@@ -459,7 +461,7 @@ export type ApproverCandidate = {
  */
 export async function searchApproverCandidates(
   query: string
-): Promise<{ ok: true; candidates: ApproverCandidate[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; candidates: ApproverCandidate[] } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'] });
   if (!c.ok) return c;
 
@@ -498,7 +500,7 @@ export async function searchApproverCandidates(
  */
 export async function setApprovalOrderEnforced(
   enforced: boolean
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 

@@ -1,5 +1,8 @@
 'use client';
 
+import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
@@ -59,11 +62,48 @@ type Labels = {
   and: string;
 };
 
+/** This screen's copy; `maxHourlyMinutesPerDay` feeds the daily-limit hint. */
+function useLabels(maxHourlyMinutesPerDay: number): Labels {
+  const maxHours = Math.round((maxHourlyMinutesPerDay / 60) * 10) / 10;
+  const t = useTranslations('request');
+  const tHourly = useTranslations('hourly');
+  const tLeave = useTranslations('leave');
+  const tRepl = useTranslations('replacement');
+  const tSignature = useTranslations('signature');
+  return {
+    leaveType: t('leaveType'),
+    selectType: t('selectType'),
+    date: tHourly('date'),
+    fromTime: tHourly('fromTime'),
+    toTime: tHourly('toTime'),
+    reason: t('reason'),
+    submit: tHourly('submit'),
+    requestingLabel: t('requestingLabel'),
+    remainingBalanceLabel: t('remainingBalanceLabel'),
+    unpaidTimeOffLabel: t('unpaidTimeOffLabel'),
+    noBalance: t('noBalance'),
+    success: t('success'),
+    errorLabel: t('error'),
+    validationSelectType: t('validationSelectType'),
+    validationSelectDate: t('validationSelectDate'),
+    validationTimes: tHourly('validationTimes'),
+    dailyLimitHint: tHourly('dailyLimitHint', { hours: maxHours }),
+    replacementTitle: tRepl('title'),
+    replacementHint: tRepl('hint'),
+    replacementSelect: tRepl('select'),
+    replacementNoReplacement: tRepl('noReplacement'),
+    replacementOnLeave: tRepl('onLeave'),
+    replacementLoading: tRepl('loading'),
+    replacementEmpty: tRepl('empty'),
+    signature: signatureLabelsFrom(tSignature),
+    ...durationLabelsFrom(tLeave),
+  };
+}
+
 type Props = {
   /** Already filtered to types with allow_hourly — the SQL re-checks anyway. */
   leaveTypes: LeaveType[];
   workSettings: WorkSettings;
-  labels: Labels;
   locale: string;
 };
 
@@ -71,7 +111,8 @@ type Props = {
  * مرخصی ساعتی — the BJ-F 50208 flow: one date, a from-time and a to-time, as
  * 30-minute slots across the company work window.
  */
-export function HourlyRequestForm({ leaveTypes, workSettings, labels, locale }: Props) {
+export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
+  const labels = useLabels(workSettings.maxHourlyMinutesPerDay);
   const slots = timeSlots({ start: workSettings.workStart, end: workSettings.workEnd }, 30);
 
   const [selectedTypeId, setSelectedTypeId] = useState('');

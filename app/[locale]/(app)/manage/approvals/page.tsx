@@ -17,8 +17,6 @@ import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 import { NewRequestsBanner } from '../../_components/NewRequestsBanner';
-import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
 
@@ -29,10 +27,6 @@ type Props = {
 // ── async child that owns all data fetching ────────────────────────────────
 async function ApprovalsData({ locale }: { locale: string }) {
   const t = await getTranslations('approvals');
-  const tLeave = await getTranslations('leave');
-  const tRepl = await getTranslations('replacement');
-  const tErrand = await getTranslations('errand');
-  const tSignature = await getTranslations('signature');
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
@@ -46,54 +40,16 @@ async function ApprovalsData({ locale }: { locale: string }) {
     ? workSettingsRes.settings.hoursPerDay
     : WORK_SETTINGS_FALLBACK.hoursPerDay;
 
-  const labels = {
-    empty: t('empty'),
-    reason: t('reason'),
-    approve: t('approve'),
-    reject: t('reject'),
-    approveConfirm: t('approveConfirm'),
-    rejectConfirm: t('rejectConfirm'),
-    rejectReasonLabel: t('rejectReasonLabel'),
-    rejectReasonPlaceholder: t('rejectReasonPlaceholder'),
-    errorLabel: t('error'),
-    approveSuccess: t('approveSuccess'),
-    rejectSuccess: t('rejectSuccess'),
-    coverLabel: tRepl('coverLabel'),
-    coverConflict: tRepl('coverConflict'),
-    trackingNo: tLeave('trackingNo'),
-    errandBadge: tErrand('badge'),
-    errandLocation: tErrand('location'),
-    requesterSignature: signatureLabelsFrom(tSignature, 'requesterTitle'),
-    approverSignature: signatureLabelsFrom(tSignature, 'approverTitle'),
-          chainTitle: t('chainTitle'),
-          awaiting: t('awaiting'),
-          signed: t('signed'),
-          stepLabels: {
-            manager: t('steps.manager'),
-            departmentManager: t('steps.departmentManager'),
-            hr: t('steps.hr'),
-            security: t('steps.security'),
-            admin: t('steps.admin'),
-          },
-    ...durationLabelsFrom(tLeave), // days/hours/minutes/and
-    dayPartLabels: {
-      full: tLeave('dayPart.full'),
-      am: tLeave('dayPart.am'),
-      pm: tLeave('dayPart.pm'),
-    },
-  };
-
   return (
     <>
       <NewRequestsBanner currentIds={requests.map((r) => r.id)} />
       {loadError && (
         <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
-          <strong>{labels.errorLabel}:</strong> {loadError}
+          <strong>{t('error')}:</strong> {loadError}
         </div>
       )}
       <ApprovalQueue
         requests={requests}
-        labels={labels}
         locale={locale}
         hoursPerDay={hoursPerDay}
       />

@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Download } from 'lucide-react';
 import type { FinanceRow } from '@/lib/actions/finance';
 import type { JalaliMonthOption } from '@/lib/actions/reports';
-import { buildCsv } from '@/lib/csv/parse';
+import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
@@ -121,14 +121,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       r.per_diem_rials === null ? '' : String(r.per_diem_rials),
       r.per_diem_rials === null ? '' : r.per_diem_by_requester ? t('csv.perDiemByRequester') : t('csv.perDiemByHr'),
     ]);
-    const csv = buildCsv([header, ...body].map((row) => row.map(safeCell)));
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bj-finance-${from}-${to}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv([header, ...body].map((row) => row.map(safeCell)), `bj-finance-${from}-${to}.csv`);
   };
 
   const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-[10px] bg-card');

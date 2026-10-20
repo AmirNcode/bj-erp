@@ -8,13 +8,13 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { isValidSignatureData } from '@/lib/leave/signature';
 
 export type SavedSignature = { signatureData: string; source: 'drawn' | 'upload'; updatedAt: string };
 
 export async function getMySavedSignature(): Promise<
-  { ok: true; signature: SavedSignature | null } | { ok: false; error: string }
+  { ok: true; signature: SavedSignature | null } | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
@@ -39,7 +39,7 @@ export async function getMySavedSignature(): Promise<
 export async function saveMySignature(input: {
   signatureData: string;
   source: 'drawn' | 'upload';
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   if (!isValidSignatureData(input.signatureData)) return dbErr('signature image is invalid');
@@ -55,7 +55,7 @@ export async function saveMySignature(input: {
   return { ok: true };
 }
 
-export async function deleteMySignature(): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deleteMySignature(): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 

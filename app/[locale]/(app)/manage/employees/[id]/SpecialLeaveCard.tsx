@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import type { DbErrorResult } from '@/lib/errors/db-error';
 
 type Props = {
   employeeId: string;
@@ -47,7 +48,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
   const date = (iso: string) => formatCalendarDate(iso.slice(0, 10), locale);
 
   const run = (
-    action: () => Promise<{ ok: true } | { ok: false; error: string }>,
+    action: () => Promise<{ ok: true } | DbErrorResult>,
     done: string,
     onDone?: () => void
   ) =>

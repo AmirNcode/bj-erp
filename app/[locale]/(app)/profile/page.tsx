@@ -48,36 +48,7 @@ export default async function ProfilePage({ params }: Props) {
   const tSig = await getTranslations('profile.signature');
   const tPi = await getTranslations('personalInfo');
 
-  const formLabels = {
-    language: t('language'),
-    langFa: t('langFa'),
-    langEn: t('langEn'),
-  };
-
-  const tl = await getTranslations('profile.logoutConfirm');
-  const logoutLabels = {
-    trigger: tl('trigger'),
-    title: tl('title'),
-    body: tl('body'),
-    cancel: tl('cancel'),
-    confirm: tl('confirm'),
-  };
-
   const tp = await getTranslations('profile.password');
-  const passwordLabels = {
-    title: tp('title'),
-    current: tp('current'),
-    new: tp('new'),
-    confirm: tp('confirm'),
-    submit: tp('submit'),
-    changed: tp('changed'),
-    tooShort: tp('tooShort'),
-    tooLong: tp('tooLong'),
-    mismatch: tp('mismatch'),
-    emptyCurrent: tp('emptyCurrent'),
-    errorLabel: t('error'),
-  };
-
   return (
     <main className="p-4 max-w-lg mx-auto space-y-4">
       {/* Mobile has no side panel, so its refresh control lives here. */}
@@ -176,10 +147,9 @@ export default async function ProfilePage({ params }: Props) {
         </CardHeader>
         <CardContent className="pt-4">
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">{formLabels.language}</p>
+            <p className="text-sm font-medium">{t('language')}</p>
             <LanguageSwitch
               locale={locale}
-              labels={{ label: formLabels.language, fa: formLabels.langFa, en: formLabels.langEn }}
               testIdPrefix="settings-language"
               className="max-w-xs"
             />
@@ -193,12 +163,12 @@ export default async function ProfilePage({ params }: Props) {
           <CardTitle>{tp('title')}</CardTitle>
         </CardHeader>
         <CardContent className="pt-4">
-          <ChangePasswordForm labels={passwordLabels} />
+          <ChangePasswordForm />
         </CardContent>
       </Card>
 
       {/* Logout — deliberately outside any card, at the very bottom */}
-      <LogoutButton locale={locale} labels={logoutLabels} />
+      <LogoutButton locale={locale} />
     </main>
   );
 }

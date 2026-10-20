@@ -1,22 +1,11 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { runAllAccruals } from '@/lib/actions/leave/balances';
 import { Button } from '@/components/ui/button';
 import { formatNumber } from '@/lib/i18n/format';
-
-type Labels = {
-  title: string;
-  hint: string;
-  run: string;
-  resultTitle: string;
-  /** e.g. "{employees} employees - {rows} entries posted" — filled here, not by next-intl. */
-  employeesLabel: string;
-  rowsLabel: string;
-  nothingToDo: string;
-  errorLabel: string;
-};
 
 /**
  * Manual trigger for monthly accrual (spec §6.4).
@@ -26,7 +15,23 @@ type Labels = {
  * result*, instead of trusting invisible machinery, and so a month can be posted
  * for everyone at once rather than one employee at a time as pages are opened.
  */
-export function AccrualRunner({ labels, locale }: { labels: Labels; locale: string }) {
+/** The runner's copy (manage.settings.accrual.*). */
+function useLabels() {
+  const t = useTranslations('manage.settings');
+  return {
+    title: t('accrual.title'),
+    hint: t('accrual.hint'),
+    run: t('accrual.run'),
+    resultTitle: t('accrual.resultTitle'),
+    employeesLabel: t('accrual.employeesLabel'),
+    rowsLabel: t('accrual.rowsLabel'),
+    nothingToDo: t('accrual.nothingToDo'),
+    errorLabel: t('error'),
+  };
+}
+
+export function AccrualRunner({ locale }: { locale: string }) {
+  const labels = useLabels();
   const [result, setResult] = useState<{ employees: number; rowsPosted: number } | null>(null);
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();

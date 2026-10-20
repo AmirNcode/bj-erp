@@ -8,7 +8,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import type { StepRole } from '@/lib/leave/approvals';
 import type { ApprovalContextRow, ApprovalSignatures, ApprovalEvidenceKind } from '@/lib/leave/approval-context';
@@ -47,7 +47,7 @@ export type ReviewRequestRow = {
  * disagree with the employee's own list for no stated reason. The UI filters.
  */
 export async function getReviewRequests(): Promise<
-  { ok: true; requests: ReviewRequestRow[] } | { ok: false; error: string }
+  { ok: true; requests: ReviewRequestRow[] } | DbErrorResult
 > {
   const c = await requireCaller({ perm: ['leave_requests', 'read'] });
   if (!c.ok) return c;
@@ -183,7 +183,7 @@ export type PrintableRequest = ReviewRequestRow & {
  */
 export async function getRequestForPrint(
   requestId: string
-): Promise<{ ok: true; request: PrintableRequest } | { ok: false; error: string }> {
+): Promise<{ ok: true; request: PrintableRequest } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 

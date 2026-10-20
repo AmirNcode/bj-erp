@@ -11,10 +11,11 @@
  * decimal days, because HR will sum and sort them.
  */
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Download, TriangleAlert } from 'lucide-react';
-import { buildCsv } from '@/lib/csv/parse';
+import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatNumber } from '@/lib/i18n/format';
 import {
@@ -26,7 +27,6 @@ import {
   buildRequestSummary,
   tableToCsvRows,
   type CapacityRow,
-  type ReportTable,
 } from '@/lib/reports/reports';
 import type { ReportData, JalaliMonthOption } from '@/lib/actions/reports';
 import { Card } from '@/components/ui/card';
@@ -80,6 +80,91 @@ type Labels = {
   stepLabels: Record<string, string>;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const t = useTranslations('reports');
+  const tLeave = useTranslations('leave');
+  const tReview = useTranslations('review');
+  const tSteps = useTranslations('approvals.steps');
+  const tNav = useTranslations('nav');
+  return {
+    breadcrumb: tNav('manage'),
+    title: tNav('reports'),
+    from: t('from'),
+    to: t('to'),
+    rangeJoin: t('rangeJoin'),
+    export: t('export'),
+    download: t('download'),
+    empty: t('empty'),
+    capacityTitle: t('capacityTitle'),
+    capacitySub: t('capacitySub'),
+    lowCapacity: t('lowCapacity'),
+    // .raw(): the dashboard fills these as the period and totals change.
+    absenceChartTitle: t('absenceChartTitle'),
+    absenceChartSub: t.raw('absenceChartSub'),
+    totalDays: t.raw('totalDays'),
+    daysValue: t.raw('daysValue'),
+    months: {
+      m1: t('months.m1'), m2: t('months.m2'), m3: t('months.m3'), m4: t('months.m4'),
+      m5: t('months.m5'), m6: t('months.m6'), m7: t('months.m7'), m8: t('months.m8'),
+      m9: t('months.m9'), m10: t('months.m10'), m11: t('months.m11'), m12: t('months.m12'),
+    },
+    balances: {
+      title: t('balances.title'),
+      name: t('balances.name'),
+      code: t('balances.code'),
+      department: t('balances.department'),
+      manager: t('balances.manager'),
+    },
+    requests: {
+      title: t('requests.title'),
+      kind: t('requests.kind'),
+      status: t('requests.status'),
+      count: t('requests.count'),
+      days: t('requests.days'),
+      unpaidDays: t('requests.unpaidDays'),
+    },
+    absence: {
+      title: t('absence.title'),
+      department: t('absence.department'),
+      people: t('absence.people'),
+      requests: t('absence.requests'),
+      days: t('absence.days'),
+    },
+    ageing: {
+      title: t('ageing.title'),
+      name: t('ageing.name'),
+      department: t('ageing.department'),
+      submitted: t('ageing.submitted'),
+      waitingDays: t('ageing.waitingDays'),
+      days: t('ageing.days'),
+      waitingOn: t('ageing.waitingOn'),
+    },
+    headcount: {
+      title: t('headcount.title'),
+      department: t('headcount.department'),
+      headcount: t('headcount.headcount'),
+      joiners: t('headcount.joiners'),
+    },
+    kindLeave: tReview('kindLeave'),
+    kindErrand: tReview('kindErrand'),
+    statuses: {
+      pending: tLeave('status.pending'),
+      approved: tLeave('status.approved'),
+      rejected: tLeave('status.rejected'),
+      cancelled: tLeave('status.cancelled'),
+    },
+    stepLabels: {
+      manager: tSteps('manager'),
+      departmentManager: tSteps('departmentManager'),
+      hr: tSteps('hr'),
+      security: tSteps('security'),
+      admin: tSteps('admin'),
+    },
+  };
+}
+
+
 type Props = {
   data: ReportData;
   months: JalaliMonthOption[];
@@ -88,19 +173,8 @@ type Props = {
    * card: the pulse is company-wide for admin and hr only (FR-55 M10).
    */
   capacity: CapacityRow[] | null;
-  labels: Labels;
   locale: string;
 };
-
-function downloadCsv(table: ReportTable, filename: string) {
-  const blob = new Blob([buildCsv(tableToCsvRows(table))], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 /** One Excel button; a small menu picks which report to export. */
 function ExportMenu({
@@ -170,7 +244,8 @@ function ExportMenu({
   );
 }
 
-export function ReportsDashboard({ data, months, capacity, labels, locale }: Props) {
+export function ReportsDashboard({ data, months, capacity, locale }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const num = (n: number) => formatNumber(n, locale);
@@ -257,7 +332,7 @@ export function ReportsDashboard({ data, months, capacity, labels, locale }: Pro
     id: r.id,
     title: r.title,
     disabled: r.table.rows.length === 0,
-    onSelect: () => downloadCsv(r.table, `${stem}-${r.file}.csv`),
+    onSelect: () => downloadCsv(tableToCsvRows(r.table), `${stem}-${r.file}.csv`),
   }));
 
   const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-[10px] bg-card');

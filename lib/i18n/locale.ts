@@ -16,11 +16,10 @@
  * Farsi must not be flipped to English because the handset's browser is English.
  */
 
-/** Must stay in step with `i18n/routing.ts`; a unit test asserts it does. */
+/** The app's locales; `i18n/routing.ts` reads them from here. */
 export const APP_LOCALES = ['fa', 'en'] as const;
 export type AppLocale = (typeof APP_LOCALES)[number];
 
-/** Must stay in step with `i18n/routing.ts`; a unit test asserts it does. */
 export const DEFAULT_LOCALE: AppLocale = 'fa';
 
 /**

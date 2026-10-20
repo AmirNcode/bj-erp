@@ -13,6 +13,8 @@
  * (`hoursPerDay`), per the days↔minutes convention in DATA_MODEL.
  */
 
+import { daysBetween as isoDaysBetween } from '@/lib/leave/isoDate';
+
 export type ReportTable = {
   columns: string[];
   rows: (string | number)[][];
@@ -25,12 +27,9 @@ export function minutesToDecimalDays(minutes: number, hoursPerDay: number): numb
   return Math.round((minutes / perDay) * 100) / 100;
 }
 
-/** Whole days between two ISO dates, for the ageing report. */
+/** Whole days between two ISO dates, for the ageing report; never negative. */
 export function daysBetween(fromIso: string, toIso: string): number {
-  const a = Date.parse(`${fromIso}T00:00:00Z`);
-  const b = Date.parse(`${toIso}T00:00:00Z`);
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.max(0, Math.round((b - a) / 86_400_000));
+  return Math.max(0, isoDaysBetween(fromIso, toIso));
 }
 
 // ---------------------------------------------------------------------------

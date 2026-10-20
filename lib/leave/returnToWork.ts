@@ -7,7 +7,7 @@
  * work_start + (work_end - work_start) / 2.
  */
 import { minutesToTime, timeToMinutes } from './hourly';
-import { isWeekendDate, type WeekendRule } from './weekend';
+import { isWorkingDate, nextWorkingDay, type WorkingDayRule } from './weekend';
 
 export type ReturnToWorkInput = {
   unit: 'day' | 'hour';
@@ -18,35 +18,13 @@ export type ReturnToWorkInput = {
   endTime?: string | null;
 };
 
-export type ReturnToWorkSettings = WeekendRule & {
-  holidays: string[];
+export type ReturnToWorkSettings = WorkingDayRule & {
   workStart: string;
   workEnd: string;
 };
 
 /** A date, plus a time when the requester is back later that same working day. */
 export type ReturnToWork = { date: string; time: string | null };
-
-const MS_PER_DAY = 86_400_000;
-/** Safety stop: a year of consecutive days off means the settings are wrong, not a real return day. */
-const MAX_DAYS_AHEAD = 366;
-
-function addDays(iso: string, days: number): string {
-  return new Date(Date.parse(`${iso}T00:00:00Z`) + days * MS_PER_DAY).toISOString().slice(0, 10);
-}
-
-export function isWorkingDate(iso: string, settings: ReturnToWorkSettings): boolean {
-  return !isWeekendDate(iso, settings) && !settings.holidays.includes(iso);
-}
-
-/** First working day strictly after `iso`, or null if none within a year. */
-export function nextWorkingDay(iso: string, settings: ReturnToWorkSettings): string | null {
-  for (let i = 1; i <= MAX_DAYS_AHEAD; i++) {
-    const day = addDays(iso, i);
-    if (isWorkingDate(day, settings)) return day;
-  }
-  return null;
-}
 
 export function returnToWork(input: ReturnToWorkInput, settings: ReturnToWorkSettings): ReturnToWork | null {
   if (Number.isNaN(Date.parse(`${input.end}T00:00:00Z`))) return null;

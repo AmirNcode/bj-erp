@@ -6,15 +6,15 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
 import type { ApprovalStep, ManagerScope, SignedStep, StepLabel, StepRole } from '@/lib/leave/approvals';
 import { approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
-import { isValidSignatureData } from '@/lib/leave/signature';
+import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import type { DayPart } from './shared';
 
-export type DecisionResult = { ok: true } | { ok: false; error: string };
+export type DecisionResult = { ok: true } | DbErrorResult;
 
 export type ApproveRequestInput = {
   signatureData: string;
@@ -39,13 +39,9 @@ export async function approveRequest(
 ): Promise<DecisionResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  if (!input.signatureAuthorized) return dbErr('signature authorization is required');
-  if (!input.signatureData) return dbErr('signature is required');
-  if (!isValidSignatureData(input.signatureData)) return dbErr('signature data is invalid');
+  const bad = signatureProblem(input) ?? perDiemProblem(input.perDiemRials);
+  if (bad) return dbErr(bad);
   const perDiem = input.perDiemRials ?? null;
-  if (perDiem !== null && (!Number.isSafeInteger(perDiem) || perDiem < 0)) {
-    return dbErr('per diem must be 0 or more');
-  }
 
   const { error } = await c.supabase.rpc('approve_leave_request_v2', {
     p_id: requestId,
@@ -185,7 +181,7 @@ export async function getApprovalConfig(): Promise<{
 
 /** Pending request context and exact decision entitlements projected by the database. */
 export async function getPendingApprovals(): Promise<
-  { ok: true; requests: PendingApproval[] } | { ok: false; error: string }
+  { ok: true; requests: PendingApproval[] } | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
@@ -250,7 +246,7 @@ export async function getPendingApprovals(): Promise<
  * queue would not show.
  */
 export async function getPendingApprovalIds(): Promise<
-  { ok: true; ids: string[] } | { ok: false; error: string }
+  { ok: true; ids: string[] } | DbErrorResult
 > {
   const res = await getPendingApprovals();
   if (!res.ok) return res;

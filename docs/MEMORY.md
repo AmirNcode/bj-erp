@@ -60,9 +60,9 @@ causing production hydration error #418. Any server-rendered time label must spe
 ### Translate an ICU message where its variables live; `build` won't catch it
 Calling `t('confirmBody')` (it holds `{count}`) on the server without the value rendered the key
 path plus `FORMATTING_ERROR` in `npm run dev` only. The production bundle skips compiling it, so
-`npm run build` and a prod smoke test looked healthy. `manage/employees/page.tsx` works around it
-with `tr.raw()` and a client-side `.replace()`. The real fix is `useTranslations()` in the client
-component (audit D3). Test rendered output of any `{placeholder}` message. A bare `{count}`
+`npm run build` and a prod smoke test looked healthy. Client components now call
+`useTranslations()` themselves (R-12, 2026-10-20), so pass the values: `t('selected', { count })`.
+A few hooks still hand `t.raw()` templates to code that fills them later. Test rendered output of any `{placeholder}` message. A bare `{count}`
 prints ASCII digits; use `{count, number}` for Persian digits.
 
 ### Ledger writes race without locks

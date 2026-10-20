@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import DatePicker from 'react-multi-date-picker';
@@ -40,6 +41,41 @@ type Labels = {
   removeDay: string;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const t = useTranslations('manage.settings');
+  return {
+    weekendTitle: t('weekendTitle'),
+    weekendHint: t('weekendHint'),
+    hoursTitle: t('hoursTitle'),
+    hoursHint: t('hoursHint'),
+    workStart: t('workStart'),
+    workEnd: t('workEnd'),
+    hourlyCap: t('hourlyCap'),
+    save: t('save'),
+    // .raw(): the form substitutes {date} itself after each save.
+    lastSaved: t.raw('lastSaved'),
+    saved: t('saved'),
+    errorLabel: t('error'),
+    days: {
+      sat: t('days.sat'),
+      sun: t('days.sun'),
+      mon: t('days.mon'),
+      tue: t('days.tue'),
+      wed: t('days.wed'),
+      thu: t('days.thu'),
+      fri: t('days.fri'),
+    },
+    frequencyWeekly: t('frequencyWeekly'),
+    frequencyBiweekly: t('frequencyBiweekly'),
+    anchorLabel: t('anchorLabel'),
+    anchorHint: t('anchorHint'),
+    dayNone: t('dayNone'),
+    addDay: t('addDay'),
+    removeDay: t('removeDay'),
+  };
+}
+
 /** One dropdown in a frequency row: an ISO weekday, or null for "none". */
 type Slot = number | null;
 
@@ -59,7 +95,6 @@ export function WorkSettingsForm({
   initialHourlyCapMinutes,
   readOnly = false,
   locale,
-  labels,
 }: {
   initial: number[];
   initialBiweekly: number[];
@@ -72,8 +107,8 @@ export function WorkSettingsForm({
   /** FR-55: a read-only viewer sees the values with every control disabled and no Save. */
   readOnly?: boolean;
   locale: string;
-  labels: Labels;
 }) {
+  const labels = useLabels();
   const [weeklySlots, setWeeklySlots] = useState<Slot[]>(() => toSlots(initial));
   const [biweeklySlots, setBiweeklySlots] = useState<Slot[]>(() => toSlots(initialBiweekly));
   const selected = fromSlots(weeklySlots);

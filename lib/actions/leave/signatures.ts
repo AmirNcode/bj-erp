@@ -6,13 +6,13 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { isValidSignatureData } from '@/lib/leave/signature';
 import type { ApprovalSignatures } from '@/lib/leave/approval-context';
 
 export async function getRequestSignature(requestId: string): Promise<
   | { ok: true; signatureData: string; consentAt: string }
-  | { ok: false; error: string }
+  | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
@@ -38,7 +38,7 @@ export async function getRequestSignature(requestId: string): Promise<
 /** Private approver evidence, with the same base-row RLS boundary as the request signature. */
 export async function getApproverSignature(requestId: string): Promise<
   | { ok: true; signatureData: string; consentAt: string }
-  | { ok: false; error: string }
+  | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;
@@ -77,7 +77,7 @@ export async function getVisibleSignatureConsents(
   rangeEnd: string
 ): Promise<
   | { ok: true; signatures: VisibleSignatureConsent[] }
-  | { ok: false; error: string }
+  | DbErrorResult
 > {
   const c = await requireCaller();
   if (!c.ok) return c;

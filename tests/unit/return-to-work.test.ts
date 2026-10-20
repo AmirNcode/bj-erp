@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { nextWorkingDay, returnToWork } from '@/lib/leave/returnToWork';
+import { returnToWork } from '@/lib/leave/returnToWork';
+import { nextWorkingDay } from '@/lib/leave/weekend';
 
 // The client's week: Friday off every week, Thursday off every other week (FR-41).
 // 2026-10-16 is a Friday; anchor 2026-10-15 makes that Thursday an off week.

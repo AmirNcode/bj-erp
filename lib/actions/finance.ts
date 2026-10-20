@@ -11,7 +11,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
-import { dbErr } from '@/lib/errors/db-error';
+import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { isValidIsoDate } from '@/lib/leave/settings-validation';
 import type { Database } from '@/lib/supabase/types';
 
@@ -21,7 +21,7 @@ export type FinanceRow =
 export async function getFinanceApprovals(
   from: string,
   to: string
-): Promise<{ ok: true; rows: FinanceRow[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; rows: FinanceRow[] } | DbErrorResult> {
   const c = await requireCaller({ perm: ['finance', 'read'] });
   if (!c.ok) return c;
   if (!isValidIsoDate(from) || !isValidIsoDate(to) || to < from) return dbErr('invalid date range');

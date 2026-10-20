@@ -9,6 +9,16 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Internal cleanup — branch `codex/refactor-cleanup` (not merged or deployed)
+
+No visible change. Plan and status: `docs/REFACTOR_PLAN.md`.
+- Removed the unused `getAllEmployees` server action (an open endpoint nothing called) and dead
+  helpers (`lib/device.ts`, `lib/auth/permissions.ts`, `frequencyOf`).
+- One shared copy each of the signature / per-diem pre-checks, work-settings defaults, CSV download,
+  ISO-date and working-day helpers, and the `.env.local` loader.
+- Client screens read their own translations instead of ~600 lines of `labels` props built by pages.
+- `npm run test:deploy` now runs all four deploy suites (needs Docker), as CI does.
+
 ### Wording — branch `codex/per-diem-wording` (not committed or deployed)
 
 - Settings › Roles: shorter delegate and CEO / Head of HR descriptions (Farsi and English).

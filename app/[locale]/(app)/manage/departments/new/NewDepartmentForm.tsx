@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { createDepartment } from '@/lib/actions/departments';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,23 +17,6 @@ type ExistingDepartment = { id: string; name_fa: string; name_en: string };
 type Props = {
   existing: ExistingDepartment[];
   locale: string;
-  labels: {
-    nameFa: string;
-    nameEn: string;
-    kind: string;
-    kindTeam: string;
-    kindOffice: string;
-    kindSecurity: string;
-    create: string;
-    cancel: string;
-    existingTitle: string;
-    createdTitle: string;
-    createdHint: string;
-    addEmployee: string;
-    backToSettings: string;
-    nameRequired: string;
-    errorLabel: string;
-  };
 };
 
 /**
@@ -40,7 +24,8 @@ type Props = {
  * the code prefixes nothing, so `createDepartment` derives it from the English
  * name and the admin never sees it (spec 2026-07-30 §6.1 / D12, D13).
  */
-export function NewDepartmentForm({ existing, locale, labels }: Props) {
+export function NewDepartmentForm({ existing, locale }: Props) {
+  const t = useTranslations('manage.departments');
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +41,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
     const fa = nameFa.trim();
     const en = nameEn.trim();
     if (!fa || !en) {
-      setError(labels.nameRequired);
+      setError(t('nameRequired'));
       return;
     }
 
@@ -80,18 +65,18 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
     return (
       <Card className="border-2 border-success/30 bg-success-foreground">
         <CardContent className="space-y-4 pt-6" data-testid="dept-created">
-          <h2 className="text-lg font-semibold text-success">{labels.createdTitle}</h2>
+          <h2 className="text-lg font-semibold text-success">{t('createdTitle')}</h2>
           <p className="text-base">{locale === 'fa' ? created.nameFa : created.nameEn}</p>
-          <p className="text-sm text-success">{labels.createdHint}</p>
+          <p className="text-sm text-success">{t('createdHint')}</p>
           <div className="flex flex-wrap gap-3 pt-2">
             <Button asChild>
               <a href={`/${locale}/manage/employees/new`} data-testid="dept-add-employee">
-                {labels.addEmployee}
+                {t('addEmployee')}
               </a>
             </Button>
             <Button variant="outline" asChild>
               <a href={`/${locale}/manage/departments`} data-testid="dept-back-to-settings">
-                {labels.backToSettings}
+                {t('backToSettings')}
               </a>
             </Button>
           </div>
@@ -111,12 +96,12 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
                 data-testid="dept-error"
                 className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg text-sm"
               >
-                {labels.errorLabel}: {error}
+                {t('error')}: {error}
               </p>
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="name_fa">{labels.nameFa}</Label>
+              <Label htmlFor="name_fa">{t('nameFa')}</Label>
               <Input
                 id="name_fa"
                 name="name_fa"
@@ -128,7 +113,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="name_en">{labels.nameEn}</Label>
+              <Label htmlFor="name_en">{t('nameEn')}</Label>
               <Input
                 id="name_en"
                 name="name_en"
@@ -142,17 +127,17 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
 
             {/* Native <select> — must stay native for Playwright selectOption e2e */}
             <div className="space-y-1.5">
-              <Label htmlFor="kind">{labels.kind}</Label>
+              <Label htmlFor="kind">{t('kind')}</Label>
               <select id="kind" name="kind" defaultValue="team" className={nativeSelectClass}>
-                <option value="team">{labels.kindTeam}</option>
-                <option value="office">{labels.kindOffice}</option>
-                <option value="security">{labels.kindSecurity}</option>
+                <option value="team">{t('kindTeam')}</option>
+                <option value="office">{t('kindOffice')}</option>
+                <option value="security">{t('kindSecurity')}</option>
               </select>
             </div>
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" disabled={pending} data-testid="dept-submit">
-                {pending ? '...' : labels.create}
+                {pending ? '...' : t('create')}
               </Button>
               <Button
                 type="button"
@@ -160,7 +145,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
                 data-testid="dept-cancel"
                 onClick={() => router.push(`/${locale}/manage/departments`)}
               >
-                {labels.cancel}
+                {t('cancel')}
               </Button>
             </div>
           </form>
@@ -171,7 +156,7 @@ export function NewDepartmentForm({ existing, locale, labels }: Props) {
       {existing.length > 0 && (
         <Card>
           <CardContent className="space-y-2">
-            <h2 className="text-base font-semibold">{labels.existingTitle}</h2>
+            <h2 className="text-base font-semibold">{t('existingTitle')}</h2>
             <ul className="space-y-1" data-testid="dept-existing">
               {existing.map((d) => (
                 <li key={d.id} className="text-sm">

@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { routing } from '@/i18n/routing';
 import {
-  APP_LOCALES,
-  DEFAULT_LOCALE,
   isAppLocale,
   localePrefixOf,
   resolveEntryLocale,
@@ -10,18 +8,7 @@ import {
   withLocalePrefix,
 } from '@/lib/i18n/locale';
 
-describe('locale constants stay in step with i18n/routing', () => {
-  // lib/i18n/locale.ts is deliberately free of next-intl imports so the
-  // middleware can use it cheaply. That duplication is only safe while these
-  // hold, so drift fails here rather than in production.
-  it('lists exactly the routing locales', () => {
-    expect([...APP_LOCALES]).toEqual([...routing.locales]);
-  });
-
-  it('uses the routing default locale', () => {
-    expect(DEFAULT_LOCALE).toBe(routing.defaultLocale);
-  });
-
+describe('i18n/routing', () => {
   it('assumes as-needed prefixing, which is what makes the bare path ambiguous', () => {
     expect(routing.localePrefix).toBe('as-needed');
   });

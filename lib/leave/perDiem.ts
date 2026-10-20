@@ -1,3 +1,5 @@
+import { formatNumber } from '@/lib/i18n/format';
+
 /**
  * Per diem (حق ماموریت روزانه, FR-61) amounts: whole Rials.
  */
@@ -18,5 +20,5 @@ export function parseRials(raw: string): number {
 
 /** Rials with locale digits and grouping, e.g. ۱٬۵۰۰٬۰۰۰. */
 export function formatRials(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale === 'fa' ? 'fa-IR' : 'en-US').format(value);
+  return formatNumber(value, locale);
 }
