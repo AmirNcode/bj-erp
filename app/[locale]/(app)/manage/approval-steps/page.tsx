@@ -25,71 +25,8 @@ export default async function ApprovalStepsPage({ params }: Props) {
   const perms = await getCachedPermissions(user.id);
   if (!can(perms, 'approval_steps', 'read')) redirect(`/${locale}/home`);
 
-  const [tNav, tApproval, tAdd, tSteps] = await Promise.all([
-    getTranslations('nav'),
-    getTranslations('manage.settings.approvalSteps'),
-    getTranslations('manage.settings.approvalSteps.addStep'),
-    getTranslations('approvals.steps'),
-  ]);
+  const tNav = await getTranslations('nav');
   const approvalData = await getApprovalSteps();
-
-  const approvalLabels = {
-    title: tApproval('title'),
-    hint: tApproval('hint'),
-    orderEnforced: tApproval('orderEnforced'),
-    orderHint: tApproval('orderHint'),
-    stepOrder: tApproval('stepOrder'),
-    active: tApproval('active'),
-    saved: tApproval('saved'),
-    error: tApproval('error'),
-    empty: tApproval('empty'),
-    personStep: tApproval('personStep'),
-    inactiveApprover: tApproval('inactiveApprover'),
-    remove: tApproval('remove'),
-    removeConfirm: tApproval('removeConfirm'),
-    removed: tApproval('removed'),
-    orderNeedsStepsEdit: tApproval('orderNeedsStepsEdit'),
-    departmentHint: tApproval('departmentHint'),
-    steps: {
-      manager: tSteps('manager'),
-      departmentManager: tSteps('departmentManager'),
-      hr: tSteps('hr'),
-      security: tSteps('security'),
-      admin: tSteps('admin'),
-      employee: tSteps('employee'),
-    },
-    addStep: {
-      button: tAdd('button'),
-      title: tAdd('title'),
-      intro: tAdd('intro'),
-      kind: tAdd('kind'),
-      kindRole: tAdd('kindRole'),
-      kindPerson: tAdd('kindPerson'),
-      role: tAdd('role'),
-      person: tAdd('person'),
-      personPlaceholder: tAdd('personPlaceholder'),
-      personHint: tAdd('personHint'),
-      searching: tAdd('searching'),
-      noMatches: tAdd('noMatches'),
-      // .raw(): the dialog fills {count}.
-      selectOne: tAdd.raw('selectOne'),
-      selected: tAdd('selected'),
-      clear: tAdd('clear'),
-      order: tAdd('order'),
-      add: tAdd('add'),
-      adding: tAdd('adding'),
-      cancel: tAdd('cancel'),
-      added: tAdd('added'),
-      errorLabel: tAdd('errorLabel'),
-      roles: {
-        manager: tSteps('manager'),
-        hr: tSteps('hr'),
-        security: tSteps('security'),
-        admin: tSteps('admin'),
-        employee: tSteps('employee'),
-      },
-    },
-  };
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
@@ -101,7 +38,6 @@ export default async function ApprovalStepsPage({ params }: Props) {
         // same gate as setApprovalOrderEnforced and its RPC.
         canEnforceOrder={can(perms, 'approval_steps')}
         canEdit={can(perms, 'approval_steps')}
-        labels={approvalLabels}
       />
     </div>
   );

@@ -9,6 +9,7 @@
  * approver may sign first — and turning it on needs no code change.
  */
 
+import { useTranslations } from 'next-intl';
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -60,10 +61,74 @@ type Labels = {
   departmentHint: string;
 };
 
+/** This screen's copy. */
+function useLabels(): Labels {
+  const tApproval = useTranslations('manage.settings.approvalSteps');
+  const tAdd = useTranslations('manage.settings.approvalSteps.addStep');
+  const tSteps = useTranslations('approvals.steps');
+  return {
+    title: tApproval('title'),
+    hint: tApproval('hint'),
+    orderEnforced: tApproval('orderEnforced'),
+    orderHint: tApproval('orderHint'),
+    stepOrder: tApproval('stepOrder'),
+    active: tApproval('active'),
+    saved: tApproval('saved'),
+    error: tApproval('error'),
+    empty: tApproval('empty'),
+    personStep: tApproval('personStep'),
+    inactiveApprover: tApproval('inactiveApprover'),
+    remove: tApproval('remove'),
+    removeConfirm: tApproval('removeConfirm'),
+    removed: tApproval('removed'),
+    orderNeedsStepsEdit: tApproval('orderNeedsStepsEdit'),
+    departmentHint: tApproval('departmentHint'),
+    steps: {
+      manager: tSteps('manager'),
+      departmentManager: tSteps('departmentManager'),
+      hr: tSteps('hr'),
+      security: tSteps('security'),
+      admin: tSteps('admin'),
+      employee: tSteps('employee'),
+    },
+    addStep: {
+      button: tAdd('button'),
+      title: tAdd('title'),
+      intro: tAdd('intro'),
+      kind: tAdd('kind'),
+      kindRole: tAdd('kindRole'),
+      kindPerson: tAdd('kindPerson'),
+      role: tAdd('role'),
+      person: tAdd('person'),
+      personPlaceholder: tAdd('personPlaceholder'),
+      personHint: tAdd('personHint'),
+      searching: tAdd('searching'),
+      noMatches: tAdd('noMatches'),
+      // .raw(): the dialog fills {count}.
+      selectOne: tAdd.raw('selectOne'),
+      selected: tAdd('selected'),
+      clear: tAdd('clear'),
+      order: tAdd('order'),
+      add: tAdd('add'),
+      adding: tAdd('adding'),
+      cancel: tAdd('cancel'),
+      added: tAdd('added'),
+      errorLabel: tAdd('errorLabel'),
+      roles: {
+        manager: tSteps('manager'),
+        hr: tSteps('hr'),
+        security: tSteps('security'),
+        admin: tSteps('admin'),
+        employee: tSteps('employee'),
+      },
+    },
+  };
+}
+
+
 type Props = {
   steps: ApprovalStepRow[];
   orderEnforced: boolean;
-  labels: Labels;
   /**
    * FR-66: approval_steps edit (the admin and the hr preset), the gate of
    * setApprovalOrderEnforced and its RPC. Passed in so the switch is disabled
@@ -77,7 +142,8 @@ type Props = {
   canEdit?: boolean;
 };
 
-export function ApprovalStepsCard({ steps, orderEnforced, labels, canEnforceOrder, canEdit = true }: Props) {
+export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEdit = true }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   const [enforced, setEnforced] = useState(orderEnforced);
   const [error, setError] = useState('');
