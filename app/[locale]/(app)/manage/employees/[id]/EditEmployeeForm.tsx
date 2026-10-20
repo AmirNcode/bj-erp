@@ -57,6 +57,47 @@ type Profile = {
   language_pref: string;
 };
 
+/** The screen's copy; every key was a `labels` prop built by the page. */
+function useLabels() {
+  const t = useTranslations('manage');
+  const tTeam = useTranslations('team');
+  return {
+    code: t('employees.code'),
+    name: t('employees.name'),
+    department: t('employees.department'),
+    manager: t('employees.manager'),
+    roles: t('employees.roles'),
+    adminTransferHint: t('employees.adminTransferHint'),
+    hireDate: t('employees.hireDate'),
+    jobTitle: t('employees.jobTitle'),
+    save: t('employees.save'),
+    cancel: t('employees.cancel'),
+    resetPwd: t('employees.resetPwd'),
+    activate: t('employees.activate'),
+    deactivate: t('employees.deactivate'),
+    deactivateConfirmTitle: t('employees.deactivateConfirmTitle'),
+    deactivateConfirmBody: t.raw('employees.deactivateConfirmBody') as string,
+    tempPasswordLabel: t('employees.tempPasswordLabel'),
+    tempPasswordHint: t('employees.tempPasswordHint'),
+    errorLabel: t('employees.error'),
+    selectDept: t('employees.selectDept'),
+    selectMgr: t('employees.selectMgr'),
+    noneOption: t('employees.none'),
+    saved: t('employees.saved'),
+    managerNote: tTeam('managerNote'),
+    balancesTitle: t('employees.balancesTitle'),
+    policyTitle: t('employees.policyTitle'),
+    policyHint: t('employees.policyHint'),
+    policyRate: t('employees.policyRate'),
+    policyRateHint: t('employees.policyRateHint'),
+    policyAnnualCap: t('employees.policyAnnualCap'),
+    policyAnnualCapHint: t('employees.policyAnnualCapHint'),
+    policyCarryCap: t('employees.policyCarryCap'),
+    policyCarryCapHint: t('employees.policyCarryCapHint'),
+    policyWarn: t('employees.policyWarn'),
+  };
+}
+
 type Props = {
   employee: Profile;
   /** Every role of the company (app_list_roles order). */
@@ -90,43 +131,6 @@ type Props = {
   /** Gregorian start of the current Jalali month — used for new policy rows. */
   accrualStartMonth: string;
   locale: string;
-  labels: {
-    code: string;
-    name: string;
-    department: string;
-    manager: string;
-    roles: string;
-    adminTransferHint: string;
-    hireDate: string;
-    jobTitle: string;
-    save: string;
-    cancel: string;
-    resetPwd: string;
-    activate: string;
-    deactivate: string;
-    /** Deactivation is confirmed first; activation is not (it is harmless to undo). */
-    deactivateConfirmTitle: string;
-    /** Raw: {name}. */
-    deactivateConfirmBody: string;
-    tempPasswordLabel: string;
-    tempPasswordHint: string;
-    errorLabel: string;
-    selectDept: string;
-    selectMgr: string;
-    noneOption: string;
-    saved: string;
-    managerNote?: string;
-    balancesTitle: string;
-    policyTitle: string;
-    policyHint: string;
-    policyRate: string;
-    policyRateHint: string;
-    policyAnnualCap: string;
-    policyAnnualCapHint: string;
-    policyCarryCap: string;
-    policyCarryCapHint: string;
-    policyWarn: string;
-  };
 };
 
 export function EditEmployeeForm({
@@ -143,8 +147,8 @@ export function EditEmployeeForm({
   typeDefaults,
   accrualStartMonth,
   locale,
-  labels,
 }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
   const t = useTranslations('manage.employees');
