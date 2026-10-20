@@ -41,6 +41,44 @@ type InitialLeaveType = {
   default_carryover_cap_minutes: number;
 };
 
+/** The screen's copy; every key was a `labels` prop built by the page. */
+function useLabels() {
+  const t = useTranslations('manage');
+  return {
+    personnelNo: t('employees.personnelNo'),
+    jobTitle: t('employees.jobTitle'),
+    codePreview: t('employees.codePreview'),
+    defaultQuotaHint: t('employees.defaultQuotaHint'),
+    name: t('employees.name'),
+    department: t('employees.department'),
+    manager: t('employees.manager'),
+    roles: t('employees.roles'),
+    adminTransferHint: t('employees.adminTransferHint'),
+    hireDate: t('employees.hireDate'),
+    submit: t('employees.create'),
+    cancel: t('employees.cancel'),
+    done: t('employees.done'),
+    tempPasswordLabel: t('employees.tempPasswordLabel'),
+    tempPasswordHint: t('employees.tempPasswordHint'),
+    errorLabel: t('employees.error'),
+    selectDept: t('employees.selectDept'),
+    selectMgr: t('employees.selectMgr'),
+    noneOption: t('employees.none'),
+    allocTitle: t('employees.allocTitle'),
+    allocHint: t('employees.allocHint'),
+    allocWarn: t('employees.allocWarn'),
+    policyTitle: t('employees.policyTitle'),
+    policyHint: t('employees.policyHint'),
+    policyRate: t('employees.policyRate'),
+    policyRateHint: t('employees.policyRateHint'),
+    policyAnnualCap: t('employees.policyAnnualCap'),
+    policyAnnualCapHint: t('employees.policyAnnualCapHint'),
+    policyCarryCap: t('employees.policyCarryCap'),
+    policyCarryCapHint: t('employees.policyCarryCapHint'),
+    policyWarn: t('employees.policyWarn'),
+  };
+}
+
 type Props = {
   /** Every role of the company (app_list_roles order). */
   allRoles: RoleRow[];
@@ -69,39 +107,6 @@ type Props = {
   /** Gregorian start of the current Jalali month — the accrual start default. */
   accrualStartMonth: string;
   locale: string;
-  labels: {
-    personnelNo: string;
-    jobTitle: string;
-    codePreview: string;
-    defaultQuotaHint: string;
-    name: string;
-    department: string;
-    manager: string;
-    roles: string;
-    adminTransferHint: string;
-    hireDate: string;
-    submit: string;
-    cancel: string;
-    done: string;
-    tempPasswordLabel: string;
-    tempPasswordHint: string;
-    errorLabel: string;
-    selectDept: string;
-    selectMgr: string;
-    noneOption: string;
-    allocTitle: string;
-    allocHint: string;
-    allocWarn: string;
-    policyTitle: string;
-    policyHint: string;
-    policyRate: string;
-    policyRateHint: string;
-    policyAnnualCap: string;
-    policyAnnualCapHint: string;
-    policyCarryCap: string;
-    policyCarryCapHint: string;
-    policyWarn: string;
-  };
 };
 
 function defaultMinutesFor(type: InitialLeaveType, hoursPerDay: number) {
@@ -122,8 +127,8 @@ export function NewEmployeeForm({
   hoursPerDay,
   accrualStartMonth,
   locale,
-  labels,
 }: Props) {
+  const labels = useLabels();
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
   const [pending, setPending] = useState(false);

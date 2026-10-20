@@ -26,7 +26,6 @@ type Props = {
 
 // ── async child that owns all data fetching ────────────────────────────────
 async function NewEmployeeData({ locale }: { locale: string }) {
-  const t = await getTranslations('manage');
   const supabase = await createClient();
 
   const user = await getCachedUser();
@@ -105,39 +104,6 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       hoursPerDay={hoursPerDay}
       accrualStartMonth={accrualStartMonth}
       locale={locale}
-      labels={{
-        personnelNo: t('employees.personnelNo'),
-        jobTitle: t('employees.jobTitle'),
-        codePreview: t('employees.codePreview'),
-        defaultQuotaHint: t('employees.defaultQuotaHint'),
-        name: t('employees.name'),
-        department: t('employees.department'),
-        manager: t('employees.manager'),
-        roles: t('employees.roles'),
-        adminTransferHint: t('employees.adminTransferHint'),
-        hireDate: t('employees.hireDate'),
-        submit: t('employees.create'),
-        cancel: t('employees.cancel'),
-        done: t('employees.done'),
-        tempPasswordLabel: t('employees.tempPasswordLabel'),
-        tempPasswordHint: t('employees.tempPasswordHint'),
-        errorLabel: t('employees.error'),
-        selectDept: t('employees.selectDept'),
-        selectMgr: t('employees.selectMgr'),
-        noneOption: t('employees.none'),
-        allocTitle: t('employees.allocTitle'),
-        allocHint: t('employees.allocHint'),
-        allocWarn: t('employees.allocWarn'),
-        policyTitle: t('employees.policyTitle'),
-        policyHint: t('employees.policyHint'),
-        policyRate: t('employees.policyRate'),
-        policyRateHint: t('employees.policyRateHint'),
-        policyAnnualCap: t('employees.policyAnnualCap'),
-        policyAnnualCapHint: t('employees.policyAnnualCapHint'),
-        policyCarryCap: t('employees.policyCarryCap'),
-        policyCarryCapHint: t('employees.policyCarryCapHint'),
-        policyWarn: t('employees.policyWarn'),
-      }}
     />
   );
 }
