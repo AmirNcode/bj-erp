@@ -59,7 +59,7 @@ export function TravelTickToggle({ requestId, employeeId, ticked, started }: {
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
       {checked && missing.length > 0 && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status" data-testid={`travel-missing-${requestId}`}>
-          {t('missingWarning', { fields: missing.map((f) => t(`fields.${f}`)).join('، ') })}{' '}
+          {t('missingWarning', { fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(missing.map((f) => t(`fields.${f}`))) })}{' '}
           <Link href={`/${locale}/manage/employees/${employeeId}`} className="font-medium underline">
             {t('missingLink')}
           </Link>

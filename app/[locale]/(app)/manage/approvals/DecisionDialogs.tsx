@@ -99,7 +99,7 @@ function TravelBookingBox({ id, travel, checked, onChange }: {
       </label>
       {checked && travel.missingFields.length > 0 && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status" data-testid={`travel-missing-${id}`}>
-          {t('missingWarning', { fields: travel.missingFields.map((f) => t(`fields.${f}`)).join('، ') })}{' '}
+          {t('missingWarning', { fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(travel.missingFields.map((f) => t(`fields.${f}`))) })}{' '}
           <Link href={`/${locale}/manage/employees/${travel.employeeId}`} className="font-medium underline">
             {t('missingLink')}
           </Link>
