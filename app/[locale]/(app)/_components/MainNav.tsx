@@ -9,8 +9,6 @@ import {
   settingsItemForRoles,
   tabsForRoles,
   type NavItem,
-  type NavItemKey,
-  type TabKey,
 } from '@/lib/nav/tabs';
 import type { Perms } from '@/lib/permissions/catalog';
 import { cn } from '@/lib/utils';
@@ -19,21 +17,12 @@ import { NAV_ICONS, NAV_ITEM_ICONS } from './nav-icons';
 import { PageRefreshButton } from './PageRefreshButton';
 import { LanguageSwitch } from './LanguageSwitch';
 
-export type NavLabels = Record<TabKey, string> &
-  Record<NavItemKey, string> & {
-    manageGroup: string;
-    language: string;
-    langFa: string;
-    langEn: string;
-  };
-
 type Props = {
   roles: string[];
   perms: Perms;
   canApprove?: boolean;
   canDelegate?: boolean;
   locale: string;
-  labels: NavLabels;
   appName?: string;
   /** Side-panel footer: the caller's name and "{role} ، profile" line. */
   profile?: { name: string; subtitle: string };
@@ -68,7 +57,6 @@ export function MainNav({
   canApprove,
   canDelegate,
   locale,
-  labels,
   appName,
   profile,
   initialUpdatedAt,
@@ -107,7 +95,7 @@ export function MainNav({
           <span aria-hidden="true" className="shrink-0">
             {NAV_ITEM_ICONS[item.key]}
           </span>
-          <span>{labels[item.key]}</span>
+          <span>{t(item.key)}</span>
           {item.key === 'approvals' && pendingCount && (
             <Suspense fallback={null}>
               <ApprovalsBadge count={pendingCount} locale={locale} />
@@ -180,7 +168,7 @@ export function MainNav({
                 >
                   {NAV_ICONS[tab.key]}
                 </span>
-                <span>{labels[tab.key]}</span>
+                <span>{t(tab.key)}</span>
               </Link>
             </li>
           );
@@ -207,7 +195,7 @@ export function MainNav({
             >
               {NAV_ICONS.profile}
             </span>
-            <span>{labels.profile}</span>
+            <span>{t('profile')}</span>
           </Link>
         </li>
       </ul>
@@ -215,7 +203,7 @@ export function MainNav({
       {manageItems.length > 0 && (
         <div className="hidden md:block">
           <p className="px-3 pt-4 pb-1 text-[11.5px] font-semibold text-muted-foreground">
-            {labels.manageGroup}
+            {t('manage')}
           </p>
           <ul className="flex flex-col gap-0.5">{manageItems.map(sideLink)}</ul>
         </div>
@@ -234,7 +222,7 @@ export function MainNav({
         <Link
           href={`/${locale}/profile`}
           data-testid="nav-profile"
-          aria-label={labels.profile}
+          aria-label={t('profile')}
           aria-current={isActive('/profile') ? 'page' : undefined}
           className="flex items-center gap-2.5 rounded-[10px] p-1 transition-colors hover:bg-muted/50"
         >
@@ -255,10 +243,7 @@ export function MainNav({
             </span>
           )}
         </Link>
-        <LanguageSwitch
-          locale={locale}
-          labels={{ label: labels.language, fa: labels.langFa, en: labels.langEn }}
-        />
+        <LanguageSwitch locale={locale} />
       </div>
     </nav>
   );

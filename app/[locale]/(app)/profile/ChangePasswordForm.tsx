@@ -1,27 +1,34 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useTranslations } from 'next-intl';
 import { changeMyPassword } from '@/lib/actions/profile';
 import { validatePassword, toLatinPassword } from '@/lib/auth/passwordPolicy';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
-type Labels = {
-  title: string;
-  current: string;
-  new: string;
-  confirm: string;
-  submit: string;
-  changed: string;
-  tooShort: string;
-  tooLong: string;
-  mismatch: string;
-  emptyCurrent: string;
-  errorLabel: string;
-};
+/** The form's copy (profile.password, plus the shared error prefix). */
+function useLabels() {
+  const t = useTranslations('profile');
+  const tp = useTranslations('profile.password');
+  return {
+    title: tp('title'),
+    current: tp('current'),
+    new: tp('new'),
+    confirm: tp('confirm'),
+    submit: tp('submit'),
+    changed: tp('changed'),
+    tooShort: tp('tooShort'),
+    tooLong: tp('tooLong'),
+    mismatch: tp('mismatch'),
+    emptyCurrent: tp('emptyCurrent'),
+    errorLabel: t('error'),
+  };
+}
 
-export function ChangePasswordForm({ labels }: { labels: Labels }) {
+export function ChangePasswordForm() {
+  const labels = useLabels();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
