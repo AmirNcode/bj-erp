@@ -78,6 +78,78 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-21 — Production test findings: sign once, Home details, finance range (design only)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/per-diem-wording` @ `ec52114` (stale); moved to new branch
+`codex/approval-fixes` from `origin/main` @ `bfa638b` (PR #10 merged, deployed 2026-10-21 02:58 UTC).
+**Trigger:** Owner's production test: Head of HR signed twice (manager + HR); Home's Recent card lacks the
+trip details procurement added; finance did not see the approved trip.
+
+**What changed**
+- `docs/specs/2026-10-21-sign-once-home-details-design.md` (draft): FR-71 sign once for every step the caller
+  holds (own + delegated), FR-72 full details under "Show more" on Home and the return-to-work retention rule,
+  FR-62 finance default range = current + next month. Owner answers recorded in the spec.
+- No code.
+
+**Actions outside the repo**
+- None. Production DB not queried: the finance cause (trip dated in Aban, page opens on Mehr) is inferred from
+  `finance_requests` (`start_date <= to and end_date >= from`) and `finance/page.tsx` defaults, not confirmed.
+
+**Verification**
+- Not run (design only).
+
+**Follow-up in the same session: plan**
+- Owner confirmed the finance cause (trip showed after picking the next month) and asked for a **Remove**
+  button on rejected requests kept on Home. Spec amended (table `home_dismissed_requests` + RPC
+  `app_dismiss_home_request`; same-day return rule as my call) and marked approved.
+- Wrote `docs/plans/2026-10-21-sign-once-home-details.md` (6 tasks, migrations `20261021120000`/`…01`,
+  `tests/sql/sign-once.sql`, scratch DB only). Owner asked to stop before implementing.
+
+**Follow-up in the same session: implementation (owner: "Plan approved. Implement it.")**
+- Task 1: `lib/finance/range.ts` `defaultFinanceRange` (current month → end of next; falls back to current
+  month / today); `finance/page.tsx` uses it; `getReportMonths({ nextYear: true })` so Esfand reaches Farvardin.
+- Task 2: `supabase/migrations/20261021120000_sign_once.sql` — `app_request_approval_progress` copied from
+  `20261018011333` (its last definition) + `is_mine` on every row, `per_diem_allowed` on the HR step follows
+  `v_allowed`; new `approve_leave_request_steps` loops `private.decide_approval_request` in step order.
+- Task 3: `approvalBundle()` in `lib/leave/approval-context.ts` (`ApprovalChoice.stepRole` added);
+  `getPendingApprovals` uses it; `ApproveRequestInput.stepIds` replaces `stepId` (steps RPC; override and
+  legacy keep `approve_leave_request_v2`); `ApproveDialog` shows "Signing as: …" (`approvals.signingAs`,
+  `Intl.ListFormat`) instead of the approve step picker. Reject dialog unchanged.
+- Task 4: `supabase/migrations/20261021120001_home_dismissed_requests.sql` (table + `app_dismiss_home_request`).
+- Task 5: shared `app/[locale]/(app)/request/_components/RequestDetails.tsx` (plan said `components/`; put next
+  to `useRequestLabels`/`RequestSignature`, which it uses); `MyRequestsList` renders it (no visible change).
+  Home: client `home/RecentRequests.tsx` (Show more / Show less, Remove on rejected, optimistic with rollback,
+  empty state links to `/request`); `recentOnHome()` in `lib/home/board.ts` (5-row cap dropped);
+  `home/page.tsx` fetches `getMyTravelBookings()` + `getMyHomeDismissals()`. `home.noRecent` reworded
+  ("No current requests."), new `home.showMore/showLess/removeFromHome/removeFailed/openRequests`.
+- Docs: REQUIREMENTS (FR-62 amendment, FR-71, FR-72), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS.
+
+**Actions outside the repo (implementation)**
+- Scratch DB `bj_travel` only (`bj-erp-db-1`, `supabase_admin`): dry-ran both migrations + `tests/sql/sign-once.sql`
+  in `begin … rollback`, then applied both with `psql -1` (no ledger rows, like `…00`–`…11`). `schema.sql` dumped
+  from `bj_travel` (diff = only these two migrations). Shared `postgres` DB, `bj-deploy`, Liara: untouched.
+
+**Verification (implementation)**
+- `tests/sql/*.sql` on `bj_travel`: 9 suites, 1051 PASS / 0 FAIL (new `sign-once.sql` 38).
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 105 files / 990 passed · `npm run build` ok ·
+  fa/en keys 1563 each, no difference.
+- NOT run: browser walk-through (the local app runs on `postgres`, which lacks these migrations), Playwright
+  e2e, `test:deploy` (no deploy files changed).
+
+**State left behind**
+- All uncommitted on `codex/approval-fixes`. Nothing pushed or deployed. `bj_travel` now has `…00`–`…11` +
+  `20261021120000`/`…01`.
+
+**For the next agent**
+- `20261021120000`/`…01` are frozen (applied to `bj_travel`); fix forward.
+- `tests/e2e/leave.spec.ts:152` reads the first `home-recent-request-*` row; it still exists but only while the
+  request is before its return-to-work day.
+
+**For the next agent**
+- `private.decide_approval_request` already loops a step array (admin override) and re-checks the order rule
+  per step, with rows inserted earlier in the same transaction visible — the new RPC can call it per step.
+
 ## 2026-10-20 — PR #10: merge main, owner review changes (finance pending, manager extension, fixes)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

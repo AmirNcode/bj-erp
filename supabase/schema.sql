@@ -4182,6 +4182,31 @@ end $$;
 
 
 --
+-- Name: app_dismiss_home_request(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_dismiss_home_request(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_owner uuid;
+  v_status public.leave_status;
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not allowed' using errcode = '42501'; end if;
+  select employee_id, status into v_owner, v_status from public.leave_requests where id = p_id;
+  if v_owner is distinct from v_uid then
+    raise exception 'request not found' using errcode = 'P0002'; end if;
+  if v_status <> 'rejected' then
+    raise exception 'only rejected requests can be removed from Home' using errcode = '22023'; end if;
+  insert into public.home_dismissed_requests(request_id, employee_id) values (p_id, v_uid)
+    on conflict (request_id) do nothing;
+end; $$;
+
+
+--
 -- Name: app_export_personal_info(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4648,7 +4673,7 @@ begin
       'signed_at',v_done.created_at,'principal_name',v_done.principal_name,'principal_id',v_done.principal_id,
       'grant_id',v_done.authority_id,'authority_id',v_done.authority_id,'authority_ref',v_done.authority_id,
       'evidence_kind',v_done.evidence_kind,'decision',v_done.decision,
-      'is_delegated',v_done.evidence_kind='delegated','can_approve',false,'can_reject',false,
+      'is_delegated',v_done.evidence_kind='delegated','can_approve',false,'can_reject',false,'is_mine',false,
       'per_diem_allowed',false,'statement',v_done.evidence->>'statement','evidence',v_done.evidence));
   end loop;
   for s in select st.* from public.approval_steps st
@@ -4667,7 +4692,7 @@ begin
     if private.request_hr_exempt(p_id,s.id) then
       v_expected:=v_snapshot->>'expected_name';
       v_item:=jsonb_build_object('evidence_kind','hr_exempt','can_approve',false,'can_reject',false,
-        'is_delegated',false,'per_diem_allowed',false,'statement','Not required — request submitted by the Head of HR');
+        'is_delegated',false,'per_diem_allowed',false,'is_mine',false,'statement','Not required — request submitted by the Head of HR');
     else
       v_natural:=private.natural_step_authority(auth.uid(),p_id,s.id);
       d:=null;
@@ -4681,7 +4706,7 @@ begin
         'can_reject',r.status='pending' and (v_allowed or private.is_admin(auth.uid())),
         'is_delegated',d.id is not null,'principal_id',d.principal_id,
         'principal_name',d.principal_name,'grant_id',d.id,'authority_id',d.id,
-        'per_diem_allowed',v_can_approve and s.role='hr' and r.kind='errand');
+        'per_diem_allowed',v_allowed and s.role='hr' and r.kind='errand','is_mine',v_allowed);
     end if;
     v_result:=v_result||jsonb_build_array(v_item||jsonb_build_object('step_id',s.id,
       'step_role',s.role,'step_order',s.step_order,'manager_scope',s.manager_scope,
@@ -4697,7 +4722,7 @@ begin
       and not exists(select 1 from jsonb_array_elements(v_result) shown where shown->>'step_id'=item->>'step_id') loop
     v_result:=v_result||jsonb_build_array(v_snapshot||jsonb_build_object('evidence_kind','hr_exempt',
       'named',(v_snapshot->>'approver_id') is not null,'principal_id',v_policy.hr_head_id,
-      'can_approve',false,'can_reject',false,'is_delegated',false,'per_diem_allowed',false,
+      'can_approve',false,'can_reject',false,'is_delegated',false,'per_diem_allowed',false,'is_mine',false,
       'signer_name',null,'signed_at',null,'decision',null,
       'statement','Not required — request submitted by the Head of HR'));
   end loop;
@@ -4707,7 +4732,7 @@ begin
       'manager_scope','direct','named',false,
       'expected_name',(select p.full_name from public.profiles emp join public.profiles p on p.id=emp.manager_id where emp.id=r.employee_id),
       'evidence_kind','pending','decision',null,'signer_name',null,'signed_at',null,
-      'can_approve',v_allowed,'can_reject',v_allowed,'per_diem_allowed',false,
+      'can_approve',v_allowed,'can_reject',v_allowed,'per_diem_allowed',false,'is_mine',v_allowed,
       'is_delegated',v_allowed and not private.is_manager_of(auth.uid(),r.employee_id) and not private.is_admin(auth.uid())));
   end if;
   return (select coalesce(jsonb_agg(item order by coalesce((item->>'step_order')::integer,1),item->>'step_id'),'[]')
@@ -6004,6 +6029,46 @@ $$;
 
 
 --
+-- Name: approve_leave_request_steps(uuid, uuid[], text, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint DEFAULT NULL::bigint) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_company uuid;
+  v_steps uuid[];
+  v_hr uuid;
+  v_step uuid;
+begin
+  if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  if p_step_ids is null or cardinality(p_step_ids) = 0 or array_position(p_step_ids, null) is not null then
+    raise exception 'no approval steps given' using errcode = '22023'; end if;
+  if (select count(distinct x) from unnest(p_step_ids) as v(x)) <> cardinality(p_step_ids) then
+    raise exception 'duplicate approval steps' using errcode = '22023'; end if;
+  select company_id into v_company from public.leave_requests where id = p_id;
+  if v_company is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+
+  select array_agg(st.id order by st.step_order, st.id),
+         (array_agg(st.id order by st.step_order, st.id) filter (where st.role = 'hr'))[1]
+    into v_steps, v_hr
+    from public.approval_steps st
+   where st.id = any(p_step_ids) and st.company_id = v_company;
+  if coalesce(cardinality(v_steps), 0) <> cardinality(p_step_ids) then
+    raise exception 'not allowed to decide this request' using errcode = '42501'; end if;
+  if p_per_diem_rials is not null and v_hr is null then
+    raise exception 'per diem can only be set on the hr step of an errand' using errcode = '22023'; end if;
+
+  foreach v_step in array v_steps loop
+    perform private.decide_approval_request(p_id, v_step, v_uid, 'approved', p_signature_data,
+      p_signature_authorized, false, case when v_step = v_hr then p_per_diem_rials end, null);
+  end loop;
+end; $$;
+
+
+--
 -- Name: approve_leave_request_v2(uuid, uuid, text, boolean, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7280,6 +7345,24 @@ CREATE TABLE public.holidays (
 
 
 --
+-- Name: home_dismissed_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.home_dismissed_requests (
+    request_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    dismissed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE home_dismissed_requests; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.home_dismissed_requests IS 'FR-72: rejected requests the requester removed from Home. Read own rows only; written by app_dismiss_home_request.';
+
+
+--
 -- Name: leave_allocations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -7935,6 +8018,14 @@ ALTER TABLE ONLY public.errand_extensions
 
 ALTER TABLE ONLY public.holidays
     ADD CONSTRAINT holidays_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: home_dismissed_requests home_dismissed_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.home_dismissed_requests
+    ADD CONSTRAINT home_dismissed_requests_pkey PRIMARY KEY (request_id);
 
 
 --
@@ -8973,6 +9064,22 @@ ALTER TABLE ONLY public.holidays
 
 
 --
+-- Name: home_dismissed_requests home_dismissed_requests_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.home_dismissed_requests
+    ADD CONSTRAINT home_dismissed_requests_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: home_dismissed_requests home_dismissed_requests_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.home_dismissed_requests
+    ADD CONSTRAINT home_dismissed_requests_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
 -- Name: leave_allocations leave_allocations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9584,6 +9691,19 @@ CREATE POLICY holidays_update_editor ON public.holidays FOR UPDATE TO authentica
   WHERE (p.id = ( SELECT auth.uid() AS uid)))))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'holidays'::text, 'edit'::text) AND (company_id = ( SELECT p.company_id
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))));
+
+
+--
+-- Name: home_dismissed_requests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.home_dismissed_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: home_dismissed_requests home_dismissed_requests_own_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY home_dismissed_requests_own_read ON public.home_dismissed_requests FOR SELECT TO authenticated USING ((employee_id = auth.uid()));
 
 
 --
@@ -10734,6 +10854,16 @@ GRANT ALL ON FUNCTION public.app_delete_role(p_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION app_dismiss_home_request(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_export_personal_info(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11145,6 +11275,16 @@ GRANT ALL ON FUNCTION public.approve_leave_request(p_id uuid, p_signature_data t
 
 
 --
+-- Name: FUNCTION approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint) TO postgres;
+GRANT ALL ON FUNCTION public.approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint) TO authenticated;
+GRANT ALL ON FUNCTION public.approve_leave_request_steps(p_id uuid, p_step_ids uuid[], p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint) TO service_role;
+
+
+--
 -- Name: FUNCTION approve_leave_request_v2(p_id uuid, p_step_id uuid, p_signature_data text, p_signature_authorized boolean, p_override boolean, p_per_diem_rials bigint); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11544,6 +11684,15 @@ GRANT ALL ON TABLE public.holidays TO postgres;
 GRANT ALL ON TABLE public.holidays TO anon;
 GRANT ALL ON TABLE public.holidays TO authenticated;
 GRANT ALL ON TABLE public.holidays TO service_role;
+
+
+--
+-- Name: TABLE home_dismissed_requests; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.home_dismissed_requests TO postgres;
+GRANT ALL ON TABLE public.home_dismissed_requests TO service_role;
+GRANT SELECT ON TABLE public.home_dismissed_requests TO authenticated;
 
 
 --

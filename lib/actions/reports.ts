@@ -44,13 +44,14 @@ export type JalaliMonthOption = {
 
 /**
  * Selectable Jalali months for the period filter — the current Jalali year and
- * the one before it.
+ * the one before it (finance also gets the next year, so its default range can
+ * reach into Farvardin from Esfand).
  *
  * Read from the `jalali_months` table rather than converted in JS: that table is
  * the calendar dimension the whole accrual and serial system already joins
  * against, so the report's idea of "Mordad 1405" cannot drift from the ledger's.
  */
-export async function getReportMonths(): Promise<JalaliMonthOption[]> {
+export async function getReportMonths(opts: { nextYear?: boolean } = {}): Promise<JalaliMonthOption[]> {
   const supabase = await createClient();
   const today = todayInAppTz();
 
@@ -68,7 +69,7 @@ export async function getReportMonths(): Promise<JalaliMonthOption[]> {
     .from('jalali_months')
     .select('jalali_year, jalali_month, gregorian_start, gregorian_end')
     .gte('jalali_year', year - 1)
-    .lte('jalali_year', year)
+    .lte('jalali_year', opts.nextYear ? year + 1 : year)
     .order('gregorian_start');
 
   return (data ?? []).map((m) => ({

@@ -18,6 +18,8 @@ export type ApprovalProgressRow = {
   can_approve: boolean;
   can_reject: boolean;
   is_delegated?: boolean;
+  /** FR-71: the caller may sign this open step (own or delegated), apart from the order rule. */
+  is_mine?: boolean;
   per_diem_allowed?: boolean;
   authority_statement?: string | null;
   /** Immutable decision statement and snapshot returned by the scoped RPC. */
@@ -89,6 +91,7 @@ export type ApprovalSignatures = {
 
 export type ApprovalChoice = {
   stepId: string | null;
+  stepRole: StepRole;
   label: StepLabel;
   name: string | null;
   principalName: string | null;
@@ -107,12 +110,36 @@ export function approvalChoices(progress: ApprovalProgressRow[], action: 'approv
   return progress
     .filter((step) => step.evidence_kind !== 'hr_exempt' && !step.decision &&
       (action === 'approve' ? step.can_approve : step.can_reject) === true)
-    .map((step) => ({
-      stepId: step.step_id,
-      label: progressLabel(step),
-      name: step.named ? step.expected_name : null,
-      principalName: step.principal_name,
-      delegated: step.is_delegated === true,
-      perDiem: step.per_diem_allowed === true,
-    }));
+    .map(toChoice);
+}
+
+function toChoice(step: ApprovalProgressRow): ApprovalChoice {
+  return {
+    stepId: step.step_id,
+    stepRole: step.step_role,
+    label: progressLabel(step),
+    name: step.named ? step.expected_name : null,
+    principalName: step.principal_name,
+    delegated: step.is_delegated === true,
+    perDiem: step.per_diem_allowed === true,
+  };
+}
+
+/**
+ * FR-71: the steps one signature approves. Walk the open steps in order and take
+ * every step the caller may sign now, plus each of their own steps (`is_mine`)
+ * still held back by the order rule when every open step before it was taken —
+ * their own earlier steps clear the way, someone else's step in between does not.
+ */
+export function approvalBundle(progress: ApprovalProgressRow[]): ApprovalChoice[] {
+  const open = progress
+    .filter((step) => !step.decision && step.evidence_kind !== 'hr_exempt')
+    .sort((a, b) => a.step_order - b.step_order);
+  const bundle: ApprovalChoice[] = [];
+  let skipped = false;
+  for (const step of open) {
+    if (step.can_approve === true || (step.is_mine === true && !skipped && bundle.length > 0)) bundle.push(toChoice(step));
+    else skipped = true;
+  }
+  return bundle;
 }

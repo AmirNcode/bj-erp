@@ -69,7 +69,8 @@ export type ApproveOptions = {
 export type ApproveExtras = {
   override: boolean;
   perDiemRials: number | null;
-  stepId: string | null;
+  /** FR-71: every step the one signature approves; empty with the override. */
+  stepIds: string[];
   /** FR-70: HR marked the trip as needing travel booking. */
   travelBooking: boolean;
 };
@@ -109,22 +110,41 @@ function TravelBookingBox({ id, travel, checked, onChange }: {
   );
 }
 
+function useStepName() {
+  const t = useTranslations('approvalEvidence');
+  const tSteps = useTranslations('approvals.steps');
+  return (step: ApprovalChoice) => {
+    const title = step.name ?? tSteps(step.label);
+    return step.delegated ? `${title} · ${t('onBehalf', { name: step.principalName ?? '—' })}` : title;
+  };
+}
+
+/** FR-71: the steps one signature approves, listed rather than picked. */
+function SigningAs({ id, steps }: { id: string; steps: ApprovalChoice[] }) {
+  const t = useTranslations('approvals');
+  const locale = useLocale();
+  const stepName = useStepName();
+  if (!steps.length) return null;
+  return (
+    <div className="rounded-md bg-muted px-3 py-2 text-sm" data-testid={`approve-steps-${id}`}>
+      <span className="font-medium">{t('signingAs')}</span>{' '}
+      {new Intl.ListFormat(locale, { type: 'conjunction' }).format(steps.map(stepName))}
+    </div>
+  );
+}
+
 function StepChoice({ id, steps, value, onChange }: {
   id: string; steps: ApprovalChoice[]; value: string; onChange: (id: string) => void;
 }) {
   const t = useTranslations('approvalEvidence');
-  const tSteps = useTranslations('approvals.steps');
-  const name = (step: ApprovalChoice) => {
-    const title = step.name ?? tSteps(step.label);
-    return step.delegated ? `${title} · ${t('onBehalf', { name: step.principalName ?? '—' })}` : title;
-  };
+  const stepName = useStepName();
   if (!steps.length) return null;
-  if (steps.length === 1) return <p className="rounded-md bg-muted px-3 py-2 text-sm">{name(steps[0])}</p>;
+  if (steps.length === 1) return <p className="rounded-md bg-muted px-3 py-2 text-sm">{stepName(steps[0])}</p>;
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{t('selectStep')}</Label>
       <select id={id} value={value} onChange={(event) => onChange(event.target.value)} className={nativeSelectClass}>
-        {steps.map((step) => <option key={step.stepId ?? 'legacy'} value={step.stepId ?? ''}>{name(step)}</option>)}
+        {steps.map((step) => <option key={step.stepId ?? 'legacy'} value={step.stepId ?? ''}>{stepName(step)}</option>)}
       </select>
     </div>
   );
@@ -160,14 +180,13 @@ export function ApproveDialog({
   const [overrideChecked, setOverrideChecked] = useState(false);
   const [perDiem, setPerDiem] = useState('');
   const [travelBooking, setTravelBooking] = useState(false);
-  const [selectedStepId, setSelectedStepId] = useState('');
-  const selectedStep = options?.steps?.find((step) => (step.stepId ?? '') === selectedStepId) ?? options?.steps?.[0];
+  const steps = options?.steps ?? [];
 
   // An admin with no step of their own can only override; the database does
   // the same when asked to approve without one.
   const overrideOnly = !!options?.canOverride && !options.hasNaturalStep;
   const override = overrideOnly || (!!options?.canOverride && overrideChecked);
-  const showPerDiem = override ? !!options?.perDiemOverride : (selectedStep?.perDiem ?? !!options?.perDiemNatural);
+  const showPerDiem = override ? !!options?.perDiemOverride : (steps.some((step) => step.perDiem) || !!options?.perDiemNatural);
   const showTravel = showPerDiem && !!options?.travel;
 
   return (
@@ -180,7 +199,6 @@ export function ApproveDialog({
           setOverrideChecked(false);
           setPerDiem('');
           setTravelBooking(false);
-          setSelectedStepId(options?.steps?.[0]?.stepId ?? '');
         }
       }}
     >
@@ -200,7 +218,7 @@ export function ApproveDialog({
           <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
           <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
         </AlertDialogHeader>
-        {!override && options?.steps && <StepChoice id={`approve-step-${id}`} steps={options.steps} value={selectedStep?.stepId ?? ''} onChange={setSelectedStepId} />}
+        {!override && <SigningAs id={id} steps={steps} />}
         {overrideOnly && (
           <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid={`approve-override-only-${id}`}>
             {t('overrideOnly')}
@@ -274,7 +292,8 @@ export function ApproveDialog({
                 }
               }
               onApprove(signatureData, signatureAuthorized, {
-                override, perDiemRials, stepId: override ? null : selectedStep?.stepId ?? null,
+                override, perDiemRials,
+                stepIds: override ? [] : steps.flatMap((step) => (step.stepId ? [step.stepId] : [])),
                 travelBooking: showTravel && travelBooking,
               });
             }}

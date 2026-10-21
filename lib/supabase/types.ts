@@ -398,6 +398,12 @@ export type Database = {
           },
         ]
       }
+      home_dismissed_requests: {
+        Row: { request_id: string; employee_id: string; dismissed_at: string }
+        Insert: { request_id: string; employee_id: string; dismissed_at?: string }
+        Update: { request_id?: string; employee_id?: string; dismissed_at?: string }
+        Relationships: []
+      }
       holidays: {
         Row: {
           company_id: string
@@ -1598,6 +1604,17 @@ export type Database = {
         Args: Database['public']['Functions']['approve_leave_request']['Args'] & { p_step_id: string | null }
         Returns: undefined
       }
+      approve_leave_request_steps: {
+        Args: {
+          p_id: string
+          p_step_ids: string[]
+          p_signature_data: string
+          p_signature_authorized: boolean
+          p_per_diem_rials?: number
+        }
+        Returns: undefined
+      }
+      app_dismiss_home_request: { Args: { p_id: string }; Returns: undefined }
       reject_leave_request_v2: { Args: { p_id: string; p_step_id: string | null; p_reason?: string }; Returns: undefined }
       app_approval_queue: { Args: { p_status?: Database['public']['Enums']['leave_status'] }; Returns: Json }
       app_request_approval_context: { Args: { p_id: string }; Returns: Json }

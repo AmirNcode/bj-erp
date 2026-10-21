@@ -22,7 +22,7 @@ const labels = {
   approve: 'Approve', approveConfirm: 'Approve this request?',
   approverSignature: { validationSignature: 'Sign', validationAuthorization: 'Authorize' },
 } as never;
-const hrStep = { stepId: 'hr-step', label: 'hr', name: null, principalName: null, delegated: false, perDiem: true } as const;
+const hrStep = { stepId: 'hr-step', stepRole: 'hr', label: 'hr', name: null, principalName: null, delegated: false, perDiem: true } as const;
 
 function renderDialog(options: ApproveOptions, onApprove = vi.fn()) {
   render(
@@ -75,8 +75,8 @@ describe('HR step: needs travel booking (FR-70)', () => {
 
 describe('approveRequest with travelBooking', () => {
   it('marks the booking after the approval succeeds', async () => {
-    expect(await approveRequest('req-1', { signatureData, signatureAuthorized: true, stepId: 'hr-step', travelBooking: true })).toEqual({ ok: true });
-    expect(mocks.rpc.mock.calls.map((c) => c[0])).toEqual(['approve_leave_request_v2', 'app_set_travel_booking']);
+    expect(await approveRequest('req-1', { signatureData, signatureAuthorized: true, stepIds: ['hr-step'], travelBooking: true })).toEqual({ ok: true });
+    expect(mocks.rpc.mock.calls.map((c) => c[0])).toEqual(['approve_leave_request_steps', 'app_set_travel_booking']);
     expect(mocks.rpc).toHaveBeenLastCalledWith('app_set_travel_booking', { p_request: 'req-1', p_on: true });
   });
 

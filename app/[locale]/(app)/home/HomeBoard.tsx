@@ -5,22 +5,19 @@ import type { ReactNode } from 'react';
 import type { HomeBoard as HomeBoardData } from '@/lib/home/board';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
-import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
-import { RequestCancelButton } from '../request/_components/RequestCancelButton';
-import { RequestProgress } from '@/components/RequestProgress';
 import { PendingApprovalsCard, type PendingRow } from './PendingApprovalsCard';
+import { RecentRequests } from './RecentRequests';
+import type { TravelNote } from '../request/_components/RequestDetails';
 
 /** This screen's copy. */
 function useLabels() {
   const t = useTranslations('home');
   const tLeave = useTranslations('leave');
   const tRepl = useTranslations('replacement');
-  const tErrand = useTranslations('errand');
   return {
     balancesTitle: t('balancesTitle'),
     recentTitle: t('recentTitle'),
@@ -31,16 +28,10 @@ function useLabels() {
     titleLabel: t('titleLabel'),
     upcomingLabel: t('upcomingLabel'),
     noUpcoming: t('noUpcoming'),
-    noRecent: t('noRecent'),
     noTeam: t('noTeam'),
     coveringTitle: tRepl('coveringTitle'),
     coveringFor: tRepl('coveringFor'),
-    errandBadge: tErrand('badge'),
     ...durationLabelsFrom(tLeave), // provides days/hours/minutes/and
-    statusPending: tLeave('status.pending'),
-    statusApproved: tLeave('status.approved'),
-    statusRejected: tLeave('status.rejected'),
-    statusCancelled: tLeave('status.cancelled'),
     pulsePresent: t('pulsePresent'),
     pulseOnLeave: t('pulseOnLeave'),
     pulseErrand: t('pulseErrand'),
@@ -78,6 +69,8 @@ type Props = {
   locale: string;
   /** Company day length — balances and durations are stored in minutes. */
   hoursPerDay: number;
+  /** FR-70/72: procurement's transport and note on the caller's booked trips. */
+  travelBookings: Record<string, TravelNote>;
   /** Approvers only; null when the read failed (cards then show "—"). */
   pulse: PulseCards | null;
   pending: {
@@ -149,6 +142,7 @@ export function HomeBoard({
   board,
   locale,
   hoursPerDay,
+  travelBookings,
   pulse,
   pending,
   usage,
@@ -156,12 +150,6 @@ export function HomeBoard({
   coverDuties,
 }: Props) {
   const labels = useLabels();
-  const statusLabels = {
-    pending: labels.statusPending,
-    approved: labels.statusApproved,
-    rejected: labels.statusRejected,
-    cancelled: labels.statusCancelled,
-  };
   const manager = board.directory.find((member) => member.relation === 'manager');
   const teammates = board.directory.filter((member) => member.relation === 'teammate');
   const none = '—';
@@ -225,50 +213,12 @@ export function HomeBoard({
               <CardTitle>{labels.recentTitle}</CardTitle>
             </CardHeader>
             <CardContent>
-              {board.recent.length === 0 ? (
-                <EmptyState message={labels.noRecent} />
-              ) : (
-                <div className="space-y-3">
-                  {board.recent.map((r) => (
-                    <div
-                      key={r.id}
-                      className="flex items-start justify-between gap-3"
-                      data-testid={`home-recent-request-${r.id}`}
-                    >
-                      <div className="min-w-0">
-                        {/* An errand has no leave type; naming it by its tag keeps
-                            the row from rendering as a bare em dash. */}
-                        <div className="text-sm font-medium truncate">
-                          {r.kind === 'errand'
-                            ? `${labels.errandBadge}: ${r.errand_location ?? '—'}`
-                            : r.leave_types
-                              ? localizedLeaveTypeName(r.leave_types, locale)
-                              : '—'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatDate(r.start_date)} — {formatDate(r.end_date)} -{' '}
-                          {formatDuration(r.requested_minutes, hoursPerDay, locale, labels)}
-                        </div>
-                        {/* FR-64: who has signed, who it still waits on. */}
-                        {r.status !== 'cancelled' && <RequestProgress requestId={r.id} />}
-                      </div>
-                      <div className="flex shrink-0 flex-col items-end gap-2">
-                        <span data-testid={`home-status-${r.id}`}>
-                          <StatusBadge
-                            status={r.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
-                            labels={statusLabels}
-                          />
-                        </span>
-                        <RequestCancelButton
-                          requestId={r.id}
-                          status={r.status}
-                          startDate={r.start_date}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <RecentRequests
+                requests={board.recent}
+                locale={locale}
+                hoursPerDay={hoursPerDay}
+                travelBookings={travelBookings}
+              />
             </CardContent>
           </Card>
 

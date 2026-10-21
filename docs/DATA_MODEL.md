@@ -552,6 +552,13 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   and settled cancelled trips. `app_extendable_trips` returns `hr_exempt` (the Head of HR's own trip:
   extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
+### `home_dismissed_requests` (2026-10-21, FR-72, unreleased)
+`request_id → leave_requests` (PK, on delete cascade) · `employee_id → profiles` (on delete cascade) ·
+`dismissed_at`. A rejected request the requester removed from Home; Home's list (`recentOnHome`,
+`lib/home/board.ts`) skips it, the Requests tab ignores it. Written only by `app_dismiss_home_request`.
+A separate table so the write never touches `leave_requests` and its triggers.
+`app_request_approval_progress` rows also carry `is_mine` (FR-71, migration `20261021120000`).
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`

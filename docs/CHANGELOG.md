@@ -9,6 +9,15 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Sign once, Home request details, finance range — branch `codex/approval-fixes` (FR-71, FR-72, FR-62, not deployed)
+
+Migrations `20261021120000` (sign once), `20261021120001` (Home removals).
+- One signature approves every step the signer holds on a request (own and delegated), e.g. the Head
+  of HR who is also the employee's manager; the approve dialog lists the steps instead of a picker.
+- Home's recent requests: "Show more" opens the full details (procurement's transport and note
+  included); requests stay until the return-to-work day; rejected ones have a Remove button.
+- `/finance` opens on the current and next month.
+
 ### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, PR #10, not deployed)
 
 Migrations `20261020120000`–`20261020120011`.

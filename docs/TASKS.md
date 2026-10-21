@@ -49,6 +49,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **Sign once, Home details, finance range (FR-71, FR-72, FR-62 amendment):** built on
+  `codex/approval-fixes`, uncommitted (migrations `20261021120000`/`…01`). After deploy the owner re-runs the
+  production test: Head of HR as manager signs once; employee's Home shows procurement's note under Show more;
+  Remove on a rejected request; `/finance` opens on this + next month.
+
 - ◐ **FR-70 travel booking (procurement → finance):** [PR #10](https://github.com/AmirNcode/bj-erp/pull/10),
   branch `codex/travel-booking`; migrations `20261020120000`–`…11` applied only to the scratch DB
   `bj_travel`. Owner review changes done (finance pending + approved, manager's own extension, UI fixes).

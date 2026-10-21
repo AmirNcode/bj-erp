@@ -5,6 +5,7 @@
 
 import type { CalendarEntry } from '@/lib/actions/leave/calendar';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
+import { returnToWork, type ReturnToWorkSettings } from '@/lib/leave/returnToWork';
 
 export type TeamDirectoryMember = {
   id: string;
@@ -45,6 +46,12 @@ export function buildHomeBoard(input: {
   team: CalendarEntry[];
   directory?: TeamDirectoryMember[];
   pendingCount: number;
+  /** Tehran today, Gregorian YYYY-MM-DD. */
+  today: string;
+  /** Weekends, holidays and working hours for the return-to-work day. */
+  workSettings: ReturnToWorkSettings;
+  /** Rejected requests the requester removed from Home. */
+  dismissedIds?: string[];
 }): HomeBoard {
   // hr signs a step of the approval chain too (FR-36), so it gets the queue.
   const showApprovals = input.canApprove ?? (
@@ -68,10 +75,34 @@ export function buildHomeBoard(input: {
   return {
     showApprovals,
     pendingCount: input.pendingCount,
-    recent: input.requests.slice(0, 5),
+    recent: recentOnHome(input.requests, input.today, input.workSettings, input.dismissedIds ?? []),
     directory: (input.directory ?? []).map((member) => ({
       ...member,
       upcomingTimeOff: upcomingByEmployee.get(member.id) ?? [],
     })),
   };
+}
+
+/**
+ * FR-72: a request stays on Home until the requester is back at work. It leaves
+ * on the return-to-work day; when the return falls later the same day (hourly,
+ * morning half day) it stays through that day. Cancelled and removed requests
+ * leave at once. Without a return day (bad settings) it stays through its end date.
+ */
+export function recentOnHome(
+  requests: LeaveRequestWithType[],
+  today: string,
+  settings: ReturnToWorkSettings,
+  dismissedIds: string[]
+): LeaveRequestWithType[] {
+  const dismissed = new Set(dismissedIds);
+  return requests.filter((r) => {
+    if (r.status === 'cancelled' || dismissed.has(r.id)) return false;
+    const back = returnToWork(
+      { unit: r.unit, dayPart: r.day_part, end: r.end_date, endTime: r.end_time },
+      settings
+    );
+    if (!back) return today <= r.end_date;
+    return back.time === null ? today < back.date : today <= back.date;
+  });
 }

@@ -5,7 +5,8 @@
  * Every approved and pending request overlapping a Jalali month range, in two
  * sections with their own totals, with the per diem HR entered on errands and
  * FR-70 travel costs, and a CSV export of both. The range is a URL
- * parameter like the reports screen's, defaulting to the current month.
+ * parameter like the reports screen's, defaulting to the current month and the
+ * next one (upcoming trips show at once).
  */
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,7 @@ import { getReportMonths } from '@/lib/actions/reports';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { todayInAppTz } from '@/lib/appDate';
+import { defaultFinanceRange } from '@/lib/finance/range';
 import { PageHeader } from '../_components/PageHeader';
 import { FinanceList } from './FinanceList';
 
@@ -40,14 +42,14 @@ export default async function FinancePage({ params, searchParams }: Props) {
 
   const [t, months, settings] = await Promise.all([
     getTranslations('finance'),
-    getReportMonths(),
+    getReportMonths({ nextYear: true }),
     getWorkSettings(),
   ]);
   const today = todayInAppTz();
-  const current = months.find((m) => m.gregorianStart <= today && m.gregorianEnd >= today);
+  const range = defaultFinanceRange(months, today);
   const { from: rawFrom, to: rawTo } = await searchParams;
-  const from = rawFrom && ISO.test(rawFrom) ? rawFrom : current?.gregorianStart ?? today;
-  const to = rawTo && ISO.test(rawTo) ? rawTo : current?.gregorianEnd ?? today;
+  const from = rawFrom && ISO.test(rawFrom) ? rawFrom : range.from;
+  const to = rawTo && ISO.test(rawTo) ? rawTo : range.to;
 
   const result = await getFinanceApprovals(from, to);
   const hoursPerDay = settings.ok ? settings.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;

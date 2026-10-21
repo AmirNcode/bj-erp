@@ -141,6 +141,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
   first `select set_config('request.jwt.claims','{"sub":"<admin uuid>","role":"authenticated"}',true)`.
 - **`lib/leave/jalaliMonths.ts` is Node-only** (`createRequire`); importing it from app code breaks
   `npm run build`. Shared date helpers go in `lib/leave/dateConvert.ts`.
+- **Approving = `approve_leave_request_steps` with the ids from `approvalBundle(progress)`** (FR-71: one signature for every step the caller holds). `approve_leave_request_v2` is only for the admin override and legacy no-chain requests.
+- **SQL fixtures that change `work_settings.approval_order_enforced` need an admin JWT too** (`pg_temp.login('admin')` first), like `profiles`.
 - **Approval steps: key on `step_id`, not `step_role`.** The direct-manager and department-manager
   steps both have `step_role='manager'` (`manager_scope` tells them apart).
 - **e2e with `E2E_BASE_URL`:** the teardown cleanup fails; run `npm run cleanup:e2e` by hand after.
