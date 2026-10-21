@@ -133,8 +133,23 @@ Copy this block verbatim and fill it in.
 - 8 local commits on `codex/travel-booking` (plus this docs commit), **not pushed**; waiting for the owner.
 - `bj_travel` now has `…00`–`…09`.
 
+**Follow-up in the same session: the Head of HR's own trips (owner decision)**
+- Owner: the Head of HR must be able to extend their own trip; keep it simple — their trips skip HR at
+  every stage; self-approval accepted (they already sign their own requests as the CEO's delegate).
+- Migration `20261020120010_hr_head_own_trip.sql`: `app_set_travel_booking` also admits the requester
+  when `private.request_has_hr_exemption(request)`; `app_request_errand_extension` / `app_extendable_trips`
+  own-trip branch = Manager role **or** HR-exempt (exempt path applies at once); `app_extendable_trips`
+  dropped/recreated with `hr_exempt`. Replaces `…09`'s refusal (`…09` stays in history).
+- App: daily errand form shows «نیاز به رزرو سفر» to the Head of HR only (`perDiemAllowed`);
+  `submitDailyErrandRequest` ticks right after the submit RPC (warning `travelOwnTickNotSaved` if the tick
+  fails; `useRequestSubmit` shows a warning next to success); `ExtendTripDialog` says "applies at once" on
+  `hr_exempt` trips. Messages `travel.ownTickHint`, `travel.extension.bodyExempt`, `errors.travelOwnTickNotSaved`.
+- Tests: SQL section rewritten (self-extension exempt + audited, own tick, employee/manager own tick refused);
+  unit `daily-errand-own-travel.test.tsx`, cases in `hr-head-own-per-diem.test.tsx`, `extend-trip-dialog.test.tsx`.
+- `bj_travel`: dry-run then applied `…10`; all `tests/sql/*` 1002 PASS / 0 FAIL; `schema.sql` re-dumped.
+
 **For the next agent**
-- `…07`–`…09` are frozen (applied to `bj_travel`). Fix forward with `…10`+.
+- `…07`–`…10` are frozen (applied to `bj_travel`). Fix forward with `…11`+.
 - In `tests/sql/travel-booking.sql`, sections after "owner review" change fixtures (mgr2 → mgr, proc2 → mgr2,
   head gains Manager); add new sections after them or re-check.
 

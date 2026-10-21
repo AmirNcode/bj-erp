@@ -549,7 +549,8 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   diem and costs null). Kept for the old app; `/finance` reads `finance_requests` (migration `…07`):
   same columns plus `waiting_step text` (pending rows: first open step's label, else null); every
   approved row whatever its `travel_state` (costs as recorded so far, null = none), every pending row,
-  and settled cancelled trips. `team_leave_calendar` adds a pending row for a pending extension's extra days.
+  and settled cancelled trips. `app_extendable_trips` returns `hr_exempt` (the Head of HR's own trip:
+  extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

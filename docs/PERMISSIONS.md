@@ -738,9 +738,14 @@ through an unsigned browser approval endpoint.
 - Traveller details (only `travel_traveller_fields()`) are returned only while the booking is open
   (`to_book`, `extension`, `cancel_undo`, or `done` before the trip ends).
 - **Request an extension** — the requester's direct manager (`profiles.manager_id`) or the admin; on
-  their **own** trip only a holder of the built-in Manager role (`private.has_role(uid, 'manager')`,
-  migration `20261020120008`), and never on an HR-exempt trip (the Head of HR's own, migration `…09`:
-  it would approve itself). HR still decides it (`is_travel_hr` excludes the traveller); the Head of
-  HR's exempt path is unchanged; a manager's direct reports never extend the manager's trip. Extension history: `request_errand_extensions(id)` behind
+  their **own** trip a holder of the built-in Manager role (`private.has_role(uid, 'manager')`,
+  migration `20261020120008`; HR decides, `is_travel_hr` excludes the traveller), or the Head of HR
+  (`private.request_has_hr_exemption(request)`, migration `…10`). A manager's direct reports never
+  extend the manager's trip.
+- **The Head of HR's own trip** (HR step exempt at submission, FR-68) skips HR at every stage
+  (owner, 2026-10-20): they tick «نیاز به رزرو سفر» themselves (`app_set_travel_booking`, from the
+  daily errand form right after submission), and their own extension is applied at once on the exempt
+  path (no HR signature, per diem unchanged). This is accepted self-approval, like their own requests,
+  which they also sign as the CEO's delegate. Migration `…09` had refused it; `…10` replaces that. Extension history: `request_errand_extensions(id)` behind
   `private.can_read_approval_request`.
 - The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).

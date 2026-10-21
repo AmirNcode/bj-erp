@@ -378,7 +378,9 @@ Validation/release status stays in `docs/TASKS.md`.
   every opened booking returns to procurement to record the amount lost (0 allowed). `/finance` shows
   an approved travel trip at once (per diem + ticket + hotel + total; costs not yet recorded show "—"
   with a "booking not finished" marker) and a cancelled one once settled (amount lost only).
-  A Manager-role holder may also ask to extend their own trip; HR decides.
+  A Manager-role holder may also ask to extend their own trip; HR decides. The Head of HR's own trips
+  skip HR at every stage: they tick «نیاز به رزرو سفر» on their own daily errand form, and their own
+  extension applies at once (exempt, per diem unchanged).
   *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; owner review 2026-10-20; unreleased.)*
 
 ### Unreleased approval delegation amendment

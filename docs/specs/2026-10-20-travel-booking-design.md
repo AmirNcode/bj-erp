@@ -223,9 +223,13 @@ the costs. *(My call.)*
   release.
 - **Manager's own trip.** A holder of the built-in Manager role may request an extension of their own
   approved, travel-booked trip (migration `20261020120008`). HR still decides; the Head of HR's exempt
-  path is unchanged, and their own HR-exempt trip is excluded even if they hold the Manager role (it
-  would approve itself; migration `…09`); the manager's direct reports never can. After a rejection, a new extension may be
+  path is unchanged; the manager's direct reports never can. After a rejection, a new extension may be
   sent (one pending at a time).
 - **Reject extension** asks for confirmation, like approve.
+- **The Head of HR's own trips skip HR at every stage** (owner, after the security review of `…08`):
+  only they see «نیاز به رزرو سفر» on their daily errand form (ticked right after submission; the
+  booking opens on approval like everyone's); they extend their own trip themselves and it applies at
+  once on the exempt path (§6.4), back to procurement. Accepted self-approval: they already sign their
+  own requests as the CEO's delegate. Migration `20261020120010` (replaces `…09`, which refused it).
 - Deferred (see `docs/TASKS.md`): an hr holder's delegate acting on that hr holder's own trip; the
   unlocked status read in `app_set_travel_booking`; HR approving an extension after the trip ended.
