@@ -25,7 +25,7 @@ vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({
 
 const wrap = (ui: React.ReactNode) => render(<NextIntlClientProvider locale="en" messages={en}>{ui}</NextIntlClientProvider>);
 const trip = { request_id: 'r1', serial_year: 1405, serial_seq: 7, employee_name: 'Sara', errand_location: 'Shiraz',
-  start_date: '2027-03-01', end_date: '2027-03-03', pending_extension: false, delegation_uncovered: false };
+  start_date: '2027-03-01', end_date: '2027-03-03', pending_extension: false, delegation_uncovered: false, hr_exempt: false };
 const ext = { extension_id: 'x1', request_id: 'r1', serial_year: 1405, serial_seq: 7, employee_name: 'Sara',
   errand_location: 'Shiraz', start_date: '2027-03-01', old_end_date: '2027-03-03', new_end_date: '2027-03-05',
   reason: 'More inspections', requested_by_name: 'Manager', per_diem_rials: 600000, delegation_uncovered: false };
@@ -113,6 +113,21 @@ describe('ExtensionDecisionCard (FR-70)', () => {
     fireEvent.click(screen.getByRole('button', { name: en.common.dismiss }));
     expect(mocks.decide).not.toHaveBeenCalled();
     expect(screen.queryByTestId('extension-reject-x1')).toBeNull();
+  });
+});
+
+describe('ExtendTripDialog on the Head of HR\'s own trip (FR-70, migration …10)', () => {
+  it('says the new end date applies at once, without HR', () => {
+    wrap(<ExtendTripDialog trip={{ ...trip, hr_exempt: true }} locale="en" />);
+    fireEvent.click(screen.getByTestId('extend-open-r1'));
+    expect(screen.getByText(en.travel.extension.bodyExempt)).toBeTruthy();
+    expect(screen.queryByText(en.travel.extension.body)).toBeNull();
+  });
+
+  it('other trips keep the HR wording', () => {
+    wrap(<ExtendTripDialog trip={trip} locale="en" />);
+    fireEvent.click(screen.getByTestId('extend-open-r1'));
+    expect(screen.getByText(en.travel.extension.body)).toBeTruthy();
   });
 });
 

@@ -1547,7 +1547,7 @@ export type Database = {
         Returns: {
           request_id: string; serial_year: number; serial_seq: number; employee_name: string
           errand_location: string | null; start_date: string; end_date: string; pending_extension: boolean
-          delegation_uncovered: boolean
+          delegation_uncovered: boolean; hr_exempt: boolean
         }[]
       }
       app_request_errand_extension: {

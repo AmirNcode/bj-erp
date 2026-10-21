@@ -144,6 +144,8 @@ export type ExtendableTrip = {
   pending_extension: boolean;
   /** A temporary approval delegation was set from this trip; it will not cover the extra days. */
   delegation_uncovered: boolean;
+  /** The Head of HR's own trip (HR step exempt): the extension applies at once, no HR decision. */
+  hr_exempt: boolean;
 };
 
 export type PendingExtension = {

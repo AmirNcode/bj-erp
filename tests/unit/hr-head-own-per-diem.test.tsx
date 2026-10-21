@@ -53,6 +53,27 @@ describe('Head of HR own per diem: submit actions', () => {
   });
 });
 
+describe('Head of HR ticks their own travel booking (FR-70)', () => {
+  it('ticks the new request right after submission', async () => {
+    expect(await submitDailyErrandRequest({ ...daily, travelBooking: true })).toEqual({ ok: true, requestId: 'request-id' });
+    expect(mocks.rpc).toHaveBeenLastCalledWith('app_set_travel_booking', { p_request: 'request-id', p_on: true });
+  });
+
+  it('does not tick when the box is off', async () => {
+    await submitDailyErrandRequest({ ...daily, travelBooking: false });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+    expect(mocks.rpc).toHaveBeenLastCalledWith('submit_daily_errand_request_v2', expect.anything());
+  });
+
+  it('keeps the request and warns when the tick fails', async () => {
+    mocks.rpc
+      .mockResolvedValueOnce({ data: 'request-id', error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'not allowed to mark travel booking' } });
+    expect(await submitDailyErrandRequest({ ...daily, travelBooking: true }))
+      .toEqual({ ok: true, requestId: 'request-id', warning: 'own travel booking not saved' });
+  });
+});
+
 describe('isCallerHrHead', () => {
   it('is true only when the caller is the designated HR head', async () => {
     mocks.rpc.mockResolvedValueOnce({ data: { principal_id: 'me', executive_settings: { hr_head_id: 'me' } }, error: null });

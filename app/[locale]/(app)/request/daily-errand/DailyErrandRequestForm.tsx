@@ -36,6 +36,8 @@ type Labels = {
   ownPerDiemLabel: string;
   ownPerDiemHint: string;
   ownPerDiemInvalid: string;
+  ownTravelLabel: string;
+  ownTravelHint: string;
   days: string;
   hours: string;
   minutes: string;
@@ -49,6 +51,7 @@ function useLabels(): Labels {
   const tErrand = useTranslations('errand');
   const tLeave = useTranslations('leave');
   const tSignature = useTranslations('signature');
+  const tTravel = useTranslations('travel');
   return {
     dateRange: t('dateRange'),
     startDate: t('startDate'),
@@ -67,6 +70,8 @@ function useLabels(): Labels {
     ownPerDiemLabel: tErrand('ownPerDiemLabel'),
     ownPerDiemHint: tErrand('ownPerDiemHint'),
     ownPerDiemInvalid: tErrand('ownPerDiemInvalid'),
+    ownTravelLabel: tTravel('tickLabel'),
+    ownTravelHint: tTravel('ownTickHint'),
     ...durationLabelsFrom(tLeave),
   };
 }
@@ -74,7 +79,8 @@ function useLabels(): Labels {
 type Props = {
   workSettings: WorkSettings;
   locale: string;
-  /** The caller is the designated Head of HR: they enter their own per diem. */
+  /** The caller is the designated Head of HR: they enter their own per diem and
+   *  tick their own travel booking (FR-68, FR-70). */
   perDiemAllowed: boolean;
 };
 
@@ -85,6 +91,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
   const [perDiem, setPerDiem] = useState('');
+  const [travelBooking, setTravelBooking] = useState(false);
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
 
@@ -118,6 +125,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
           signatureData: signature.data,
           signatureAuthorized: signature.authorized,
           perDiemRials,
+          travelBooking: perDiemAllowed && travelBooking,
           ...delegation.submission,
         }),
       () => {
@@ -126,6 +134,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
         setLocation('');
         setDescription('');
         setPerDiem('');
+        setTravelBooking(false);
         signature.reset();
       }
     );
@@ -170,6 +179,22 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
 
           {perDiemAllowed && (
             <OwnPerDiemField idPrefix="daily_errand" testIdPrefix="daily-errand" value={perDiem} onChange={setPerDiem} labels={labels} />
+          )}
+
+          {perDiemAllowed && (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1 size-4"
+                checked={travelBooking}
+                onChange={(e) => setTravelBooking(e.target.checked)}
+                data-testid="daily-errand-travel-booking"
+              />
+              <span>
+                <span className="font-medium">{labels.ownTravelLabel}</span>
+                <span className="block text-xs text-muted-foreground">{labels.ownTravelHint}</span>
+              </span>
+            </label>
           )}
 
           <RequestDelegationFields idPrefix="daily-errand" delegation={delegation} workSettings={workSettings} locale={locale} showCover={false} />

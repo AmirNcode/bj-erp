@@ -546,14 +546,36 @@ select pg_temp.expect('direct report does not see the manager''s trip',pg_temp.a
 select pg_temp.expect('the manager''s own manager still may',pg_temp.as_scalar('mgr',format(
   'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('mgr2_req'))),'1');
 
--- Security review of …08 (…09): the Head of HR's own trip is HR-exempt, so a self-request would
--- approve itself. Even holding the Manager role, they cannot request it; their manager still can.
-insert into public.user_roles(user_id,role) values(pg_temp.fx('head'),'manager');
-select pg_temp.expect('head of hr with manager role refused on own exempt trip',pg_temp.err(pg_temp.ext('head','head_req','2027-08-20')),'42501');
-select pg_temp.expect('own exempt trip not listed as extendable',pg_temp.as_scalar('head',format(
-  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('head_req'))),'0');
-insert into tb_fx values('head_ext2',pg_temp.ext('mgr','head_req','2027-08-20')::uuid);
+-- Owner (…10): the Head of HR's own trip skips HR at every stage. They extend it themselves
+-- (exempt path, applied at once) and tick it themselves; no Manager role needed.
+select pg_temp.expect('head of hr sees own exempt trip as extendable',pg_temp.as_scalar('head',format(
+  'select hr_exempt::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('head_req'))),'true');
+select pg_temp.expect('another manager''s own trip is not exempt',pg_temp.as_scalar('mgr2',format(
+  'select hr_exempt::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('mgr2_req'))),'false');
+insert into tb_fx values('head_self',pg_temp.ext('head','head_req','2027-08-20')::uuid);
+select pg_temp.expect('head of hr extends own trip on the exempt path',pg_temp.ext_status('head_self'),'approved/exempt');
+select pg_temp.expect('own extension applied at once, per diem kept',
+  (select end_date||'/'||per_diem_rials||'/'||per_diem_by_requester from public.leave_requests where id=pg_temp.fx('head_req')),
+  '2027-08-20/500000/true');
+select pg_temp.expect('booking goes back to procurement',pg_temp.state('head_req'),'extension');
+select pg_temp.expect('self-extension is audited',(select count(*)::text from public.audit_log
+  where action='errand_extension.request' and actor_id=pg_temp.fx('head') and entity_id=pg_temp.fx('head_req')),'1');
+insert into tb_fx values('head_ext2',pg_temp.ext('mgr','head_req','2027-08-21')::uuid);
 select pg_temp.expect('their manager still extends it on the exempt path',pg_temp.ext_status('head_ext2'),'approved/exempt');
+
+insert into tb_fx values('head_req2',pg_temp.daily('head','2027-12-01','2027-12-02')::uuid);
+select pg_temp.expect('head of hr ticks own trip at submission',pg_temp.err(pg_temp.as_scalar('head',format(
+  'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('head_req2')))),'ok');
+select pg_temp.expect('own ticked trip waits for approval',pg_temp.state('head_req2'),'awaiting_approval');
+select pg_temp.expect('own tick audited as theirs',(select count(*)::text from public.audit_log
+  where action='travel_booking.tick' and actor_id=pg_temp.fx('head') and entity_id=pg_temp.fx('head_req2')),'1');
+select pg_temp.expect('head trip 2: manager approves',pg_temp.approve('mgr','head_req2','mgr_step'),'ok');
+select pg_temp.expect('approved own trip reaches procurement',pg_temp.state('head_req2'),'to_book');
+insert into tb_fx values('w_own',pg_temp.daily('worker','2027-12-10','2027-12-11')::uuid);
+select pg_temp.expect('an employee cannot tick own trip',pg_temp.err(pg_temp.as_scalar('worker',format(
+  'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('w_own')))),'42501');
+select pg_temp.expect('a manager cannot tick own trip',pg_temp.err(pg_temp.as_scalar('mgr2',format(
+  'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('mgr2_req')))),'42501');
 
 -- @@ next section
 rollback;

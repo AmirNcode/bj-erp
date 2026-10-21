@@ -1043,6 +1043,7 @@
     "ceoAuthorityInvalid": "Automatic approval authority can only be granted for the designated CEO’s delegate.",
     "approvalStepChanged": "This approval step changed. Refresh the request before deciding.",
     "perDiemOwnNotAllowed": "Only the Head of HR can enter a per diem on their own errand.",
+    "travelOwnTickNotSaved": "The request was sent, but “Needs travel booking” was not saved. Ask HR to tick it on the Requests page.",
     "travelTickNotSaved": "The request is approved, but “Needs travel booking” was not saved. Tick it on the Requests page.",
     "travelDailyOnly": "Travel booking is for daily work errands only.",
     "travelTripEnded": "This trip has already ended.",
@@ -1736,6 +1737,7 @@
       "gender": "Gender"
     },
     "tickLabel": "Needs travel booking",
+    "ownTickHint": "You are the Head of HR, so you mark your own trip. Once it is approved, it goes to procurement.",
     "tickHint": "Once fully approved, the request goes to procurement to buy the ticket and book the hotel.",
     "missingWarning": "These traveller details are missing: {fields}. Procurement needs them to book; you can still approve.",
     "missingLink": "Complete personal information",
@@ -1783,6 +1785,7 @@
       "waiting": "Extension waiting for HR",
       "title": "Extend trip",
       "body": "Write the new end date and the reason. HR decides; until then the trip keeps its dates.",
+      "bodyExempt": "No HR approval is needed for this trip: the new end date applies at once and the booking goes back to procurement.",
       "newEnd": "New end date",
       "reason": "Reason for the extension",
       "submit": "Send to HR",

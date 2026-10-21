@@ -59,7 +59,7 @@ export function ExtendTripDialog({ trip, locale }: { trip: ExtendableTrip; local
       <AlertDialogContent size="default">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('title')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('body')}</AlertDialogDescription>
+          <AlertDialogDescription>{trip.hr_exempt ? t('bodyExempt') : t('body')}</AlertDialogDescription>
         </AlertDialogHeader>
         {trip.delegation_uncovered && (
           <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid={`extend-delegation-${id}`}>
