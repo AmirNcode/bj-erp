@@ -147,9 +147,15 @@ Copy this block verbatim and fill it in.
 - Tests: SQL section rewritten (self-extension exempt + audited, own tick, employee/manager own tick refused);
   unit `daily-errand-own-travel.test.tsx`, cases in `hr-head-own-per-diem.test.tsx`, `extend-trip-dialog.test.tsx`.
 - `bj_travel`: dry-run then applied `…10`; all `tests/sql/*` 1002 PASS / 0 FAIL; `schema.sql` re-dumped.
+- Automated security review of `…10`: the self path trusted the exemption recorded at submission, so a
+  former Head of HR could still tick/extend those trips alone. Migration `…11` adds
+  `private.is_current_hr_head(uid, company)` to the self tick, the own-extension branch, the exempt
+  auto-apply on a self-request and `app_extendable_trips.hr_exempt`; a former Head of HR's own extension
+  (Manager role) now waits for HR. Proved: suite without `…11` fails ("former head cannot untick own trip:
+  expected 42501, got ok"). Applied to `bj_travel`; all `tests/sql/*` 1013 PASS / 0 FAIL.
 
 **For the next agent**
-- `…07`–`…10` are frozen (applied to `bj_travel`). Fix forward with `…11`+.
+- `…07`–`…11` are frozen (applied to `bj_travel`). Fix forward with `…12`+.
 - In `tests/sql/travel-booking.sql`, sections after "owner review" change fixtures (mgr2 → mgr, proc2 → mgr2,
   head gains Manager); add new sections after them or re-check.
 

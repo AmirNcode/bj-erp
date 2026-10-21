@@ -746,6 +746,9 @@ through an unsigned browser approval endpoint.
   (owner, 2026-10-20): they tick «نیاز به رزرو سفر» themselves (`app_set_travel_booking`, from the
   daily errand form right after submission), and their own extension is applied at once on the exempt
   path (no HR signature, per diem unchanged). This is accepted self-approval, like their own requests,
-  which they also sign as the CEO's delegate. Migration `…09` had refused it; `…10` replaces that. Extension history: `request_errand_extensions(id)` behind
+  which they also sign as the CEO's delegate. Migration `…09` had refused it; `…10` replaces that.
+  The self path also needs the caller to be the Head of HR **today** (`private.is_current_hr_head`,
+  `approval_executive_settings.hr_head_id`, migration `…11`): once someone else is named, a former Head
+  of HR cannot tick their old trips, and their own extension (with the Manager role) waits for HR. Extension history: `request_errand_extensions(id)` behind
   `private.can_read_approval_request`.
 - The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).

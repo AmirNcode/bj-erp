@@ -11,7 +11,7 @@ was deployed; semantic versioning starts at the first tag.
 
 ### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, PR #10, not deployed)
 
-Migrations `20261020120000`–`20261020120010`.
+Migrations `20261020120000`–`20261020120011`.
 - HR ticks «نیاز به رزرو سفر» on a daily work errand when approving (or later on the Requests page),
   with a warning when the traveller's details are missing.
 - New Procurement preset and «رزرو سفر» permission; `/procurement` lists approved trips to book, with
@@ -27,7 +27,7 @@ Migrations `20261020120000`–`20261020120010`.
   (`finance_requests`, migration `…07`; `finance_approved_requests` kept for the old app).
 - Owner review: a Manager-role holder can ask to extend their own trip (HR decides, `…08`). The Head
   of HR's own trips skip HR: they tick «نیاز به رزرو سفر» on their daily errand form and extend their
-  own trip at once (`…10`, replacing `…09`'s refusal). Reject
+  own trip at once (`…10`, replacing `…09`'s refusal; `…11`: only while they are still Head of HR). Reject
   extension asks for confirmation; the travel switch and Cancel trip are hidden on the viewer's own
   requests; missing-field lists use the locale's "and"; "1 trip waiting on procurement" is singular.
 

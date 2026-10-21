@@ -50,7 +50,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 ## Product backlog
 
 - ◐ **FR-70 travel booking (procurement → finance):** [PR #10](https://github.com/AmirNcode/bj-erp/pull/10),
-  branch `codex/travel-booking`; migrations `20261020120000`–`…10` applied only to the scratch DB
+  branch `codex/travel-booking`; migrations `20261020120000`–`…11` applied only to the scratch DB
   `bj_travel`. Owner review changes done (finance pending + approved, manager's own extension, UI fixes).
   Open: **confirm the traveller field list with procurement** (placeholder: full name, national ID,
   birth date, mobile, gender — `private.travel_traveller_fields()` + `lib/travel/fields.ts`); manual

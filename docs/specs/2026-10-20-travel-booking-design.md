@@ -230,6 +230,7 @@ the costs. *(My call.)*
   only they see «نیاز به رزرو سفر» on their daily errand form (ticked right after submission; the
   booking opens on approval like everyone's); they extend their own trip themselves and it applies at
   once on the exempt path (§6.4), back to procurement. Accepted self-approval: they already sign their
-  own requests as the CEO's delegate. Migration `20261020120010` (replaces `…09`, which refused it).
+  own requests as the CEO's delegate. Migration `20261020120010` (replaces `…09`, which refused it);
+  `…11` limits the self path to whoever is Head of HR today, not whoever was at submission.
 - Deferred (see `docs/TASKS.md`): an hr holder's delegate acting on that hr holder's own trip; the
   unlocked status read in `app_set_travel_booking`; HR approving an extension after the trip ended.
