@@ -78,6 +78,83 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-21 — Approval-fixes review plan executed (T1) + PR
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/approval-fixes @ 26ba3f6
+**Trigger:** Execute `docs/plans/2026-10-21-approval-fixes-review.md` (T1, final verification, PR).
+
+**What changed** (commit `abba1d8`, `fix(calendar): …`)
+- `lib/leave/approval-context.ts` — new `bundleStepIds(choices)` after `approvalBundle` (step ids one signature approves; drops the legacy no-chain choice).
+- `app/[locale]/(app)/manage/approvals/DecisionDialogs.tsx` — uses `bundleStepIds(steps)` instead of the inline `flatMap`.
+- `app/[locale]/(app)/calendar/page.tsx` — builds `decisionStepIds` (request id → `bundleStepIds(r.decision_steps)`) from `getPendingApprovals()` and passes it to `<CalendarView>`.
+- `app/[locale]/(app)/calendar/CalendarView.tsx` — new `decisionStepIds` prop; `DecideButtons` takes `stepIds` and sends them to `approveRequest`, so the calendar takes the `approve_leave_request_steps` path (FR-71). Empty array keeps the v2 path (admin override / legacy no-chain).
+- `tests/unit/approval-bundle.test.ts` — `bundleStepIds (FR-71)` case.
+
+**Actions outside the repo**
+- Local DB `postgres` only: 6 `tests/sql/*` files (each rolls back), Playwright e2e with throwaway 999… users, `npm run cleanup:e2e` (0 left). Liara untouched.
+
+**Verification**
+- T1: `vitest run approval-bundle + sign-once` 11 passed; `tsc --noEmit` 0; `npm run lint` 0; `playwright calendar.spec.ts` 1 passed (it approves through the calendar).
+- Final: `npm ci` 0; lint 0; tsc 0; `npm run test:unit` 106 files / 1015 passed; `npm run build` 0; `npm audit --omit=dev` found 0 vulnerabilities; `npm run test:deploy` 0.
+- SQL: sign-once 38, approval-delegation 165, hr-head-own-per-diem 24, travel-booking 217, travel-itinerary 46, fr55-roles-permissions 355 PASS — all ok, same as before the fix.
+- e2e (approval, approval-step-person, home, leave, calendar, errand; `--workers=1`): 7 pass, 2 fail — the same two as the review (`approval-step-person.spec.ts:39`, `leave.spec.ts:137`), pre-existing on `origin/main` with the local roster DB.
+
+**State left behind**
+- `abba1d8` committed; this log entry + the review entry and plan committed as docs; branch pushed; PR opened into `main` (not merged).
+
+**For the next agent**
+- Still no e2e that signs several steps in one go; FR-71 UI coverage is unit + `tests/sql/sign-once.sql`.
+- The two pre-existing e2e failures remain; fix separately if wanted. PR-notes risks are listed in the PR body.
+
+## 2026-10-21 — Pre-PR review of codex/approval-fixes (review + plan only)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-fixes` @ `26ba3f6` (2 ahead, 0 behind `origin/main` @ `bfa638b`; no rebase needed)
+**Trigger:** Owner: review the branch, decide whether it can go to main by PR; plan fixes for a medium-effort implementer.
+
+**What changed**
+- `docs/plans/2026-10-21-approval-fixes-review.md` — handoff plan, one task (T1).
+- This entry. No app code, migrations or tests touched.
+
+**Findings**
+- Medium (T1): `app/[locale]/(app)/calendar/CalendarView.tsx:171-172` approves with no `stepIds`, so the Calendar
+  still takes the `approve_leave_request_v2` single-step path; the Head of HR who is also the manager signs twice
+  there. Queue and Home are fixed (`approvalBundle` → `approve_leave_request_steps`).
+- Checked, no issue: migrations `20261021120000`–`…05` are new files, add-only (v1 RPCs kept for the old app),
+  no enum; ledger checksums match the files; `supabase/schema.sql` = fresh `pg_dump` of local `postgres` (0 diff
+  lines). `app_request_approval_progress` differs from `20261018011333` only by `is_mine` and `per_diem_allowed`
+  following `v_allowed`. `approve_leave_request_steps` loops `private.decide_approval_request` (company lock before
+  `leave:` lock each call; failure rolls back all). Costs: `my_travel_itineraries` strips `cost_rials`; no grant on
+  `travel_bookings` to `authenticated`; `is_procurement` excludes own trips. New server actions start with
+  `requireCaller`. fa/en 1638 keys each, no gaps. `html-to-image`/`jspdf` load with `import()`.
+- Low (PR notes in the plan): admin implicit override inherited from v2; calendar has no per diem/travel tick
+  (as on main); editing a pre-FR-73 finished booking now needs the itinerary; org chart shows personnel numbers to all.
+
+**Actions outside the repo**
+- Temporary worktree of `origin/main` at the session scratchpad (`…/scratchpad/base`) for baselines; still registered
+  (`git worktree prune` after the scratchpad is cleared).
+- Local DB `postgres` only: ran 6 `tests/sql/*` files (each `begin … rollback`); Playwright e2e (throwaway 999… users),
+  then `npm run cleanup:e2e` (0 left). Liara untouched.
+
+**Verification** (baseline `origin/main` → branch)
+- `npm ci` 0 → 0 · `npm run lint` 0 → 0 · `npx tsc --noEmit` 0 → 0 · `npm run test:unit` 961 passed/5 skipped → 1014 passed ·
+  `npm run build` 0 → 0 · `npm audit --omit=dev` 0 vulns → 0 vulns.
+- `npm run test:deploy` branch: 4 suites ok (baseline skipped: no deploy files changed, worktree has no `deploy/.env`).
+- SQL on local `postgres` (branch schema): sign-once 38, approval-delegation 165, hr-head-own-per-diem 24,
+  travel-booking 217, travel-itinerary 46, fr55-roles-permissions 355 PASS, 0 FAIL.
+- e2e `--workers=1` (approval, approval-step-person, home, leave, calendar, errand): 7 pass, 2 fail. Both fail the same
+  way on `origin/main`: `approval-step-person.spec.ts:39` (no `approval-step-department-manager` on the local roster
+  DB) and `leave.spec.ts:137` (`waitForURL(/\/request$/)` lands on `/request?form=1&all=1`). Not branch-caused.
+- No e2e signs several steps at once; FR-71 in the UI is covered only by unit tests + `tests/sql/sign-once.sql`.
+
+**State left behind**
+- Uncommitted: the plan file and this entry. Nothing pushed, no PR.
+
+**For the next agent**
+- Do T1 from the plan, then the plan's final verification, then push and open the PR (never merge).
+- The two e2e failures above are pre-existing on the local roster DB; fix separately if wanted.
+
 ## 2026-10-21 — Org chart shows personnel number
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
