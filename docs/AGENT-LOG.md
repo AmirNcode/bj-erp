@@ -154,6 +154,11 @@ Copy this block verbatim and fill it in.
   (Manager role) now waits for HR. Proved: suite without `…11` fails ("former head cannot untick own trip:
   expected 42501, got ok"). Applied to `bj_travel`; all `tests/sql/*` 1013 PASS / 0 FAIL.
 
+**Push and merge**
+- Pushed `codex/travel-booking` (owner's go-ahead). Automated push review flagged 3 older issues (`…04`–`…06`);
+  owner skipped all 3 for now, recorded in `docs/TASKS.md`. Owner then asked to merge PR #10 into `main`
+  (deploys to Liara with `…00`–`…11`) and delete the branch.
+
 **For the next agent**
 - `…07`–`…11` are frozen (applied to `bj_travel`). Fix forward with `…12`+.
 - In `tests/sql/travel-booking.sql`, sections after "owner review" change fixtures (mgr2 → mgr, proc2 → mgr2,

@@ -64,6 +64,15 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
     reaches procurement).
   - HR can approve an extension after the trip has ended (`app_decide_errand_extension` has no end-date
     check). Kept on purpose as a last-minute buffer; revisit with real data.
+  **Security review findings, skipped by the owner 2026-10-20 (come back later):**
+  - `…06` `private.is_travel_hr` / `acts_as_travel_hr` is company-wide: an hr holder's delegate passes on
+    the hr holder's own trip and on the delegation's source request (same as the first deferred item).
+    Fix idea: per-request check, `r.employee_id <> principal` and `source_request_id is distinct from request`.
+  - `…05` `cancel_leave_request` travel branch lacks the `leave_requests` branch's exclusions: HR can cancel
+    admin-owned travel trips (owner: fine, admin is a test account) and the delegating principal's own trips.
+  - `…04` `app_decide_errand_extension` does not refuse `e.requested_by = v_uid`: a direct manager who also
+    holds `hr` can request and approve their report's extension. Fix idea: 42501 after the lock, and hide
+    such rows in `app_pending_errand_extensions`.
 
 - ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
   under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
