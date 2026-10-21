@@ -84,6 +84,8 @@ type Props = {
   workSettings: WorkSettings;
   /** Pending request ids the viewer may decide (admin: all; manager: own reports). */
   decidableIds?: string[];
+  /** FR-71: per request, the step ids one signature approves. */
+  decisionStepIds?: Record<string, string[]>;
   /** Signature metadata already scoped by base-table RLS; images remain lazy. */
   signatureConsents?: VisibleSignatureConsent[];
   /** Today (company timezone) as YYYY-MM-DD, to highlight the current day tile. */
@@ -105,11 +107,13 @@ const TODAY_TILE_STYLE = {
 /** Approve/Reject pair with confirm dialogs — shown on decidable pending entries. */
 function DecideButtons({
   id,
+  stepIds,
   labels,
   disabled,
   onDecide,
 }: {
   id: string;
+  stepIds: string[];
   labels: Labels;
   disabled: boolean;
   onDecide: (id: string, successMsg: string, action: (id: string) => Promise<DecisionResult>) => void;
@@ -169,7 +173,7 @@ function DecideButtons({
                   return;
                 }
                 onDecide(id, labels.approveSuccess, (requestId) =>
-                  approveRequest(requestId, { signatureData, signatureAuthorized })
+                  approveRequest(requestId, { signatureData, signatureAuthorized, stepIds })
                 );
               }}
               data-testid={`cal-approve-confirm-${id}`}
@@ -231,6 +235,7 @@ export function CalendarView({
   monthLabel,
   workSettings,
   decidableIds,
+  decisionStepIds,
   signatureConsents,
   todayIso,
   prevHref,
@@ -361,7 +366,7 @@ export function CalendarView({
                 </div>
                 {canDecide(entry) && (
                   <div className="flex justify-end">
-                    <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
+                    <DecideButtons id={entry.id} stepIds={decisionStepIds?.[entry.id] ?? []} labels={labels} disabled={isPending} onDecide={decide} />
                   </div>
                 )}
                 <RequestSignatureViewer
@@ -480,7 +485,7 @@ export function CalendarView({
                       )}
                       {canDecide(entry) && (
                         <div className="mt-2">
-                          <DecideButtons id={entry.id} labels={labels} disabled={isPending} onDecide={decide} />
+                          <DecideButtons id={entry.id} stepIds={decisionStepIds?.[entry.id] ?? []} labels={labels} disabled={isPending} onDecide={decide} />
                         </div>
                       )}
                       <RequestSignatureViewer

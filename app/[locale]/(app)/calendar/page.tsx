@@ -12,6 +12,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles } from '@/lib/auth/context';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
+import { bundleStepIds } from '@/lib/leave/approval-context';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getVisibleSignatureConsents } from '@/lib/actions/leave/signatures';
@@ -65,6 +66,10 @@ async function CalendarData({ locale, month }: { locale: string; month?: string 
     : WORK_SETTINGS_FALLBACK;
   const decidableIds =
     approvalsResult && approvalsResult.ok ? approvalsResult.requests.map((r) => r.id) : [];
+  const decisionStepIds: Record<string, string[]> =
+    approvalsResult && approvalsResult.ok
+      ? Object.fromEntries(approvalsResult.requests.map((r) => [r.id, bundleStepIds(r.decision_steps)]))
+      : {};
   const signatureConsents =
     signaturesResult && signaturesResult.ok ? signaturesResult.signatures : [];
 
@@ -83,6 +88,7 @@ async function CalendarData({ locale, month }: { locale: string; month?: string 
         monthLabel={monthLabel}
         workSettings={workSettings}
         decidableIds={decidableIds}
+        decisionStepIds={decisionStepIds}
         signatureConsents={signatureConsents}
         todayIso={todayInAppTz()}
         prevHref={monthHref(shiftIso(rangeStart, -1))}

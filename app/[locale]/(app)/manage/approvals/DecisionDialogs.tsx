@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { parseRials } from '@/lib/leave/perDiem';
 import type { TravellerField } from '@/lib/travel/fields';
-import type { ApprovalChoice } from '@/lib/leave/approval-context';
+import { bundleStepIds, type ApprovalChoice } from '@/lib/leave/approval-context';
 import { nativeSelectClass } from '@/lib/native-select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -293,7 +293,7 @@ export function ApproveDialog({
               }
               onApprove(signatureData, signatureAuthorized, {
                 override, perDiemRials,
-                stepIds: override ? [] : steps.flatMap((step) => (step.stepId ? [step.stepId] : [])),
+                stepIds: override ? [] : bundleStepIds(steps),
                 travelBooking: showTravel && travelBooking,
               });
             }}

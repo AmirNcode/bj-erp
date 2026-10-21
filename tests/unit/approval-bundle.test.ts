@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { approvalBundle, type ApprovalProgressRow } from '@/lib/leave/approval-context';
+import { approvalBundle, bundleStepIds, type ApprovalProgressRow } from '@/lib/leave/approval-context';
 
 const step = (id: string, order: number, extra: Partial<ApprovalProgressRow> = {}): ApprovalProgressRow => ({
   step_id: id, step_role: 'manager', step_order: order, manager_scope: 'direct', named: false,
@@ -51,5 +51,16 @@ describe('approvalBundle (FR-71)', () => {
       step('hr', 2, { is_mine: true }),
       step('mgr', 1, { can_approve: true, is_mine: true }),
     ])).toEqual(['mgr', 'hr']);
+  });
+});
+
+describe('bundleStepIds (FR-71)', () => {
+  it('drops the legacy no-chain choice and keeps order', () => {
+    expect(bundleStepIds(approvalBundle([
+      step('mgr', 1, { can_approve: true, is_mine: true }),
+      step('hr', 2, { is_mine: true, step_role: 'hr' }),
+    ]))).toEqual(['mgr', 'hr']);
+    expect(bundleStepIds([{ stepId: null, stepRole: 'manager', label: 'manager', name: null, principalName: null, delegated: false, perDiem: false }])).toEqual([]);
+    expect(bundleStepIds(undefined)).toEqual([]);
   });
 });

@@ -143,3 +143,8 @@ export function approvalBundle(progress: ApprovalProgressRow[]): ApprovalChoice[
   }
   return bundle;
 }
+
+/** FR-71: the step ids one signature approves (the legacy no-chain choice has none). */
+export function bundleStepIds(choices: ApprovalChoice[] | undefined): string[] {
+  return (choices ?? []).flatMap((step) => (step.stepId ? [step.stepId] : []));
+}
