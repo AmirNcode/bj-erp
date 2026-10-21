@@ -577,5 +577,25 @@ select pg_temp.expect('an employee cannot tick own trip',pg_temp.err(pg_temp.as_
 select pg_temp.expect('a manager cannot tick own trip',pg_temp.err(pg_temp.as_scalar('mgr2',format(
   'select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('mgr2_req')))),'42501');
 
+-- Security review of …10 (…11): the self path needs the caller to be the Head of HR today.
+select pg_temp.expect('admin names another Head of HR',pg_temp.err(pg_temp.as_scalar('admin',format(
+  'select public.app_set_executive_settings(null,%L,array[%L]::uuid[])::text',pg_temp.fx('hr2'),pg_temp.fx('hr_step')))),'ok');
+select pg_temp.expect('former head cannot untick own trip',pg_temp.err(pg_temp.as_scalar('head',format(
+  'select public.app_set_travel_booking(%L,false)::text',pg_temp.fx('head_req2')))),'42501');
+select pg_temp.expect('former head (no Manager role) cannot extend own trip',pg_temp.err(pg_temp.ext('head','head_req','2027-08-25')),'42501');
+select pg_temp.expect('former head does not see own trip as extendable',pg_temp.as_scalar('head',format(
+  'select count(*)::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('head_req'))),'0');
+insert into public.user_roles(user_id,role) values(pg_temp.fx('head'),'manager');
+select pg_temp.expect('as a manager, own trip is listed but not exempt',pg_temp.as_scalar('head',format(
+  'select hr_exempt::text from public.app_extendable_trips() where request_id=%L',pg_temp.fx('head_req'))),'false');
+insert into tb_fx values('head_former',pg_temp.ext('head','head_req','2027-08-25')::uuid);
+select pg_temp.expect('former head''s own extension waits for HR',pg_temp.ext_status('head_former'),'pending');
+select pg_temp.expect('end date unchanged until HR decides',pg_temp.end_of('head_req'),'2027-08-21');
+select pg_temp.expect('former head cannot decide it',pg_temp.decide('head','head_former',true,pg_temp.sig()),'42501');
+select pg_temp.expect('hr decides it',pg_temp.decide('hr','head_former',true,pg_temp.sig()),'ok');
+select pg_temp.expect('decided by HR, not exempt',pg_temp.ext_status('head_former'),'approved/manual');
+insert into tb_fx values('head_mgr3',pg_temp.ext('mgr','head_req','2027-08-26')::uuid);
+select pg_temp.expect('their manager''s request still takes the exempt path',pg_temp.ext_status('head_mgr3'),'approved/exempt');
+
 -- @@ next section
 rollback;

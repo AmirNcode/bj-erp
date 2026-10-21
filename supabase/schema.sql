@@ -1598,6 +1598,19 @@ COMMENT ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date) I
 
 
 --
+-- Name: is_current_hr_head(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.approval_executive_settings x
+                  where x.company_id = p_company and x.hr_head_id = p_uid);
+$$;
+
+
+--
 -- Name: is_department_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4223,6 +4236,7 @@ begin
            exists (select 1 from public.errand_extensions e where e.request_id = r.id and e.status = 'pending'),
            exists (select 1 from public.approval_delegations g where g.source_request_id = r.id and g.revoked_at is null),
            private.request_has_hr_exemption(r.id)
+             and (r.employee_id <> v_uid or private.is_current_hr_head(v_uid, r.company_id))
       from public.travel_bookings b
       join public.leave_requests r on r.id = b.request_id
       join public.profiles p on p.id = r.employee_id
@@ -4230,7 +4244,8 @@ begin
      where r.status = 'approved' and b.opened_at is not null
        and r.end_date >= (now() at time zone 'Asia/Tehran')::date
        and case when r.employee_id = v_uid
-                then private.has_role(v_uid, 'manager') or private.request_has_hr_exemption(r.id)
+                then private.has_role(v_uid, 'manager')
+                     or (private.request_has_hr_exemption(r.id) and private.is_current_hr_head(v_uid, r.company_id))
                 else p.manager_id = v_uid or private.is_admin(v_uid) end
      order by r.start_date, r.serial_year, r.serial_seq;
 end; $$;
@@ -4760,7 +4775,8 @@ begin
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
   select manager_id into v_manager from public.profiles where id = r.employee_id;
   if not (case when r.employee_id = v_uid
-               then private.has_role(v_uid, 'manager') or private.request_has_hr_exemption(r.id)
+               then private.has_role(v_uid, 'manager')
+                    or (private.request_has_hr_exemption(r.id) and private.is_current_hr_head(v_uid, r.company_id))
                else v_manager = v_uid
                     or (private.is_admin(v_uid)
                         and exists (select 1 from public.profiles c where c.id = v_uid and c.company_id = r.company_id))
@@ -4800,7 +4816,8 @@ begin
 
   -- The Head of HR's own trip: its HR step was exempt, so the extension is too
   -- (owner, 2026-10-20): approved at once, no signature, per diem unchanged.
-  if private.request_has_hr_exemption(r.id) then
+  if private.request_has_hr_exemption(r.id)
+     and (r.employee_id <> v_uid or private.is_current_hr_head(v_uid, r.company_id)) then
     perform private.apply_errand_extension(v_id, null, 'exempt', null, null, null);
   end if;
   return v_id;
@@ -5473,7 +5490,8 @@ begin
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
   -- HR (never on their own request), or the Head of HR on their own HR-exempt trip.
   if not (private.is_travel_hr(v_uid, p_request)
-          or (r.employee_id = v_uid and private.is_active(v_uid) and private.request_has_hr_exemption(p_request))) then
+          or (r.employee_id = v_uid and private.is_active(v_uid) and private.request_has_hr_exemption(p_request)
+              and private.is_current_hr_head(v_uid, r.company_id))) then
     raise exception 'not allowed to mark travel booking' using errcode = '42501';
   end if;
   if r.kind <> 'errand' or r.unit <> 'day' then
@@ -10211,6 +10229,14 @@ GRANT ALL ON FUNCTION private.is_admin(uid uuid) TO authenticated;
 
 REVOKE ALL ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_current_hr_head(p_uid uuid, p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) TO authenticated;
 
 
 --
