@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Check, ChevronLeft, ChevronRight, TriangleAlert } from 'lucide-react';
 import { approveRequest, rejectRequest, type DecisionResult } from '@/lib/actions/leave/approvals';
+import type { PendingExtension } from '@/lib/actions/travel';
 import { STATUS_BADGE_STYLES } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -18,6 +19,7 @@ import {
   RejectDialog,
   type ApproveOptions,
 } from '../manage/approvals/DecisionDialogs';
+import { ExtensionDecisionCard } from '../manage/approvals/ExtensionDecisionCard';
 
 /** One pending request, pre-formatted on the server. */
 export type PendingRow = {
@@ -42,6 +44,8 @@ type Props = {
   total: string;
   count: number;
   locale: string;
+  /** FR-70: trip extensions waiting for HR, decided in place. */
+  extensions?: PendingExtension[];
 };
 
 /**
@@ -69,8 +73,9 @@ function useLabels() {
   };
 }
 
-export function PendingApprovalsCard({ rows, total, count, locale }: Props) {
+export function PendingApprovalsCard({ rows, total, count, locale, extensions = [] }: Props) {
   const labels = useLabels();
+  const tExt = useTranslations('travel.extension');
   const router = useRouter();
   // One decision may leave another step for this caller. Refresh the complete queue.
   const localRows = rows;
@@ -92,7 +97,7 @@ export function PendingApprovalsCard({ rows, total, count, locale }: Props) {
       }
     });
 
-  if (count === 0 || localRows.length === 0) {
+  if (count === 0 || (localRows.length === 0 && extensions.length === 0)) {
     return (
       <Card className="flex-row items-center gap-3 px-[22px] py-4" data-testid="home-pending">
         <h2 className="text-base font-semibold">{labels.title}</h2>
@@ -185,6 +190,18 @@ export function PendingApprovalsCard({ rows, total, count, locale }: Props) {
                 triggerIcon={<Check aria-hidden="true" />}
               />
             </div>
+          </li>
+        ))}
+        {extensions.map((ext) => (
+          <li
+            key={ext.extension_id}
+            data-testid={`home-pending-extension-${ext.extension_id}`}
+            className="space-y-2 border-t border-muted px-[22px] py-3.5"
+          >
+            <Badge variant="outline" className={cn('rounded-full', STATUS_BADGE_STYLES.pending)}>
+              {tExt('badge')}
+            </Badge>
+            <ExtensionDecisionCard ext={ext} locale={locale} bare />
           </li>
         ))}
       </ul>

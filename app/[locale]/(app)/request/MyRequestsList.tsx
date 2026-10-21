@@ -58,6 +58,7 @@ export function MyRequestsList({
     approved: labels.statusApproved,
     rejected: labels.statusRejected,
     cancelled: labels.statusCancelled,
+    awaitingTravel: labels.statusAwaitingTravel,
   };
 
   return (
@@ -120,7 +121,11 @@ export function MyRequestsList({
                     {/* Status badge */}
                     <span data-testid={`status-badge-${req.id}`}>
                       <StatusBadge
-                        status={req.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
+                        status={
+                          req.status === 'approved' && travelBookings[req.id]?.pending
+                            ? 'awaitingTravel'
+                            : (req.status as 'pending' | 'approved' | 'rejected' | 'cancelled')
+                        }
                         labels={statusLabels}
                       />
                     </span>

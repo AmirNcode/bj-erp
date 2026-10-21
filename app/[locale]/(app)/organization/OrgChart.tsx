@@ -17,6 +17,7 @@ import { formatNumber } from '@/lib/i18n/format';
 import {
   buildOrgIndex,
   chainTo,
+  nameWithPersonnelNo,
   reportsOf,
   searchPeople,
   type OrgPerson,
@@ -88,7 +89,7 @@ export function OrgChart({ people, myId, locale }: Props) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold">{person.fullName}</span>
+            <span className="truncate text-sm font-semibold">{nameWithPersonnelNo(person)}</span>
             {person.id === myId && (
               <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
                 {t('you')}
@@ -100,8 +101,12 @@ export function OrgChart({ people, myId, locale }: Props) {
           </span>
         </span>
         {count > 0 && (
-          <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-            {t('people', { count: fmt(count) })}
+          <span
+            className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground"
+            title={t('people', { count: fmt(count) })}
+            aria-label={t('people', { count: fmt(count) })}
+          >
+            {fmt(count)}
           </span>
         )}
       </button>
@@ -195,7 +200,7 @@ export function OrgChart({ people, myId, locale }: Props) {
                   data-person={p.id}
                   className="flex w-full flex-wrap items-baseline gap-x-2 rounded-md px-2 py-1 text-start hover:bg-secondary"
                 >
-                  <span className="text-sm font-medium">{p.fullName}</span>
+                  <span className="text-sm font-medium">{nameWithPersonnelNo(p)}</span>
                   <span className="text-xs text-muted-foreground">{p.jobTitle}</span>
                 </button>
               </li>
@@ -220,7 +225,7 @@ export function OrgChart({ people, myId, locale }: Props) {
             </span>
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold">{focus.fullName}</h2>
+                <h2 className="text-lg font-bold">{nameWithPersonnelNo(focus)}</h2>
                 {focus.id === myId && (
                   <span className="rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground">
                     {t('you')}
@@ -250,7 +255,7 @@ export function OrgChart({ people, myId, locale }: Props) {
                     className="font-medium text-primary hover:underline"
                     data-testid="org-focus-manager"
                   >
-                    {manager.fullName}
+                    {nameWithPersonnelNo(manager)}
                   </button>
                 </p>
               )}

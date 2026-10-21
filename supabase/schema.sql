@@ -2688,6 +2688,7 @@ CREATE TABLE public.travel_bookings (
     settled_at timestamp with time zone,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     first_done_at timestamp with time zone,
+    itinerary jsonb,
     CONSTRAINT travel_bookings_flight_cost_rials_check CHECK ((flight_cost_rials >= 0)),
     CONSTRAINT travel_bookings_hotel_cost_rials_check CHECK ((hotel_cost_rials >= 0)),
     CONSTRAINT travel_bookings_lost_note_check CHECK ((char_length(lost_note) <= 500)),
@@ -2702,6 +2703,13 @@ CREATE TABLE public.travel_bookings (
 --
 
 COMMENT ON TABLE public.travel_bookings IS 'FR-70: procurement''s booking of an approved daily errand (flight/company car, hotel, costs, note to the traveller; amount lost after a cancellation). No client policies: RPCs only.';
+
+
+--
+-- Name: COLUMN travel_bookings.itinerary; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.travel_bookings.itinerary IS 'FR-73: flight legs or company car, hotel stays. NULL on bookings saved before FR-73. Checked by private.travel_itinerary_check.';
 
 
 --
@@ -2725,6 +2733,160 @@ CREATE FUNCTION private.travel_booking_state(p_status public.leave_status, b pub
     when p_status = 'cancelled' and b.settled_at is null then 'cancel_undo'
     when p_status = 'cancelled' then 'settled'
     else 'hidden' end;
+$$;
+
+
+--
+-- Name: travel_itinerary_check(jsonb, text, boolean, date, date); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_itinerary_check(p_it jsonb, p_transport text, p_done boolean, p_start date, p_end date) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+declare
+  k text;
+  v jsonb;
+  f jsonb;
+  s jsonb;
+  v_lo date := p_start - 7;
+  v_hi date := p_end + 7;
+  v_one_way boolean;
+  v_no_hotel boolean;
+  v_dir text;
+begin
+  if p_it is null then
+    if p_done then raise exception 'itinerary is required' using errcode = '22023'; end if;
+    return;
+  end if;
+  if jsonb_typeof(p_it) <> 'object' then raise exception 'invalid itinerary' using errcode = '22023'; end if;
+  for k, v in select * from jsonb_each(p_it) loop
+    if k not in ('one_way', 'booking_ref', 'flights', 'car', 'no_hotel', 'stays')
+       or (k in ('one_way', 'no_hotel') and jsonb_typeof(v) <> 'boolean')
+       or (k = 'booking_ref' and jsonb_typeof(v) <> 'string')
+       or (k in ('flights', 'stays') and jsonb_typeof(v) <> 'array')
+       or (k = 'car' and jsonb_typeof(v) <> 'object') then
+      raise exception 'invalid itinerary' using errcode = '22023';
+    end if;
+  end loop;
+  v_one_way := coalesce((p_it ->> 'one_way')::boolean, false);
+  v_no_hotel := coalesce((p_it ->> 'no_hotel')::boolean, false);
+  if char_length(p_it ->> 'booking_ref') > 100 then
+    raise exception 'itinerary text is too long' using errcode = '22023';
+  end if;
+  if (p_it ? 'flights' and p_transport is distinct from 'flight')
+     or (p_it ? 'car' and p_transport is distinct from 'company_car') then
+    raise exception 'itinerary does not match the transport' using errcode = '22023';
+  end if;
+
+  if jsonb_array_length(coalesce(p_it -> 'flights', '[]')) > 2
+     or (select count(distinct x ->> 'leg') from jsonb_array_elements(coalesce(p_it -> 'flights', '[]')) x)
+        <> jsonb_array_length(coalesce(p_it -> 'flights', '[]')) then
+    raise exception 'invalid itinerary' using errcode = '22023';
+  end if;
+  for f in select * from jsonb_array_elements(coalesce(p_it -> 'flights', '[]')) loop
+    if jsonb_typeof(f) <> 'object' or coalesce(f ->> 'leg', '') not in ('outbound', 'return')
+       or (v_one_way and f ->> 'leg' = 'return') then
+      raise exception 'invalid itinerary' using errcode = '22023';
+    end if;
+    perform private.travel_itinerary_fields(f - 'leg',
+      array['airline', 'flight_no', 'from', 'to', 'date', 'departs', 'arrives'], v_lo, v_hi);
+  end loop;
+  if p_it ? 'car' then
+    perform private.travel_itinerary_fields(p_it -> 'car',
+      array['vehicle', 'plate', 'driver_name', 'driver_mobile', 'pickup_place', 'pickup_date', 'pickup_time',
+            'return_place', 'return_date', 'return_time'], v_lo, v_hi);
+  end if;
+
+  if v_no_hotel and p_it ? 'stays' then raise exception 'invalid itinerary' using errcode = '22023'; end if;
+  if jsonb_array_length(coalesce(p_it -> 'stays', '[]')) > 10 then
+    raise exception 'too many hotel stays' using errcode = '22023';
+  end if;
+  for s in select * from jsonb_array_elements(coalesce(p_it -> 'stays', '[]')) loop
+    perform private.travel_itinerary_fields(s,
+      array['name', 'address', 'phone', 'check_in', 'check_out', 'confirmation'], v_lo, v_hi, 'address');
+    if s ? 'check_in' and s ? 'check_out' and (s ->> 'check_out')::date <= (s ->> 'check_in')::date then
+      raise exception 'check-out must be after check-in' using errcode = '22023';
+    end if;
+  end loop;
+
+  if p_done then
+    if p_transport = 'flight' then
+      foreach v_dir in array (case when v_one_way then array['outbound'] else array['outbound', 'return'] end) loop
+        if not exists (
+          select 1 from jsonb_array_elements(coalesce(p_it -> 'flights', '[]')) x
+           where x ->> 'leg' = v_dir and x ? 'flight_no' and x ? 'date' and x ? 'departs') then
+          raise exception 'flight details are required' using errcode = '22023';
+        end if;
+      end loop;
+    end if;
+    if not v_no_hotel and (
+         jsonb_array_length(coalesce(p_it -> 'stays', '[]')) = 0
+         or exists (select 1 from jsonb_array_elements(p_it -> 'stays') x
+                     where not (x ? 'name' and x ? 'check_in' and x ? 'check_out'))) then
+      raise exception 'hotel details are required' using errcode = '22023';
+    end if;
+  end if;
+end; $$;
+
+
+--
+-- Name: travel_itinerary_fields(jsonb, text[], date, date, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_itinerary_fields(p_obj jsonb, p_keys text[], p_lo date, p_hi date, p_long text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+declare
+  k text;
+  v jsonb;
+  s text;
+  d date;
+begin
+  if jsonb_typeof(p_obj) is distinct from 'object' then
+    raise exception 'invalid itinerary' using errcode = '22023';
+  end if;
+  for k, v in select * from jsonb_each(p_obj) loop
+    if not (k = any(p_keys)) or jsonb_typeof(v) <> 'string' then
+      raise exception 'invalid itinerary' using errcode = '22023';
+    end if;
+    s := v #>> '{}';
+    if char_length(s) > (case when k = p_long then 200 else 100 end) then
+      raise exception 'itinerary text is too long' using errcode = '22023';
+    end if;
+    if k in ('date', 'pickup_date', 'return_date', 'check_in', 'check_out') then
+      if s !~ '^\d{4}-\d{2}-\d{2}$' then raise exception 'invalid itinerary date' using errcode = '22023'; end if;
+      begin
+        d := s::date;
+      exception when others then
+        raise exception 'invalid itinerary date' using errcode = '22023';
+      end;
+      if to_char(d, 'YYYY-MM-DD') <> s then raise exception 'invalid itinerary date' using errcode = '22023'; end if;
+      if d < p_lo or d > p_hi then raise exception 'itinerary date is outside the trip' using errcode = '22023'; end if;
+    end if;
+    if k in ('departs', 'arrives', 'pickup_time', 'return_time') and s !~ '^([01]\d|2[0-3]):[0-5]\d$' then
+      raise exception 'invalid itinerary time' using errcode = '22023';
+    end if;
+  end loop;
+end; $_$;
+
+
+--
+-- Name: travel_itinerary_without_costs(jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_itinerary_without_costs(p_it jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case
+    when jsonb_typeof(p_it) = 'object' and jsonb_typeof(p_it -> 'stays') = 'array' then
+      jsonb_set(p_it, '{stays}', coalesce((
+        select jsonb_agg(case when jsonb_typeof(x) = 'object' then x - 'cost_rials' else x end order by n)
+          from jsonb_array_elements(p_it -> 'stays') with ordinality as t(x, n)), '[]'::jsonb))
+    else p_it
+  end;
 $$;
 
 
@@ -5128,6 +5290,87 @@ end; $$;
 
 
 --
+-- Name: app_save_travel_booking_v2(uuid, text, bigint, bigint, jsonb, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  v_state text;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+  v_costed int;
+  v_bad int;
+  v_stays int;
+  v_sum bigint;
+begin
+  if not private.is_procurement(v_uid, p_request) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  select * into b from public.travel_bookings where request_id = p_request for update;
+  if b.request_id is null then raise exception 'no booking for this request' using errcode = '22023'; end if;
+  v_state := private.travel_booking_state(r.status, b);
+  if not (v_state in ('to_book', 'extension')
+          or (v_state = 'done' and r.end_date >= (now() at time zone 'Asia/Tehran')::date)) then
+    raise exception 'booking cannot be changed now' using errcode = '22023';
+  end if;
+  if p_transport is not null and p_transport not in ('flight', 'company_car') then
+    raise exception 'invalid transport' using errcode = '22023';
+  end if;
+  if p_flight < 0 or p_hotel < 0 then raise exception 'costs must be 0 or more' using errcode = '22023'; end if;
+  if char_length(v_note) > 500 then raise exception 'note is too long' using errcode = '22023'; end if;
+  if p_done and (p_transport is null or p_flight is null or p_hotel is null) then
+    raise exception 'transport and both costs are required' using errcode = '22023';
+  end if;
+  if v_state = 'done' and not p_done then
+    raise exception 'a finished booking stays finished' using errcode = '22023';
+  end if;
+  perform private.travel_itinerary_check(private.travel_itinerary_without_costs(p_itinerary),
+                                         p_transport, p_done, r.start_date, r.end_date);
+  if coalesce((p_itinerary ->> 'no_hotel')::boolean, false) and coalesce(p_hotel, 0) <> 0 then
+    raise exception 'no hotel means a hotel cost of 0' using errcode = '22023';
+  end if;
+  -- Each stay's cost: a whole number of Rials; booked = every stay has one; the
+  -- hotel cost finance reads is their total.
+  select count(*) filter (where x ? 'cost_rials'),
+         count(*) filter (where x ? 'cost_rials' and (jsonb_typeof(x -> 'cost_rials') <> 'number'
+                            or (x ->> 'cost_rials') !~ '^[0-9]{1,15}$')),
+         count(*),
+         sum(case when (x ->> 'cost_rials') ~ '^[0-9]{1,15}$' then (x ->> 'cost_rials')::bigint end)
+    into v_costed, v_bad, v_stays, v_sum
+    from jsonb_array_elements(case when jsonb_typeof(p_itinerary -> 'stays') = 'array'
+                                   then p_itinerary -> 'stays' else '[]'::jsonb end) x;
+  if v_bad > 0 then raise exception 'invalid hotel cost' using errcode = '22023'; end if;
+  if p_done and v_costed < v_stays then
+    raise exception 'each hotel stay needs a cost' using errcode = '22023';
+  end if;
+  if v_costed > 0 and p_hotel is distinct from v_sum then
+    raise exception 'hotel cost must be the total of the stays' using errcode = '22023';
+  end if;
+
+  update public.travel_bookings
+     set transport = p_transport, flight_cost_rials = p_flight, hotel_cost_rials = p_hotel,
+         itinerary = p_itinerary,
+         traveller_note = v_note, first_saved_at = coalesce(first_saved_at, now()),
+         done_by = case when p_done then v_uid else done_by end,
+         done_at = case when p_done then now() else done_at end,
+         updated_at = now()
+   where request_id = p_request;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'travel_booking.save', 'leave_requests', p_request,
+          jsonb_build_object('done', p_done, 'transport', p_transport,
+                             'flight_cost_rials', p_flight, 'hotel_cost_rials', p_hotel,
+                             'itinerary_keys', (select coalesce(jsonb_agg(k order by k), '[]'::jsonb)
+                                                  from jsonb_object_keys(coalesce(p_itinerary, '{}')) k)));
+end; $_$;
+
+
+--
 -- Name: app_search_delegates(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5877,6 +6120,7 @@ begin
     'start_date', r.start_date, 'end_date', r.end_date, 'status', r.status, 'state', v_state,
     'transport', b.transport, 'flight_cost_rials', b.flight_cost_rials,
     'hotel_cost_rials', b.hotel_cost_rials, 'traveller_note', b.traveller_note,
+    'itinerary', b.itinerary,
     'lost_rials', b.lost_rials, 'lost_note', b.lost_note, 'done_at', b.done_at,
     'extensions', coalesce((
       select jsonb_agg(jsonb_build_object('old_end_date', e.old_end_date, 'new_end_date', e.new_end_date,
@@ -6551,7 +6795,7 @@ $$;
 -- Name: get_org_chart(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name text, job_title text, department_id uuid, department_name_fa text, department_name_en text, manager_id uuid, is_department_manager boolean)
+CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name text, job_title text, department_id uuid, department_name_fa text, department_name_en text, manager_id uuid, is_department_manager boolean, personnel_no text)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -6572,7 +6816,8 @@ CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name 
     exists (
       select 1 from public.departments dm
        where dm.manager_id = p.id and dm.company_id = p.company_id
-    )
+    ),
+    p.personnel_no
   from me
   join public.profiles p
     on p.company_id = me.company_id
@@ -6666,6 +6911,38 @@ CREATE FUNCTION public.my_travel_bookings() RETURNS TABLE(request_id uuid, trans
     from public.travel_bookings b
     join public.leave_requests r on r.id = b.request_id
    where r.employee_id = auth.uid() and r.status = 'approved' and b.first_done_at is not null;
+$$;
+
+
+--
+-- Name: my_travel_itineraries(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_travel_itineraries() RETURNS TABLE(request_id uuid, transport text, itinerary jsonb, traveller_note text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select b.request_id, b.transport, private.travel_itinerary_without_costs(b.itinerary), b.traveller_note
+    from public.travel_bookings b
+    join public.leave_requests r on r.id = b.request_id
+   where r.employee_id = auth.uid() and r.status = 'approved' and b.first_done_at is not null;
+$$;
+
+
+--
+-- Name: my_travel_pending(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_travel_pending() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select r.id
+    from public.travel_bookings b
+    join public.leave_requests r on r.id = b.request_id
+   where r.employee_id = auth.uid()
+     and r.status = 'approved'
+     and private.travel_booking_state(r.status, b) in ('to_book', 'extension');
 $$;
 
 
@@ -7693,7 +7970,7 @@ CREATE TABLE public.separation_signoffs (
     signature_consent_at timestamp with time zone,
     note text,
     CONSTRAINT separation_signoffs_hr_no_signer CHECK (((NOT is_hr) OR (signer_id IS NULL))),
-    CONSTRAINT separation_signoffs_names CHECK (((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_signoffs_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
     CONSTRAINT separation_signoffs_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
     CONSTRAINT separation_signoffs_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
     CONSTRAINT separation_signoffs_signed_shape CHECK (((signed_at IS NULL) = (signature_data IS NULL)))
@@ -7715,7 +7992,7 @@ CREATE TABLE public.separation_units (
     sort_order integer DEFAULT 0 NOT NULL,
     active boolean DEFAULT true NOT NULL,
     CONSTRAINT separation_units_kind CHECK ((kind = ANY (ARRAY['hr'::text, 'department'::text, 'own_department'::text, 'person'::text]))),
-    CONSTRAINT separation_units_names CHECK (((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_units_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
     CONSTRAINT separation_units_shape CHECK ((((kind = 'hr'::text) AND (department_id IS NULL) AND (signer_id IS NULL) AND active) OR ((kind = 'department'::text) AND (signer_id IS NULL)) OR ((kind = 'own_department'::text) AND (department_id IS NULL) AND (signer_id IS NULL)) OR ((kind = 'person'::text) AND (department_id IS NULL))))
 );
 
@@ -7859,7 +8136,7 @@ CREATE TABLE public.user_signatures (
     signature_data text NOT NULL,
     source text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT user_signatures_shape CHECK (((length(signature_data) >= 100) AND (length(signature_data) <= 350000) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text))),
+    CONSTRAINT user_signatures_shape CHECK ((((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text))),
     CONSTRAINT user_signatures_source CHECK ((source = ANY (ARRAY['drawn'::text, 'upload'::text])))
 );
 
@@ -10664,6 +10941,27 @@ REVOKE ALL ON FUNCTION private.travel_booking_state(p_status public.leave_status
 
 
 --
+-- Name: FUNCTION travel_itinerary_check(p_it jsonb, p_transport text, p_done boolean, p_start date, p_end date); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_itinerary_check(p_it jsonb, p_transport text, p_done boolean, p_start date, p_end date) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION travel_itinerary_fields(p_obj jsonb, p_keys text[], p_lo date, p_hi date, p_long text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_itinerary_fields(p_obj jsonb, p_keys text[], p_lo date, p_hi date, p_long text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION travel_itinerary_without_costs(p_it jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_itinerary_without_costs(p_it jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION accrue_all_leave(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11054,6 +11352,16 @@ GRANT ALL ON FUNCTION public.app_save_travel_booking(p_request uuid, p_transport
 
 
 --
+-- Name: FUNCTION app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_save_travel_booking_v2(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_itinerary jsonb, p_note text, p_done boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION app_search_delegates(p_principal_id uuid, p_search text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11430,6 +11738,26 @@ REVOKE ALL ON FUNCTION public.my_travel_bookings() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_travel_bookings() TO postgres;
 GRANT ALL ON FUNCTION public.my_travel_bookings() TO authenticated;
 GRANT ALL ON FUNCTION public.my_travel_bookings() TO service_role;
+
+
+--
+-- Name: FUNCTION my_travel_itineraries(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_travel_itineraries() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_travel_itineraries() TO postgres;
+GRANT ALL ON FUNCTION public.my_travel_itineraries() TO authenticated;
+GRANT ALL ON FUNCTION public.my_travel_itineraries() TO service_role;
+
+
+--
+-- Name: FUNCTION my_travel_pending(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_travel_pending() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_travel_pending() TO postgres;
+GRANT ALL ON FUNCTION public.my_travel_pending() TO authenticated;
+GRANT ALL ON FUNCTION public.my_travel_pending() TO service_role;
 
 
 --

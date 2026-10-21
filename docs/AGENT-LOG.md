@@ -78,6 +78,119 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-21 — Org chart shows personnel number
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-fixes` @ `98c5561`
+**Trigger:** Owner: org chart cards should read "<name> - <personnel no>" (focused card, direct reports, manager above).
+
+**What changed**
+- `supabase/migrations/20261021120002_org_chart_personnel_no.sql` — drop + recreate `get_org_chart()` with a
+  trailing `personnel_no` column. Widens owner decision D8: every signed-in colleague now sees personnel numbers.
+- `lib/org/tree.ts` — `OrgPerson.personnelNo`, `nameWithPersonnelNo()` (name alone when the number is null).
+- `lib/actions/org.ts`, `lib/supabase/types.ts` (hand-edited) — map the new column.
+- `app/[locale]/(app)/organization/OrgChart.tsx` — focus heading, report/root cards, chain items above the focus,
+  and the "Reports to" link use `nameWithPersonnelNo`. Search results left as name only.
+- `tests/unit/org-tree.test.ts` fixture; `docs/PERMISSIONS.md` org-chart paragraph; `docs/CHANGELOG.md`.
+- `supabase/schema.sql` regenerated.
+
+**Actions outside the repo**
+- Local only: dry-run of the migration in `begin … rollback`, then `./deploy/bj-deploy update local` (applied,
+  migration now frozen), `npm run schema:dump`, `docker restart bj-erp-rest-1`. Production untouched.
+
+**Verification**
+- `tsc --noEmit` clean, eslint on touched files clean, `vitest run tests/unit/org-tree.test.ts` 10/10.
+- SQL as an active employee JWT: `get_org_chart()` returns 15 rows, 14 with `personnel_no`.
+- Browser check NOT done: `.env.test-accounts` credentials (124) were rejected on local login.
+
+**State left behind**
+- Uncommitted on `codex/approval-fixes`.
+
+**Follow-up in the same session: bare report count**
+- `OrgChart.tsx` card badge shows `fmt(count)` only; `t('people')` kept as `title` + `aria-label`.
+  tsc + eslint clean; not browser-checked (same login problem).
+
+**Follow-up in the same session: "approved, travel pending" status**
+- Owner: an approved errand whose procurement step is not done showed plain "Approved".
+- `supabase/migrations/20261021120003_my_travel_pending.sql` — add-only `public.my_travel_pending()` (SECURITY
+  DEFINER, own approved requests whose `private.travel_booking_state` is `to_book`/`extension`).
+- `lib/actions/travel.ts` `getMyTravelBookings` merges it as `pending: true` into the existing record (no new props);
+  `RequestDetails` shows the travel box only when there is a transport or note; `StatusBadge` takes
+  `awaitingTravel` (pending colours); `MyRequestsList`, `RecentRequests`, `useRequestLabels`;
+  `leave.status.awaitingTravel` in fa/en.
+- Dry-run in `begin … rollback` with a fixture booking (triggers disabled): listed while to book, gone after
+  `done_at`. Applied with `./deploy/bj-deploy update local`, `schema:dump`, rest restarted.
+- tsc clean, eslint clean, `npm run test:unit` 990/990. Not browser-checked.
+
+**Follow-up in the same session: structured travel itinerary (design + plan only)**
+- Owner asked for dedicated flight / company car and hotel sections, notes kept for extras. Proposed a
+  boarding-pass itinerary card + three-section procurement form (inline mockup). Owner answers: one way is an
+  option, "+" adds hotel stays, company-car fields optional, airline/airports typed, mobile-friendly, export
+  as PDF or JPEG.
+- Wrote `docs/specs/2026-10-21-travel-itinerary-design.md` (FR-73, draft) and
+  `docs/plans/2026-10-21-travel-itinerary.md` (7 tasks, migration `20261021120004`). No code yet.
+
+**Follow-up in the same session: structured itinerary implemented (owner: "Proceed to build this out")**
+- `lib/travel/itinerary.ts` (model, normalize, errors mirroring SQL, nights) + `tests/unit/travel-itinerary.test.ts`.
+- `supabase/migrations/20261021120004_travel_itinerary.sql`: `travel_bookings.itinerary`, `private.travel_itinerary_fields`
+  / `private.travel_itinerary_check`, `app_save_travel_booking_v2`, `app_travel_booking` + `itinerary`,
+  `my_travel_itineraries()`. `tests/sql/travel-itinerary.sql` (38 PASS). `tests/sql/travel-booking.sql` row literal
+  gained the new column (217 PASS against the new schema). Trap hit: plpgsql `IF … > case when … then … end then`
+  needs the CASE in parentheses.
+- Procurement form split: `BookingForm` + `TransportSection` + `HotelSection` + `ItineraryFields`; company car hides the
+  ticket cost (0). `tests/unit/booking-form.test.tsx` rewritten (11 tests).
+- `components/TravelItinerary.tsx` (card + Save as PDF / image) in `RequestDetails` and the procurement read-only summary.
+  Lucide `Plane` points up-left by default, so it is flipped in LTR (`ltr:-scale-x-100`).
+- Deps: `html-to-image` ^1.11.13, `jspdf` ^4.2.1 (3.x has a critical `npm audit` finding; CI runs `npm audit --omit=dev`).
+- Strings `travel.itinerary.*`, `dbErrors.itinerary*` (fa/en); `lib/errors/db-error.ts` rules.
+- Docs: REQUIREMENTS FR-73, DATA_MODEL, PERMISSIONS, CHANGELOG, spec marked approved, plan marked implemented.
+
+**Actions outside the repo (this follow-up)**
+- Local only: migration dry-run in `begin … rollback` with both SQL tests, `./deploy/bj-deploy update local` (twice: schema,
+  then app rebuild), `npm run schema:dump`, `docker restart bj-erp-rest-1`.
+- Visual check through a temporary unauthenticated route `app/[locale]/zz-itinerary-preview` with fake data (deleted
+  afterwards; `.next/dev/types` cleared). Checked 375 px fa and desktop en. JPEG export rendered in-page: Vazirmatn embedded,
+  header present. PDF export produced a 101 KB `application/pdf` blob; jsPDF's own download path may have saved one
+  `itinerary-1405-0011.pdf` (fake data) in the browser pane.
+
+**Verification (this follow-up)**
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 1012/1012, `npm run build` ok, `npm audit --omit=dev` 0.
+- Not tested with a real login (stale test password): the procurement page and My Requests with real bookings.
+
+**Follow-up in the same session: extensions on Home, calendar month arrows**
+- Owner (testing locally as HR): a manager's trip extension showed only on /manage/approvals. Home now calls
+  `listPendingExtensions()` when `canApprove` ([] for anyone not acting as travel HR, RPC raises 42501 for them);
+  `pendingCount` = requests + extensions (pulse card and Pending card badge). `PendingApprovalsCard` renders each
+  extension as a row with a «تمدید ماموریت» badge and `ExtensionDecisionCard bare` (new prop: no card frame).
+  The pulse "oldest" line still looks at requests only (extensions carry no submitted time in that RPC).
+- Calendar: `page.tsx` reads `?month=<ISO day>` (invalid → this month), passes prev/next hrefs; `CalendarView` shows
+  chevrons around the label (`rtl:rotate-180`), keeps view mode across navigation, and resolves the selected day to
+  the new month's default when the old pick is outside it (ring + aria-pressed use the resolved day).
+- Checked through a temporary `app/[locale]/zz-preview` route with fake data (deleted): extension row on the Pending
+  card; month nav in en and fa. tsc, lint, unit 1012/1012. Not checked with a real login.
+
+**Follow-up in the same session: a cost per hotel stay**
+- Owner: hotel cost per stay plus one total; finance gets the total.
+- `supabase/migrations/20261021120005_travel_stay_costs.sql`: `private.travel_itinerary_without_costs(jsonb)`;
+  `app_save_travel_booking_v2` (create or replace) runs the unchanged check on the cost-free copy, then checks
+  `cost_rials` (whole number), «رزرو شد» needs one per stay, `p_hotel` must equal their sum;
+  `my_travel_itineraries()` strips costs. `tests/sql/travel-itinerary.sql` 46 PASS, `travel-booking.sql` 217 PASS.
+- `lib/travel/itinerary.ts`: `StayDraft.cost`, `HotelStay.cost_rials`, `stayFilled`, `hotelTotal`, `badCost`.
+  `HotelSection` per-stay cost input + read-only total; `BookingForm` sends `hotelTotal(itinerary)`, carries an old
+  one-stay hotel total into the stay. New stay's check-out is blank when the previous stay already ends on the
+  trip's last day (it used to equal check-in and fail).
+- tsc, lint, unit 1014/1014; migration applied locally (`bj-deploy update local`), schema dumped, rest restarted,
+  app rebuilt. Not checked in a browser (no working login; no preview route this time).
+
+**Wrap-up (owner: commit everything, no PR yet)**
+- CLAUDE.md gotchas added: plpgsql IF/CASE, `travel_bookings` row literal in SQL tests, travel costs never reach the
+  traveller, `jspdf` ≥ 4.2.1, temporary preview route for UI checks without a login.
+- Everything above committed in one commit on `codex/approval-fixes` (not pushed, no PR). Migrations
+  `20261021120002`–`…05` are applied to the local DB only.
+
+**For the next agent**
+- `.env.test-accounts` password for 124 is stale; ask the owner for a current one.
+
 ## 2026-10-21 — Production test findings: sign once, Home details, finance range (design only)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

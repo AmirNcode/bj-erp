@@ -156,6 +156,11 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **UI copy:** a `'use client'` component reads its text with `useTranslations` (or a local `useLabels()` hook); pages never build translated `labels` props — the whole catalog already reaches the client.
 - **Leave amounts in forms:** minutes, edited as whole days + hours via `DaysHoursField` / `leaveAmountReader` (`EmployeeFormParts`); never a decimal-days input.
 - **Local SQL as superuser:** `postgres` is not one in the db image; use `supabase_admin` with `PGPASSWORD` from `deploy/.env` (see `tests/sql/*` header).
+- **plpgsql `IF` with a `CASE`:** `if x > case when … then … end then` is a syntax error (the parser stops at the first `then`). Wrap the CASE in parentheses.
+- **Adding a column to `travel_bookings`** breaks SQL tests that build a `row(…)::public.travel_bookings` literal (`tests/sql/travel-booking.sql`); add the value there too.
+- **Travel costs never reach the traveller:** `my_travel_itineraries()` strips per-stay `cost_rials` (`private.travel_itinerary_without_costs`); finance reads only `hotel_cost_rials` (= the stays' sum).
+- **`jspdf` must stay ≥ 4.2.1:** 3.x has a critical advisory and CI runs `npm audit --omit=dev`. `html-to-image`/`jspdf` load with `import()` on click.
+- **UI check without a login:** a temporary `app/[locale]/zz-…/page.tsx` (outside the route groups, so no auth layout) renders client components with fake data; delete it and `rm -rf .next/dev/types` before `tsc`.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

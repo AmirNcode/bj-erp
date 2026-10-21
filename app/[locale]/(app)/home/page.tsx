@@ -17,7 +17,7 @@ import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getMyLeaveRequests, getMyCoverDuties, getMyHomeDismissals } from '@/lib/actions/leave/requests';
-import { getMyTravelBookings } from '@/lib/actions/travel';
+import { getMyTravelBookings, listPendingExtensions } from '@/lib/actions/travel';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import {
   getMyBalanceUsage,
@@ -103,6 +103,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     holiday,
     travelBookings,
     dismissedIds,
+    pendingExtensions,
   ] = await Promise.all([
     getCachedProfile(userId),
     getMyLeaveRequests(),
@@ -120,6 +121,8 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     // FR-72: procurement's note under "Show more", and rejected requests removed from Home.
     getMyTravelBookings(),
     getMyHomeDismissals(),
+    // FR-70: trip extensions HR decides ([] for anyone who does not act as travel HR).
+    canApprove ? listPendingExtensions() : Promise.resolve([]),
   ]);
 
   const workSettings = workSettingsRes.ok ? workSettingsRes.settings : WORK_SETTINGS_FALLBACK;
@@ -130,7 +133,8 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
   const date = (iso: string) => formatCalendarDate(iso, locale);
 
   const pending = approvalsRes?.ok ? approvalsRes.requests : [];
-  const pendingCount = pending.length;
+  // Extensions count as waiting on this person too (Home card and the pulse figure).
+  const pendingCount = pending.length + pendingExtensions.length;
 
   const board = buildHomeBoard({
     roles,
@@ -284,7 +288,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         pulse={pulse}
         pending={
           board.showApprovals
-            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount }
+            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount, extensions: pendingExtensions }
             : null
         }
         usage={usage}

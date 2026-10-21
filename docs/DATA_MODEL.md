@@ -542,6 +542,15 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
 - **State** (`private.travel_booking_state(status, booking)`): `awaiting_approval` (pending, or not
   opened) · `to_book` · `extension` (approved extension, not re-booked) · `done` · `cancel_undo`
   (cancelled after opening, not settled) · `settled` · `hidden` (rejected, or cancelled before opening).
+- **Itinerary (FR-73, migration `20261021120004`)**: `travel_bookings.itinerary jsonb` (NULL before FR-73):
+  `{one_way?, booking_ref?, flights?: [{leg: outbound|return, airline?, flight_no?, from?, to?, date?, departs?,
+  arrives?}], car?: {vehicle?, plate?, driver_name?, driver_mobile?, pickup_place|date|time?,
+  return_place|date|time?}, no_hotel?, stays?: [{name?, address?, phone?, check_in?, check_out?, confirmation?, cost_rials?}]}`.
+  `cost_rials` (migration `…05`): whole Rials per stay; `hotel_cost_rials` = their sum; stripped from the
+  traveller's `my_travel_itineraries()`.
+  Gregorian ISO dates within trip ± 7 days, `HH:MM` times, text ≤ 100 (address ≤ 200), ≤ 10 stays, flights only
+  with transport `flight`, car only with `company_car`. Checked by `private.travel_itinerary_check` (mirrored by
+  `lib/travel/itinerary.ts`); written by `app_save_travel_booking_v2`; the old `app_save_travel_booking` leaves it.
 - **Traveller fields**: `private.travel_traveller_fields()` (placeholder list, mirrored by
   `lib/travel/fields.ts`); read live from `profiles.full_name` + `employee_personal_info`.
 - **Finance**: `finance_approved_requests` gains `status, travel_state, transport, flight_cost_rials,

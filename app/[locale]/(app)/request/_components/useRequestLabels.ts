@@ -45,6 +45,7 @@ export function useRequestLabels() {
     validationSelectDate: t('validationSelectDate'),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
+    statusAwaitingTravel: tLeave('status.awaitingTravel'),
     statusRejected: tLeave('status.rejected'),
     statusCancelled: tLeave('status.cancelled'),
     dayPartLabels: {

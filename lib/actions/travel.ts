@@ -10,6 +10,8 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { TravellerField } from '@/lib/travel/fields';
+import type { Itinerary } from '@/lib/travel/itinerary';
+import type { Json } from '@/lib/supabase/types';
 
 /** HR or admin: mark (or unmark) a daily errand «نیاز به رزرو سفر». */
 export async function setTravelBooking(requestId: string, on: boolean): Promise<{ ok: true } | DbErrorResult> {
@@ -70,6 +72,8 @@ export type TravelBookingDetail = Omit<TravelBookingRow, 'done_at'> & {
   description: string | null;
   status: 'approved' | 'cancelled';
   traveller_note: string | null;
+  /** FR-73; null on bookings saved before it. */
+  itinerary: Itinerary | null;
   lost_note: string | null;
   done_at: string | null;
   extensions: { old_end_date: string; new_end_date: string; reason: string; decided_at: string | null }[];
@@ -99,6 +103,7 @@ export type SaveTravelBookingInput = {
   transport: Transport | null;
   flightCostRials: number | null;
   hotelCostRials: number | null;
+  itinerary: Itinerary;
   note: string;
   done: boolean;
 };
@@ -109,11 +114,12 @@ export async function saveTravelBooking(input: SaveTravelBookingInput): Promise<
   const c = await requireCaller({ perm: ['travel_booking', 'edit'] });
   if (!c.ok) return c;
   if (!isRials(input.flightCostRials) || !isRials(input.hotelCostRials)) return dbErr('costs must be 0 or more');
-  const { error } = await c.supabase.rpc('app_save_travel_booking', {
+  const { error } = await c.supabase.rpc('app_save_travel_booking_v2', {
     p_request: input.requestId,
     p_transport: input.transport,
     p_flight: input.flightCostRials,
     p_hotel: input.hotelCostRials,
+    p_itinerary: input.itinerary as Json,
     p_note: input.note,
     p_done: input.done,
   });
@@ -122,13 +128,40 @@ export async function saveTravelBooking(input: SaveTravelBookingInput): Promise<
   return { ok: true };
 }
 
-/** The caller's own finished bookings: transport and procurement's note (no costs). */
-export async function getMyTravelBookings(): Promise<Record<string, { transport: Transport | null; note: string | null }>> {
+export type MyTravel = {
+  transport: Transport | null;
+  note: string | null;
+  /** FR-73; null on bookings finished before it. */
+  itinerary?: Itinerary | null;
+  pending?: boolean;
+};
+
+/**
+ * The caller's own trips: transport, itinerary and procurement's note on
+ * finished bookings (no costs), and `pending` on approved trips procurement has
+ * still to book or re-book after an extension.
+ */
+export async function getMyTravelBookings(): Promise<Record<string, MyTravel>> {
   const c = await requireCaller();
   if (!c.ok) return {};
-  const { data, error } = await c.supabase.rpc('my_travel_bookings');
-  if (error) return {};
-  return Object.fromEntries((data ?? []).map((r) => [r.request_id, { transport: r.transport as Transport | null, note: r.traveller_note }]));
+  const [booked, pending] = await Promise.all([
+    c.supabase.rpc('my_travel_itineraries'),
+    c.supabase.rpc('my_travel_pending'),
+  ]);
+  const out: Record<string, MyTravel> = {};
+  if (!booked.error) {
+    for (const r of booked.data ?? []) {
+      out[r.request_id] = {
+        transport: r.transport as Transport | null,
+        note: r.traveller_note,
+        itinerary: (r.itinerary as Itinerary | null) ?? null,
+      };
+    }
+  }
+  if (!pending.error) {
+    for (const id of pending.data ?? []) out[id] = { ...(out[id] ?? { transport: null, note: null }), pending: true };
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- extensions (spec §6)

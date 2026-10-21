@@ -395,6 +395,14 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-73** ☐ **Structured travel itinerary.** Procurement records the trip in sections: **Getting there**
+  (flight: outbound + return legs, or **One way**; airline, flight no., from, to typed in; company car: every
+  field optional), **Hotel** (one stay, **+ Add another stay** up to 10, or **No hotel** with cost 0; a cost per stay, their total goes to finance) and
+  **Other notes**. «رزرو شد» needs each leg's flight no., date and departure, and each stay's name and dates.
+  The traveller sees an itinerary card on My Requests and Home (never the costs), mobile-friendly, with
+  **Save as PDF** / **Save as image** done in the browser. Bookings finished earlier keep the note box.
+  An approved trip still waiting on procurement reads "Approved · travel arrangements pending"
+  (`my_travel_pending`). *(2026-10-21; spec `docs/specs/2026-10-21-travel-itinerary-design.md`; unreleased.)*
 
 ### Unreleased approval delegation amendment
 

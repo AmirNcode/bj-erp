@@ -49,6 +49,7 @@ export function RecentRequests({
     approved: tLeave('status.approved'),
     rejected: tLeave('status.rejected'),
     cancelled: tLeave('status.cancelled'),
+    awaitingTravel: tLeave('status.awaitingTravel'),
   };
   const formatDate = (date: string) => formatCalendarDate(date, locale);
   const toggle = (id: string) =>
@@ -126,7 +127,11 @@ export function RecentRequests({
               <div className="flex shrink-0 flex-col items-end gap-2">
                 <span data-testid={`home-status-${r.id}`}>
                   <StatusBadge
-                    status={r.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
+                    status={
+                      r.status === 'approved' && travelBookings[r.id]?.pending
+                        ? 'awaitingTravel'
+                        : (r.status as 'pending' | 'approved' | 'rejected' | 'cancelled')
+                    }
                     labels={statusLabels}
                   />
                 </span>

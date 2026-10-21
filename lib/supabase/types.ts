@@ -1544,9 +1544,24 @@ export type Database = {
         Args: { p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null; p_note: string; p_done: boolean }
         Returns: undefined
       }
+      app_save_travel_booking_v2: {
+        Args: {
+          p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null
+          p_itinerary: Json; p_note: string; p_done: boolean
+        }
+        Returns: undefined
+      }
+      my_travel_itineraries: {
+        Args: Record<PropertyKey, never>
+        Returns: { request_id: string; transport: string | null; itinerary: Json | null; traveller_note: string | null }[]
+      }
       my_travel_bookings: {
         Args: Record<PropertyKey, never>
         Returns: { request_id: string; transport: string | null; traveller_note: string | null }[]
+      }
+      my_travel_pending: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
       }
       app_extendable_trips: {
         Args: Record<PropertyKey, never>
@@ -2012,6 +2027,7 @@ export type Database = {
           is_department_manager: boolean
           job_title: string | null
           manager_id: string | null
+          personnel_no: string | null
           profile_id: string
         }[]
       }

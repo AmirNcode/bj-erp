@@ -238,7 +238,8 @@
       "pending": "در انتظار",
       "approved": "تایید شده",
       "rejected": "رد شده",
-      "cancelled": "لغو شده"
+      "cancelled": "لغو شده",
+      "awaitingTravel": "تایید شده · در انتظار رزرو سفر"
     },
     "dayPart": {
       "full": "روز کامل",
@@ -263,7 +264,9 @@
     "offOn": "مرخصی در",
     "noOffThisDay": "در این روز کسی در مرخصی نیست.",
     "returns": "بازگشت",
-    "error": "خطا"
+    "error": "خطا",
+    "prevMonth": "ماه قبل",
+    "nextMonth": "ماه بعد"
   },
   "profile": {
     "title": "پروفایل",
@@ -1053,7 +1056,20 @@
     "travelTickNotSaved": "درخواست تأیید شد، اما «نیاز به رزرو سفر» ذخیره نشد. آن را از صفحه درخواست‌ها علامت بزنید.",
     "travelDailyOnly": "رزرو سفر فقط برای ماموریت روزانه است.",
     "travelTripEnded": "این ماموریت به پایان رسیده است.",
-    "travelBookingStarted": "تدارکات رزرو را شروع کرده است؛ به جای برداشتن علامت، ماموریت را لغو کنید."
+    "travelBookingStarted": "تدارکات رزرو را شروع کرده است؛ به جای برداشتن علامت، ماموریت را لغو کنید.",
+    "itineraryTooLong": "یکی از موارد برنامه سفر خیلی طولانی است.",
+    "itineraryBadDate": "یکی از تاریخ‌های برنامه سفر معتبر نیست.",
+    "itineraryDateOutside": "یکی از تاریخ‌ها بیش از یک هفته با تاریخ ماموریت فاصله دارد.",
+    "itineraryBadTime": "ساعت را ۲۴ساعته وارد کنید، مثل 09:30.",
+    "itineraryCheckOut": "خروج باید بعد از ورود باشد.",
+    "itineraryTooManyStays": "حداکثر ۱۰ اقامت.",
+    "itineraryFlightRequired": "شماره پرواز، تاریخ و ساعت حرکت هر پرواز را وارد کنید.",
+    "itineraryHotelRequired": "نام هتل و تاریخ‌های هر اقامت را وارد کنید، یا «بدون هتل» را بزنید.",
+    "itineraryNoHotelCost": "بدون هتل، هزینه هتل باید ۰ باشد.",
+    "itineraryInvalid": "برنامه سفر خوانده نشد. صفحه را دوباره باز کنید و دوباره تلاش کنید.",
+    "itineraryBadCost": "هزینه هر هتل را به ریال و به صورت عدد صحیح (۰ یا بیشتر) وارد کنید.",
+    "itineraryStayCost": "هزینه هر اقامت را وارد کنید.",
+    "itineraryHotelTotal": "هزینه هتل باید جمع هزینه اقامت‌ها باشد. صفحه را دوباره باز کنید و دوباره تلاش کنید."
   },
   "roles": {
     "admin": "Admin",
@@ -1821,13 +1837,82 @@
       },
       "exempt": "بدون امضای منابع انسانی (معاف)",
       "pendingNote": "درخواست تمدید تا {date} در انتظار تأیید است.",
-      "printLine": "تمدید تا {date} — {reason}"
+      "printLine": "تمدید تا {date} — {reason}",
+      "badge": "تمدید ماموریت"
     },
     "settleHint": "این ماموریت لغو شد. بلیت و هتل را لغو کنید، سپس مبلغی را که برگشت داده نشد (جریمه، شب‌های غیرقابل استرداد) ثبت کنید.",
     "lostNote": "توضیح (اختیاری)",
     "settle": "ثبت مبلغ از دست رفته",
     "nothingBooked": "چیزی رزرو نشده بود",
     "cancelTrip": "لغو ماموریت",
-    "cancelTripConfirm": "ماموریت لغو می‌شود و تدارکات باید رزرو را لغو کند."
+    "cancelTripConfirm": "ماموریت لغو می‌شود و تدارکات باید رزرو را لغو کند.",
+    "itinerary": {
+      "title": "برنامه سفر",
+      "gettingThere": "رفت‌وآمد",
+      "oneWay": "یک‌طرفه",
+      "outbound": "رفت",
+      "return": "برگشت",
+      "bookingRef": "کد رزرو",
+      "leg": {
+        "airline": "شرکت هواپیمایی",
+        "flight_no": "شماره پرواز",
+        "from": "مبدأ",
+        "to": "مقصد",
+        "date": "تاریخ",
+        "departs": "ساعت حرکت",
+        "arrives": "ساعت رسیدن"
+      },
+      "car": {
+        "vehicle": "خودرو",
+        "plate": "پلاک",
+        "driver_name": "راننده",
+        "driver_mobile": "موبایل راننده",
+        "pickup_place": "محل سوار شدن",
+        "pickup_date": "تاریخ",
+        "pickup_time": "ساعت",
+        "return_place": "محل سوار شدن",
+        "return_date": "تاریخ",
+        "return_time": "ساعت"
+      },
+      "carOptional": "همه موارد اختیاری است.",
+      "pickup": "رفت",
+      "returnPickup": "برگشت",
+      "hotel": "هتل",
+      "noHotel": "بدون هتل",
+      "stay": "اقامت {n}",
+      "addStay": "افزودن اقامت دیگر",
+      "removeStay": "حذف اقامت",
+      "stayFields": {
+        "name": "نام هتل",
+        "address": "نشانی",
+        "phone": "تلفن",
+        "check_in": "ورود",
+        "check_out": "خروج",
+        "confirmation": "شماره تأیید"
+      },
+      "nights": "{count, plural, other {# شب}}",
+      "otherNotes": "توضیحات دیگر برای مسافر",
+      "otherNotesPlaceholder": "هر نکته دیگری که مسافر باید بداند",
+      "call": "تماس",
+      "fixErrors": "موارد مشخص‌شده را اصلاح کنید.",
+      "errors": {
+        "required": "برای «رزرو شد» لازم است.",
+        "tooLong": "خیلی طولانی است.",
+        "badDate": "تاریخ معتبر نیست.",
+        "dateOutsideTrip": "بیش از یک هفته با تاریخ ماموریت فاصله دارد.",
+        "badTime": "ساعت را ۲۴ساعته وارد کنید، مثل 09:30.",
+        "checkOutBeforeIn": "خروج باید بعد از ورود باشد.",
+        "tooManyStays": "حداکثر ۱۰ اقامت.",
+        "badCost": "مبلغ را به ریال و به صورت عدد صحیح (۰ یا بیشتر) وارد کنید."
+      },
+      "savePdf": "ذخیره PDF",
+      "saveImage": "ذخیره تصویر",
+      "exporting": "در حال ذخیره…",
+      "exportFailed": "ذخیره برنامه سفر انجام نشد. دوباره تلاش کنید.",
+      "tracking": "شماره پیگیری",
+      "tripDates": "تاریخ ماموریت",
+      "totalHotelCost": "جمع هزینه هتل (ریال)",
+      "totalHint": "این جمع برای مالی ارسال می‌شود."
+    }
   }
 }

@@ -238,7 +238,8 @@
       "pending": "Pending",
       "approved": "Approved",
       "rejected": "Rejected",
-      "cancelled": "Cancelled"
+      "cancelled": "Cancelled",
+      "awaitingTravel": "Approved · travel arrangements pending"
     },
     "dayPart": {
       "full": "Full day",
@@ -263,7 +264,9 @@
     "offOn": "Off on",
     "noOffThisDay": "No one is off this day.",
     "returns": "Returns",
-    "error": "Error"
+    "error": "Error",
+    "prevMonth": "Previous month",
+    "nextMonth": "Next month"
   },
   "profile": {
     "title": "Profile",
@@ -1053,7 +1056,20 @@
     "travelTickNotSaved": "The request is approved, but “Needs travel booking” was not saved. Tick it on the Requests page.",
     "travelDailyOnly": "Travel booking is for daily work errands only.",
     "travelTripEnded": "This trip has already ended.",
-    "travelBookingStarted": "Procurement has started booking; cancel the trip instead of unticking it."
+    "travelBookingStarted": "Procurement has started booking; cancel the trip instead of unticking it.",
+    "itineraryTooLong": "An itinerary field is too long.",
+    "itineraryBadDate": "An itinerary date is not valid.",
+    "itineraryDateOutside": "An itinerary date is more than a week from the trip.",
+    "itineraryBadTime": "Use 24-hour times, like 09:30.",
+    "itineraryCheckOut": "Check-out must be after check-in.",
+    "itineraryTooManyStays": "At most 10 hotel stays.",
+    "itineraryFlightRequired": "Enter the flight no., date and departure time of each flight.",
+    "itineraryHotelRequired": "Enter the hotel name and dates of each stay, or tick No hotel.",
+    "itineraryNoHotelCost": "With no hotel, the hotel cost must be 0.",
+    "itineraryInvalid": "The itinerary couldn't be read. Reload the page and try again.",
+    "itineraryBadCost": "Enter each hotel cost in whole Rials, 0 or more.",
+    "itineraryStayCost": "Enter the cost of each hotel stay.",
+    "itineraryHotelTotal": "The hotel cost must be the total of the stays. Reload the page and try again."
   },
   "roles": {
     "admin": "Admin",
@@ -1821,13 +1837,82 @@
       },
       "exempt": "No HR signature (exempt)",
       "pendingNote": "Extension to {date} is waiting for approval.",
-      "printLine": "Extended to {date} — {reason}"
+      "printLine": "Extended to {date} — {reason}",
+      "badge": "Trip extension"
     },
     "settleHint": "This trip was cancelled. Cancel the ticket and hotel, then record what could not be refunded (fees, non-refundable nights).",
     "lostNote": "Note (optional)",
     "settle": "Record amount lost",
     "nothingBooked": "Nothing was booked",
     "cancelTrip": "Cancel trip",
-    "cancelTripConfirm": "The trip is cancelled and procurement must undo the booking."
+    "cancelTripConfirm": "The trip is cancelled and procurement must undo the booking.",
+    "itinerary": {
+      "title": "Itinerary",
+      "gettingThere": "Getting there",
+      "oneWay": "One way",
+      "outbound": "Outbound",
+      "return": "Return",
+      "bookingRef": "Booking reference",
+      "leg": {
+        "airline": "Airline",
+        "flight_no": "Flight no.",
+        "from": "From",
+        "to": "To",
+        "date": "Date",
+        "departs": "Departs",
+        "arrives": "Arrives"
+      },
+      "car": {
+        "vehicle": "Vehicle",
+        "plate": "Plate",
+        "driver_name": "Driver",
+        "driver_mobile": "Driver's mobile",
+        "pickup_place": "Pickup place",
+        "pickup_date": "Date",
+        "pickup_time": "Time",
+        "return_place": "Pickup place",
+        "return_date": "Date",
+        "return_time": "Time"
+      },
+      "carOptional": "Every field is optional.",
+      "pickup": "Pickup",
+      "returnPickup": "Return pickup",
+      "hotel": "Hotel",
+      "noHotel": "No hotel",
+      "stay": "Stay {n}",
+      "addStay": "Add another stay",
+      "removeStay": "Remove stay",
+      "stayFields": {
+        "name": "Hotel name",
+        "address": "Address",
+        "phone": "Phone",
+        "check_in": "Check-in",
+        "check_out": "Check-out",
+        "confirmation": "Confirmation no."
+      },
+      "nights": "{count, plural, one {# night} other {# nights}}",
+      "otherNotes": "Other notes for the traveller",
+      "otherNotesPlaceholder": "Anything else the traveller should know",
+      "call": "Call",
+      "fixErrors": "Fix the highlighted fields.",
+      "errors": {
+        "required": "Needed to mark it booked.",
+        "tooLong": "Too long.",
+        "badDate": "Not a valid date.",
+        "dateOutsideTrip": "More than a week from the trip dates.",
+        "badTime": "Use 24-hour time, like 09:30.",
+        "checkOutBeforeIn": "Check-out must be after check-in.",
+        "tooManyStays": "At most 10 stays.",
+        "badCost": "Enter whole Rials, 0 or more."
+      },
+      "savePdf": "Save as PDF",
+      "saveImage": "Save as image",
+      "exporting": "Saving…",
+      "exportFailed": "Couldn't save the itinerary. Try again.",
+      "tracking": "Tracking no.",
+      "tripDates": "Trip dates",
+      "totalHotelCost": "Total hotel cost (Rials)",
+      "totalHint": "Finance receives this total."
+    }
   }
 }

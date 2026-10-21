@@ -2,24 +2,27 @@
 
 /**
  * The details of one of the caller's own requests (FR-72): per diem,
- * procurement's transport and note, dates, day part or time, unpaid part,
+ * procurement's itinerary (FR-73) or, on older bookings, its transport and note, dates, day part or time, unpaid part,
  * tracking number, cover, rejection note, approval steps and signatures.
  * Shared by the Requests tab and Home's "Show more".
  */
 
 import { useTranslations } from 'next-intl';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
-import type { Transport } from '@/lib/actions/travel';
+import type { MyTravel } from '@/lib/actions/travel';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
-import { formatSerialLocalized } from '@/lib/leave/serial';
+import { formatSerial, formatSerialLocalized } from '@/lib/leave/serial';
+import { hasItinerary } from '@/lib/travel/itinerary';
+import { TravelItinerary } from '@/components/TravelItinerary';
 import { formatRials } from '@/lib/leave/perDiem';
 import { RequestProgress } from '@/components/RequestProgress';
 import { RequestSignatureViewer } from './RequestSignature';
 import { useRequestLabels } from './useRequestLabels';
 
-export type TravelNote = { transport: Transport | null; note: string | null };
+/** `pending`: approved, but procurement has not finished the travel booking. */
+export type TravelNote = MyTravel;
 
 export function RequestDetails({
   req,
@@ -46,12 +49,24 @@ export function RequestDetails({
           {req.per_diem_by_requester && <> · {tErrand('perDiemByRequester')}</>}
         </div>
       )}
-      {travel && (
+      {hasItinerary(travel?.itinerary) ? (
+        <TravelItinerary
+          itinerary={travel.itinerary}
+          transport={travel.transport}
+          note={travel.note}
+          locale={locale}
+          serial={formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
+          fileSerial={formatSerial(req.serial_year, req.serial_seq)}
+          tripStart={req.start_date}
+          tripEnd={req.end_date}
+          testId={`travel-itinerary-${req.id}`}
+        />
+      ) : (travel?.transport || travel?.note) && (
         <div className="mt-1 rounded-md bg-secondary px-2 py-1 text-xs" data-testid={`travel-note-${req.id}`}>
-          {travel.transport && (
+          {travel?.transport && (
             <div>{tTravel('myTransport')}: {tTravel(`transportOptions.${travel.transport}`)}</div>
           )}
-          {travel.note && <div>{tTravel('myNote')}: {travel.note}</div>}
+          {travel?.note && <div>{tTravel('myNote')}: {travel.note}</div>}
         </div>
       )}
       {/* Date range */}

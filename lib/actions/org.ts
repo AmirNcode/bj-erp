@@ -7,7 +7,7 @@ import type { OrgPerson } from '@/lib/org/tree';
 /**
  * Every active colleague with their manager link, for the Organization tab
  * (FR-44). Any signed-in user: `get_org_chart()` is SECURITY DEFINER and
- * returns names, titles, departments and reporting lines only.
+ * returns names, personnel numbers, titles, departments and reporting lines only.
  */
 export async function getOrgChart(): Promise<
   { ok: true; people: OrgPerson[]; myId: string } | DbErrorResult
@@ -30,6 +30,7 @@ export async function getOrgChart(): Promise<
       departmentNameEn: r.department_name_en,
       managerId: r.manager_id,
       isDepartmentManager: r.is_department_manager,
+      personnelNo: r.personnel_no,
     })),
   };
 }

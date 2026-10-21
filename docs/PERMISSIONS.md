@@ -456,9 +456,10 @@ risk, not a new activation gate. All password resets remain admin-only.
 ### Org chart (FR-44)
 - `public.get_org_chart()` — SECURITY DEFINER, granted to `authenticated`, revoked from `anon`,
   scoped to the caller's company. Returns active profiles only: id, full name, job title,
-  department (id, fa, en), manager id (NULL when the manager is inactive) and whether the person
-  manages a department. Every role may call it (owner decision D8). **It widens names, titles,
-  departments and reporting lines to every employee — nothing else**: no personnel number, roles,
+  department (id, fa, en), manager id (NULL when the manager is inactive), whether the person
+  manages a department, and personnel number (owner request 2026-10-21, migration
+  `20261021120002`). Every role may call it (owner decision D8). **It widens names, personnel
+  numbers, titles, departments and reporting lines to every employee — nothing else**: no roles,
   hire date, balances or leave data. Same pattern as `get_my_team_directory()`.
 
 ## Configurable roles (FR-55)
@@ -752,6 +753,10 @@ through an unsigned browser approval endpoint.
   of HR cannot tick their old trips, and their own extension (with the Manager role) waits for HR. Extension history: `request_errand_extensions(id)` behind
   `private.can_read_approval_request`.
 - The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).
+  FR-73: `my_travel_itineraries()` adds the itinerary (same rows: own, approved, `first_done_at` set; no costs);
+  `my_travel_pending()` returns only the ids of their own approved trips still to book. Procurement writes the
+  itinerary through `app_save_travel_booking_v2` (same `private.is_procurement` guard and state rules as v1) and
+  reads it in `app_travel_booking`. All three revoked from `anon`.
 
 ## Sign once and Home removals (FR-71 / FR-72, 2026-10-21, unreleased)
 

@@ -17,6 +17,7 @@ const p = (id: string, fullName: string, managerId: string | null = null): OrgPe
   departmentNameEn: null,
   managerId,
   isDepartmentManager: false,
+  personnelNo: null,
 });
 
 const people = [

@@ -7,9 +7,10 @@
 
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { useMemo, useState, useTransition } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CalendarDays, List } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave/approvals';
 import type { DecisionResult } from '@/lib/actions/leave/approvals';
@@ -51,6 +52,8 @@ function useLabels() {
     empty: t('empty'),
     listView: t('listView'),
     monthView: t('monthView'),
+    prevMonth: t('prevMonth'),
+    nextMonth: t('nextMonth'),
     offOn: t('offOn'),
     noOffThisDay: t('noOffThisDay'),
     returns: t('returns'),
@@ -85,6 +88,9 @@ type Props = {
   signatureConsents?: VisibleSignatureConsent[];
   /** Today (company timezone) as YYYY-MM-DD, to highlight the current day tile. */
   todayIso?: string;
+  /** Links to the previous / next month (`?month=`); the view mode and selection carry over. */
+  prevHref?: string;
+  nextHref?: string;
 };
 
 const sevenColumnGridStyle = { gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' };
@@ -227,6 +233,8 @@ export function CalendarView({
   decidableIds,
   signatureConsents,
   todayIso,
+  prevHref,
+  nextHref,
 }: Props) {
   const labels = useLabels();
   const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
@@ -277,7 +285,11 @@ export function CalendarView({
     : undefined;
   const firstBusyDay = month.days.find((day) => day.inMonth && day.count > 0)?.iso ?? rangeStart;
   const [selectedIso, setSelectedIso] = useState(todayInMonth ?? firstBusyDay);
-  const selectedDay = month.days.find((day) => day.iso === selectedIso) ?? month.days[0];
+  // After moving to another month the old pick is not in it: fall back to that month's default.
+  const selectedDay =
+    month.days.find((day) => day.inMonth && day.iso === selectedIso) ??
+    month.days.find((day) => day.iso === (todayInMonth ?? firstBusyDay)) ??
+    month.days[0];
 
   const fmt = (iso: string) => formatCalendarDate(iso, locale);
   // An errand carries no leave type (the view LEFT JOINs), so it is named by its
@@ -396,7 +408,7 @@ export function CalendarView({
           <button
             key={day.iso}
             type="button"
-            aria-pressed={selectedIso === day.iso}
+            aria-pressed={selectedDay?.iso === day.iso}
             aria-label={day.ariaLabel}
             data-testid={`calendar-day-${day.iso}`}
             data-today={isToday ? 'true' : undefined}
@@ -409,7 +421,7 @@ export function CalendarView({
                 ? 'border-border bg-card text-card-foreground hover:border-primary/50'
                 : 'border-border/50 bg-muted/40 text-muted-foreground/60',
               day.count > 0 && day.inMonth && 'border-primary/40 bg-primary/10 shadow-sm',
-              selectedIso === day.iso && 'ring-2 ring-primary ring-offset-2'
+              selectedDay?.iso === day.iso && 'ring-2 ring-primary ring-offset-2'
             )}
           >
             <span className="text-[11px] font-semibold sm:text-xs">{day.dayLabel}</span>
@@ -506,7 +518,25 @@ export function CalendarView({
   return (
     <div data-testid="calendar-view">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-sm font-medium text-muted-foreground">{monthLabel}</div>
+        <div className="flex items-center gap-1" data-testid="calendar-month-nav">
+          {prevHref && (
+            <Button asChild variant="ghost" size="icon" className="size-8">
+              <Link href={prevHref} scroll={false} aria-label={labels.prevMonth} data-testid="calendar-prev-month">
+                <ChevronLeft aria-hidden="true" className="rtl:rotate-180" />
+              </Link>
+            </Button>
+          )}
+          <div className="min-w-28 text-center text-sm font-medium text-muted-foreground" data-testid="calendar-month-label">
+            {monthLabel}
+          </div>
+          {nextHref && (
+            <Button asChild variant="ghost" size="icon" className="size-8">
+              <Link href={nextHref} scroll={false} aria-label={labels.nextMonth} data-testid="calendar-next-month">
+                <ChevronRight aria-hidden="true" className="rtl:rotate-180" />
+              </Link>
+            </Button>
+          )}
+        </div>
         <div
           className="inline-flex w-fit rounded-lg border bg-card p-1 shadow-xs"
           role="group"

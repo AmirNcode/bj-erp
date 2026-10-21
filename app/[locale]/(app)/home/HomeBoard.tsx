@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { PendingApprovalsCard, type PendingRow } from './PendingApprovalsCard';
 import { RecentRequests } from './RecentRequests';
 import type { TravelNote } from '../request/_components/RequestDetails';
+import type { PendingExtension } from '@/lib/actions/travel';
 
 /** This screen's copy. */
 function useLabels() {
@@ -77,6 +78,8 @@ type Props = {
     rows: PendingRow[];
     total: string;
     count: number;
+    /** FR-70: trip extensions waiting for HR. */
+    extensions: PendingExtension[];
   } | null;
   usage: UsageRow[];
   nextHoliday: { name: string; month: string; day: string; when: string } | null;
@@ -204,6 +207,7 @@ export function HomeBoard({
               rows={pending.rows}
               total={pending.total}
               count={pending.count}
+              extensions={pending.extensions}
               locale={locale}
             />
           )}
