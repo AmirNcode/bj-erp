@@ -398,6 +398,12 @@ export type Database = {
           },
         ]
       }
+      home_dismissed_requests: {
+        Row: { request_id: string; employee_id: string; dismissed_at: string }
+        Insert: { request_id: string; employee_id: string; dismissed_at?: string }
+        Update: { request_id?: string; employee_id?: string; dismissed_at?: string }
+        Relationships: []
+      }
       holidays: {
         Row: {
           company_id: string
@@ -1538,9 +1544,24 @@ export type Database = {
         Args: { p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null; p_note: string; p_done: boolean }
         Returns: undefined
       }
+      app_save_travel_booking_v2: {
+        Args: {
+          p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null
+          p_itinerary: Json; p_note: string; p_done: boolean
+        }
+        Returns: undefined
+      }
+      my_travel_itineraries: {
+        Args: Record<PropertyKey, never>
+        Returns: { request_id: string; transport: string | null; itinerary: Json | null; traveller_note: string | null }[]
+      }
       my_travel_bookings: {
         Args: Record<PropertyKey, never>
         Returns: { request_id: string; transport: string | null; traveller_note: string | null }[]
+      }
+      my_travel_pending: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
       }
       app_extendable_trips: {
         Args: Record<PropertyKey, never>
@@ -1598,6 +1619,17 @@ export type Database = {
         Args: Database['public']['Functions']['approve_leave_request']['Args'] & { p_step_id: string | null }
         Returns: undefined
       }
+      approve_leave_request_steps: {
+        Args: {
+          p_id: string
+          p_step_ids: string[]
+          p_signature_data: string
+          p_signature_authorized: boolean
+          p_per_diem_rials?: number
+        }
+        Returns: undefined
+      }
+      app_dismiss_home_request: { Args: { p_id: string }; Returns: undefined }
       reject_leave_request_v2: { Args: { p_id: string; p_step_id: string | null; p_reason?: string }; Returns: undefined }
       app_approval_queue: { Args: { p_status?: Database['public']['Enums']['leave_status'] }; Returns: Json }
       app_request_approval_context: { Args: { p_id: string }; Returns: Json }
@@ -1995,6 +2027,7 @@ export type Database = {
           is_department_manager: boolean
           job_title: string | null
           manager_id: string | null
+          personnel_no: string | null
           profile_id: string
         }[]
       }

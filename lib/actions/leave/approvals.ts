@@ -10,7 +10,7 @@ import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Database } from '@/lib/supabase/types';
 import type { ApprovalStep, ManagerScope, SignedStep, StepLabel, StepRole } from '@/lib/leave/approvals';
-import { approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
+import { approvalBundle, approvalChoices, progressLabel, type ApprovalChoice, type ApprovalContextRow, type ApprovalProgressRow } from '@/lib/leave/approval-context';
 import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import type { TravellerField } from '@/lib/travel/fields';
 import type { DayPart } from './shared';
@@ -21,8 +21,8 @@ export type DecisionResult = { ok: true; warning?: string } | DbErrorResult;
 export type ApproveRequestInput = {
   signatureData: string;
   signatureAuthorized: boolean;
-  /** Exact natural or delegated step selected by the signer. */
-  stepId?: string | null;
+  /** FR-71: every step this one signature approves (own and delegated). */
+  stepIds?: string[];
   /** FR-58: admin only — sign every outstanding step at once. */
   override?: boolean;
   /** FR-61: per diem in Rials, only with an hr step on an errand. */
@@ -32,8 +32,8 @@ export type ApproveRequestInput = {
 };
 
 /**
- * Approve a pending request: sign the caller's own step, or — for an admin —
- * every outstanding step at once (FR-58). The SQL fn decides entitlement, flips
+ * Approve a pending request: sign the caller's steps with one signature (FR-71),
+ * or — for an admin — every outstanding step at once (FR-58). The SQL fn decides entitlement, flips
  * the status atomically when the chain completes, and debits the ledger for
  * balance-affecting types.
  */
@@ -47,14 +47,25 @@ export async function approveRequest(
   if (bad) return dbErr(bad);
   const perDiem = input.perDiemRials ?? null;
 
-  const { error } = await c.supabase.rpc('approve_leave_request_v2', {
-    p_id: requestId,
-    p_step_id: input.stepId ?? null,
-    p_signature_data: input.signatureData,
-    p_signature_authorized: input.signatureAuthorized,
-    p_override: input.override ?? false,
-    p_per_diem_rials: perDiem ?? undefined,
-  });
+  const stepIds = input.stepIds ?? [];
+  // FR-71: one signature for the caller's steps; the admin override and the
+  // legacy no-chain request (no step ids) keep the single-call path.
+  const { error } = !input.override && stepIds.length > 0
+    ? await c.supabase.rpc('approve_leave_request_steps', {
+      p_id: requestId,
+      p_step_ids: stepIds,
+      p_signature_data: input.signatureData,
+      p_signature_authorized: input.signatureAuthorized,
+      p_per_diem_rials: perDiem ?? undefined,
+    })
+    : await c.supabase.rpc('approve_leave_request_v2', {
+      p_id: requestId,
+      p_step_id: null,
+      p_signature_data: input.signatureData,
+      p_signature_authorized: input.signatureAuthorized,
+      p_override: input.override ?? false,
+      p_per_diem_rials: perDiem ?? undefined,
+    });
   if (error) return dbErr(error.message);
   invalidateAppCache();
   if (input.travelBooking) {
@@ -206,10 +217,10 @@ export async function getPendingApprovals(): Promise<
   const rows = (Array.isArray(data) ? data : []) as unknown as ApprovalContextRow[];
   const requests: PendingApproval[] = rows.map((row) => {
     const progress = row.progress ?? [];
-    const choices = approvalChoices(progress, 'approve');
+    const choices = approvalBundle(progress);
     const rejections = approvalChoices(progress, 'reject');
     // Old no-chain requests still need their explicitly authorized legacy action.
-    if (!progress.length && row.can_approve) choices.push({ stepId: null, label: 'manager', name: null, principalName: null, delegated: false, perDiem: false });
+    if (!progress.length && row.can_approve) choices.push({ stepId: null, stepRole: 'manager', label: 'manager', name: null, principalName: null, delegated: false, perDiem: false });
     return {
       id: row.id,
       kind: row.kind,
@@ -240,7 +251,7 @@ export async function getPendingApprovals(): Promise<
       outstanding: progress.filter((step) => !step.decision && step.evidence_kind !== 'hr_exempt').map(progressLabel),
       natural_step: choices[0]?.label ?? null,
       can_override: row.can_override === true,
-      per_diem_natural: choices[0]?.perDiem ?? false,
+      per_diem_natural: choices.some((step) => step.perDiem),
       per_diem_override: row.can_override === true && row.kind === 'errand' && progress.some((step) => step.step_role === 'hr' && !step.decision && step.evidence_kind !== 'hr_exempt'),
       travel: null,
       decision_steps: choices,

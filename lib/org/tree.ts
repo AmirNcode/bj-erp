@@ -18,6 +18,7 @@ export type OrgPerson = {
   managerId: string | null;
   /** Manages a department (`departments.manager_id`). */
   isDepartmentManager: boolean;
+  personnelNo: string | null;
 };
 
 export type OrgIndex = {
@@ -107,6 +108,11 @@ export function normalizeFaName(value: string): string {
 }
 
 /** Name search for the org chart's jump box. */
+/** "<name> - <personnel no>", or the name alone when there is no number. */
+export function nameWithPersonnelNo(person: OrgPerson): string {
+  return person.personnelNo ? `${person.fullName} - ${person.personnelNo}` : person.fullName;
+}
+
 export function searchPeople(index: OrgIndex, query: string, limit = 8): OrgPerson[] {
   const q = normalizeFaName(query);
   if (!q) return [];

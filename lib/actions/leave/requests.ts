@@ -322,6 +322,24 @@ export async function getMyLeaveRequests(): Promise<{
   return { ok: true, requests };
 }
 
+/** FR-72: ids of the caller's rejected requests they removed from Home. */
+export async function getMyHomeDismissals(): Promise<string[]> {
+  const c = await requireCaller();
+  if (!c.ok) return [];
+  const { data } = await c.supabase.from('home_dismissed_requests').select('request_id');
+  return (data ?? []).map((r) => r.request_id);
+}
+
+/** FR-72: remove one of the caller's rejected requests from Home (the Requests tab keeps it). */
+export async function dismissFromHome(requestId: string): Promise<{ ok: true } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_dismiss_home_request', { p_id: requestId });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
 export async function getReplacementCandidates(input: {
   start: string;
   end: string;

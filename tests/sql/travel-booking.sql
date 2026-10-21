@@ -119,7 +119,7 @@ select pg_temp.expect('traveller fields placeholder',
 -- State derivation on synthetic rows (no request needed: the function reads only its arguments
 -- and errand_extensions for the row's request_id).
 select pg_temp.expect('state matrix',(select string_agg(private.travel_booking_state(s.st::public.leave_status,
-    row(gen_random_uuid(),pg_temp.fx('company'),null,now(),s.opened,null,null,null,null,null,null,s.done,null,null,null,s.settled,now(),null)::public.travel_bookings),',' order by s.n)
+    row(gen_random_uuid(),pg_temp.fx('company'),null,now(),s.opened,null,null,null,null,null,null,s.done,null,null,null,s.settled,now(),null,null)::public.travel_bookings),',' order by s.n)
   from (values
     (1,'pending',null::timestamptz,null::timestamptz,null::timestamptz),
     (2,'approved',null,null,null),

@@ -161,6 +161,20 @@ const RULES: Rule[] = [
   { re: /trip has already ended/, key: 'travelTripEnded' },
   { re: /booking already started/, key: 'travelBookingStarted' },
   { re: /not allowed to mark travel booking/, key: 'notAllowed' },
+  // FR-73 itinerary (private.travel_itinerary_check).
+  { re: /^itinerary text is too long$/, key: 'itineraryTooLong' },
+  { re: /^invalid itinerary date$/, key: 'itineraryBadDate' },
+  { re: /^itinerary date is outside the trip$/, key: 'itineraryDateOutside' },
+  { re: /^invalid itinerary time$/, key: 'itineraryBadTime' },
+  { re: /^check-out must be after check-in$/, key: 'itineraryCheckOut' },
+  { re: /^too many hotel stays$/, key: 'itineraryTooManyStays' },
+  { re: /^flight details are required$/, key: 'itineraryFlightRequired' },
+  { re: /^hotel details are required$/, key: 'itineraryHotelRequired' },
+  { re: /^no hotel means a hotel cost of 0$/, key: 'itineraryNoHotelCost' },
+  { re: /^invalid hotel cost$/, key: 'itineraryBadCost' },
+  { re: /^each hotel stay needs a cost$/, key: 'itineraryStayCost' },
+  { re: /^hotel cost must be the total of the stays$/, key: 'itineraryHotelTotal' },
+  { re: /^(invalid itinerary|itinerary is required|itinerary does not match the transport)$/, key: 'itineraryInvalid' },
   // FR-59: hr edits settings, but hours per day stays admin-only.
   { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
   // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).

@@ -321,6 +321,8 @@ Validation/release status stays in `docs/TASKS.md`.
   only. A pending row shows the step it waits on as a label (Direct manager, HR, …), never approver
   names, signatures or the reason. The CSV covers both, with a status column. Via `finance_requests()`
   (unreleased).
+  **Amended 2026-10-21:** opens on the current Jalali month through the end of the next one, so
+  upcoming approved trips show without picking a month (unreleased).
 
 - **FR-63** ☑ **Own personal information is view only.** Users see theirs on Profile but cannot
   change it; hr and admin edit other people's (hr never an admin's). Editing one's own needs
@@ -382,6 +384,25 @@ Validation/release status stays in `docs/TASKS.md`.
   skip HR at every stage: they tick «نیاز به رزرو سفر» on their own daily errand form, and their own
   extension applies at once (exempt, per diem unchanged).
   *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; owner review 2026-10-20; unreleased.)*
+- **FR-71** ☐ **Sign once for several steps.** When one person can sign several open steps of a
+  request (own or as a delegate; e.g. the Head of HR who is also the requester's manager), the approve
+  dialog lists them and one signature approves them all (`approve_leave_request_steps`, one
+  transaction; each step keeps its own signed row). With the approval order on, another person's step
+  in between ends the group. Per diem and the travel tick show when the group holds the errand's HR step.
+  *(2026-10-21; spec `2026-10-21-sign-once-home-details-design.md`; unreleased.)*
+- **FR-72** ☐ **Full request details on Home.** "Show more" on Home's recent requests opens the same
+  details as the Requests tab (procurement's transport and note included). A request stays on Home
+  until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
+  once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
+  keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-73** ☐ **Structured travel itinerary.** Procurement records the trip in sections: **Getting there**
+  (flight: outbound + return legs, or **One way**; airline, flight no., from, to typed in; company car: every
+  field optional), **Hotel** (one stay, **+ Add another stay** up to 10, or **No hotel** with cost 0; a cost per stay, their total goes to finance) and
+  **Other notes**. «رزرو شد» needs each leg's flight no., date and departure, and each stay's name and dates.
+  The traveller sees an itinerary card on My Requests and Home (never the costs), mobile-friendly, with
+  **Save as PDF** / **Save as image** done in the browser. Bookings finished earlier keep the note box.
+  An approved trip still waiting on procurement reads "Approved · travel arrangements pending"
+  (`my_travel_pending`). *(2026-10-21; spec `docs/specs/2026-10-21-travel-itinerary-design.md`; unreleased.)*
 
 ### Unreleased approval delegation amendment
 

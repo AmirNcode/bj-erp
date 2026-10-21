@@ -4,21 +4,12 @@ import { useRequestLabels } from './_components/useRequestLabels';
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
-import { formatCalendarDate } from '@/lib/leave/calendarMonth';
-import { formatDuration } from '@/lib/leave/duration';
-import { formatTimeRange } from '@/lib/leave/formatTimeRange';
-import { formatSerialLocalized } from '@/lib/leave/serial';
-import { formatRials } from '@/lib/leave/perDiem';
-import type { Transport } from '@/lib/actions/travel';
 import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { StatusBadge } from '@/components/StatusBadge';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
-import { RequestProgress } from '@/components/RequestProgress';
 import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
-import {
-  RequestSignatureViewer,
-} from './_components/RequestSignature';
+import { RequestDetails, type TravelNote } from './_components/RequestDetails';
 
 type Props = {
   requests: LeaveRequestWithType[];
@@ -28,7 +19,7 @@ type Props = {
   /** Open with every request shown (`?all=1`, e.g. from the outcome banner). */
   showAll?: boolean;
   /** FR-70: procurement's transport and note on the caller's booked trips. */
-  travelBookings?: Record<string, { transport: Transport | null; note: string | null }>;
+  travelBookings?: Record<string, TravelNote>;
 };
 
 export function MyRequestsList({
@@ -40,8 +31,6 @@ export function MyRequestsList({
 }: Props) {
   const labels = useRequestLabels();
   const t = useTranslations('request');
-  const tTravel = useTranslations('travel');
-  const tErrand = useTranslations('errand');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -69,6 +58,7 @@ export function MyRequestsList({
     approved: labels.statusApproved,
     rejected: labels.statusRejected,
     cancelled: labels.statusCancelled,
+    awaitingTravel: labels.statusAwaitingTravel,
   };
 
   return (
@@ -118,86 +108,12 @@ export function MyRequestsList({
                         </div>
                       )}
                     </div>
-                    {req.kind === 'errand' && req.per_diem_rials != null && (
-                      <div className="text-xs text-muted-foreground mt-0.5" data-testid={`per-diem-${req.id}`}>
-                        {tErrand('perDiem')}: {formatRials(req.per_diem_rials, locale)}
-                        {req.per_diem_by_requester && <> · {tErrand('perDiemByRequester')}</>}
-                      </div>
-                    )}
-                    {travelBookings[req.id] && (
-                      <div className="mt-1 rounded-md bg-secondary px-2 py-1 text-xs" data-testid={`travel-note-${req.id}`}>
-                        {travelBookings[req.id].transport && (
-                          <div>{tTravel('myTransport')}: {tTravel(`transportOptions.${travelBookings[req.id].transport}`)}</div>
-                        )}
-                        {travelBookings[req.id].note && <div>{tTravel('myNote')}: {travelBookings[req.id].note}</div>}
-                      </div>
-                    )}
-                    {/* Date range */}
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {labels.from} {formatCalendarDate(req.start_date, locale)}{' '}
-                      {labels.to} {formatCalendarDate(req.end_date, locale)}
-                    </div>
-                    {/* Day part */}
-                    <div className="text-xs text-muted-foreground">
-                      {req.unit === 'hour'
-                        ? formatTimeRange(req.start_time, req.end_time, locale)
-                        : labels.dayPartLabels[req.day_part]}{' '}
-                      · {formatDuration(req.requested_minutes, hoursPerDay, locale, labels)}
-                    </div>
-                    {req.unpaid_minutes > 0 && (
-                      <div
-                        className="text-xs font-medium text-destructive"
-                        data-testid={`request-unpaid-${req.id}`}
-                      >
-                        {labels.unpaidTimeOffLabel}:{' '}
-                        {formatDuration(req.unpaid_minutes, hoursPerDay, locale, labels)}
-                      </div>
-                    )}
-                    {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
-                        which is the requester's personnel number (spec §5). */}
-                    <div className="text-xs text-muted-foreground">
-                      {labels.trackingNo}:{' '}
-                      {/* testid marks the VALUE, not the label — a caller reading
-                          `serial-*` wants the number, not the chrome around it. */}
-                      <span className="font-mono" dir="ltr" data-testid={`serial-${req.id}`}>
-                        {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
-                      </span>
-                    </div>
-                    {req.replacement_name && (
-                      <div className="text-xs text-muted-foreground">
-                        {labels.coverLabel}: {req.replacement_name}
-                      </div>
-                    )}
-                    {/* Why it was rejected — optional, set by the decider. */}
-                    {req.status === 'rejected' && req.decision_note && (
-                      <div
-                        className="mt-2 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-                        data-testid={`decision-note-${req.id}`}
-                      >
-                        <span className="font-medium">{labels.rejectedReason}:</span>{' '}
-                        {req.decision_note}
-                      </div>
-                    )}
-                    {req.status !== 'cancelled' && (
-                      // Keyed by status: a decision arriving on refresh reloads the steps.
-                      <RequestProgress
-                        key={`${req.id}:${req.status}`}
-                        requestId={req.id}
-                        defaultOpen={req.status === 'pending'}
-                      />
-                    )}
-                    <RequestSignatureViewer
-                      requestId={req.id}
-                      consentAt={req.signature_consent_at}
-                      labels={labels.requesterSignature}
+                    <RequestDetails
+                      req={req}
                       locale={locale}
-                    />
-                    <RequestSignatureViewer
-                      requestId={req.id}
-                      consentAt={req.approver_signature_consent_at}
-                      labels={labels.approverSignature}
-                      locale={locale}
-                      kind="approver"
+                      hoursPerDay={hoursPerDay}
+                      travel={travelBookings[req.id]}
+                      progressOpen={req.status === 'pending'}
                     />
                   </div>
 
@@ -205,7 +121,11 @@ export function MyRequestsList({
                     {/* Status badge */}
                     <span data-testid={`status-badge-${req.id}`}>
                       <StatusBadge
-                        status={req.status as 'pending' | 'approved' | 'rejected' | 'cancelled'}
+                        status={
+                          req.status === 'approved' && travelBookings[req.id]?.pending
+                            ? 'awaitingTravel'
+                            : (req.status as 'pending' | 'approved' | 'rejected' | 'cancelled')
+                        }
                         labels={statusLabels}
                       />
                     </span>

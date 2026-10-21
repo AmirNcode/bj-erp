@@ -16,7 +16,8 @@ import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
-import { getMyLeaveRequests, getMyCoverDuties } from '@/lib/actions/leave/requests';
+import { getMyLeaveRequests, getMyCoverDuties, getMyHomeDismissals } from '@/lib/actions/leave/requests';
+import { getMyTravelBookings, listPendingExtensions } from '@/lib/actions/travel';
 import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import {
   getMyBalanceUsage,
@@ -100,6 +101,9 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     coverDutiesRes,
     pulseRes,
     holiday,
+    travelBookings,
+    dismissedIds,
+    pendingExtensions,
   ] = await Promise.all([
     getCachedProfile(userId),
     getMyLeaveRequests(),
@@ -114,18 +118,23 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     getMyCoverDuties(today, rangeEnd),
     canApprove ? getTodayPulse() : Promise.resolve(null),
     getNextHoliday(),
+    // FR-72: procurement's note under "Show more", and rejected requests removed from Home.
+    getMyTravelBookings(),
+    getMyHomeDismissals(),
+    // FR-70: trip extensions HR decides ([] for anyone who does not act as travel HR).
+    canApprove ? listPendingExtensions() : Promise.resolve([]),
   ]);
 
-  const hoursPerDay = workSettingsRes.ok
-    ? workSettingsRes.settings.hoursPerDay
-    : WORK_SETTINGS_FALLBACK.hoursPerDay;
+  const workSettings = workSettingsRes.ok ? workSettingsRes.settings : WORK_SETTINGS_FALLBACK;
+  const hoursPerDay = workSettings.hoursPerDay;
   const durationLabels = durationLabelsFrom(tLeave);
   const duration = (minutes: number) => formatDuration(minutes, hoursPerDay, locale, durationLabels);
   const num = (n: number) => formatNumber(n, locale);
   const date = (iso: string) => formatCalendarDate(iso, locale);
 
   const pending = approvalsRes?.ok ? approvalsRes.requests : [];
-  const pendingCount = pending.length;
+  // Extensions count as waiting on this person too (Home card and the pulse figure).
+  const pendingCount = pending.length + pendingExtensions.length;
 
   const board = buildHomeBoard({
     roles,
@@ -134,6 +143,9 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
     team: calendarRes?.ok ? calendarRes.entries : [],
     directory: directoryRes?.ok ? directoryRes.members : [],
     pendingCount,
+    today,
+    workSettings,
+    dismissedIds,
   });
 
   // ── pulse band ───────────────────────────────────────────────────────────
@@ -272,10 +284,11 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         board={board}
         locale={locale}
         hoursPerDay={hoursPerDay}
+        travelBookings={travelBookings}
         pulse={pulse}
         pending={
           board.showApprovals
-            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount }
+            ? { rows: pendingRows, total: num(pendingCount), count: pendingCount, extensions: pendingExtensions }
             : null
         }
         usage={usage}

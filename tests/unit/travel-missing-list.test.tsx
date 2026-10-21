@@ -40,7 +40,7 @@ describe.each(CASES)('missing traveller fields in $locale', ({ locale, messages,
   it('HR approve dialog joins them with the locale list format', () => {
     const options: ApproveOptions = {
       hasNaturalStep: true, canOverride: false, perDiemNatural: true, perDiemOverride: false,
-      steps: [{ stepId: 'hr-step', label: 'hr', name: null, principalName: null, delegated: false, perDiem: true }],
+      steps: [{ stepId: 'hr-step', stepRole: 'hr', label: 'hr', name: null, principalName: null, delegated: false, perDiem: true }],
       travel: { employeeId: 'emp-1', missingFields: [...FIELDS] },
     };
     const labels = { approve: 'Approve', approveConfirm: '?', approverSignature: {} } as never;

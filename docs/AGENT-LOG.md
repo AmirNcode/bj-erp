@@ -78,6 +78,268 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-21 — Approval-fixes review plan executed (T1) + PR
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/approval-fixes @ 26ba3f6
+**Trigger:** Execute `docs/plans/2026-10-21-approval-fixes-review.md` (T1, final verification, PR).
+
+**What changed** (commit `abba1d8`, `fix(calendar): …`)
+- `lib/leave/approval-context.ts` — new `bundleStepIds(choices)` after `approvalBundle` (step ids one signature approves; drops the legacy no-chain choice).
+- `app/[locale]/(app)/manage/approvals/DecisionDialogs.tsx` — uses `bundleStepIds(steps)` instead of the inline `flatMap`.
+- `app/[locale]/(app)/calendar/page.tsx` — builds `decisionStepIds` (request id → `bundleStepIds(r.decision_steps)`) from `getPendingApprovals()` and passes it to `<CalendarView>`.
+- `app/[locale]/(app)/calendar/CalendarView.tsx` — new `decisionStepIds` prop; `DecideButtons` takes `stepIds` and sends them to `approveRequest`, so the calendar takes the `approve_leave_request_steps` path (FR-71). Empty array keeps the v2 path (admin override / legacy no-chain).
+- `tests/unit/approval-bundle.test.ts` — `bundleStepIds (FR-71)` case.
+
+**Actions outside the repo**
+- Local DB `postgres` only: 6 `tests/sql/*` files (each rolls back), Playwright e2e with throwaway 999… users, `npm run cleanup:e2e` (0 left). Liara untouched.
+
+**Verification**
+- T1: `vitest run approval-bundle + sign-once` 11 passed; `tsc --noEmit` 0; `npm run lint` 0; `playwright calendar.spec.ts` 1 passed (it approves through the calendar).
+- Final: `npm ci` 0; lint 0; tsc 0; `npm run test:unit` 106 files / 1015 passed; `npm run build` 0; `npm audit --omit=dev` found 0 vulnerabilities; `npm run test:deploy` 0.
+- SQL: sign-once 38, approval-delegation 165, hr-head-own-per-diem 24, travel-booking 217, travel-itinerary 46, fr55-roles-permissions 355 PASS — all ok, same as before the fix.
+- e2e (approval, approval-step-person, home, leave, calendar, errand; `--workers=1`): 7 pass, 2 fail — the same two as the review (`approval-step-person.spec.ts:39`, `leave.spec.ts:137`), pre-existing on `origin/main` with the local roster DB.
+
+**State left behind**
+- `abba1d8` committed; this log entry + the review entry and plan committed as docs; branch pushed; PR opened into `main` (not merged).
+
+**For the next agent**
+- Still no e2e that signs several steps in one go; FR-71 UI coverage is unit + `tests/sql/sign-once.sql`.
+- The two pre-existing e2e failures remain; fix separately if wanted. PR-notes risks are listed in the PR body.
+
+## 2026-10-21 — Pre-PR review of codex/approval-fixes (review + plan only)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-fixes` @ `26ba3f6` (2 ahead, 0 behind `origin/main` @ `bfa638b`; no rebase needed)
+**Trigger:** Owner: review the branch, decide whether it can go to main by PR; plan fixes for a medium-effort implementer.
+
+**What changed**
+- `docs/plans/2026-10-21-approval-fixes-review.md` — handoff plan, one task (T1).
+- This entry. No app code, migrations or tests touched.
+
+**Findings**
+- Medium (T1): `app/[locale]/(app)/calendar/CalendarView.tsx:171-172` approves with no `stepIds`, so the Calendar
+  still takes the `approve_leave_request_v2` single-step path; the Head of HR who is also the manager signs twice
+  there. Queue and Home are fixed (`approvalBundle` → `approve_leave_request_steps`).
+- Checked, no issue: migrations `20261021120000`–`…05` are new files, add-only (v1 RPCs kept for the old app),
+  no enum; ledger checksums match the files; `supabase/schema.sql` = fresh `pg_dump` of local `postgres` (0 diff
+  lines). `app_request_approval_progress` differs from `20261018011333` only by `is_mine` and `per_diem_allowed`
+  following `v_allowed`. `approve_leave_request_steps` loops `private.decide_approval_request` (company lock before
+  `leave:` lock each call; failure rolls back all). Costs: `my_travel_itineraries` strips `cost_rials`; no grant on
+  `travel_bookings` to `authenticated`; `is_procurement` excludes own trips. New server actions start with
+  `requireCaller`. fa/en 1638 keys each, no gaps. `html-to-image`/`jspdf` load with `import()`.
+- Low (PR notes in the plan): admin implicit override inherited from v2; calendar has no per diem/travel tick
+  (as on main); editing a pre-FR-73 finished booking now needs the itinerary; org chart shows personnel numbers to all.
+
+**Actions outside the repo**
+- Temporary worktree of `origin/main` at the session scratchpad (`…/scratchpad/base`) for baselines; still registered
+  (`git worktree prune` after the scratchpad is cleared).
+- Local DB `postgres` only: ran 6 `tests/sql/*` files (each `begin … rollback`); Playwright e2e (throwaway 999… users),
+  then `npm run cleanup:e2e` (0 left). Liara untouched.
+
+**Verification** (baseline `origin/main` → branch)
+- `npm ci` 0 → 0 · `npm run lint` 0 → 0 · `npx tsc --noEmit` 0 → 0 · `npm run test:unit` 961 passed/5 skipped → 1014 passed ·
+  `npm run build` 0 → 0 · `npm audit --omit=dev` 0 vulns → 0 vulns.
+- `npm run test:deploy` branch: 4 suites ok (baseline skipped: no deploy files changed, worktree has no `deploy/.env`).
+- SQL on local `postgres` (branch schema): sign-once 38, approval-delegation 165, hr-head-own-per-diem 24,
+  travel-booking 217, travel-itinerary 46, fr55-roles-permissions 355 PASS, 0 FAIL.
+- e2e `--workers=1` (approval, approval-step-person, home, leave, calendar, errand): 7 pass, 2 fail. Both fail the same
+  way on `origin/main`: `approval-step-person.spec.ts:39` (no `approval-step-department-manager` on the local roster
+  DB) and `leave.spec.ts:137` (`waitForURL(/\/request$/)` lands on `/request?form=1&all=1`). Not branch-caused.
+- No e2e signs several steps at once; FR-71 in the UI is covered only by unit tests + `tests/sql/sign-once.sql`.
+
+**State left behind**
+- Uncommitted: the plan file and this entry. Nothing pushed, no PR.
+
+**For the next agent**
+- Do T1 from the plan, then the plan's final verification, then push and open the PR (never merge).
+- The two e2e failures above are pre-existing on the local roster DB; fix separately if wanted.
+
+## 2026-10-21 — Org chart shows personnel number
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-fixes` @ `98c5561`
+**Trigger:** Owner: org chart cards should read "<name> - <personnel no>" (focused card, direct reports, manager above).
+
+**What changed**
+- `supabase/migrations/20261021120002_org_chart_personnel_no.sql` — drop + recreate `get_org_chart()` with a
+  trailing `personnel_no` column. Widens owner decision D8: every signed-in colleague now sees personnel numbers.
+- `lib/org/tree.ts` — `OrgPerson.personnelNo`, `nameWithPersonnelNo()` (name alone when the number is null).
+- `lib/actions/org.ts`, `lib/supabase/types.ts` (hand-edited) — map the new column.
+- `app/[locale]/(app)/organization/OrgChart.tsx` — focus heading, report/root cards, chain items above the focus,
+  and the "Reports to" link use `nameWithPersonnelNo`. Search results left as name only.
+- `tests/unit/org-tree.test.ts` fixture; `docs/PERMISSIONS.md` org-chart paragraph; `docs/CHANGELOG.md`.
+- `supabase/schema.sql` regenerated.
+
+**Actions outside the repo**
+- Local only: dry-run of the migration in `begin … rollback`, then `./deploy/bj-deploy update local` (applied,
+  migration now frozen), `npm run schema:dump`, `docker restart bj-erp-rest-1`. Production untouched.
+
+**Verification**
+- `tsc --noEmit` clean, eslint on touched files clean, `vitest run tests/unit/org-tree.test.ts` 10/10.
+- SQL as an active employee JWT: `get_org_chart()` returns 15 rows, 14 with `personnel_no`.
+- Browser check NOT done: `.env.test-accounts` credentials (124) were rejected on local login.
+
+**State left behind**
+- Uncommitted on `codex/approval-fixes`.
+
+**Follow-up in the same session: bare report count**
+- `OrgChart.tsx` card badge shows `fmt(count)` only; `t('people')` kept as `title` + `aria-label`.
+  tsc + eslint clean; not browser-checked (same login problem).
+
+**Follow-up in the same session: "approved, travel pending" status**
+- Owner: an approved errand whose procurement step is not done showed plain "Approved".
+- `supabase/migrations/20261021120003_my_travel_pending.sql` — add-only `public.my_travel_pending()` (SECURITY
+  DEFINER, own approved requests whose `private.travel_booking_state` is `to_book`/`extension`).
+- `lib/actions/travel.ts` `getMyTravelBookings` merges it as `pending: true` into the existing record (no new props);
+  `RequestDetails` shows the travel box only when there is a transport or note; `StatusBadge` takes
+  `awaitingTravel` (pending colours); `MyRequestsList`, `RecentRequests`, `useRequestLabels`;
+  `leave.status.awaitingTravel` in fa/en.
+- Dry-run in `begin … rollback` with a fixture booking (triggers disabled): listed while to book, gone after
+  `done_at`. Applied with `./deploy/bj-deploy update local`, `schema:dump`, rest restarted.
+- tsc clean, eslint clean, `npm run test:unit` 990/990. Not browser-checked.
+
+**Follow-up in the same session: structured travel itinerary (design + plan only)**
+- Owner asked for dedicated flight / company car and hotel sections, notes kept for extras. Proposed a
+  boarding-pass itinerary card + three-section procurement form (inline mockup). Owner answers: one way is an
+  option, "+" adds hotel stays, company-car fields optional, airline/airports typed, mobile-friendly, export
+  as PDF or JPEG.
+- Wrote `docs/specs/2026-10-21-travel-itinerary-design.md` (FR-73, draft) and
+  `docs/plans/2026-10-21-travel-itinerary.md` (7 tasks, migration `20261021120004`). No code yet.
+
+**Follow-up in the same session: structured itinerary implemented (owner: "Proceed to build this out")**
+- `lib/travel/itinerary.ts` (model, normalize, errors mirroring SQL, nights) + `tests/unit/travel-itinerary.test.ts`.
+- `supabase/migrations/20261021120004_travel_itinerary.sql`: `travel_bookings.itinerary`, `private.travel_itinerary_fields`
+  / `private.travel_itinerary_check`, `app_save_travel_booking_v2`, `app_travel_booking` + `itinerary`,
+  `my_travel_itineraries()`. `tests/sql/travel-itinerary.sql` (38 PASS). `tests/sql/travel-booking.sql` row literal
+  gained the new column (217 PASS against the new schema). Trap hit: plpgsql `IF … > case when … then … end then`
+  needs the CASE in parentheses.
+- Procurement form split: `BookingForm` + `TransportSection` + `HotelSection` + `ItineraryFields`; company car hides the
+  ticket cost (0). `tests/unit/booking-form.test.tsx` rewritten (11 tests).
+- `components/TravelItinerary.tsx` (card + Save as PDF / image) in `RequestDetails` and the procurement read-only summary.
+  Lucide `Plane` points up-left by default, so it is flipped in LTR (`ltr:-scale-x-100`).
+- Deps: `html-to-image` ^1.11.13, `jspdf` ^4.2.1 (3.x has a critical `npm audit` finding; CI runs `npm audit --omit=dev`).
+- Strings `travel.itinerary.*`, `dbErrors.itinerary*` (fa/en); `lib/errors/db-error.ts` rules.
+- Docs: REQUIREMENTS FR-73, DATA_MODEL, PERMISSIONS, CHANGELOG, spec marked approved, plan marked implemented.
+
+**Actions outside the repo (this follow-up)**
+- Local only: migration dry-run in `begin … rollback` with both SQL tests, `./deploy/bj-deploy update local` (twice: schema,
+  then app rebuild), `npm run schema:dump`, `docker restart bj-erp-rest-1`.
+- Visual check through a temporary unauthenticated route `app/[locale]/zz-itinerary-preview` with fake data (deleted
+  afterwards; `.next/dev/types` cleared). Checked 375 px fa and desktop en. JPEG export rendered in-page: Vazirmatn embedded,
+  header present. PDF export produced a 101 KB `application/pdf` blob; jsPDF's own download path may have saved one
+  `itinerary-1405-0011.pdf` (fake data) in the browser pane.
+
+**Verification (this follow-up)**
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 1012/1012, `npm run build` ok, `npm audit --omit=dev` 0.
+- Not tested with a real login (stale test password): the procurement page and My Requests with real bookings.
+
+**Follow-up in the same session: extensions on Home, calendar month arrows**
+- Owner (testing locally as HR): a manager's trip extension showed only on /manage/approvals. Home now calls
+  `listPendingExtensions()` when `canApprove` ([] for anyone not acting as travel HR, RPC raises 42501 for them);
+  `pendingCount` = requests + extensions (pulse card and Pending card badge). `PendingApprovalsCard` renders each
+  extension as a row with a «تمدید ماموریت» badge and `ExtensionDecisionCard bare` (new prop: no card frame).
+  The pulse "oldest" line still looks at requests only (extensions carry no submitted time in that RPC).
+- Calendar: `page.tsx` reads `?month=<ISO day>` (invalid → this month), passes prev/next hrefs; `CalendarView` shows
+  chevrons around the label (`rtl:rotate-180`), keeps view mode across navigation, and resolves the selected day to
+  the new month's default when the old pick is outside it (ring + aria-pressed use the resolved day).
+- Checked through a temporary `app/[locale]/zz-preview` route with fake data (deleted): extension row on the Pending
+  card; month nav in en and fa. tsc, lint, unit 1012/1012. Not checked with a real login.
+
+**Follow-up in the same session: a cost per hotel stay**
+- Owner: hotel cost per stay plus one total; finance gets the total.
+- `supabase/migrations/20261021120005_travel_stay_costs.sql`: `private.travel_itinerary_without_costs(jsonb)`;
+  `app_save_travel_booking_v2` (create or replace) runs the unchanged check on the cost-free copy, then checks
+  `cost_rials` (whole number), «رزرو شد» needs one per stay, `p_hotel` must equal their sum;
+  `my_travel_itineraries()` strips costs. `tests/sql/travel-itinerary.sql` 46 PASS, `travel-booking.sql` 217 PASS.
+- `lib/travel/itinerary.ts`: `StayDraft.cost`, `HotelStay.cost_rials`, `stayFilled`, `hotelTotal`, `badCost`.
+  `HotelSection` per-stay cost input + read-only total; `BookingForm` sends `hotelTotal(itinerary)`, carries an old
+  one-stay hotel total into the stay. New stay's check-out is blank when the previous stay already ends on the
+  trip's last day (it used to equal check-in and fail).
+- tsc, lint, unit 1014/1014; migration applied locally (`bj-deploy update local`), schema dumped, rest restarted,
+  app rebuilt. Not checked in a browser (no working login; no preview route this time).
+
+**Wrap-up (owner: commit everything, no PR yet)**
+- CLAUDE.md gotchas added: plpgsql IF/CASE, `travel_bookings` row literal in SQL tests, travel costs never reach the
+  traveller, `jspdf` ≥ 4.2.1, temporary preview route for UI checks without a login.
+- Everything above committed in one commit on `codex/approval-fixes` (not pushed, no PR). Migrations
+  `20261021120002`–`…05` are applied to the local DB only.
+
+**For the next agent**
+- `.env.test-accounts` password for 124 is stale; ask the owner for a current one.
+
+## 2026-10-21 — Production test findings: sign once, Home details, finance range (design only)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/per-diem-wording` @ `ec52114` (stale); moved to new branch
+`codex/approval-fixes` from `origin/main` @ `bfa638b` (PR #10 merged, deployed 2026-10-21 02:58 UTC).
+**Trigger:** Owner's production test: Head of HR signed twice (manager + HR); Home's Recent card lacks the
+trip details procurement added; finance did not see the approved trip.
+
+**What changed**
+- `docs/specs/2026-10-21-sign-once-home-details-design.md` (draft): FR-71 sign once for every step the caller
+  holds (own + delegated), FR-72 full details under "Show more" on Home and the return-to-work retention rule,
+  FR-62 finance default range = current + next month. Owner answers recorded in the spec.
+- No code.
+
+**Actions outside the repo**
+- None. Production DB not queried: the finance cause (trip dated in Aban, page opens on Mehr) is inferred from
+  `finance_requests` (`start_date <= to and end_date >= from`) and `finance/page.tsx` defaults, not confirmed.
+
+**Verification**
+- Not run (design only).
+
+**Follow-up in the same session: plan**
+- Owner confirmed the finance cause (trip showed after picking the next month) and asked for a **Remove**
+  button on rejected requests kept on Home. Spec amended (table `home_dismissed_requests` + RPC
+  `app_dismiss_home_request`; same-day return rule as my call) and marked approved.
+- Wrote `docs/plans/2026-10-21-sign-once-home-details.md` (6 tasks, migrations `20261021120000`/`…01`,
+  `tests/sql/sign-once.sql`, scratch DB only). Owner asked to stop before implementing.
+
+**Follow-up in the same session: implementation (owner: "Plan approved. Implement it.")**
+- Task 1: `lib/finance/range.ts` `defaultFinanceRange` (current month → end of next; falls back to current
+  month / today); `finance/page.tsx` uses it; `getReportMonths({ nextYear: true })` so Esfand reaches Farvardin.
+- Task 2: `supabase/migrations/20261021120000_sign_once.sql` — `app_request_approval_progress` copied from
+  `20261018011333` (its last definition) + `is_mine` on every row, `per_diem_allowed` on the HR step follows
+  `v_allowed`; new `approve_leave_request_steps` loops `private.decide_approval_request` in step order.
+- Task 3: `approvalBundle()` in `lib/leave/approval-context.ts` (`ApprovalChoice.stepRole` added);
+  `getPendingApprovals` uses it; `ApproveRequestInput.stepIds` replaces `stepId` (steps RPC; override and
+  legacy keep `approve_leave_request_v2`); `ApproveDialog` shows "Signing as: …" (`approvals.signingAs`,
+  `Intl.ListFormat`) instead of the approve step picker. Reject dialog unchanged.
+- Task 4: `supabase/migrations/20261021120001_home_dismissed_requests.sql` (table + `app_dismiss_home_request`).
+- Task 5: shared `app/[locale]/(app)/request/_components/RequestDetails.tsx` (plan said `components/`; put next
+  to `useRequestLabels`/`RequestSignature`, which it uses); `MyRequestsList` renders it (no visible change).
+  Home: client `home/RecentRequests.tsx` (Show more / Show less, Remove on rejected, optimistic with rollback,
+  empty state links to `/request`); `recentOnHome()` in `lib/home/board.ts` (5-row cap dropped);
+  `home/page.tsx` fetches `getMyTravelBookings()` + `getMyHomeDismissals()`. `home.noRecent` reworded
+  ("No current requests."), new `home.showMore/showLess/removeFromHome/removeFailed/openRequests`.
+- Docs: REQUIREMENTS (FR-62 amendment, FR-71, FR-72), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS.
+
+**Actions outside the repo (implementation)**
+- Scratch DB `bj_travel` only (`bj-erp-db-1`, `supabase_admin`): dry-ran both migrations + `tests/sql/sign-once.sql`
+  in `begin … rollback`, then applied both with `psql -1` (no ledger rows, like `…00`–`…11`). `schema.sql` dumped
+  from `bj_travel` (diff = only these two migrations). Shared `postgres` DB, `bj-deploy`, Liara: untouched.
+
+**Verification (implementation)**
+- `tests/sql/*.sql` on `bj_travel`: 9 suites, 1051 PASS / 0 FAIL (new `sign-once.sql` 38).
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 105 files / 990 passed · `npm run build` ok ·
+  fa/en keys 1563 each, no difference.
+- NOT run: browser walk-through (the local app runs on `postgres`, which lacks these migrations), Playwright
+  e2e, `test:deploy` (no deploy files changed).
+
+**State left behind**
+- All uncommitted on `codex/approval-fixes`. Nothing pushed or deployed. `bj_travel` now has `…00`–`…11` +
+  `20261021120000`/`…01`.
+
+**For the next agent**
+- `20261021120000`/`…01` are frozen (applied to `bj_travel`); fix forward.
+- `tests/e2e/leave.spec.ts:152` reads the first `home-recent-request-*` row; it still exists but only while the
+  request is before its return-to-work day.
+
+**For the next agent**
+- `private.decide_approval_request` already loops a step array (admin override) and re-checks the order rule
+  per step, with rows inserted earlier in the same transaction visible — the new RPC can call it per step.
+
 ## 2026-10-20 — PR #10: merge main, owner review changes (finance pending, manager extension, fixes)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

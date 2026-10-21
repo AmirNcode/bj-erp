@@ -14,7 +14,9 @@ import { can } from '@/lib/permissions/catalog';
 import { getTravelBooking } from '@/lib/actions/travel';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatRials } from '@/lib/leave/perDiem';
-import { formatSerialLocalized } from '@/lib/leave/serial';
+import { formatSerial, formatSerialLocalized } from '@/lib/leave/serial';
+import { hasItinerary } from '@/lib/travel/itinerary';
+import { TravelItinerary } from '@/components/TravelItinerary';
 import { TRAVELLER_FIELDS } from '@/lib/travel/fields';
 import { Card, CardContent } from '@/components/ui/card';
 import { PageHeader } from '../../_components/PageHeader';
@@ -53,6 +55,7 @@ export default async function BookingPage({ params }: Props) {
   };
 
   const summary = (
+          <>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <dt className="text-muted-foreground">{t('transport')}</dt>
               <dd>{b.transport ? t(`transportOptions.${b.transport}`) : '—'}</dd>
@@ -61,6 +64,20 @@ export default async function BookingPage({ params }: Props) {
               {b.traveller_note && (<><dt className="text-muted-foreground">{t('travellerNote')}</dt><dd>{b.traveller_note}</dd></>)}
               {b.state === 'settled' && (<><dt className="text-muted-foreground">{t('lostAmount')}</dt><dd>{rials(b.lost_rials)}</dd></>)}
             </dl>
+            {hasItinerary(b.itinerary) && (
+              <TravelItinerary
+                itinerary={b.itinerary}
+                transport={b.transport}
+                note={null}
+                locale={locale}
+                serial={formatSerialLocalized(b.serial_year, b.serial_seq, locale)}
+                fileSerial={formatSerial(b.serial_year, b.serial_seq)}
+                tripStart={b.start_date}
+                tripEnd={b.end_date}
+                testId="booking-itinerary"
+              />
+            )}
+          </>
   );
 
   return (
@@ -113,10 +130,14 @@ export default async function BookingPage({ params }: Props) {
           ) : editable ? (
             <BookingForm
               requestId={b.request_id}
+              locale={locale}
+              tripStart={b.start_date}
+              tripEnd={b.end_date}
               initial={{
                 transport: b.transport,
                 flightCostRials: b.flight_cost_rials,
                 hotelCostRials: b.hotel_cost_rials,
+                itinerary: b.itinerary,
                 note: b.traveller_note,
                 done: b.state === 'done',
               }}

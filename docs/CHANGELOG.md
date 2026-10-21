@@ -9,6 +9,31 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Sign once, Home request details, finance range — branch `codex/approval-fixes` (FR-71, FR-72, FR-62, not deployed)
+
+Migrations `20261021120000` (sign once), `20261021120001` (Home removals).
+- One signature approves every step the signer holds on a request (own and delegated), e.g. the Head
+  of HR who is also the employee's manager; the approve dialog lists the steps instead of a picker.
+- Home's recent requests: "Show more" opens the full details (procurement's transport and note
+  included); requests stay until the return-to-work day; rejected ones have a Remove button.
+- `/finance` opens on the current and next month.
+- Organization chart shows "<name> - <personnel no>" on the focused card, direct-report cards, the
+  chain above and the "Reports to" link (migration `20261021120002`: `get_org_chart` returns
+  `personnel_no` to every signed-in colleague).
+- Trip extensions waiting for HR appear on Home's Pending requests (approve or reject in place) and count in
+  "Awaiting your approval".
+- Calendar: arrows beside the month label move to the previous / next month (`?month=`); list or month view
+  and the selected day carry over.
+- **Structured travel itinerary (FR-73, migration `20261021120004`).** Procurement's booking form has
+  Getting there (flight legs with one-way option, or company car with optional fields), Hotel (several stays,
+  or No hotel) and Other notes. The traveller sees an itinerary card (boarding-pass legs, stays, note) with
+  Save as PDF / Save as image (`html-to-image`, `jspdf` 4, loaded on click). Each hotel stay has its own
+  cost; the total (what finance gets) shows under the stays (migration `20261021120005`).
+- An approved errand still waiting on procurement reads «تایید شده · در انتظار رزرو سفر» / "Approved · travel
+  arrangements pending" on My Requests and Home until the booking is done (migration `20261021120003`:
+  `my_travel_pending()`).
+- Org chart cards show the direct-report count as a bare number ("4", full phrase kept as tooltip/label).
+
 ### Travel booking for out-of-town errands — branch `codex/travel-booking` (FR-70, PR #10, not deployed)
 
 Migrations `20261020120000`–`20261020120011`.
