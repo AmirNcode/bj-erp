@@ -26,7 +26,7 @@ export function useRequestSubmit(successText: string) {
 
   function submit(
     problem: string | null,
-    send: () => Promise<{ ok: true } | DbErrorResult>,
+    send: () => Promise<{ ok: true; warning?: string } | DbErrorResult>,
     onSuccess: () => void
   ) {
     setError('');
@@ -39,6 +39,7 @@ export function useRequestSubmit(successText: string) {
       const result = await send();
       if (result.ok) {
         setSuccess(successText);
+        if (result.warning) setError(result.warning);
         onSuccess();
         router.refresh();
       } else {

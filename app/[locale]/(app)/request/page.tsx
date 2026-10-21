@@ -11,6 +11,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { getActiveLeaveTypes, getWorkSettings } from '@/lib/actions/leave/reference';
 import { getMyLeaveRequests } from '@/lib/actions/leave/requests';
+import { getMyTravelBookings } from '@/lib/actions/travel';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
@@ -46,10 +47,11 @@ async function RequestPageData({
   if (!user) return null;
 
   // Fetch everything in parallel
-  const [leaveTypesResult, requestsResult, workSettingsResult] = await Promise.all([
+  const [leaveTypesResult, requestsResult, workSettingsResult, travelBookings] = await Promise.all([
     getActiveLeaveTypes(),
     getMyLeaveRequests(),
     getWorkSettings(),
+    getMyTravelBookings(),
   ]);
 
   const leaveTypes = leaveTypesResult.ok ? leaveTypesResult.types : [];
@@ -78,6 +80,7 @@ async function RequestPageData({
         locale={locale}
         hoursPerDay={workSettings.hoursPerDay}
         showAll={showAll}
+        travelBookings={travelBookings}
       />
     </div>
   );

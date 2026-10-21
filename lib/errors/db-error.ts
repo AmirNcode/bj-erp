@@ -154,6 +154,13 @@ const RULES: Rule[] = [
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
   { re: /only the Head of HR can enter per diem on their own errand/, key: 'perDiemOwnNotAllowed' },
+  // FR-70 travel booking.
+  { re: /own travel booking not saved/, key: 'travelOwnTickNotSaved' },
+  { re: /travel booking not saved/, key: 'travelTickNotSaved' },
+  { re: /travel booking applies to daily work errands only/, key: 'travelDailyOnly' },
+  { re: /trip has already ended/, key: 'travelTripEnded' },
+  { re: /booking already started/, key: 'travelBookingStarted' },
+  { re: /not allowed to mark travel booking/, key: 'notAllowed' },
   // FR-59: hr edits settings, but hours per day stays admin-only.
   { re: /only an admin may change (approval order or )?(the )?hours per day/, key: 'adminOnlySetting' },
   // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).

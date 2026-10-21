@@ -11,6 +11,8 @@ import { useCallback, useEffect, useState, useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { CircleCheck, CircleDashed, CircleX, ChevronDown } from 'lucide-react';
 import { getRequestProgress, type ProgressStep } from '@/lib/actions/leave/progress';
+import type { RequestExtension } from '@/lib/actions/travel';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
 
@@ -24,12 +26,14 @@ export function RequestProgress({
   const t = useTranslations('requestProgress');
   const te = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
+  const tx = useTranslations('travel.extension');
   const locale = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
   const [error, setError] = useState('');
   const [configurationChanged, setConfigurationChanged] = useState(false);
   const [legacyReconciliation, setLegacyReconciliation] = useState(false);
+  const [extensions, setExtensions] = useState<RequestExtension[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback(
@@ -40,6 +44,7 @@ export function RequestProgress({
           setSteps(res.steps);
           setConfigurationChanged(res.configurationChanged === true);
           setLegacyReconciliation(res.legacyReconciliationRequired === true);
+          setExtensions(res.extensions ?? []);
           setError('');
         }
         else setError(res.error);
@@ -143,6 +148,23 @@ export function RequestProgress({
                 );
               })}
             </ol>
+          )}
+          {extensions.length > 0 && (
+            <div className="mt-3 border-t pt-2 text-xs" data-testid={`progress-extensions-${requestId}`}>
+              <p className="font-medium">{tx('historyTitle')}</p>
+              <ul className="mt-1 space-y-1">
+                {extensions.map((e) => (
+                  <li key={`${e.new_end_date}-${e.status}-${e.decided_at ?? ''}`}>
+                    {tx('historyLine', { date: formatCalendarDate(e.new_end_date, locale), reason: e.reason })}
+                    <span className="text-muted-foreground"> · {tx(`status.${e.status}`)}
+                      {e.evidence === 'exempt' && <> · {tx('exempt')}</>}
+                      {e.decided_by_name && e.evidence !== 'exempt' && <> · {e.decided_by_name}</>}
+                      {e.decided_at && <> · {formatPersianConsentTimestamp(e.decided_at, locale)}</>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

@@ -20,7 +20,8 @@
     "settings": "Settings",
     "profileSubtitle": "{role}, profile",
     "absences": "Approved absences",
-    "finance": "Finance"
+    "finance": "Finance",
+    "procurement": "Procurement"
   },
   "refresh": {
     "updated": "Updated {time}",
@@ -1041,7 +1042,12 @@
     "executiveInvalid": "Choose an active person in this company.",
     "ceoAuthorityInvalid": "Automatic approval authority can only be granted for the designated CEO’s delegate.",
     "approvalStepChanged": "This approval step changed. Refresh the request before deciding.",
-    "perDiemOwnNotAllowed": "Only the Head of HR can enter a per diem on their own errand."
+    "perDiemOwnNotAllowed": "Only the Head of HR can enter a per diem on their own errand.",
+    "travelOwnTickNotSaved": "The request was sent, but “Needs travel booking” was not saved. Ask HR to tick it on the Requests page.",
+    "travelTickNotSaved": "The request is approved, but “Needs travel booking” was not saved. Tick it on the Requests page.",
+    "travelDailyOnly": "Travel booking is for daily work errands only.",
+    "travelTripEnded": "This trip has already ended.",
+    "travelBookingStarted": "Procurement has started booking; cancel the trip instead of unticking it."
   },
   "roles": {
     "admin": "Admin",
@@ -1049,7 +1055,8 @@
     "manager": "Manager",
     "employee": "Employee",
     "security": "Security",
-    "finance": "Finance"
+    "finance": "Finance",
+    "procurement": "Procurement"
   },
   "org": {
     "searchPlaceholder": "Search a colleague…",
@@ -1350,7 +1357,7 @@
     "dailyErrand": "Daily work errand"
   },
   "finance": {
-    "title": "Finance — completed approvals",
+    "title": "Finance — requests",
     "kind": "Kind",
     "all": "All requests",
     "errands": "Work errands",
@@ -1359,7 +1366,7 @@
     "count": "Approved requests",
     "totalPerDiem": "Total per diem",
     "rials": "Rials",
-    "empty": "No fully approved requests in this period.",
+    "empty": "No requests in this period.",
     "trackingNo": "Tracking no.",
     "employee": "Employee",
     "type": "Type",
@@ -1389,9 +1396,32 @@
       "perDiem": "Per diem (Rials)",
       "perDiemBy": "Per diem entered by",
       "perDiemByRequester": "Requester (Head of HR)",
-      "perDiemByHr": "HR approval"
+      "perDiemByHr": "HR approval",
+      "transport": "Transport",
+      "flightCost": "Ticket cost",
+      "hotelCost": "Hotel cost",
+      "lost": "Amount lost",
+      "total": "Total",
+      "status": "Status",
+      "waitingOn": "Waiting on"
     },
-    "perDiemByRequester": "Entered by requester (Head of HR)"
+    "perDiemByRequester": "Entered by requester (Head of HR)",
+    "grandTotal": "Total cost",
+    "transport": "Transport",
+    "flightCost": "Ticket",
+    "hotelCost": "Hotel",
+    "lost": "Lost",
+    "total": "Total",
+    "cancelled": "Cancelled",
+    "approved": "Approved",
+    "sectionApproved": "Fully approved",
+    "sectionPending": "Pending approval",
+    "pendingCount": "Pending requests",
+    "sectionEmpty": "None in this period.",
+    "waitingOn": "Waiting on: {step}",
+    "waitingUnknown": "Waiting for approval",
+    "bookingOpen": "Booking not finished",
+    "pending": "Pending"
   },
   "requestProgress": {
     "toggle": "Approval steps",
@@ -1428,7 +1458,8 @@
       "departments": "Departments",
       "leave": "Leave",
       "approvalChain": "Approval chain",
-      "settings": "Company settings"
+      "settings": "Company settings",
+      "procurement": "Procurement"
     },
     "items": {
       "personal_info_own": {
@@ -1445,7 +1476,7 @@
       },
       "finance": {
         "label": "Finance",
-        "description": "See every fully approved request with its per diem, and export it."
+        "description": "See approved and pending requests with per diem and travel costs, and export them."
       },
       "people": {
         "label": "Employee records",
@@ -1510,6 +1541,10 @@
       "approval_delegate": {
         "label": "Approval delegation",
         "description": "Choose your own approval delegate. This does not grant role editing or access to other people’s delegation settings."
+      },
+      "travel_booking": {
+        "label": "Travel booking",
+        "description": "See approved errands that need travel booking and the traveller details needed to book; record the transport, ticket and hotel costs, and the amount lost after a cancellation."
       }
     },
     "levels": {
@@ -1692,5 +1727,101 @@
     "configurationChanged": "The approval chain has changed since submission. The current required steps are shown below.",
     "legacyReconciliation": "Older approval evidence cannot identify the required steps unambiguously. The remaining steps need explicit decisions; contact the admin if clarification is needed.",
     "historicalHrExemption": "HR review was not required when submitted. This step has since changed and now requires review."
+  },
+  "travel": {
+    "fields": {
+      "full_name": "Full name",
+      "national_id": "National ID",
+      "birth_date": "Date of birth",
+      "mobile": "Mobile",
+      "gender": "Gender"
+    },
+    "tickLabel": "Needs travel booking",
+    "ownTickHint": "You are the Head of HR, so you mark your own trip. Once it is approved, it goes to procurement.",
+    "tickHint": "Once fully approved, the request goes to procurement to buy the ticket and book the hotel.",
+    "missingWarning": "These traveller details are missing: {fields}. Procurement needs them to book; you can still approve.",
+    "missingLink": "Complete personal information",
+    "startedHint": "Procurement has started booking. Cancel the trip instead.",
+    "transport": "Transport",
+    "transportOptions": {
+      "flight": "Flight",
+      "company_car": "Company car"
+    },
+    "flightCost": "Ticket cost (Rials)",
+    "hotelCost": "Hotel cost (Rials)",
+    "travellerNote": "Note for the traveller",
+    "travellerNotePlaceholder": "Flight number and time, hotel name and address",
+    "travellerNoteHint": "The traveller sees this note on My Requests; they do not see the costs.",
+    "costInvalid": "Enter whole Rials, 0 or more.",
+    "doneNeedsAll": "Choose the transport and enter both costs (0 if none).",
+    "saveDraft": "Save",
+    "markDone": "Booked",
+    "saveChanges": "Save changes",
+    "saved": "Saved.",
+    "procurementTitle": "Travel booking",
+    "procurementHint": "Approved errands HR marked “Needs travel booking”. Your own trips are not listed here.",
+    "procurementEmpty": "No trips to book.",
+    "states": {
+      "to_book": "To book",
+      "extension": "Extension: update the booking",
+      "cancel_undo": "Cancelled: undo the booking",
+      "done": "Booked",
+      "settled": "Cancelled and settled"
+    },
+    "tripDates": "Trip dates",
+    "description": "Description",
+    "extendedTo": "Extended to {date}",
+    "travellerDetails": "Traveller details",
+    "notRecorded": "Not recorded",
+    "detailsHidden": "This booking is closed, so the traveller's details are no longer shown.",
+    "booking": "Booking",
+    "lostAmount": "Amount lost (Rials)",
+    "homeWaiting": "{count, plural, one {# trip waiting on procurement} other {# trips waiting on procurement}}",
+    "homeOpen": "Open",
+    "myTransport": "Transport",
+    "myNote": "Procurement's note",
+    "extension": {
+      "open": "Extend trip",
+      "waiting": "Extension waiting for HR",
+      "title": "Extend trip",
+      "body": "Write the new end date and the reason. HR decides; until then the trip keeps its dates.",
+      "bodyExempt": "No HR approval is needed for this trip: the new end date applies at once and the booking goes back to procurement.",
+      "newEnd": "New end date",
+      "reason": "Reason for the extension",
+      "submit": "Send to HR",
+      "newEndAfter": "Choose a date after the current end date.",
+      "reasonRequired": "Write why the trip needs to be extended.",
+      "sectionTrips": "Trips you can extend",
+      "sectionPending": "Extension requests",
+      "dates": "Starts {start} · ends {from} → {to}",
+      "reasonBy": "Reason (from {name})",
+      "currentPerDiem": "Current per diem: {amount} Rials",
+      "delegationUncovered": "The traveller handed their approvals to someone for this trip; that hand-over does not cover the extra days.",
+      "note": "Note (optional)",
+      "approve": "Approve extension",
+      "reject": "Reject extension",
+      "rejectTitle": "Reject this extension?",
+      "rejectBody": "The trip keeps its current end date ({date}). The manager can send a new extension.",
+      "approveTitle": "Approve extension",
+      "approveBody": "The trip will end on {date} and the booking goes back to procurement.",
+      "perDiemHint": "If the per diem changes, enter the new total; leave blank to keep it.",
+      "historyTitle": "Extensions",
+      "historyLine": "Extended to {date}: {reason}",
+      "status": {
+        "pending": "Waiting for HR",
+        "approved": "Approved",
+        "rejected": "Rejected",
+        "cancelled": "Cancelled"
+      },
+      "exempt": "No HR signature (exempt)",
+      "pendingNote": "Extension to {date} is waiting for approval.",
+      "printLine": "Extended to {date} — {reason}"
+    },
+    "settleHint": "This trip was cancelled. Cancel the ticket and hotel, then record what could not be refunded (fees, non-refundable nights).",
+    "lostNote": "Note (optional)",
+    "settle": "Record amount lost",
+    "nothingBooked": "Nothing was booked",
+    "cancelTrip": "Cancel trip",
+    "cancelTripConfirm": "The trip is cancelled and procurement must undo the booking."
   }
 }

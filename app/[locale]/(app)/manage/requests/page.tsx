@@ -15,6 +15,7 @@ import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getReviewRequests } from '@/lib/actions/leave/review';
+import { getTravelTicks } from '@/lib/actions/travel';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { PageHeader } from '../../_components/PageHeader';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -22,11 +23,12 @@ import { RequestsReview } from './RequestsReview';
 
 type Props = { params: Promise<{ locale: string }> };
 
-async function ReviewData({ locale }: { locale: string }) {
+async function ReviewData({ locale, viewerId }: { locale: string; viewerId: string }) {
 
-  const [result, settingsResult] = await Promise.all([
+  const [result, settingsResult, travelTicks] = await Promise.all([
     getReviewRequests(),
     getWorkSettings(),
+    getTravelTicks(),
   ]);
 
   if (!result.ok) {
@@ -46,6 +48,8 @@ async function ReviewData({ locale }: { locale: string }) {
       requests={result.requests}
       locale={locale}
       hoursPerDay={hoursPerDay}
+      travelTicks={travelTicks}
+      viewerId={viewerId}
     />
   );
 }
@@ -72,7 +76,7 @@ export default async function RequestsReviewPage({ params }: Props) {
       <PageHeader title={t('title')} />
       <p className="text-sm text-muted-foreground">{t('hint')}</p>
       <Suspense fallback={<ListSkeleton count={4} />}>
-        <ReviewData locale={locale} />
+        <ReviewData locale={locale} viewerId={user.id} />
       </Suspense>
     </main>
   );

@@ -83,6 +83,7 @@ export function PendingApprovalsCard({ rows, total, count, locale }: Props) {
       const res = await action();
       if (res.ok) {
         toast.success(successMsg);
+        if (res.warning) toast.warning(res.warning);
         router.refresh();
       } else {
         toast.error(res.error);

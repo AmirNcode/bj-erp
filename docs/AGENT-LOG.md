@@ -78,6 +78,176 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-20 — PR #10: merge main, owner review changes (finance pending, manager extension, fixes)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/travel-booking` @ `ad8cf49` (+ one uncommitted AGENT-LOG entry), worktree `.claude/worktrees/travel-booking`.
+**Trigger:** Owner brief: merge `main` (PR #9) into the branch, then make the PR #10 review changes; ask before pushing.
+
+**What changed**
+- `e27fa74` committed the previous session's log entry alone. `e19b3e4` merged `origin/main`: exactly the 9
+  expected conflicts, resolved as briefed (main's side for `(app)/layout.tsx` and the two nav tests; requests
+  page keeps `getTravelTicks()`/`travelTicks`; `RequestsReview` keeps `useLabels()` + `travelTicks` + `today`;
+  `approvals.ts` takes `perDiemProblem`/`signatureProblem` + `TravellerField`, `DecisionResult = { ok: true;
+  warning?: string } | DbErrorResult`; `progress.ts` `DbErrorResult` + `extensions`; docs keep both sides).
+  Only extra fix: `tests/unit/my-travel-note.test.tsx`, `requests-review-travel.test.tsx` dropped `labels` props
+  (tsc). Nav reads «تدارکات» via `nav.procurement` (`MainNav` `t(item.key)`); `manage/page.tsx` map already had it.
+- `b0d9446` finance: migration `20261020120007_finance_requests.sql` adds `public.finance_requests(from,to)`
+  (`has_perm finance read`): approved (any `travel_state`; costs as recorded), pending (+ `waiting_step`, first
+  open step's label: same filter as `app_request_approval_progress`, label as `progressLabel`), settled
+  cancelled trips. `finance_approved_requests` untouched. `lib/actions/finance.ts` calls it; `FinanceList.tsx`
+  two sections ("Fully approved" incl. settled cancellations / "Pending approval"), each with count / per diem
+  / total; "Waiting on: <step>" badge; "Booking not finished" marker; CSV = both sections, status column
+  (+ "Waiting on" column). `types.ts` hand-added `finance_requests`. Finance title/empty/permission text updated.
+  Call made: costs procurement saved on an unfinished booking show and count in the approved total.
+- `1d64388` `/manage/requests`: `viewerId` from the page; no travel switch / Cancel trip on own rows.
+- `97a3ceb` `Intl.ListFormat(locale, { type: 'conjunction' })` in `DecisionDialogs.tsx` and `TravelTickToggle.tsx`
+  (API checked in Context7 `/mdn/content`).
+- `d0b85c7` Reject extension confirm dialog (`ExtensionDecisionCard.tsx`, new `travel.extension.rejectTitle/
+  rejectBody`); migration `20261020120008_manager_own_trip_extension.sql`: own trip allowed for
+  `private.has_role(uid,'manager')` in `app_request_errand_extension` + `app_extendable_trips`.
+- `70e1e17` `travel.homeWaiting` ICU plural (fa `other` only, like `rolesAdmin.holders`); raw count in `TravelBookingCard`.
+- `ada98c3` **Security fix found by the automated review of `…08`:** a Head of HR holding Manager could
+  self-request an extension on their own HR-exempt trip, which auto-approves (nobody else involved). Migration
+  `20261020120009_own_extension_not_hr_exempt.sql` adds `private.request_has_hr_exemption(request)` and
+  excludes HR-exempt trips from the own-trip branch; their manager/admin still extends on the exempt path.
+  Proved: suite without `…09` fails at that case ("expected 42501, got ok").
+- Docs: `PERMISSIONS.md`, `DATA_MODEL.md`, `REQUIREMENTS.md` (FR-62 amended, FR-70), spec §6/§8 + new §11,
+  `TASKS.md` (the three deferred items: delegate on hr holder's own trip, unlocked status read in
+  `app_set_travel_booking`, extension approval after trip end), `CHANGELOG.md`.
+
+**Actions outside the repo**
+- Scratch DB `bj_travel` only (container `bj-erp-db-1`, `psql` as `supabase_admin`): dry-ran each new migration +
+  `tests/sql/travel-booking.sql` inside `begin … rollback`, then applied `…07`, `…08`, `…09` by `psql -1`
+  (no `bj_deploy.schema_migrations` rows, same as `…00`–`…06`). `schema.sql` dumped with `pg_dump -d bj_travel`.
+  Shared `postgres` DB, `bj-deploy`, Liara: untouched. Nothing pushed.
+
+**Verification**
+- After merge: tsc 0, lint 0, unit 941 passed / 5 skipped, build ok. `git merge-tree origin/main HEAD`: no conflicts.
+- Final: `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 99 files, 954 passed / 5 skipped ·
+  `npm run build` ok · `tests/sql/*.sql` on `bj_travel`: 8 suites, 991 PASS / 0 FAIL (travel-booking 195).
+- fa/en keys 1554 each; placeholder differences only the 3 pre-existing plural keys.
+- NOT done: browser walk-through (no app stack points at `bj_travel`); `test:deploy` not run (no deploy files).
+
+**State left behind**
+- 8 local commits on `codex/travel-booking` (plus this docs commit), **not pushed**; waiting for the owner.
+- `bj_travel` now has `…00`–`…09`.
+
+**Follow-up in the same session: the Head of HR's own trips (owner decision)**
+- Owner: the Head of HR must be able to extend their own trip; keep it simple — their trips skip HR at
+  every stage; self-approval accepted (they already sign their own requests as the CEO's delegate).
+- Migration `20261020120010_hr_head_own_trip.sql`: `app_set_travel_booking` also admits the requester
+  when `private.request_has_hr_exemption(request)`; `app_request_errand_extension` / `app_extendable_trips`
+  own-trip branch = Manager role **or** HR-exempt (exempt path applies at once); `app_extendable_trips`
+  dropped/recreated with `hr_exempt`. Replaces `…09`'s refusal (`…09` stays in history).
+- App: daily errand form shows «نیاز به رزرو سفر» to the Head of HR only (`perDiemAllowed`);
+  `submitDailyErrandRequest` ticks right after the submit RPC (warning `travelOwnTickNotSaved` if the tick
+  fails; `useRequestSubmit` shows a warning next to success); `ExtendTripDialog` says "applies at once" on
+  `hr_exempt` trips. Messages `travel.ownTickHint`, `travel.extension.bodyExempt`, `errors.travelOwnTickNotSaved`.
+- Tests: SQL section rewritten (self-extension exempt + audited, own tick, employee/manager own tick refused);
+  unit `daily-errand-own-travel.test.tsx`, cases in `hr-head-own-per-diem.test.tsx`, `extend-trip-dialog.test.tsx`.
+- `bj_travel`: dry-run then applied `…10`; all `tests/sql/*` 1002 PASS / 0 FAIL; `schema.sql` re-dumped.
+- Automated security review of `…10`: the self path trusted the exemption recorded at submission, so a
+  former Head of HR could still tick/extend those trips alone. Migration `…11` adds
+  `private.is_current_hr_head(uid, company)` to the self tick, the own-extension branch, the exempt
+  auto-apply on a self-request and `app_extendable_trips.hr_exempt`; a former Head of HR's own extension
+  (Manager role) now waits for HR. Proved: suite without `…11` fails ("former head cannot untick own trip:
+  expected 42501, got ok"). Applied to `bj_travel`; all `tests/sql/*` 1013 PASS / 0 FAIL.
+
+**Push and merge**
+- Pushed `codex/travel-booking` (owner's go-ahead). Automated push review flagged 3 older issues (`…04`–`…06`);
+  owner skipped all 3 for now, recorded in `docs/TASKS.md`. Owner then asked to merge PR #10 into `main`
+  (deploys to Liara with `…00`–`…11`) and delete the branch.
+
+**For the next agent**
+- `…07`–`…11` are frozen (applied to `bj_travel`). Fix forward with `…12`+.
+- In `tests/sql/travel-booking.sql`, sections after "owner review" change fixtures (mgr2 → mgr, proc2 → mgr2,
+  head gains Manager); add new sections after them or re-check.
+
+## 2026-10-20 — Travel booking committed, PR #10 opened and reviewed
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop), side session started by the PR #9 session
+**Branch / HEAD at start:** `codex/travel-booking` @ `ec52114` (73 files uncommitted, worktree `.claude/worktrees/travel-booking`)
+**Trigger:** Commit the FR-70 travel-booking work in logical commits, open a PR against `main` (no merge), then review it.
+
+**What changed**
+- Five commits: `2e219e1` spec + plan, `f8c75a1` migrations `20261020120000`–`…06` + `schema.sql` + `types.ts` +
+  catalog + `tests/sql`, `e2e0a9d` server actions + `lib/travel/*` + nav, `23ee716` screens + messages + UI tests,
+  `ad8cf49` docs. Pushed; opened [PR #10](https://github.com/AmirNcode/bj-erp/pull/10). Not merged.
+- Review only, no code changed.
+
+**Actions outside the repo**
+- `git push -u origin codex/travel-booking`; `gh pr create` (PR #10). No DB or server actions.
+
+**Verification**
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 943 passed / 5 skipped · `npm run build` ok.
+  `test:deploy` not run (no deploy files changed). `tests/sql/*` not re-run (needs scratch DB `bj_travel`).
+- fa/en message keys match (1544 each); no new placeholder mismatches.
+- `git merge-tree origin/main HEAD`: 9 conflicts after PR #9 — `(app)/layout.tsx`, `manage/requests/RequestsReview.tsx`,
+  `manage/requests/page.tsx`, `lib/actions/leave/approvals.ts`, `lib/actions/leave/progress.ts`,
+  `tests/unit/main-nav.test.tsx`, `tests/unit/page-refresh-button.test.tsx`, `docs/AGENT-LOG.md`, `docs/CHANGELOG.md`.
+
+**Review findings (none fixed; waiting on the owner)**
+- Medium: `private.acts_as_travel_hr`/`is_travel_hr` (`…06`) let an hr holder's approval delegate tick, cancel
+  and decide extensions on that hr holder's **own** trip (only `employee_id <> delegate` is checked) — delegated
+  self-signing, which `docs/PERMISSIONS.md` forbids.
+- A ticked trip (and one with a newly approved extension) is hidden from `/finance`, per diem included, until
+  procurement presses «رزرو شد»; nothing surfaces trips procurement never finishes.
+- `app_decide_errand_extension` does not check the trip end date, so HR can approve after the trip ended.
+- `app_set_travel_booking` reads status without a lock: ticking at the moment of final approval can leave
+  `opened_at` null for good (narrow race).
+- Cosmetic: tick switch shows on HR's own request and then errors; English missing-fields list joined with «،»;
+  reject extension has no confirm; `travel.homeWaiting` has no plural ("1 trips").
+
+**State left behind**
+- PR #10 open, conflicting with `main`. This log entry uncommitted until the owner approves.
+- Scratch DB `bj_travel` (from the building session) still exists.
+
+**For the next agent**
+- Merge `main` into the branch before anything else; the owner resolves or approves conflict resolution.
+
+## 2026-10-20 — Travel booking (procurement → finance) design draft
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** `codex/per-diem-wording` @ `ec52114` (other agents' uncommitted work in tree, untouched)
+**Trigger:** HR wants out-of-town errands routed to procurement (flight/hotel) and then finance; flesh the idea out before any code.
+
+- Drafted HR questions, then mapped HR/administration's answers and the owner's decisions into
+  `docs/specs/2026-10-20-travel-booking-design.md` (FR-70 placeholder). Key decisions: HR ticks
+  «نیاز به رزرو سفر» on daily errands; booking is fulfilment after approval, not an approval step;
+  new `travel_booking` catalog item + Procurement preset; live personal info (5-field placeholder);
+  manager-initiated extension edits end date, HR alone re-approves; cancellation always returns to
+  procurement for the amount lost, which alone shows on `/finance`.
+- Builder-check subagent raised six questions; five folded in as marked "my call" items
+  (no `can_act_on`, no self-booking, booking opens at chain end, original end date kept, delegation
+  not extended). Owner then settled the Head of HR's own extension: exempt, no signature, per diem unchanged.
+  Only open item: personal-info field list, pending procurement.
+- Owner approved the spec; wrote `docs/plans/2026-10-20-travel-booking.md` (7 tasks, 6 migrations
+  `20261020120000`–`…06`, one `tests/sql/travel-booking.sql`). Design calls made in the plan:
+  booking state derived from request status + timestamps; HR's tick saved by a separate RPC right
+  after approval; pending-extension days conflict-checked at request and again at HR approval (not
+  in `submit_leave_impl`). Added a coordination section for the parallel `docs/REFACTOR_PLAN.md` work
+  (R-03/05/06/07/09/10/12) after the owner said another agent is refactoring.
+- Owner chose inline execution. Built FR-70 in worktree `.claude/worktrees/travel-booking`, branch
+  `codex/travel-booking` from `ec52114` (spec + plan moved there; main checkout's copies removed and its
+  AGENT-LOG hunk reverted). Six migrations `20261020120000`–`…06`; `tests/sql/travel-booking.sql`
+  (143 assertions); 13 new unit test files. Ledger with every ruling:
+  `.superpowers/sdd/2026-10-20-travel-booking/progress.md` (git-ignored).
+- **Out-of-repo DB action:** created scratch database `bj_travel` inside container `bj-erp-db-1`
+  (`pg_dump -Fc postgres | pg_restore`, only pg_cron/graphql objects failed) and applied the six
+  migrations there by `psql` as `supabase_admin`. The shared `postgres` DB (real roster) was NOT
+  touched; `bj-deploy update local` NOT run; Liara untouched. `schema.sql` dumped from `bj_travel`
+  (pg_dump reorders a few GRANT lines — noise). Drop `bj_travel` when done: `dropdb -U supabase_admin bj_travel`.
+- Verified: all 8 `tests/sql/*.sql` scenarios 939 PASS / 0 FAIL on `bj_travel` (updated 5 count checks in
+  `fr55-roles-permissions.sql`: 7 roles, 21 keys); `npm run test:unit` 941 passed / 5 skipped; `tsc` 0;
+  `npm run lint` 0; `npm run build` ok. NOT done: manual browser walk-through (no app stack on `bj_travel`).
+- Final review (fresh reviewer): 0 critical, 5 important — all fixed in migration `20261020120006`
+  + UI (HR delegates act as HR; failed post-approval tick is a warning; manager sees delegation warning;
+  traveller note survives re-booking; company-car cost trap). Also added `notify pgrst, 'reload schema'`
+  (the release recreates only `app`). 9 minors deferred (listed in the ledger). After fixes: SQL 950/950,
+  unit 943 passed, tsc/lint/build ok.
+- Nothing committed (CLAUDE.md). Traveller field list is still the placeholder pending procurement.
+
 ## 2026-10-20 — Review and merge of PR #9 (refactor plan)
 
 **Agent:** Claude Opus 5.5 via Claude Code

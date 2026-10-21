@@ -15,7 +15,7 @@ test database). They do not claim production release.
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
 | **security** | Security department staff. **Read-only** visibility into **everyone's** calendar, and the approved-absences board (`/absences`, FR-56). **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
-| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only. *(FR-54; added 2026-10-07.)* |
+| **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only; since 2026-10-20 (owner review of FR-70) also pending requests, through `finance_requests()`. *(FR-54; added 2026-10-07.)* |
 | **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
 | **Custom roles** (FR-55) | Created by the admin in Settings › Roles: an English name and a level per catalog item (Allowed / Read only / Not allowed). Assignable like any role; see *Configurable roles (FR-55)* below. Not approval-step roles (`approval_steps.role` stays on the `app_role` enum). |
 
@@ -255,7 +255,11 @@ information").
   `approval_order_enforced` without `approval_steps` edit.
 - `public.finance_approved_requests(from, to)`: SECURITY DEFINER, requires an active caller with
   `finance` read (alias `finance.view`); caller's company; approved rows only; no signatures, no
-  reason.
+  reason. Kept unchanged for the previous app during a release; the app now calls:
+- `public.finance_requests(from, to)` (migration `20261020120007`): SECURITY DEFINER, active caller with
+  `finance` read (`private.has_perm`); caller's company; approved and **pending** rows, plus settled
+  cancelled travel trips. A pending row carries only `waiting_step`, the label of the first open step
+  (`manager`, `departmentManager`, `hr`, …): no approver or signer names, no signatures, no reason.
 - The approved-absences board (`getAbsences`) needs `absences` read; rows come through
   `leave_requests_select`, hence the dependency on `people` and `leave_requests`.
 
@@ -488,6 +492,7 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | | `absences` | R | `people`, `leave_requests` |
 | | `reports` | R | `people`, `leave_balances`, `leave_requests` |
 | Finance | `finance` | R | — |
+| Procurement | `travel_booking` | E (Yes/No) | — |
 | Approval chain | `approval_steps` | R/E | `people` |
 | | `approval_delegate` (unreleased) | E, Yes/No | — |
 | Settings | `work_settings` | R/E | — |
@@ -500,6 +505,7 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `absences`, `reports`, `finance` at read |
 | **Security** | `people`, `leave_balances`, `leave_requests`, `calendar`, `absences` at read |
 | **Finance** | `clearance`, `finance` at read |
+| **Procurement** (FR-70) | `travel_booking` at edit |
 
 `personal_info_own`, `role_assign` and unreleased `approval_delegate` are on no preset. The released
 catalog has 19 items; delegation adds the twentieth. `passwords` was
@@ -564,6 +570,7 @@ their holders.
 |---|---|
 | Employees / Departments / Request archive / Approval steps / Reports pages | `manager` or `people` read · `departments` read · `leave_requests` read · `approval_steps` read · `reports` read |
 | Finance page | `finance` read (a Manage item for callers who already have the Manage group, else a bottom tab) |
+| Procurement page (FR-70) | `travel_booking` edit (same tab/Manage rule as Finance) |
 | Settings | admin, or `work_settings` read, or `holidays` read; unreleased delegate holders also reach their own Roles-tab panel, while role authoring stays admin-only |
 | `app_list_roles()` | any active member (the employee forms render the role boxes) |
 | `app_role_holders`, `app_save_role`, `app_delete_role`, `app_transfer_admin` | admin only |
@@ -715,3 +722,33 @@ because the client's own BJ-F 50210 / 50208 / 50207 forms already carry an
 actual signature evidence. The unreleased app calls the guarded `_v2` exact-step RPC; automatic
 CEO decisions happen only inside submission (private path, immutable authority evidence), not
 through an unsigned browser approval endpoint.
+
+## Travel booking (FR-70, 2026-10-20, unreleased)
+
+- `travel_bookings` and `errand_extensions`: RLS enabled, **no policies**, all client privileges revoked.
+- **Tick / untick / cancel a travel trip / decide extensions** — `private.is_travel_hr(uid, request)`:
+  active, same company, not the requester, and admin, an `hr` role holder, or the current effective
+  approval delegate of an active `hr` holder (`private.acts_as_travel_hr`, migration 06). Cancelling goes through
+  `cancel_leave_request`, which admits this branch only when the request has a `travel_bookings` row
+  (HR still cannot cancel other requests: the hr preset holds `leave_requests` at read).
+- **Book / settle / read traveller details** — `private.is_procurement(uid, request)`: active, same
+  company, not the requester, and admin or `travel_booking` edit. **Deliberately no
+  `private.can_act_on`**: procurement must book for the CEO, the Head of HR or the admin. No
+  self-booking: own trips are excluded from the list and refused by every booking RPC.
+- Traveller details (only `travel_traveller_fields()`) are returned only while the booking is open
+  (`to_book`, `extension`, `cancel_undo`, or `done` before the trip ends).
+- **Request an extension** — the requester's direct manager (`profiles.manager_id`) or the admin; on
+  their **own** trip a holder of the built-in Manager role (`private.has_role(uid, 'manager')`,
+  migration `20261020120008`; HR decides, `is_travel_hr` excludes the traveller), or the Head of HR
+  (`private.request_has_hr_exemption(request)`, migration `…10`). A manager's direct reports never
+  extend the manager's trip.
+- **The Head of HR's own trip** (HR step exempt at submission, FR-68) skips HR at every stage
+  (owner, 2026-10-20): they tick «نیاز به رزرو سفر» themselves (`app_set_travel_booking`, from the
+  daily errand form right after submission), and their own extension is applied at once on the exempt
+  path (no HR signature, per diem unchanged). This is accepted self-approval, like their own requests,
+  which they also sign as the CEO's delegate. Migration `…09` had refused it; `…10` replaces that.
+  The self path also needs the caller to be the Head of HR **today** (`private.is_current_hr_head`,
+  `approval_executive_settings.hr_head_id`, migration `…11`): once someone else is named, a former Head
+  of HR cannot tick their old trips, and their own extension (with the Manager role) waits for HR. Extension history: `request_errand_extensions(id)` behind
+  `private.can_read_approval_request`.
+- The traveller reads only transport and note of their own booked trips (`my_travel_bookings()`).

@@ -36,6 +36,7 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { HomeBoard, type PulseCards } from './HomeBoard';
 import { ProfileReminderCard } from './ProfileReminderCard';
 import { ClearanceAwaitingCard } from './ClearanceAwaitingCard';
+import { TravelBookingCard } from './TravelBookingCard';
 import { createClient } from '@/lib/supabase/server';
 import type { PendingRow } from './PendingApprovalsCard';
 import { NewRequestsBanner } from '../_components/NewRequestsBanner';
@@ -218,6 +219,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         canOverride: r.can_override,
         perDiemNatural: r.per_diem_natural,
         perDiemOverride: r.per_diem_override,
+        travel: r.travel,
       },
     };
   });
@@ -359,6 +361,9 @@ export default async function HomePage({ params, searchParams }: Props) {
       </Suspense>
       <Suspense fallback={null}>
         <ClearanceAwaitingCard locale={locale} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <TravelBookingCard locale={locale} userId={user.id} />
       </Suspense>
       <Suspense fallback={null}>
         <SecurityAbsences locale={locale} userId={user.id} rawDate={date} />

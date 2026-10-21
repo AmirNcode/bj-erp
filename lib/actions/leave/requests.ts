@@ -43,8 +43,9 @@ export type SubmitRequestInput = DelegationSubmissionInput & {
   signatureAuthorized: boolean;
 };
 
+/** `warning`: the request is saved but a follow-up step (FR-70 travel tick) was not. */
 export type SubmitRequestResult =
-  | { ok: true; requestId: string }
+  | { ok: true; requestId: string; warning?: string }
   | DbErrorResult;
 
 export async function submitRequest(
@@ -210,6 +211,8 @@ export type SubmitDailyErrandInput = DelegationSubmissionInput & {
   signatureAuthorized: boolean;
   /** Whole Rials. Only the designated Head of HR may send it, for their own errand (the DB checks). */
   perDiemRials?: number | null;
+  /** FR-70: «نیاز به رزرو سفر». Only the Head of HR may tick their own trip (the DB checks). */
+  travelBooking?: boolean;
 };
 
 export async function submitDailyErrandRequest(
@@ -237,7 +240,14 @@ export async function submitDailyErrandRequest(
   if (error) return dbErr(error.message);
 
   invalidateAppCache();
-  return { ok: true, requestId: data as string };
+  const requestId = data as string;
+  if (input.travelBooking) {
+    // A separate call, as on HR's approval: the request stands even if this fails,
+    // and HR can tick it later from the Requests page.
+    const { error: tickError } = await c.supabase.rpc('app_set_travel_booking', { p_request: requestId, p_on: true });
+    if (tickError) return { ok: true, requestId, warning: (await dbErr('own travel booking not saved')).error };
+  }
+  return { ok: true, requestId };
 }
 
 /**

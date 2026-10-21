@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
+import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { parseRials } from '@/lib/leave/perDiem';
+import type { TravellerField } from '@/lib/travel/fields';
 import type { ApprovalChoice } from '@/lib/leave/approval-context';
 import { nativeSelectClass } from '@/lib/native-select';
 import { Label } from '@/components/ui/label';
@@ -57,9 +59,55 @@ export type ApproveOptions = {
   perDiemNatural: boolean;
   perDiemOverride: boolean;
   steps?: ApprovalChoice[];
+  /**
+   * FR-70: a daily errand whose HR step may mark «نیاز به رزرو سفر». Shown with the
+   * per diem field; `missingFields` are the traveller details still empty.
+   */
+  travel?: { employeeId: string; missingFields: TravellerField[] } | null;
 };
 
-export type ApproveExtras = { override: boolean; perDiemRials: number | null; stepId: string | null };
+export type ApproveExtras = {
+  override: boolean;
+  perDiemRials: number | null;
+  stepId: string | null;
+  /** FR-70: HR marked the trip as needing travel booking. */
+  travelBooking: boolean;
+};
+
+function TravelBookingBox({ id, travel, checked, onChange }: {
+  id: string;
+  travel: NonNullable<ApproveOptions['travel']>;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const t = useTranslations('travel');
+  const locale = useLocale();
+  return (
+    <div className="space-y-1.5 text-start">
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1 size-4"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          data-testid={`travel-booking-${id}`}
+        />
+        <span>
+          <span className="font-medium">{t('tickLabel')}</span>
+          <span className="block text-xs text-muted-foreground">{t('tickHint')}</span>
+        </span>
+      </label>
+      {checked && travel.missingFields.length > 0 && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status" data-testid={`travel-missing-${id}`}>
+          {t('missingWarning', { fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(travel.missingFields.map((f) => t(`fields.${f}`))) })}{' '}
+          <Link href={`/${locale}/manage/employees/${travel.employeeId}`} className="font-medium underline">
+            {t('missingLink')}
+          </Link>
+        </p>
+      )}
+    </div>
+  );
+}
 
 function StepChoice({ id, steps, value, onChange }: {
   id: string; steps: ApprovalChoice[]; value: string; onChange: (id: string) => void;
@@ -111,6 +159,7 @@ export function ApproveDialog({
   const [validationError, setValidationError] = useState('');
   const [overrideChecked, setOverrideChecked] = useState(false);
   const [perDiem, setPerDiem] = useState('');
+  const [travelBooking, setTravelBooking] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState('');
   const selectedStep = options?.steps?.find((step) => (step.stepId ?? '') === selectedStepId) ?? options?.steps?.[0];
 
@@ -119,6 +168,7 @@ export function ApproveDialog({
   const overrideOnly = !!options?.canOverride && !options.hasNaturalStep;
   const override = overrideOnly || (!!options?.canOverride && overrideChecked);
   const showPerDiem = override ? !!options?.perDiemOverride : (selectedStep?.perDiem ?? !!options?.perDiemNatural);
+  const showTravel = showPerDiem && !!options?.travel;
 
   return (
     <AlertDialog
@@ -129,6 +179,7 @@ export function ApproveDialog({
           setValidationError('');
           setOverrideChecked(false);
           setPerDiem('');
+          setTravelBooking(false);
           setSelectedStepId(options?.steps?.[0]?.stepId ?? '');
         }
       }}
@@ -183,6 +234,9 @@ export function ApproveDialog({
             <p className="text-xs text-muted-foreground">{t('perDiemHint')}</p>
           </div>
         )}
+        {showTravel && options?.travel && (
+          <TravelBookingBox id={id} travel={options.travel} checked={travelBooking} onChange={setTravelBooking} />
+        )}
         <RequestSignatureFields
           idPrefix={`approval-${id}`}
           value={signatureData}
@@ -219,7 +273,10 @@ export function ApproveDialog({
                   return;
                 }
               }
-              onApprove(signatureData, signatureAuthorized, { override, perDiemRials, stepId: override ? null : selectedStep?.stepId ?? null });
+              onApprove(signatureData, signatureAuthorized, {
+                override, perDiemRials, stepId: override ? null : selectedStep?.stepId ?? null,
+                travelBooking: showTravel && travelBooking,
+              });
             }}
             data-testid={`approve-confirm-${id}`}
           >

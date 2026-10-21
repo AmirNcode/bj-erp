@@ -16,6 +16,8 @@ import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
+import { TripExtensions } from './TripExtensions';
+import { listExtendableTrips, listPendingExtensions } from '@/lib/actions/travel';
 import { NewRequestsBanner } from '../../_components/NewRequestsBanner';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -30,9 +32,11 @@ async function ApprovalsData({ locale }: { locale: string }) {
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
-  const [result, workSettingsRes] = await Promise.all([
+  const [result, workSettingsRes, extendableTrips, pendingExtensions] = await Promise.all([
     getPendingApprovals(),
     getWorkSettings(),
+    listExtendableTrips(),
+    listPendingExtensions(),
   ]);
   const requests = result.ok ? result.requests : [];
   const loadError = result.ok ? null : result.error;
@@ -53,6 +57,7 @@ async function ApprovalsData({ locale }: { locale: string }) {
         locale={locale}
         hoursPerDay={hoursPerDay}
       />
+      <TripExtensions trips={extendableTrips} pending={pendingExtensions} locale={locale} />
     </>
   );
 }

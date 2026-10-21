@@ -128,7 +128,7 @@ export function PermissionSection({
                   </div>
                 )}
               </div>
-              {k === 'approval_delegate' ? (
+              {k === 'approval_delegate' || k === 'travel_booking' ? (
                 <ToggleGroup.Root
                   type="single"
                   value={level === 'edit' ? 'edit' : 'none'}

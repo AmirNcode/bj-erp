@@ -34,6 +34,7 @@ import { formatRials } from '@/lib/leave/perDiem';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatNumber, formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { PrintToolbar } from './PrintToolbar';
+import { printedTripDates } from '@/lib/travel/extensions';
 
 type Props = { params: Promise<{ locale: string; id: string }> };
 
@@ -69,6 +70,7 @@ export default async function PrintRequestPage({ params }: Props) {
   setRequestLocale(locale);
 
   const t = await getTranslations('print');
+  const tx = await getTranslations('travel.extension');
   const te = await getTranslations('approvalEvidence');
   const ts = await getTranslations('approvals.steps');
   const tLeave = await getTranslations('leave');
@@ -99,6 +101,7 @@ export default async function PrintRequestPage({ params }: Props) {
   }
 
   const r = result.request;
+  const trip = printedTripDates(r.end_date, r.extensions ?? []);
   const form = paperFormFor(r.kind, r.unit);
   const isErrand = r.kind === 'errand';
   const isHourly = r.unit === 'hour';
@@ -245,10 +248,15 @@ export default async function PrintRequestPage({ params }: Props) {
                 ) : (
                   <>
                     <Cell label={t('fields.from')} value={date(r.start_date)} className="border-0 border-b border-e" />
-                    <Cell label={t('fields.to')} value={date(r.end_date)} className="border-0 border-b" />
+                    <Cell label={t('fields.to')} value={date(trip.signedEnd)} className="border-0 border-b" />
                   </>
                 )}
               </div>
+              {trip.extended.map((e) => (
+                <div key={e.date} className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-extension">
+                  {tx('printLine', { date: date(e.date), reason: e.reason })}
+                </div>
+              ))}
               {r.per_diem_rials != null && (
                 <div className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-per-diem">
                   <span className="text-[10px] text-neutral-700">{t('fields.perDiem')} :</span>{' '}

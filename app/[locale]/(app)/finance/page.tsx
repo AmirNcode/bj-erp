@@ -1,9 +1,10 @@
 /**
- * Completed approvals for finance (FR-62) — finance read (FR-55: the finance and
- * hr presets; the admin implicitly).
+ * Requests for finance (FR-62) — finance read (FR-55: the finance and hr
+ * presets; the admin implicitly).
  *
- * Every fully approved request overlapping a Jalali month range, with the per
- * diem HR entered on errands, a total, and a CSV export. The range is a URL
+ * Every approved and pending request overlapping a Jalali month range, in two
+ * sections with their own totals, with the per diem HR entered on errands and
+ * FR-70 travel costs, and a CSV export of both. The range is a URL
  * parameter like the reports screen's, defaulting to the current month.
  */
 

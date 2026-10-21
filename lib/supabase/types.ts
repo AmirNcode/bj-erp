@@ -1507,6 +1507,73 @@ export type Database = {
         Args: { p_ceo_id: string | null; p_hr_head_id: string | null; p_hr_step_ids: string[] }
         Returns: undefined
       }
+      // FR-70 travel booking.
+      app_set_travel_booking: {
+        Args: { p_request: string; p_on: boolean }
+        Returns: undefined
+      }
+      app_travel_missing_fields: {
+        Args: { p_request: string }
+        Returns: string[]
+      }
+      app_travel_ticks: {
+        Args: Record<PropertyKey, never>
+        Returns: { request_id: string; started: boolean }[]
+      }
+      app_travel_bookings: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          request_id: string; serial_year: number; serial_seq: number; employee_name: string
+          personnel_no: string | null; department_name_fa: string | null; department_name_en: string | null
+          errand_location: string | null; start_date: string; end_date: string; state: string
+          transport: string | null; flight_cost_rials: number | null; hotel_cost_rials: number | null
+          lost_rials: number | null; done_at: string | null
+        }[]
+      }
+      app_travel_booking: {
+        Args: { p_request: string }
+        Returns: Json
+      }
+      app_save_travel_booking: {
+        Args: { p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null; p_note: string; p_done: boolean }
+        Returns: undefined
+      }
+      my_travel_bookings: {
+        Args: Record<PropertyKey, never>
+        Returns: { request_id: string; transport: string | null; traveller_note: string | null }[]
+      }
+      app_extendable_trips: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          request_id: string; serial_year: number; serial_seq: number; employee_name: string
+          errand_location: string | null; start_date: string; end_date: string; pending_extension: boolean
+          delegation_uncovered: boolean; hr_exempt: boolean
+        }[]
+      }
+      app_request_errand_extension: {
+        Args: { p_request: string; p_new_end: string; p_reason: string }
+        Returns: string
+      }
+      app_pending_errand_extensions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          extension_id: string; request_id: string; serial_year: number; serial_seq: number
+          employee_name: string; errand_location: string | null; start_date: string; old_end_date: string
+          new_end_date: string; reason: string; requested_by_name: string; per_diem_rials: number | null
+          delegation_uncovered: boolean
+        }[]
+      }
+      app_decide_errand_extension: {
+        Args: { p_extension: string; p_approve: boolean; p_signature_data: string | null; p_signature_authorized: boolean; p_per_diem_rials?: number | null; p_note?: string }
+        Returns: undefined
+      }
+      request_errand_extensions: {
+        Args: { p_id: string }
+        Returns: {
+          old_end_date: string; new_end_date: string; reason: string; status: string; evidence: string | null
+          requested_by_name: string; decided_by_name: string | null; decided_at: string | null
+        }[]
+      }
       app_request_delegation_preview: {
         Args: { p_start: string; p_end: string; p_unit?: 'day' | 'hour'; p_day_part?: 'full' | 'am' | 'pm'; p_start_time?: string; p_end_time?: string; p_replacement_id?: string }
         Returns: Json
@@ -1827,7 +1894,51 @@ export type Database = {
           per_diem_rials: number | null
           per_diem_by_requester: boolean
           decided_at: string | null
+          status: Database["public"]["Enums"]["leave_status"]
+          travel_state: string | null
+          transport: string | null
+          flight_cost_rials: number | null
+          hotel_cost_rials: number | null
+          lost_rials: number | null
         }[]
+      }
+      finance_requests: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          id: string
+          serial_year: number
+          serial_seq: number
+          kind: Database["public"]["Enums"]["request_kind"]
+          employee_name: string
+          personnel_no: string | null
+          department_name_fa: string | null
+          department_name_en: string | null
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          is_paid: boolean | null
+          start_date: string
+          end_date: string
+          unit: Database["public"]["Enums"]["leave_unit"]
+          start_time: string | null
+          end_time: string | null
+          requested_minutes: number
+          unpaid_minutes: number
+          errand_location: string | null
+          per_diem_rials: number | null
+          per_diem_by_requester: boolean
+          decided_at: string | null
+          status: Database["public"]["Enums"]["leave_status"]
+          travel_state: string | null
+          transport: string | null
+          flight_cost_rials: number | null
+          hotel_cost_rials: number | null
+          lost_rials: number | null
+          waiting_step: string | null
+        }[]
+      }
+      app_settle_travel_booking: {
+        Args: { p_request: string; p_lost: number; p_note: string }
+        Returns: undefined
       }
       compute_requested_minutes: {
         Args: {
@@ -1983,7 +2094,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "security" | "hr" | "finance"
+      app_role: "admin" | "manager" | "employee" | "security" | "hr" | "finance" | "procurement"
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
       leave_unit: "day" | "hour"
@@ -2122,7 +2233,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "security", "hr", "finance"],
+      app_role: ["admin", "manager", "employee", "security", "hr", "finance", "procurement"],
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
       leave_unit: ["day", "hour"],

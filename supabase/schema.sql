@@ -50,7 +50,8 @@ CREATE TYPE public.app_role AS ENUM (
     'employee',
     'security',
     'hr',
-    'finance'
+    'finance',
+    'procurement'
 );
 
 
@@ -119,6 +120,26 @@ CREATE TYPE public.request_kind AS ENUM (
     'leave',
     'errand'
 );
+
+
+--
+-- Name: acts_as_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.acts_as_travel_hr(p_uid uuid, p_company uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_uid is not null and private.is_active(p_uid)
+     and exists (select 1 from public.profiles c where c.id = p_uid and c.company_id = p_company)
+     and (private.is_admin(p_uid) or private.has_role(p_uid, 'hr')
+          or exists (
+            select 1 from public.user_roles ur
+              join public.profiles h on h.id = ur.user_id and h.company_id = p_company and h.active
+             where ur.role = 'hr'
+               and exists (select 1 from private.effective_approval_delegate(ur.user_id) d
+                            where d.delegate_id = p_uid)));
+$$;
 
 
 --
@@ -215,6 +236,48 @@ begin
   end loop;
   perform set_config('bj.separation_apply', 'off', true);
   return v_count;
+end; $$;
+
+
+--
+-- Name: apply_errand_extension(uuid, uuid, text, text, bigint, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.apply_errand_extension(p_extension uuid, p_actor uuid, p_evidence text, p_signature_data text, p_per_diem bigint, p_note text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  e public.errand_extensions%rowtype;
+  r public.leave_requests%rowtype;
+  v_now timestamptz := clock_timestamp();
+begin
+  select * into e from public.errand_extensions where id = p_extension for update;
+  select * into r from public.leave_requests where id = e.request_id for update;
+  if private.extension_overlaps(r.id, r.employee_id, e.old_end_date + 1, e.new_end_date) then
+    raise exception 'overlapping leave request exists' using errcode = '22023';
+  end if;
+  update public.errand_extensions
+     set status = 'approved', evidence = p_evidence, decided_by = p_actor, decided_at = v_now,
+         signature_data = p_signature_data,
+         signature_consent_at = case when p_signature_data is not null then v_now end,
+         decision_note = nullif(btrim(coalesce(p_note, '')), ''),
+         per_diem_before = r.per_diem_rials,
+         per_diem_after = coalesce(p_per_diem, r.per_diem_rials)
+   where id = p_extension;
+  update public.leave_requests
+     set end_date = e.new_end_date,
+         requested_minutes = public.compute_requested_minutes(r.company_id, r.start_date, e.new_end_date,
+                               'full', 'day', null, null, 'errand'),
+         per_diem_rials = coalesce(p_per_diem, per_diem_rials),
+         per_diem_by_requester = case when p_per_diem is not null then false else per_diem_by_requester end
+   where id = r.id;
+  update public.travel_bookings set done_at = null, done_by = null, updated_at = now() where request_id = r.id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (p_actor, 'errand_extension.approve', 'leave_requests', r.id,
+          jsonb_build_object('end_date', e.old_end_date, 'per_diem_rials', r.per_diem_rials),
+          jsonb_build_object('end_date', e.new_end_date, 'evidence', p_evidence, 'extension_id', p_extension,
+                             'per_diem_rials', coalesce(p_per_diem, r.per_diem_rials)));
 end; $$;
 
 
@@ -1314,6 +1377,27 @@ end; $$;
 
 
 --
+-- Name: extension_overlaps(uuid, uuid, date, date); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.extension_overlaps(p_request uuid, p_employee uuid, p_start date, p_end date) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (
+      select 1 from public.leave_requests r
+       where r.employee_id = p_employee and r.id <> p_request
+         and r.status in ('pending', 'approved')
+         and r.start_date <= p_end and r.end_date >= p_start)
+    or exists (
+      select 1 from public.errand_extensions e
+        join public.leave_requests r on r.id = e.request_id
+       where r.employee_id = p_employee and e.request_id <> p_request and e.status = 'pending'
+         and e.old_end_date + 1 <= p_end and e.new_end_date >= p_start);
+$$;
+
+
+--
 -- Name: finalize_approval_request(uuid, uuid, text, timestamp with time zone, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1514,6 +1598,19 @@ COMMENT ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date) I
 
 
 --
+-- Name: is_current_hr_head(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.approval_executive_settings x
+                  where x.company_id = p_company and x.hr_head_id = p_uid);
+$$;
+
+
+--
 -- Name: is_department_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1545,6 +1642,37 @@ CREATE FUNCTION private.is_manager_of(uid uuid, target uuid) RETURNS boolean
         where caller.id = uid
           and employee.manager_id = uid
      );
+$$;
+
+
+--
+-- Name: is_procurement(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_procurement(p_uid uuid, p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_uid is not null and private.is_active(p_uid)
+     and exists (
+       select 1 from public.leave_requests r
+         join public.profiles c on c.id = p_uid and c.company_id = r.company_id
+        where r.id = p_request and r.employee_id <> p_uid)
+     and (private.is_admin(p_uid) or private.has_perm(p_uid, 'travel_booking', 'edit'));
+$$;
+
+
+--
+-- Name: is_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_travel_hr(p_uid uuid, p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.leave_requests r
+                  where r.id = p_request and r.employee_id <> p_uid
+                    and private.acts_as_travel_hr(p_uid, r.company_id));
 $$;
 
 
@@ -1692,7 +1820,7 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     AS $$
   select case
     when p_key in ('people_create','role_manager','role_assign','leave_accrual',
-      'personal_info_own','special_leave','approval_delegate') then p_level = 'edit'
+      'personal_info_own','special_leave','approval_delegate','travel_booking') then p_level = 'edit'
     when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
       'leave_requests','approval_steps','work_settings','holidays') then p_level in ('read','edit')
@@ -1733,7 +1861,7 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
   select unnest(array['people','people_create','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
     'special_leave','leave_requests','calendar','reports','absences','approval_steps','approval_delegate',
-    'work_settings','holidays','finance']);
+    'work_settings','holidays','finance','travel_booking']);
 $$;
 
 
@@ -1878,6 +2006,19 @@ $$;
 
 
 --
+-- Name: request_has_hr_exemption(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_has_hr_exemption(p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.approval_request_policy x
+                  where x.request_id = p_request and cardinality(x.hr_exempt_step_ids) > 0);
+$$;
+
+
+--
 -- Name: request_hr_exempt(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2004,7 +2145,8 @@ begin
   insert into public.roles (company_id, system_key, kind, name) values
     (p_company, 'admin', 'system', 'Admin'), (p_company, 'manager', 'system', 'Manager'),
     (p_company, 'employee', 'system', 'Employee'), (p_company, 'hr', 'preset', 'HR'),
-    (p_company, 'security', 'preset', 'Security'), (p_company, 'finance', 'preset', 'Finance')
+    (p_company, 'security', 'preset', 'Security'), (p_company, 'finance', 'preset', 'Finance'),
+    (p_company, 'procurement', 'preset', 'Procurement')
   on conflict do nothing;
 
   insert into public.role_permissions (role_id, permission, level)
@@ -2020,7 +2162,8 @@ begin
       ('security','people','read'), ('security','leave_balances','read'),
       ('security','leave_requests','read'), ('security','calendar','read'),
       ('security','absences','read'),
-      ('finance','clearance','read'), ('finance','finance','read')
+      ('finance','clearance','read'), ('finance','finance','read'),
+      ('procurement','travel_booking','edit')
     ) as v(system_key, permission, level) on r.system_key = v.system_key::public.app_role
    where r.company_id = p_company
   on conflict do nothing;
@@ -2474,6 +2617,126 @@ begin
 
   return v_req;
 end;
+$$;
+
+
+--
+-- Name: travel_booking_first_done(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_booking_first_done() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.done_at is not null and new.first_done_at is null then new.first_done_at := new.done_at; end if;
+  return new;
+end; $$;
+
+
+--
+-- Name: travel_booking_open(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_booking_open() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if new.status = 'approved' and old.status is distinct from 'approved' then
+    update public.travel_bookings
+       set opened_at = coalesce(opened_at, clock_timestamp()), updated_at = now()
+     where request_id = new.id;
+  end if;
+  return new;
+end; $$;
+
+
+--
+-- Name: travel_booking_open_for_details(text, date); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_booking_open_for_details(p_state text, p_end date) RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select p_state in ('to_book', 'extension', 'cancel_undo')
+      or (p_state = 'done' and p_end >= (now() at time zone 'Asia/Tehran')::date);
+$$;
+
+
+--
+-- Name: travel_bookings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.travel_bookings (
+    request_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    ticked_by uuid,
+    ticked_at timestamp with time zone DEFAULT now() NOT NULL,
+    opened_at timestamp with time zone,
+    transport text,
+    flight_cost_rials bigint,
+    hotel_cost_rials bigint,
+    traveller_note text,
+    first_saved_at timestamp with time zone,
+    done_by uuid,
+    done_at timestamp with time zone,
+    lost_rials bigint,
+    lost_note text,
+    settled_by uuid,
+    settled_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    first_done_at timestamp with time zone,
+    CONSTRAINT travel_bookings_flight_cost_rials_check CHECK ((flight_cost_rials >= 0)),
+    CONSTRAINT travel_bookings_hotel_cost_rials_check CHECK ((hotel_cost_rials >= 0)),
+    CONSTRAINT travel_bookings_lost_note_check CHECK ((char_length(lost_note) <= 500)),
+    CONSTRAINT travel_bookings_lost_rials_check CHECK ((lost_rials >= 0)),
+    CONSTRAINT travel_bookings_transport_check CHECK ((transport = ANY (ARRAY['flight'::text, 'company_car'::text]))),
+    CONSTRAINT travel_bookings_traveller_note_check CHECK ((char_length(traveller_note) <= 500))
+);
+
+
+--
+-- Name: TABLE travel_bookings; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.travel_bookings IS 'FR-70: procurement''s booking of an approved daily errand (flight/company car, hotel, costs, note to the traveller; amount lost after a cancellation). No client policies: RPCs only.';
+
+
+--
+-- Name: travel_booking_state(public.leave_status, public.travel_bookings); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_booking_state(p_status public.leave_status, b public.travel_bookings) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select case
+    when p_status = 'pending' then 'awaiting_approval'
+    when p_status = 'approved' and b.opened_at is null then 'awaiting_approval'
+    when p_status = 'approved' and b.done_at is not null then 'done'
+    when p_status = 'approved' and exists (
+      select 1 from public.errand_extensions e
+       where e.request_id = b.request_id and e.status = 'approved' and e.decided_at >= b.opened_at)
+      then 'extension'
+    when p_status = 'approved' then 'to_book'
+    when p_status = 'cancelled' and b.opened_at is null then 'hidden'
+    when p_status = 'cancelled' and b.settled_at is null then 'cancel_undo'
+    when p_status = 'cancelled' then 'settled'
+    else 'hidden' end;
+$$;
+
+
+--
+-- Name: travel_traveller_fields(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.travel_traveller_fields() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select '{full_name,national_id,birth_date,mobile,gender}'::text[];
 $$;
 
 
@@ -3800,6 +4063,53 @@ end; $_$;
 
 
 --
+-- Name: app_decide_errand_extension(uuid, boolean, text, boolean, bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint DEFAULT NULL::bigint, p_note text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_uid uuid := auth.uid();
+  e public.errand_extensions%rowtype;
+  v_employee uuid;
+begin
+  select * into e from public.errand_extensions where id = p_extension;
+  if e.id is null then raise exception 'extension not found' using errcode = 'P0002'; end if;
+  if not private.is_travel_hr(v_uid, e.request_id) then
+    raise exception 'not allowed to decide this extension' using errcode = '42501';
+  end if;
+  if p_approve then
+    if not coalesce(p_signature_authorized, false) or p_signature_data is null
+       or p_signature_data !~ '^data:image/png;base64,[A-Za-z0-9+/]+=*$' then
+      raise exception 'signature is required' using errcode = '22023';
+    end if;
+    if p_per_diem_rials < 0 then raise exception 'per diem must be 0 or more' using errcode = '22023'; end if;
+  end if;
+  if char_length(p_note) > 1000 then raise exception 'note is too long' using errcode = '22023'; end if;
+
+  select employee_id into v_employee from public.leave_requests where id = e.request_id;
+  perform private.approval_lock(e.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || v_employee::text, 0));
+  select * into e from public.errand_extensions where id = p_extension for update;
+  if e.status <> 'pending' then raise exception 'extension is no longer pending' using errcode = '22023'; end if;
+
+  if p_approve then
+    perform private.apply_errand_extension(p_extension, v_uid, 'manual', p_signature_data, p_per_diem_rials, p_note);
+  else
+    update public.errand_extensions
+       set status = 'rejected', decided_by = v_uid, decided_at = clock_timestamp(),
+           decision_note = nullif(btrim(coalesce(p_note, '')), '')
+     where id = p_extension;
+    insert into public.audit_log (actor_id, action, entity, entity_id, after)
+    values (v_uid, 'errand_extension.reject', 'leave_requests', e.request_id,
+            jsonb_build_object('extension_id', p_extension));
+  end if;
+end; $_$;
+
+
+--
 -- Name: app_delegation_context(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3905,6 +4215,39 @@ begin
       join public.profiles p on p.id = i.employee_id
      where i.company_id = v_company
      order by p.active desc, p.personnel_no nulls last, p.full_name;
+end; $$;
+
+
+--
+-- Name: app_extendable_trips(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_extendable_trips() RETURNS TABLE(request_id uuid, serial_year integer, serial_seq integer, employee_name text, errand_location text, start_date date, end_date date, pending_extension boolean, delegation_uncovered boolean, hr_exempt boolean)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  return query
+    select r.id, r.serial_year, r.serial_seq, p.full_name, r.errand_location, r.start_date, r.end_date,
+           exists (select 1 from public.errand_extensions e where e.request_id = r.id and e.status = 'pending'),
+           exists (select 1 from public.approval_delegations g where g.source_request_id = r.id and g.revoked_at is null),
+           private.request_has_hr_exemption(r.id)
+             and (r.employee_id <> v_uid or private.is_current_hr_head(v_uid, r.company_id))
+      from public.travel_bookings b
+      join public.leave_requests r on r.id = b.request_id
+      join public.profiles p on p.id = r.employee_id
+      join public.profiles c on c.id = v_uid and c.company_id = r.company_id
+     where r.status = 'approved' and b.opened_at is not null
+       and r.end_date >= (now() at time zone 'Asia/Tehran')::date
+       and case when r.employee_id = v_uid
+                then private.has_role(v_uid, 'manager')
+                     or (private.request_has_hr_exemption(r.id) and private.is_current_hr_head(v_uid, r.company_id))
+                else p.manager_id = v_uid or private.is_admin(v_uid) end
+     order by r.start_date, r.serial_year, r.serial_seq;
 end; $$;
 
 
@@ -4201,6 +4544,34 @@ $$;
 
 
 --
+-- Name: app_pending_errand_extensions(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_pending_errand_extensions() RETURNS TABLE(extension_id uuid, request_id uuid, serial_year integer, serial_seq integer, employee_name text, errand_location text, start_date date, old_end_date date, new_end_date date, reason text, requested_by_name text, per_diem_rials bigint, delegation_uncovered boolean)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid(); v_company uuid;
+begin
+  select company_id into v_company from public.profiles where id = v_uid;
+  if not coalesce(private.acts_as_travel_hr(v_uid, v_company), false) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  return query
+    select e.id, r.id, r.serial_year, r.serial_seq, p.full_name, r.errand_location, r.start_date,
+           e.old_end_date, e.new_end_date, e.reason, q.full_name, r.per_diem_rials,
+           exists (select 1 from public.approval_delegations g
+                    where g.source_request_id = r.id and g.revoked_at is null)
+      from public.errand_extensions e
+      join public.leave_requests r on r.id = e.request_id
+      join public.profiles p on p.id = r.employee_id
+      join public.profiles q on q.id = e.requested_by
+     where e.company_id = v_company and e.status = 'pending' and r.employee_id <> v_uid
+     order by e.requested_at;
+end; $$;
+
+
+--
 -- Name: app_request_approval_context(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4378,6 +4749,78 @@ begin
     'replacement_id',p_replacement_id,'start',p_start,'end',p_end,'unit',p_unit,'day_part',p_day_part,
     'start_time',p_start_time,'end_time',p_end_time);
   return v_result||jsonb_build_object('preview_token',md5(v_result::text));
+end; $$;
+
+
+--
+-- Name: app_request_errand_extension(uuid, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  v_manager uuid;
+  v_id uuid;
+  v_reason text := btrim(coalesce(p_reason, ''));
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+  select manager_id into v_manager from public.profiles where id = r.employee_id;
+  if not (case when r.employee_id = v_uid
+               then private.has_role(v_uid, 'manager')
+                    or (private.request_has_hr_exemption(r.id) and private.is_current_hr_head(v_uid, r.company_id))
+               else v_manager = v_uid
+                    or (private.is_admin(v_uid)
+                        and exists (select 1 from public.profiles c where c.id = v_uid and c.company_id = r.company_id))
+          end) then
+    raise exception 'not allowed to extend this trip' using errcode = '42501';
+  end if;
+
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
+  select * into r from public.leave_requests where id = p_request;
+  select * into b from public.travel_bookings where request_id = p_request;
+
+  if r.status <> 'approved' or b.request_id is null or b.opened_at is null then
+    raise exception 'only an approved trip with travel booking can be extended' using errcode = '22023';
+  end if;
+  if r.end_date < (now() at time zone 'Asia/Tehran')::date then
+    raise exception 'trip has already ended' using errcode = '22023';
+  end if;
+  if p_new_end is null or p_new_end <= r.end_date then
+    raise exception 'new end date must be after the current end date' using errcode = '22023';
+  end if;
+  if v_reason = '' then raise exception 'a reason is required' using errcode = '22023'; end if;
+  if char_length(v_reason) > 1000 then raise exception 'reason is too long' using errcode = '22023'; end if;
+  if exists (select 1 from public.errand_extensions where request_id = p_request and status = 'pending') then
+    raise exception 'an extension is already waiting for HR' using errcode = '22023';
+  end if;
+  if private.extension_overlaps(r.id, r.employee_id, r.end_date + 1, p_new_end) then
+    raise exception 'overlapping leave request exists' using errcode = '22023';
+  end if;
+
+  insert into public.errand_extensions (request_id, company_id, old_end_date, new_end_date, reason, requested_by)
+  values (r.id, r.company_id, r.end_date, p_new_end, v_reason, v_uid)
+  returning id into v_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'errand_extension.request', 'leave_requests', r.id,
+          jsonb_build_object('extension_id', v_id, 'new_end_date', p_new_end));
+
+  -- The Head of HR's own trip: its HR step was exempt, so the extension is too
+  -- (owner, 2026-10-20): approved at once, no signature, per diem unchanged.
+  if private.request_has_hr_exemption(r.id)
+     and (r.employee_id <> v_uid or private.is_current_hr_head(v_uid, r.company_id)) then
+    perform private.apply_errand_extension(v_id, null, 'exempt', null, null, null);
+  end if;
+  return v_id;
 end; $$;
 
 
@@ -4604,6 +5047,58 @@ begin
    where company_id = v_company and kind <> 'hr' and not (id = any (v_keep));
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
   values (v_uid, 'separation.units', 'separation_units', null, jsonb_build_object('units', v_i + 1));
+end; $$;
+
+
+--
+-- Name: app_save_travel_booking(uuid, text, bigint, bigint, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  v_state text;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if not private.is_procurement(v_uid, p_request) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  select * into b from public.travel_bookings where request_id = p_request for update;
+  if b.request_id is null then raise exception 'no booking for this request' using errcode = '22023'; end if;
+  v_state := private.travel_booking_state(r.status, b);
+  if not (v_state in ('to_book', 'extension')
+          or (v_state = 'done' and r.end_date >= (now() at time zone 'Asia/Tehran')::date)) then
+    raise exception 'booking cannot be changed now' using errcode = '22023';
+  end if;
+  if p_transport is not null and p_transport not in ('flight', 'company_car') then
+    raise exception 'invalid transport' using errcode = '22023';
+  end if;
+  if p_flight < 0 or p_hotel < 0 then raise exception 'costs must be 0 or more' using errcode = '22023'; end if;
+  if char_length(v_note) > 500 then raise exception 'note is too long' using errcode = '22023'; end if;
+  if p_done and (p_transport is null or p_flight is null or p_hotel is null) then
+    raise exception 'transport and both costs are required' using errcode = '22023';
+  end if;
+  if v_state = 'done' and not p_done then
+    raise exception 'a finished booking stays finished' using errcode = '22023';
+  end if;
+
+  update public.travel_bookings
+     set transport = p_transport, flight_cost_rials = p_flight, hotel_cost_rials = p_hotel,
+         traveller_note = v_note, first_saved_at = coalesce(first_saved_at, now()),
+         done_by = case when p_done then v_uid else done_by end,
+         done_at = case when p_done then now() else done_at end,
+         updated_at = now()
+   where request_id = p_request;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'travel_booking.save', 'leave_requests', p_request,
+          jsonb_build_object('done', p_done, 'transport', p_transport,
+                             'flight_cost_rials', p_flight, 'hotel_cost_rials', p_hotel));
 end; $$;
 
 
@@ -4977,6 +5472,59 @@ end; $$;
 
 
 --
+-- Name: app_set_travel_booking(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_travel_booking(p_request uuid, p_on boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  v_today date := (now() at time zone 'Asia/Tehran')::date;
+begin
+  if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+  -- HR (never on their own request), or the Head of HR on their own HR-exempt trip.
+  if not (private.is_travel_hr(v_uid, p_request)
+          or (r.employee_id = v_uid and private.is_active(v_uid) and private.request_has_hr_exemption(p_request)
+              and private.is_current_hr_head(v_uid, r.company_id))) then
+    raise exception 'not allowed to mark travel booking' using errcode = '42501';
+  end if;
+  if r.kind <> 'errand' or r.unit <> 'day' then
+    raise exception 'travel booking applies to daily work errands only' using errcode = '22023';
+  end if;
+  if r.status not in ('pending', 'approved') then
+    raise exception 'request is not pending or approved' using errcode = '22023';
+  end if;
+  if r.end_date < v_today then
+    raise exception 'trip has already ended' using errcode = '22023';
+  end if;
+
+  select * into b from public.travel_bookings where request_id = p_request for update;
+  if p_on then
+    if b.request_id is null then
+      insert into public.travel_bookings (request_id, company_id, ticked_by, ticked_at, opened_at)
+      values (p_request, r.company_id, v_uid, now(),
+              case when r.status = 'approved' then clock_timestamp() end);
+      insert into public.audit_log (actor_id, action, entity, entity_id, after)
+      values (v_uid, 'travel_booking.tick', 'leave_requests', p_request, null);
+    end if;
+  elsif b.request_id is not null then
+    if b.first_saved_at is not null or b.done_at is not null then
+      raise exception 'booking already started' using errcode = '22023';
+    end if;
+    delete from public.travel_bookings where request_id = p_request;
+    insert into public.audit_log (actor_id, action, entity, entity_id, after)
+    values (v_uid, 'travel_booking.untick', 'leave_requests', p_request, null);
+  end if;
+end; $$;
+
+
+--
 -- Name: app_set_user_role_ids(uuid, uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5082,6 +5630,38 @@ begin
     from public.user_roles ur where ur.user_id = p_user_id and ur.role is null;
   perform public.app_set_user_role_ids(p_user_id, v_ids);
 end $$;
+
+
+--
+-- Name: app_settle_travel_booking(uuid, bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  v_note text := nullif(btrim(coalesce(p_note, '')), '');
+begin
+  if not private.is_procurement(v_uid, p_request) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  select * into b from public.travel_bookings where request_id = p_request for update;
+  if b.request_id is null or private.travel_booking_state(r.status, b) <> 'cancel_undo' then
+    raise exception 'only a cancelled booking can be settled' using errcode = '22023';
+  end if;
+  if p_lost is null or p_lost < 0 then raise exception 'amount lost must be 0 or more' using errcode = '22023'; end if;
+  if char_length(v_note) > 500 then raise exception 'note is too long' using errcode = '22023'; end if;
+  update public.travel_bookings
+     set lost_rials = p_lost, lost_note = v_note, settled_by = v_uid, settled_at = now(), updated_at = now()
+   where request_id = p_request;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'travel_booking.settle', 'leave_requests', p_request, jsonb_build_object('lost_rials', p_lost));
+end; $$;
 
 
 --
@@ -5234,6 +5814,146 @@ end $$;
 
 
 --
+-- Name: app_travel_booking(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_travel_booking(p_request uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  r public.leave_requests%rowtype;
+  b public.travel_bookings%rowtype;
+  p public.profiles%rowtype;
+  i public.employee_personal_info%rowtype;
+  v_state text;
+  v_out jsonb;
+  v_traveller jsonb := '{}';
+  f text;
+begin
+  if not private.is_procurement(v_uid, p_request) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select * into b from public.travel_bookings where request_id = p_request;
+  select * into r from public.leave_requests where id = p_request;
+  v_state := case when b.request_id is null then 'hidden' else private.travel_booking_state(r.status, b) end;
+  if v_state in ('awaiting_approval', 'hidden') then
+    raise exception 'no booking for this request' using errcode = '22023';
+  end if;
+  select * into p from public.profiles where id = r.employee_id;
+
+  v_out := jsonb_build_object(
+    'request_id', r.id, 'serial_year', r.serial_year, 'serial_seq', r.serial_seq,
+    'employee_name', p.full_name, 'personnel_no', p.personnel_no,
+    'department_name_fa', (select name_fa from public.departments where id = p.department_id),
+    'department_name_en', (select name_en from public.departments where id = p.department_id),
+    'errand_location', r.errand_location, 'description', r.reason,
+    'start_date', r.start_date, 'end_date', r.end_date, 'status', r.status, 'state', v_state,
+    'transport', b.transport, 'flight_cost_rials', b.flight_cost_rials,
+    'hotel_cost_rials', b.hotel_cost_rials, 'traveller_note', b.traveller_note,
+    'lost_rials', b.lost_rials, 'lost_note', b.lost_note, 'done_at', b.done_at,
+    'extensions', coalesce((
+      select jsonb_agg(jsonb_build_object('old_end_date', e.old_end_date, 'new_end_date', e.new_end_date,
+               'reason', e.reason, 'status', e.status, 'decided_at', e.decided_at) order by e.requested_at)
+        from public.errand_extensions e where e.request_id = r.id and e.status = 'approved'), '[]'::jsonb));
+
+  if private.travel_booking_open_for_details(v_state, r.end_date) then
+    select * into i from public.employee_personal_info where employee_id = p.id;
+    foreach f in array private.travel_traveller_fields() loop
+      v_traveller := v_traveller || jsonb_build_object(f,
+        case f when 'full_name' then to_jsonb(p.full_name) else to_jsonb(i) -> f end);
+    end loop;
+    v_out := v_out || jsonb_build_object('traveller', v_traveller);
+  end if;
+  return v_out;
+end; $$;
+
+
+--
+-- Name: app_travel_bookings(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_travel_bookings() RETURNS TABLE(request_id uuid, serial_year integer, serial_seq integer, employee_name text, personnel_no text, department_name_fa text, department_name_en text, errand_location text, start_date date, end_date date, state text, transport text, flight_cost_rials bigint, hotel_cost_rials bigint, lost_rials bigint, done_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid();
+begin
+  if v_uid is null or not private.is_active(v_uid)
+     or not (private.is_admin(v_uid) or private.has_perm(v_uid, 'travel_booking', 'edit')) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  return query
+    select * from (
+      select r.id, r.serial_year, r.serial_seq, p.full_name, p.personnel_no, d.name_fa, d.name_en,
+             r.errand_location, r.start_date, r.end_date, private.travel_booking_state(r.status, b) as st,
+             b.transport, b.flight_cost_rials, b.hotel_cost_rials, b.lost_rials, b.done_at
+        from public.travel_bookings b
+        join public.leave_requests r on r.id = b.request_id
+        join public.profiles c on c.id = v_uid and c.company_id = b.company_id
+        join public.profiles p on p.id = r.employee_id
+        left join public.departments d on d.id = p.department_id
+       where r.employee_id <> v_uid) x
+     where x.st not in ('awaiting_approval', 'hidden')
+     order by x.start_date, x.serial_year, x.serial_seq;
+end; $$;
+
+
+--
+-- Name: app_travel_missing_fields(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_travel_missing_fields(p_request uuid) RETURNS text[]
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_missing text[] := '{}';
+  p public.profiles%rowtype;
+  i public.employee_personal_info%rowtype;
+  f text;
+  v_value text;
+begin
+  if v_uid is null or not private.is_travel_hr(v_uid, p_request) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select pr.* into p from public.profiles pr
+    join public.leave_requests r on r.employee_id = pr.id where r.id = p_request;
+  select * into i from public.employee_personal_info where employee_id = p.id;
+  foreach f in array private.travel_traveller_fields() loop
+    v_value := case f when 'full_name' then p.full_name
+                      else to_jsonb(i) ->> f end;
+    if nullif(btrim(coalesce(v_value, '')), '') is null then
+      v_missing := v_missing || f;
+    end if;
+  end loop;
+  return v_missing;
+end; $$;
+
+
+--
+-- Name: app_travel_ticks(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_travel_ticks() RETURNS TABLE(request_id uuid, started boolean)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid(); v_company uuid;
+begin
+  select company_id into v_company from public.profiles where id = v_uid;
+  if not coalesce(private.acts_as_travel_hr(v_uid, v_company), false) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  return query
+    select b.request_id, (b.first_saved_at is not null or b.done_at is not null)
+      from public.travel_bookings b where b.company_id = v_company;
+end; $$;
+
+
+--
 -- Name: app_update_separation(uuid, text, date, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5335,7 +6055,10 @@ begin
               and exists (select 1 from public.profiles o
                             join public.profiles c on c.company_id = o.company_id and c.id = v_uid
                            where o.id = v_owner)
-              and not exists (select 1 from public.user_roles where user_id = v_owner and role = 'admin'))) then
+              and not exists (select 1 from public.user_roles where user_id = v_owner and role = 'admin'))
+          -- FR-70: HR cancels travel-booked trips (the manager tells HR; spec §7).
+          or (private.is_travel_hr(v_uid, p_id)
+              and exists (select 1 from public.travel_bookings b where b.request_id = p_id))) then
     raise exception 'not allowed to cancel this request' using errcode = '42501';
   end if;
 
@@ -5357,7 +6080,9 @@ begin
               and exists (select 1 from public.profiles o
                             join public.profiles c on c.company_id=o.company_id and c.id=v_uid
                            where o.id=v_owner)
-              and not exists (select 1 from public.user_roles where user_id=v_owner and role='admin'))) then
+              and not exists (select 1 from public.user_roles where user_id=v_owner and role='admin'))
+          or (private.is_travel_hr(v_uid, p_id)
+              and exists (select 1 from public.travel_bookings b where b.request_id = p_id))) then
     raise exception 'not allowed to cancel this request' using errcode='42501';
   end if;
   v_paid := greatest(v_minutes - coalesce(v_unpaid, 0), 0);
@@ -5396,6 +6121,11 @@ begin
     raise exception 'only pending or not-yet-started approved requests can be cancelled'
       using errcode = '22023';
   end if;
+
+  -- FR-70: an extension still waiting for HR goes with the trip.
+  update public.errand_extensions
+     set status = 'cancelled', decided_by = v_uid, decided_at = v_now
+   where request_id = p_id and status = 'pending';
 
   insert into public.audit_log(actor_id, action, entity, entity_id, after)
   values (
@@ -5540,7 +6270,7 @@ $$;
 -- Name: finance_approved_requests(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.finance_approved_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone)
+CREATE FUNCTION public.finance_approved_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone, status public.leave_status, travel_state text, transport text, flight_cost_rials bigint, hotel_cost_rials bigint, lost_rials bigint)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5563,22 +6293,102 @@ begin
   select company_id into v_company from public.profiles where profiles.id = v_uid;
 
   return query
-    select r.id, r.serial_year, r.serial_seq, r.kind,
-           p.full_name, p.personnel_no,
-           d.name_fa, d.name_en,
-           t.name_fa, t.name_en, t.is_paid,
-           r.start_date, r.end_date, r.unit, r.start_time, r.end_time,
-           r.requested_minutes, r.unpaid_minutes,
-           r.errand_location, r.per_diem_rials, r.per_diem_by_requester, r.decided_at
-      from public.leave_requests r
-      join public.profiles p on p.id = r.employee_id
-      left join public.departments d on d.id = p.department_id
-      left join public.leave_types t on t.id = r.leave_type_id
-     where r.company_id = v_company
-       and r.status = 'approved'
-       and r.start_date <= p_to
-       and r.end_date >= p_from
-     order by r.start_date, r.serial_year, r.serial_seq;
+    select x.id, x.serial_year, x.serial_seq, x.kind, x.full_name, x.personnel_no, x.dname_fa, x.dname_en,
+           x.tname_fa, x.tname_en, x.is_paid, x.start_date, x.end_date, x.unit, x.start_time, x.end_time,
+           x.requested_minutes, x.unpaid_minutes, x.errand_location,
+           case when x.status = 'cancelled' then null else x.per_diem_rials end,
+           x.per_diem_by_requester, x.decided_at, x.status, x.st, x.transport,
+           case when x.status = 'cancelled' then null else x.flight_cost_rials end,
+           case when x.status = 'cancelled' then null else x.hotel_cost_rials end,
+           x.lost_rials
+      from (
+        select r.id, r.serial_year, r.serial_seq, r.kind, p.full_name, p.personnel_no,
+               d.name_fa as dname_fa, d.name_en as dname_en, t.name_fa as tname_fa, t.name_en as tname_en, t.is_paid,
+               r.start_date, r.end_date, r.unit, r.start_time, r.end_time, r.requested_minutes, r.unpaid_minutes,
+               r.errand_location, r.per_diem_rials, r.per_diem_by_requester, r.decided_at, r.status,
+               case when b.request_id is null then null else private.travel_booking_state(r.status, b) end as st,
+               b.transport, b.flight_cost_rials, b.hotel_cost_rials, b.lost_rials
+          from public.leave_requests r
+          join public.profiles p on p.id = r.employee_id
+          left join public.departments d on d.id = p.department_id
+          left join public.leave_types t on t.id = r.leave_type_id
+          left join public.travel_bookings b on b.request_id = r.id
+         where r.company_id = v_company
+           and r.status in ('approved', 'cancelled')
+           and r.start_date <= p_to
+           and r.end_date >= p_from) x
+     where (x.status = 'approved' and (x.st is null or x.st = 'done'))
+        or (x.status = 'cancelled' and x.st = 'settled')
+     order by x.start_date, x.serial_year, x.serial_seq;
+end; $$;
+
+
+--
+-- Name: finance_requests(date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.finance_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone, status public.leave_status, travel_state text, transport text, flight_cost_rials bigint, hotel_cost_rials bigint, lost_rials bigint, waiting_step text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_company uuid;
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not private.has_perm(v_uid, 'finance', 'read') then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_from is null or p_to is null or p_to < p_from then
+    raise exception 'invalid date range' using errcode = '22023';
+  end if;
+  if p_to - p_from > 400 then
+    raise exception 'date range too long' using errcode = '22023';
+  end if;
+  select company_id into v_company from public.profiles where profiles.id = v_uid;
+
+  return query
+    select x.id, x.serial_year, x.serial_seq, x.kind, x.full_name, x.personnel_no, x.dname_fa, x.dname_en,
+           x.tname_fa, x.tname_en, x.is_paid, x.start_date, x.end_date, x.unit, x.start_time, x.end_time,
+           x.requested_minutes, x.unpaid_minutes, x.errand_location,
+           case when x.status = 'cancelled' then null else x.per_diem_rials end,
+           x.per_diem_by_requester, x.decided_at, x.status, x.st, x.transport,
+           case when x.status = 'cancelled' then null else x.flight_cost_rials end,
+           case when x.status = 'cancelled' then null else x.hotel_cost_rials end,
+           x.lost_rials,
+           case when x.status = 'pending' then (
+             -- Same open steps as app_request_approval_progress; label as progressLabel().
+             select case when st.role = 'manager' and st.manager_scope = 'department' and st.approver_id is null
+                         then 'departmentManager' else st.role::text end
+               from public.approval_steps st
+              where st.company_id = x.company_id and st.active and x.kind = any(st.applies_to)
+                and private.step_applies(st.manager_scope, x.employee_id)
+                and not private.request_step_decided(x.id, st.id)
+                and not private.request_hr_exempt(x.id, st.id)
+              order by st.step_order, st.id
+              limit 1)
+           end
+      from (
+        select r.id, r.company_id, r.employee_id, r.serial_year, r.serial_seq, r.kind, p.full_name, p.personnel_no,
+               d.name_fa as dname_fa, d.name_en as dname_en, t.name_fa as tname_fa, t.name_en as tname_en, t.is_paid,
+               r.start_date, r.end_date, r.unit, r.start_time, r.end_time, r.requested_minutes, r.unpaid_minutes,
+               r.errand_location, r.per_diem_rials, r.per_diem_by_requester, r.decided_at, r.status,
+               case when b.request_id is null then null else private.travel_booking_state(r.status, b) end as st,
+               b.transport, b.flight_cost_rials, b.hotel_cost_rials, b.lost_rials
+          from public.leave_requests r
+          join public.profiles p on p.id = r.employee_id
+          left join public.departments d on d.id = p.department_id
+          left join public.leave_types t on t.id = r.leave_type_id
+          left join public.travel_bookings b on b.request_id = r.id
+         where r.company_id = v_company
+           and r.status in ('approved', 'pending', 'cancelled')
+           and r.start_date <= p_to
+           and r.end_date >= p_from) x
+     where x.status in ('approved', 'pending')
+        or (x.status = 'cancelled' and x.st = 'settled')
+     order by x.start_date, x.serial_year, x.serial_seq;
 end; $$;
 
 
@@ -5780,6 +6590,21 @@ end; $$;
 
 
 --
+-- Name: my_travel_bookings(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_travel_bookings() RETURNS TABLE(request_id uuid, transport text, traveller_note text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select b.request_id, b.transport, b.traveller_note
+    from public.travel_bookings b
+    join public.leave_requests r on r.id = b.request_id
+   where r.employee_id = auth.uid() and r.status = 'approved' and b.first_done_at is not null;
+$$;
+
+
+--
 -- Name: reject_leave_request(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5816,6 +6641,28 @@ CREATE FUNCTION public.request_approval_progress(p_id uuid) RETURNS TABLE(step_o
     (item->>'decision')::public.leave_status,item->>'signer_name',(item->>'signed_at')::timestamptz
   from jsonb_array_elements(public.app_request_approval_progress(p_id)) item;
 $$;
+
+
+--
+-- Name: request_errand_extensions(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.request_errand_extensions(p_id uuid) RETURNS TABLE(old_end_date date, new_end_date date, reason text, status text, evidence text, requested_by_name text, decided_by_name text, decided_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.can_read_approval_request(auth.uid(), p_id) then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+  return query
+    select e.old_end_date, e.new_end_date, e.reason, e.status, e.evidence, q.full_name, d.full_name, e.decided_at
+      from public.errand_extensions e
+      join public.profiles q on q.id = e.requested_by
+      left join public.profiles d on d.id = e.decided_by
+     where e.request_id = p_id
+     order by e.requested_at;
+end; $$;
 
 
 --
@@ -6381,6 +7228,43 @@ COMMENT ON TABLE public.employee_personal_info IS 'FR-53: identity, bank, contac
 
 
 --
+-- Name: errand_extensions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.errand_extensions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    request_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    old_end_date date NOT NULL,
+    new_end_date date NOT NULL,
+    reason text NOT NULL,
+    requested_by uuid NOT NULL,
+    requested_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    evidence text,
+    decided_by uuid,
+    decided_at timestamp with time zone,
+    signature_data text,
+    signature_consent_at timestamp with time zone,
+    decision_note text,
+    per_diem_before bigint,
+    per_diem_after bigint,
+    CONSTRAINT errand_extensions_decision_note_check CHECK ((char_length(decision_note) <= 1000)),
+    CONSTRAINT errand_extensions_evidence_check CHECK ((evidence = ANY (ARRAY['manual'::text, 'exempt'::text]))),
+    CONSTRAINT errand_extensions_later CHECK ((new_end_date > old_end_date)),
+    CONSTRAINT errand_extensions_reason_check CHECK (((char_length(btrim(reason)) >= 1) AND (char_length(btrim(reason)) <= 1000))),
+    CONSTRAINT errand_extensions_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: TABLE errand_extensions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.errand_extensions IS 'FR-70: trip extensions. old_end_date keeps the originally signed end date. RPCs only.';
+
+
+--
 -- Name: holidays; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -6846,7 +7730,29 @@ CREATE VIEW public.team_leave_calendar AS
    FROM ((public.leave_requests lr
      JOIN public.profiles p ON ((p.id = lr.employee_id)))
      LEFT JOIN public.leave_types lt ON ((lt.id = lr.leave_type_id)))
-  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())));
+  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())))
+UNION ALL
+ SELECT e.id,
+    lr.employee_id,
+    p.full_name AS employee_name,
+    p.department_id,
+    lr.kind,
+    lr.leave_type_id,
+    NULL::text AS leave_type_name_fa,
+    NULL::text AS leave_type_name_en,
+    NULL::text AS leave_type_color,
+    (e.old_end_date + 1) AS start_date,
+    e.new_end_date AS end_date,
+    lr.day_part,
+    lr.unit,
+    lr.start_time,
+    lr.end_time,
+    0 AS requested_minutes,
+    'pending'::public.leave_status AS status
+   FROM ((public.errand_extensions e
+     JOIN public.leave_requests lr ON ((lr.id = e.request_id)))
+     JOIN public.profiles p ON ((p.id = lr.employee_id)))
+  WHERE ((e.status = 'pending'::text) AND (lr.status = 'approved'::public.leave_status) AND private.is_active(auth.uid()) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())));
 
 
 --
@@ -7016,6 +7922,14 @@ ALTER TABLE ONLY public.employee_personal_info
 
 
 --
+-- Name: errand_extensions errand_extensions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.errand_extensions
+    ADD CONSTRAINT errand_extensions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: holidays holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7141,6 +8055,14 @@ ALTER TABLE ONLY public.separations
 
 ALTER TABLE ONLY public.special_leave_grants
     ADD CONSTRAINT special_leave_grants_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: travel_bookings travel_bookings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_pkey PRIMARY KEY (request_id);
 
 
 --
@@ -7272,6 +8194,20 @@ CREATE INDEX employee_leave_policies_employee_idx ON public.employee_leave_polic
 --
 
 CREATE INDEX employee_personal_info_company_idx ON public.employee_personal_info USING btree (company_id, complete);
+
+
+--
+-- Name: errand_extensions_one_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX errand_extensions_one_pending ON public.errand_extensions USING btree (request_id) WHERE (status = 'pending'::text);
+
+
+--
+-- Name: errand_extensions_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX errand_extensions_request ON public.errand_extensions USING btree (request_id);
 
 
 --
@@ -7765,6 +8701,20 @@ CREATE TRIGGER role_permissions_guard BEFORE INSERT OR UPDATE ON public.role_per
 
 
 --
+-- Name: travel_bookings travel_booking_first_done; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER travel_booking_first_done BEFORE INSERT OR UPDATE ON public.travel_bookings FOR EACH ROW EXECUTE FUNCTION private.travel_booking_first_done();
+
+
+--
+-- Name: leave_requests travel_booking_open; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER travel_booking_open AFTER UPDATE OF status ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.travel_booking_open();
+
+
+--
 -- Name: user_roles user_roles_sync; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -7980,6 +8930,38 @@ ALTER TABLE ONLY public.employee_personal_info
 
 ALTER TABLE ONLY public.employee_personal_info
     ADD CONSTRAINT employee_personal_info_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: errand_extensions errand_extensions_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.errand_extensions
+    ADD CONSTRAINT errand_extensions_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: errand_extensions errand_extensions_decided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.errand_extensions
+    ADD CONSTRAINT errand_extensions_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: errand_extensions errand_extensions_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.errand_extensions
+    ADD CONSTRAINT errand_extensions_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: errand_extensions errand_extensions_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.errand_extensions
+    ADD CONSTRAINT errand_extensions_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id);
 
 
 --
@@ -8295,6 +9277,46 @@ ALTER TABLE ONLY public.special_leave_grants
 
 
 --
+-- Name: travel_bookings travel_bookings_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: travel_bookings travel_bookings_done_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_done_by_fkey FOREIGN KEY (done_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: travel_bookings travel_bookings_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: travel_bookings travel_bookings_settled_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_settled_by_fkey FOREIGN KEY (settled_by) REFERENCES public.profiles(id);
+
+
+--
+-- Name: travel_bookings travel_bookings_ticked_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.travel_bookings
+    ADD CONSTRAINT travel_bookings_ticked_by_fkey FOREIGN KEY (ticked_by) REFERENCES public.profiles(id);
+
+
+--
 -- Name: user_roles user_roles_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8515,6 +9537,12 @@ CREATE POLICY employee_personal_info_update ON public.employee_personal_info FOR
    FROM public.profiles p
   WHERE (p.id = ( SELECT auth.uid() AS uid))))))));
 
+
+--
+-- Name: errand_extensions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.errand_extensions ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: holidays; Type: ROW SECURITY; Schema: public; Owner: -
@@ -8805,6 +9833,12 @@ CREATE POLICY special_leave_grants_select ON public.special_leave_grants FOR SEL
 
 
 --
+-- Name: travel_bookings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.travel_bookings ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: user_roles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -8897,6 +9931,14 @@ GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
 
 
 --
+-- Name: FUNCTION acts_as_travel_hr(p_uid uuid, p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.acts_as_travel_hr(p_uid uuid, p_company uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.acts_as_travel_hr(p_uid uuid, p_company uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION allocate_leave_impl(p_actor uuid, p_employee_id uuid, p_leave_type_id uuid, p_period_start date, p_period_end date, p_minutes integer); Type: ACL; Schema: private; Owner: -
 --
 
@@ -8915,6 +9957,13 @@ REVOKE ALL ON FUNCTION private.ambiguous_legacy_approval(p_request uuid) FROM PU
 --
 
 REVOKE ALL ON FUNCTION private.apply_due_separations(p_id uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION apply_errand_extension(p_extension uuid, p_actor uuid, p_evidence text, p_signature_data text, p_per_diem bigint, p_note text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.apply_errand_extension(p_extension uuid, p_actor uuid, p_evidence text, p_signature_data text, p_per_diem bigint, p_note text) FROM PUBLIC;
 
 
 --
@@ -9121,6 +10170,13 @@ REVOKE ALL ON FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_
 
 
 --
+-- Name: FUNCTION extension_overlaps(p_request uuid, p_employee uuid, p_start date, p_end date); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.extension_overlaps(p_request uuid, p_employee uuid, p_start date, p_end date) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION finalize_approval_request(p_id uuid, p_actor uuid, p_signature text, p_consent_at timestamp with time zone, p_origin text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -9176,6 +10232,14 @@ GRANT ALL ON FUNCTION private.is_company_weekend(p_company_id uuid, p_date date)
 
 
 --
+-- Name: FUNCTION is_current_hr_head(p_uid uuid, p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION is_department_manager_of(p_uid uuid, p_emp uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -9188,6 +10252,22 @@ REVOKE ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) 
 
 REVOKE ALL ON FUNCTION private.is_manager_of(uid uuid, target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.is_manager_of(uid uuid, target uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_procurement(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_procurement(p_uid uuid, p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_procurement(p_uid uuid, p_request uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_travel_hr(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_travel_hr(p_uid uuid, p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_travel_hr(p_uid uuid, p_request uuid) TO authenticated;
 
 
 --
@@ -9230,8 +10310,8 @@ REVOKE ALL ON FUNCTION private.natural_step_authority(p_uid uuid, p_request uuid
 --
 
 REVOKE ALL ON FUNCTION private.perm_level(uid uuid, p_key text) FROM PUBLIC;
-GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO supabase_auth_admin;
 GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO authenticated;
+GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO supabase_auth_admin;
 
 
 --
@@ -9239,8 +10319,8 @@ GRANT ALL ON FUNCTION private.perm_level(uid uuid, p_key text) TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION private.permission_allows(p_key text, p_level text) FROM PUBLIC;
-GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO supabase_auth_admin;
 GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO authenticated;
+GRANT ALL ON FUNCTION private.permission_allows(p_key text, p_level text) TO supabase_auth_admin;
 
 
 --
@@ -9256,8 +10336,8 @@ GRANT ALL ON FUNCTION private.permission_deps() TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION private.permission_keys() FROM PUBLIC;
-GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
 GRANT ALL ON FUNCTION private.permission_keys() TO authenticated;
+GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
 
 
 --
@@ -9303,6 +10383,14 @@ REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date, p_end date, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_has_hr_exemption(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_has_hr_exemption(p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.request_has_hr_exemption(p_request uuid) TO authenticated;
 
 
 --
@@ -9424,6 +10512,35 @@ REVOKE ALL ON FUNCTION private.step_delegation(p_uid uuid, p_request uuid, p_ste
 --
 
 REVOKE ALL ON FUNCTION private.submit_leave_impl(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_reason text, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid, p_kind public.request_kind, p_location text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION travel_booking_first_done(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_booking_first_done() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION travel_booking_open(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_booking_open() FROM PUBLIC;
+
+
+--
+-- Name: TABLE travel_bookings; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.travel_bookings TO postgres;
+GRANT ALL ON TABLE public.travel_bookings TO service_role;
+
+
+--
+-- Name: FUNCTION travel_booking_state(p_status public.leave_status, b public.travel_bookings); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.travel_booking_state(p_status public.leave_status, b public.travel_bookings) FROM PUBLIC;
 
 
 --
@@ -9587,6 +10704,16 @@ GRANT ALL ON FUNCTION public.app_create_separation(p_employee_id uuid, p_reason 
 
 
 --
+-- Name: FUNCTION app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_decide_errand_extension(p_extension uuid, p_approve boolean, p_signature_data text, p_signature_authorized boolean, p_per_diem_rials bigint, p_note text) TO service_role;
+
+
+--
 -- Name: FUNCTION app_delegation_context(p_principal_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -9614,6 +10741,16 @@ REVOKE ALL ON FUNCTION public.app_export_personal_info() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_export_personal_info() TO postgres;
 GRANT ALL ON FUNCTION public.app_export_personal_info() TO authenticated;
 GRANT ALL ON FUNCTION public.app_export_personal_info() TO service_role;
+
+
+--
+-- Name: FUNCTION app_extendable_trips(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_extendable_trips() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_extendable_trips() TO postgres;
+GRANT ALL ON FUNCTION public.app_extendable_trips() TO authenticated;
+GRANT ALL ON FUNCTION public.app_extendable_trips() TO service_role;
 
 
 --
@@ -9687,6 +10824,16 @@ GRANT ALL ON FUNCTION public.app_password_reset_eligible(p_ids uuid[]) TO servic
 
 
 --
+-- Name: FUNCTION app_pending_errand_extensions(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_pending_errand_extensions() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_pending_errand_extensions() TO postgres;
+GRANT ALL ON FUNCTION public.app_pending_errand_extensions() TO authenticated;
+GRANT ALL ON FUNCTION public.app_pending_errand_extensions() TO service_role;
+
+
+--
 -- Name: FUNCTION app_request_approval_context(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -9714,6 +10861,16 @@ REVOKE ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end
 GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO postgres;
 GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO service_role;
 GRANT ALL ON FUNCTION public.app_request_delegation_preview(p_start date, p_end date, p_unit public.leave_unit, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_request_errand_extension(p_request uuid, p_new_end date, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO postgres;
+GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO service_role;
 
 
 --
@@ -9754,6 +10911,16 @@ REVOKE ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) FROM PUBL
 GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_save_separation_units(p_units jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_save_travel_booking(p_request uuid, p_transport text, p_flight bigint, p_hotel bigint, p_note text, p_done boolean) TO service_role;
 
 
 --
@@ -9847,6 +11014,16 @@ GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb
 
 
 --
+-- Name: FUNCTION app_set_travel_booking(p_request uuid, p_on boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_travel_booking(p_request uuid, p_on boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_travel_booking(p_request uuid, p_on boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_travel_booking(p_request uuid, p_on boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_travel_booking(p_request uuid, p_on boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_user_role_ids(p_user_id uuid, p_role_ids uuid[]); Type: ACL; Schema: public; Owner: -
 --
 
@@ -9864,6 +11041,16 @@ REVOKE ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_user_roles(p_user_id uuid, p_roles public.app_role[]) TO service_role;
+
+
+--
+-- Name: FUNCTION app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_settle_travel_booking(p_request uuid, p_lost bigint, p_note text) TO service_role;
 
 
 --
@@ -9894,6 +11081,46 @@ REVOKE ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no t
 GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO postgres;
 GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_transfer_admin(p_target uuid, p_personnel_no text, p_password text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_travel_booking(p_request uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_travel_booking(p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_travel_booking(p_request uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_travel_booking(p_request uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_travel_booking(p_request uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_travel_bookings(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_travel_bookings() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_travel_bookings() TO postgres;
+GRANT ALL ON FUNCTION public.app_travel_bookings() TO authenticated;
+GRANT ALL ON FUNCTION public.app_travel_bookings() TO service_role;
+
+
+--
+-- Name: FUNCTION app_travel_missing_fields(p_request uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_travel_missing_fields(p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_travel_missing_fields(p_request uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_travel_missing_fields(p_request uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_travel_missing_fields(p_request uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_travel_ticks(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_travel_ticks() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_travel_ticks() TO postgres;
+GRANT ALL ON FUNCTION public.app_travel_ticks() TO authenticated;
+GRANT ALL ON FUNCTION public.app_travel_ticks() TO service_role;
 
 
 --
@@ -9960,9 +11187,9 @@ GRANT ALL ON FUNCTION public.current_leave_balance(p_employee_id uuid, p_leave_t
 --
 
 REVOKE ALL ON FUNCTION public.custom_access_token_hook(event jsonb) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO supabase_auth_admin;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO service_role;
+GRANT ALL ON FUNCTION public.custom_access_token_hook(event jsonb) TO supabase_auth_admin;
 
 
 --
@@ -9973,6 +11200,16 @@ REVOKE ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) 
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO postgres;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO authenticated;
 GRANT ALL ON FUNCTION public.finance_approved_requests(p_from date, p_to date) TO service_role;
+
+
+--
+-- Name: FUNCTION finance_requests(p_from date, p_to date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.finance_requests(p_from date, p_to date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.finance_requests(p_from date, p_to date) TO postgres;
+GRANT ALL ON FUNCTION public.finance_requests(p_from date, p_to date) TO authenticated;
+GRANT ALL ON FUNCTION public.finance_requests(p_from date, p_to date) TO service_role;
 
 
 --
@@ -10046,6 +11283,16 @@ GRANT ALL ON FUNCTION public.jalali_month_of(p_date date) TO service_role;
 
 
 --
+-- Name: FUNCTION my_travel_bookings(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_travel_bookings() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_travel_bookings() TO postgres;
+GRANT ALL ON FUNCTION public.my_travel_bookings() TO authenticated;
+GRANT ALL ON FUNCTION public.my_travel_bookings() TO service_role;
+
+
+--
 -- Name: FUNCTION reject_leave_request(p_id uuid, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10074,6 +11321,16 @@ GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO postgres;
 GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO anon;
 GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.request_approval_progress(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION request_errand_extensions(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.request_errand_extensions(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.request_errand_extensions(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.request_errand_extensions(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.request_errand_extensions(p_id uuid) TO service_role;
 
 
 --
@@ -10272,6 +11529,14 @@ GRANT SELECT,UPDATE ON TABLE public.employee_personal_info TO authenticated;
 
 
 --
+-- Name: TABLE errand_extensions; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.errand_extensions TO postgres;
+GRANT ALL ON TABLE public.errand_extensions TO service_role;
+
+
+--
 -- Name: TABLE holidays; Type: ACL; Schema: public; Owner: -
 --
 
@@ -10383,20 +11648,20 @@ GRANT SELECT(active) ON TABLE public.profiles TO supabase_auth_admin;
 -- Name: TABLE role_permissions; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT ON TABLE public.role_permissions TO supabase_auth_admin;
 GRANT ALL ON TABLE public.role_permissions TO postgres;
 GRANT ALL ON TABLE public.role_permissions TO service_role;
 GRANT SELECT ON TABLE public.role_permissions TO authenticated;
+GRANT SELECT ON TABLE public.role_permissions TO supabase_auth_admin;
 
 
 --
 -- Name: TABLE roles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 GRANT ALL ON TABLE public.roles TO postgres;
 GRANT ALL ON TABLE public.roles TO service_role;
 GRANT SELECT ON TABLE public.roles TO authenticated;
+GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 
 
 --
@@ -10449,11 +11714,11 @@ GRANT SELECT ON TABLE public.team_leave_calendar TO authenticated;
 -- Name: TABLE user_roles; Type: ACL; Schema: public; Owner: -
 --
 
-GRANT SELECT ON TABLE public.user_roles TO supabase_auth_admin;
 GRANT ALL ON TABLE public.user_roles TO postgres;
 GRANT ALL ON TABLE public.user_roles TO anon;
 GRANT SELECT,REFERENCES,TRIGGER,TRUNCATE ON TABLE public.user_roles TO authenticated;
 GRANT ALL ON TABLE public.user_roles TO service_role;
+GRANT SELECT ON TABLE public.user_roles TO supabase_auth_admin;
 
 
 --

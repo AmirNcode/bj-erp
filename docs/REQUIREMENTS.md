@@ -316,7 +316,11 @@ Validation/release status stays in `docs/TASKS.md`.
   entered when an hr step of an errand is signed. *(2026-10-12.)*
 - **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
-  *(2026-10-12.)*
+  *(2026-10-12.)* **Amended 2026-10-20 (owner review of FR-70):** leave and errands in two sections,
+  "Fully approved" and "Pending approval", each with its own totals; the headline totals count approved
+  only. A pending row shows the step it waits on as a label (Direct manager, HR, …), never approver
+  names, signatures or the reason. The CSV covers both, with a status column. Via `finance_requests()`
+  (unreleased).
 
 - **FR-63** ☑ **Own personal information is view only.** Users see theirs on Profile but cannot
   change it; hr and admin edit other people's (hr never an admin's). Editing one's own needs
@@ -358,6 +362,26 @@ Validation/release status stays in `docs/TASKS.md`.
   for hourly requests ending before work end and for morning half days (midpoint as in
   `approval_bounds`). Display only. The approval coverage box shows only to approvers, the CEO and the
   CEO's delegate. *(2026-10-20.)*
+
+- **FR-70** ☐ **Travel booking for out-of-town work errands (procurement → finance).** HR (an hr role
+  holder or the admin, never on their own request) ticks «نیاز به رزرو سفر» on a daily work errand at
+  its HR step, or after approval until the trip ends (Head of HR's exempt trips, admin override);
+  missing traveller details (placeholder: full name, national ID, birth date, mobile, gender) are
+  warned about, not required. Once the whole chain approves, the trip reaches procurement — a new
+  Yes/No `travel_booking` permission and a Procurement preset — on `/procurement`: the traveller's
+  details read live (only while the booking is open; never own trips), transport (flight / company
+  car), ticket and hotel cost (whole Rials), and a note the traveller sees on My Requests (no costs).
+  Booking is fulfilment, not an approval step. The direct manager extends an approved trip (new end
+  date + required reason); HR alone approves (signed, may change per diem) or rejects; the end date
+  moves, the booking returns to procurement, the print form keeps the signed date plus "extended to".
+  The Head of HR's own extension is exempt and keeps its per diem. HR (or the requester) cancels;
+  every opened booking returns to procurement to record the amount lost (0 allowed). `/finance` shows
+  an approved travel trip at once (per diem + ticket + hotel + total; costs not yet recorded show "—"
+  with a "booking not finished" marker) and a cancelled one once settled (amount lost only).
+  A Manager-role holder may also ask to extend their own trip; HR decides. The Head of HR's own trips
+  skip HR at every stage: they tick «نیاز به رزرو سفر» on their own daily errand form, and their own
+  extension applies at once (exempt, per diem unchanged).
+  *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; owner review 2026-10-20; unreleased.)*
 
 ### Unreleased approval delegation amendment
 
