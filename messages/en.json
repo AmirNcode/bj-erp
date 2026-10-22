@@ -1029,7 +1029,7 @@
     "clearanceNotAwaitingFinance": "Finance can sign only after every row has signed.",
     "clearanceFinanceOnly": "Only finance can sign this step.",
     "oneHourlyPerDay": "You already have an hourly leave on this day. Only one hourly leave is allowed per day.",
-    "perDiemNotApplicable": "A per diem can only be entered on the HR step of a work errand.",
+    "perDiemNotApplicable": "A per diem can only be entered on the HR step of a daily work errand.",
     "perDiemInvalid": "Enter the per diem as a whole number of Rials, 0 or more.",
     "adminOnlySetting": "Only an admin may change the hours in a working day.",
     "approvalOrderNotAllowed": "Only someone who may edit the approval steps can change whether their order is binding.",

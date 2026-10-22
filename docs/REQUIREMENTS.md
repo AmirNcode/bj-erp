@@ -313,7 +313,9 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-60** ☑ **Unlimited carryover.** No Farvardin forfeit; the whole balance carries over.
   Supersedes FR-27's carryover cap. *(2026-10-12.)*
 - **FR-61** ☑ **Per diem on HR's step.** Optional Rial amount (`leave_requests.per_diem_rials`)
-  entered when an hr step of an errand is signed. *(2026-10-12.)*
+  entered when an hr step of an errand is signed. *(2026-10-12.)* Daily work errands only since
+  2026-10-22: an hourly errand carries no per diem (no HR field, no own-per-diem field, refused by
+  the DB) and never reaches procurement (FR-70 is daily-only).
 - **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
   *(2026-10-12.)* **Amended 2026-10-20 (owner review of FR-70):** leave and errands in two sections,
@@ -353,7 +355,7 @@ Validation/release status stays in `docs/TASKS.md`.
   Approval-step dialog and every PersonSearch box. *(2026-10-13.)*
 - **FR-68** ☑ **Head of HR enters their own per diem.** Amends FR-61. The designated HR head's own
   HR step is exempt (and their CEO step may approve at submission), so no approver is offered the
-  per diem field. Their hourly and daily errand forms show an optional per diem (whole Rials, 0
+  per diem field. Their daily errand form (not the hourly one, since 2026-10-22) shows an optional per diem (whole Rials, 0
   allowed), saved at submission and never editable afterwards (cancel and refile). Only the HR head
   recorded on the request's approval policy; anyone else sending it is refused. The amount is shown
   as "Entered by requester (Head of HR)" on My Requests, the print form and `/finance` (+ CSV

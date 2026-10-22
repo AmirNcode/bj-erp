@@ -152,6 +152,7 @@ const RULES: Rule[] = [
   { re: /work_settings_hourly_cap_sane/, key: 'invalidHourlySettings' },
   // FR-61 per diem.
   { re: /per diem can only be set on the hr step of an errand/, key: 'perDiemNotApplicable' },
+  { re: /per diem applies to daily work errands only/, key: 'perDiemNotApplicable' },
   { re: /per diem must be 0 or more/, key: 'perDiemInvalid' },
   { re: /only the Head of HR can enter per diem on their own errand/, key: 'perDiemOwnNotAllowed' },
   // FR-70 travel booking.

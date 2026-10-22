@@ -1748,6 +1748,24 @@ end; $_$;
 
 
 --
+-- Name: leave_request_per_diem_daily_only(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.leave_request_per_diem_daily_only() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if new.per_diem_rials is not null
+     and (tg_op = 'INSERT' or new.per_diem_rials is distinct from old.per_diem_rials)
+     and (new.kind <> 'errand' or new.unit <> 'day') then
+    raise exception 'per diem applies to daily work errands only' using errcode = '22023';
+  end if;
+  return new;
+end; $$;
+
+
+--
 -- Name: natural_approver(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4868,7 +4886,7 @@ begin
         'can_reject',r.status='pending' and (v_allowed or private.is_admin(auth.uid())),
         'is_delegated',d.id is not null,'principal_id',d.principal_id,
         'principal_name',d.principal_name,'grant_id',d.id,'authority_id',d.id,
-        'per_diem_allowed',v_allowed and s.role='hr' and r.kind='errand','is_mine',v_allowed);
+        'per_diem_allowed',v_allowed and s.role='hr' and r.kind='errand' and r.unit='day','is_mine',v_allowed);
     end if;
     v_result:=v_result||jsonb_build_array(v_item||jsonb_build_object('step_id',s.id,
       'step_role',s.role,'step_order',s.step_order,'manager_scope',s.manager_scope,
@@ -9024,6 +9042,13 @@ CREATE TRIGGER employee_personal_info_before_update BEFORE UPDATE ON public.empl
 --
 
 CREATE TRIGGER holidays_audit_change AFTER INSERT OR DELETE OR UPDATE ON public.holidays FOR EACH ROW EXECUTE FUNCTION private.audit_row_change();
+
+
+--
+-- Name: leave_requests leave_requests_per_diem_daily_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per_diem_rials ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_per_diem_daily_only();
 
 
 --

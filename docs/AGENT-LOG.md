@@ -78,6 +78,38 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-22 — Hourly work errand: no per diem
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `codex/approval-fixes` @ `73f5ed5`; moved to `main` @ `5930539` (PR #11 merged, branch deleted on GitHub)
+**Trigger:** Owner: per diem is only for daily work trips; remove it from the hourly errand form, from HR's approval of an hourly errand, and keep hourly errands away from procurement.
+
+**What changed**
+- `supabase/migrations/20261022120000_hourly_errand_no_per_diem.sql` — trigger `leave_requests_per_diem_daily_only` (before insert/update of `per_diem_rials`) raises `per diem applies to daily work errands only` (22023) on a new non-null value unless `kind='errand' and unit='day'`; covers HR-head own per diem, HR step signing and extensions in one place. Old values untouched. `app_request_approval_progress`: `per_diem_allowed` also needs `r.unit='day'` (rest of the function = `pg_get_functiondef` of the local DB).
+- `supabase/schema.sql` — regenerated.
+- `app/[locale]/(app)/request/errand/ErrandRequestForm.tsx`, `page.tsx` — own per diem field, its state and `isCallerHrHead()` call removed.
+- `lib/actions/leave/requests.ts` — `submitErrandRequest` no longer takes or sends `perDiemRials`.
+- `lib/actions/leave/approvals.ts` — `per_diem_override` (admin) needs `row.unit === 'day'`.
+- `lib/errors/db-error.ts` + `messages/{fa,en}.json` — new message maps to `perDiemNotApplicable`, text now says "daily work errand".
+- Procurement: nothing to change — `app_set_travel_booking` already refuses non-daily errands and the approve dialog shows the travel box only with `unit === 'day'`.
+- Tests: `tests/sql/hr-head-own-per-diem.sql` (per diem fixtures now one-day daily errands; hourly refusals added), `tests/sql/sign-once.sql` (r1 daily; hourly HR step `per_diem_allowed=false` and per diem refused), `tests/unit/hr-head-own-per-diem.test.tsx`.
+- Docs: REQUIREMENTS FR-61/FR-68, DATA_MODEL, CHANGELOG.
+
+**Actions outside the repo**
+- Local only: dry-run of migration + 6 SQL suites in `begin … rollback`; `./deploy/bj-deploy update local` (migration applied, frozen); `docker restart bj-erp-rest-1`; Playwright `errand.spec.ts` + `npm run cleanup:e2e` (0 left). Liara untouched.
+
+**Verification**
+- SQL (dry-run): hr-head-own-per-diem 27, sign-once 40, travel-booking 217, client-feedback-2026-10-12 70, approval-delegation 165, travel-itinerary 46 PASS, 0 FAIL.
+- `npx tsc --noEmit` 0; `npm run lint` 0; `npx vitest run` 106 files / 1016 passed; `playwright errand.spec.ts --workers=1` 2 passed.
+- Local DB: 0 hourly errands hold a per diem. Not checked on Liara (any old hourly per diem stays as is; trigger only blocks new values).
+- Not run: `npm run build`, full e2e.
+
+**State left behind**
+- Committed locally on `main` (one commit on top of `5930539`); NOT pushed — owner tests, then pushes (push deploys to Liara). Local `codex/approval-fixes` branch still exists.
+
+**For the next agent**
+- `perDiemApplies` in `lib/leave/approvals.ts` still checks `kind` only; it is unused by app code and slated for removal.
+
 ## 2026-10-21 — Approval-fixes review plan executed (T1) + PR
 
 **Agent:** Claude Opus 5.5 via Claude Code

@@ -164,10 +164,9 @@ export type SubmitErrandInput = DelegationSubmissionInput & {
   description?: string;
   signatureData: string;
   signatureAuthorized: boolean;
-  /** Whole Rials. Only the designated Head of HR may send it, for their own errand (the DB checks). */
-  perDiemRials?: number | null;
 };
 
+/** No per diem: it is paid on daily errands only (the DB refuses one here). */
 export async function submitErrandRequest(
   input: SubmitErrandInput
 ): Promise<SubmitRequestResult> {
@@ -175,7 +174,6 @@ export async function submitErrandRequest(
   if (!c.ok) return c;
   const bad = submissionProblem(input);
   if (bad) return dbErr(bad);
-  const perDiem = input.perDiemRials ?? null;
 
   // No accrual pass here, unlike the two leave paths: an errand is work. It
   // spends no balance, so there is nothing a freshly-accrued hour could unlock.
@@ -190,7 +188,6 @@ export async function submitErrandRequest(
     p_auto_approval_consent: input.autoApprovalConsent,
     p_delegation_preview: input.delegationPreview,
     p_temporary_ceo_authorized: input.temporaryCeoAuthorized,
-    p_per_diem_rials: perDiem ?? undefined,
   });
 
   if (error) return dbErr(error.message);

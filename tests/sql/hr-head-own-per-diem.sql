@@ -36,12 +36,19 @@ end; $$;
 create function pg_temp.sig() returns text language sql immutable as $$
   select 'data:image/png;base64,iVBORw0KGgo'||repeat('A',89);
 $$;
--- Hourly errand as p_actor; returns the request id or 'ERROR <sqlstate> …'.
+-- One-day daily errand as p_actor; returns the request id or 'ERROR <sqlstate> …'.
+-- Per diem belongs to daily errands only (2026-10-22); pg_temp.hourly checks the refusal.
 create function pg_temp.errand(p_actor text,p_date date,p_per_diem bigint,p_auto boolean default false) returns text
 language sql as $$
   select pg_temp.as_scalar(p_actor,format(
-    'select public.submit_errand_request_v2(%L,''08:00'',''09:00'',''Fixture location'',%L,true,null,%L,null,false,%s)',
-    p_date,pg_temp.sig(),p_auto,coalesce(p_per_diem::text,'null')));
+    'select public.submit_daily_errand_request_v2(%L,%L,''Fixture location'',%L,true,null,%L,null,false,%s)',
+    p_date,p_date,pg_temp.sig(),p_auto,coalesce(p_per_diem::text,'null')));
+$$;
+create function pg_temp.hourly(p_actor text,p_date date,p_per_diem bigint) returns text
+language sql as $$
+  select pg_temp.as_scalar(p_actor,format(
+    'select public.submit_errand_request_v2(%L,''08:00'',''09:00'',''Fixture location'',%L,true,null,false,null,false,%s)',
+    p_date,pg_temp.sig(),coalesce(p_per_diem::text,'null')));
 $$;
 create function pg_temp.err(p_result text) returns text language sql as $$
   select case when left(p_result,6)='ERROR ' then split_part(p_result,' ',2) else 'ok' end;
@@ -106,10 +113,16 @@ select pg_temp.expect('blank per diem stays empty',
 select pg_temp.expect('negative per diem refused',pg_temp.err(pg_temp.errand('head','2027-02-05',-1)),'22023');
 select pg_temp.expect('ordinary employee cannot enter own per diem',pg_temp.err(pg_temp.errand('worker','2027-02-05',100)),'42501');
 select pg_temp.expect('other hr user cannot enter own per diem',pg_temp.err(pg_temp.errand('hr2','2027-02-05',100)),'42501');
+select pg_temp.expect('HR head hourly errand refuses a per diem',pg_temp.err(pg_temp.hourly('head','2027-02-05',100)),'22023');
+select pg_temp.expect('HR head hourly errand refuses even 0 Rials',pg_temp.err(pg_temp.hourly('head','2027-02-05',0)),'22023');
 select pg_temp.expect('refused submissions leave no request behind',
   (select count(*)::text from public.leave_requests where start_date='2027-02-05'),'0');
 select pg_temp.expect('v1 errand wrapper still works without per diem',pg_temp.err(pg_temp.as_scalar('worker',format(
   'select public.submit_errand_request(''2027-02-06'',''08:00'',''09:00'',''Fixture location'',%L,true)',pg_temp.sig()))),'ok');
+
+insert into perdiem_fx values('head_hourly',pg_temp.hourly('head','2027-02-07',null)::uuid);
+select pg_temp.expect('HR head hourly errand without per diem ok',
+  (select coalesce(per_diem_rials::text,'null')||'/'||unit::text from public.leave_requests where id=pg_temp.fx('head_hourly')),'null/hour');
 
 -- Finance sees the marker once approved (admin override signs the remaining CEO step).
 select pg_temp.expect('admin approves the HR head errand',pg_temp.err(pg_temp.as_scalar('admin',format(

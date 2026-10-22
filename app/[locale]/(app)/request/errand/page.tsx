@@ -13,7 +13,6 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
-import { isCallerHrHead } from '@/lib/actions/approval-delegation';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ErrandRequestForm } from './ErrandRequestForm';
 import { PageHeader } from '../../_components/PageHeader';
@@ -29,14 +28,13 @@ async function ErrandRequestData({ locale }: { locale: string }) {
   const user = await getCachedUser();
   if (!user) return null;
 
-  const [workSettingsResult, perDiemAllowed] = await Promise.all([getWorkSettings(), isCallerHrHead()]);
+  const workSettingsResult = await getWorkSettings();
   const workSettings = workSettingsResult.ok ? workSettingsResult.settings : WORK_SETTINGS_FALLBACK;
 
   return (
     <ErrandRequestForm
       workSettings={workSettings}
       locale={locale}
-      perDiemAllowed={perDiemAllowed}
     />
   );
 }

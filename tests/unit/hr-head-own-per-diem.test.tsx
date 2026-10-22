@@ -34,20 +34,25 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('Head of HR own per diem: submit actions', () => {
-  it('sends the amount with both errand forms', async () => {
-    expect(await submitErrandRequest({ ...hourly, perDiemRials: 1_500_000 })).toEqual({ ok: true, requestId: 'request-id' });
-    expect(mocks.rpc).toHaveBeenLastCalledWith('submit_errand_request_v2', expect.objectContaining({ p_per_diem_rials: 1_500_000 }));
+  it('sends the amount with the daily errand form', async () => {
+    expect(await submitDailyErrandRequest({ ...daily, perDiemRials: 1_500_000 })).toEqual({ ok: true, requestId: 'request-id' });
+    expect(mocks.rpc).toHaveBeenLastCalledWith('submit_daily_errand_request_v2', expect.objectContaining({ p_per_diem_rials: 1_500_000 }));
     await submitDailyErrandRequest({ ...daily, perDiemRials: 0 });
     expect(mocks.rpc).toHaveBeenLastCalledWith('submit_daily_errand_request_v2', expect.objectContaining({ p_per_diem_rials: 0 }));
   });
 
   it('omits the parameter when no amount is entered', async () => {
-    await submitErrandRequest({ ...hourly, perDiemRials: null });
+    await submitDailyErrandRequest({ ...daily, perDiemRials: null });
     expect(mocks.rpc.mock.calls[0][1].p_per_diem_rials).toBeUndefined();
   });
 
+  it('never sends a per diem with an hourly errand (daily errands only)', async () => {
+    expect(await submitErrandRequest(hourly)).toEqual({ ok: true, requestId: 'request-id' });
+    expect(mocks.rpc).toHaveBeenLastCalledWith('submit_errand_request_v2', expect.not.objectContaining({ p_per_diem_rials: expect.anything() }));
+  });
+
   it('refuses negative and fractional amounts before calling the database', async () => {
-    expect(await submitErrandRequest({ ...hourly, perDiemRials: -1 })).toEqual({ ok: false, error: 'per diem must be 0 or more' });
+    expect(await submitDailyErrandRequest({ ...daily, perDiemRials: -1 })).toEqual({ ok: false, error: 'per diem must be 0 or more' });
     expect(await submitDailyErrandRequest({ ...daily, perDiemRials: 1.5 })).toEqual({ ok: false, error: 'per diem must be 0 or more' });
     expect(mocks.rpc).not.toHaveBeenCalled();
   });

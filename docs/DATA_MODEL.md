@@ -304,7 +304,7 @@ The yearly entitlement. Creating one also writes a ledger `allocation` row.
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` · `start_date date` ·
 `end_date date` · `day_part day_part` · `requested_minutes int` (computed, see below) ·
 `unpaid_minutes int` (default 0, constrained to `0..requested_minutes`) ·
-`per_diem_rials bigint` (FR-61, 2026-10-12: errand-only, `>= 0`, set when an hr step is signed) ·
+`per_diem_rials bigint` (FR-61, 2026-10-12: errand-only, `>= 0`, set when an hr step is signed; since 2026-10-22 trigger `leave_requests_per_diem_daily_only` refuses a new value unless `unit = 'day'`) ·
 `per_diem_by_requester boolean` (FR-68, 2026-10-19: default false; true when the designated HR head
 entered it on their own errand at submission; requires `per_diem_rials`; an hr step signer's amount resets it) ·
 `status leave_status` (default `pending`) · `reason text` · `decided_by → profiles` (nullable) ·

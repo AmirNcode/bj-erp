@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Hourly work errands carry no per diem — `main` (FR-61, not deployed)
+
+Migration `20261022120000_hourly_errand_no_per_diem`.
+- The hourly work errand form no longer shows the Head of HR's own per diem field.
+- HR's approval of an hourly errand no longer asks for a per diem; only daily work errands do.
+- The database refuses a per diem on anything but a daily errand (amounts already saved stay).
+  Hourly errands still never reach procurement (travel booking was already daily-only).
+
 ### Sign once, Home request details, finance range — branch `codex/approval-fixes` (FR-71, FR-72, FR-62, not deployed)
 
 Migrations `20261021120000` (sign once), `20261021120001` (Home removals).

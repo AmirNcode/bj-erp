@@ -40,6 +40,12 @@ create function pg_temp.errand(p_actor text,p_date date) returns uuid language s
     'select public.submit_errand_request_v2(%L,''08:00'',''09:00'',''Fixture location'',%L,true,null,false,null,false,null)',
     p_date,pg_temp.sig()))::uuid;
 $$;
+-- One-day daily errand by p_actor (per diem is daily-only since 2026-10-22).
+create function pg_temp.daily(p_actor text,p_date date) returns uuid language sql as $$
+  select pg_temp.as_scalar(p_actor,format(
+    'select public.submit_daily_errand_request_v2(%L,%L,''Fixture location'',%L,true,null,false,null,false,null)',
+    p_date,p_date,pg_temp.sig()))::uuid;
+$$;
 -- Sign a list of step keys for request key p_req as p_actor.
 create function pg_temp.sign(p_actor text,p_req text,p_steps text[],p_per_diem bigint default null) returns text
 language sql as $$
@@ -91,7 +97,7 @@ begin
 end; $$;
 
 -- ── FR-71: order not enforced ────────────────────────────────────────────────
-insert into once_fx values('r1',pg_temp.errand('worker','2027-03-01'));
+insert into once_fx values('r1',pg_temp.daily('worker','2027-03-01'));
 select pg_temp.expect('boss holds manager and HR steps',pg_temp.mine('boss','r1'),'mgr:true/true,hr:true/true,named:false/false');
 select pg_temp.expect('per diem allowed on the HR step',pg_temp.as_scalar('boss',format(
   'select item->>''per_diem_allowed'' from jsonb_array_elements(public.app_request_approval_progress(%L)) item where item->>''step_id''=%L',
@@ -115,6 +121,10 @@ select pg_temp.expect('duplicate steps refused',pg_temp.sign('boss','r2',array['
 select pg_temp.expect('unknown step refused',pg_temp.sign('boss','r2',array['mgr','stranger']),'42501');
 select pg_temp.expect('per diem without the HR step refused',pg_temp.sign('boss','r2',array['mgr'],100),'22023');
 select pg_temp.expect('someone else''s step in the list refused',pg_temp.sign('boss','r2',array['mgr','named']),'42501');
+select pg_temp.expect('no per diem on an hourly errand''s HR step',pg_temp.as_scalar('boss',format(
+  'select item->>''per_diem_allowed'' from jsonb_array_elements(public.app_request_approval_progress(%L)) item where item->>''step_id''=%L',
+  pg_temp.fx('r2'),pg_temp.fx('hr'))),'false');
+select pg_temp.expect('per diem on an hourly errand refused',pg_temp.sign('boss','r2',array['mgr','hr'],100),'22023');
 select pg_temp.expect('a refused call saves nothing',
   (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('r2')),'0');
 select pg_temp.expect('worker cannot sign',pg_temp.sign('worker','r2',array['mgr']),'42501');
