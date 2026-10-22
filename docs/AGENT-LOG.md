@@ -100,8 +100,11 @@ Copy this block verbatim and fill it in.
 - Committed on local `main`, not pushed (owner tests then pushes; push deploys to Liara).
 
 **For the next agent**
-- Fix `leave.spec.ts` step 9 to target the cancelled row by id instead of `.first()`.
 - `56189d0` can still be recovered by SHA until git gc.
+
+**Follow-up (same session): leave.spec step 9 fixed**
+- `tests/e2e/leave.spec.ts` step 9 — cause: Home drops cancelled requests (`recentOnHome`, `lib/home/board.ts:100`, FR-72), so `.first()` re-resolved to another pending row. Now pins the row by request id, expects the Home row gone (`toHaveCount(0)`), then checks `status-badge-<id>` on `/request` reads cancelled.
+- `playwright leave.spec.ts --workers=1`: 1 passed; `npm run cleanup:e2e` 0 left; lint 0; tsc 0. Committed on local `main`, not pushed.
 
 ## 2026-10-22 — Hourly work errand: no per diem
 

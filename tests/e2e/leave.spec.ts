@@ -151,18 +151,22 @@ test.describe('Leave request + allocation flow', () => {
     await page.goto('/home');
     const homeRow = page.locator('[data-testid^="home-recent-request-"]').first();
     await expect(homeRow).toBeVisible({ timeout: 10_000 });
-    const cancelBtn = homeRow.locator('[data-testid^="cancel-btn-"]');
+    // Pin the row by id: Home drops a cancelled request (FR-72), so `.first()`
+    // would move on to the next request once this one is gone.
+    const requestId = (await homeRow.getAttribute('data-testid'))!.replace('home-recent-request-', '');
+    const cancelBtn = page.getByTestId(`cancel-btn-${requestId}`);
     await expect(cancelBtn).toBeVisible({ timeout: 5_000 });
     await cancelBtn.click();
-    const confirmBtn = page.locator('[data-testid^="cancel-confirm-"]').first();
+    const confirmBtn = page.getByTestId(`cancel-confirm-${requestId}`);
     await expect(confirmBtn).toBeVisible({ timeout: 5_000 });
     await confirmBtn.click();
 
-    // The shared control refreshes the Home board after the cancellation.
-    await expect(homeRow.locator('[data-testid^="home-status-"]')).toContainText(
-      /cancel|لغو/i,
-      { timeout: 10_000 }
-    );
+    // The shared control refreshes the Home board, which no longer lists it.
+    await expect(page.getByTestId(`home-recent-request-${requestId}`)).toHaveCount(0, { timeout: 10_000 });
+
+    // My Requests still shows it, as cancelled.
+    await page.goto('/request');
+    await expect(page.getByTestId(`status-badge-${requestId}`)).toContainText(/cancel|لغو/i, { timeout: 10_000 });
 
     // ── 10. Submit an over-balance request (very long range) ──────────────
     await page.goto('/request?form=1&all=1');
