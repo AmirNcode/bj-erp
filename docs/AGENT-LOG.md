@@ -106,6 +106,8 @@ Copy this block verbatim and fill it in.
 - `tests/e2e/leave.spec.ts` step 9 — cause: Home drops cancelled requests (`recentOnHome`, `lib/home/board.ts:100`, FR-72), so `.first()` re-resolved to another pending row. Now pins the row by request id, expects the Home row gone (`toHaveCount(0)`), then checks `status-badge-<id>` on `/request` reads cancelled.
 - `playwright leave.spec.ts --workers=1`: 1 passed; `npm run cleanup:e2e` 0 left; lint 0; tsc 0. Committed on local `main`, not pushed.
 
+**Deploy (same session, owner-approved):** pushed `main` `5930539..39bcdc8` (d8b7ecd, e2d8d04, 39bcdc8). GitHub Actions run 39802209120: build success, deploy success (applies migration `20261022120000_hourly_errand_no_per_diem` on Liara). `https://bjeng.app/api/health` → `{"status":"ok"}`. No signed-in smoke check done (owner does those). This log note is uncommitted.
+
 ## 2026-10-22 — Hourly work errand: no per diem
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
