@@ -108,7 +108,14 @@ Copy this block verbatim and fill it in.
   after deploy: Home scrolled to bottom + top of a page under the status bar.
 
 **State left behind**
-- Uncommitted, not pushed (push to main deploys).
+- Owner then asked to push: `cb769c5` (this fix) and `d2107e5` (the other session's Home
+  day-off tile, after tsc/lint/1026 unit tests passed) pushed to main. **Both deploy runs
+  failed at `npm audit --omit=dev`**: new critical advisories on `next` 16.0.0–16.4.0
+  (GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r, GHSA-673q-mjm6-r5xr); fix = `next` 16.4.3.
+  Nothing reached Liara from those two runs.
+- Owner approved the bump: `next` + `eslint-config-next` 16.3.8 → 16.4.3 (exact pins kept).
+  `npm audit --omit=dev` → 0 vulnerabilities; tsc, lint, 1026 unit tests, `npm run build` all
+  pass locally (deploy-script tests not run locally; CI runs them). Committed and pushed with this note.
 
 **For the next agent**
 - If the status bar overlaps content at the top on device, consider `appleWebApp.statusBarStyle`; deliberately not set here.

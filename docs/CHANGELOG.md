@@ -9,6 +9,11 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Security: Next.js 16.4.3 — `main`
+
+- `next` and `eslint-config-next` 16.3.8 → 16.4.3 for critical advisories GHSA-2464-fhr4-w9xw,
+  GHSA-p3m5-59mp-jv5r, GHSA-673q-mjm6-r5xr (CI's `npm audit` blocked deploys).
+
 ### iPhone home-screen app: bottom bar clears the home indicator — `main` (not deployed)
 
 - On an iPhone with the app installed to the home screen, the bottom tab bar now sits above the
