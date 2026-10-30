@@ -78,6 +78,41 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-30 — iPhone PWA bottom tab bar under the home indicator
+
+**Agent:** Claude Opus 5.5 via Claude Code (side session)
+**Branch / HEAD at start:** main @ de06460 (uncommitted Home day-off tile work from another session, left as is)
+**Trigger:** owner's iPhone screenshot (installed PWA): bottom tab labels almost touch the home indicator.
+
+**What changed**
+- `app/[locale]/layout.tsx` — `viewport.viewportFit: 'cover'` (Next 16 `Viewport`, checked in Context7).
+  Root cause: without `viewport-fit=cover` iOS reports `env(safe-area-inset-*)` as 0, so the
+  nav's existing `paddingBottom: env(safe-area-inset-bottom)` (`MainNav.tsx`) did nothing.
+- `app/[locale]/(app)/_components/AppShell.tsx` — mobile `<main>` padding now
+  `pt-[max(1.25rem,env(safe-area-inset-top))]` (cover lets content reach the status bar) and
+  `pb-[calc(6rem+env(safe-area-inset-bottom))]` (last card clears the taller bar). `md:` unchanged.
+- `app/[locale]/(app)/manage/employees/page.tsx` — mobile "add" FAB `bottom-24` → `bottom-[calc(6rem+env(safe-area-inset-bottom))]` so it stays above the bar.
+- Login page untouched (centred, `p-8`). Sonner toaster (`top-center`) not touched: sonner has no safe-area handling, so on device a toast may now sit under the status bar — check, and give `<Toaster>` an `offset`/`mobileOffset` with the top inset if so.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Temp page `app/[locale]/zz-safearea` (deleted) with `AppShell` + 30 cards, dev server, 375×812:
+  meta = `width=device-width, initial-scale=1, viewport-fit=cover`; with insets 0 main padding is
+  20px/96px and nav padding 0 (same as before). Emulated insets (top 59, bottom 34) by inline
+  styles: labels end 29px above a drawn home indicator, last card 41px above the nav. Desktop
+  1024px: 28px/32px (unchanged).
+- `npx tsc --noEmit` clean, `npm run lint` clean, `npm run build` exit 0.
+- NOT verified on a real installed iPhone PWA (env() cannot be faked in Chromium). Needs a check
+  after deploy: Home scrolled to bottom + top of a page under the status bar.
+
+**State left behind**
+- Uncommitted, not pushed (push to main deploys).
+
+**For the next agent**
+- If the status bar overlaps content at the top on device, consider `appleWebApp.statusBarStyle`; deliberately not set here.
+
 ## 2026-10-22 — Leave type picker restored onto main (cherry-pick of 1e5ce65)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

@@ -32,6 +32,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: '#2E3C92',
   colorScheme: 'light',
+  // Without `cover`, env(safe-area-inset-*) is 0 and the installed iPhone PWA's
+  // bottom bar sits under the home indicator.
+  viewportFit: 'cover',
 };
 
 export function generateStaticParams() {

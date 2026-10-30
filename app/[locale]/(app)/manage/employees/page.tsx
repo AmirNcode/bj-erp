@@ -391,7 +391,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           href={`${base}/new`}
           aria-label={t('employees.addNew')}
           data-testid="add-employee-fab"
-          className="fixed bottom-24 end-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg sm:hidden"
+          className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] end-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg sm:hidden"
         >
           <Plus aria-hidden="true" className="size-6" />
         </Link>

@@ -42,7 +42,8 @@ export function AppShell({
 
   return (
     <div className="min-h-dvh md:ps-60">
-      <main className="mx-auto w-full max-w-6xl px-4 py-5 pb-24 md:px-8 md:py-7 md:pb-8">
+      {/* Safe-area insets are 0 outside the installed iPhone PWA, so browsers keep 20px / 96px. */}
+      <main className="mx-auto w-full max-w-6xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
         {myPending && <RequestOutcomeBanner pending={myPending} />}
         {children}
       </main>

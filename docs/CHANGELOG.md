@@ -9,6 +9,11 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### iPhone home-screen app: bottom bar clears the home indicator — `main` (not deployed)
+
+- On an iPhone with the app installed to the home screen, the bottom tab bar now sits above the
+  home indicator, and the page leaves room for it. Browsers and desktop look the same as before.
+
 ### Hourly work errands carry no per diem — `main` (FR-61, not deployed)
 
 Migration `20261022120000_hourly_errand_no_per_diem`.
