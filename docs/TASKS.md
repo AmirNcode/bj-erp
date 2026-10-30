@@ -10,13 +10,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   certificate and active backup timer verified. Owner confirmed login on bjeng.app (2026-10-06).
   Original timeout cause remains unknown; investigate with Liara if it recurs (the uptime workflow
   now emails on an outage).
-- ☐ Real data: enter the 1404–1405 official holidays (CSV upload in Settings) and import the
-  employee roster (`docs/files/Personnel_CLEAN.csv` via Manage › Employees › Import — owner tests
-  it locally first). After import: activate the **Department manager** approval step, give Meysam
-  Ayasi the `hr` role if wanted, and hand out the login slips (Print login slips on the
-  credentials screen), then delete the CSV. Import only after the FR-50 release is live on Liara:
-  accounts created before it are not flagged for a first-login password (regenerating their
-  passwords flags them).
+- ☐ Real data: roster imported on Liara and login slips printed (2026-10-07). Not yet confirmed:
+  the 1404–1405 official holidays (CSV upload in Settings), the **Department manager** approval
+  step activated, Meysam Ayasi's `hr` role (if wanted), and `docs/files/Personnel_CLEAN.csv`
+  deleted.
 - ☐ Personnel list follow-ups (owner): hire a supervisor for «رنگ و بسته بندی» (PNP, 12 people;
   Milad 490 left — until then they report to Sahraei); HR corrects the three balances counted to other dates (notes column: Fateme
   Fouladi "to year end", Sousan Fouladi "incl. Mehr", Mousavi "incl. Shahrivar").
@@ -49,17 +46,14 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
-- ◐ **Sign once, Home details, finance range (FR-71, FR-72, FR-62 amendment):** built on
-  `codex/approval-fixes`, uncommitted (migrations `20261021120000`/`…01`). After deploy the owner re-runs the
-  production test: Head of HR as manager signs once; employee's Home shows procurement's note under Show more;
+- ☐ **Production test of sign once, Home details, finance range (FR-71, FR-72, FR-62 amendment)**
+  (owner; [PR #11](https://github.com/AmirNcode/bj-erp/pull/11), live since 2026-10-22): Head of HR as manager signs once; employee's Home shows procurement's note under Show more;
   Remove on a rejected request; `/finance` opens on this + next month.
 
-- ◐ **FR-70 travel booking (procurement → finance):** [PR #10](https://github.com/AmirNcode/bj-erp/pull/10),
-  branch `codex/travel-booking`; migrations `20261020120000`–`…11` applied only to the scratch DB
-  `bj_travel`. Owner review changes done (finance pending + approved, manager's own extension, UI fixes).
-  Open: **confirm the traveller field list with procurement** (placeholder: full name, national ID,
-  birth date, mobile, gender — `private.travel_traveller_fields()` + `lib/travel/fields.ts`); manual
-  walk-through on a stack pointed at `bj_travel`; merge.
+- ☐ **FR-70 travel booking follow-ups** ([PR #10](https://github.com/AmirNcode/bj-erp/pull/10), live;
+  migrations `20261020120000`–`…11` are frozen, so fixes go in new migrations).
+  **Confirm the traveller field list with procurement** (placeholder: full name, national ID,
+  birth date, mobile, gender — `private.travel_traveller_fields()` + `lib/travel/fields.ts`).
   **Deferred by the owner (2026-10-20 review), no code yet:**
   - An hr holder's approval delegate can tick, cancel or decide extensions on that hr holder's OWN trip
     (`private.acts_as_travel_hr` / `is_travel_hr`, migration `…06`, check only `employee_id <> delegate`).
@@ -79,24 +73,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
     holds `hr` can request and approve their report's extension. Fix idea: 42501 after the lock, and hide
     such rows in `app_pending_errand_extensions`.
 
-- ◐ **Approval delegation, replacements and automatic CEO step:** new Yes/No delegation permission
-  under Approval chain; saved delegate selection at `/settings/roles` (admin manages others, permission
-  holders select their own). Eligible delegates: active managers/approvers. Leave replacement becomes
-  temporary delegate only if eligible, during approved absence, then saved delegate resumes. Ordinary
-  employees remain work cover only. **Owner simplification 2026-10-19:** no timer, worker or review
-  window — when the CEO's attested delegate (e.g. HR head) submits their own request with consent, the
-  CEO step is approved at submission; other CEO-step requests go to the CEO or the delegate. Non-HR
-  delegates still need HR; only the designated HR head skips the HR signature. Spec:
-  `docs/specs/2026-10-17-ceo-delegate-approval-design.md` (amendment). Open as
-  https://github.com/AmirNcode/bj-erp/pull/7; one squashed migration `20261018011333`, applied only to
-  the rebuilt isolated test DB. Review findings addressed: `step_delegation` performance (10–20× on
-  production data), narrower read RLS, CEO re-designation, e2e-cleanup FKs, queue order. Remaining,
-  each needing owner authorization: second review, merge (= deploy), pre-deploy backup + restore
-  drill, post-deploy smoke. Credential/session hardening stays deferred (risk R9). Second review done
-  2026-10-19 (no blocker; follow-ups in the next item).
-
-- ☐ **PR #7 second-review follow-ups** (review of `def6861`, 2026-10-19; none blocks deploy). Migration
-  `20261018011333` is frozen once deployed, so SQL fixes go in a new migration. Line numbers refer to it.
+- ☐ **Approval delegation follow-ups** ([PR #7](https://github.com/AmirNcode/bj-erp/pull/7), live; spec
+  `docs/specs/2026-10-17-ceo-delegate-approval-design.md`). From the second review of `def6861`
+  (2026-10-19). Migration `20261018011333` is frozen, so SQL fixes go in a new migration; line numbers
+  refer to it. Credential/session hardening stays deferred (risk R9).
   - **Revoke blocked while principal is ineligible (most important):** `app_set_approval_delegate`
     (:389-391) demands the principal's `approval_delegate` permission + `natural_approver` even when
     `p_delegate_id` is null. If the CEO is deactivated or loses the manager role/permission, admin cannot
@@ -117,8 +97,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - **e2e testid contract broken:** `ApprovalQueue.tsx:170` is now `chain-<id>-<step_id>`;
     `tests/e2e/hr-role.spec.ts:355-380` still expects `chain-<id>-manager` / `-hr`. Restore a role-based
     testid or update the spec.
-  - **HR head errand per diem can never be set:** an errand whose only applicable step is the exempt HR
-    step is finalized at submission; per diem is settable only on a pending HR step. Ask the owner.
   - **Wider `leave_requests` RLS reaches unscoped queries:** `lib/actions/reports.ts:119` and
     `lib/actions/absences.ts:44` have no employee filter, so named step approvers now also see pending /
     self-decided requests there. Confirm intended or filter.
@@ -131,16 +109,16 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   - **Test gaps:** no SQL tests for executive-settings negatives, automatic approval refused when the CEO
     is inactive / lost the permission, the revoke path, the HR-step exclusion; multi-session lock races not
     rerun after the timer removal.
-  - **Before deploy (read-only):** count pending requests holding a legacy `step_id is null` manager
+  - **Post-deploy check (read-only, Liara):** count pending requests holding a legacy `step_id is null` manager
     approval where both manager steps apply — the new mapping no longer lets one row fill both, so those
     show "reconciliation required" and need an admin override.
 
-- ☐ **Settings › Roles save notices vanish ~1 s after saving** (branch `codex/approval-delegation`,
-  found 2026-10-19): `settings/roles/page.tsx` keys `DelegationPanel` on `JSON.stringify(context)`;
+- ☐ **Settings › Roles save notices vanish ~1 s after saving** (found 2026-10-19,
+  shipped with PR #7): `settings/roles/page.tsx` keys `DelegationPanel` on `JSON.stringify(context)`;
   the save action's `invalidateAppCache()` re-renders the page, the key changes and the panel remounts,
   dropping the "saved" status for delegate and executive saves. Values do update. Fix by
   keying on `principal_id` only (state is already refreshed client-side) and re-run the browser phases.
-- ☐ **Farsi print shows the recorded automatic-authority statement in English** (same branch): the
+- ☐ **Farsi print shows the recorded automatic-authority statement in English** (shipped with PR #7): the
   statement is stored immutable evidence text written by SQL in English.
 - ☐ **e2e cleanup fails when a throwaway approver signed a throwaway user's request** (pre-existing,
   found 2026-10-19; same FKs on `main`): one `delete from auth.users` removes both, and the approver's
@@ -226,14 +204,13 @@ Plan and status: `docs/CLEANUP-AUDIT-2026-10-04.md` (§0 says what was applied o
 
 - ☐ `updateDepartmentCode`, its skipped test (`tests/e2e/department.spec.ts`) and the
   `departments_update_admin` policy: owner said leave them for now (2026-10-04).
-- ☐ Owner approved deleting the merged branches; the agent's permission check blocked it, so
-  Amir runs it: 4 local `codex/*` and 3 `origin/codex/*`, all merged into `main`.
-- ☐ Local disk, owner to confirm: the `.claude/worktrees/peaceful-williams-9c1cf9` worktree and
-  its branch (its one lesson is now in `docs/MEMORY.md`); 18 old `bj-erp-app` Docker image tags
-  and ~18 GB of Docker build cache.
+- ☐ Local disk, owner to confirm: stale detached worktrees `/Users/amir/Workspace/bj-fr55` (FR-55,
+  merged in PR #6; its scratch DB `bj_fr55`) and `.claude/worktrees/objective-kilby-c2fe28`, plus a
+  prunable scratchpad worktree (`git worktree prune`); 18 old `bj-erp-app` Docker image tags and
+  ~18 GB of Docker build cache.
 - ☐ Incremental, when touching the area: SQL-level tests instead of TS mirrors (D9); trim history
   from comments (D10); drop the vestigial `profiles.calendar_pref` (C8). (D3, labels props →
-  `useTranslations`, is done on branch `codex/refactor-cleanup`.)
+  `useTranslations`, is done (PR #9).)
 - ⊘ **R-10 of `docs/REFACTOR_PLAN.md`** (delete the test-only TS mirrors in `lib/leave/approvals.ts`,
   `hourly.ts`, `accrual.ts`, `personal-info/fields.ts`): blocked until `tests/sql/*.sql` run in CI
   (a Postgres service job); add SQL cases for order enforcement, self-signing and hourly overlap first.

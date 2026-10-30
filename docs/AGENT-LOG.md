@@ -113,6 +113,58 @@ Copy this block verbatim and fill it in.
 **For the next agent**
 - If the status bar overlaps content at the top on device, consider `appleWebApp.statusBarStyle`; deliberately not set here.
 
+## 2026-10-29 — Home tile: next every-other-week day off
+
+**Agent:** Claude Opus 5.5 via Claude Code (side session)
+**Branch / HEAD at start:** main @ de06460 (uncommitted `docs/TASKS.md` + this file from another session, left as is)
+**Trigger:** owner wants employees to see on Home whether this coming Thursday is off and the next off Thursday's date.
+
+- `lib/leave/weekend.ts`: `alternatingDaysOff(today, rule)` — per bi-weekly weekday: coming
+  occurrence (today if today is that day), whether it is off (via `isWeekendDate`, the existing
+  parity rule; not reimplemented), next off date (it or +7). Soonest first; [] with no day/anchor.
+- `app/[locale]/(app)/home/page.tsx` builds the lines (Tehran `today`, Jalali `formatCalendarDate`);
+  `HomeBoard.tsx` renders card `home-alternating-day-off` in the aside under the next-holiday card,
+  every role. Several days → one line each (each day has its own off/working state; "soonest" alone
+  would hide one). Holidays are not considered — weekly rule only.
+- Strings `home.alternating*` in `messages/fa.json` + `en.json`.
+- Tests `tests/unit/alternating-days-off.test.ts` (6: today off, today worked, mid-week, future
+  anchor, no setting, two days).
+- Verified: `npx tsc --noEmit`, `npm run lint`, `npm run test:unit` (108 files / 1026 tests), `npm run build`
+  all pass. Browser: temporary `app/[locale]/zz-alt` page rendering the real `HomeBoard` with the
+  Settings screenshot rule (Thu, anchor 2026-10-22 = 1405/07/30) — fa today 2026-10-29: "today is a
+  working day", next off ۱۴۰۵/۰۸/۱۴; en 2026-11-05: "Today … is a day off"; two days listed. Page
+  deleted, `.next/dev/types` removed. Not checked logged in on the real Home (no current test password).
+- Note: in `en` the weekday prints transliterated ("Panjshanbeh"), same as the existing holiday card.
+- Nothing committed or pushed; nothing run against Liara.
+
+## 2026-10-29 — TASKS.md tidy after PRs #6–#11
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.
+**Branch / HEAD at start:** `main` @ `de06460` (clean)
+**Trigger:** Owner asked for a status summary, then to tidy stale `docs/TASKS.md` entries.
+
+**What changed**
+- `docs/TASKS.md` only:
+  - FR-71/72 entry → owner production-test item (was "uncommitted on `codex/approval-fixes`").
+  - FR-70 entry → follow-ups only (PR #10 live); kept the traveller-field question, deferred items, skipped security findings.
+  - Approval-delegation ◐ entry removed (PR #7 merged + deployed); its spec link and R9 note moved into the follow-ups header.
+  - Dropped the "HR head errand per diem can never be set" follow-up (FR-68, PR #8). "Before deploy" check → read-only post-deploy check on Liara.
+  - Real data: roster imported + login slips printed on 2026-10-07 (AGENT-LOG); holidays, department-manager step, `hr` role and CSV deletion left as unconfirmed.
+  - Codebase cleanup: removed the branch-deletion item (no `codex/*` branches left); worktree item now names `bj-fr55`, `objective-kilby-c2fe28` and a prunable scratchpad worktree.
+- Checked in code that the other PR #7 follow-ups are still open (`DelegationPanel` key, `chain-…-manager` testids, `unnest(...) id` scoping, no self-nomination guard).
+
+**Actions outside the repo**
+- Refreshed Claude memory note `bj-hr-app-state.md`. Nothing on Liara or the local DB.
+
+**Verification**
+- Docs only; no tests run.
+
+**State left behind**
+- Uncommitted on `main` (`docs/TASKS.md`, this entry). Commit with `[skip ci]` when the owner asks.
+
+**For the next agent**
+- Not confirmed whether holidays / department-manager step were done on Liara; ask the owner.
+
 ## 2026-10-22 — Leave type picker restored onto main (cherry-pick of 1e5ce65)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop). No subagents.

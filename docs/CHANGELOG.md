@@ -14,6 +14,14 @@ was deployed; semantic versioning starts at the first tag.
 - On an iPhone with the app installed to the home screen, the bottom tab bar now sits above the
   home indicator, and the page leaves room for it. Browsers and desktop look the same as before.
 
+### Home: every-other-week day off tile — `main` (not deployed)
+
+- Home shows a tile for each "Off every other week" day in Settings › General (e.g. Thursday):
+  whether its coming occurrence is a day off or a working day (today, when today is that day),
+  and the Jalali date of the next off one. No tile when no such day is set; one line per day,
+  soonest first, when several are set. Every role sees it. Weekly rule only: an official holiday
+  on that day is not reflected here.
+
 ### Hourly work errands carry no per diem — `main` (FR-61, not deployed)
 
 Migration `20261022120000_hourly_errand_no_per_diem`.

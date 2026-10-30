@@ -39,6 +39,7 @@ function useLabels() {
     pulsePending: t('pulsePending'),
     nextHolidayTitle: t('nextHolidayTitle'),
     noHoliday: t('noHoliday'),
+    alternatingTitle: t('alternatingTitle'),
   };
 }
 
@@ -83,6 +84,8 @@ type Props = {
   } | null;
   usage: UsageRow[];
   nextHoliday: { name: string; month: string; day: string; when: string } | null;
+  /** Every-other-week days off, soonest first; [] hides the card. */
+  alternating: { weekday: number; off: boolean; status: string; next: string | null }[];
   /** Requests where this person is the named cover (D15: never a surprise). */
   coverDuties: {
     requestId: string;
@@ -150,6 +153,7 @@ export function HomeBoard({
   pending,
   usage,
   nextHoliday,
+  alternating,
   coverDuties,
 }: Props) {
   const labels = useLabels();
@@ -350,6 +354,26 @@ export function HomeBoard({
               </div>
             )}
           </Card>
+
+          {alternating.length > 0 && (
+            <Card className="gap-3 px-5 py-5" data-testid="home-alternating-day-off">
+              <h2 className="text-[12.5px] text-muted-foreground">{labels.alternatingTitle}</h2>
+              <ul className="space-y-3">
+                {alternating.map((d) => (
+                  <li key={d.weekday} data-testid={`home-alternating-${d.weekday}`} className="flex gap-2.5">
+                    <span
+                      aria-hidden="true"
+                      className={cn('mt-1.5 size-2 shrink-0 rounded-full', d.off ? 'bg-primary' : 'bg-muted-foreground/40')}
+                    />
+                    <div className="min-w-0">
+                      <p className="font-semibold">{d.status}</p>
+                      {d.next && <p className="text-xs text-muted-foreground">{d.next}</p>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </aside>
       </div>
     </>

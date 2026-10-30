@@ -34,6 +34,7 @@ import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
+import { alternatingDaysOff } from '@/lib/leave/weekend';
 import { HomeBoard, type PulseCards } from './HomeBoard';
 import { ProfileReminderCard } from './ProfileReminderCard';
 import { ClearanceAwaitingCard } from './ClearanceAwaitingCard';
@@ -266,6 +267,23 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
       }
     : null;
 
+  // ── every-other-week day off (e.g. Thursday) ─────────────────────────────
+  // One line per configured day: whether its coming occurrence (today when
+  // today is that day) is off, and the next off date when it is not.
+  const alternating = alternatingDaysOff(today, workSettings).map((d) => {
+    const weekday = formatCalendarDate(d.upcoming, locale, 'dddd');
+    const isToday = d.upcoming === today;
+    const status = isToday
+      ? t(d.upcomingOff ? 'alternatingTodayOff' : 'alternatingTodayWork', { weekday })
+      : t(d.upcomingOff ? 'alternatingUpcomingOff' : 'alternatingUpcomingWork', { weekday, date: date(d.upcoming) });
+    return {
+      weekday: d.weekday,
+      off: d.upcomingOff,
+      status,
+      next: d.upcomingOff ? null : t('alternatingNextOff', { weekday, date: date(d.nextOff) }),
+    };
+  });
+
   return (
     <div className="flex flex-col gap-5" data-testid="home-board">
       {canApprove && <NewRequestsBanner currentIds={pending.map((r) => r.id)} />}
@@ -293,6 +311,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
         }
         usage={usage}
         nextHoliday={nextHoliday}
+        alternating={alternating}
         coverDuties={
           coverDutiesRes.ok
             ? coverDutiesRes.duties.map((d) => ({

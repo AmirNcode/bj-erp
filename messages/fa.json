@@ -97,6 +97,12 @@
     "holidayIn": "{weekday} ، {days} روز دیگر",
     "holidayToday": "{weekday} ، امروز",
     "noHoliday": "تعطیلی رسمی پیش رو ثبت نشده است.",
+    "alternatingTitle": "تعطیلی یک هفته در میان",
+    "alternatingTodayOff": "امروز، {weekday}، تعطیل است",
+    "alternatingTodayWork": "امروز، {weekday}، روز کاری است",
+    "alternatingUpcomingOff": "{weekday} این هفته، {date}، تعطیل است",
+    "alternatingUpcomingWork": "{weekday} این هفته، {date}، روز کاری است",
+    "alternatingNextOff": "{weekday} تعطیل بعدی: {date}",
     "profileReminder": {
       "title": "پروفایل خود را کامل کنید",
       "both": "اطلاعات شخصی خود را وارد و امضای خود را ذخیره کنید تا امضای درخواست‌ها با یک لمس انجام شود.",

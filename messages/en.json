@@ -97,6 +97,12 @@
     "holidayIn": "{weekday}, in {days} days",
     "holidayToday": "{weekday}, today",
     "noHoliday": "No upcoming official holiday is recorded.",
+    "alternatingTitle": "Every-other-week day off",
+    "alternatingTodayOff": "Today, {weekday}, is a day off",
+    "alternatingTodayWork": "Today, {weekday}, is a working day",
+    "alternatingUpcomingOff": "This {weekday}, {date}, is a day off",
+    "alternatingUpcomingWork": "This {weekday}, {date}, is a working day",
+    "alternatingNextOff": "Next {weekday} off: {date}",
     "profileReminder": {
       "title": "Complete your profile",
       "both": "Add your personal information and save your signature, so signing requests is one tap.",

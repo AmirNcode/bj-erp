@@ -144,3 +144,32 @@ export function validateWeekendDays(
     anchor: uniqBi.length > 0 ? anchor : null,
   };
 }
+
+/** Where one every-other-week day off stands, seen from `today` (Home tile). */
+export type AlternatingDayOff = {
+  /** ISO weekday (Mon=1 … Sun=7). */
+  weekday: number;
+  /** Today when today is that weekday, else its next occurrence. */
+  upcoming: string;
+  /** Whether `upcoming` is an off week under the rule. */
+  upcomingOff: boolean;
+  /** The first off date on or after `upcoming` (it or a week later). */
+  nextOff: string;
+};
+
+/**
+ * One entry per every-other-week day off, soonest first; [] when none is set.
+ * The parity comes from `isWeekendDate`, so this can never disagree with the
+ * day counter. `today` is the company's (Tehran) date.
+ */
+export function alternatingDaysOff(today: string, rule: WeekendRule): AlternatingDayOff[] {
+  const todayWeekday = isoWeekdayOf(today);
+  if (todayWeekday === null || !rule.biweeklyAnchor) return [];
+  return Array.from(new Set(rule.biweeklyWeekendDays ?? []))
+    .map((weekday) => {
+      const upcoming = addDays(today, (weekday - todayWeekday + 7) % 7);
+      const upcomingOff = isWeekendDate(upcoming, rule);
+      return { weekday, upcoming, upcomingOff, nextOff: upcomingOff ? upcoming : addDays(upcoming, 7) };
+    })
+    .sort((a, b) => a.upcoming.localeCompare(b.upcoming));
+}
