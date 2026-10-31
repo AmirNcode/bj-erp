@@ -9,6 +9,16 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin can finish a request stuck after an approval step was removed — `main` (not deployed)
+
+- When an approval step is turned off (or stops applying to the employee) after the other steps
+  already signed, the request had nothing left to sign and stayed pending; Approve and Reject
+  failed with "You have already signed this request" (Liara 1405-0001: manager and HR signed,
+  then the security step was turned off). The admin's Approve now completes such a request with
+  the admin's signature and Reject rejects it. Migration `20261031120000_stranded_request_override`.
+- Checked, no change needed: requests can be dated in the past (time off taken without a
+  request) and can be approved or rejected after their dates; nothing expires.
+
 ### Security: Next.js 16.4.3 — `main`
 
 - `next` and `eslint-config-next` 16.3.8 → 16.4.3 for critical advisories GHSA-2464-fhr4-w9xw,

@@ -986,7 +986,25 @@ begin
     elsif v_step is not null then v_steps:=array[v_step];
     else raise exception 'not allowed to decide this request' using errcode='42501'; end if;
   end if;
-  if cardinality(coalesce(v_steps,'{}'))=0 then raise exception 'you have already signed this request' using errcode='22023'; end if;
+  if cardinality(coalesce(v_steps,'{}'))=0 then
+    -- Stranded request: every step that still applies is decided, yet the request is pending,
+    -- because the step that would have completed it was deactivated or stopped applying after
+    -- the others signed. Only the admin override arrives here with nothing left to sign.
+    if not v_override then raise exception 'you have already signed this request' using errcode='22023'; end if;
+    if p_per_diem_rials is not null then
+      raise exception 'per diem can only be set on the hr step of an errand' using errcode='22023'; end if;
+    if p_decision='rejected' then
+      update public.leave_requests set status='rejected',decided_by=p_actor,decided_at=v_now,decision_note=v_note
+        where id=p_id and status='pending';
+    elsif not private.finalize_approval_request(p_id,p_actor,p_signature_data,v_now,'manual') then
+      raise exception 'you have already signed this request' using errcode='22023';
+    end if;
+    insert into public.audit_log(actor_id,action,entity,entity_id,after) values
+      (p_actor,case when p_decision='approved' then 'approve_leave_step' else 'reject_leave_request' end,
+       'leave_requests',p_id,jsonb_build_object('step_ids','{}'::uuid[],'evidence_kind','manual',
+         'admin_override',true,'stranded',true));
+    return;
+  end if;
   foreach v_step in array v_steps loop
     s:=null;
     if v_step is not null then select * into s from public.approval_steps where id=v_step;

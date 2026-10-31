@@ -78,6 +78,40 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-10-31 — Stuck request 1405-0001: "You have already signed this request"
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ e1789f4 (uncommitted `.design-sync/` work from the 2026-10-30 session, left as is)
+**Trigger:** owner could neither approve nor reject a month-old test request on bjeng.app (both chips ✓, error "You have already signed this request"); asked that requests stay decidable after their dates and that past-dated requests can be submitted.
+
+**Diagnosis**
+- Not a date problem: no code expires requests or blocks past dates.
+- Read the 2026-10-31 Liara backup locally (`~/Backups/bj-erp/daily-20261031T021147Z.dump`, tables extracted with `pg_restore -a -t` in a throwaway `postgres:17-alpine` container into the session scratchpad). Request `509aa9bf…` (1405-0001, leave 2026-10-08) had three steps: direct manager signed 2026-10-08 (audit `steps_remaining 2`), HR signed 2026-10-11 (`steps_remaining 1`), then the security step `5bb74263…` was set `active=false` on 2026-10-12 (the `approval_steps_role_allowed` check only allows security steps inactive). Nothing left to sign, and `finalize_approval_request` runs only from a decision or at submission, so it stayed pending. The admin override (`v_step` null → `v_override`) built an empty step list → `you have already signed this request` for approve and reject alike. It is the only pending request in that backup.
+- Tried a read-only `ssh liara-bj-vm` query first; the auto-mode classifier blocked it, so the backup was used instead.
+
+**What changed**
+- `supabase/migrations/20261031120000_stranded_request_override.sql` — `private.decide_approval_request`: when the admin override has no outstanding step, approve → `finalize_approval_request` (admin signature, ledger/overlap checks unchanged), reject → status rejected with the note; audit row with `"stranded": true`; per diem refused; non-admins keep the old errors. Rest of the body copied from `schema.sql` (last defined in 20261019120000).
+- `tests/sql/stranded-request.sql` (new, 32 assertions): past-dated leave / daily errand / hourly errand submit and get decided after their dates; stranded approve and reject by admin; manager/HR refused (42501); per diem refused; reactivated step goes back to the normal path.
+- Docs: CHANGELOG, MEMORY lesson ("Only a decision completes a request"), TASKS (owner to decide 1405-0001 after deploy).
+- No app/UI change: the admin dialog already says approving "signs every remaining step as admin and completes it".
+- `supabase/schema.sql` regenerated (`npm run schema:dump`; only this function changed).
+
+**Actions outside the repo**
+- Started Docker Desktop; `./deploy/bj-deploy update local` applied the migration to the local DB (ledger shows `20261031120000_stranded_request_override.sql`). Its final health check failed only because I had started `bj-erp-db-1` alone; `bj-deploy restart local` then `doctor local` → "Local stack is healthy".
+- Liara: nothing run or changed. Backup only read locally (extracted copies in the session scratchpad, not in the repo).
+
+**Verification**
+- Dry run (migration + test in one rolled-back transaction): `stranded-request` 32/32, `sign-once` 40, `approval-delegation` 165, `hr-head-own-per-diem` 27 PASS, no FAIL. Without the migration `stranded-request` fails at "admin approves the stranded request: expected ok, got 22023" (the owner's bug).
+- After apply: `stranded-request` 32 and `sign-once` 40 PASS. `npx tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 1026 passed; `npm run build` ok.
+- Not clicked through in the browser.
+
+**State left behind**
+- Uncommitted, not pushed: migration, test, schema.sql, CHANGELOG, MEMORY, TASKS, this entry (plus the earlier `.design-sync/` work).
+
+**For the next agent**
+- After deploy, the owner (admin) must approve or reject 1405-0001 by hand (TASKS).
+- Not done on purpose: auto-finalizing pending requests when a step is turned off (would approve leave and debit balances with no human action). The admin override handles it instead.
+
 ## 2026-10-30 — iPhone PWA bottom tab bar under the home indicator
 
 **Agent:** Claude Opus 5.5 via Claude Code (side session)

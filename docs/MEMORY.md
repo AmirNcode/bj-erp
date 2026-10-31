@@ -320,6 +320,14 @@ effect: a new employee's balance jumps the moment they first log in, because acc
 on the first balance read. The 2026-08-17 wording pass (`allocHint`, `policyAnnualCapHint`, …)
 explains this in the UI; the model itself was deliberately left alone.
 
+### Only a decision completes a request — chain edits can strand it (2026-10-31)
+`private.finalize_approval_request` runs only from a decision (`decide_approval_request`) or at
+submission. Turning a step off, or a step ceasing to apply (department manager changed), after
+the others signed leaves a pending request with no open step and nothing to finish it: Liara
+1405-0001 showed every chip ✓ and Approve/Reject failed with "already signed". Since
+`20261031120000` the admin override completes or rejects it. Any new path that changes which
+steps apply must expect pending requests to be left complete-but-pending.
+
 ### Liara hosting decision (2026-09-30)
 The initial PaaS/one-click proposal was superseded by one Debian VM running the
 repository's minimal Docker stack. Use `docs/DEPLOY-LIARA.md` and the latest AGENT-LOG.
