@@ -3,6 +3,7 @@ import {
   Banknote,
   ChartNoAxesColumn,
   CircleCheck,
+  CircleHelp,
   DoorOpen,
   Network,
   Plane,
@@ -110,3 +111,6 @@ export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
   procurement: <Plane {...itemIcon} />,
   settings: <Settings {...itemIcon} />,
 };
+
+/** Side-panel footer link to Help & guides. */
+export const HELP_ICON = <CircleHelp {...itemIcon} />;

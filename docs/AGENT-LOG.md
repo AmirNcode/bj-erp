@@ -78,6 +78,64 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-01 — Help & guides page with the SOP user guide
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ dd006b7 (uncommitted `.design-sync/` config edits and the 2026-10-31 SOP log entry already in the tree)
+**Trigger:** owner asked for a Help page (side panel link above "Updated"; mobile link on Profile) holding the `sop/` instructions, `sop/` out of git, then push to deploy.
+
+**What changed**
+- `lib/help/userGuideFa.ts` — body of `sop/sop.html` converted once by a scratchpad script: cover and printed TOC dropped (the reading-the-images note kept), `id`s on h2/h3, a `USER_GUIDE_TOC` list, images → `/help/user-guide/*.webp`, mm column widths → %. This file is now the web copy; `sop/sop.html` (local only) still builds the PDF, so the two can drift.
+- `lib/help/guides.ts` — guide registry (slug, message key, language, html, toc, pdf).
+- `app/[locale]/(app)/help/page.tsx` (guide list) and `help/[slug]/page.tsx` (collapsible contents, PDF button, `dangerouslySetInnerHTML` of the trusted static markup, `lang`/`dir` of the guide).
+- `public/help/user-guide/*.webp` — 28 screenshots used by the guide (cwebp -q 82, 3.4 MB PNG → 1.1 MB); the 3 unused ones (e17, m06, m08) left out. `public/help/BJ-HR-SOP-fa.pdf` (4.2 MB) for download.
+- `app/globals.css` — `.help-guide` styles (the SOP's classes, screen units, logical properties).
+- `MainNav.tsx` — Help item above the side-panel footer (`nav-help`); `nav-icons.tsx` `HELP_ICON`; `profile/page.tsx` — mobile-only Help card (`profile-help-link`).
+- `messages/{fa,en}.json` — `nav.help`, `help.*`.
+- `.gitignore` — `/sop/` (was never tracked: `git log --all -- sop` empty). Only that hunk committed; the pending design-sync ignores in `.gitignore`, `.dockerignore`, `eslint.config.mjs`, `tsconfig.json` left uncommitted as found.
+
+**Actions outside the repo**
+- Push to `main` → CI deploy to Liara. No server commands.
+
+**Verification**
+- Temporary `app/[locale]/zz-help` page (MainNav with fake props + both help pages), desktop and 375px mobile, fa and en: nav item placement, contents, screenshots (28 loaded, 0 broken), PDF + webp served 200. Deleted afterwards.
+- `npx tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 1026 passed; `npm run build` ok.
+- Not seen behind a real login (Profile card checked by typecheck only).
+
+**State left behind**
+- Committed and pushed to `main`. `.design-sync/` and the design-sync ignore edits still uncommitted.
+
+**For the next agent**
+- New guide: content module in `lib/help/`, entry in `HELP_GUIDES`, `help.<key>.title/description` in both catalogs (`messageKey` type needs the new key).
+- Editing the guide text: edit `lib/help/userGuideFa.ts` directly (no backticks or `${` inside).
+
+## 2026-10-31 — Persian user SOP (employee + manager) with annotated screenshots
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ e1789f4 (other uncommitted work in the tree left untouched)
+**Trigger:** owner asked for a Persian SOP with labelled screenshots for testers; chose demo data, PDF, employee + manager roles, no testing section.
+
+**What changed**
+- `sop/BJ-HR-SOP-fa.pdf` (21 pages, A4) built from `sop/sop.html`: purpose and terms, roles, login and first-login password, PWA install, employee chapter (home, signature, 4 request types, track/cancel, calendar, profile), manager chapter (home, approvals queue, approve, reject, employees, team calendar), FAQ.
+- `sop/images/*.png`: 31 phone screenshots with numbered red markers drawn into the page by `sop/_tools/lib.mjs` `shot()`.
+- `sop/_tools/employee.mjs`, `manager.mjs`, `build-pdf.mjs`, `demo-stack/{docker-compose.yml,up.sh,dev.sh}`, `sop/README.md` (how to regenerate).
+- `.claude/launch.json`: added a `bj-sop` config (next dev :3100 against the demo stack).
+
+**Actions outside the repo**
+- Started Docker Desktop. Ran a throwaway compose project `bj-sop` (own volume, ports 5434/8081): all 109 migrations + seed + bootstrap admin + `seed-demo.mjs`, demo names changed to Persian. Torn down with `down -v` at the end. The real local stack `bj-erp` and its roster were not touched. No Liara actions.
+
+**Verification**
+- Every screenshot was looked at in contact sheets; PDF pages rendered via PDFKit and checked (font, RTL, two steps per page).
+- `demo-stack/up.sh` was **not run as a script**: it repeats the commands I ran by hand, with only `bash -n` checked.
+
+**State left behind**
+- Nothing committed. `sop/` is untracked.
+
+**For the next agent**
+- The capture scripts depend on request state: run them on a fresh stack in order (employee, then manager). `SOP_ONLY=<names>` retakes single shots.
+- GoTrue must boot before `bootstrap_admin.sql` (auth.users columns come from its migrations).
+- Mobile request form: the leave-type radio has no default. Without it the submit error is "نوع مرخصی را انتخاب کنید".
+
 ## 2026-10-31 — Stuck request 1405-0001: "You have already signed this request"
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
@@ -111,6 +169,38 @@ Copy this block verbatim and fill it in.
 **For the next agent**
 - After deploy, the owner (admin) must approve or reject 1405-0001 by hand (TASKS).
 - Not done on purpose: auto-finalizing pending requests when a step is turned off (would approve leave and debit balances with no human action). The admin override handles it instead.
+
+## 2026-10-30 — Claude Design sync of the UI components (/design-sync)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ e1789f4 (clean)
+**Trigger:** owner ran `/design-sync`: import the app's components into a Claude Design (claude.ai/design) project so its design agent builds with the real components.
+
+**What changed**
+- `.design-sync/` (new, committed set): `config.json` (project pin, build command, component list, groups, overrides, hand-written prop contracts), `entry.ts` (bundle entry: 20 reusable components + `BjProvider` + `Icons` + `cn`/`toast`/`nativeSelectClass`), `provider.tsx` (`BjProvider`, mirrors `app/[locale]/layout.tsx`, also sets `<html dir/lang>`), `icons.ts` (lucide icons the app uses), `tailwind.css` + `fonts.css` (compiled stylesheet + Rubik/Vazirmatn), `tsconfig.dts.json`, `groups/*.md` (card group stubs), `overrides/dts.mjs` (converter fork, see NOTES), `previews/*.tsx` (20 authored Farsi RTL previews), `conventions.md` (header for the design agent), `NOTES.md` (how the sync works, gotchas, re-sync risks).
+- `tsconfig.json` exclude, `eslint.config.mjs` globalIgnores, `.dockerignore`: added `.design-sync`, `.ds-sync`, `ds-bundle` (+ `build` for tsc/docker). Previews import `'bj-erp'`, which only resolves in the converter, so without this `next build` in CI would fail.
+- `.gitignore`: `.ds-sync/`, `ds-bundle/`, `.design-sync/.cache/`, `.design-sync/learnings/`, `.design-sync/node_modules`, `build/ts/`.
+- No app code, package.json or lockfile changes.
+
+**Actions outside the repo**
+- Created the Claude Design project "Behsazan Jonoob DS" (`c84bccb1-7978-4bd8-9f8d-1485e34610c9`, https://claude.ai/design/p/c84bccb1-7978-4bd8-9f8d-1485e34610c9) and uploaded 112 files: bundle, CSS, fonts, 20 components, `_ds_sync.json` anchor.
+- Installed Playwright chromium-headless-shell 1228 in `~/Library/Caches/ms-playwright` (same build as the repo's `@playwright/test` 1.61.1).
+- No server, database or deploy touched.
+
+**Verification**
+- `package-validate.mjs` exit 0: 20/20 previews render, 0 bad, 1 known benign warn (Toaster `[RENDER_THIN]`, fixed-position toasts).
+- All 20 previews screenshot-graded good. Dialog/AlertDialog first rendered LTR (Radix portals sit outside the RTL wrapper); fixed by `BjProvider` setting `<html dir>`.
+- `npx tsc --noEmit` passes, `npm run lint` clean after the excludes. `next build` and unit tests not run (no app code changed).
+
+- Follow-up, same session: after the owner opened the project, the token panel showed Tailwind leftovers instead of the brand colours. Added `.design-sync/gen-brand-tokens.mjs` (in `buildCmd`), re-ran the driver against the uploaded anchor (components unchanged, styling only), and re-uploaded the CSS, README, bundle and fonts + a new `_ds_sync.json`.
+
+**State left behind**
+- Uncommitted: `.design-sync/` + the four ignore/config edits. Not pushed.
+
+**For the next agent**
+- Re-sync: read `.design-sync/NOTES.md` first. Staged scripts in `.ds-sync/` are gitignored; re-copy them from the skill.
+- Toasts use the system font, not Vazirmatn (sonner CSS sets `font-family`), in the live app too. Possible small app fix.
+- App-coupled components (PersianDateField, RequestProgress, MainNav, …) are not in the design system; adding one means `entry.ts` + `componentSrcMap` + `docsMap` + a preview.
 
 ## 2026-10-30 — iPhone PWA bottom tab bar under the home indicator
 

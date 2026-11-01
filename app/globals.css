@@ -106,3 +106,166 @@ select:not([multiple]):not([size]) {
     background: white;
   }
 }
+
+/*
+ * Help guides (lib/help/*): static markup from the SOP, so it is styled by
+ * class here instead of Tailwind utilities. Brand blue + the SOP's red markers.
+ */
+.help-guide {
+  --mark: #e11d48;
+  font-size: 0.9375rem;
+  line-height: 1.9;
+}
+.help-guide h2,
+.help-guide h3 {
+  color: var(--primary);
+  line-height: 1.5;
+  scroll-margin-top: 1rem;
+}
+.help-guide h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 2.25rem 0 1rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid var(--primary);
+}
+.help-guide h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 1.5rem 0 0.5rem;
+}
+.help-guide h3 .num {
+  display: inline-block;
+  min-width: 2.25rem;
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+.help-guide p {
+  margin: 0 0 0.6rem;
+}
+.help-guide table.grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+}
+.help-guide table.grid th {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  text-align: start;
+  padding: 0.4rem 0.6rem;
+}
+.help-guide table.grid td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+  vertical-align: top;
+}
+.help-guide .step {
+  display: grid;
+  gap: 1rem;
+  margin: 0.5rem 0 1.5rem;
+}
+@media (min-width: 640px) {
+  .help-guide .step {
+    grid-template-columns: 200px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+}
+.help-guide .shot {
+  width: 200px;
+  max-width: 100%;
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+.help-guide .shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.help-guide .cap {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  text-align: center;
+  margin-top: 0.35rem;
+}
+.help-guide ol.legend {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+.help-guide ol.legend li {
+  position: relative;
+  padding-inline-start: 2rem;
+  margin-bottom: 0.5rem;
+}
+.help-guide ol.legend li b.n {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.15rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  background: var(--mark);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.4rem;
+  text-align: center;
+  font-weight: 700;
+}
+.help-guide ol.steps {
+  margin: 0 0 0.75rem;
+  padding-inline-start: 1.5rem;
+  list-style-type: persian;
+}
+.help-guide ol.steps li {
+  margin-bottom: 0.3rem;
+}
+.help-guide .note,
+.help-guide .warn,
+.help-guide .tip {
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.875rem;
+  border-inline-start: 3px solid;
+}
+.help-guide .note {
+  background: color-mix(in oklab, var(--primary) 6%, transparent);
+  border-color: var(--primary);
+}
+.help-guide .tip {
+  background: #ecfdf5;
+  border-color: #059669;
+}
+.help-guide .warn {
+  background: #fff1f2;
+  border-color: var(--mark);
+}
+.help-guide .badge {
+  display: inline-block;
+  padding: 0 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.help-guide .b-pend { background: #fef3c7; color: #92400e; }
+.help-guide .b-ok { background: #dcfce7; color: #166534; }
+.help-guide .b-no { background: #fee2e2; color: #991b1b; }
+.help-guide .b-cancel { background: #e5e7eb; color: #374151; }
+.help-guide kbd {
+  font-family: inherit;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 0.3rem;
+  padding: 0 0.3rem;
+  font-size: 0.85em;
+}
+.help-guide .ltr {
+  direction: ltr;
+  unicode-bidi: embed;
+}

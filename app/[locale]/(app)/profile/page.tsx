@@ -31,6 +31,7 @@ export default async function ProfilePage({ params }: Props) {
 
   const t = await getTranslations('profile');
   const tOrg = await getTranslations('org');
+  const tHelp = await getTranslations('help');
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -85,6 +86,21 @@ export default async function ProfilePage({ params }: Props) {
         <span>
           <span className="block text-sm font-semibold">{tOrg('openFromProfile')}</span>
           <span className="block text-xs text-muted-foreground">{tOrg('openFromProfileHint')}</span>
+        </span>
+        <span aria-hidden className="text-muted-foreground rtl:rotate-180">
+          ›
+        </span>
+      </Link>
+
+      {/* Help & guides: desktop has it in the side panel. */}
+      <Link
+        href={`/${locale}/help`}
+        data-testid="profile-help-link"
+        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
+      >
+        <span>
+          <span className="block text-sm font-semibold">{tHelp('openFromProfile')}</span>
+          <span className="block text-xs text-muted-foreground">{tHelp('openFromProfileHint')}</span>
         </span>
         <span aria-hidden className="text-muted-foreground rtl:rotate-180">
           ›

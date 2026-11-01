@@ -13,7 +13,7 @@ import {
 import type { Perms } from '@/lib/permissions/catalog';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
-import { NAV_ICONS, NAV_ITEM_ICONS } from './nav-icons';
+import { HELP_ICON, NAV_ICONS, NAV_ITEM_ICONS } from './nav-icons';
 import { PageRefreshButton } from './PageRefreshButton';
 import { LanguageSwitch } from './LanguageSwitch';
 
@@ -216,8 +216,25 @@ export function MainNav({
         </div>
       )}
 
+      {/* Help sits just above the footer; mobile reaches it from Profile. */}
+      <ul className="mt-auto hidden pb-2 md:block">
+        <li>
+          <Link
+            href={`/${locale}/help`}
+            data-testid="nav-help"
+            aria-current={isActive('/help') ? 'page' : undefined}
+            className={cn(sideItem, isActive('/help') ? activeItem : inactiveItem)}
+          >
+            <span aria-hidden="true" className="shrink-0">
+              {HELP_ICON}
+            </span>
+            <span>{t('help')}</span>
+          </Link>
+        </li>
+      </ul>
+
       {/* Footer: refresh, profile, language — pinned to the bottom. */}
-      <div className="mt-auto hidden flex-col gap-2.5 border-t border-muted pt-4 pb-4 md:flex">
+      <div className="hidden flex-col gap-2.5 border-t border-muted pt-4 pb-4 md:flex">
         <PageRefreshButton initialUpdatedAt={initialUpdatedAt} />
         <Link
           href={`/${locale}/profile`}

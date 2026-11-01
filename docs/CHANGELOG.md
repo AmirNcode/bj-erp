@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Help & guides page — `main`
+
+- New **Help** page (`/help`) for guides, instructions and how-tos. Desktop: link at the bottom
+  of the side panel, above "Updated". Mobile: a card on the Profile screen.
+- First guide: the Persian user guide for employees and managers (from the 2026-10-31 SOP), with
+  its annotated screenshots and a PDF download. Shown in Persian in both languages.
+
 ### Admin can finish a request stuck after an approval step was removed — `main` (not deployed)
 
 - When an approval step is turned off (or stops applying to the employee) after the other steps

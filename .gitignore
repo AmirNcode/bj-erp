@@ -56,3 +56,6 @@ docs/files/
 
 # Local test accounts (never commit)
 .env.test-accounts
+
+# Local-only user SOP (PDF, screenshots, capture tools)
+/sop/

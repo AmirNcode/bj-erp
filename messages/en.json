@@ -21,7 +21,8 @@
     "profileSubtitle": "{role}, profile",
     "absences": "Approved absences",
     "finance": "Finance",
-    "procurement": "Procurement"
+    "procurement": "Procurement",
+    "help": "Help"
   },
   "refresh": {
     "updated": "Updated {time}",
@@ -1918,6 +1919,20 @@
       "tripDates": "Trip dates",
       "totalHotelCost": "Total hotel cost (Rials)",
       "totalHint": "Finance receives this total."
+    }
+  },
+  "help": {
+    "title": "Help & guides",
+    "intro": "Guides, instructions and how-tos for using the system.",
+    "openFromProfile": "Help & guides",
+    "openFromProfileHint": "How to request leave, approve requests and more.",
+    "persianOnly": "In Persian",
+    "contents": "Contents",
+    "downloadPdf": "Download PDF",
+    "back": "All guides",
+    "userGuide": {
+      "title": "User guide: leave and errands",
+      "description": "For employees and managers: signing in, saving your signature, the four request types, tracking requests, approving and rejecting."
     }
   }
 }
