@@ -50,7 +50,6 @@ import { UpcomingAbsences } from '../absences/UpcomingAbsences';
 
 type Props = {
   params: Promise<{ locale: string }>;
-  /** FR-56: the day security's absences board shows (default today). */
 };
 
 /** Most pending rows shown inline; the rest are one link away. */
