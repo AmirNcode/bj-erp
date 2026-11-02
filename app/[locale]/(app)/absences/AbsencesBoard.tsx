@@ -40,43 +40,6 @@ export function AbsencesBoard({ date, today, absences, locale, basePath = '/abse
 
   const allDay = absences.filter((a) => a.unit === 'day');
   const hourly = absences.filter((a) => a.unit === 'hour');
-  const fmt = (iso: string) => formatCalendarDate(iso, locale);
-
-  const row = (a: Absence) => {
-    const dept = locale === 'fa' ? a.departmentNameFa ?? a.departmentNameEn : a.departmentNameEn ?? a.departmentNameFa;
-    const what =
-      a.kind === 'errand'
-        ? t(a.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand')
-        : a.leaveTypeNameFa
-          ? localizedLeaveTypeName({ name_fa: a.leaveTypeNameFa, name_en: a.leaveTypeNameEn }, locale)
-          : t('leave');
-    const when =
-      a.unit === 'hour'
-        ? formatTimeRange(a.startTime, a.endTime, locale)
-        : a.startDate === a.endDate
-          ? t('allDay')
-          : t('dateRange', { from: fmt(a.startDate), to: fmt(a.endDate) });
-    return (
-      <li key={a.id} className="flex items-start justify-between gap-3 py-3" data-testid={`absence-${a.id}`}>
-        <div className="min-w-0">
-          <p className="font-medium">
-            {a.employeeName}
-            {a.personnelNo && (
-              <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
-                {formatNumber(Number(a.personnelNo), locale, { useGrouping: false })}
-              </span>
-            )}
-          </p>
-          {dept && <p className="text-xs text-muted-foreground">{dept}</p>}
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1 text-end">
-          <Badge variant={a.kind === 'errand' ? 'secondary' : 'outline'}>{what}</Badge>
-          <span className="text-sm tabular-nums">{when}</span>
-        </div>
-      </li>
-    );
-  };
-
   const section = (title: string, icon: React.ReactNode, list: Absence[], testId: string) =>
     list.length > 0 && (
       <Card className="gap-0 px-4 py-2" data-testid={testId}>
@@ -85,7 +48,11 @@ export function AbsencesBoard({ date, today, absences, locale, basePath = '/abse
           {title}
           <span className="text-muted-foreground">({formatNumber(list.length, locale)})</span>
         </h2>
-        <ul className="divide-y">{list.map(row)}</ul>
+        <ul className="divide-y">
+          {list.map((a) => (
+            <AbsenceRow key={a.id} a={a} locale={locale} />
+          ))}
+        </ul>
       </Card>
     );
 
@@ -120,5 +87,50 @@ export function AbsencesBoard({ date, today, absences, locale, basePath = '/abse
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * One person out. With `withDate` (the look-ahead list) an hourly row also
+ * shows its day; a one-day row shows the day instead of «All day».
+ */
+export function AbsenceRow({ a, locale, withDate = false }: { a: Absence; locale: string; withDate?: boolean }) {
+  const t = useTranslations('absences');
+  const fmt = (iso: string) => formatCalendarDate(iso, locale);
+  const dept = locale === 'fa' ? a.departmentNameFa ?? a.departmentNameEn : a.departmentNameEn ?? a.departmentNameFa;
+  const what =
+    a.kind === 'errand'
+      ? t(a.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand')
+      : a.leaveTypeNameFa
+        ? localizedLeaveTypeName({ name_fa: a.leaveTypeNameFa, name_en: a.leaveTypeNameEn }, locale)
+        : t('leave');
+  const when =
+    a.unit === 'hour'
+      ? withDate
+        ? `${fmt(a.startDate)} · ${formatTimeRange(a.startTime, a.endTime, locale)}`
+        : formatTimeRange(a.startTime, a.endTime, locale)
+      : a.startDate === a.endDate
+        ? withDate
+          ? fmt(a.startDate)
+          : t('allDay')
+        : t('dateRange', { from: fmt(a.startDate), to: fmt(a.endDate) });
+  return (
+    <li className="flex items-start justify-between gap-3 py-3" data-testid={`absence-${a.id}`}>
+      <div className="min-w-0">
+        <p className="font-medium">
+          {a.employeeName}
+          {a.personnelNo && (
+            <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
+              {formatNumber(Number(a.personnelNo), locale, { useGrouping: false })}
+            </span>
+          )}
+        </p>
+        {dept && <p className="text-xs text-muted-foreground">{dept}</p>}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1 text-end">
+        <Badge variant={a.kind === 'errand' ? 'secondary' : 'outline'}>{what}</Badge>
+        <span className="text-sm tabular-nums">{when}</span>
+      </div>
+    </li>
   );
 }

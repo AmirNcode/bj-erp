@@ -78,6 +78,70 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Absences board: 30-day look-ahead
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** Amir chose the simplest option from the design advice below: show who will be absent
+in the next month on the Home absences tile, ship, and gather HR's feedback.
+
+**What changed**
+- `lib/actions/absences.ts` — shared select/mapping/sort; new `getUpcomingAbsences(from, to)`
+  (approved, `start_date` in range, absences read; same columns, so no new read surface).
+- `lib/absences/upcoming.ts` — `UPCOMING_ABSENCE_DAYS = 30`, `upcomingAbsenceWindow(today)` (tomorrow → +30).
+- `app/[locale]/(app)/absences/AbsencesBoard.tsx` — row extracted as exported `AbsenceRow` (`withDate` shows the day).
+- `app/[locale]/(app)/absences/UpcomingAbsences.tsx` — new look-ahead card.
+- `app/[locale]/(app)/home/page.tsx` (`SecurityAbsences`) and `app/[locale]/(app)/absences/page.tsx` — render it under the day board.
+  Security holders see it too (same tile).
+- `messages/{fa,en}.json` — `absences.upcomingTitle/upcomingHint/upcomingEmpty`.
+- `tests/unit/upcoming-absences.test.ts`; docs: CHANGELOG, REQUIREMENTS FR-56 amendment, TASKS feedback item.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- `tsc --noEmit` clean; eslint on touched files clean; `vitest run tests/unit` 1029 passed.
+- Visual check via a temporary `zz-upcoming` page with fake rows (fa, 375px): RTL, Jalali dates,
+  hourly time, multi-day range, empty state OK. Page deleted, `.next/dev/types` removed.
+- Not checked: the real query against the DB while logged in as an hr holder (local DB holds the real roster).
+
+**State left behind**
+- Committed on `claude/absences-lookahead` (from `main`, own worktree `../bj-absences-lookahead`).
+  Another session shared the main checkout and switched it to `claude/finance-errands-only` (PR #13)
+  mid-session; that PR contains none of this work, and this branch none of its.
+
+**For the next agent**
+- Window starts tomorrow: a request starting today shows only on the day board; one that started
+  earlier and runs into the window is not in the look-ahead (it is on today's board).
+
+## 2026-11-02 — Design advice: keeping HR's attendance-system clerk in the loop
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** An HR holder who signs nothing must enter approved leave into the fingerprint
+attendance system before the day; the Home absences tile (today only) gives too little notice.
+
+**What changed**
+- Nothing in code. Read `app/[locale]/(app)/absences/page.tsx`, `lib/actions/absences.ts`,
+  `app/[locale]/(app)/finance/page.tsx`, `TravelTickToggle.tsx`, `docs/TASKS.md`.
+- Recommended an "attendance entry" worklist (approved requests not yet marked as entered, with a
+  per-request tick; cancelled-after-entry and back-dated approvals flagged), gated by a new catalog
+  permission for the hr preset; SMS later as a nudge on top. Not specced, not built.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- not applicable (no code)
+
+**State left behind**
+- Awaiting owner's go-ahead to write a spec in `docs/specs/`.
+
+**For the next agent**
+- Precedents to reuse: `/absences` board (FR-56) query, `/finance` range page (FR-62), travel tick
+  (`travel_bookings.opened_at`, FR-70). Keep the tick in its own table, not on `leave_requests`
+  (writes there take the company approval lock).
+
 ## 2026-11-01 — Help & guides page with the SOP user guide
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Absences board looks 30 days ahead — `claude/absences-lookahead` (not deployed)
+
+- The approved-absences board (Home for hr and security, Manage › Absences for the admin) now
+  also lists the approved leave and work errands that **start in the next 30 days**, by start
+  date. HR can enter them into the fingerprint attendance system before the day instead of
+  finding out on the day.
+
 ### Help & guides page — `main`
 
 - New **Help** page (`/help`) for guides, instructions and how-tos. Desktop: link at the bottom
