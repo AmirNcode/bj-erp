@@ -101,6 +101,8 @@ Copy this block verbatim and fill it in.
 
 **Verification**
 - `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 109 files / 1032 tests pass; `npm run build` OK; all 14 `tests/sql/*` PASS on the clone.
+- Deploy: merge commit `0cb0c15`, Actions run 41506935929 build + deploy success; `https://bjeng.app/api/health` ok afterwards. Not clicked through on Liara.
+- Left alone: stopped Docker containers of old branch stacks (`bj-delegation-*`, `bj-fr55-fr55-*`) and the non-git folders `../bj-data`, `../bj-procurement`.
 
 **State left behind**
 - Ignored, untracked dirs kept in the main checkout: `CLAUDE-SECURITY-20261101-043958/` (security report), `CLAUDE-SECURITY-20261101-205529/` (resume state for the unfinished rescan), `.ds-sync/`, `ds-bundle/`, `build/`, `sop/`.
