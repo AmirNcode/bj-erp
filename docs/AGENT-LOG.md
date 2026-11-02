@@ -78,6 +78,73 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Review PR #15, merge to main, clean branches and worktrees
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** review/integration-2026-11-02 @ 5d55e33 (= PR #15 head), uncommitted design-sync setup + two AGENT-LOG entries
+**Trigger:** Amir: review PR #15, fix issues, merge to main to deploy; afterwards only `main`, no uncommitted work, no other branches or worktrees.
+
+**Review of PR #15**
+- Read both migrations and the app diff. No blocking issue. Checked: `app_create_employee` drop/recreate keeps old named-arg callers working (new arg defaults null); PostgREST reloads on its own (`pgrst_ddl_watch` event trigger exists), so no manual restart on Liara; login page keeps printable ASCII (`toLatinCode`), so symbol login codes can sign in; the travel "missing details" link to an employee page only shows at HR steps (HR has `people` read), so the new `people`-read guard does not 404 it.
+- Fixed one nit: stale JSDoc left in `home/page.tsx` `Props` after `searchParams` went away.
+
+**What changed (on `claude/manager-ux-batch`, merged with PR #15)**
+- `fa6060f` the nit above.
+- `8a255b0` committed the Claude Design sync setup that sat uncommitted in the main checkout (`.design-sync/`, ignore entries in `.gitignore`/`.dockerignore`, `eslint.config.mjs`, `tsconfig.json` excludes).
+- `4737ce2` committed two other sessions' uncommitted AGENT-LOG entries (finance PR #13 note, SOP cover logo).
+- Not merged: local-only branch `security/audit-2026-11` (2026-11-01 security report + its log entry). The repo is public, so an unpatched-vulnerability report stays out of git: restored to its original git-ignored dir `CLAUDE-SECURITY-20261101-043958/` (blob hashes verified), its log entry saved there as `SESSION-LOG.md`, then the branch was deleted.
+
+**Actions outside the repo**
+- Local DB: cloned `postgres` into a throwaway `review15` database, ran all `tests/sql/*`, dropped it.
+- GitHub: pushed the branch (first push attempt, which included the security report, was blocked; report taken out), merged PR #15 with a merge commit (deploys to Liara), deleted the merged remote branches.
+- Local: removed every worktree and every branch except `main`.
+
+**Verification**
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 109 files / 1032 tests pass; `npm run build` OK; all 14 `tests/sql/*` PASS on the clone.
+
+**State left behind**
+- Ignored, untracked dirs kept in the main checkout: `CLAUDE-SECURITY-20261101-043958/` (security report), `CLAUDE-SECURITY-20261101-205529/` (resume state for the unfinished rescan), `.ds-sync/`, `ds-bundle/`, `build/`, `sop/`.
+
+**For the next agent**
+- The security report's 11 findings are still open (local, git-ignored report `CLAUDE-SECURITY-20261101-043958/CLAUDE-SECURITY-RESULTS.md`; never commit it while the repo is public); the rescan of the remaining areas never finished.
+
+## 2026-11-02 — Manager UX batch: Employees hidden, admin login codes, Home absences card, approvals history
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** review/integration-2026-11-02 @ 9d12259
+**Trigger:** Amir: hide Employees from managers without HR; admin sets any login code and edits personnel numbers; Home absences card = next 30 days split into errands/leave, placed after the greeting; Approvals page shows the history of what each approver decided.
+
+**Owner answers (asked first):** absences card = fixed next 30 days, no month picker or arrows ("look at the calendar for more"); login code free text without spaces/@; changing a personnel number makes it the new login code ("only for testing"); history = requests the viewer personally signed/rejected (admin: all decided). Plan: `docs/plans/2026-11-02-manager-ux-batch.md`.
+
+**What changed**
+- Employees: `lib/nav/tabs.ts` employees item now `people` read only (the `hasReports`/manager branch is gone). `manage/employees/page.tsx` redirects callers without `people` read to `/organization` and drops the reports-only list; `[id]/page.tsx` 404s without `people` read. Unit tests (`nav_tabs`, `main-nav`, `route-prefetcher`) updated.
+- Home: `UpcomingAbsences.tsx` is now the whole card ("Approved absences in the next 30 days", Work errands / Leave sections). The day-picker `AbsencesBoard` is gone from Home (admin `/absences` keeps it). `upcomingAbsenceWindow` starts today; `getUpcomingAbsences` matches by overlap, so an absence already under way shows. `home/page.tsx`: `HomeAbsences` renders as a slot inside `HomeBoardData`, right after the greeting; `?date=` on Home no longer used.
+- Login code: migration `20261102130000_admin_login_code.sql` — `private.valid_login_code` (RFC 5322 atext + non-edge single dots, 1–64), `private.set_login_code` (profiles.employee_code + auth.users email + identities email, case-insensitive uniqueness, audit), `app_create_employee(..., p_login_code)` (admin only; old signature dropped), `app_admin_set_personnel_no(uuid, text)` (admin only; code follows the number). App: `createEmployee` `login_code`, new `setPersonnelNo` action, `isValidLoginCode` in `lib/employees/code.ts`, `ErrorField` `login_code` (duplicate code errors now pin to it), New Employee form shows an editable Login code field for the admin (placeholder = personnel no.), Edit Employee header code is a button for the admin (`[id]/PersonnelNoDialog.tsx`).
+- History: migration `20261102130001_approval_history.sql` — `app_approval_history(p_limit, p_offset)` → `{total, rows}` with the caller's own decisions. `getApprovalHistory` action, `manage/approvals/ApprovalHistory.tsx` (20 a page, `?history=N`, link to the print form).
+- `lib/supabase/types.ts` hand-edited for the three RPCs; `messages/{en,fa}.json` new keys; `supabase/schema.sql` dumped.
+- Tests: `tests/sql/admin-login-code.sql` (30 checks), `tests/sql/approval-history.sql` (16 checks), unit tests for `isValidLoginCode` and the error mapping.
+
+**Actions outside the repo**
+- Local Docker only. Clone DB `xlc` in `bj-erp-db-1` for the dry run (both migrations + all 14 `tests/sql/*` files → no FAIL), dropped afterwards.
+- `./deploy/bj-deploy update local` (backup taken; both migrations applied — now frozen; app rebuilt, "Local update succeeded"), `docker restart bj-erp-rest-1`, `npm run schema:dump`.
+- GoTrue probe: inserted a throwaway auth user with email `lc-test!#$%&'*+/=?^_`{|}~.x@bj-app.internal`, password sign-in through the local gateway succeeded, user deleted (identities, sessions, refresh tokens, user).
+- Read-only check in `begin … rollback` on the local DB: an approver's `app_approval_history` returned 10 decided requests with their decision; admin total 13 = all non-pending requests.
+- Nothing on Liara; nothing committed or pushed.
+
+**Verification**
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 109 files / 1032 tests pass, the app image built (`bj-deploy`), SQL as above.
+- UI: temporary `zz-check` page (deleted) rendered the new absences card (en + fa, with and without rows), the personnel-number dialog and the admin login-code field. Not checked logged in: the test account 124 password is still rejected locally. e2e not run.
+
+**State left behind**
+- Committed 24a342d on `review/integration-2026-11-02` (not pushed). Left unstaged: other sessions' `.dockerignore`, `.gitignore`, `eslint.config.mjs`, `tsconfig.json`, `.design-sync/` and their older AGENT-LOG hunk.
+- On Amir's request after the commit: `./deploy/bj-deploy update local` again ("Local update succeeded", no new migrations), `docker restart bj-erp-rest-1`, `bj-deploy doctor local` → "Local stack is healthy: https://192.168.2.85:3500".
+- Amir approved after testing locally: branch `claude/manager-ux-batch` (= the two commits on main 9d12259) pushed, [PR #15](https://github.com/AmirNcode/bj-erp/pull/15) opened. Merge with a merge commit or squash, not rebase (last commit has `[skip ci]`). Liara deploys on merge.
+
+**For the next agent**
+- `app_create_employee` now has 13 args; `seed-demo.mjs` and the app call it by name, so the dropped 12-arg version breaks nothing.
+- A custom login code may look like a number; a later personnel number equal to it is refused with "employee code already exists".
+- `upcomingHint` copy says the list starts today; Manage › Absences (admin) shows the day board and this card, so today's absences appear in both there.
+
 ## 2026-11-02 — Review and fix PRs #12, #13, #14
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
@@ -264,7 +331,35 @@ attendance system before the day; the Home absences tile (today only) gives too 
 - `app/[locale]/(app)/finance/FinanceList.tsx`: leave/errand filter → All / Daily / Hourly (`unit`); dropped the leave-type branch and the CSV Kind column. Pruned unused `finance.{errands,leaves,leave,errand,csv.kind}` in `messages/{en,fa}.json`; `all`/`empty` copy now say "work errands".
 - Tests: `tests/sql/travel-booking.sql` adds an approved + pending leave fixture and asserts neither finance function returns it. Dry-run as `supabase_admin` inside `begin … rollback` (migration + whole file): all PASS; without the migration it FAILs at "finance2: approved leave stays hidden", as expected. `tests/unit/finance-travel-columns.test.tsx`: pending leave fixture → pending hourly errand, new filter test. `npm run test:unit` 108 files / 1027 tests pass; `tsc --noEmit` and eslint on the touched files clean.
 - Applied locally on Amir's go-ahead: `./deploy/bj-deploy update local` (backup taken, migration applied, app rebuilt; "Local update succeeded"), restarted `bj-erp-rest-1`, `npm run schema:dump` → `supabase/schema.sql` diff is exactly the two `and r.kind = 'errand'` lines. Live check as admin on the local DB: `finance_requests(today-200, today+100)` returns only `errand` rows (2). The migration is now frozen.
-- **Not done:** nothing committed; nothing run on Liara (deploys on push to main).
+- Committed 18884e7 on branch `claude/finance-errands-only` (only this change's hunks; other sessions' uncommitted AGENT-LOG entries and `upcoming*` message keys left unstaged), pushed, opened PR #13 to review after PR #12 (both add a `20261102120000_*` migration; distinct filenames, ledger keys on filename). Checkout left on that branch: other sessions' uncommitted work blocks switching back to main.
+- **Not done:** nothing run on Liara (deploys when the PR merges to main).
+
+## 2026-11-01 — SOP cover company logo
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** Replace the blue company-name badge on the first page of the local SOP HTML and PDF with the company logo.
+
+**What changed**
+- `sop/sop.html` — cover image replaces the text badge; 80mm width with original proportions and accessible alternative text.
+- `sop/images/bj-logo.png` — copied the existing `public/bj-logo.png` for the local guide.
+- `sop/BJ-HR-SOP-fa.pdf` — regenerated with the existing build script.
+
+**Actions outside the repo**
+- Local temporary baseline/render files in `/tmp`; no server, database, push or deploy actions.
+
+**Verification**
+- Initial Chromium build failed with sandbox MachPort permission denial; rerun with elevated execution succeeded.
+- Rendered the first page with Poppler and visually checked logo, Persian text, spacing and footer.
+- PDF remains 21 A4 pages; Poppler PNG renders of pages 2–21 at 40 dpi are byte-identical to the original.
+- PyMuPDF comparison was unavailable (`ModuleNotFoundError: fitz`); used Poppler comparison instead.
+
+**State left behind**
+- Local changes only; `sop/` remains ignored. Existing unrelated changes preserved.
+- The separate published copy at `public/help/BJ-HR-SOP-fa.pdf` is unchanged; request scoped to `sop/`.
+
+**For the next agent**
+- Regenerate with `node sop/_tools/build-pdf.mjs`; cover logo now lives in `sop/images/`.
 
 ## 2026-11-01 — Help & guides page with the SOP user guide
 

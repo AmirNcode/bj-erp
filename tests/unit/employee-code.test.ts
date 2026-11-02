@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildEmployeeCode,
+  isValidLoginCode,
   isValidPersonnelNo,
   normalizePersonnelNo,
   toLatinCode,
@@ -67,5 +68,18 @@ describe('buildEmployeeCode', () => {
 
   it('mirrors the SQL btrim', () => {
     expect(buildEmployeeCode(' 1042 ')).toBe('1042');
+  });
+});
+
+describe('isValidLoginCode (mirrors private.valid_login_code)', () => {
+  it('takes letters, digits and email-safe symbols', () => {
+    expect(isValidLoginCode('1042')).toBe(true);
+    expect(isValidLoginCode("Ali.R-1!#$%&'*+/=?^_`{|}~")).toBe(true);
+  });
+  it('rejects spaces, @, bad dots, non-ASCII and over 64 characters', () => {
+    for (const bad of ['', 'a b', 'a@b', '.ab', 'ab.', 'a..b', 'علی', 'a"b', 'a,b', 'a'.repeat(65)]) {
+      expect(isValidLoginCode(bad)).toBe(false);
+    }
+    expect(isValidLoginCode('a'.repeat(64))).toBe(true);
   });
 });

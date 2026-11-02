@@ -83,6 +83,7 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       employeeRoleId={employeeRoleId}
       editableRoleIds={editableRoleIds}
       canManageLeave={canManageLeave}
+      canSetLoginCode={roles.includes('admin')}
       departments={departments ?? []}
       managers={managers ?? []}
       leaveTypes={leaveTypes ?? []}

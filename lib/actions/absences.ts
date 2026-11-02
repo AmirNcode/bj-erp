@@ -96,9 +96,9 @@ export async function getApprovedAbsences(
 }
 
 /**
- * Approved absences that START in [from, to] — the look-ahead under the day
- * board, so HR can enter leave into the attendance (fingerprint) system before
- * the day. Ordered by start date, then as on the day board.
+ * Approved absences that overlap [from, to] — the 30-day look-ahead (Home card,
+ * admin's Absences page), so HR can enter leave into the attendance
+ * (fingerprint) system. Ordered by start date, then as on the day board.
  */
 export async function getUpcomingAbsences(
   from: string,
@@ -112,7 +112,8 @@ export async function getUpcomingAbsences(
     .from('leave_requests')
     .select(ABSENCE_COLUMNS)
     .eq('status', 'approved')
-    .gte('start_date', from)
+    // Overlap, so an absence already under way on `from` is listed too.
+    .gte('end_date', from)
     .lte('start_date', to)
     .order('start_date', { ascending: true });
   if (error) return dbErr(error.message);

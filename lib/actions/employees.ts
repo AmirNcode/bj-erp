@@ -1,7 +1,7 @@
 'use server';
 
 import { allowedProfileFields, generateTempPassword } from './employees-helpers';
-import { normalizePersonnelNo, isValidPersonnelNo } from '@/lib/employees/code';
+import { normalizePersonnelNo, isValidPersonnelNo, isValidLoginCode } from '@/lib/employees/code';
 import { requireCaller } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
@@ -17,6 +17,8 @@ export type CreateEmployeeInput = {
   roleIds?: string[];
   hire_date?: string;
   language_pref?: string;
+  /** Admin only (2026-11-02): a login code other than the personnel number. */
+  login_code?: string;
 };
 
 /**
@@ -43,6 +45,11 @@ export async function createEmployee(
   // (The SQL fn re-checks; this just gives a fast, localized error.)
   const personnelNo = normalizePersonnelNo(input.personnel_no);
   if (!isValidPersonnelNo(personnelNo)) return dbErr('invalid personnel number');
+  const loginCode = input.login_code?.trim() || undefined;
+  if (loginCode !== undefined) {
+    if (!c.roles.includes('admin')) return dbErr('only the admin sets a login code');
+    if (!isValidLoginCode(loginCode)) return dbErr('invalid login code');
+  }
 
   const tempPassword = generateTempPassword();
 
@@ -57,6 +64,7 @@ export async function createEmployee(
     ...(input.hire_date ? { p_hire_date: input.hire_date } : {}),
     ...(input.language_pref ? { p_language_pref: input.language_pref } : {}),
     ...(input.job_title ? { p_job_title: input.job_title } : {}),
+    ...(loginCode ? { p_login_code: loginCode } : {}),
   });
 
   if (error) {
@@ -65,6 +73,27 @@ export async function createEmployee(
 
   invalidateAppCache();
   return { ok: true, tempPassword, userId: userId as string };
+}
+
+/**
+ * Admin only (owner, 2026-11-02): changes someone's personnel number; their
+ * login code becomes the new number (app_admin_set_personnel_no re-checks both).
+ */
+export async function setPersonnelNo(
+  id: string,
+  personnelNo: string
+): Promise<{ ok: true; employeeCode: string } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  if (!c.roles.includes('admin')) return dbErr('admin required');
+  const pno = normalizePersonnelNo(personnelNo);
+  if (!isValidPersonnelNo(pno)) return dbErr('invalid personnel number');
+
+  const { error } = await c.supabase.rpc('app_admin_set_personnel_no', { p_user: id, p_personnel_no: pno });
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, employeeCode: pno };
 }
 
 export type UpdateEmployeeFields = Partial<{

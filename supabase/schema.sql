@@ -2362,6 +2362,47 @@ end; $$;
 
 
 --
+-- Name: set_login_code(uuid, uuid, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.set_login_code(p_actor uuid, p_uid uuid, p_code text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_code  text := btrim(coalesce(p_code, ''));
+  v_email text;
+  v_old   text;
+begin
+  if not private.valid_login_code(v_code) then
+    raise exception 'invalid login code' using errcode = '22023';
+  end if;
+  v_email := lower(v_code) || '@bj-app.internal';
+  select employee_code into v_old from public.profiles where id = p_uid;
+  if v_old is null then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  if v_old = v_code then
+    return;
+  end if;
+  if exists (select 1 from public.profiles where lower(employee_code) = lower(v_code) and id <> p_uid)
+     or exists (select 1 from auth.users where lower(email) = v_email and id <> p_uid) then
+    raise exception 'employee code already exists' using errcode = '23505';
+  end if;
+
+  update public.profiles set employee_code = v_code where id = p_uid;
+  update auth.users set email = v_email, updated_at = now() where id = p_uid;
+  update auth.identities
+     set identity_data = identity_data || jsonb_build_object('email', v_email), updated_at = now()
+   where user_id = p_uid and provider = 'email';
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (p_actor, 'set_login_code', 'profiles', p_uid,
+          jsonb_build_object('employee_code', v_old), jsonb_build_object('employee_code', v_code));
+end; $$;
+
+
+--
 -- Name: set_requester_per_diem(uuid, bigint); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -3013,6 +3054,20 @@ end; $$;
 
 
 --
+-- Name: valid_login_code(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.valid_login_code(p_code text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select p_code is not null
+     and char_length(p_code) between 1 and 64
+     and p_code ~ '^[A-Za-z0-9!#$%&''*+/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&''*+/=?^_`{|}~-]+)*$';
+$_$;
+
+
+--
 -- Name: accrue_all_leave(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3261,6 +3316,48 @@ end; $$;
 
 
 --
+-- Name: app_admin_set_personnel_no(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_caller  uuid := auth.uid();
+  v_pno     text := btrim(coalesce(p_personnel_no, ''));
+  v_company uuid;
+  v_old     text;
+begin
+  if v_caller is null or not private.is_admin(v_caller) then
+    raise exception 'admin required' using errcode = '42501';
+  end if;
+  if v_pno !~ '^[0-9]{1,10}$' then
+    raise exception 'invalid personnel number (1-10 digits)' using errcode = '22023';
+  end if;
+  select company_id, personnel_no into v_company, v_old
+    from public.profiles where id = p_user for update;
+  if v_company is null
+     or v_company is distinct from (select company_id from public.profiles where id = v_caller) then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  if exists (select 1 from public.profiles
+              where company_id = v_company and personnel_no = v_pno and id <> p_user) then
+    raise exception 'personnel number already exists' using errcode = '23505';
+  end if;
+
+  if v_old is distinct from v_pno then
+    update public.profiles set personnel_no = v_pno where id = p_user;
+    insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+    values (v_caller, 'set_personnel_no', 'profiles', p_user,
+            jsonb_build_object('personnel_no', v_old), jsonb_build_object('personnel_no', v_pno));
+  end if;
+  -- The login code follows the number (owner, 2026-11-02).
+  perform private.set_login_code(v_caller, p_user, v_pno);
+end; $_$;
+
+
+--
 -- Name: app_approval_capabilities(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3274,6 +3371,68 @@ CREATE FUNCTION public.app_approval_capabilities() RETURNS jsonb
       select 1 from public.approval_delegations d
       cross join lateral private.effective_approval_delegate(d.principal_id) e
       where e.id=d.id and d.delegate_id=auth.uid()));
+$$;
+
+
+--
+-- Name: app_approval_history(integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_approval_history(p_limit integer DEFAULT 20, p_offset integer DEFAULT 0) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with me as (
+    select p.id, p.company_id, private.is_admin(p.id) as admin
+      from public.profiles p
+     where p.id = auth.uid() and private.is_active(p.id)
+  ), hits as (
+    select r.id, coalesce(r.decided_at, max(a.created_at), r.created_at) as decided_at
+      from me
+      join public.leave_requests r on r.company_id = me.company_id and r.status <> 'pending'
+      left join public.leave_request_approvals a on a.request_id = r.id
+     where me.admin
+        or exists (select 1 from public.leave_request_approvals x
+                    where x.request_id = r.id and x.approver_id = me.id)
+     group by r.id
+  ), page as (
+    select * from hits order by decided_at desc, id
+     limit least(greatest(coalesce(p_limit, 20), 1), 100) offset greatest(coalesce(p_offset, 0), 0)
+  )
+  select jsonb_build_object(
+    'total', (select count(*) from hits),
+    'rows', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'id', r.id,
+        'kind', r.kind,
+        'status', r.status,
+        'serial_year', r.serial_year,
+        'serial_seq', r.serial_seq,
+        'employee_name', e.full_name,
+        'personnel_no', e.personnel_no,
+        'department_name_fa', d.name_fa,
+        'department_name_en', d.name_en,
+        'leave_type_name_fa', lt.name_fa,
+        'leave_type_name_en', lt.name_en,
+        'unit', r.unit,
+        'start_date', r.start_date,
+        'end_date', r.end_date,
+        'start_time', r.start_time,
+        'end_time', r.end_time,
+        'requested_minutes', r.requested_minutes,
+        'errand_location', r.errand_location,
+        'decided_at', pg.decided_at,
+        'my_decisions', coalesce((
+          select jsonb_agg(jsonb_build_object('decision', a.decision, 'at', a.created_at, 'note', a.note)
+                           order by a.created_at)
+            from public.leave_request_approvals a
+           where a.request_id = r.id and a.approver_id = auth.uid()), '[]'::jsonb)
+      ) order by pg.decided_at desc, pg.id)
+        from page pg
+        join public.leave_requests r on r.id = pg.id
+        join public.profiles e on e.id = r.employee_id
+        left join public.departments d on d.id = e.department_id
+        left join public.leave_types lt on lt.id = r.leave_type_id), '[]'::jsonb));
 $$;
 
 
@@ -4087,10 +4246,10 @@ $_$;
 
 
 --
--- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[]); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[], text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text, p_role_ids uuid[] DEFAULT NULL::uuid[]) RETURNS uuid
+CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text, p_role_ids uuid[] DEFAULT NULL::uuid[], p_login_code text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -4113,6 +4272,11 @@ begin
   v_hr := private.has_perm(v_caller, 'people_create', 'edit');
 
   -- D1: no path adds admin, whichever branch below runs.
+  -- Owner, 2026-11-02: only the admin picks a login code other than the personnel number.
+  if nullif(btrim(coalesce(p_login_code, '')), '') is not null and not v_admin then
+    raise exception 'only the admin sets a login code' using errcode = '42501';
+  end if;
+
   if 'admin' = any (coalesce(p_roles, '{}')) then
     raise exception 'admin is moved only by Transfer admin' using errcode = '42501';
   end if;
@@ -4153,6 +4317,10 @@ begin
     v_caller, case when v_admin then 'admin' else 'hr' end,
     v_company, v_dept, v_mgr, p_personnel_no, p_full_name, p_password,
     v_roles, p_hire_date, p_language_pref, p_calendar_pref, p_job_title);
+
+  if nullif(btrim(coalesce(p_login_code, '')), '') is not null then
+    perform private.set_login_code(v_caller, v_uid, p_login_code);
+  end if;
 
   -- D5 for non-admins (and D1 for everyone) through the assignment RPC. Skipped
   -- when the ids add nothing beyond Employee.
@@ -10947,6 +11115,13 @@ REVOKE ALL ON FUNCTION private.separation_row_signer(p_company uuid, p_employee 
 
 
 --
+-- Name: FUNCTION set_login_code(p_actor uuid, p_uid uuid, p_code text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.set_login_code(p_actor uuid, p_uid uuid, p_code text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION set_requester_per_diem(p_request uuid, p_per_diem_rials bigint); Type: ACL; Schema: private; Owner: -
 --
 
@@ -11032,6 +11207,14 @@ REVOKE ALL ON FUNCTION private.travel_itinerary_without_costs(p_it jsonb) FROM P
 
 
 --
+-- Name: FUNCTION valid_login_code(p_code text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.valid_login_code(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.valid_login_code(p_code text) TO authenticated;
+
+
+--
 -- Name: FUNCTION accrue_all_leave(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11082,6 +11265,16 @@ GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id 
 
 
 --
+-- Name: FUNCTION app_admin_set_personnel_no(p_user uuid, p_personnel_no text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO postgres;
+GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO service_role;
+
+
+--
 -- Name: FUNCTION app_approval_capabilities(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11089,6 +11282,16 @@ REVOKE ALL ON FUNCTION public.app_approval_capabilities() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_approval_capabilities() TO postgres;
 GRANT ALL ON FUNCTION public.app_approval_capabilities() TO service_role;
 GRANT ALL ON FUNCTION public.app_approval_capabilities() TO authenticated;
+
+
+--
+-- Name: FUNCTION app_approval_history(p_limit integer, p_offset integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_approval_history(p_limit integer, p_offset integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_approval_history(p_limit integer, p_offset integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_approval_history(p_limit integer, p_offset integer) TO authenticated;
+GRANT ALL ON FUNCTION public.app_approval_history(p_limit integer, p_offset integer) TO service_role;
 
 
 --
@@ -11172,13 +11375,13 @@ GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO service_role;
 
 
 --
--- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO postgres;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO authenticated;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[]) TO service_role;
+REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO postgres;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO service_role;
 
 
 --

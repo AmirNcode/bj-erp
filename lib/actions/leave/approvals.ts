@@ -288,3 +288,49 @@ export async function getPendingApprovalIds(): Promise<
   if (!res.ok) return res;
   return { ok: true, ids: res.requests.map((r) => r.id) };
 }
+
+// Not exported: a 'use server' module exports async functions only.
+const APPROVAL_HISTORY_PAGE_SIZE = 20;
+
+export type ApprovalHistoryRow = {
+  id: string;
+  kind: 'leave' | 'errand';
+  status: 'approved' | 'rejected' | 'cancelled';
+  serial_year: number;
+  serial_seq: number;
+  employee_name: string;
+  personnel_no: string | null;
+  department_name_fa: string | null;
+  department_name_en: string | null;
+  leave_type_name_fa: string | null;
+  leave_type_name_en: string | null;
+  unit: 'day' | 'hour';
+  start_date: string;
+  end_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  requested_minutes: number;
+  errand_location: string | null;
+  decided_at: string;
+  my_decisions: { decision: 'approved' | 'rejected'; at: string; note: string | null }[];
+};
+
+/**
+ * Approvals history (owner, 2026-11-02): decided requests the caller approved
+ * or rejected a step of, newest first; the admin sees every decided request.
+ * Scope lives in app_approval_history. `page` is 1-based.
+ */
+export async function getApprovalHistory(
+  page: number
+): Promise<{ ok: true; total: number; pageSize: number; rows: ApprovalHistoryRow[] } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const p = Number.isInteger(page) && page > 0 ? page : 1;
+  const { data, error } = await c.supabase.rpc('app_approval_history', {
+    p_limit: APPROVAL_HISTORY_PAGE_SIZE,
+    p_offset: (p - 1) * APPROVAL_HISTORY_PAGE_SIZE,
+  });
+  if (error) return dbErr(error.message);
+  const result = (data ?? {}) as { total?: number; rows?: ApprovalHistoryRow[] };
+  return { ok: true, total: result.total ?? 0, pageSize: APPROVAL_HISTORY_PAGE_SIZE, rows: result.rows ?? [] };
+}

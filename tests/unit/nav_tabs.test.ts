@@ -99,8 +99,8 @@ describe('manageItemsForRoles', () => {
   it('security preset now reaches employees and the archive (spec: visible difference)', () => {
     expect(keys(['security'], SEC)).toEqual(['employees', 'requests']);
   });
-  it('manager keeps employees + approvals with no perms', () => {
-    expect(keys(['employee', 'manager'], {})).toEqual(['employees', 'approvals']);
+  it('manager with no perms keeps only approvals (Employees needs people read, 2026-11-02)', () => {
+    expect(keys(['employee', 'manager'], {})).toEqual(['approvals']);
   });
   it('hr preset: the manage items before FR-55, plus Finance (ruling a)', () => {
     expect(keys(['hr'], HR)).toEqual([
@@ -135,7 +135,7 @@ describe('manageItemsForRoles', () => {
     expect(keys(['security'], SEC)).not.toContain('finance');
   });
   it('a manager with finance read finds it in Manage', () => {
-    expect(keys(['manager'], { finance: 'read' })).toEqual(['employees', 'approvals', 'finance']);
+    expect(keys(['manager'], { finance: 'read' })).toEqual(['approvals', 'finance']);
   });
   it('hr with an emptied role keeps only Approvals (identity-based)', () => {
     expect(keys(['hr'], {})).toEqual(['approvals']);
@@ -143,15 +143,15 @@ describe('manageItemsForRoles', () => {
   it('helpdesk (people read + people_create) gets Employees only', () => {
     expect(keys(['employee'], { people: 'read', people_create: 'edit' })).toEqual(['employees']);
   });
-  it('FR-74: Employees follows direct reports, not the Manager role, once known', () => {
-    expect(manageItemsForRoles(['employee'], {}, false, false, true).map((i) => i.key)).toEqual(['employees']);
+  it('Employees follows people read only, never direct reports or the Manager role', () => {
+    expect(manageItemsForRoles(['employee'], {}, false, false, true).map((i) => i.key)).toEqual([]);
     expect(manageItemsForRoles(['manager'], {}, false, false, false).map((i) => i.key)).toEqual([]);
-    expect(tabsForRoles(['employee'], {}, false, false, true).some((t) => t.key === 'manage')).toBe(true);
+    expect(tabsForRoles(['employee'], {}, false, false, true).some((t) => t.key === 'manage')).toBe(false);
     // people read lists everyone regardless of reports
     expect(manageItemsForRoles(['employee'], { people: 'read' }, false, false, false).map((i) => i.key)).toEqual(['employees']);
   });
   it('the employees hub keeps the nav-manage test id', () => {
-    expect(manageItemsForRoles(['manager'], {})[0]).toMatchObject({
+    expect(manageItemsForRoles(['manager'], { people: 'read' })[0]).toMatchObject({
       key: 'employees',
       href: '/manage/employees',
       testId: 'nav-manage',

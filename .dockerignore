@@ -13,3 +13,8 @@ docs
 .superpowers
 .claude
 *.md
+# Claude Design sync (not app code)
+.design-sync
+.ds-sync
+ds-bundle
+build

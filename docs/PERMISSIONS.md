@@ -569,7 +569,7 @@ their holders.
 
 | Object | Gate |
 |---|---|
-| Employees / Departments / Request archive / Approval steps / Reports pages | `manager` or `people` read · `departments` read · `leave_requests` read · `approval_steps` read · `reports` read |
+| Employees / Departments / Request archive / Approval steps / Reports pages | `people` read (managers without it: org chart, 2026-11-02) · `departments` read · `leave_requests` read · `approval_steps` read · `reports` read |
 | Finance page | `finance` read (a Manage item for callers who already have the Manage group, else a bottom tab) |
 | Procurement page (FR-70) | `travel_booking` edit (same tab/Manage rule as Finance) |
 | Settings | admin, or `work_settings` read, or `holidays` read; unreleased delegate holders also reach their own Roles-tab panel, while role authoring stays admin-only |
@@ -768,3 +768,7 @@ through an unsigned browser approval endpoint.
   ignoring the order rule (the app groups steps with it; the RPC above still enforces the order).
 - `home_dismissed_requests`: RLS, own rows readable (`employee_id = auth.uid()`), no write privileges.
   `app_dismiss_home_request(id)`: active caller, own request only (else P0002), status `rejected` only.
+
+### Admin-only identity RPCs (2026-11-02)
+
+`app_create_employee(…, p_login_code)`: only the admin may pass a login code. `app_admin_set_personnel_no(uuid, text)`: admin only, same company; the login code follows the number. `app_approval_history(int, int)`: decided requests the caller approved or rejected a step of (`leave_request_approvals.approver_id`); the admin sees every decided request of the company.

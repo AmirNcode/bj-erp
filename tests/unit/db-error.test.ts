@@ -100,13 +100,14 @@ describe('fieldForDbError', () => {
     expect(fieldForDbError('invalid personnel number')).toBe('personnel_no');
   });
 
-  it('leaves the EMPLOYEE CODE errors at page level', () => {
-    // The form collects a personnel number; the code is derived from it (FR-31).
-    // Pinning a code error to the personnel input would name the wrong thing.
-    expect(fieldForDbError('employee code already exists')).toBeUndefined();
+  it('pins the EMPLOYEE CODE errors to the login code, never the personnel number', () => {
+    // The admin's Add form has a login code input (2026-11-02); for everyone
+    // else the form shows the error at page level (no such input).
+    expect(fieldForDbError('employee code already exists')).toBe('login_code');
     expect(
       fieldForDbError('duplicate key value violates unique constraint "profiles_employee_code_key"')
-    ).toBeUndefined();
+    ).toBe('login_code');
+    expect(fieldForDbError('invalid login code')).toBe('login_code');
   });
 
   it('leaves unrelated errors unattributed', () => {

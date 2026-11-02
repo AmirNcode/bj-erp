@@ -98,6 +98,9 @@ an admin-issued password, FR-50; rows that existed on 2026-10-06 were set false)
 before that it was `departments.code || '-' || personnel_no`. Accounts created earlier were **not
 migrated** — `prod-1042` and `1042` both log in, and the mixed state is permanent and intentional.
 The synthetic auth email follows the code (`1042@bj-app.internal`).
+**Since 2026-11-02 the admin may set any login code** (`private.valid_login_code`: email-safe ASCII,
+no spaces or @, 1–64; unique case-insensitively, the auth email is lower-cased) on creation, and
+changing a personnel number (`app_admin_set_personnel_no`) resets the code to the new number.
 
 Two consequences worth knowing before touching this:
 - **`employee_code` uniqueness is global, not per company.** The prefix used to keep `prod-1042` and

@@ -1,0 +1,4 @@
+/* Brand fonts (app/fonts), served by next/font in the app. */
+@font-face { font-family: 'Vazirmatn'; src: url('../app/fonts/Vazirmatn[wght].woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Rubik'; src: url('../app/fonts/Rubik-VariableFont_wght.ttf') format('truetype'); font-weight: 300 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Rubik'; src: url('../app/fonts/Rubik-Italic-VariableFont_wght.ttf') format('truetype'); font-weight: 300 900; font-style: italic; font-display: swap; }

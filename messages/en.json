@@ -354,7 +354,20 @@
     "signingAs": "Signing as:",
     "perDiemLabel": "Per diem (Rials)",
     "perDiemHint": "Optional. Finance sees it once the errand is fully approved.",
-    "perDiemInvalid": "Enter the per diem as a whole number of Rials."
+    "perDiemInvalid": "Enter the per diem as a whole number of Rials.",
+    "history": {
+      "title": "History",
+      "hint": "Requests you approved or rejected, newest first. Open one to see its whole approval chain.",
+      "empty": "You have not decided any request yet.",
+      "youApproved": "You approved on {date}",
+      "youRejected": "You rejected on {date}",
+      "decidedOn": "Decided on {date}",
+      "note": "Your note",
+      "view": "View form",
+      "prev": "Newer",
+      "next": "Older",
+      "pageOf": "Page {page} of {pages}"
+    }
   },
   "review": {
     "title": "Request review",
@@ -602,7 +615,15 @@
       "lockedAbove": "This person has access you don't have, so only the admin or someone with more access can change their record.",
       "readOnlyNote": "You can view this record but not change its details.",
       "adminTransferHint": "Admin is moved with Transfer admin in Settings › Roles.",
-      "accountActions": "Account"
+      "accountActions": "Account",
+      "loginCode": "Login code",
+      "loginCodeHint": "Leave empty to use the personnel number. Letters, digits and symbols; no spaces or @.",
+      "editPersonnelNo": "Change personnel number",
+      "editPersonnelNoHint": "Their login code becomes the new number. They sign in with it from now on; the password stays the same.",
+      "savePersonnelNo": "Save",
+      "personnelNoSaved": "Personnel number and login code updated.",
+      "currentLoginCode": "Current login code: {code}",
+      "loginCodeInvalid": "Not a valid login code: English letters, digits and symbols only, no spaces or @."
     },
     "departments": {
       "title": "Departments",
@@ -940,7 +961,7 @@
     "passwordTooShort": "The new password must be at least 8 characters.",
     "passwordTooLong": "The new password must be no more than 72 ASCII characters.",
     "invalidEmployeeCode": "Invalid employee code (latin letters, digits, dot, dash, underscore only).",
-    "duplicateEmployeeCode": "This employee code already exists.",
+    "duplicateEmployeeCode": "This login code is already in use.",
     "duplicatePersonnelNo": "This personnel number is already in use by another employee.",
     "invalidPersonnelNo": "Personnel number must be 1-10 digits.",
     "duplicateHoliday": "A holiday already exists on this date.",
@@ -1075,7 +1096,8 @@
     "itineraryInvalid": "The itinerary couldn't be read. Reload the page and try again.",
     "itineraryBadCost": "Enter each hotel cost in whole Rials, 0 or more.",
     "itineraryStayCost": "Enter the cost of each hotel stay.",
-    "itineraryHotelTotal": "The hotel cost must be the total of the stays. Reload the page and try again."
+    "itineraryHotelTotal": "The hotel cost must be the total of the stays. Reload the page and try again.",
+    "invalidLoginCode": "Login code: up to 64 English letters, digits or symbols, without spaces or @ (a dot may not start, end or repeat)."
   },
   "roles": {
     "admin": "Admin",
@@ -1383,9 +1405,12 @@
     "leave": "Leave",
     "hourlyErrand": "Hourly work errand",
     "dailyErrand": "Daily work errand",
-    "upcomingTitle": "Absences in the next {days} days",
-    "upcomingHint": "Approved leave and work errands that start between tomorrow and {days} days from now, by start date.",
-    "upcomingEmpty": "No approved leave or work errand starts in the next {days} days."
+    "upcomingTitle": "Approved absences in the next {days} days",
+    "upcomingHint": "Fully approved leave and work errands from today through {days} days from now, including any already under way. Pending requests do not appear; the calendar shows later dates.",
+    "errandsSection": "Work errands",
+    "leaveSection": "Leave",
+    "errandsEmpty": "No approved work errand in the next {days} days.",
+    "leaveEmpty": "No approved leave in the next {days} days."
   },
   "finance": {
     "title": "Finance — requests",

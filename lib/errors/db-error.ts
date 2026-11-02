@@ -18,7 +18,7 @@ import { getTranslations } from 'next-intl/server';
  * place that knows which raw database message means which field, so a future
  * action raising the same message gets the same placement for free.
  */
-export type ErrorField = 'personnel_no' | 'role_name' | 'password';
+export type ErrorField = 'personnel_no' | 'login_code' | 'role_name' | 'password';
 
 /** The shape every failing server action returns. `field` is optional. */
 export type DbErrorResult = { ok: false; error: string; field?: ErrorField };
@@ -99,8 +99,11 @@ const RULES: Rule[] = [
   { re: /new password must differ from the current password/, key: 'passwordSameAsCurrent' },
   { re: /password change is not required/, key: 'passwordChangeNotRequired' },
   { re: /invalid employee code/, key: 'invalidEmployeeCode' },
-  { re: /employee code already exists/, key: 'duplicateEmployeeCode' },
-  { re: /duplicate key value.*profiles_employee_code/, key: 'duplicateEmployeeCode' },
+  { re: /employee code already exists/, key: 'duplicateEmployeeCode', field: 'login_code' },
+  { re: /duplicate key value.*profiles_employee_code/, key: 'duplicateEmployeeCode', field: 'login_code' },
+  // Admin login codes (2026-11-02): any text without spaces or @.
+  { re: /^invalid login code$/, key: 'invalidLoginCode', field: 'login_code' },
+  { re: /^only the admin sets a login code$|^admin required$/, key: 'notAllowed' },
   // The personnel number is what the Add Employee form actually collects — the
   // employee code is derived from it (FR-31). Both of these raised messages were
   // UNMAPPED until 2026-08-18, so a duplicate personnel number reached the user
