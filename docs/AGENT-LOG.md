@@ -78,6 +78,32 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Spec: editable Manager role (FR-74 draft)
+
+**Agent:** Claude Code (cloud session)
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** owner: HR says managers should not add employees; make Manager editable by admin.
+
+**What changed**
+- `docs/specs/2026-11-02-editable-manager-role-design.md` — new draft spec. Manager becomes a preset;
+  hard-wired reads (`reads_people/balances/calendar`) become role_permissions rows; new catalog item
+  `people_create_team` (off by default) gates the manager branch of `app_create_employee`.
+  Reporting-line powers (`is_manager_of`, approval steps, travel checks) stay fixed.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- none (docs only). Survey: `grep has_role(...'manager')` in `supabase/schema.sql` → 9 sites; app
+  `roles.includes('manager')` sites listed in spec §5.
+
+**State left behind**
+- Uncommitted spec + this entry. No code. Waiting for owner review of spec §8 questions.
+
+**For the next agent**
+- Owner answers: full preset, default off, all create paths. Import already needs `people_create`.
+- `private.can_read_all` has no callers; spec drops only its manager clause.
+
 ## 2026-11-01 — Help & guides page with the SOP user guide
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
