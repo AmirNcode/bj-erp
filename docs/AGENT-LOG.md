@@ -93,7 +93,7 @@ Copy this block verbatim and fill it in.
 
 **Actions outside the repo**
 - Local Docker DB only: created throwaway databases `bj_review12`, `bj_review13`, `bj_review_all` in `bj-erp-db-1` (pg_dump/pg_restore of `postgres`), applied the #12 migration there, ran `tests/sql/*`, dropped all three. `postgres` itself untouched (it already had #13's migration from an earlier session). One read-only query as an hr user inside `begin … rollback` (no approved absences start in the next 30 days locally, so #14's real query returned 0 rows).
-- Nothing pushed. Nothing run on Liara.
+- Pushed only the three PR branches (no push to main). Nothing run on Liara.
 
 **Verification**
 - Combined (#12 + #13 + #14 merged onto main in a scratch worktree): `tsc --noEmit` clean, `npm run lint` clean, `vitest run tests/unit` 1025 passed / 5 skipped, `npm run build` succeeded, all 12 `tests/sql/*` files 1173 PASS / 0 FAIL; the merged `schema.sql` equals a dump of the combined DB (apart from `pg_restore` CHECK formatting). Merge conflicts: only `docs/AGENT-LOG.md` and `docs/CHANGELOG.md` (keep both entries).
@@ -101,10 +101,9 @@ Copy this block verbatim and fill it in.
 - Not run: e2e (`team.spec.ts`, `hr-role.spec.ts`), browser check of the new pages.
 
 **State left behind**
-- Fixes are local commits in worktrees `.claude/worktrees/pr12` (branch `claude/editable-manager-role`), `pr13` and `pr14` (detached HEADs; the branch names are checked out in the main checkout and `../bj-absences-lookahead`), plus a scratch merge in `.claude/worktrees/integration`. Not pushed.
+- Fixes are local commits in worktrees `.claude/worktrees/pr12` (branch `claude/editable-manager-role`), `pr13` and `pr14` (detached HEADs; the branch names are checked out in the main checkout and `../bj-absences-lookahead`), plus a scratch merge on local branch `review/integration-2026-11-02` (`.claude/worktrees/integration`, not pushed). On Amir's go-ahead the three PR branches were pushed (fast-forward): #12 → 1cfd485, #13 → b709c6d, #14 → 7515179. The local `claude/finance-errands-only` (main checkout) and `claude/absences-lookahead` (`../bj-absences-lookahead`) branches are now one commit behind origin.
 
 **For the next agent**
-- Push #13/#14 fixes with `git push origin HEAD:claude/finance-errands-only` / `HEAD:claude/absences-lookahead` from those worktrees.
 - The #12 migration is editable only until a DB applies it; after Amir's local deploy it is frozen.
 
 ## 2026-11-02 — FR-74 built: Manager read-only on people
