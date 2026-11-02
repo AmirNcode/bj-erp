@@ -8,7 +8,7 @@ import type { FinanceRow } from '@/lib/actions/finance';
 import type { JalaliMonthOption } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
-import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatNumber } from '@/lib/i18n/format';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
@@ -30,7 +30,8 @@ type Props = {
   hoursPerDay: number;
 };
 
-type KindFilter = 'all' | 'leave' | 'errand';
+// Finance sees work errands only (the SQL returns no leave); filter by hourly vs daily.
+type UnitFilter = 'all' | 'day' | 'hour';
 
 /**
  * A spreadsheet cell that Excel will not run as a formula. Errand locations
@@ -48,7 +49,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
   const tApprovals = useTranslations('approvals');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [kind, setKind] = useState<KindFilter>('all');
+  const [unit, setUnit] = useState<UnitFilter>('all');
 
   const durationLabels = durationLabelsFrom(tLeave);
   const num = (n: number) => formatNumber(n, locale);
@@ -68,7 +69,10 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       router.replace(`/${locale}/finance?from=${f}&to=${tt}`, { scroll: false });
     });
 
-  const shown = useMemo(() => (kind === 'all' ? rows : rows.filter((r) => r.kind === kind)), [rows, kind]);
+  const shown = useMemo(
+    () => (unit === 'all' ? rows : rows.filter((r) => (r.unit === 'hour') === (unit === 'hour'))),
+    [rows, unit]
+  );
   // FR-62: fully approved (and settled cancelled trips) apart from pending; the
   // headline totals count the approved section only.
   const approvedRows = shown.filter((r) => r.status !== 'pending');
@@ -104,12 +108,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
   const amount = (v: number | null) => (v === null ? '—' : formatRials(v, locale));
   const plain = (v: number | null) => (v === null ? '' : String(v));
 
-  const typeName = (r: FinanceRow) =>
-    r.kind === 'errand'
-      ? t(r.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand')
-      : r.leave_type_name_fa
-        ? localizedLeaveTypeName({ name_fa: r.leave_type_name_fa, name_en: r.leave_type_name_en }, locale)
-        : '—';
+  const typeName = (r: FinanceRow) => t(r.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand');
   const dates = (r: FinanceRow) =>
     r.unit === 'hour'
       ? `${date(r.start_date)} ${formatTimeRange(r.start_time, r.end_time, locale) ?? ''}`.trim()
@@ -128,7 +127,6 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       t('csv.personnelNo'),
       t('csv.employee'),
       t('csv.department'),
-      t('csv.kind'),
       t('csv.type'),
       t('csv.start'),
       t('csv.end'),
@@ -152,7 +150,6 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       r.personnel_no ?? '',
       r.employee_name,
       dept(r),
-      r.kind === 'errand' ? t('errand') : t('leave'),
       typeName(r),
       formatCalendarDate(r.start_date, 'fa'),
       formatCalendarDate(r.end_date, 'fa'),
@@ -318,14 +315,14 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
         </select>
         <select
           aria-label={t('kind')}
-          value={kind}
-          onChange={(e) => setKind(e.target.value as KindFilter)}
+          value={unit}
+          onChange={(e) => setUnit(e.target.value as UnitFilter)}
           className={selectClass}
           data-testid="finance-kind"
         >
           <option value="all">{t('all')}</option>
-          <option value="errand">{t('errands')}</option>
-          <option value="leave">{t('leaves')}</option>
+          <option value="day">{t('dailyErrand')}</option>
+          <option value="hour">{t('hourlyErrand')}</option>
         </select>
         <Button
           variant="outline"

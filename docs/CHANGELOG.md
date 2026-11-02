@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Finance sees work errands only — `claude/finance-errands-only` (not deployed)
+
+- `/finance` listed every request, leave included. It now lists only work errands (hourly and
+  daily); leave requests no longer reach the finance role at all — the database functions
+  filter them out. The filter offers All / Daily / Hourly, and the CSV drops its Kind column.
+  Migration `20261102120000_finance_errands_only`.
+
 ### Help & guides page — `main`
 
 - New **Help** page (`/help`) for guides, instructions and how-tos. Desktop: link at the bottom

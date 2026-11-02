@@ -66,15 +66,16 @@ describe('finance: travel costs (FR-70)', () => {
 });
 
 // Owner review 2026-10-20: finance sees pending requests too (FR-62/FR-70).
-const pendingLeave: FinanceRow = { ...plain, id: 'p', serial_seq: 4, kind: 'leave', status: 'pending', per_diem_rials: null,
-  errand_location: null, waiting_step: 'manager' };
+// Finance sees work errands only (2026-11-02): the SQL returns no leave rows.
+const pendingHourly: FinanceRow = { ...plain, id: 'p', serial_seq: 4, unit: 'hour', start_time: '08:00:00', end_time: '10:00:00',
+  status: 'pending', per_diem_rials: null, waiting_step: 'manager' };
 const pendingErrand: FinanceRow = { ...plain, id: 'q', serial_seq: 5, status: 'pending', per_diem_rials: 300000, waiting_step: 'hr' };
 const unbooked: FinanceRow = { ...base, id: 'u', serial_seq: 6, travel_state: 'to_book', transport: null,
   flight_cost_rials: null, hotel_cost_rials: null, per_diem_rials: 200000 };
 
 describe('finance: approved and pending sections', () => {
   it('splits rows into the two sections with their own totals', () => {
-    renderList([base, cancelled, pendingLeave, pendingErrand]);
+    renderList([base, cancelled, pendingHourly, pendingErrand]);
     const approved = screen.getByTestId('finance-section-approved');
     const pending = screen.getByTestId('finance-section-pending');
     expect(approved.querySelector('[data-testid="finance-row-a"]')).toBeTruthy();
@@ -89,10 +90,22 @@ describe('finance: approved and pending sections', () => {
   });
 
   it('a pending row shows only the step label it waits on', () => {
-    renderList([pendingLeave, pendingErrand]);
+    renderList([pendingHourly, pendingErrand]);
     expect(screen.getByTestId('finance-waiting-p').textContent).toBe('Waiting on: Direct manager');
     expect(screen.getByTestId('finance-waiting-q').textContent).toBe('Waiting on: HR');
     expect(screen.getByTestId('finance-approved-empty')).toBeTruthy();
+  });
+
+  it('filters hourly and daily work errands; no leave option', () => {
+    renderList([base, pendingHourly]);
+    const filter = screen.getByTestId('finance-kind') as HTMLSelectElement;
+    expect([...filter.options].map((o) => o.value)).toEqual(['all', 'day', 'hour']);
+    fireEvent.change(filter, { target: { value: 'hour' } });
+    expect(screen.queryByTestId('finance-row-a')).toBeNull();
+    expect(screen.getByTestId('finance-row-p')).toBeTruthy();
+    fireEvent.change(filter, { target: { value: 'day' } });
+    expect(screen.getByTestId('finance-row-a')).toBeTruthy();
+    expect(screen.queryByTestId('finance-row-p')).toBeNull();
   });
 
   it('an approved trip procurement has not finished shows dashes and the marker', () => {

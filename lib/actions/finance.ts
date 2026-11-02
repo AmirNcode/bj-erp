@@ -5,8 +5,8 @@
  *
  * Reads go through `public.finance_requests`, a guarded SECURITY DEFINER
  * function (finance read): finance has no RLS read on `leave_requests`. It
- * returns approved and pending requests, without signatures, approver names or
- * the private reason; a pending row carries only the label of the step it waits
+ * returns approved and pending work errands only (no leave, since 2026-11-02),
+ * without signatures, approver names or the private reason; a pending row carries only the label of the step it waits
  * on (`waiting_step`). FR-70: a travel-booked trip appears as soon as it is
  * approved (`travel_state` says whether procurement has finished); a cancelled
  * one once procurement has recorded the amount lost (`status` = cancelled).

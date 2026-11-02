@@ -507,6 +507,29 @@ select pg_temp.expect('finance2: range checked',left(pg_temp.as_scalar('admin',
 select pg_temp.assert('anon cannot call finance_requests',
   not has_function_privilege('anon','public.finance_requests(date,date)','EXECUTE'));
 
+-- Finance sees work errands only (2026-11-02): leave never reaches it, approved or pending.
+do $$
+declare v_type uuid; v_id uuid; v_day int:=0; v_status text;
+begin
+  perform pg_temp.login('admin');
+  insert into public.leave_types(company_id,name_fa,name_en,is_paid,affects_balance,allow_half_day,allow_hourly)
+    values(pg_temp.fx('company'),'استحقاقی','Fixture annual',true,false,true,true) returning id into v_type;
+  foreach v_status in array array['approved','pending'] loop
+    insert into public.leave_requests(employee_id,company_id,kind,leave_type_id,start_date,end_date,
+                                      requested_minutes,status,serial_year,serial_seq)
+      values(pg_temp.fx('worker'),pg_temp.fx('company'),'leave',v_type,date '2027-09-20'+v_day,date '2027-09-20'+v_day,
+             480,v_status::public.leave_status,1,977001+v_day)
+      returning id into v_id;
+    insert into tb_fx values('fin_leave_'||v_status,v_id);
+    v_day:=v_day+1;
+  end loop;
+end $$;
+select pg_temp.expect('finance2: approved leave stays hidden',pg_temp.fin2('admin','fin_leave_approved'),null);
+select pg_temp.expect('finance2: pending leave stays hidden',pg_temp.fin2('admin','fin_leave_pending'),null);
+select pg_temp.expect('old finance function hides leave too',pg_temp.fin('fin_leave_approved'),null);
+select pg_temp.expect('finance2: only errands come back',pg_temp.as_scalar('admin',
+  'select count(*)::text from public.finance_requests(''2027-03-01'',''2027-12-31'') where kind<>''errand'''),'0');
+
 -- ============================================================ owner review: extensions after rejection, manager's own trip (…08)
 -- After a rejection, a new extension may be sent for the same trip (one pending at a time).
 insert into tb_fx values('rej1',pg_temp.ext('mgr','fin_req','2027-09-05')::uuid);
