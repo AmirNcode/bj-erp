@@ -78,6 +78,19 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Finance page: work errands only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** Amir: the finance role should see only work trips (hourly and daily) on /finance; it showed all leave requests too.
+
+- Cause: `public.finance_requests` (migration `20261020120007`) returns every kind by design (owner review 2026-10-20: "leave and errands").
+- New migration `supabase/migrations/20261102120000_finance_errands_only.sql`: re-creates `finance_requests` and legacy `finance_approved_requests` with `and r.kind = 'errand'` (bodies copied from `schema.sql`, signatures unchanged, so the old app keeps working during release).
+- `app/[locale]/(app)/finance/FinanceList.tsx`: leave/errand filter → All / Daily / Hourly (`unit`); dropped the leave-type branch and the CSV Kind column. Pruned unused `finance.{errands,leaves,leave,errand,csv.kind}` in `messages/{en,fa}.json`; `all`/`empty` copy now say "work errands".
+- Tests: `tests/sql/travel-booking.sql` adds an approved + pending leave fixture and asserts neither finance function returns it. Dry-run as `supabase_admin` inside `begin … rollback` (migration + whole file): all PASS; without the migration it FAILs at "finance2: approved leave stays hidden", as expected. `tests/unit/finance-travel-columns.test.tsx`: pending leave fixture → pending hourly errand, new filter test. `npm run test:unit` 108 files / 1027 tests pass; `tsc --noEmit` and eslint on the touched files clean.
+- Applied locally on Amir's go-ahead: `./deploy/bj-deploy update local` (backup taken, migration applied, app rebuilt; "Local update succeeded"), restarted `bj-erp-rest-1`, `npm run schema:dump` → `supabase/schema.sql` diff is exactly the two `and r.kind = 'errand'` lines. Live check as admin on the local DB: `finance_requests(today-200, today+100)` returns only `errand` rows (2). The migration is now frozen.
+- **Not done:** nothing committed; nothing run on Liara (deploys on push to main).
+
 ## 2026-11-01 — Help & guides page with the SOP user guide
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

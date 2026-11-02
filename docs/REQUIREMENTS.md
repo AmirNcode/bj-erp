@@ -326,6 +326,9 @@ Validation/release status stays in `docs/TASKS.md`.
   **Amended 2026-10-21:** opens on the current Jalali month through the end of the next one, so
   upcoming approved trips show without picking a month (unreleased).
 
+  **Amended 2026-11-02 (owner):** work errands only — hourly and daily; leave never reaches
+  finance (`finance_requests()` and `finance_approved_requests()` filter `kind = 'errand'`). The
+  filter is all / daily / hourly; the CSV drops its Kind column.
 - **FR-63** ☑ **Own personal information is view only.** Users see theirs on Profile but cannot
   change it; hr and admin edit other people's (hr never an admin's). Editing one's own needs
   `personal_info.edit_own` — admin today; FR-55 makes it a per-role switch. Applies to the form and

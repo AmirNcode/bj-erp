@@ -6659,6 +6659,7 @@ begin
           left join public.leave_types t on t.id = r.leave_type_id
           left join public.travel_bookings b on b.request_id = r.id
          where r.company_id = v_company
+           and r.kind = 'errand'
            and r.status in ('approved', 'cancelled')
            and r.start_date <= p_to
            and r.end_date >= p_from) x
@@ -6728,6 +6729,7 @@ begin
           left join public.leave_types t on t.id = r.leave_type_id
           left join public.travel_bookings b on b.request_id = r.id
          where r.company_id = v_company
+           and r.kind = 'errand'
            and r.status in ('approved', 'pending', 'cancelled')
            and r.start_date <= p_to
            and r.end_date >= p_from) x
