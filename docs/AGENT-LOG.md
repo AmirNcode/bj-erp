@@ -78,7 +78,7 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-11-02 — Spec: editable Manager role (FR-74 draft)
+## 2026-11-02 — Spec: Manager read-only on people (FR-74 draft; was "editable Manager")
 
 **Agent:** Claude Code (cloud session)
 **Branch / HEAD at start:** main @ f03e37f
@@ -101,7 +101,11 @@ Copy this block verbatim and fill it in.
 - Uncommitted spec + this entry. No code. Waiting for owner review of spec §8 questions.
 
 **For the next agent**
-- Owner answers: full preset, default off, all create paths. Import already needs `people_create`.
+- Round 3 (same day): owner dropped the editable preset. Final design = Manager fixed, no switches,
+  no add/edit of employees, sees only direct reports + company calendar, still approves. Spec renamed
+  to `docs/specs/2026-11-02-manager-read-only-design.md`. Any role with direct reports sees them.
+- Calendar names come from definer view `team_leave_calendar`, so keeping `reads_calendar` for
+  managers needs no profile read.
 - `private.can_read_all` has no callers; spec drops only its manager clause.
 
 ## 2026-11-01 — Help & guides page with the SOP user guide
