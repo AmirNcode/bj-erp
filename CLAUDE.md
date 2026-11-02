@@ -143,6 +143,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
   `npm run build`. Shared date helpers go in `lib/leave/dateConvert.ts`.
 - **Approving = `approve_leave_request_steps` with the ids from `approvalBundle(progress)`** (FR-71: one signature for every step the caller holds). `approve_leave_request_v2` is only for the admin override and legacy no-chain requests.
 - **SQL fixtures that change `work_settings.approval_order_enforced` need an admin JWT too** (`pg_temp.login('admin')` first), like `profiles`.
+- **Reading a report vs acting on one (FR-74):** reads use `private.is_direct_manager_of` (reporting line, any role); writes and signatures use `is_manager_of` (Manager role too). The department manager reads their department's `leave_ledger` (`is_department_manager_of`) for the department step. Only `people` edit changes employees.
 - **Approval steps: key on `step_id`, not `step_role`.** The direct-manager and department-manager
   steps both have `step_role='manager'` (`manager_scope` tells them apart).
 - **e2e with `E2E_BASE_URL`:** the teardown cleanup fails; run `npm run cleanup:e2e` by hand after.
@@ -152,7 +153,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Separate DB for a long-lived branch** (keeps the shared local DB on main's schema): `pg_dump -Fc` db `postgres` and `pg_restore` into a new database in `bj-erp-db-1` (only pg_cron/graphql objects fail; pg_cron exists only in `postgres`), run a second GoTrue + PostgREST + gateway on it (network `bj-erp_default`, `…@db:5432/<db>`), and dump `schema.sql` with `pg_dump -d <db>` — `npm run schema:dump` is hard-wired to `postgres`.
 - **Lock order: `private.approval_lock(company)` before any `'leave:'||employee` advisory lock.** Since approval delegation, a trigger takes the company lock on every write to `leave_requests`, `profiles` (active/manager/department), `departments`, `roles`, `role_permissions`, `user_roles`, `approval_steps`; a function that takes the employee lock first and then writes one of these can deadlock.
 - **SQL scoping trap:** in `from unnest(arr) id where not exists (select 1 from t where t.id = id)`, the bare `id` binds to `t.id` (always true). Alias the unnest column (`unnest(arr) as v(eid)`) and compare `v.eid`.
-- **Dry-run migrations first:** run the migration + `tests/sql/*` scenarios inside `begin … rollback` as `supabase_admin` before `bj-deploy update local` (applying freezes it).
+- **Dry-run migrations first** (applying one freezes it): each `tests/sql/*` file opens and rolls back its own transaction, so it cannot share one with the migration. Clone instead: in `bj-erp-db-1`, `create database x`, `pg_dump -Fc -d postgres | pg_restore -d x --no-owner`, apply the migration to `x`, run the test files against `x`, `drop database x`.
+- **`pg_restore` re-parenthesizes CHECK constraints:** a schema dump from a restored DB differs from `schema.sql` in a few `CONSTRAINT … CHECK` lines with no real change; never commit those hunks.
 - **UI copy:** a `'use client'` component reads its text with `useTranslations` (or a local `useLabels()` hook); pages never build translated `labels` props — the whole catalog already reaches the client.
 - **Leave amounts in forms:** minutes, edited as whole days + hours via `DaysHoursField` / `leaveAmountReader` (`EmployeeFormParts`); never a decimal-days input.
 - **Local SQL as superuser:** `postgres` is not one in the db image; use `supabase_admin` with `PGPASSWORD` from `deploy/.env` (see `tests/sql/*` header).
@@ -160,6 +162,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Adding a column to `travel_bookings`** breaks SQL tests that build a `row(…)::public.travel_bookings` literal (`tests/sql/travel-booking.sql`); add the value there too.
 - **Travel costs never reach the traveller:** `my_travel_itineraries()` strips per-stay `cost_rials` (`private.travel_itinerary_without_costs`); finance reads only `hotel_cost_rials` (= the stays' sum).
 - **`jspdf` must stay ≥ 4.2.1:** 3.x has a critical advisory and CI runs `npm audit --omit=dev`. `html-to-image`/`jspdf` load with `import()` on click.
+- **Worktrees:** a symlinked `node_modules` passes `tsc`/vitest but breaks `next build` (Turbopack refuses files outside the root); clone it with `cp -Rc ../bj/node_modules node_modules` (APFS, instant).
 - **UI check without a login:** a temporary `app/[locale]/zz-…/page.tsx` (outside the route groups, so no auth layout) renders client components with fake data; delete it and `rm -rf .next/dev/types` before `tsc`.
 - More: `docs/MEMORY.md`.
 
