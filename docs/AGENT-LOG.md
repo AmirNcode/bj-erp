@@ -78,6 +78,36 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Review PR #15, merge to main, clean branches and worktrees
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** review/integration-2026-11-02 @ 5d55e33 (= PR #15 head), uncommitted design-sync setup + two AGENT-LOG entries
+**Trigger:** Amir: review PR #15, fix issues, merge to main to deploy; afterwards only `main`, no uncommitted work, no other branches or worktrees.
+
+**Review of PR #15**
+- Read both migrations and the app diff. No blocking issue. Checked: `app_create_employee` drop/recreate keeps old named-arg callers working (new arg defaults null); PostgREST reloads on its own (`pgrst_ddl_watch` event trigger exists), so no manual restart on Liara; login page keeps printable ASCII (`toLatinCode`), so symbol login codes can sign in; the travel "missing details" link to an employee page only shows at HR steps (HR has `people` read), so the new `people`-read guard does not 404 it.
+- Fixed one nit: stale JSDoc left in `home/page.tsx` `Props` after `searchParams` went away.
+
+**What changed (on `claude/manager-ux-batch`, merged with PR #15)**
+- `fa6060f` the nit above.
+- `8a255b0` committed the Claude Design sync setup that sat uncommitted in the main checkout (`.design-sync/`, ignore entries in `.gitignore`/`.dockerignore`, `eslint.config.mjs`, `tsconfig.json` excludes).
+- `4737ce2` committed two other sessions' uncommitted AGENT-LOG entries (finance PR #13 note, SOP cover logo).
+- Not merged: local-only branch `security/audit-2026-11` (2026-11-01 security report + its log entry). The repo is public, so an unpatched-vulnerability report stays out of git: restored to its original git-ignored dir `CLAUDE-SECURITY-20261101-043958/` (blob hashes verified), its log entry saved there as `SESSION-LOG.md`, then the branch was deleted.
+
+**Actions outside the repo**
+- Local DB: cloned `postgres` into a throwaway `review15` database, ran all `tests/sql/*`, dropped it.
+- GitHub: pushed the branch (first push attempt, which included the security report, was blocked; report taken out), merged PR #15 with a merge commit (deploys to Liara), deleted the merged remote branches.
+- Local: removed every worktree and every branch except `main`.
+
+**Verification**
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 109 files / 1032 tests pass; `npm run build` OK; all 14 `tests/sql/*` PASS on the clone.
+
+**State left behind**
+- Ignored, untracked dirs kept in the main checkout: `CLAUDE-SECURITY-20261101-043958/` (security report), `CLAUDE-SECURITY-20261101-205529/` (resume state for the unfinished rescan), `.ds-sync/`, `ds-bundle/`, `build/`, `sop/`.
+
+**For the next agent**
+- The security report's 11 findings are still open (local, git-ignored report `CLAUDE-SECURITY-20261101-043958/CLAUDE-SECURITY-RESULTS.md`; never commit it while the repo is public); the rescan of the remaining areas never finished.
+
 ## 2026-11-02 — Manager UX batch: Employees hidden, admin login codes, Home absences card, approvals history
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
