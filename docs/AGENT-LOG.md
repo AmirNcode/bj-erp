@@ -108,6 +108,7 @@ Copy this block verbatim and fill it in.
 **State left behind**
 - Committed 24a342d on `review/integration-2026-11-02` (not pushed). Left unstaged: other sessions' `.dockerignore`, `.gitignore`, `eslint.config.mjs`, `tsconfig.json`, `.design-sync/` and their older AGENT-LOG hunk.
 - On Amir's request after the commit: `./deploy/bj-deploy update local` again ("Local update succeeded", no new migrations), `docker restart bj-erp-rest-1`, `bj-deploy doctor local` → "Local stack is healthy: https://192.168.2.85:3500".
+- Amir approved after testing locally: branch `claude/manager-ux-batch` (= the two commits on main 9d12259) pushed, [PR #15](https://github.com/AmirNcode/bj-erp/pull/15) opened. Merge with a merge commit or squash, not rebase (last commit has `[skip ci]`). Liara deploys on merge.
 
 **For the next agent**
 - `app_create_employee` now has 13 args; `seed-demo.mjs` and the app call it by name, so the dropped 12-arg version breaks nothing.
