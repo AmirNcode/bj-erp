@@ -56,6 +56,12 @@ switches**, and may not change anything about an employee. Only HR and Admin cha
    nothing new.
 8. Kept as is: `is_manager_of` (with role) for every signature and approval step; `natural_approver`;
    travel trip-extension checks; `role_manager` deps.
+9. **Review fix (2026-11-02):** dropping the Manager role from `reads_people` / `reads_balances` also
+   blinded the **department manager** signing the department step for someone who is not their
+   direct report. Restored only what that signer needs: `leave_ledger_select` adds
+   `is_department_manager_of` (Home balance hint, print view), and `app_request_approval_context`
+   shows `personnel_no` / `job_title` to the direct manager (any role) and the department manager
+   (paper form). No profile-list or other balance access is added.
 
 Compatible with the still-running old app: old app shows Add / Edit to managers for a few seconds
 during the swap, and SQL refuses with an error. Acceptable.

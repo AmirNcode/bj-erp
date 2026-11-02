@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Review and fix PRs #12, #13, #14
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** PR heads 9dd7488 (#12 `claude/editable-manager-role`), 18884e7 (#13 `claude/finance-errands-only`), b60dd6d (#14 `claude/absences-lookahead`); main @ f03e37f
+**Trigger:** Amir: review PR #12, fix the top findings, then review and fix #13 and #14; update CLAUDE.md; Amir tests on local Docker before pushing to main.
+
+**What changed**
+- #12, commit d84b5a4: `supabase/migrations/20261102120000_manager_read_only.sql` (not yet applied to any DB, so edited in place): `app_request_approval_context` shows `personnel_no`/`job_title` to the direct manager (any role) and the department manager (they were blank on the paper form for the department-step signer after `reads_people` lost the Manager role); `leave_ledger_select` adds `is_department_manager_of` (Home "balance after approval" hint + print balance for the department step) and grants execute on it to `authenticated`. `lib/auth/approval-capabilities.ts`: `hasReports` counts inactive reports too (the list and the employee page show them). `manage/employees/[id]/page.tsx`: one 404 for "no such person" and "not yours" (it redirected home for a missing id but 404'd for a colleague). `tests/sql/manager-read-only.sql` +4 checks (department head). `supabase/schema.sql` updated to match.
+- #12, this commit: CLAUDE.md gotchas (FR-74 read vs act helpers, dry-run by cloning the DB, `pg_restore` CHECK noise, worktree `node_modules`); spec §2 item 9.
+- #13, commit b709c6d: `tests/sql/client-feedback-2026-10-12.sql` still expected three leave rows from `finance_approved_requests`; PR #13 filters leave out, so it failed. Now expects 0.
+- #14, commit 7515179: `absences/page.tsx` shows the look-ahead error instead of silently dropping the card (Home already did).
+- Review findings left as is (#12): lock hint for `people` read-only holders (accurate copy, kept); redundant `profiles` lookup in `getEmployeeBalances` (guards against showing zero balances); folding the `hasReports` count into `app_approval_capabilities`; the `hasReports ?? roles.includes('manager')` nav fallback (tests rely on it). e2e not run.
+
+**Actions outside the repo**
+- Local Docker DB only: created throwaway databases `bj_review12`, `bj_review13`, `bj_review_all` in `bj-erp-db-1` (pg_dump/pg_restore of `postgres`), applied the #12 migration there, ran `tests/sql/*`, dropped all three. `postgres` itself untouched (it already had #13's migration from an earlier session). One read-only query as an hr user inside `begin … rollback` (no approved absences start in the next 30 days locally, so #14's real query returned 0 rows).
+- Nothing pushed. Nothing run on Liara.
+
+**Verification**
+- Combined (#12 + #13 + #14 merged onto main in a scratch worktree): `tsc --noEmit` clean, `npm run lint` clean, `vitest run tests/unit` 1025 passed / 5 skipped, `npm run build` succeeded, all 12 `tests/sql/*` files 1173 PASS / 0 FAIL; the merged `schema.sql` equals a dump of the combined DB (apart from `pg_restore` CHECK formatting). Merge conflicts: only `docs/AGENT-LOG.md` and `docs/CHANGELOG.md` (keep both entries).
+- Per branch: unit tests pass on each.
+- Not run: e2e (`team.spec.ts`, `hr-role.spec.ts`), browser check of the new pages.
+
+**State left behind**
+- Fixes are local commits in worktrees `.claude/worktrees/pr12` (branch `claude/editable-manager-role`), `pr13` and `pr14` (detached HEADs; the branch names are checked out in the main checkout and `../bj-absences-lookahead`), plus a scratch merge in `.claude/worktrees/integration`. Not pushed.
+
+**For the next agent**
+- Push #13/#14 fixes with `git push origin HEAD:claude/finance-errands-only` / `HEAD:claude/absences-lookahead` from those worktrees.
+- The #12 migration is editable only until a DB applies it; after Amir's local deploy it is frozen.
+
 ## 2026-11-02 — FR-74 built: Manager read-only on people
 
 **Agent:** Claude Code (cloud session)
