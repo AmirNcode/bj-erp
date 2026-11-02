@@ -56,13 +56,10 @@ async function EmployeesData({
   query,
   canBulkReset,
   showLocks,
-  reportsOnly,
 }: {
   locale: string;
   query: EmployeesQuery;
   canBulkReset: boolean;
-  /** FR-74: no `people` read — the caller lists only their direct reports. */
-  reportsOnly: boolean;
   showLocks: boolean;
 }) {
   const [t, tl, tErrand, rolesRes] = await Promise.all([
@@ -91,7 +88,7 @@ async function EmployeesData({
     )
     .eq('active', query.filter !== 'inactive');
   if (incomplete) list = list.eq('employee_personal_info.complete', false);
-  if ((query.filter === 'reports' || reportsOnly) && user) list = list.eq('manager_id', user.id);
+  if (query.filter === 'reports' && user) list = list.eq('manager_id', user.id);
   if (query.dept) list = list.eq('department_id', query.dept);
   const term = ilikeTerm(query.q);
   if (term) {
@@ -282,29 +279,24 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   ]);
   const { hasReports } = capabilities;
   // The Manage layout admits anyone with a Manage item; this page is the
-  // Employees one (lib/nav/tabs.ts). FR-74: `people` read lists everyone;
-  // anyone with direct reports lists those, read-only.
-  const readsPeople = can(perms, 'people', 'read');
-  if (!readsPeople && !hasReports) redirect(`/${locale}/home`);
-  const reportsOnly = !readsPeople;
+  // Employees one (lib/nav/tabs.ts): `people` read only (owner, 2026-11-02);
+  // a manager without it finds their team on the org chart.
+  if (!can(perms, 'people', 'read')) redirect(`/${locale}/organization`);
   const canSeePersonalInfo = can(perms, 'personal_info', 'read');
   // FR-74: only `people` edit (HR, admin) changes employees; everyone else reads.
   const readOnly = !can(perms, 'people');
   // Same rule as the Add page's guard (FR-74: managers cannot add).
   const canAdd = can(perms, 'people_create');
-  const query = parseEmployeesQuery(sp, { isManager: hasReports && !reportsOnly, canSeePersonalInfo });
+  const query = parseEmployeesQuery(sp, { isManager: hasReports, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
   // Segment counts and the department list: head-only counts, cheap enough to
   // keep outside Suspense so the toolbar (and its search box) never remounts.
   const supabase = await createClient();
-  const profilesHead = () => {
-    const q = supabase.from('profiles').select('id', { count: 'exact', head: true });
-    return reportsOnly ? q.eq('manager_id', user.id) : q;
-  };
+  const profilesHead = () => supabase.from('profiles').select('id', { count: 'exact', head: true });
   const [allRes, reportsRes, inactiveRes, incompleteRes, { data: departments }] = await Promise.all([
     profilesHead().eq('active', true),
-    hasReports && !reportsOnly
+    hasReports
       ? profilesHead().eq('active', true).eq('manager_id', user.id)
       : Promise.resolve(null),
     profilesHead().eq('active', false),
@@ -396,7 +388,6 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           query={query}
           canBulkReset={myRoles.includes('admin')}
           showLocks={readOnly}
-          reportsOnly={reportsOnly}
         />
       </Suspense>
 

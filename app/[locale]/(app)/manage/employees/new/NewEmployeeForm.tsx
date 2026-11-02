@@ -11,6 +11,7 @@ import { currentYearPeriod } from '@/lib/leave/allocations';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import {
   buildEmployeeCode,
+  isValidLoginCode,
   isValidPersonnelNo,
   normalizePersonnelNo,
 } from '@/lib/employees/code';
@@ -48,6 +49,9 @@ function useLabels() {
     personnelNo: t('employees.personnelNo'),
     jobTitle: t('employees.jobTitle'),
     codePreview: t('employees.codePreview'),
+    loginCode: t('employees.loginCode'),
+    loginCodeHint: t('employees.loginCodeHint'),
+    invalidLoginCode: t('employees.loginCodeInvalid'),
     defaultQuotaHint: t('employees.defaultQuotaHint'),
     name: t('employees.name'),
     department: t('employees.department'),
@@ -92,6 +96,8 @@ type Props = {
   editableRoleIds: string[];
   /** FR-43: may set the opening leave balance and the accrual policy (leave_balances edit). */
   canManageLeave: boolean;
+  /** Admin only (2026-11-02): a login code other than the personnel number. */
+  canSetLoginCode: boolean;
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
@@ -111,6 +117,7 @@ export function NewEmployeeForm({
   employeeRoleId,
   editableRoleIds,
   canManageLeave,
+  canSetLoginCode,
   departments,
   managers,
   leaveTypes,
@@ -131,6 +138,8 @@ export function NewEmployeeForm({
   // personnel number used to arrive as a bare "unexpected error" at the top of
   // the page, naming neither the field nor the cause.
   const [fieldError, setFieldError] = useState<string | null>(null);
+  const [loginCodeError, setLoginCodeError] = useState<string | null>(null);
+  const [loginCode, setLoginCode] = useState('');
   const [allocationError, setAllocationError] = useState<string | null>(null);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
@@ -153,6 +162,7 @@ export function NewEmployeeForm({
     e.preventDefault();
     setError(null);
     setFieldError(null);
+    setLoginCodeError(null);
     setAllocationError(null);
     setPolicyError(null);
     setPending(true);
@@ -173,6 +183,12 @@ export function NewEmployeeForm({
       ? leaveTypes.map((type) => ({ leaveTypeId: type.id, ...amounts.policy(type.id) }))
       : [];
     setAmountErrors(amounts.errors);
+    const customCode = canSetLoginCode ? loginCode.trim() : '';
+    if (customCode && !isValidLoginCode(customCode)) {
+      setPending(false);
+      setLoginCodeError(labels.invalidLoginCode);
+      return;
+    }
     if (Object.keys(amounts.errors).length > 0) {
       setPending(false);
       setError(tDuration('invalid'));
@@ -187,6 +203,7 @@ export function NewEmployeeForm({
       manager_id: (fd.get('manager_id') as string) || undefined,
       roleIds: canAssignRoles ? selectedRoleIds : undefined,
       hire_date: hireDate ? dateObjectToGregorian(hireDate) : undefined,
+      login_code: customCode || undefined,
     });
 
     if (!result.ok) {
@@ -194,6 +211,7 @@ export function NewEmployeeForm({
       // Exactly one of the two is set, so the same failure is never reported
       // twice on the page.
       if (result.field === 'personnel_no') setFieldError(result.error);
+      else if (result.field === 'login_code' && canSetLoginCode) setLoginCodeError(result.error);
       else setError(result.error);
       return;
     }
@@ -363,17 +381,51 @@ export function NewEmployeeForm({
             <Input id="job_title" name="job_title" data-testid="job-title" />
           </div>
 
-          {/* Live preview of the generated login code (source of truth: DB). */}
-          <div className="space-y-1.5">
-            <span className="block text-sm font-medium leading-none">{labels.codePreview}</span>
-            <p
-              className="font-mono text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2 select-all"
-              dir="ltr"
-              data-testid="code-preview"
-            >
-              {codePreview}
-            </p>
-          </div>
+          {canSetLoginCode ? (
+            // Admin (2026-11-02): any login code; empty = the personnel number.
+            <div className="space-y-1.5">
+              <Label htmlFor="login_code">{labels.loginCode}</Label>
+              <Input
+                id="login_code"
+                name="login_code"
+                data-testid="login-code"
+                dir="ltr"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                maxLength={64}
+                placeholder={codePreview === '—' ? undefined : codePreview}
+                aria-invalid={loginCodeError ? true : undefined}
+                aria-describedby={loginCodeError ? 'login_code-error' : 'login_code-hint'}
+                value={loginCode}
+                onChange={(e) => {
+                  setLoginCode(e.target.value);
+                  setLoginCodeError(null);
+                }}
+              />
+              {loginCodeError ? (
+                <p id="login_code-error" role="alert" className="text-sm text-destructive">
+                  {loginCodeError}
+                </p>
+              ) : (
+                <p id="login_code-hint" className="text-xs text-muted-foreground">
+                  {labels.loginCodeHint}
+                </p>
+              )}
+            </div>
+          ) : (
+            // Live preview of the generated login code (source of truth: DB).
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium leading-none">{labels.codePreview}</span>
+              <p
+                className="font-mono text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2 select-all"
+                dir="ltr"
+                data-testid="code-preview"
+              >
+                {codePreview}
+              </p>
+            </div>
+          )}
 
           {canAssignRoles && (
             <RoleCheckboxes

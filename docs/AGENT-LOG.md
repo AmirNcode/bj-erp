@@ -78,6 +78,41 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Manager UX batch: Employees hidden, admin login codes, Home absences card, approvals history
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** review/integration-2026-11-02 @ 9d12259
+**Trigger:** Amir: hide Employees from managers without HR; admin sets any login code and edits personnel numbers; Home absences card = next 30 days split into errands/leave, placed after the greeting; Approvals page shows the history of what each approver decided.
+
+**Owner answers (asked first):** absences card = fixed next 30 days, no month picker or arrows ("look at the calendar for more"); login code free text without spaces/@; changing a personnel number makes it the new login code ("only for testing"); history = requests the viewer personally signed/rejected (admin: all decided). Plan: `docs/plans/2026-11-02-manager-ux-batch.md`.
+
+**What changed**
+- Employees: `lib/nav/tabs.ts` employees item now `people` read only (the `hasReports`/manager branch is gone). `manage/employees/page.tsx` redirects callers without `people` read to `/organization` and drops the reports-only list; `[id]/page.tsx` 404s without `people` read. Unit tests (`nav_tabs`, `main-nav`, `route-prefetcher`) updated.
+- Home: `UpcomingAbsences.tsx` is now the whole card ("Approved absences in the next 30 days", Work errands / Leave sections). The day-picker `AbsencesBoard` is gone from Home (admin `/absences` keeps it). `upcomingAbsenceWindow` starts today; `getUpcomingAbsences` matches by overlap, so an absence already under way shows. `home/page.tsx`: `HomeAbsences` renders as a slot inside `HomeBoardData`, right after the greeting; `?date=` on Home no longer used.
+- Login code: migration `20261102130000_admin_login_code.sql` — `private.valid_login_code` (RFC 5322 atext + non-edge single dots, 1–64), `private.set_login_code` (profiles.employee_code + auth.users email + identities email, case-insensitive uniqueness, audit), `app_create_employee(..., p_login_code)` (admin only; old signature dropped), `app_admin_set_personnel_no(uuid, text)` (admin only; code follows the number). App: `createEmployee` `login_code`, new `setPersonnelNo` action, `isValidLoginCode` in `lib/employees/code.ts`, `ErrorField` `login_code` (duplicate code errors now pin to it), New Employee form shows an editable Login code field for the admin (placeholder = personnel no.), Edit Employee header code is a button for the admin (`[id]/PersonnelNoDialog.tsx`).
+- History: migration `20261102130001_approval_history.sql` — `app_approval_history(p_limit, p_offset)` → `{total, rows}` with the caller's own decisions. `getApprovalHistory` action, `manage/approvals/ApprovalHistory.tsx` (20 a page, `?history=N`, link to the print form).
+- `lib/supabase/types.ts` hand-edited for the three RPCs; `messages/{en,fa}.json` new keys; `supabase/schema.sql` dumped.
+- Tests: `tests/sql/admin-login-code.sql` (30 checks), `tests/sql/approval-history.sql` (16 checks), unit tests for `isValidLoginCode` and the error mapping.
+
+**Actions outside the repo**
+- Local Docker only. Clone DB `xlc` in `bj-erp-db-1` for the dry run (both migrations + all 14 `tests/sql/*` files → no FAIL), dropped afterwards.
+- `./deploy/bj-deploy update local` (backup taken; both migrations applied — now frozen; app rebuilt, "Local update succeeded"), `docker restart bj-erp-rest-1`, `npm run schema:dump`.
+- GoTrue probe: inserted a throwaway auth user with email `lc-test!#$%&'*+/=?^_`{|}~.x@bj-app.internal`, password sign-in through the local gateway succeeded, user deleted (identities, sessions, refresh tokens, user).
+- Read-only check in `begin … rollback` on the local DB: an approver's `app_approval_history` returned 10 decided requests with their decision; admin total 13 = all non-pending requests.
+- Nothing on Liara; nothing committed or pushed.
+
+**Verification**
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 109 files / 1032 tests pass, the app image built (`bj-deploy`), SQL as above.
+- UI: temporary `zz-check` page (deleted) rendered the new absences card (en + fa, with and without rows), the personnel-number dialog and the admin login-code field. Not checked logged in: the test account 124 password is still rejected locally. e2e not run.
+
+**State left behind**
+- Uncommitted on `review/integration-2026-11-02` (alongside earlier sessions' uncommitted files: `.dockerignore`, `.gitignore`, `eslint.config.mjs`, `tsconfig.json`, `.design-sync/`).
+
+**For the next agent**
+- `app_create_employee` now has 13 args; `seed-demo.mjs` and the app call it by name, so the dropped 12-arg version breaks nothing.
+- A custom login code may look like a number; a later personnel number equal to it is refused with "employee code already exists".
+- `upcomingHint` copy says the list starts today; Manage › Absences (admin) shows the day board and this card, so today's absences appear in both there.
+
 ## 2026-11-02 — Review and fix PRs #12, #13, #14
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

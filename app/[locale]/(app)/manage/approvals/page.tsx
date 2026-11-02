@@ -1,6 +1,7 @@
 /**
  * Approvals queue — the approval chain routes to people, so access is identity
- * based (admin, manager, hr), not a permission (FR-55; lib/nav/tabs.ts). Read
+ * based (admin, manager, hr), not a permission (FR-55; lib/nav/tabs.ts). Below
+ * it, the history of what the caller decided (2026-11-02). Read
  * scope comes from RLS + getPendingApprovals. The /manage layout admits anyone
  * with a Manage item, so this page guards itself.
  */
@@ -17,6 +18,7 @@ import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { PageHeader } from '../../_components/PageHeader';
 import { ApprovalQueue } from './ApprovalQueue';
 import { TripExtensions } from './TripExtensions';
+import { ApprovalHistory } from './ApprovalHistory';
 import { listExtendableTrips, listPendingExtensions } from '@/lib/actions/travel';
 import { NewRequestsBanner } from '../../_components/NewRequestsBanner';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -24,10 +26,11 @@ import { ListSkeleton } from '@/components/Skeletons';
 
 type Props = {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ history?: string }>;
 };
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function ApprovalsData({ locale }: { locale: string }) {
+async function ApprovalsData({ locale, historyPage }: { locale: string; historyPage: number }) {
   const t = await getTranslations('approvals');
 
   // Durations are stored in minutes; rendering them as days and hours needs the
@@ -58,13 +61,17 @@ async function ApprovalsData({ locale }: { locale: string }) {
         hoursPerDay={hoursPerDay}
       />
       <TripExtensions trips={extendableTrips} pending={pendingExtensions} locale={locale} />
+      <Suspense fallback={<ListSkeleton count={3} />}>
+        <ApprovalHistory locale={locale} page={historyPage} hoursPerDay={hoursPerDay} />
+      </Suspense>
     </>
   );
 }
 
 // ── page shell ─────────────────────────────────────────────────────────────
-export default async function ApprovalsPage({ params }: Props) {
+export default async function ApprovalsPage({ params, searchParams }: Props) {
   const { locale } = await params;
+  const historyPage = Number.parseInt((await searchParams).history ?? '1', 10) || 1;
   setRequestLocale(locale);
 
   const user = await getCachedUser();
@@ -78,7 +85,7 @@ export default async function ApprovalsPage({ params }: Props) {
     <main className="p-6 max-w-3xl mx-auto">
       <PageHeader title={t('title')} />
       <Suspense fallback={<ListSkeleton count={3} />}>
-        <ApprovalsData locale={locale} />
+        <ApprovalsData locale={locale} historyPage={historyPage} />
       </Suspense>
     </main>
   );

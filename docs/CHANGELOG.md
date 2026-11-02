@@ -9,6 +9,21 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Manager UX batch — `review/integration-2026-11-02` (not deployed)
+
+- **Employees** is shown only to people with `people` read (HR, admin). Managers without it no
+  longer see the page; they read their team on the org chart.
+- **Admin login codes:** on Add Employee the admin may type any login code (letters, digits and
+  symbols, no spaces or @); empty keeps the personnel number. On Edit Employee the admin clicks
+  the code at the top to change the personnel number, and the login code becomes the new
+  number. Migration `20261102130000_admin_login_code`.
+- **Home absences card:** "Approved absences in the next 30 days", split into Work errands and
+  Leave, now right after the greeting. The day picker is gone from Home; absences already under
+  way are included.
+- **Approvals history:** under the queue, the requests you approved or rejected (the admin sees
+  every decided request), newest first, 20 a page, each linking to the printable form.
+  Migration `20261102130001_approval_history`.
+
 ### Finance sees work errands only — `claude/finance-errands-only` (not deployed)
 
 - `/finance` listed every request, leave included. It now lists only work errands (hourly and

@@ -49,3 +49,17 @@ export function toLatinCode(value: string): string {
 export function buildEmployeeCode(personnelNo: string): string {
   return personnelNo.trim();
 }
+
+/**
+ * Mirrors private.valid_login_code (migration 20261102130000): an admin-chosen
+ * login code is 1–64 characters an email local part takes unquoted — English
+ * letters, digits and ! # $ % & ' * + / = ? ^ _ ` { | } ~ - — plus dots that
+ * neither start, end nor repeat. No spaces, no @.
+ */
+export function isValidLoginCode(value: string): boolean {
+  return (
+    value.length >= 1 &&
+    value.length <= 64 &&
+    /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*$/.test(value)
+  );
+}

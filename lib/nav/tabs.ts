@@ -16,7 +16,7 @@ import { can, type Perms } from '@/lib/permissions/catalog';
  *   keeping the bar at 4/5 items (owner decision 2026-10-05, FR-44).
  *
  * Who is OFFERED a link is decided here: it follows FR-55 permissions; identity
- * roles only for approvals (and the manager's Employees link). What a caller can
+ * roles only for approvals. What a caller can
  * actually do behind it is still enforced per page (manage/layout.tsx + per-page
  * guards), by server actions and by RLS.
  */
@@ -78,7 +78,8 @@ const FOLLOWS_GROUP: NavItemKey[] = ['finance', 'procurement'];
 const MANAGE: ManageEntry[] = [
   // `nav-manage` stays the entry point into Manage on desktop: it is the first
   // item of the group and lands on the employees hub, as the old tab did.
-  { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (roles, perms, _canApprove, hasReports) => can(perms, 'people', 'read') || (hasReports ?? roles.includes('manager')) },
+  // `people` read only (owner, 2026-11-02): managers read their team on the org chart.
+  { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (_roles, perms) => can(perms, 'people', 'read') },
   // FR-51: departments permission (read lists, edit creates/renames/sets managers).
   { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: (_roles, perms) => can(perms, 'departments', 'read') },
   { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles, _perms, canApprove) => canApprove ?? isApprover(roles) },

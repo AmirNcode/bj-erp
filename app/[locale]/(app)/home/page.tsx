@@ -44,17 +44,13 @@ import type { PendingRow } from './PendingApprovalsCard';
 import { NewRequestsBanner } from '../_components/NewRequestsBanner';
 import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card } from '@/components/ui/card';
-import { getApprovedAbsences, getUpcomingAbsences } from '@/lib/actions/absences';
+import { getUpcomingAbsences } from '@/lib/actions/absences';
 import { upcomingAbsenceWindow, UPCOMING_ABSENCE_DAYS } from '@/lib/absences/upcoming';
-import { isValidIsoDate } from '@/lib/leave/settings-validation';
-import { AbsencesBoard } from '../absences/AbsencesBoard';
 import { UpcomingAbsences } from '../absences/UpcomingAbsences';
 
 type Props = {
   params: Promise<{ locale: string }>;
   /** FR-56: the day security's absences board shows (default today). */
-  searchParams: Promise<{ date?: string }>;
 };
 
 /** Most pending rows shown inline; the rest are one link away. */
@@ -71,7 +67,16 @@ function greetingKey(at: Date = new Date()) {
 }
 
 // ── async child that owns all data fetching ────────────────────────────────
-async function HomeBoardData({ locale, userId }: { locale: string; userId: string }) {
+async function HomeBoardData({
+  locale,
+  userId,
+  absences,
+}: {
+  locale: string;
+  userId: string;
+  /** Rendered right after the greeting (owner, 2026-11-02). */
+  absences: React.ReactNode;
+}) {
   const [t, tLeave, tRepl, tErrand, roles, capabilities] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
@@ -300,6 +305,7 @@ async function HomeBoardData({ locale, userId }: { locale: string; userId: strin
           })}
         </h1>
       </div>
+      {absences}
       <HomeBoard
         board={board}
         locale={locale}
@@ -347,52 +353,28 @@ async function ProfileReminder({ locale, userId }: { locale: string; userId: str
   return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;
 }
 
-// ── FR-56: absences holders (security, hr) see who is out right on Home ────
-// The admin opens the same board from Manage › Absences instead.
-async function SecurityAbsences({
-  locale,
-  userId,
-  rawDate,
-}: {
-  locale: string;
-  userId: string;
-  rawDate?: string;
-}) {
+// ── FR-56: absences holders (security, hr) see who is out next on Home ─────
+// Owner, 2026-11-02: only the next 30 days, no day picker. The admin opens the
+// same card from Manage › Absences instead.
+async function HomeAbsences({ locale, userId }: { locale: string; userId: string }) {
   const [roles, perms] = await Promise.all([getCachedRoles(userId), getCachedPermissions(userId)]);
   if (!homeAbsencesBoard(roles, perms)) return null;
-  const today = todayInAppTz();
-  const date = rawDate && isValidIsoDate(rawDate) ? rawDate : today;
-  const ahead = upcomingAbsenceWindow(today);
-  const [t, res, upcoming] = await Promise.all([
-    getTranslations('absences'),
-    getApprovedAbsences(date),
-    getUpcomingAbsences(ahead.from, ahead.to),
-  ]);
-  return (
-    <Card className="mb-5 gap-3 p-4" data-testid="home-absences">
-      <h2 className="text-lg font-semibold">{t('title')}</h2>
-      {res.ok ? (
-        <AbsencesBoard date={date} today={today} absences={res.absences} locale={locale} basePath="/home" />
-      ) : (
-        <p role="alert" className="text-sm text-destructive">
-          {res.error}
-        </p>
-      )}
-      {upcoming.ok ? (
-        <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
-      ) : (
-        <p role="alert" className="text-sm text-destructive">
-          {upcoming.error}
-        </p>
-      )}
-    </Card>
+  const ahead = upcomingAbsenceWindow(todayInAppTz());
+  const upcoming = await getUpcomingAbsences(ahead.from, ahead.to);
+  return upcoming.ok ? (
+    <div data-testid="home-absences">
+      <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
+    </div>
+  ) : (
+    <p role="alert" className="text-sm text-destructive" data-testid="home-absences">
+      {upcoming.error}
+    </p>
   );
 }
 
 // ── page shell: paints instantly, all data streams in via Suspense ─────────
-export default async function HomePage({ params, searchParams }: Props) {
+export default async function HomePage({ params }: Props) {
   const { locale } = await params;
-  const { date } = await searchParams;
   setRequestLocale(locale);
 
   // Local JWT check only — no network. The greeting needs the profile row, so
@@ -411,9 +393,6 @@ export default async function HomePage({ params, searchParams }: Props) {
       <Suspense fallback={null}>
         <TravelBookingCard locale={locale} userId={user.id} />
       </Suspense>
-      <Suspense fallback={null}>
-        <SecurityAbsences locale={locale} userId={user.id} rawDate={date} />
-      </Suspense>
       <Suspense
         fallback={
           <div className="space-y-5">
@@ -422,7 +401,15 @@ export default async function HomePage({ params, searchParams }: Props) {
           </div>
         }
       >
-        <HomeBoardData locale={locale} userId={user.id} />
+        <HomeBoardData
+          locale={locale}
+          userId={user.id}
+          absences={
+            <Suspense fallback={null}>
+              <HomeAbsences locale={locale} userId={user.id} />
+            </Suspense>
+          }
+        />
       </Suspense>
     </>
   );

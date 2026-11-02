@@ -60,7 +60,8 @@ describe('MainNav', () => {
   });
   it('shows the manage group for managers, without admin-only items', () => {
     renderWithIntl(<MainNav roles={['manager']} perms={{}} locale="fa" />);
-    expect(screen.getByTestId('nav-manage').getAttribute('href')).toBe('/fa/manage/employees');
+    // Employees needs people read (2026-11-02); a plain manager gets Approvals only.
+    expect(screen.queryByTestId('nav-manage')).toBeNull();
     expect(screen.getByTestId('nav-manage-tab').getAttribute('href')).toBe('/fa/manage');
     expect(screen.getByTestId('nav-approvals')).toBeTruthy();
     expect(screen.queryByTestId('nav-reports')).toBeNull();
@@ -73,7 +74,7 @@ describe('MainNav', () => {
   });
   it('keeps the manage tab active on any manage page', () => {
     mockPathname = '/fa/manage/approvals';
-    renderWithIntl(<MainNav roles={['manager']} perms={{}} locale="fa" />);
+    renderWithIntl(<MainNav roles={['manager']} perms={{ people: 'read' }} locale="fa" />);
     expect(screen.getByTestId('nav-manage-tab').getAttribute('aria-current')).toBe('page');
     expect(screen.getByTestId('nav-approvals').getAttribute('aria-current')).toBe('page');
     expect(screen.getByTestId('nav-manage').getAttribute('aria-current')).toBeNull();

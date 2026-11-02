@@ -18,7 +18,9 @@ describe('RoutePrefetcher', () => {
       expect(prefetch).toHaveBeenCalledWith('/en/calendar');
       expect(prefetch).toHaveBeenCalledWith('/en/profile');
       expect(prefetch).toHaveBeenCalledWith('/en/manage');
-      expect(prefetch).toHaveBeenCalledWith('/en/manage/employees');
+      expect(prefetch).toHaveBeenCalledWith('/en/manage/approvals');
+      // Employees needs people read (2026-11-02).
+      expect(prefetch).not.toHaveBeenCalledWith('/en/manage/employees');
     });
   });
 });

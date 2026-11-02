@@ -1689,6 +1689,7 @@ export type Database = {
           p_hire_date?: string
           p_job_title?: string
           p_language_pref?: string
+          p_login_code?: string
           p_manager_id?: string
           p_password: string
           p_personnel_no: string
@@ -1696,6 +1697,14 @@ export type Database = {
           p_roles?: Database["public"]["Enums"]["app_role"][]
         }
         Returns: string
+      }
+      app_admin_set_personnel_no: {
+        Args: { p_user: string; p_personnel_no: string }
+        Returns: undefined
+      }
+      app_approval_history: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: Json
       }
       app_set_employee_password: {
         Args: { p_password: string; p_user_id: string }

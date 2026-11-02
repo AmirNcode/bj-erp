@@ -22,6 +22,7 @@ import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSpecialLeaveGrants } from '@/lib/actions/specialLeave';
 import { SpecialLeaveCard } from './SpecialLeaveCard';
+import { PersonnelNoDialog } from './PersonnelNoDialog';
 
 type Props = {
   params: Promise<{ locale: string; id: string }>;
@@ -85,13 +86,10 @@ export default async function EditEmployeePage({ params }: Props) {
     .single();
 
   // The Manage layout admits anyone with a Manage item; this page needs the
-  // Employees one. FR-74: without `people` read, only your own direct reports
-  // (read-only); RLS would also show same-department colleagues. One answer
-  // (404) for "no such person" and "not yours", so the page reveals nothing.
-  if (!employee) return notFound();
-  const readsPeople = can(callerPerms, 'people', 'read');
+  // Employees one: `people` read only (owner, 2026-11-02). One answer (404)
+  // for "no such person" and "not yours", so the page reveals nothing.
+  if (!employee || !can(callerPerms, 'people', 'read')) return notFound();
   const callerIsDirectManager = employee.manager_id === user.id;
-  if (!readsPeople && !callerIsDirectManager) return notFound();
 
   // The target's role ids (FR-55: custom roles have no enum), every role of the
   // company, and whether they manage a department (D4).
@@ -169,7 +167,15 @@ export default async function EditEmployeePage({ params }: Props) {
       <PageHeader
         title={t('employees.editTitle')}
         action={
-          <span className="font-mono text-sm text-muted-foreground">{employee.employee_code}</span>
+          isAdmin ? (
+            <PersonnelNoDialog
+              employeeId={id}
+              employeeCode={employee.employee_code}
+              personnelNo={employee.personnel_no}
+            />
+          ) : (
+            <span className="font-mono text-sm text-muted-foreground">{employee.employee_code}</span>
+          )
         }
       />
       <EditEmployeeForm
