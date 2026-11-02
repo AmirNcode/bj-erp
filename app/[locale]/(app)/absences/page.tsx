@@ -58,11 +58,15 @@ export default async function AbsencesPage({ params, searchParams }: Props) {
           {result.error}
         </p>
       )}
-      {upcoming.ok && (
-        <div className="mt-4">
+      <div className="mt-4">
+        {upcoming.ok ? (
           <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
-        </div>
-      )}
+        ) : (
+          <p role="alert" className="text-sm text-destructive">
+            {upcoming.error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
