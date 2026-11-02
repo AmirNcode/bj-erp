@@ -28,8 +28,8 @@ describe('allowedProfileFields', () => {
     ]);
   });
 
-  it('a manager without people keeps exactly name and hire date', () => {
-    expect(allowedProfileFields(['manager', 'employee'], {})).toEqual(['full_name', 'hire_date']);
+  it('FR-74: a manager without people writes no field', () => {
+    expect(allowedProfileFields(['manager', 'employee'], {})).toEqual([]);
   });
 
   it('people:read alone may not send any column', () => {

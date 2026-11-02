@@ -81,7 +81,7 @@ const base = {
 const caps = (
   caller: { roles: string[]; perms: Perms },
   targetSlugs: string[],
-  opts: { targetId?: string; identity?: Partial<typeof NO_IDENTITY> } = {}
+  opts: { targetId?: string; identity?: Partial<typeof NO_IDENTITY>; directManager?: boolean } = {}
 ) =>
   employeeEditCapabilities({
     ...base,
@@ -90,6 +90,7 @@ const caps = (
     targetId: opts.targetId ?? THEM,
     targetRoleIds: targetSlugs.map(idOf),
     targetIdentity: { ...NO_IDENTITY, ...opts.identity },
+    callerIsDirectManager: opts.directManager,
   });
 
 const ADMIN = { roles: ['admin'], perms: fullPerms() };
@@ -193,9 +194,9 @@ describe('employeeEditCapabilities', () => {
     expect(caps(HELPDESK_CALLER, ['employee']).specialLeave).toBe(false);
   });
 
-  it('a manager keeps the name and hire date of their reports only', () => {
+  it('FR-74: a manager changes nothing, and reads a direct report\'s balances', () => {
     expect(caps({ roles: ['manager', 'employee'], perms: {} }, ['employee'])).toEqual({
-      profile: true,
+      profile: false,
       org: false,
       editableRoleIds: [],
       resetPassword: false,
@@ -205,10 +206,18 @@ describe('employeeEditCapabilities', () => {
       personalInfo: null,
       specialLeave: false,
     });
+    const report = caps({ roles: ['manager', 'employee'], perms: {} }, ['employee'], { directManager: true });
+    expect(report).toMatchObject({ profile: false, org: false, leave: true, leaveEdit: false, editableRoleIds: [] });
+    // Any role with a direct report reads the same, never more.
+    expect(caps({ roles: ['employee'], perms: {} }, ['employee'], { directManager: true })).toMatchObject({
+      profile: false,
+      leave: true,
+      leaveEdit: false,
+    });
   });
 
-  it('hr who also manages the admin keeps the manager subset', () => {
-    expect(caps(hr('manager'), ['admin'])).toMatchObject({ profile: true, org: false });
+  it('FR-74: hr who also manages the admin gets nothing on the admin', () => {
+    expect(caps(hr('manager'), ['admin'])).toMatchObject({ profile: false, org: false });
   });
 
   // ── D4 subset rule ───────────────────────────────────────────────────────
@@ -364,9 +373,9 @@ describe('editFormView', () => {
   const view = (caller: { roles: string[]; perms: Perms }, targetSlugs: string[], opts: { targetId?: string } = {}) =>
     editFormView(caps(caller, targetSlugs, opts), { showOrg: can(caller.perms, 'people', 'read') });
 
-  it('a manager-only caller keeps the pre-FR-55 view: manager note, no org or roles, no lock note', () => {
+  it('FR-74: a manager-only caller gets the read-only manager note, nothing to save', () => {
     for (const target of [['employee'], ['employee', 'manager'], ['employee', 'hr']]) {
-      expect(view(MANAGER_ONLY, target)).toEqual({ note: 'manager', orgBlock: false, rolesBlock: false, saveable: true });
+      expect(view(MANAGER_ONLY, target)).toEqual({ note: 'manager', orgBlock: false, rolesBlock: false, saveable: false });
     }
     // Their own record: profile is false, still the manager note and no blocks.
     expect(view(MANAGER_ONLY, ['manager', 'employee'], { targetId: ME })).toEqual({

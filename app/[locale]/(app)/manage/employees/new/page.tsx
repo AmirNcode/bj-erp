@@ -2,8 +2,7 @@
  * Create new employee page — permission-adaptive (FR-55).
  * people_create: any department / manager; the initial roles the caller may
  * assign (D5); leave_balances edit adds manual allocations and accrual policy.
- * Manager without people_create: locked to own department + self as manager,
- * employee role only, default quotas applied in-DB. Enforcement lives in
+ * FR-74: managers cannot add employees. Enforcement lives in
  * app_create_employee; this page only mirrors it.
  */
 
@@ -11,7 +10,7 @@ import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
 import { getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
 import { listRoles } from '@/lib/actions/roles';
 import { employeeEditCapabilities } from '@/lib/employees/editCapabilities';
@@ -30,17 +29,12 @@ async function NewEmployeeData({ locale }: { locale: string }) {
 
   const user = await getCachedUser();
   if (!user) return null;
-  const [roles, perms, callerProfile, rolesRes] = await Promise.all([
+  const [roles, perms, rolesRes] = await Promise.all([
     getCachedRoles(user.id),
     getCachedPermissions(user.id),
-    getCachedProfile(user.id),
     listRoles(),
   ]);
-  // FR-35 D4: people_create picks the department and reporting line. A manager
-  // without it is locked to their own team (app_create_employee overwrites both).
-  const canChooseScope = can(perms, 'people_create');
-  // FR-43: opening balance and accrual policy. A different question from
-  // `canChooseScope` — what leave the hire starts with, not where they land.
+  // FR-43: opening balance and accrual policy.
   const canManageLeave = can(perms, 'leave_balances');
   // D5: the initial roles are checked like any later role change. The new person
   // holds only Employee, so the subset rule never locks them.
@@ -59,15 +53,12 @@ async function NewEmployeeData({ locale }: { locale: string }) {
       }).editableRoleIds
     : [];
 
-  // Admin picks dept/manager and types allocations; a manager's variant only
-  // needs their own department row.
+  // The creator picks dept/manager and types allocations.
   const [{ data: departments }, { data: managers }, { data: leaveTypes }, { data: ws }] =
     await Promise.all([
     // No `code`: the login code is the personnel number alone (20260730130002).
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
-    canChooseScope
-      ? supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name')
-      : Promise.resolve({ data: [] }),
+    supabase.from('profiles').select('id, full_name, employee_code').eq('active', true).order('full_name'),
     canManageLeave
       ? supabase
           .from('leave_types')
@@ -86,18 +77,12 @@ async function NewEmployeeData({ locale }: { locale: string }) {
   // accrual on must not retroactively credit months nobody worked (spec §6, D10).
   const accrualStartMonth = await getCurrentJalaliMonthStart();
 
-  const ownDepartment =
-    (departments ?? []).find((d) => d.id === callerProfile?.department_id) ?? null;
-
   return (
     <NewEmployeeForm
       allRoles={allRoles}
       employeeRoleId={employeeRoleId}
       editableRoleIds={editableRoleIds}
       canManageLeave={canManageLeave}
-      canChooseScope={canChooseScope}
-      ownDepartment={ownDepartment}
-      ownName={callerProfile?.full_name ?? ''}
       departments={departments ?? []}
       managers={managers ?? []}
       leaveTypes={leaveTypes ?? []}
@@ -114,11 +99,11 @@ export default async function NewEmployeePage({ params }: Props) {
   setRequestLocale(locale);
 
   // The Manage layout admits anyone with a Manage item; adding people needs
-  // people_create, or a manager's own-team path.
+  // people_create (FR-74: managers cannot add).
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const [roles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
-  if (!roles.includes('manager') && !can(perms, 'people_create')) {
+  const perms = await getCachedPermissions(user.id);
+  if (!can(perms, 'people_create')) {
     redirect(`/${locale}/home`);
   }
 

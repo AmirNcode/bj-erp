@@ -22,6 +22,7 @@ type Props = {
   perms: Perms;
   canApprove?: boolean;
   canDelegate?: boolean;
+  hasReports?: boolean;
   locale: string;
   appName?: string;
   /** Side-panel footer: the caller's name and "{role} ، profile" line. */
@@ -56,6 +57,7 @@ export function MainNav({
   perms,
   canApprove,
   canDelegate,
+  hasReports,
   locale,
   appName,
   profile,
@@ -64,8 +66,8 @@ export function MainNav({
 }: Props) {
   const t = useTranslations('nav');
   const pathname = usePathname();
-  const tabs = tabsForRoles(roles, perms, canApprove, canDelegate);
-  const manageItems = manageItemsForRoles(roles, perms, canApprove, canDelegate);
+  const tabs = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports);
+  const manageItems = manageItemsForRoles(roles, perms, canApprove, canDelegate, hasReports);
   const settings = settingsItemForRoles(roles, perms, canDelegate);
 
   const isActive = (href: string) => {

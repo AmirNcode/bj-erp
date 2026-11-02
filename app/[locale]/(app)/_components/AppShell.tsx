@@ -11,6 +11,8 @@ type Props = {
   perms: Perms;
   canApprove?: boolean;
   canDelegate?: boolean;
+  /** FR-74: someone reports to the caller (Employees shows them). */
+  hasReports?: boolean;
   locale: string;
   appName: string;
   /** Side-panel footer identity: name and "{role} ، profile". */
@@ -31,6 +33,7 @@ export function AppShell({
   perms,
   canApprove,
   canDelegate,
+  hasReports,
   locale,
   appName,
   profile,
@@ -52,13 +55,14 @@ export function AppShell({
         perms={perms}
         canApprove={canApprove}
         canDelegate={canDelegate}
+        hasReports={hasReports}
         locale={locale}
         appName={appName}
         profile={profile}
         initialUpdatedAt={initialUpdatedAt}
         pendingCount={pendingCount}
       />
-      <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} locale={locale} />
+      <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} hasReports={hasReports} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
   );

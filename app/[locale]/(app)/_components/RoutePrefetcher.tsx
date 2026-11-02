@@ -10,21 +10,22 @@ type Props = {
   perms: Perms;
   canApprove?: boolean;
   canDelegate?: boolean;
+  hasReports?: boolean;
   locale: string;
 };
 
-export function RoutePrefetcher({ roles, perms, locale, canApprove, canDelegate }: Props) {
+export function RoutePrefetcher({ roles, perms, locale, canApprove, canDelegate, hasReports }: Props) {
   const router = useRouter();
   const hrefs = useMemo(() => {
-    const list = tabsForRoles(roles, perms, canApprove, canDelegate).map((tab) => tab.href);
+    const list = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports).map((tab) => tab.href);
     // The side panel's first Manage item (the employees hub) is the usual
     // entry into the group on desktop.
-    const firstManage = manageItemsForRoles(roles, perms, canApprove, canDelegate)[0];
+    const firstManage = manageItemsForRoles(roles, perms, canApprove, canDelegate, hasReports)[0];
     if (firstManage) list.push(firstManage.href);
     // Profile lives in the side panel footer / mobile bar — still warm it.
     list.push('/profile');
     return list;
-  }, [roles, perms, canApprove, canDelegate]);
+  }, [roles, perms, canApprove, canDelegate, hasReports]);
 
   useEffect(() => {
     for (const href of hrefs) {

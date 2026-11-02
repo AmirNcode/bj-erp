@@ -78,6 +78,58 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — FR-74 built: Manager read-only on people
+
+**Agent:** Claude Code (cloud session)
+**Branch / HEAD at start:** claude/editable-manager-role @ 716452e
+**Trigger:** owner approved `docs/specs/2026-11-02-manager-read-only-design.md`: "build it".
+
+**What changed**
+- `supabase/migrations/20261102120000_manager_read_only.sql` — new. Drops the manager branch of
+  `app_create_employee` and of `enforce_profile_update_scope`; `profiles_update` loses `is_manager_of`;
+  `reads_people` / `reads_balances` / `can_read_all` lose `has_role(uid,'manager')` (`reads_calendar`
+  keeps it); new `private.is_direct_manager_of(uid,target)` (any role, `manager_id = uid`) added to
+  SELECT of `profiles`, `user_roles`, `leave_ledger`, `leave_allocations`, `employee_leave_policies`,
+  `can_read_approval_request`, `accrue_employee_leave`. Signing keeps `is_manager_of`.
+- `supabase/schema.sql` — dumped (`BJ_DB_CONTAINER=bjdb bash scripts/dump-schema.sh`); diff = only the above.
+- App: Add page/action/button need `people_create` only (`manage/employees/new/*`, `lib/actions/employees.ts`);
+  manager-variant locked form removed. List (`manage/employees/page.tsx`): `people` read or has
+  direct reports; without `people` read the list and counts are forced to `manager_id = me`.
+  Detail (`[id]/page.tsx`): without `people` read only your direct report, read-only, balances shown,
+  accrual-policy card hidden (`policies: null`). `editCapabilities.ts`: no manager write path;
+  `callerIsDirectManager` → `leave` read. `getEmployeeBalances` admits the direct manager.
+  Nav: `ApprovalCapabilities.hasReports` (head count in `getApprovalCapabilities`) threaded through
+  `tabsForRoles` / `manageItemsForRoles` (5th arg; falls back to the Manager role when omitted).
+- Copy (fa/en): `team.managerNote`, `manage.employees.list.lockedHint`, Settings › Roles `managerNote`.
+- Tests: new `tests/sql/manager-read-only.sql` (31 checks); updated `fr51` (manager rename/retitle → 0
+  rows), `fr55` (manager create → 42501), unit `edit-capabilities`, `employees_action`, `nav_tabs`;
+  e2e `team.spec.ts` rewritten for read-only; `manager-create-employee.spec.ts` deleted.
+
+**Actions outside the repo**
+- none (no server touched; nothing pushed to main).
+
+**Verification**
+- Throwaway DB in this container: `docker run supabase/postgres:15.8.1.085`, patched `auth.uid()/role()/jwt()`
+  to read `request.jwt.claims`, added GoTrue's missing `auth.users` columns + `auth.identities`, applied
+  every migration in order, `supabase/seed.sql`, one admin profile (`employee_code='admin'`). Baseline
+  before my migration: all `tests/sql/*` 0 FAIL. After: 12 files, 1165 PASS, 0 FAIL.
+- `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 1022 passed · `npm run build` ok.
+- UI: temp `zz-mgr` page rendered `EditEmployeeForm` with manager caps (en + fa): fields disabled, no
+  Save, note shown, balances shown, policy card hidden. Page deleted.
+- **e2e NOT run**: Docker Hub 429 for GoTrue/PostgREST images, so no full stack.
+
+**State left behind**
+- Committed and pushed on `claude/editable-manager-role`. Not merged, not deployed.
+- Docs (`PERMISSIONS.md`, `REQUIREMENTS.md` FR-74, `CHANGELOG.md`, Help guide) deliberately not
+  updated — owner said hold off.
+
+**For the next agent**
+- Run e2e `team.spec.ts` + `hr-role.spec.ts` against a real stack before merge.
+- `next build` rewrites `AGENTS.md` (`#` → `##` heading); revert it before committing.
+- Cloud-container SQL test DB recipe above; `fr55` prints FAIL without stopping — grep for FAIL.
+- Managers now lose company-wide `profiles` read: watch for screens that listed everyone for managers
+  (Home pulse already scoped to reports; calendar uses definer view `team_leave_calendar`).
+
 ## 2026-11-02 — Spec: Manager read-only on people (FR-74 draft; was "editable Manager")
 
 **Agent:** Claude Code (cloud session)

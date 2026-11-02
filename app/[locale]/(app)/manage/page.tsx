@@ -26,7 +26,7 @@ export default async function ManageIndexPage({ params }: Props) {
     : [[], {}];
   const t = await getTranslations('nav');
   const capabilities = await getApprovalCapabilities();
-  const items = manageItemsForRoles(roles, perms, capabilities.canApprove, capabilities.canDelegate);
+  const items = manageItemsForRoles(roles, perms, capabilities.canApprove, capabilities.canDelegate, capabilities.hasReports);
   const settings = settingsItemForRoles(roles, perms, capabilities.canDelegate);
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
   // Explicit map, not t(item.labelKey): a dynamic message key has already

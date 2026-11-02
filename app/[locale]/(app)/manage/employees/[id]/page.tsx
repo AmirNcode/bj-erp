@@ -77,12 +77,6 @@ export default async function EditEmployeePage({ params }: Props) {
     getCachedRoles(user.id),
     getCachedPermissions(user.id),
   ]);
-  // The Manage layout admits anyone with a Manage item; this page needs the
-  // Employees one.
-  if (!callerRoles.includes('manager') && !can(callerPerms, 'people', 'read')) {
-    redirect(`/${locale}/home`);
-  }
-
   // Fetch target employee
   const { data: employee } = await supabase
     .from('profiles')
@@ -90,6 +84,15 @@ export default async function EditEmployeePage({ params }: Props) {
     .eq('id', id)
     .single();
 
+  // The Manage layout admits anyone with a Manage item; this page needs the
+  // Employees one. FR-74: without `people` read, only your own direct reports
+  // (read-only); RLS would also show same-department colleagues.
+  const readsPeople = can(callerPerms, 'people', 'read');
+  const callerIsDirectManager = employee?.manager_id === user.id;
+  if (!readsPeople && !callerIsDirectManager) {
+    if (!employee) redirect(`/${locale}/home`);
+    return notFound();
+  }
   if (!employee) return notFound();
 
   // The target's role ids (FR-55: custom roles have no enum), every role of the
@@ -120,6 +123,7 @@ export default async function EditEmployeePage({ params }: Props) {
     // A failed read locks (fail closed); the database decides either way.
     targetIsDepartmentManager: managedDeptRes.error != null || (managedDeptRes.data?.length ?? 0) > 0,
     targetIdentity: identity,
+    callerIsDirectManager,
   });
   const canManageLeave = caps.leave;
 
@@ -143,7 +147,8 @@ export default async function EditEmployeePage({ params }: Props) {
   // the gaps, and the start month defaults to the current Jalali month so turning
   // accrual on never back-credits months nobody worked.
   const policiesRes = canManageLeave ? await getEmployeePolicies(id) : null;
-  const policies = policiesRes?.ok ? policiesRes.policies : [];
+  // FR-74: a direct manager without leave_balances read cannot read policies; null hides the card.
+  const policies = policiesRes?.ok ? policiesRes.policies : policiesRes ? null : [];
   const accrualStartMonth = canManageLeave ? await getCurrentJalaliMonthStart() : '';
   const { data: typeDefaults } = canManageLeave
     ? await supabase

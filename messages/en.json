@@ -116,7 +116,7 @@
     "balanceRemaining": "<b>{left}</b> remaining"
   },
   "team": {
-    "managerNote": "As a manager you can edit only name and hire date."
+    "managerNote": "You can view your direct report. Only admins and HR can change employee details."
   },
   "request": {
     "title": "Request Leave",
@@ -571,7 +571,7 @@
         "search": "Search name or personnel number",
         "department": "Department",
         "allDepartments": "All departments",
-        "lockedHint": "Locked columns can only be changed by admins and HR. You can edit the name and hire date of your direct reports.",
+        "lockedHint": "View only. Only admins and HR can change employee details.",
         "locked": "Admins and HR only",
         "employee": "Employee",
         "upcomingLeave": "Upcoming leave",
@@ -1610,7 +1610,7 @@
     "builtIn": "Built-in",
     "adminRow": "Full access. Exactly one person holds it.",
     "noAdmin": "No one",
-    "managerNote": "Built-in, follows the reporting line",
+    "managerNote": "Built-in. Sees direct reports and the company calendar, approves requests. Cannot change employees.",
     "employeeNote": "Everyone",
     "actions": {
       "edit": "Edit",

@@ -120,8 +120,11 @@ type Props = {
   balances: BalanceItem[];
   /** Company day length: the inputs below are days + hours, the ledger is minutes. */
   hoursPerDay: number;
-  /** Existing accrual policies; absent types fall back to the leave-type default. */
-  policies: LeavePolicyRow[];
+  /**
+   * Existing accrual policies; absent types fall back to the leave-type default.
+   * null = the caller may not read them (FR-74 direct manager): the policy card is hidden.
+   */
+  policies: LeavePolicyRow[] | null;
   typeDefaults: {
     id: string;
     default_accrual_minutes_per_month: number | null;
@@ -171,7 +174,7 @@ export function EditEmployeeForm({
   // The current policy in minutes, falling back to the leave-type default. A
   // null cap ("no cap") shows as 0, which the save turns back into null.
   const policyMinutesFor = (leaveTypeId: string): PolicyMinutes & { startMonth: string } => {
-    const existing = policies.find((p) => p.leaveTypeId === leaveTypeId);
+    const existing = policies?.find((p) => p.leaveTypeId === leaveTypeId);
     const fallback = typeDefaults.find((t) => t.id === leaveTypeId);
     return {
       rate: existing?.accrualMinutesPerMonth ?? fallback?.default_accrual_minutes_per_month ?? 0,
@@ -494,7 +497,7 @@ export function EditEmployeeForm({
                   </div>
                 )}
 
-                {balances.length > 0 && (
+                {balances.length > 0 && policies !== null && (
                   <div
                     className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
                     data-testid="policy-section"

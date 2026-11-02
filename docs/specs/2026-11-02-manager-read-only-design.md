@@ -1,6 +1,6 @@
 # Manager role: read-only on people (no switches)
 
-**Date:** 2026-11-02 · **Status:** draft, waiting for owner approval
+**Date:** 2026-11-02 · **Status:** approved by owner 2026-11-02; implemented on `claude/editable-manager-role` (unreleased)
 **Trigger:** owner: HR says managers should not add employees. Owner first asked for an editable
 Manager role, then (same day, round 3) chose a simpler design: Manager stays **fixed**, with **no
 switches**, and may not change anything about an employee. Only HR and Admin change employees.

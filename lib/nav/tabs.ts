@@ -54,7 +54,9 @@ const BASE: Tab[] = [
   { key: 'organization', href: '/organization', labelKey: 'organization', desktopOnly: true },
 ];
 
-type ManageEntry = NavItem & { allowed: (roles: string[], perms: Perms, canApprove?: boolean) => boolean };
+type ManageEntry = NavItem & {
+  allowed: (roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean) => boolean;
+};
 
 // Approvals are identity-based (the approval chain routes to a person), not a permission.
 const isApprover = (roles: string[]) => ['admin', 'manager', 'hr'].some((r) => roles.includes(r));
@@ -76,7 +78,7 @@ const FOLLOWS_GROUP: NavItemKey[] = ['finance', 'procurement'];
 const MANAGE: ManageEntry[] = [
   // `nav-manage` stays the entry point into Manage on desktop: it is the first
   // item of the group and lands on the employees hub, as the old tab did.
-  { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (roles, perms) => roles.includes('manager') || can(perms, 'people', 'read') },
+  { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (roles, perms, _canApprove, hasReports) => can(perms, 'people', 'read') || (hasReports ?? roles.includes('manager')) },
   // FR-51: departments permission (read lists, edit creates/renames/sets managers).
   { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: (_roles, perms) => can(perms, 'departments', 'read') },
   { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles, _perms, canApprove) => canApprove ?? isApprover(roles) },
@@ -90,19 +92,21 @@ const MANAGE: ManageEntry[] = [
   // implicit for the admin); other holders see it on Home (homeAbsencesBoard).
   { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: isAdmin },
   // FR-62: inside Manage only for someone who has a Manage group anyway.
-  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove) },
-  { key: 'procurement', href: '/procurement', labelKey: 'procurement', testId: 'nav-procurement', allowed: (roles, perms, canApprove) => can(perms, 'travel_booking', 'edit') && hasManageGroup(roles, perms, canApprove) },
+  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove, hasReports) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove, hasReports) },
+  { key: 'procurement', href: '/procurement', labelKey: 'procurement', testId: 'nav-procurement', allowed: (roles, perms, canApprove, hasReports) => can(perms, 'travel_booking', 'edit') && hasManageGroup(roles, perms, canApprove, hasReports) },
 ];
 
 /** True when the caller reaches a Manage page other than Finance/Procurement (which follow the group). */
-function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean) {
-  return MANAGE.some((i) => !FOLLOWS_GROUP.includes(i.key) && i.allowed(roles, perms, canApprove));
+function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean) {
+  return MANAGE.some((i) => !FOLLOWS_GROUP.includes(i.key) && i.allowed(roles, perms, canApprove, hasReports));
 }
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
-export function tabsForRoles(roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean): Tab[] {
+export function tabsForRoles(
+  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean
+): Tab[] {
   const tabs = [...BASE];
-  const manage = hasManageGroup(roles, perms, canApprove) || canDelegate === true;
+  const manage = hasManageGroup(roles, perms, canApprove, hasReports) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (can(perms, 'travel_booking', 'edit') && !manage) tabs.push(PROCUREMENT_TAB);
   if (manage) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
@@ -110,12 +114,14 @@ export function tabsForRoles(roles: string[], perms: Perms, canApprove?: boolean
 }
 
 /** The labelled Manage group, filtered to what this caller can reach. */
-export function manageItemsForRoles(roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean): NavItem[] {
+export function manageItemsForRoles(
+  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean
+): NavItem[] {
   return MANAGE.filter((item) => item.key === 'finance' && canDelegate === true
     ? can(perms, 'finance', 'read')
     : item.key === 'procurement' && canDelegate === true
       ? can(perms, 'travel_booking', 'edit')
-      : item.allowed(roles, perms, canApprove)).map(({ key, href, labelKey, testId }) => ({
+      : item.allowed(roles, perms, canApprove, hasReports)).map(({ key, href, labelKey, testId }) => ({
     key,
     href,
     labelKey,

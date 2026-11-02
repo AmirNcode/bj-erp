@@ -10,6 +10,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
+import { can } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
@@ -85,8 +86,18 @@ export async function getMyBalances(): Promise<
 export async function getEmployeeBalances(
   employeeId: string
 ): Promise<{ ok: true; balances: BalanceItem[] } | DbErrorResult> {
-  const c = await requireCaller({ perm: ['leave_balances', 'read'], company: true });
+  const c = await requireCaller({ company: true });
   if (!c.ok) return c;
+  // leave_balances read, or (FR-74) the employee's direct manager, any role.
+  // RLS on leave_ledger enforces the same.
+  if (!can(c.perms, 'leave_balances', 'read')) {
+    const { data: target } = await c.supabase
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', employeeId)
+      .maybeSingle();
+    if (target?.manager_id !== c.user.id) return dbErr('not allowed');
+  }
 
   await accrueBeforeRead(c.supabase, employeeId);
 

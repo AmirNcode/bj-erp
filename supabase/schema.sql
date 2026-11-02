@@ -700,7 +700,6 @@ CREATE FUNCTION private.can_read_all(uid uuid) RETURNS boolean
     SET search_path TO ''
     AS $$
   select private.is_admin(uid)
-      or private.has_role(uid, 'manager')
       or private.has_role(uid, 'security')
       or private.has_role(uid, 'hr');
 $$;
@@ -710,7 +709,7 @@ $$;
 -- Name: FUNCTION can_read_all(uid uuid); Type: COMMENT; Schema: private; Owner: -
 --
 
-COMMENT ON FUNCTION private.can_read_all(uid uuid) IS 'Broad-read predicate: admin, manager, security, or hr. Write access is never implied — managers write only to direct reports, and hr writes only through guarded RPCs. FR-17/FR-18/FR-35.';
+COMMENT ON FUNCTION private.can_read_all(uid uuid) IS 'Broad-read predicate: admin, security, or hr (FR-74 removed manager). Write access is never implied. FR-17/FR-18/FR-35.';
 
 
 --
@@ -723,7 +722,7 @@ CREATE FUNCTION private.can_read_approval_request(p_uid uuid, p_request uuid) RE
     AS $$
   select coalesce(private.is_active(p_uid) and exists (
     select 1 from public.leave_requests r join public.profiles p on p.id=p_uid and p.company_id=r.company_id
-    where r.id=p_request and (r.employee_id=p_uid or private.is_manager_of(p_uid,r.employee_id)
+    where r.id=p_request and (r.employee_id=p_uid or private.is_direct_manager_of(p_uid,r.employee_id)
       or private.has_perm(p_uid,'leave_requests','read')
       -- Review fix: approval authority grants a full-row read only while the request is
       -- pending, or for a request on which the caller recorded a decision (print/history).
@@ -1255,8 +1254,6 @@ begin
         and private.can_act_on(v_uid, old.id)
   then
     v_allowed := array['full_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
-  elsif private.is_manager_of(v_uid, new.id) then
-    v_allowed := array['full_name', 'hire_date'];
   else
     -- Password resets are the admin's alone (20261013200007).
     raise exception 'not permitted to update this profile' using errcode = '42501';
@@ -1643,6 +1640,34 @@ $$;
 
 
 --
+-- Name: is_direct_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_direct_manager_of(uid uuid, target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.is_active(uid)
+     and exists (
+       select 1
+         from public.profiles caller
+         join public.profiles employee
+           on employee.id = target
+          and employee.company_id = caller.company_id
+        where caller.id = uid
+          and employee.manager_id = uid
+     );
+$$;
+
+
+--
+-- Name: FUNCTION is_direct_manager_of(uid uuid, target uuid); Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) IS 'FR-74: caller is active and target reports to them (profiles.manager_id), whatever the caller''s roles. Read access only; writes and approvals use is_manager_of.';
+
+
+--
 -- Name: is_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1974,7 +1999,7 @@ CREATE FUNCTION private.reads_balances(uid uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select private.has_role(uid, 'manager') or private.has_perm(uid, 'leave_balances', 'read');
+  select private.has_perm(uid, 'leave_balances', 'read');
 $$;
 
 
@@ -1998,7 +2023,7 @@ CREATE FUNCTION private.reads_people(uid uuid) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select private.has_role(uid, 'manager') or private.has_perm(uid, 'people', 'read');
+  select private.has_perm(uid, 'people', 'read');
 $$;
 
 
@@ -3044,11 +3069,12 @@ CREATE FUNCTION public.accrue_employee_leave(p_employee_id uuid) RETURNS void
 declare v_uid uuid := auth.uid(); v_type uuid;
 begin
   if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
-  -- FR-43: hr joins manager-of and admin. This posts only months the policy has
+  -- FR-43: hr joins the direct manager and admin. FR-74: any role with the
+  -- employee as a direct report (they may read the balances). This posts only months the policy has
   -- ALREADY earned — it credits nothing that was not due — and it runs lazily on
   -- every balance read. Without hr here, the balances HR now reads on the Edit
   -- Employee screen would silently lag behind the accrual policy HR just set.
-  if not (private.is_manager_of(v_uid, p_employee_id)
+  if not (private.is_direct_manager_of(v_uid, p_employee_id)
           or private.has_perm(v_uid, 'leave_balances', 'read')) then
     raise exception 'not allowed to accrue for this employee' using errcode = '42501';
   end if;
@@ -4106,27 +4132,16 @@ begin
     -- FR-35 / spec D4. HR onboards into ANY department and sets the reporting
     -- line, which is what makes them useful. But the enum role list is overwritten
     -- here regardless of what the client sent; extra roles come only through
-    -- p_role_ids, which D5 checks. Checked before the manager branch so someone
-    -- holding both gets the wider scope.
+    -- p_role_ids, which D5 checks.
     --
-    -- The company comes from the caller's own profile rather than the argument,
-    -- matching the manager branch: only an admin may name the company.
+    -- The company comes from the caller's own profile rather than the argument:
+    -- only an admin may name the company.
     select company_id into v_company from public.profiles where id = v_caller;
     v_dept := p_department_id;
     v_mgr := p_manager_id;
     v_roles := array['employee']::public.app_role[];
-  elsif private.has_role(v_caller, 'manager') then
-    -- Managers onboard into their own team only; every privileged input is
-    -- overwritten here regardless of what the client sent.
-    select department_id, company_id into v_dept, v_company
-      from public.profiles where id = v_caller;
-    if v_dept is null then
-      raise exception 'manager has no department' using errcode = '22023';
-    end if;
-    v_mgr := v_caller;
-    v_roles := array['employee']::public.app_role[];
   else
-    raise exception 'admin or manager role required' using errcode = '42501';
+    raise exception 'admin or hr required' using errcode = '42501';
   end if;
 
   -- With role ids, the enum list is just Employee; the ids decide the rest below.
@@ -4135,20 +4150,19 @@ begin
   end if;
 
   v_uid := private.create_employee_impl(
-    v_caller, case when v_admin then 'admin' when v_hr then 'hr' else 'manager' end,
+    v_caller, case when v_admin then 'admin' else 'hr' end,
     v_company, v_dept, v_mgr, p_personnel_no, p_full_name, p_password,
     v_roles, p_hire_date, p_language_pref, p_calendar_pref, p_job_title);
 
   -- D5 for non-admins (and D1 for everyone) through the assignment RPC. Skipped
-  -- when the ids add nothing beyond Employee, so a plain manager still onboards.
+  -- when the ids add nothing beyond Employee.
   select id into v_emp_role from public.roles where company_id = v_company and system_key = 'employee';
   if p_role_ids is not null
      and exists (select 1 from unnest(p_role_ids) x where x is distinct from v_emp_role) then
     perform public.app_set_user_role_ids(v_uid, p_role_ids || v_emp_role);
   end if;
 
-  -- Manager and HR paths: default quotas immediately, no admin round-trip.
-  -- (`not v_admin` is both of them.)
+  -- HR path: default quotas immediately, no admin round-trip.
   if not v_admin then
     for lt in
       select id, default_annual_quota_days
@@ -9936,7 +9950,7 @@ ALTER TABLE public.employee_leave_policies ENABLE ROW LEVEL SECURITY;
 -- Name: employee_leave_policies employee_leave_policies_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY employee_leave_policies_select ON public.employee_leave_policies FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
+CREATE POLICY employee_leave_policies_select ON public.employee_leave_policies FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10049,7 +10063,7 @@ ALTER TABLE public.leave_allocations ENABLE ROW LEVEL SECURITY;
 -- Name: leave_allocations leave_allocations_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_allocations_select ON public.leave_allocations FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
+CREATE POLICY leave_allocations_select ON public.leave_allocations FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10062,7 +10076,7 @@ ALTER TABLE public.leave_ledger ENABLE ROW LEVEL SECURITY;
 -- Name: leave_ledger leave_ledger_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
+CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10148,7 +10162,7 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 -- Name: profiles profiles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_select ON public.profiles FOR SELECT TO authenticated USING (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active(( SELECT auth.uid() AS uid)) AND (private.same_team(( SELECT auth.uid() AS uid), id) OR private.reads_people(( SELECT auth.uid() AS uid))))));
+CREATE POLICY profiles_select ON public.profiles FOR SELECT TO authenticated USING (((id = ( SELECT auth.uid() AS uid)) OR (private.is_active(( SELECT auth.uid() AS uid)) AND (private.same_team(( SELECT auth.uid() AS uid), id) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), id) OR private.reads_people(( SELECT auth.uid() AS uid))))));
 
 
 --
@@ -10169,7 +10183,7 @@ COMMENT ON POLICY profiles_select_auth_admin ON public.profiles IS 'Lets the GoT
 -- Name: profiles profiles_update; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR private.is_manager_of(( SELECT auth.uid() AS uid), id) OR (id = ( SELECT auth.uid() AS uid)))));
+CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10288,7 +10302,7 @@ ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
 -- Name: user_roles user_roles_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY user_roles_select ON public.user_roles FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.reads_people(( SELECT auth.uid() AS uid)))));
+CREATE POLICY user_roles_select ON public.user_roles FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((user_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), user_id) OR private.reads_people(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10684,6 +10698,14 @@ GRANT ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) TO 
 --
 
 REVOKE ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION is_direct_manager_of(uid uuid, target uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) TO authenticated;
 
 
 --

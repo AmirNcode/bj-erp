@@ -23,8 +23,8 @@ export type CreateEmployeeInput = {
  * Creates a new employee auth account + profile + roles in one RPC transaction.
  * The employee code is composed in-DB — since 20260730130002 it is the
  * personnel number alone, with no department prefix.
- * Admins create freely; managers are scoped in-DB to their own department and
- * team; people_create may pick any department and manager. Roles beyond
+ * Admins create freely; people_create may pick any department and manager.
+ * FR-74: managers cannot add employees. Roles beyond
  * Employee go as role ids, checked by D5 in-DB like any later role change.
  * Every one of those limits is enforced inside app_create_employee — the check
  * here only avoids a pointless round-trip.
@@ -36,8 +36,8 @@ export async function createEmployee(
 ): Promise<{ ok: true; tempPassword: string; userId: string } | DbErrorResult> {
   const c = await requireCaller({ company: true });
   if (!c.ok) return c;
-  // FR-55: managers keep their scoped path; everyone else needs `people_create`.
-  if (!c.roles.includes('manager') && !can(c.perms, 'people_create')) return dbErr('not allowed');
+  // FR-74: only `people_create` holders (and admin) add employees.
+  if (!can(c.perms, 'people_create')) return dbErr('not allowed');
 
   // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)

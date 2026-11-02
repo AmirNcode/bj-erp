@@ -81,6 +81,7 @@ export function employeeEditCapabilities({
   allRoles,
   targetIsDepartmentManager,
   targetIdentity,
+  callerIsDirectManager = false,
 }: {
   callerId: string;
   callerRoles: string[];
@@ -90,6 +91,8 @@ export function employeeEditCapabilities({
   allRoles: RoleRow[];
   targetIsDepartmentManager: boolean;
   targetIdentity: TargetIdentity;
+  /** FR-74: the target reports to the caller (reads their balances, changes nothing). */
+  callerIsDirectManager?: boolean;
 }): EditCapabilities {
   // D1: the admin box is never a checkbox anyone toggles; Transfer admin moves it.
   const assignable = allRoles.filter((r) => r.systemKey !== 'admin');
@@ -137,14 +140,13 @@ export function employeeEditCapabilities({
   };
 
   return {
-    // A manager's name/hire-date power is the reporting relationship, not D4;
-    // RLS narrows it to their own reports.
-    profile: (actor && can(callerPerms, 'people')) || (callerRoles.includes('manager') && !self),
+    // FR-74: managers change nothing; only `people` edit (HR) on a D4 target.
+    profile: actor && can(callerPerms, 'people'),
     org: actor && can(callerPerms, 'people'),
     editableRoleIds: actor ? assignable.filter(mayToggle).map((r) => r.id) : [],
     // Password resets are the admin's alone (20261013200007, returned above).
     resetPassword: false,
-    leave: can(callerPerms, 'leave_balances', 'read'),
+    leave: can(callerPerms, 'leave_balances', 'read') || (callerIsDirectManager && !self),
     leaveEdit: actor && can(callerPerms, 'leave_balances'),
     lockedReason,
     // FR-63: your own personal information is view only unless you hold
@@ -172,9 +174,8 @@ export type EditFormView = {
 
 /**
  * How the Edit Employee form presents `caps`. `showOrg` = the caller holds
- * people read. Without it the caller is a manager on the relationship path and
- * keeps the pre-FR-55 view: the manager note, name and hire date only, never a
- * lock note (their name/hire-date power does not depend on D4).
+ * people read. Without it the caller is a direct manager (FR-74): the read-only
+ * manager note, name and hire date shown, nothing saveable.
  */
 export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boolean }): EditFormView {
   const saveable = caps.profile || caps.org || caps.editableRoleIds.length > 0 || caps.leaveEdit;
@@ -190,13 +191,9 @@ export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boo
     ? 'manager'
     : lockNote
       ? lockNote
-      : caps.org
+      : caps.org || saveable
         ? null
-        : caps.profile
-          ? 'manager' // name and hire date through the reporting line only
-          : saveable
-            ? null
-            : 'readOnly';
+        : 'readOnly';
   const orgBlock = showOrg && (caps.org || caps.lockedReason !== null);
   return { note, orgBlock, rolesBlock: orgBlock || caps.editableRoleIds.length > 0, saveable };
 }

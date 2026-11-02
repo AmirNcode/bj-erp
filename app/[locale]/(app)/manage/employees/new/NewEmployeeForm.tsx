@@ -92,13 +92,6 @@ type Props = {
   editableRoleIds: string[];
   /** FR-43: may set the opening leave balance and the accrual policy (leave_balances edit). */
   canManageLeave: boolean;
-  /**
-   * people_create: the department and manager pickers (FR-35 D4). A manager
-   * without it is locked to their own department, with themselves as manager.
-   */
-  canChooseScope: boolean;
-  ownDepartment: Department | null;
-  ownName: string;
   departments: Department[];
   managers: Manager[];
   leaveTypes: InitialLeaveType[];
@@ -118,9 +111,6 @@ export function NewEmployeeForm({
   employeeRoleId,
   editableRoleIds,
   canManageLeave,
-  canChooseScope,
-  ownDepartment,
-  ownName,
   departments,
   managers,
   leaveTypes,
@@ -150,8 +140,7 @@ export function NewEmployeeForm({
   const canAssignRoles = editableRoleIds.length > 0;
   const [personnelNo, setPersonnelNo] = useState('');
   const [hireDate, setHireDate] = useState<PickerDate | null>(null);
-  // Admin picks a department; manager is locked to their own.
-  const [deptId, setDeptId] = useState(canChooseScope ? '' : ownDepartment?.id ?? '');
+  const [deptId, setDeptId] = useState('');
 
   // Since 20260730130002 the login code is the personnel number alone — the
   // department no longer feeds it, so the preview does not wait for one.
@@ -194,8 +183,8 @@ export function NewEmployeeForm({
       personnel_no: normalizedPno,
       full_name: (fd.get('full_name') as string).trim(),
       job_title: ((fd.get('job_title') as string) || '').trim() || undefined,
-      department_id: canChooseScope ? (fd.get('department_id') as string) || undefined : undefined,
-      manager_id: canChooseScope ? (fd.get('manager_id') as string) || undefined : undefined,
+      department_id: (fd.get('department_id') as string) || undefined,
+      manager_id: (fd.get('manager_id') as string) || undefined,
       roleIds: canAssignRoles ? selectedRoleIds : undefined,
       hire_date: hireDate ? dateObjectToGregorian(hireDate) : undefined,
     });
@@ -337,55 +326,37 @@ export function NewEmployeeForm({
             )}
           </div>
 
-          {canChooseScope ? (
-            /* Native <select> — must stay native for Playwright selectOption e2e */
-            <div className="space-y-1.5">
-              <Label htmlFor="department_id">{labels.department}</Label>
-              <select
-                id="department_id"
-                name="department_id"
-                required
-                className={nativeSelectClass}
-                value={deptId}
-                onChange={(e) => setDeptId(e.target.value)}
-              >
-                <option value="">{labels.selectDept}</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {locale === 'fa' ? d.name_fa : d.name_en}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <span className="block text-sm font-medium leading-none">{labels.department}</span>
-              <p className="text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="dept-locked">
-                {locale === 'fa' ? ownDepartment?.name_fa : ownDepartment?.name_en}
-              </p>
-            </div>
-          )}
+          {/* Native <select> — must stay native for Playwright selectOption e2e */}
+          <div className="space-y-1.5">
+            <Label htmlFor="department_id">{labels.department}</Label>
+            <select
+              id="department_id"
+              name="department_id"
+              required
+              className={nativeSelectClass}
+              value={deptId}
+              onChange={(e) => setDeptId(e.target.value)}
+            >
+              <option value="">{labels.selectDept}</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {locale === 'fa' ? d.name_fa : d.name_en}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {canChooseScope ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="manager_id">{labels.manager}</Label>
-              <PersonSearch
-                id="manager_id"
-                name="manager_id"
-                people={managerOptions}
-                value={managerId}
-                onChange={setManagerId}
-                testId="manager-search"
-              />
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <span className="block text-sm font-medium leading-none">{labels.manager}</span>
-              <p className="text-sm rounded-lg border border-border bg-secondary/40 px-3 py-2" data-testid="mgr-locked">
-                {ownName}
-              </p>
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label htmlFor="manager_id">{labels.manager}</Label>
+            <PersonSearch
+              id="manager_id"
+              name="manager_id"
+              people={managerOptions}
+              value={managerId}
+              onChange={setManagerId}
+              testId="manager-search"
+            />
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="job_title">{labels.jobTitle}</Label>

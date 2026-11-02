@@ -1,5 +1,11 @@
 /** Narrow, server-authorized delegation views. No profile-table access is implied. */
-export type ApprovalCapabilities = { canApprove: boolean; canDelegate: boolean; isAdmin: boolean };
+export type ApprovalCapabilities = {
+  canApprove: boolean;
+  canDelegate: boolean;
+  isAdmin: boolean;
+  /** FR-74: someone reports to the caller (profiles.manager_id), whatever their roles. */
+  hasReports: boolean;
+};
 export type DelegateCandidate = { profile_id: string; full_name: string; employee_code: string | null };
 export type DelegationGrant = {
   grant_id: string;

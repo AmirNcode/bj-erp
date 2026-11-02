@@ -92,6 +92,7 @@ export default async function AppLayout({ children, params }: Props) {
       perms={perms}
       canApprove={canApprove}
       canDelegate={capabilities.canDelegate}
+      hasReports={capabilities.hasReports}
       locale={locale}
       appName={t('appName')}
       profile={profileSummary}

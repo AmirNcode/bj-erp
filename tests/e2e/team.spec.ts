@@ -1,12 +1,12 @@
 /**
- * e2e: Manager "My Team" view + editing direct reports.
+ * e2e: Manager "My Team" view, read-only (FR-74).
  *
  * Flow:
  * 1. Admin logs in, creates manager M and two employees E (report of M) and X (no manager).
  * 2. Log in as M.
  * 3. /team lists E but not X.
- * 4. M edits E → only full_name + hire_date fields visible → change saves.
- * 5. M tries to edit X via direct URL → action returns error / no change (RLS blocks).
+ * 4. M opens E → read-only: name and hire date shown disabled, no Save, no Add.
+ * 5. M opens X via direct URL → not found (managers see only direct reports).
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -80,8 +80,8 @@ async function createEmployeeWithManager(
   return { code, password: tempPassword.trim() };
 }
 
-test.describe('Manager "My Team" view + direct-report edits', () => {
-  test('manager sees only reports, can edit report, cannot persist X change', async ({ page }) => {
+test.describe('Manager "My Team" view, read-only (FR-74)', () => {
+  test('manager sees only reports, read-only, and cannot open a non-report', async ({ page }) => {
     test.setTimeout(120_000);
     const ts = Date.now();
 
@@ -152,50 +152,30 @@ test.describe('Manager "My Team" view + direct-report edits', () => {
     // X's code must NOT appear on this page
     await expect(page.getByText(nonCode)).not.toBeVisible();
 
-    // ── 7. Open E's edit page → only full_name + hire_date editable ────────
+    // FR-74: no Add employee for a manager.
+    await expect(page.locator('[data-testid="add-employee-link"]')).toHaveCount(0);
+
+    // ── 7. Open E's page → read-only ─────────────────────────────────────
     await page.goto(`/fa/manage/employees/${empId}`);
     await expect(page).toHaveURL(new RegExp(`/manage/employees/${empId}$`), { timeout: 10000 });
 
-    // department select must not exist (admin-only)
+    // department / manager / roles are never shown to a manager
     await expect(page.locator('#department_id')).not.toBeVisible();
-    // manager select must not exist
     await expect(page.locator('#manager_id')).not.toBeVisible();
-    // roles checkboxes must not exist
     await expect(page.locator('input[type="checkbox"]')).not.toBeVisible();
 
-    // full_name and hire_date must exist
+    // name and hire date shown, but disabled; nothing to save
     await expect(page.locator('#full_name')).toBeVisible();
-    await expect(page.locator('#hire_date')).toBeVisible();
+    await expect(page.locator('#full_name')).toBeDisabled();
+    await expect(page.locator('[data-testid="edit-scope-note"]')).toBeVisible();
+    await expect(page.locator('[data-testid="edit-save"]')).toHaveCount(0);
 
-    // Change full_name and save
-    const newName = `Updated Report ${ts}`;
-    await page.fill('#full_name', newName);
-    await page.click('button[type="submit"]');
-
-    // Success banner should appear
-    await expect(page.locator('[role="status"]')).toBeVisible({ timeout: 10000 });
-
-    // Reload to confirm the name persisted
-    await page.reload();
-    await expect(page.locator('#full_name')).toHaveValue(newName, { timeout: 8000 });
-
-    // ── 8. Negative: M navigates to X's edit page and tries to save ────────
+    // ── 8. Negative: M opens X's page → not found ───────────────────────
     await page.goto(`/fa/manage/employees/${nonId}`);
-    // Page loads (managers can read all profiles via RLS SELECT policy)
-    await expect(page.locator('#full_name')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#full_name')).toHaveCount(0, { timeout: 10000 });
 
-    const xOrigName = (await page.locator('#full_name').inputValue()) ?? '';
-    const xBadName = `BLOCKED_CHANGE_${ts}`;
-    await page.fill('#full_name', xBadName);
-    await page.click('button[type="submit"]');
-
-    // Expect an error alert (RLS blocks the UPDATE)
-    await expect(page.locator('[role="alert"]')).toBeVisible({ timeout: 10000 });
-
-    // Reload and confirm X's name is unchanged
-    await page.reload();
-    const xCurrentName = await page.locator('#full_name').inputValue();
-    expect(xCurrentName).toBe(xOrigName);
-    expect(xCurrentName).not.toBe(xBadName);
+    // /new is HR and admin only
+    await page.goto('/fa/manage/employees/new');
+    await expect(page).toHaveURL(/\/home$/, { timeout: 10000 });
   });
 });

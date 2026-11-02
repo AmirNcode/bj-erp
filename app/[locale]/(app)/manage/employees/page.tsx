@@ -1,6 +1,7 @@
 /**
- * Manage › Employees. Managers and `people` read holders read company-wide;
- * writes stay restricted per permission on the edit page and in RLS (FR-55).
+ * Manage › Employees. `people` read holders read company-wide; anyone with
+ * direct reports (FR-74, any role) reads only those. Writes stay restricted per
+ * permission on the edit page and in RLS (FR-55); managers write nothing.
  * Absorbs the old My Team page as the `reports` filter (/team redirects here).
  *
  * All list state is in the URL (q, dept, filter, page) and the query runs
@@ -18,6 +19,7 @@ import { ChevronLeft, ChevronRight, ClipboardCheck, IdCard, Lock, Plus, Upload }
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { listRoles } from '@/lib/actions/roles';
 import { can } from '@/lib/permissions/catalog';
 import { todayInAppTz } from '@/lib/appDate';
@@ -54,10 +56,13 @@ async function EmployeesData({
   query,
   canBulkReset,
   showLocks,
+  reportsOnly,
 }: {
   locale: string;
   query: EmployeesQuery;
   canBulkReset: boolean;
+  /** FR-74: no `people` read — the caller lists only their direct reports. */
+  reportsOnly: boolean;
   showLocks: boolean;
 }) {
   const [t, tl, tErrand, rolesRes] = await Promise.all([
@@ -86,7 +91,7 @@ async function EmployeesData({
     )
     .eq('active', query.filter !== 'inactive');
   if (incomplete) list = list.eq('employee_personal_info.complete', false);
-  if (query.filter === 'reports' && user) list = list.eq('manager_id', user.id);
+  if ((query.filter === 'reports' || reportsOnly) && user) list = list.eq('manager_id', user.id);
   if (query.dept) list = list.eq('department_id', query.dept);
   const term = ilikeTerm(query.q);
   if (term) {
@@ -270,27 +275,36 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const [myRoles, perms] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id)]);
-  const isManager = myRoles.includes('manager');
+  const [myRoles, perms, capabilities] = await Promise.all([
+    getCachedRoles(user.id),
+    getCachedPermissions(user.id),
+    getApprovalCapabilities(),
+  ]);
+  const { hasReports } = capabilities;
   // The Manage layout admits anyone with a Manage item; this page is the
-  // Employees one (lib/nav/tabs.ts).
-  if (!isManager && !can(perms, 'people', 'read')) redirect(`/${locale}/home`);
+  // Employees one (lib/nav/tabs.ts). FR-74: `people` read lists everyone;
+  // anyone with direct reports lists those, read-only.
+  const readsPeople = can(perms, 'people', 'read');
+  if (!readsPeople && !hasReports) redirect(`/${locale}/home`);
+  const reportsOnly = !readsPeople;
   const canSeePersonalInfo = can(perms, 'personal_info', 'read');
-  // A manager without people edit changes only name and hire date of reports.
-  const managerOnly = isManager && !can(perms, 'people');
-  // Same rule as the Add page's guard: people_create, or a manager's own-team path.
-  const canAdd = isManager || can(perms, 'people_create');
-  const query = parseEmployeesQuery(sp, { isManager, canSeePersonalInfo });
+  // FR-74: only `people` edit (HR, admin) changes employees; everyone else reads.
+  const readOnly = !can(perms, 'people');
+  // Same rule as the Add page's guard (FR-74: managers cannot add).
+  const canAdd = can(perms, 'people_create');
+  const query = parseEmployeesQuery(sp, { isManager: hasReports && !reportsOnly, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
   // Segment counts and the department list: head-only counts, cheap enough to
   // keep outside Suspense so the toolbar (and its search box) never remounts.
   const supabase = await createClient();
-  const profilesHead = () =>
-    supabase.from('profiles').select('id', { count: 'exact', head: true });
+  const profilesHead = () => {
+    const q = supabase.from('profiles').select('id', { count: 'exact', head: true });
+    return reportsOnly ? q.eq('manager_id', user.id) : q;
+  };
   const [allRes, reportsRes, inactiveRes, incompleteRes, { data: departments }] = await Promise.all([
     profilesHead().eq('active', true),
-    isManager && user
+    hasReports && !reportsOnly
       ? profilesHead().eq('active', true).eq('manager_id', user.id)
       : Promise.resolve(null),
     profilesHead().eq('active', false),
@@ -368,8 +382,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
         }))}
       />
 
-      {/* Managers edit only name and hire date of their direct reports. */}
-      {managerOnly && (
+      {/* FR-74: only admin and HR change employees. */}
+      {readOnly && (
         <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground" data-testid="emp-locked-hint">
           <Lock aria-hidden="true" className="size-3.5 shrink-0" />
           {tl('lockedHint')}
@@ -381,7 +395,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           locale={locale}
           query={query}
           canBulkReset={myRoles.includes('admin')}
-          showLocks={managerOnly}
+          showLocks={readOnly}
+          reportsOnly={reportsOnly}
         />
       </Suspense>
 

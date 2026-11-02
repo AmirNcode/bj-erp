@@ -132,10 +132,11 @@ select pg_temp.expect('employee may not retitle themselves',
   pg_temp.try_as('emp', format('update public.profiles set job_title = %s where id = %s', quote_literal('CEO'), pg_temp.id('emp'))), '42501');
 select pg_temp.expect('employee may not change own personnel number',
   pg_temp.try_as('emp', format('update public.profiles set personnel_no = %s where id = %s', quote_literal('9990000998'), pg_temp.id('emp'))), '42501');
+-- FR-74: a manager changes nothing on a report (the policy hides the row: 0 rows).
 select pg_temp.expect('manager may not retitle a report',
-  pg_temp.try_as('mgr', format('update public.profiles set job_title = %s where id = %s', quote_literal('x'), pg_temp.id('emp'))), '42501');
-select pg_temp.expect('manager still edits a report''s name',
-  pg_temp.try_as('mgr', format('update public.profiles set full_name = %s where id = %s', quote_literal('FR51 emp3'), pg_temp.id('emp'))), 'ok:1');
+  pg_temp.try_as('mgr', format('update public.profiles set job_title = %s where id = %s', quote_literal('x'), pg_temp.id('emp'))), 'ok:0');
+select pg_temp.expect('manager may not edit a report''s name (FR-74)',
+  pg_temp.try_as('mgr', format('update public.profiles set full_name = %s where id = %s', quote_literal('FR51 emp3'), pg_temp.id('emp'))), 'ok:0');
 select pg_temp.expect('employee may not move a colleague',
   pg_temp.try_as('emp', format('update public.profiles set department_id = %s where id = %s', pg_temp.id('dept'), pg_temp.id('mgr'))), 'ok:0');
 

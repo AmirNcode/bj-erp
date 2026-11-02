@@ -1003,9 +1003,9 @@ select pg_temp.expect('hr without role ids still gets a plain employee (enum lis
 select pg_temp.expect('… the new employee holds Employee only',
   (select string_agg(r.name, ',' order by r.name) from public.user_roles ur join public.roles r on r.id = ur.role_id
               join public.profiles p on p.id = ur.user_id where p.personnel_no = '9990000985'), 'Employee');
-select pg_temp.expect('a manager still creates into their team, with empty role ids',
+select pg_temp.expect('FR-74: a manager may not create employees',
   pg_temp.try_as('mgr', format($q$select public.app_create_employee('9990000986','FR55 c5','Temp!2026x',%s, p_role_ids => '{}'::uuid[])$q$,
-    pg_temp.id('company'))), 'ok:1');
+    pg_temp.id('company'))), '42501');
 
 -- delete (D12)
 select pg_temp.expect('hr may not delete a role',

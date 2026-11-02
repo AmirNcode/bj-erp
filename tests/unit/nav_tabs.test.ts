@@ -143,6 +143,13 @@ describe('manageItemsForRoles', () => {
   it('helpdesk (people read + people_create) gets Employees only', () => {
     expect(keys(['employee'], { people: 'read', people_create: 'edit' })).toEqual(['employees']);
   });
+  it('FR-74: Employees follows direct reports, not the Manager role, once known', () => {
+    expect(manageItemsForRoles(['employee'], {}, false, false, true).map((i) => i.key)).toEqual(['employees']);
+    expect(manageItemsForRoles(['manager'], {}, false, false, false).map((i) => i.key)).toEqual([]);
+    expect(tabsForRoles(['employee'], {}, false, false, true).some((t) => t.key === 'manage')).toBe(true);
+    // people read lists everyone regardless of reports
+    expect(manageItemsForRoles(['employee'], { people: 'read' }, false, false, false).map((i) => i.key)).toEqual(['employees']);
+  });
   it('the employees hub keeps the nav-manage test id', () => {
     expect(manageItemsForRoles(['manager'], {})[0]).toMatchObject({
       key: 'employees',
