@@ -102,6 +102,7 @@ Copy this block verbatim and fill it in.
 
 **State left behind**
 - Fixes are local commits in worktrees `.claude/worktrees/pr12` (branch `claude/editable-manager-role`), `pr13` and `pr14` (detached HEADs; the branch names are checked out in the main checkout and `../bj-absences-lookahead`), plus a scratch merge on local branch `review/integration-2026-11-02` (`.claude/worktrees/integration`, not pushed). On Amir's go-ahead the three PR branches were pushed (fast-forward): #12 → 1cfd485, #13 → b709c6d, #14 → 7515179. The local `claude/finance-errands-only` (main checkout) and `claude/absences-lookahead` (`../bj-absences-lookahead`) branches are now one commit behind origin.
+- Later the same day: Amir deployed `review/integration-2026-11-02` to local Docker (applied `20261102120000_manager_read_only.sql`; it is frozen now). The Mac's IP had moved to 192.168.2.85, so `APP_HOST`/`APP_ORIGIN` in `deploy/.env` were changed and auth/rest/app/gateway recreated. Then, on Amir's request, the branch was pushed to `main` with `[skip ci]`: main now holds #12–#14, **Liara does not**. The next push to main without `[skip ci]` deploys all of it, migration included.
 
 **For the next agent**
 - The #12 migration is editable only until a DB applies it; after Amir's local deploy it is frozen.
@@ -169,6 +170,25 @@ Copy this block verbatim and fill it in.
   hard-wired reads (`reads_people/balances/calendar`) become role_permissions rows; new catalog item
   `people_create_team` (off by default) gates the manager branch of `app_create_employee`.
   Reporting-line powers (`is_manager_of`, approval steps, travel checks) stay fixed.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- none (docs only). Survey: `grep has_role(...'manager')` in `supabase/schema.sql` → 9 sites; app
+  `roles.includes('manager')` sites listed in spec §5.
+
+**State left behind**
+- Uncommitted spec + this entry. No code. Waiting for owner review of spec §8 questions.
+
+**For the next agent**
+- Round 3 (same day): owner dropped the editable preset. Final design = Manager fixed, no switches,
+  no add/edit of employees, sees only direct reports + company calendar, still approves. Spec renamed
+  to `docs/specs/2026-11-02-manager-read-only-design.md`. Any role with direct reports sees them.
+- Calendar names come from definer view `team_leave_calendar`, so keeping `reads_calendar` for
+  managers needs no profile read.
+- `private.can_read_all` has no callers; spec drops only its manager clause.
+
 ## 2026-11-02 — Absences board: 30-day look-ahead
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
@@ -191,31 +211,6 @@ in the next month on the Home absences tile, ship, and gather HR's feedback.
 - none
 
 **Verification**
-- none (docs only). Survey: `grep has_role(...'manager')` in `supabase/schema.sql` → 9 sites; app
-  `roles.includes('manager')` sites listed in spec §5.
-
-**State left behind**
-- Uncommitted spec + this entry. No code. Waiting for owner review of spec §8 questions.
-
-**For the next agent**
-- Round 3 (same day): owner dropped the editable preset. Final design = Manager fixed, no switches,
-  no add/edit of employees, sees only direct reports + company calendar, still approves. Spec renamed
-  to `docs/specs/2026-11-02-manager-read-only-design.md`. Any role with direct reports sees them.
-- Calendar names come from definer view `team_leave_calendar`, so keeping `reads_calendar` for
-  managers needs no profile read.
-- `private.can_read_all` has no callers; spec drops only its manager clause.
-## 2026-11-02 — Finance page: work errands only
-
-**Agent:** Claude Opus 5.5 via Claude Code (desktop)
-**Branch / HEAD at start:** main @ f03e37f
-**Trigger:** Amir: the finance role should see only work trips (hourly and daily) on /finance; it showed all leave requests too.
-
-- Cause: `public.finance_requests` (migration `20261020120007`) returns every kind by design (owner review 2026-10-20: "leave and errands").
-- New migration `supabase/migrations/20261102120000_finance_errands_only.sql`: re-creates `finance_requests` and legacy `finance_approved_requests` with `and r.kind = 'errand'` (bodies copied from `schema.sql`, signatures unchanged, so the old app keeps working during release).
-- `app/[locale]/(app)/finance/FinanceList.tsx`: leave/errand filter → All / Daily / Hourly (`unit`); dropped the leave-type branch and the CSV Kind column. Pruned unused `finance.{errands,leaves,leave,errand,csv.kind}` in `messages/{en,fa}.json`; `all`/`empty` copy now say "work errands".
-- Tests: `tests/sql/travel-booking.sql` adds an approved + pending leave fixture and asserts neither finance function returns it. Dry-run as `supabase_admin` inside `begin … rollback` (migration + whole file): all PASS; without the migration it FAILs at "finance2: approved leave stays hidden", as expected. `tests/unit/finance-travel-columns.test.tsx`: pending leave fixture → pending hourly errand, new filter test. `npm run test:unit` 108 files / 1027 tests pass; `tsc --noEmit` and eslint on the touched files clean.
-- Applied locally on Amir's go-ahead: `./deploy/bj-deploy update local` (backup taken, migration applied, app rebuilt; "Local update succeeded"), restarted `bj-erp-rest-1`, `npm run schema:dump` → `supabase/schema.sql` diff is exactly the two `and r.kind = 'errand'` lines. Live check as admin on the local DB: `finance_requests(today-200, today+100)` returns only `errand` rows (2). The migration is now frozen.
-- **Not done:** nothing committed; nothing run on Liara (deploys on push to main).
 - `tsc --noEmit` clean; eslint on touched files clean; `vitest run tests/unit` 1029 passed.
 - Visual check via a temporary `zz-upcoming` page with fake rows (fa, 375px): RTL, Jalali dates,
   hourly time, multi-day range, empty state OK. Page deleted, `.next/dev/types` removed.
@@ -257,6 +252,19 @@ attendance system before the day; the Home absences tile (today only) gives too 
 - Precedents to reuse: `/absences` board (FR-56) query, `/finance` range page (FR-62), travel tick
   (`travel_bookings.opened_at`, FR-70). Keep the tick in its own table, not on `leave_requests`
   (writes there take the company approval lock).
+
+## 2026-11-02 — Finance page: work errands only
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** Amir: the finance role should see only work trips (hourly and daily) on /finance; it showed all leave requests too.
+
+- Cause: `public.finance_requests` (migration `20261020120007`) returns every kind by design (owner review 2026-10-20: "leave and errands").
+- New migration `supabase/migrations/20261102120000_finance_errands_only.sql`: re-creates `finance_requests` and legacy `finance_approved_requests` with `and r.kind = 'errand'` (bodies copied from `schema.sql`, signatures unchanged, so the old app keeps working during release).
+- `app/[locale]/(app)/finance/FinanceList.tsx`: leave/errand filter → All / Daily / Hourly (`unit`); dropped the leave-type branch and the CSV Kind column. Pruned unused `finance.{errands,leaves,leave,errand,csv.kind}` in `messages/{en,fa}.json`; `all`/`empty` copy now say "work errands".
+- Tests: `tests/sql/travel-booking.sql` adds an approved + pending leave fixture and asserts neither finance function returns it. Dry-run as `supabase_admin` inside `begin … rollback` (migration + whole file): all PASS; without the migration it FAILs at "finance2: approved leave stays hidden", as expected. `tests/unit/finance-travel-columns.test.tsx`: pending leave fixture → pending hourly errand, new filter test. `npm run test:unit` 108 files / 1027 tests pass; `tsc --noEmit` and eslint on the touched files clean.
+- Applied locally on Amir's go-ahead: `./deploy/bj-deploy update local` (backup taken, migration applied, app rebuilt; "Local update succeeded"), restarted `bj-erp-rest-1`, `npm run schema:dump` → `supabase/schema.sql` diff is exactly the two `and r.kind = 'errand'` lines. Live check as admin on the local DB: `finance_requests(today-200, today+100)` returns only `errand` rows (2). The migration is now frozen.
+- **Not done:** nothing committed; nothing run on Liara (deploys on push to main).
 
 ## 2026-11-01 — Help & guides page with the SOP user guide
 
