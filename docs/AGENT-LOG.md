@@ -301,7 +301,35 @@ attendance system before the day; the Home absences tile (today only) gives too 
 - `app/[locale]/(app)/finance/FinanceList.tsx`: leave/errand filter → All / Daily / Hourly (`unit`); dropped the leave-type branch and the CSV Kind column. Pruned unused `finance.{errands,leaves,leave,errand,csv.kind}` in `messages/{en,fa}.json`; `all`/`empty` copy now say "work errands".
 - Tests: `tests/sql/travel-booking.sql` adds an approved + pending leave fixture and asserts neither finance function returns it. Dry-run as `supabase_admin` inside `begin … rollback` (migration + whole file): all PASS; without the migration it FAILs at "finance2: approved leave stays hidden", as expected. `tests/unit/finance-travel-columns.test.tsx`: pending leave fixture → pending hourly errand, new filter test. `npm run test:unit` 108 files / 1027 tests pass; `tsc --noEmit` and eslint on the touched files clean.
 - Applied locally on Amir's go-ahead: `./deploy/bj-deploy update local` (backup taken, migration applied, app rebuilt; "Local update succeeded"), restarted `bj-erp-rest-1`, `npm run schema:dump` → `supabase/schema.sql` diff is exactly the two `and r.kind = 'errand'` lines. Live check as admin on the local DB: `finance_requests(today-200, today+100)` returns only `errand` rows (2). The migration is now frozen.
-- **Not done:** nothing committed; nothing run on Liara (deploys on push to main).
+- Committed 18884e7 on branch `claude/finance-errands-only` (only this change's hunks; other sessions' uncommitted AGENT-LOG entries and `upcoming*` message keys left unstaged), pushed, opened PR #13 to review after PR #12 (both add a `20261102120000_*` migration; distinct filenames, ledger keys on filename). Checkout left on that branch: other sessions' uncommitted work blocks switching back to main.
+- **Not done:** nothing run on Liara (deploys when the PR merges to main).
+
+## 2026-11-01 — SOP cover company logo
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ f03e37f
+**Trigger:** Replace the blue company-name badge on the first page of the local SOP HTML and PDF with the company logo.
+
+**What changed**
+- `sop/sop.html` — cover image replaces the text badge; 80mm width with original proportions and accessible alternative text.
+- `sop/images/bj-logo.png` — copied the existing `public/bj-logo.png` for the local guide.
+- `sop/BJ-HR-SOP-fa.pdf` — regenerated with the existing build script.
+
+**Actions outside the repo**
+- Local temporary baseline/render files in `/tmp`; no server, database, push or deploy actions.
+
+**Verification**
+- Initial Chromium build failed with sandbox MachPort permission denial; rerun with elevated execution succeeded.
+- Rendered the first page with Poppler and visually checked logo, Persian text, spacing and footer.
+- PDF remains 21 A4 pages; Poppler PNG renders of pages 2–21 at 40 dpi are byte-identical to the original.
+- PyMuPDF comparison was unavailable (`ModuleNotFoundError: fitz`); used Poppler comparison instead.
+
+**State left behind**
+- Local changes only; `sop/` remains ignored. Existing unrelated changes preserved.
+- The separate published copy at `public/help/BJ-HR-SOP-fa.pdf` is unchanged; request scoped to `sop/`.
+
+**For the next agent**
+- Regenerate with `node sop/_tools/build-pdf.mjs`; cover logo now lives in `sop/images/`.
 
 ## 2026-11-01 — Help & guides page with the SOP user guide
 
