@@ -22,6 +22,10 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "dist/**",
     "backups/**",
+    // Claude Design sync inputs + generated output (not app code).
+    ".design-sync/**",
+    ".ds-sync/**",
+    "ds-bundle/**",
   ]),
 ]);
 

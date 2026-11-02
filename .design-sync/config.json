@@ -1,0 +1,113 @@
+{
+  "projectId": "c84bccb1-7978-4bd8-9f8d-1485e34610c9",
+  "shape": "package",
+  "pkg": "bj-erp",
+  "globalName": "BJ",
+  "entry": "./.design-sync/entry.ts",
+  "buildCmd": "node .design-sync/gen-brand-tokens.mjs && node .ds-sync/node_modules/@tailwindcss/cli/dist/index.mjs -i .design-sync/tailwind.css -o .design-sync/.cache/bj.css --minify && rm -rf build/ts && npx tsc -p .design-sync/tsconfig.dts.json && echo \"export * from './.design-sync/entry';\" > build/ts/index.d.ts",
+  "srcDir": "components",
+  "tsconfig": "./tsconfig.json",
+  "cssEntry": ".design-sync/.cache/bj.css",
+  "extraFonts": [
+    ".design-sync/fonts.css"
+  ],
+  "provider": {
+    "component": "BjProvider"
+  },
+  "componentSrcMap": {
+    "Button": "components/ui/button.tsx",
+    "Badge": "components/ui/badge.tsx",
+    "Card": "components/ui/card.tsx",
+    "Dialog": "components/ui/dialog.tsx",
+    "AlertDialog": "components/ui/alert-dialog.tsx",
+    "Input": "components/ui/input.tsx",
+    "Label": "components/ui/label.tsx",
+    "Textarea": "components/ui/textarea.tsx",
+    "Skeleton": "components/ui/skeleton.tsx",
+    "Toaster": "components/ui/sonner.tsx",
+    "TriStateToggle": "components/ui/tri-state-toggle.tsx",
+    "CollapsibleSection": "components/CollapsibleSection.tsx",
+    "EmptyState": "components/EmptyState.tsx",
+    "CardSkeleton": "components/Skeletons.tsx",
+    "ListSkeleton": "components/Skeletons.tsx",
+    "BoardSkeleton": "components/Skeletons.tsx",
+    "FormSkeleton": "components/Skeletons.tsx",
+    "StatusBadge": "components/StatusBadge.tsx",
+    "PersonSearch": "components/PersonSearch.tsx",
+    "PageHeader": true
+  },
+  "guidelinesGlob": [
+    ".design-sync/guidelines/**/*.md"
+  ],
+  "docsDir": ".design-sync/groups",
+  "docsMap": {
+    "Button": ".design-sync/groups/Actions.md",
+    "Input": ".design-sync/groups/Forms.md",
+    "Label": ".design-sync/groups/Forms.md",
+    "Textarea": ".design-sync/groups/Forms.md",
+    "PersonSearch": ".design-sync/groups/Forms.md",
+    "TriStateToggle": ".design-sync/groups/Forms.md",
+    "Badge": ".design-sync/groups/Display.md",
+    "StatusBadge": ".design-sync/groups/Display.md",
+    "Card": ".design-sync/groups/Display.md",
+    "EmptyState": ".design-sync/groups/Display.md",
+    "PageHeader": ".design-sync/groups/Display.md",
+    "CollapsibleSection": ".design-sync/groups/Display.md",
+    "Dialog": ".design-sync/groups/Overlays.md",
+    "AlertDialog": ".design-sync/groups/Overlays.md",
+    "Toaster": ".design-sync/groups/Overlays.md",
+    "Skeleton": ".design-sync/groups/Loading.md",
+    "CardSkeleton": ".design-sync/groups/Loading.md",
+    "ListSkeleton": ".design-sync/groups/Loading.md",
+    "BoardSkeleton": ".design-sync/groups/Loading.md",
+    "FormSkeleton": ".design-sync/groups/Loading.md"
+  },
+  "libOverrides": {
+    "dts.mjs": "app repo has no package types entry; fall back to <typesRoot>/index.d.ts emitted by buildCmd"
+  },
+  "overrides": {
+    "Dialog": {
+      "cardMode": "single",
+      "viewport": "640x420"
+    },
+    "AlertDialog": {
+      "cardMode": "single",
+      "viewport": "640x420"
+    },
+    "Toaster": {
+      "cardMode": "single",
+      "viewport": "640x360"
+    },
+    "PageHeader": {
+      "cardMode": "column"
+    },
+    "BoardSkeleton": {
+      "cardMode": "column"
+    },
+    "Card": {
+      "cardMode": "column"
+    },
+    "CollapsibleSection": {
+      "cardMode": "column"
+    },
+    "EmptyState": {
+      "cardMode": "column"
+    },
+    "Textarea": {
+      "cardMode": "column"
+    },
+    "TriStateToggle": {
+      "cardMode": "column"
+    },
+    "CardSkeleton": {
+      "cardMode": "column"
+    }
+  },
+  "dtsPropsFor": {
+    "PersonSearch": "  /** People to search: { id, name, personnelNo } (personnelNo may be null). */\n  people: { id: string; name: string; personnelNo: string | null }[];\n  /** Selected person id, or null. */\n  value: string | null;\n  onChange: (id: string | null) => void;\n  /** Defaults to «نام یا شماره پرسنلی را تایپ کنید». */\n  placeholder?: string;\n  /** Accessible name when there is no visible <label htmlFor>. */\n  ariaLabel?: string;\n  id?: string;\n  testId: string;\n  /** Posts the chosen id ('' when none) with a surrounding <form> under this name. */\n  name?: string;\n  disabled?: boolean;\n  /** Max suggestions shown (default 5). */\n  limit?: number;\n  /** Characters typed before suggestions appear (default 2). */\n  minChars?: number;",
+    "StatusBadge": "  status: \"pending\" | \"approved\" | \"rejected\" | \"cancelled\" | \"awaitingTravel\";\n  /** Display text per status (awaitingTravel falls back to approved's label). */\n  labels: { pending: string; approved: string; rejected: string; cancelled: string; awaitingTravel?: string };",
+    "TriStateToggle": "  value: \"edit\" | \"read\" | \"none\";\n  onChange: (v: \"edit\" | \"read\" | \"none\") => void;\n  /** Levels the item has: 'RE' all three; 'E' (action) no read-only; 'R' (view-only) no edit. Missing levels render disabled with a tooltip. */\n  shape: \"RE\" | \"E\" | \"R\";\n  labels: { edit: string; read: string; none: string; noRead: string; noEdit: string };\n  /** Accessible name of the group. */\n  name: string;\n  testId?: string;",
+    "Toaster": "  position?: \"top-left\" | \"top-right\" | \"bottom-left\" | \"bottom-right\" | \"top-center\" | \"bottom-center\";\n  expand?: boolean;\n  richColors?: boolean;\n  closeButton?: boolean;\n  /** Default ms each toast stays (sonner default 4000). */\n  duration?: number;\n  visibleToasts?: number;\n  dir?: \"auto\" | \"rtl\" | \"ltr\";\n  offset?: string | number;\n  className?: string;\n  style?: React.CSSProperties;"
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

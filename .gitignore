@@ -57,5 +57,13 @@ docs/files/
 # Local test accounts (never commit)
 .env.test-accounts
 
+# design-sync (Claude Design)
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+build/ts/
+
 # Local-only user SOP (PDF, screenshots, capture tools)
 /sop/

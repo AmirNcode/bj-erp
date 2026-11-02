@@ -1,0 +1,27 @@
+/* Tailwind input for the design-sync stylesheet: the app's own globals.css (tokens + theme),
+   the font variables next/font sets in the app, every class the repo + previews use, and a
+   safelist of token utilities so designs can use the full vocabulary. */
+@import "../app/globals.css";
+/* Brand colours as literal --color-* tokens for Claude Design's token index (generated). */
+@import "./.cache/brand-tokens.css";
+
+@source "../app";
+@source "../components";
+@source "../lib";
+@source "./previews";
+@source "./provider.tsx";
+
+:root {
+  --font-rubik: 'Rubik';
+  --font-vazirmatn: 'Vazirmatn';
+}
+html { font-family: var(--font-sans); }
+
+@source inline("{bg,text,border}-{background,foreground,card,card-foreground,popover,popover-foreground,primary,primary-foreground,secondary,secondary-foreground,accent,accent-foreground,muted,muted-foreground,border,input,ring,destructive,destructive-foreground,success,success-foreground,warning,warning-foreground,white,black,transparent}{,/10,/20,/40,/60,/80,/90}");
+@source inline("{hover:,focus-visible:}{bg,text,border}-{primary,secondary,accent,muted,destructive,card}{,/40,/80,/90}");
+@source inline("{ring,fill,stroke,divide}-{primary,border,ring,foreground,muted-foreground,destructive,success,warning}");
+@source inline("{,sm:,md:,lg:}{p,px,py,pt,pb,ps,pe,m,mx,my,mt,mb,ms,me,gap,gap-x,gap-y,space-x,space-y,w,h,size,min-h,min-w,max-w,inset,top,bottom,start,end}-{0,0.5,1,1.5,2,2.5,3,3.5,4,5,6,7,8,9,10,11,12,14,16,20,24,28,32,36,40,44,48,56,64,72,80,96,auto,full,screen,fit,px}");
+@source inline("{,sm:,md:,lg:}{grid-cols,col-span,row-span}-{1,2,3,4,5,6,12,full}");
+@source inline("{,sm:,md:,lg:}{flex,inline-flex,grid,block,inline-block,hidden,contents,flex-row,flex-col,flex-wrap,flex-1,shrink-0,grow,items-start,items-center,items-end,items-baseline,items-stretch,justify-start,justify-center,justify-end,justify-between,self-start,self-center,self-end,text-start,text-center,text-end}");
+@source inline("{,sm:,md:,lg:}{text-xs,text-sm,text-base,text-lg,text-xl,text-2xl,text-3xl,text-4xl,font-light,font-normal,font-medium,font-semibold,font-bold,leading-none,leading-tight,leading-snug,leading-normal,leading-relaxed,tracking-tight,tracking-wide,truncate,line-clamp-1,line-clamp-2,line-clamp-3,whitespace-nowrap,tabular-nums,underline,uppercase}");
+@source inline("{rounded,rounded-sm,rounded-md,rounded-lg,rounded-xl,rounded-2xl,rounded-full,rounded-none,border,border-0,border-2,border-t,border-b,border-s,border-e,border-dashed,shadow,shadow-xs,shadow-sm,shadow-md,shadow-lg,shadow-none,overflow-hidden,overflow-auto,overflow-x-auto,overflow-y-auto,relative,absolute,fixed,sticky,z-10,z-20,z-50,opacity-50,opacity-70,transition,transition-colors,cursor-pointer,select-none,sr-only,aspect-square,aspect-video,object-cover,mx-auto,container}");
