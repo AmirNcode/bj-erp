@@ -106,7 +106,8 @@ Copy this block verbatim and fill it in.
 - UI: temporary `zz-check` page (deleted) rendered the new absences card (en + fa, with and without rows), the personnel-number dialog and the admin login-code field. Not checked logged in: the test account 124 password is still rejected locally. e2e not run.
 
 **State left behind**
-- Uncommitted on `review/integration-2026-11-02` (alongside earlier sessions' uncommitted files: `.dockerignore`, `.gitignore`, `eslint.config.mjs`, `tsconfig.json`, `.design-sync/`).
+- Committed 24a342d on `review/integration-2026-11-02` (not pushed). Left unstaged: other sessions' `.dockerignore`, `.gitignore`, `eslint.config.mjs`, `tsconfig.json`, `.design-sync/` and their older AGENT-LOG hunk.
+- On Amir's request after the commit: `./deploy/bj-deploy update local` again ("Local update succeeded", no new migrations), `docker restart bj-erp-rest-1`, `bj-deploy doctor local` → "Local stack is healthy: https://192.168.2.85:3500".
 
 **For the next agent**
 - `app_create_employee` now has 13 args; `seed-demo.mjs` and the app call it by name, so the dropped 12-arg version breaks nothing.
