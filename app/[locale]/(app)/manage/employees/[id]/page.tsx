@@ -12,7 +12,7 @@ import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/
 import { getEmployeeBalances, getEmployeePolicies, getCurrentJalaliMonthStart } from '@/lib/actions/leave/balances';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { listRoles } from '@/lib/actions/roles';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { employeeEditCapabilities, type TargetIdentity } from '@/lib/employees/editCapabilities';
 import { can, type Perms } from '@/lib/permissions/catalog';
 import { PageHeader } from '../../../_components/PageHeader';
@@ -86,14 +86,12 @@ export default async function EditEmployeePage({ params }: Props) {
 
   // The Manage layout admits anyone with a Manage item; this page needs the
   // Employees one. FR-74: without `people` read, only your own direct reports
-  // (read-only); RLS would also show same-department colleagues.
-  const readsPeople = can(callerPerms, 'people', 'read');
-  const callerIsDirectManager = employee?.manager_id === user.id;
-  if (!readsPeople && !callerIsDirectManager) {
-    if (!employee) redirect(`/${locale}/home`);
-    return notFound();
-  }
+  // (read-only); RLS would also show same-department colleagues. One answer
+  // (404) for "no such person" and "not yours", so the page reveals nothing.
   if (!employee) return notFound();
+  const readsPeople = can(callerPerms, 'people', 'read');
+  const callerIsDirectManager = employee.manager_id === user.id;
+  if (!readsPeople && !callerIsDirectManager) return notFound();
 
   // The target's role ids (FR-55: custom roles have no enum), every role of the
   // company, and whether they manage a department (D4).

@@ -11,6 +11,10 @@
 --    SELECT policies of profiles, user_roles, leave ledger/allocations/policies, the request
 --    read (can_read_approval_request) and accrue_employee_leave. Reads only, never writes or
 --    signatures: those keep is_manager_of (Manager role required).
+-- 5. The department manager signs the department step for people who are not their direct
+--    reports. Until now the Manager role read every balance and personnel number; keep what that
+--    signer needs: leave_ledger rows of their department (the balance hint on Home, the print
+--    view) and personnel_no / job_title in app_request_approval_context (the paper form).
 -- Otherwise each function body is copied unchanged from supabase/schema.sql.
 
 create function private.is_direct_manager_of(uid uuid, target uuid) returns boolean
@@ -250,6 +254,46 @@ CREATE OR REPLACE FUNCTION private.can_read_approval_request(p_uid uuid, p_reque
 $$;
 
 
+CREATE OR REPLACE FUNCTION public.app_request_approval_context(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; v_progress jsonb; v_result jsonb;
+begin
+  if not private.can_read_approval_request(auth.uid(),p_id) then
+    raise exception 'request not found' using errcode='P0002'; end if;
+  select * into r from public.leave_requests where id=p_id;
+  v_progress:=public.app_request_approval_progress(p_id);
+  select (to_jsonb(r)-'signature_data'-'approver_signature_data')||jsonb_build_object(
+    'employee_name',p.full_name,'employee_code',p.employee_code,
+    'personnel_no',case when p.id=auth.uid() or private.reads_people(auth.uid())
+      or private.is_direct_manager_of(auth.uid(),p.id) or private.is_department_manager_of(auth.uid(),p.id) then p.personnel_no end,
+    'job_title',case when p.id=auth.uid() or private.reads_people(auth.uid())
+      or private.is_direct_manager_of(auth.uid(),p.id) or private.is_department_manager_of(auth.uid(),p.id) then p.job_title end,
+    'employee_manager_id',p.manager_id,'department_id',p.department_id,
+    'department_name',dep.name_fa,'department_name_fa',dep.name_fa,'department_name_en',dep.name_en,
+    'employee_department_manager_id',private.department_manager_for(p.id),
+    'leave_type_name_fa',lt.name_fa,'leave_type_name_en',lt.name_en,'affects_balance',lt.affects_balance,
+    'leave_type_affects_balance',lt.affects_balance,'is_paid',lt.is_paid,
+    'replacement_name',rp.full_name,'decided_by_name',dp.full_name,
+    'replacement_conflict',case when r.replacement_id is null then false else
+      private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,r.unit,r.start_time,r.end_time) end,
+    'can_override',r.status='pending' and private.is_admin(auth.uid()),
+    'can_approve',r.status='pending' and (private.is_admin(auth.uid()) or exists
+      (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_approve')::boolean)),
+    'can_reject',r.status='pending' and (private.is_admin(auth.uid()) or exists
+      (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_reject')::boolean)),
+    'configuration_changed',coalesce(pol.configuration_changed,false),
+    'legacy_reconciliation_required',private.ambiguous_legacy_approval(r.id),
+    'progress',v_progress)
+  into v_result from public.profiles p left join public.departments dep on dep.id=p.department_id
+    left join public.leave_types lt on lt.id=r.leave_type_id
+    left join public.profiles rp on rp.id=r.replacement_id left join public.profiles dp on dp.id=r.decided_by
+    left join public.approval_request_policy pol on pol.request_id=r.id where p.id=r.employee_id;
+  return v_result;
+end; $$;
+
+
 drop policy profiles_update on public.profiles;
 create policy profiles_update on public.profiles for update to authenticated
   using (private.is_active((select auth.uid())) and (
@@ -295,4 +339,8 @@ create policy leave_ledger_select on public.leave_ledger for select to authentic
   using (private.is_active((select auth.uid())) and (
     employee_id = (select auth.uid())
     or private.is_direct_manager_of((select auth.uid()), employee_id)
+    or private.is_department_manager_of((select auth.uid()), employee_id)
     or private.reads_balances((select auth.uid()))));
+
+-- The ledger policy runs as the caller, so it needs execute (it was definer-internal).
+grant execute on function private.is_department_manager_of(uuid, uuid) to authenticated;

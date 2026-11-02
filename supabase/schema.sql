@@ -4824,8 +4824,10 @@ begin
   v_progress:=public.app_request_approval_progress(p_id);
   select (to_jsonb(r)-'signature_data'-'approver_signature_data')||jsonb_build_object(
     'employee_name',p.full_name,'employee_code',p.employee_code,
-    'personnel_no',case when p.id=auth.uid() or private.reads_people(auth.uid()) or private.is_manager_of(auth.uid(),p.id) then p.personnel_no end,
-    'job_title',case when p.id=auth.uid() or private.reads_people(auth.uid()) or private.is_manager_of(auth.uid(),p.id) then p.job_title end,
+    'personnel_no',case when p.id=auth.uid() or private.reads_people(auth.uid())
+      or private.is_direct_manager_of(auth.uid(),p.id) or private.is_department_manager_of(auth.uid(),p.id) then p.personnel_no end,
+    'job_title',case when p.id=auth.uid() or private.reads_people(auth.uid())
+      or private.is_direct_manager_of(auth.uid(),p.id) or private.is_department_manager_of(auth.uid(),p.id) then p.job_title end,
     'employee_manager_id',p.manager_id,'department_id',p.department_id,
     'department_name',dep.name_fa,'department_name_fa',dep.name_fa,'department_name_en',dep.name_en,
     'employee_department_manager_id',private.department_manager_for(p.id),
@@ -10076,7 +10078,7 @@ ALTER TABLE public.leave_ledger ENABLE ROW LEVEL SECURITY;
 -- Name: leave_ledger leave_ledger_select; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
+CREATE POLICY leave_ledger_select ON public.leave_ledger FOR SELECT TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND ((employee_id = ( SELECT auth.uid() AS uid)) OR private.is_direct_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.is_department_manager_of(( SELECT auth.uid() AS uid), employee_id) OR private.reads_balances(( SELECT auth.uid() AS uid)))));
 
 
 --
@@ -10698,6 +10700,7 @@ GRANT ALL ON FUNCTION private.is_current_hr_head(p_uid uuid, p_company uuid) TO 
 --
 
 REVOKE ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) TO authenticated;
 
 
 --

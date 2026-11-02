@@ -10,11 +10,11 @@ export const getApprovalCapabilities = cache(async (): Promise<ApprovalCapabilit
   const [{ data, error }, reports] = await Promise.all([
     c.supabase.rpc('app_approval_capabilities'),
     // FR-74: RLS lets anyone read their direct reports; a head-only count.
+    // Inactive reports count too: the list and the employee page show them.
     c.supabase
       .from('profiles')
       .select('id', { count: 'exact', head: true })
-      .eq('manager_id', c.user.id)
-      .eq('active', true),
+      .eq('manager_id', c.user.id),
   ]);
   const hasReports = (reports.count ?? 0) > 0;
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) return { ...denied, hasReports };

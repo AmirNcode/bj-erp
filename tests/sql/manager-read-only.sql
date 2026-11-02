@@ -152,4 +152,30 @@ select pg_temp.expect('HR creates an employee',pg_temp.err(pg_temp.as_scalar('hr
 select pg_temp.expect('HR renames an employee',pg_temp.upd('hrp','full_name=''Fixture rep 2''','rep'),'1');
 select pg_temp.expect('HR still reads everyone',pg_temp.sees('hrp','profiles','id','peer'),'1');
 
+-- ── the department manager keeps what the department step needs ──────────────
+-- dhead (Manager, dept A) heads dept B: peer is in it but reports to no one.
+do $$
+declare v_id uuid;
+begin
+  insert into mr_fx values('dhead',gen_random_uuid());
+  insert into auth.users(id,email) values(pg_temp.fx('dhead'),'9990074008@manager-ro-fixture.invalid');
+  insert into public.profiles(id,company_id,department_id,employee_code,personnel_no,full_name,must_change_password)
+    values(pg_temp.fx('dhead'),pg_temp.fx('company'),pg_temp.fx('dept_a'),'9990074008','9990074008','Fixture dhead',false);
+  insert into public.user_roles(user_id,role) values(pg_temp.fx('dhead'),'manager'),(pg_temp.fx('dhead'),'employee');
+  perform pg_temp.login('admin');
+  update public.departments set manager_id=pg_temp.fx('dhead') where id=pg_temp.fx('dept_b');
+  insert into public.approval_steps(company_id,role,manager_scope,step_order,applies_to)
+    values(pg_temp.fx('company'),'manager','department',3,'{leave,errand}') returning id into v_id;
+  insert into mr_fx values('dept_step',v_id);
+end; $$;
+insert into mr_fx values('peer_req2',(pg_temp.leave('peer',current_date+20,current_date+20))::uuid);
+select pg_temp.expect('department manager sees a department member''s balance',
+  pg_temp.sees('dhead','leave_ledger','employee_id','peer'),'1');
+select pg_temp.expect('… but not their profile list row',pg_temp.sees('dhead','profiles','id','peer'),'0');
+select pg_temp.expect('department manager reads the personnel number on the request',
+  pg_temp.as_scalar('dhead',format('select public.app_request_approval_context(%L)->>''personnel_no''',pg_temp.fx('peer_req2'))),
+  '9990074006');
+select pg_temp.expect('the plain manager sees no balance outside their reports and department',
+  pg_temp.sees('boss','leave_ledger','employee_id','peer'),'0');
+
 rollback;
