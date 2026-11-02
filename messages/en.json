@@ -1382,7 +1382,10 @@
     "dateRange": "{from} to {to}",
     "leave": "Leave",
     "hourlyErrand": "Hourly work errand",
-    "dailyErrand": "Daily work errand"
+    "dailyErrand": "Daily work errand",
+    "upcomingTitle": "Absences in the next {days} days",
+    "upcomingHint": "Approved leave and work errands that start between tomorrow and {days} days from now, by start date.",
+    "upcomingEmpty": "No approved leave or work errand starts in the next {days} days."
   },
   "finance": {
     "title": "Finance — requests",

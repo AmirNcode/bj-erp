@@ -300,7 +300,10 @@ Validation/release status stays in `docs/TASKS.md`.
   fully approved leave or errand (daily or hourly) on a chosen day, default today; pending requests
   never show; no reason or errand location. Security and admin can no longer be approval steps
   (existing ones deactivated). *(2026-10-12; spec
-  `2026-10-12-client-feedback-approvals-settings-design.md`.)*
+  `2026-10-12-client-feedback-approvals-settings-design.md`.)* **Amended 2026-11-02 (owner):** below the
+  day board, a look-ahead lists approved requests starting tomorrow through 30 days out, by start date,
+  so HR can update the fingerprint attendance system in advance. First step; a per-request
+  "entered in attendance system" worklist may follow after HR's feedback.
 - **FR-57** ☑ **One hourly leave a day, at most 4 hours.** A second pending/approved hourly leave on
   the same day is refused; `max_hourly_minutes_per_day` is capped at 240. Hourly errands unaffected.
   *(2026-10-12.)*

@@ -45,9 +45,11 @@ import { NewRequestsBanner } from '../_components/NewRequestsBanner';
 import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
-import { getApprovedAbsences } from '@/lib/actions/absences';
+import { getApprovedAbsences, getUpcomingAbsences } from '@/lib/actions/absences';
+import { upcomingAbsenceWindow, UPCOMING_ABSENCE_DAYS } from '@/lib/absences/upcoming';
 import { isValidIsoDate } from '@/lib/leave/settings-validation';
 import { AbsencesBoard } from '../absences/AbsencesBoard';
+import { UpcomingAbsences } from '../absences/UpcomingAbsences';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -360,7 +362,12 @@ async function SecurityAbsences({
   if (!homeAbsencesBoard(roles, perms)) return null;
   const today = todayInAppTz();
   const date = rawDate && isValidIsoDate(rawDate) ? rawDate : today;
-  const [t, res] = await Promise.all([getTranslations('absences'), getApprovedAbsences(date)]);
+  const ahead = upcomingAbsenceWindow(today);
+  const [t, res, upcoming] = await Promise.all([
+    getTranslations('absences'),
+    getApprovedAbsences(date),
+    getUpcomingAbsences(ahead.from, ahead.to),
+  ]);
   return (
     <Card className="mb-5 gap-3 p-4" data-testid="home-absences">
       <h2 className="text-lg font-semibold">{t('title')}</h2>
@@ -369,6 +376,13 @@ async function SecurityAbsences({
       ) : (
         <p role="alert" className="text-sm text-destructive">
           {res.error}
+        </p>
+      )}
+      {upcoming.ok ? (
+        <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
+      ) : (
+        <p role="alert" className="text-sm text-destructive">
+          {upcoming.error}
         </p>
       )}
     </Card>

@@ -49,6 +49,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ☐ **Absences look-ahead feedback (owner, after deploy):** ask the HR clerk who updates the
+  fingerprint system whether the 30-day list on Home is enough. If items slip, next step is a
+  worklist with a per-request "entered in attendance system" tick, flagging cancelled-after-entry
+  and back-dated approvals (see AGENT-LOG 2026-11-02 design advice).
+
 - ☐ **Production test of sign once, Home details, finance range (FR-71, FR-72, FR-62 amendment)**
   (owner; [PR #11](https://github.com/AmirNcode/bj-erp/pull/11), live since 2026-10-22): Head of HR as manager signs once; employee's Home shows procurement's note under Show more;
   Remove on a rejected request; `/finance` opens on this + next month.
