@@ -253,9 +253,10 @@ select pg_temp.expect('finance lists approved requests (approved only)',
   pg_temp.val_as('fin', $q$select count(*) filter (where per_diem_rials = 1500000)::text || '/' || count(*) filter (where kind = 'errand')::text
                             from public.finance_approved_requests('2026-11-01', '2026-12-31') f
                            where f.employee_name = 'CF emp'$q$), '1/1');
-select pg_temp.expect('finance list excludes pending and rejected',
+-- Since 2026-11-02 finance sees work errands only: the approved leave rows stay hidden too.
+select pg_temp.expect('finance list shows no leave',
   pg_temp.val_as('fin', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31') f
-                           where f.employee_name = 'CF emp' and f.kind = 'leave'$q$), '3');
+                           where f.employee_name = 'CF emp' and f.kind = 'leave'$q$), '0');
 select pg_temp.expect('admin may read the finance list',
   left(pg_temp.val_as('adm', $q$select count(*)::text from public.finance_approved_requests('2026-11-01', '2026-12-31')$q$), 4) <> 'ERR:', 'true');
 -- FR-55, owner ruling (a) of 2026-10-13: the HR preset holds `finance` read (so
