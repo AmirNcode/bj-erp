@@ -45,7 +45,7 @@ export function PersonnelNoDialog({ employeeId, employeeCode, personnelNo }: Pro
   };
 
   const pno = normalizePersonnelNo(value);
-  const ready = isValidPersonnelNo(pno) && pno !== personnelNo;
+  const ready = isValidPersonnelNo(pno, true) && pno !== personnelNo;
 
   const save = () => {
     if (!ready) return;
@@ -86,9 +86,9 @@ export function PersonnelNoDialog({ employeeId, employeeCode, personnelNo }: Pro
           <Label htmlFor="edit-personnel-no-input">{t('personnelNo')}</Label>
           <Input
             id="edit-personnel-no-input"
-            inputMode="numeric"
-            dir="ltr"
+            dir="auto"
             autoComplete="off"
+            maxLength={64}
             className="h-10"
             value={value}
             disabled={isPending}

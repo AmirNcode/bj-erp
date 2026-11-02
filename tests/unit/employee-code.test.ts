@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildEmployeeCode,
   isValidLoginCode,
+  displayPersonnelNo,
   isValidPersonnelNo,
   normalizePersonnelNo,
   toLatinCode,
@@ -55,6 +56,23 @@ describe('isValidPersonnelNo', () => {
     expect(isValidPersonnelNo('10a2')).toBe(false);
     expect(isValidPersonnelNo('19999999999')).toBe(false);
     expect(isValidPersonnelNo('10 42')).toBe(false);
+  });
+
+  it('lets the admin enter any text of 1-64 characters', () => {
+    expect(isValidPersonnelNo('SEC-001#', true)).toBe(true);
+    expect(isValidPersonnelNo('حراست ۱', true)).toBe(true);
+    expect(isValidPersonnelNo('a'.repeat(64), true)).toBe(true);
+    expect(isValidPersonnelNo('', true)).toBe(false);
+    expect(isValidPersonnelNo(' a', true)).toBe(false);
+    expect(isValidPersonnelNo('a'.repeat(65), true)).toBe(false);
+  });
+});
+
+describe('displayPersonnelNo', () => {
+  const fmt = (n: number) => `#${n}`;
+  it('formats a digits-only number and leaves any other text as typed', () => {
+    expect(displayPersonnelNo('1042', fmt)).toBe('#1042');
+    expect(displayPersonnelNo('SEC001', fmt)).toBe('SEC001');
   });
 });
 

@@ -154,9 +154,10 @@ export function NewEmployeeForm({
   // Since 20260730130002 the login code is the personnel number alone — the
   // department no longer feeds it, so the preview does not wait for one.
   const normalizedPno = normalizePersonnelNo(personnelNo);
-  const codePreview = isValidPersonnelNo(normalizedPno)
-    ? buildEmployeeCode(normalizedPno)
-    : '—';
+  const codePreview =
+    isValidPersonnelNo(normalizedPno, canSetLoginCode) && isValidLoginCode(normalizedPno)
+      ? buildEmployeeCode(normalizedPno)
+      : '—';
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -312,14 +313,16 @@ export function NewEmployeeForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="personnel_no">{labels.personnelNo}</Label>
-            {/* Becomes part of the login code — digits only, LTR even in fa. */}
+            {/* Becomes the login code — digits only, LTR even in fa. The admin may type any
+                text (2026-11-02: security staff are a subcontractor with no company number). */}
             <Input
               id="personnel_no"
               name="personnel_no"
               data-testid="personnel-no"
               required
-              dir="ltr"
-              inputMode="numeric"
+              dir={canSetLoginCode ? 'auto' : 'ltr'}
+              inputMode={canSetLoginCode ? 'text' : 'numeric'}
+              maxLength={canSetLoginCode ? 64 : undefined}
               autoCapitalize="off"
               autoCorrect="off"
               aria-invalid={fieldError ? true : undefined}

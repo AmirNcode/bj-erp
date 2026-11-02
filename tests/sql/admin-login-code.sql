@@ -90,7 +90,8 @@ select pg_temp.expect('a refused create leaves no account',
 -- Personnel number change.
 select pg_temp.expect('HR may not change a personnel number',pg_temp.set_pno('hrp',pg_temp.fx('emp'),'9990075020'),'42501');
 select pg_temp.expect('employee may not either',pg_temp.set_pno('emp',pg_temp.fx('emp'),'9990075020'),'42501');
-select pg_temp.expect('digits only',pg_temp.set_pno('admin',pg_temp.fx('emp'),'12a'),'22023');
+select pg_temp.expect('blank refused',pg_temp.set_pno('admin',pg_temp.fx('emp'),'   '),'22023');
+select pg_temp.expect('65 characters refused',pg_temp.set_pno('admin',pg_temp.fx('emp'),repeat('x',65)),'22023');
 select pg_temp.expect('taken number refused',pg_temp.set_pno('admin',pg_temp.fx('emp'),'9990075002'),'23505');
 select pg_temp.expect('admin changes it',pg_temp.set_pno('admin',pg_temp.fx('emp'),'9990075020'),'ok');
 select pg_temp.expect('number changed',(select personnel_no from public.profiles where id=pg_temp.fx('emp')),'9990075020');

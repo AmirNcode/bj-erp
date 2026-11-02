@@ -617,9 +617,9 @@
       "adminTransferHint": "Admin is moved with Transfer admin in Settings › Roles.",
       "accountActions": "Account",
       "loginCode": "Login code",
-      "loginCodeHint": "Leave empty to use the personnel number. Letters, digits and symbols; no spaces or @.",
+      "loginCodeHint": "Leave empty to use the personnel number (if it has no spaces, @ or non-English letters). Letters, digits and symbols; no spaces or @.",
       "editPersonnelNo": "Change personnel number",
-      "editPersonnelNoHint": "Their login code becomes the new number. They sign in with it from now on; the password stays the same.",
+      "editPersonnelNoHint": "Their login code becomes the new number, if it has no spaces, @ or non-English letters. They sign in with it from now on; the password stays the same.",
       "savePersonnelNo": "Save",
       "personnelNoSaved": "Personnel number and login code updated.",
       "currentLoginCode": "Current login code: {code}",
@@ -1097,7 +1097,9 @@
     "itineraryBadCost": "Enter each hotel cost in whole Rials, 0 or more.",
     "itineraryStayCost": "Enter the cost of each hotel stay.",
     "itineraryHotelTotal": "The hotel cost must be the total of the stays. Reload the page and try again.",
-    "invalidLoginCode": "Login code: up to 64 English letters, digits or symbols, without spaces or @ (a dot may not start, end or repeat)."
+    "invalidLoginCode": "Login code: up to 64 English letters, digits or symbols, without spaces or @ (a dot may not start, end or repeat).",
+    "loginCodeRequired": "This personnel number can't be a login code (it has spaces, @ or non-English letters). Enter a login code.",
+    "invalidPersonnelNoAdmin": "Personnel number: 1–64 characters."
   },
   "roles": {
     "admin": "Admin",

@@ -103,6 +103,9 @@ const RULES: Rule[] = [
   { re: /duplicate key value.*profiles_employee_code/, key: 'duplicateEmployeeCode', field: 'login_code' },
   // Admin login codes (2026-11-02): any text without spaces or @.
   { re: /^invalid login code$/, key: 'invalidLoginCode', field: 'login_code' },
+  // Admin personnel numbers (2026-11-02): any text, so it may not be usable as the login code.
+  { re: /^login code required$/, key: 'loginCodeRequired', field: 'login_code' },
+  { re: /invalid personnel number \(1-64 characters\)/, key: 'invalidPersonnelNoAdmin', field: 'personnel_no' },
   { re: /^only the admin sets a login code$|^admin required$/, key: 'notAllowed' },
   // The personnel number is what the Add Employee form actually collects — the
   // employee code is derived from it (FR-31). Both of these raised messages were

@@ -827,7 +827,7 @@ $$;
 CREATE FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
+    AS $$
 declare
   v_uid       uuid := gen_random_uuid();
   v_pno       text := btrim(coalesce(p_personnel_no, ''));
@@ -836,7 +836,10 @@ declare
   v_email     text;
   v_role      public.app_role;
 begin
-  if v_pno !~ '^[0-9]{1,10}$' then
+  if not private.valid_personnel_no(v_pno, p_path = 'admin') then
+    if p_path = 'admin' then
+      raise exception 'invalid personnel number (1-64 characters)' using errcode = '22023';
+    end if;
     raise exception 'invalid personnel number (1-10 digits)' using errcode = '22023';
   end if;
   if length(coalesce(p_password, '')) < 8 then
@@ -865,11 +868,12 @@ begin
   -- employee_code uniqueness is GLOBAL, not per company. With bare numbers a
   -- second tenant's 1042 would collide; see the spec §6 for the multi-tenant
   -- cost this knowingly takes on.
-  if exists (select 1 from public.profiles where employee_code = v_code) then
+  if exists (select 1 from public.profiles where lower(employee_code) = lower(v_code)) then
     raise exception 'employee code already exists' using errcode = '23505';
   end if;
 
-  v_email := v_code || '@bj-app.internal';
+  -- Lower-cased like private.set_login_code: an admin's personnel number may hold letters.
+  v_email := lower(v_code) || '@bj-app.internal';
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -904,7 +908,7 @@ begin
                              'full_name', p_full_name, 'roles', to_jsonb(p_roles), 'path', p_path));
 
   return v_uid;
-end; $_$;
+end; $$;
 
 
 --
@@ -3068,6 +3072,22 @@ $_$;
 
 
 --
+-- Name: valid_personnel_no(text, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.valid_personnel_no(p_pno text, p_admin boolean) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select p_pno is not null
+     and case when p_admin
+              then char_length(p_pno) between 1 and 64 and p_pno = btrim(p_pno)
+              else p_pno ~ '^[0-9]{1,10}$'
+         end;
+$_$;
+
+
+--
 -- Name: accrue_all_leave(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3322,7 +3342,7 @@ end; $$;
 CREATE FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
+    AS $$
 declare
   v_caller  uuid := auth.uid();
   v_pno     text := btrim(coalesce(p_personnel_no, ''));
@@ -3332,8 +3352,8 @@ begin
   if v_caller is null or not private.is_admin(v_caller) then
     raise exception 'admin required' using errcode = '42501';
   end if;
-  if v_pno !~ '^[0-9]{1,10}$' then
-    raise exception 'invalid personnel number (1-10 digits)' using errcode = '22023';
+  if not private.valid_personnel_no(v_pno, true) then
+    raise exception 'invalid personnel number (1-64 characters)' using errcode = '22023';
   end if;
   select company_id, personnel_no into v_company, v_old
     from public.profiles where id = p_user for update;
@@ -3352,9 +3372,12 @@ begin
     values (v_caller, 'set_personnel_no', 'profiles', p_user,
             jsonb_build_object('personnel_no', v_old), jsonb_build_object('personnel_no', v_pno));
   end if;
-  -- The login code follows the number (owner, 2026-11-02).
-  perform private.set_login_code(v_caller, p_user, v_pno);
-end; $_$;
+  -- The login code follows the number (owner, 2026-11-02) when the number can be one;
+  -- a number with spaces, @ or Persian letters leaves the login code as it is.
+  if private.valid_login_code(v_pno) then
+    perform private.set_login_code(v_caller, p_user, v_pno);
+  end if;
+end; $$;
 
 
 --
@@ -4275,6 +4298,13 @@ begin
   -- Owner, 2026-11-02: only the admin picks a login code other than the personnel number.
   if nullif(btrim(coalesce(p_login_code, '')), '') is not null and not v_admin then
     raise exception 'only the admin sets a login code' using errcode = '42501';
+  end if;
+
+  -- The login code defaults to the personnel number, so a number that cannot be one
+  -- (spaces, @, Persian letters; admin only) needs an explicit code.
+  if v_admin and nullif(btrim(coalesce(p_login_code, '')), '') is null
+     and not private.valid_login_code(btrim(coalesce(p_personnel_no, ''))) then
+    raise exception 'login code required' using errcode = '22023';
   end if;
 
   if 'admin' = any (coalesce(p_roles, '{}')) then
@@ -8124,7 +8154,7 @@ CREATE TABLE public.profiles (
     must_change_password boolean DEFAULT true NOT NULL,
     CONSTRAINT profiles_calendar_pref_persian_only CHECK ((calendar_pref = 'jalali'::text)),
     CONSTRAINT profiles_manager_not_self CHECK (((manager_id IS NULL) OR (manager_id <> id))),
-    CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (personnel_no ~ '^[0-9]{1,10}$'::text)))
+    CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (((char_length(personnel_no) >= 1) AND (char_length(personnel_no) <= 64)) AND (personnel_no = btrim(personnel_no)))))
 );
 
 
@@ -11212,6 +11242,13 @@ REVOKE ALL ON FUNCTION private.travel_itinerary_without_costs(p_it jsonb) FROM P
 
 REVOKE ALL ON FUNCTION private.valid_login_code(p_code text) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.valid_login_code(p_code text) TO authenticated;
+
+
+--
+-- Name: FUNCTION valid_personnel_no(p_pno text, p_admin boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.valid_personnel_no(p_pno text, p_admin boolean) FROM PUBLIC;
 
 
 --

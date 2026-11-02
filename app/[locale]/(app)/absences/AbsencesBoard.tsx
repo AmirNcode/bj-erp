@@ -14,6 +14,7 @@ import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave/dateConvert';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { displayPersonnelNo } from '@/lib/employees/code';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -121,7 +122,7 @@ export function AbsenceRow({ a, locale, withDate = false }: { a: Absence; locale
           {a.employeeName}
           {a.personnelNo && (
             <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
-              {formatNumber(Number(a.personnelNo), locale, { useGrouping: false })}
+              {displayPersonnelNo(a.personnelNo, (n) => formatNumber(n, locale, { useGrouping: false }))}
             </span>
           )}
         </p>

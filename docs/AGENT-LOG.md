@@ -78,6 +78,29 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-02 — Admin may enter any personnel number (security subcontractor logins)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ 732f93e, clean
+**Trigger:** Amir: security staff are a subcontractor with no personnel number; only for the admin, let the personnel-number field take any value, special characters included.
+
+**What changed (uncommitted, on `main` working tree)**
+- Migration `supabase/migrations/20261102140000_admin_free_personnel_no.sql`: new `private.valid_personnel_no(pno, admin)` (admin: 1–64 chars, no surrounding whitespace; others: 1–10 digits); `profiles_personnel_no_format` CHECK relaxed to 1–64 trimmed chars; `create_employee_impl` uses it with `p_path = 'admin'` (bulk/HR paths unchanged), lower-cases the auth email and checks `employee_code` case-insensitively; `app_create_employee` raises `login code required` when the admin leaves the login code empty and the number is not a valid login code; `app_admin_set_personnel_no` accepts any such number and moves the login code only when the number is a valid login code.
+- `lib/employees/code.ts`: `isValidPersonnelNo(value, admin)`, new `displayPersonnelNo`. `lib/actions/employees.ts`: admin flag passed; `login code required` pre-check; `setPersonnelNo` returns `{ ok: true }` (the returned code was unused and could be wrong now).
+- UI: `NewEmployeeForm` (admin: text input, dir auto, max 64), `PersonnelNoDialog` (text input), `AbsencesBoard` + `FinanceList` no longer render `Number(personnel_no)` (would show NaN for `SEC001`).
+- `lib/errors/db-error.ts` + `messages/{fa,en}.json`: `loginCodeRequired`, `invalidPersonnelNoAdmin`; login-code and edit-number hints mention the new limit.
+- Tests: new `tests/sql/admin-free-personnel-no.sql` (23 assertions); `tests/sql/admin-login-code.sql` — the admin "digits only" assertion became "blank refused" + "65 characters refused"; unit tests in `tests/unit/employee-code.test.ts`.
+- `supabase/schema.sql` regenerated from the dry-run clone (3 restore-only CHECK re-parenthesization hunks reverted by hand). Docs: DATA_MODEL, CHANGELOG.
+
+**Actions outside the repo**
+- Local DB: cloned `postgres` into throwaway `pno_dry`, applied the migration, ran the SQL tests, dumped schema, dropped `pno_dry`. The shared local `postgres` DB was NOT migrated.
+
+**Verification**
+- `tests/sql/admin-free-personnel-no.sql` 23 PASS, `admin-login-code.sql` 31 PASS, `fr51-hr-employee-admin.sql` PASS on the clone. `tsc --noEmit` and `npm run lint` clean; `npm run test:unit` 109 files / 1034 tests pass; `npm run build` OK. Not clicked through in a browser.
+
+**For the next agent**
+- Not committed or deployed; push to `main` deploys to Liara. Bulk import and the personal-info CSV still require digits (by design: the owner asked for admin only).
+
 ## 2026-11-02 — Review PR #15, merge to main, clean branches and worktrees
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

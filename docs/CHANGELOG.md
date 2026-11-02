@@ -9,6 +9,15 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin may enter any personnel number — `main`
+
+- On Add Employee and in the Edit Employee personnel-number dialog the **admin** may now type
+  any personnel number (letters, symbols, Persian, 1–64 characters), e.g. for security staff,
+  who are a subcontractor with no company number. HR, bulk import and the personal-info CSV keep
+  the 1–10-digit rule. A number with spaces, @ or non-English letters cannot be the login code,
+  so the admin must then enter one. The absences board and finance list show such numbers as
+  typed. Migration `20261102140000_admin_free_personnel_no`.
+
 ### Manager UX batch — `review/integration-2026-11-02` (not deployed)
 
 - **Employees** is shown only to people with `people` read (HR, admin). Managers without it no

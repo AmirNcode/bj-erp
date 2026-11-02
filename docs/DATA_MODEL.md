@@ -84,8 +84,9 @@ manager).
 ### `profiles`
 `id` (= auth user id) · `company_id` · `employee_code` (unique, the login username; **generated
 in-DB**, never typed) ·
-`personnel_no` (client HR number, `^[0-9]{1,10}$`, unique per company, nullable for pre-existing
-users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
+`personnel_no` (client HR number, `^[0-9]{1,10}$` — except the admin may enter any text of 1–64
+characters, e.g. for subcontractors with no company number (`private.valid_personnel_no`); unique
+per company, nullable for pre-existing users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
 `language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali` only, default `jalali`; retained
 as a compatibility column while the UI has no calendar setting) ·

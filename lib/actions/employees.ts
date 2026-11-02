@@ -43,12 +43,16 @@ export async function createEmployee(
 
   // Personnel number becomes part of the auth email — validate before the RPC.
   // (The SQL fn re-checks; this just gives a fast, localized error.)
+  const isAdmin = c.roles.includes('admin');
   const personnelNo = normalizePersonnelNo(input.personnel_no);
-  if (!isValidPersonnelNo(personnelNo)) return dbErr('invalid personnel number');
+  if (!isValidPersonnelNo(personnelNo, isAdmin)) return dbErr('invalid personnel number');
   const loginCode = input.login_code?.trim() || undefined;
   if (loginCode !== undefined) {
-    if (!c.roles.includes('admin')) return dbErr('only the admin sets a login code');
+    if (!isAdmin) return dbErr('only the admin sets a login code');
     if (!isValidLoginCode(loginCode)) return dbErr('invalid login code');
+  } else if (!isValidLoginCode(personnelNo)) {
+    // The login code defaults to the number; one with spaces, @ or Persian letters cannot be it.
+    return dbErr('login code required');
   }
 
   const tempPassword = generateTempPassword();
@@ -77,23 +81,24 @@ export async function createEmployee(
 
 /**
  * Admin only (owner, 2026-11-02): changes someone's personnel number; their
- * login code becomes the new number (app_admin_set_personnel_no re-checks both).
+ * login code becomes the new number when it can be one (app_admin_set_personnel_no
+ * re-checks both), and stays as it was otherwise.
  */
 export async function setPersonnelNo(
   id: string,
   personnelNo: string
-): Promise<{ ok: true; employeeCode: string } | DbErrorResult> {
+): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   if (!c.roles.includes('admin')) return dbErr('admin required');
   const pno = normalizePersonnelNo(personnelNo);
-  if (!isValidPersonnelNo(pno)) return dbErr('invalid personnel number');
+  if (!isValidPersonnelNo(pno, true)) return dbErr('invalid personnel number');
 
   const { error } = await c.supabase.rpc('app_admin_set_personnel_no', { p_user: id, p_personnel_no: pno });
   if (error) return dbErr(error.message);
 
   invalidateAppCache();
-  return { ok: true, employeeCode: pno };
+  return { ok: true };
 }
 
 export type UpdateEmployeeFields = Partial<{

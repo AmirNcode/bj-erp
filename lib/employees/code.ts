@@ -24,9 +24,19 @@ export function normalizePersonnelNo(value: string): string {
   return toAsciiDigits(value.trim());
 }
 
-/** Mirrors the SQL check: personnel_no ~ '^[0-9]{1,10}$'. */
-export function isValidPersonnelNo(value: string): boolean {
+/**
+ * Mirrors private.valid_personnel_no (migration 20261102140000): 1–10 digits,
+ * or — for the admin only — any text of 1–64 characters with no surrounding
+ * whitespace (security staff are a subcontractor with no company number).
+ */
+export function isValidPersonnelNo(value: string, admin = false): boolean {
+  if (admin) return value.length >= 1 && value.length <= 64 && value === value.trim();
   return /^[0-9]{1,10}$/.test(value);
+}
+
+/** Shows a personnel number in the locale's digits; one that is not all digits stays as typed. */
+export function displayPersonnelNo(value: string, format: (n: number) => string): string {
+  return /^[0-9]+$/.test(value) ? format(Number(value)) : value;
 }
 
 /**
