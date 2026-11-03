@@ -1,0 +1,177 @@
+-- Security-only staff have no time off (owner, 2026-11-03; FR-76).
+--
+-- Security staff are a subcontractor: someone holding the Security role WITHOUT Employee sends no
+-- leave or errand requests and earns no leave. Security + Employee keeps everything. Enforced here
+-- so a direct URL, an old app tab or HR filing on their behalf cannot get around the hidden pages:
+--   * a BEFORE INSERT trigger on leave_requests (covers every submit_* function, v1 and v2), which
+--     also refuses the final approval of a request filed before the Employee role was removed;
+--   * the same on errand_extensions: no new extension, no approval of a pending one;
+--   * accrue_leave posts 0-minute allocations instead of the monthly amount, so no accrual path
+--     (all / one employee / my own) credits them, and adding Employee later does not backfill the
+--     months they spent security-only (the loop skips months that already have a row).
+-- Existing ledger rows and approved requests stay as history; pending ones can still be rejected
+-- or cancelled.
+
+create function private.is_security_only(uid uuid) returns boolean
+    language sql stable security definer
+    set search_path to ''
+    as $$
+  select exists (select 1 from public.user_roles where user_id = uid and role = 'security')
+     and not exists (select 1 from public.user_roles where user_id = uid and role = 'employee');
+$$;
+
+revoke all on function private.is_security_only(uuid) from public, anon;
+grant execute on function private.is_security_only(uuid) to authenticated;
+
+create function private.leave_request_requester_has_time_off() returns trigger
+    language plpgsql security definer
+    set search_path to ''
+    as $$
+begin
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only(new.employee_id) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+revoke all on function private.leave_request_requester_has_time_off() from public, anon;
+
+create trigger leave_requests_requester_has_time_off before insert or update of status on public.leave_requests
+  for each row execute function private.leave_request_requester_has_time_off();
+
+-- An extension lengthens an approved errand without touching leave_requests.status.
+create function private.errand_extension_requester_has_time_off() returns trigger
+    language plpgsql security definer
+    set search_path to ''
+    as $$
+begin
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only((select employee_id from public.leave_requests where id = new.request_id)) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+revoke all on function private.errand_extension_requester_has_time_off() from public, anon;
+
+create trigger errand_extensions_requester_has_time_off before insert or update of status on public.errand_extensions
+  for each row execute function private.errand_extension_requester_has_time_off();
+
+create or replace function public.accrue_leave(p_employee_id uuid, p_leave_type_id uuid) RETURNS integer
+    language plpgsql security definer
+    set search_path to ''
+    as $$
+declare
+  v_rate      int;
+  v_cap       int;
+  v_start     date;
+  v_hire      date;
+  v_today     date := (now() at time zone 'Asia/Tehran')::date;
+  v_this_mon  date;
+  v_first_post date;
+  v_balance   int;
+  v_m         record;
+  v_amount    int;
+  v_already   int;
+  v_rows      int;
+  v_no_time_off boolean;
+begin
+  select accrual_minutes_per_month, annual_cap_minutes, accrual_start_month
+    into v_rate, v_cap, v_start
+    from public.employee_leave_policies
+   where employee_id = p_employee_id and leave_type_id = p_leave_type_id;
+
+  -- No policy, or a non-accruing type (sick leave): nothing to do.
+  if v_rate is null or v_rate <= 0 then
+    return public.current_leave_balance(p_employee_id, p_leave_type_id);
+  end if;
+
+  -- Hot-path short-circuit: this runs on every balance read, so if the month
+  -- containing today is already posted there is nothing to do and we skip both
+  -- the lock and the loop. Steady-state cost is one indexed EXISTS.
+  select gregorian_start into v_this_mon
+    from public.jalali_months
+   where v_today between gregorian_start and gregorian_end;
+
+  -- The oldest month actually posted. If the policy's start is now EARLIER
+  -- than this, an admin has backdated accrual_start_month and the months in
+  -- between were never credited, so the short-circuit below must not fire.
+  select min(period_month) into v_first_post
+    from public.leave_ledger
+   where employee_id = p_employee_id and leave_type_id = p_leave_type_id
+     and entry_type = 'allocation' and period_month is not null;
+
+  if v_this_mon is not null
+     and (v_first_post is null or v_first_post <= v_start)
+     and exists (
+       select 1 from public.leave_ledger
+        where employee_id = p_employee_id and leave_type_id = p_leave_type_id
+          and entry_type = 'allocation' and period_month = v_this_mon
+     )
+  then
+    return public.current_leave_balance(p_employee_id, p_leave_type_id);
+  end if;
+
+  -- Serialize with every other leave write for this employee (2026-07-02 hardening).
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || p_employee_id::text, 0));
+
+  select hire_date into v_hire from public.profiles where id = p_employee_id;
+  v_balance := public.current_leave_balance(p_employee_id, p_leave_type_id);
+  -- FR-76: security staff without the Employee role earn no leave. Their months still get a
+  -- 0-minute row, so the month counts as posted and a later Employee role does not backfill it.
+  v_no_time_off := private.is_security_only(p_employee_id);
+
+  for v_m in
+    select jm.jalali_year, jm.jalali_month, jm.gregorian_start, jm.gregorian_end
+      from public.jalali_months jm
+     where jm.gregorian_start >= v_start
+       and jm.gregorian_start <= v_today
+     order by jm.gregorian_start
+  loop
+    -- Nobody accrues for a month that ended before they were hired.
+    if v_hire is not null and v_m.gregorian_end < v_hire then
+      continue;
+    end if;
+
+    v_amount := v_rate;
+
+    -- Pro-rate the hire month by calendar days remaining in it.
+    if v_hire is not null and v_hire between v_m.gregorian_start and v_m.gregorian_end then
+      v_amount := round(v_rate::numeric
+                        * ((v_m.gregorian_end - v_hire) + 1)
+                        / ((v_m.gregorian_end - v_m.gregorian_start) + 1));
+    end if;
+
+    -- The annual cap counts ACCRUALS within this Jalali year, not the balance.
+    -- Opening allocations have a null period_month and so never consume it.
+    if v_cap is not null then
+      select coalesce(sum(l.delta_minutes), 0) into v_already
+        from public.leave_ledger l
+        join public.jalali_months jm on jm.gregorian_start = l.period_month
+       where l.employee_id = p_employee_id and l.leave_type_id = p_leave_type_id
+         and l.entry_type = 'allocation'
+         and jm.jalali_year = v_m.jalali_year;
+      v_amount := least(v_amount, greatest(v_cap - v_already, 0));
+    end if;
+
+    if v_no_time_off then
+      v_amount := 0;
+    end if;
+
+    if v_amount > 0 or v_no_time_off then
+      insert into public.leave_ledger(employee_id, leave_type_id, entry_type,
+                                      delta_minutes, balance_after_minutes, period_month, note)
+      values (p_employee_id, p_leave_type_id, 'allocation',
+              v_amount, v_balance + v_amount, v_m.gregorian_start,
+              case when v_no_time_off then 'no accrual: security only' else 'monthly accrual' end)
+      on conflict do nothing;
+      get diagnostics v_rows = row_count;
+      if v_rows = 1 then
+        v_balance := v_balance + v_amount;
+      end if;
+    end if;
+  end loop;
+
+  return v_balance;
+end; $$;

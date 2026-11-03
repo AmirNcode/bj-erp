@@ -9,6 +9,33 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Security staff without Employee: no requests or leave (FR-76) · role buttons — `claude/absence-watchers` (not deployed)
+
+- People with the **Security** role and **without Employee** (subcontractor security staff) no longer
+  see the **Request** tab, and Home no longer shows them **My Recent Requests** or **My Balances**. The
+  database refuses any request for them and monthly accrual skips them. Anyone with Security **and**
+  Employee keeps everything.
+- Review fixes: the skipped months stay skipped if Employee is added later (no back-pay of leave);
+  a request filed before Employee was removed can be rejected but not approved; work-trip extensions
+  are refused for them too; the Request tab and pages follow a role change on the next page load
+  instead of after the sign-in token refreshes (up to an hour).
+- **New / Edit Employee:** the roles are now on/off buttons (filled blue with a check when on)
+  instead of small checkboxes, with a hint under them about Security without Employee.
+- Migration `20261103120000_security_only_no_time_off`.
+
+### Absence notifications per person (FR-75) — `main` (not deployed)
+
+- **Manage › Approval steps** has a new **Absence notifications** section. Add a person by name or
+  personnel number and switch on what they follow (daily leave, hourly leave, daily work trip, hourly
+  work errand) and where (the 30-day **Home tile**, the **full Absences page**). Edit or remove them
+  later. Only these people see approved absences, and only their types; the admin still sees
+  everything in Manage › Absences.
+- The **Approved absences** item is gone from Settings › Roles (and from the HR and Security presets).
+  Everyone who had it was moved to the list with all four types and the Home tile, so nothing
+  disappears on deploy. A watcher with the full page on finds Absences in the Manage menu.
+- Migration `20261102150000_absence_watchers`: table `absence_watchers`, function
+  `watched_absences(from, to)`.
+
 ### Admin may enter any personnel number — `main`
 
 - On Add Employee and in the Edit Employee personnel-number dialog the **admin** may now type

@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 // The HR preset as seeded (migration 20261013200001), trimmed to what the nav reads.
-const HR: Perms = { people: 'edit', people_create: 'edit', departments: 'edit', leave_requests: 'read', reports: 'read', approval_steps: 'edit', leave_balances: 'edit', calendar: 'read', absences: 'read', finance: 'read', work_settings: 'edit', holidays: 'edit' };
+const HR: Perms = { people: 'edit', people_create: 'edit', departments: 'edit', leave_requests: 'read', reports: 'read', approval_steps: 'edit', leave_balances: 'edit', calendar: 'read', finance: 'read', work_settings: 'edit', holidays: 'edit' };
 
 const messages = {
   nav: { primary: 'ناوبری اصلی', home: 'خانه', request: 'درخواست', calendar: 'تقویم', organization: 'سازمان', profile: 'پروفایل', manage: 'مدیریت', employees: 'کارکنان', departments: 'واحدها', approvals: 'تأییدها', requests: 'بایگانی درخواست‌ها', approvalSteps: 'مراحل تأیید', reports: 'گزارش‌ها', absences: 'غایبین', finance: 'امور مالی', settings: 'تنظیمات', language: 'زبان' },
@@ -114,9 +114,9 @@ describe('MainNav', () => {
     expect(screen.getByTestId('nav-finance').getAttribute('href')).toBe('/fa/finance');
     expect(screen.queryByTestId('nav-manage-tab')).toBeNull();
   });
-  it('the security preset gets no absences tab or link', () => {
+  it('the security preset gets no absences tab or link without a watcher row (FR-75)', () => {
     renderWithIntl(
-      <MainNav roles={['employee', 'security']} perms={{ people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read', absences: 'read' }} locale="fa" />
+      <MainNav roles={['employee', 'security']} perms={{ people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read' }} locale="fa" />
     );
     expect(screen.queryByTestId('nav-absences')).toBeNull();
   });

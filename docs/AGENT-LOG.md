@@ -78,6 +78,90 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — PR #16 review fixes (FR-76 accrual backfill, approval/extension bypass, live roles) · merge
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/absence-watchers @ 7dcb863 (PR #16)
+**Trigger:** Amir asked for a review of PR #16, then: fix the findings (self-adding as an absence watcher with `approval_steps` edit is intended, so no change there), including the stale-token point, and merge to `main` to deploy.
+
+**What changed**
+- `supabase/migrations/20261103120000_security_only_no_time_off.sql` (edited in place: no persistent DB had applied it — local `postgres` ledger ends at `20261102130001`, Liara never got the PR):
+  - `accrue_leave`: a security-only person now gets 0-minute `allocation` rows (`no accrual: security only`) for each month instead of an early return. Before, adding Employee later made the loop backfill every month since `accrual_start_month`.
+  - `leave_requests_requester_has_time_off` is now `BEFORE INSERT OR UPDATE OF status` and also refuses the change to `approved` (a request filed before Employee was removed). Rejecting/cancelling still works.
+  - New `private.errand_extension_requester_has_time_off` + trigger on `errand_extensions` (insert, or approving a pending one): extensions never touched `leave_requests` inserts, so they got past FR-76.
+- `lib/auth/context.ts` `getCachedTimeOff` (live `user_roles`; claim as fallback on a failed read) → `ApprovalCapabilities.timeOff` (`lib/leave/delegation.ts`, `lib/auth/approval-capabilities.ts`) → `layout.tsx` → `AppShell` → `MainNav`/`RoutePrefetcher` → `tabsForRoles(..., timeOff)` (`lib/nav/tabs.ts`). `/request` layout and Home use it too. The Request tab/pages now follow a role change on the next page load, not after the token refresh.
+- `messages/*.json` `errors.noTimeOff` now also covers approvals.
+- Tests: `tests/sql/security-only.sql` 12 → 21 (no backfill after Employee is added; approval and extension refused after Employee removed; reject still OK); `tests/unit/nav_tabs.test.ts` live-flag case.
+- `supabase/schema.sql` dumped from the clone (3 restore-only CHECK hunks reverted). Docs: DATA_MODEL, PERMISSIONS (self-add intended), REQUIREMENTS FR-76, CHANGELOG, CLAUDE.md FR-76 line.
+
+**Actions outside the repo**
+- Throwaway clone `sec_dry` of local `postgres` with `20261102140000`, `20261102150000`, `20261103120000` applied; every `tests/sql/*` run; schema dumped; `sec_dry` dropped. Local `postgres` NOT migrated.
+- Merge of PR #16 to `main` (deploys to Liara via CI) — result in the next entry.
+
+**Verification**
+- Clone: all `tests/sql/*` PASS (security-only 21, absence-watchers 28, fr55 355, …) except the pre-existing `approval-delegation.sql` failure ("overlapping leave request exists" for ceo), same as before.
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 112 files / 1050 pass; `npm run build` OK.
+- Not clicked through in a browser: the local DB lacks the PR's migrations (Home calls `watched_absences`).
+
+**For the next agent**
+- On deploy, the first balance read / accrual run posts 0-minute rows for the 3 security-only users' unposted months; `accrue_all_leave`'s `rows_posted` counts them once.
+- A pending request of someone who became security-only now errors on approval with `noTimeOff`; HR must reject it.
+
+## 2026-11-03 — Security-only staff: no requests or leave (FR-76) · role pill toggles
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/absence-watchers @ 1cf684f (PR #16)
+**Trigger:** Amir: security is a subcontractor — remove the Request page and Home's My Recent Requests / My Balances for the security role unless the person also has Employee; make the New/Edit Employee role options real on/off buttons. Added to PR #16.
+
+**Decisions (owner, this session)**
+- Hide in UI and refuse in the DB; stop accrual too; pill toggles; Employee is not auto-unticked (a hint explains).
+
+**What changed**
+- Migration `supabase/migrations/20261103120000_security_only_no_time_off.sql`: `private.is_security_only`, BEFORE INSERT trigger `leave_requests_requester_has_time_off` (`no time off for this account`, 42501), `accrue_leave` recreated with an early return.
+- `lib/auth/timeOff.ts` (`isSecurityOnly`, `hasTimeOff`); `lib/nav/tabs.ts` drops the request tab; new `app/[locale]/(app)/request/layout.tsx` guard; Home skips the two reads and hides the two cards (`timeOff` prop on `HomeBoard`); `db-error` + messages `noTimeOff`.
+- `RoleCheckboxes` (`EmployeeFormParts.tsx`) is now pill toggles: label with `data-testid="role-…"` around an `sr-only` native checkbox (e2e `[data-testid=role-x] input` unchanged), filled `bg-primary` + `Check` icon when on; hint `manage.employees.securityOnlyHint`.
+- Tests: new `tests/sql/security-only.sql` (12), `tests/unit/time-off.test.ts`, `tests/unit/role-pills.test.tsx`, `nav_tabs` case. `supabase/schema.sql` regenerated from the clone (3 restore-only CHECK hunks reverted). Docs: PERMISSIONS, DATA_MODEL, REQUIREMENTS FR-76, CHANGELOG, TASKS, CLAUDE.md.
+
+**Actions outside the repo**
+- Throwaway clone `aw_dry` of local `postgres` with `20261102140000`, `20261102150000`, `20261103120000` applied; every `tests/sql/*` run; schema dumped; clone dropped. Local `postgres` NOT migrated. Nothing on Liara.
+
+**Verification**
+- Clone: all `tests/sql/*` PASS except the pre-existing `approval-delegation.sql` failure (same as before this change).
+- `tsc`, lint clean; `test:unit` 1049 pass; `npm run build` OK.
+- Pills checked on a temporary `zz-` page (en + fa): toggle on/off, admin locked, hint shown. Home/Request hiding not clicked through with a security login (local DB not migrated) — covered by unit + SQL tests.
+
+**For the next agent**
+- Local roster: 3 active security-only users and the admin lack Employee. The admin is unaffected (rule is security-only).
+- The approval-delegation SQL failure is still open (TASKS).
+
+## 2026-11-03 — Absence notifications per person (FR-75)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ e179dd2, clean
+**Trigger:** Amir: the fingerprint clerk must see approved leave; replace the role-based "Approved absences" tile with a per-person list on Manage › Approval steps (name/ID search, 4 request-type switches, 2 view switches: Home tile, full Absences page).
+
+**Decisions (owner, this session)**
+- Pre-fill today's holders; two views per person; whole company; "leave" = every leave type split by day/hour. UI per owner mockup, drawn with the app's bordered checkbox rows (no switch component exists).
+
+**What changed (branch `claude/absence-watchers`, PR for review; Amir asked)**
+- Migration `supabase/migrations/20261102150000_absence_watchers.sql`: table `absence_watchers` (RLS: read own row or `approval_steps` read; write `approval_steps` edit, same company; trigger refuses another company's person and sets `updated_by`), definer `watched_absences(from,to)` (caller's types only; admin all; no row none), pre-fill of active non-admin `absences` holders (all types, Home tile, no full page), removal of the `absences` catalog item (role_permissions rows, `permission_keys/allows/deps`, `seed_company_roles`), `has_permission('absences.view')` = admin or watcher.
+- App: `lib/absences/watch.ts` (pure), `lib/actions/absence-watchers.ts` (list/save/remove/candidates), `lib/actions/absences.ts` now calls the RPC (no perm gate), `getCachedAbsenceWatch` in `lib/auth/context.ts`, `absencesPage` capability threaded through `lib/nav/tabs.ts` → layout/AppShell/MainNav/RoutePrefetcher/manage page+layout; Home tile and `/absences` gate on the watcher row; `UpcomingAbsences` `sections` prop; new `AbsenceWatchersCard` + `AbsenceWatcherDialog` on the approval-steps page (uses `PersonSearch`); catalog drops `absences`; messages `manage.settings.absenceWatchers.*`, `errors.absenceWatcher*`, `permissions.items.absences` removed; `lib/supabase/types.ts` hand-edited.
+- Tests: new `tests/sql/absence-watchers.sql` (24 assertions), `tests/unit/absence-watch.test.ts`; `tests/sql/fr55-roles-permissions.sql` and unit tests updated for the removed item (HRLite now acts on Security holders: Security no longer holds anything HR lacks).
+- `supabase/schema.sql` regenerated from the dry-run clone (3 restore-only CHECK hunks reverted). Docs: PERMISSIONS, DATA_MODEL, REQUIREMENTS (FR-75), CHANGELOG.
+
+**Actions outside the repo**
+- Local DB: throwaway clone `aw_dry` of `postgres`, applied `20261102140000` (the local DB still lacks it) and the new migration, ran every `tests/sql/*`, dumped schema, dropped `aw_dry`. The shared local `postgres` DB was NOT migrated. Nothing run on Liara.
+
+**Verification**
+- On the clone: all `tests/sql/*` PASS except `approval-delegation.sql` ("overlapping leave request exists" for ceo), which fails the same way on a clone without this migration (pre-existing, data-dependent). Pre-fill moved 5 holders on the local roster.
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 110 files / 1041 tests pass; `npm run build` OK.
+- UI checked on a temporary `zz-` page with fake data (en + fa): list, Add dialog (ID search auto-picks, "already listed" hint, Save disabled with no view), Edit dialog prefilled, leave-only tile hides Work errands. Not clicked through with a real login (local DB not migrated).
+
+**For the next agent**
+- Committed on `claude/absence-watchers` and opened as a PR; another agent reviews before merge. Not deployed. Merging to `main` deploys; migration runs before the app swap and the old app keeps working (alias kept, old catalog key just disappears from claims).
+- `approval-delegation.sql` failure is pre-existing; not investigated.
+- Follow-up (automated security review of the commit): a tile-only watcher could call `watched_absences` for any range. Fixed in the same (unapplied) migration: without `full_page` the RPC returns only today..+30 (Tehran). `tests/sql/absence-watchers.sql` now 28 PASS, fr55 355 PASS on a fresh clone (dropped after). Edited in place: no persistent DB had applied it.
+
 ## 2026-11-02 — Admin may enter any personnel number (security subcontractor logins)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

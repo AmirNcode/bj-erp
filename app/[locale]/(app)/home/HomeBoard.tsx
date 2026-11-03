@@ -83,6 +83,8 @@ type Props = {
     extensions: PendingExtension[];
   } | null;
   usage: UsageRow[];
+  /** FR-76: false for security staff without Employee — no My Recent Requests, no My Balances. */
+  timeOff: boolean;
   nextHoliday: { name: string; month: string; day: string; when: string } | null;
   /** Every-other-week days off, soonest first; [] hides the card. */
   alternating: { weekday: number; off: boolean; status: string; next: string | null }[];
@@ -152,6 +154,7 @@ export function HomeBoard({
   pulse,
   pending,
   usage,
+  timeOff,
   nextHoliday,
   alternating,
   coverDuties,
@@ -216,19 +219,21 @@ export function HomeBoard({
             />
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{labels.recentTitle}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RecentRequests
-                requests={board.recent}
-                locale={locale}
-                hoursPerDay={hoursPerDay}
-                travelBookings={travelBookings}
-              />
-            </CardContent>
-          </Card>
+          {timeOff && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{labels.recentTitle}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RecentRequests
+                  requests={board.recent}
+                  locale={locale}
+                  hoursPerDay={hoursPerDay}
+                  travelBookings={travelBookings}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Non-approvers keep the My Team panel. */}
           {!board.showApprovals && (
@@ -308,26 +313,28 @@ export function HomeBoard({
             </Card>
           )}
 
-          <Card className="gap-4 px-5 py-5" data-testid="home-balances">
-            <h2 className="text-base font-semibold">{labels.balancesTitle}</h2>
-            {usage.length === 0 ? (
-              <EmptyState message="—" />
-            ) : (
-              <ul className="space-y-4">
-                {usage.map((u) => (
-                  <li
-                    key={u.id}
-                    data-testid={`home-balance-${u.id}`}
-                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
-                  >
-                    <span className="text-sm text-muted-foreground">{u.name}</span>
-                    {/* Wraps under the name when the card is too narrow for one line. */}
-                    <span className="min-w-0 text-sm text-muted-foreground">{u.remaining}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          {timeOff && (
+            <Card className="gap-4 px-5 py-5" data-testid="home-balances">
+              <h2 className="text-base font-semibold">{labels.balancesTitle}</h2>
+              {usage.length === 0 ? (
+                <EmptyState message="—" />
+              ) : (
+                <ul className="space-y-4">
+                  {usage.map((u) => (
+                    <li
+                      key={u.id}
+                      data-testid={`home-balance-${u.id}`}
+                      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5"
+                    >
+                      <span className="text-sm text-muted-foreground">{u.name}</span>
+                      {/* Wraps under the name when the card is too narrow for one line. */}
+                      <span className="min-w-0 text-sm text-muted-foreground">{u.remaining}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           <Card className="flex-row items-center gap-4 px-5 py-5" data-testid="home-next-holiday">
             {nextHoliday ? (

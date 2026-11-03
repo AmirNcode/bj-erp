@@ -26,7 +26,7 @@ export default async function ManageLayout({ children, params }: Props) {
   }
 
   const [roles, perms, capabilities] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id), getApprovalCapabilities()]);
-  const canAccess = manageItemsForRoles(roles, perms, capabilities.canApprove, undefined, capabilities.hasReports).length > 0 || capabilities.canDelegate;
+  const canAccess = manageItemsForRoles(roles, perms, capabilities.canApprove, undefined, capabilities.hasReports, capabilities.absencesPage).length > 0 || capabilities.canDelegate;
 
   if (!canAccess) {
     redirect(`/${locale}/home`);

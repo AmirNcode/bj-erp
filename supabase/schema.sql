@@ -123,6 +123,23 @@ CREATE TYPE public.request_kind AS ENUM (
 
 
 --
+-- Name: absence_watcher_same_company(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.absence_watcher_same_company() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not exists (select 1 from public.profiles where id = new.user_id and company_id = new.company_id) then
+    raise exception 'person not found' using errcode = '23503';
+  end if;
+  new.updated_by := auth.uid();
+  return new;
+end $$;
+
+
+--
 -- Name: acts_as_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1396,6 +1413,23 @@ end; $$;
 
 
 --
+-- Name: errand_extension_requester_has_time_off(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.errand_extension_requester_has_time_off() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only((select employee_id from public.leave_requests where id = new.request_id)) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+
+--
 -- Name: extension_overlaps(uuid, uuid, date, date); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1496,7 +1530,10 @@ CREATE FUNCTION private.has_permission(uid uuid, p_permission text) RETURNS bool
     when 'separations.view'   then private.has_perm(uid, 'clearance', 'read')
     when 'settings.edit'      then private.has_perm(uid, 'work_settings', 'edit')
                                    and private.has_perm(uid, 'holidays', 'edit')
-    when 'absences.view'      then private.has_perm(uid, 'absences', 'read')
+    -- FR-75: absences are per person now (absence_watchers), not a catalog item.
+    when 'absences.view'      then private.is_active(uid)
+                                   and (private.is_admin(uid)
+                                        or exists (select 1 from public.absence_watchers where user_id = uid))
     when 'finance.view'       then private.has_perm(uid, 'finance', 'read')
     else false
   end;
@@ -1710,6 +1747,19 @@ $$;
 
 
 --
+-- Name: is_security_only(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_security_only(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.user_roles where user_id = uid and role = 'security')
+     and not exists (select 1 from public.user_roles where user_id = uid and role = 'employee');
+$$;
+
+
+--
 -- Name: is_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1813,6 +1863,23 @@ end; $$;
 
 
 --
+-- Name: leave_request_requester_has_time_off(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.leave_request_requester_has_time_off() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only(new.employee_id) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+
+--
 -- Name: natural_approver(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1886,7 +1953,7 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
   select case
     when p_key in ('people_create','role_manager','role_assign','leave_accrual',
       'personal_info_own','special_leave','approval_delegate','travel_booking') then p_level = 'edit'
-    when p_key in ('calendar','reports','absences','finance') then p_level = 'read'
+    when p_key in ('calendar','reports','finance') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
       'leave_requests','approval_steps','work_settings','holidays') then p_level in ('read','edit')
     else false end;
@@ -1910,7 +1977,6 @@ CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text
     ('leave_accrual','read','departments'), ('leave_requests','read','people'),
     ('approval_steps','read','people'), ('reports','read','people'),
     ('reports','read','leave_balances'), ('reports','read','leave_requests'),
-    ('absences','read','people'), ('absences','read','leave_requests'),
     ('special_leave','read','people'), ('special_leave','read','leave_balances');
 $$;
 
@@ -1925,7 +1991,7 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     AS $$
   select unnest(array['people','people_create','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
-    'special_leave','leave_requests','calendar','reports','absences','approval_steps','approval_delegate',
+    'special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
     'work_settings','holidays','finance','travel_booking']);
 $$;
 
@@ -2223,10 +2289,9 @@ begin
       ('hr','leave_balances','edit'), ('hr','leave_accrual','edit'), ('hr','leave_requests','read'),
       ('hr','calendar','read'), ('hr','reports','read'), ('hr','approval_steps','edit'),
       ('hr','work_settings','edit'), ('hr','holidays','edit'), ('hr','special_leave','edit'),
-      ('hr','absences','read'), ('hr','finance','read'),
+      ('hr','finance','read'),
       ('security','people','read'), ('security','leave_balances','read'),
       ('security','leave_requests','read'), ('security','calendar','read'),
-      ('security','absences','read'),
       ('finance','clearance','read'), ('finance','finance','read'),
       ('procurement','travel_booking','edit')
     ) as v(system_key, permission, level) on r.system_key = v.system_key::public.app_role
@@ -3183,6 +3248,7 @@ declare
   v_amount    int;
   v_already   int;
   v_rows      int;
+  v_no_time_off boolean;
 begin
   select accrual_minutes_per_month, annual_cap_minutes, accrual_start_month
     into v_rate, v_cap, v_start
@@ -3225,6 +3291,9 @@ begin
 
   select hire_date into v_hire from public.profiles where id = p_employee_id;
   v_balance := public.current_leave_balance(p_employee_id, p_leave_type_id);
+  -- FR-76: security staff without the Employee role earn no leave. Their months still get a
+  -- 0-minute row, so the month counts as posted and a later Employee role does not backfill it.
+  v_no_time_off := private.is_security_only(p_employee_id);
 
   for v_m in
     select jm.jalali_year, jm.jalali_month, jm.gregorian_start, jm.gregorian_end
@@ -3259,11 +3328,16 @@ begin
       v_amount := least(v_amount, greatest(v_cap - v_already, 0));
     end if;
 
-    if v_amount > 0 then
+    if v_no_time_off then
+      v_amount := 0;
+    end if;
+
+    if v_amount > 0 or v_no_time_off then
       insert into public.leave_ledger(employee_id, leave_type_id, entry_type,
                                       delta_minutes, balance_after_minutes, period_month, note)
       values (p_employee_id, p_leave_type_id, 'allocation',
-              v_amount, v_balance + v_amount, v_m.gregorian_start, 'monthly accrual')
+              v_amount, v_balance + v_amount, v_m.gregorian_start,
+              case when v_no_time_off then 'no accrual: security only' else 'monthly accrual' end)
       on conflict do nothing;
       get diagnostics v_rows = row_count;
       if v_rows = 1 then
@@ -7620,6 +7694,72 @@ $$;
 
 
 --
+-- Name: watched_absences(date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.watched_absences(p_from date, p_to date) RETURNS TABLE(id uuid, kind public.request_kind, unit public.leave_unit, start_date date, end_date date, start_time time without time zone, end_time time without time zone, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with me as (
+    select p.company_id,
+           private.is_admin(p.id) as admin,
+           coalesce(w.full_page, false) as full_page,
+           (now() at time zone 'Asia/Tehran')::date as today,
+           w.leave_day, w.leave_hour, w.errand_day, w.errand_hour
+      from public.profiles p
+      left join public.absence_watchers w on w.user_id = p.id
+     where p.id = auth.uid() and p.active
+  )
+  select r.id, r.kind, r.unit, r.start_date, r.end_date, r.start_time, r.end_time,
+         e.full_name, e.personnel_no, d.name_fa, d.name_en, t.name_fa, t.name_en
+    from me
+    join public.leave_requests r on r.company_id = me.company_id
+    join public.profiles e on e.id = r.employee_id
+    left join public.departments d on d.id = e.department_id
+    left join public.leave_types t on t.id = r.leave_type_id
+   where r.status = 'approved'
+     and r.end_date >= p_from and r.start_date <= p_to
+     and (me.admin or me.full_page
+          or (r.end_date >= me.today and r.start_date <= me.today + 30))
+     and (me.admin
+          or (r.kind = 'leave'  and r.unit = 'day'  and coalesce(me.leave_day, false))
+          or (r.kind = 'leave'  and r.unit = 'hour' and coalesce(me.leave_hour, false))
+          or (r.kind = 'errand' and r.unit = 'day'  and coalesce(me.errand_day, false))
+          or (r.kind = 'errand' and r.unit = 'hour' and coalesce(me.errand_hour, false)))
+   order by r.start_date, r.start_time nulls first;
+$$;
+
+
+--
+-- Name: absence_watchers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.absence_watchers (
+    user_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    leave_day boolean DEFAULT true NOT NULL,
+    leave_hour boolean DEFAULT true NOT NULL,
+    errand_day boolean DEFAULT true NOT NULL,
+    errand_hour boolean DEFAULT true NOT NULL,
+    home_tile boolean DEFAULT true NOT NULL,
+    full_page boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT absence_watchers_some_kind CHECK ((leave_day OR leave_hour OR errand_day OR errand_hour)),
+    CONSTRAINT absence_watchers_some_view CHECK ((home_tile OR full_page))
+);
+
+
+--
+-- Name: TABLE absence_watchers; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.absence_watchers IS 'FR-75: people who see approved absences (Home tile and/or Absences page), per request type. Edited with approval_steps edit.';
+
+
+--
 -- Name: approval_executive_settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8454,6 +8594,14 @@ ALTER TABLE ONLY public.leave_ledger ALTER COLUMN seq SET DEFAULT nextval('publi
 
 
 --
+-- Name: absence_watchers absence_watchers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.absence_watchers
+    ADD CONSTRAINT absence_watchers_pkey PRIMARY KEY (user_id);
+
+
+--
 -- Name: approval_delegations approval_delegations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8723,6 +8871,13 @@ ALTER TABLE ONLY public.user_signatures
 
 ALTER TABLE ONLY public.work_settings
     ADD CONSTRAINT work_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: absence_watchers_company_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX absence_watchers_company_idx ON public.absence_watchers USING btree (company_id);
 
 
 --
@@ -9139,6 +9294,20 @@ CREATE INDEX work_settings_updated_by_idx ON public.work_settings USING btree (u
 
 
 --
+-- Name: absence_watchers absence_watchers_same_company; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER absence_watchers_same_company BEFORE INSERT OR UPDATE ON public.absence_watchers FOR EACH ROW EXECUTE FUNCTION private.absence_watcher_same_company();
+
+
+--
+-- Name: absence_watchers absence_watchers_set_updated_at; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER absence_watchers_set_updated_at BEFORE UPDATE ON public.absence_watchers FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
 -- Name: approval_delegations approval_authority_lock; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9272,6 +9441,13 @@ CREATE TRIGGER employee_personal_info_before_update BEFORE UPDATE ON public.empl
 
 
 --
+-- Name: errand_extensions errand_extensions_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER errand_extensions_requester_has_time_off BEFORE INSERT OR UPDATE OF status ON public.errand_extensions FOR EACH ROW EXECUTE FUNCTION private.errand_extension_requester_has_time_off();
+
+
+--
 -- Name: holidays holidays_audit_change; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9283,6 +9459,13 @@ CREATE TRIGGER holidays_audit_change AFTER INSERT OR DELETE OR UPDATE ON public.
 --
 
 CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per_diem_rials ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_per_diem_daily_only();
+
+
+--
+-- Name: leave_requests leave_requests_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER leave_requests_requester_has_time_off BEFORE INSERT OR UPDATE OF status ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_requester_has_time_off();
 
 
 --
@@ -9381,6 +9564,30 @@ CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.wor
 --
 
 CREATE TRIGGER work_settings_set_updated_at BEFORE UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: absence_watchers absence_watchers_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.absence_watchers
+    ADD CONSTRAINT absence_watchers_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: absence_watchers absence_watchers_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.absence_watchers
+    ADD CONSTRAINT absence_watchers_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: absence_watchers absence_watchers_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.absence_watchers
+    ADD CONSTRAINT absence_watchers_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -10000,6 +10207,40 @@ ALTER TABLE ONLY public.work_settings
 
 
 --
+-- Name: absence_watchers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.absence_watchers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: absence_watchers absence_watchers_delete; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY absence_watchers_delete ON public.absence_watchers FOR DELETE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+
+
+--
+-- Name: absence_watchers absence_watchers_insert; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY absence_watchers_insert ON public.absence_watchers FOR INSERT TO authenticated WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+
+
+--
+-- Name: absence_watchers absence_watchers_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY absence_watchers_select ON public.absence_watchers FOR SELECT TO authenticated USING (((user_id = ( SELECT auth.uid() AS uid)) OR (private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'read'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company)))));
+
+
+--
+-- Name: absence_watchers absence_watchers_update; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY absence_watchers_update ON public.absence_watchers FOR UPDATE TO authenticated USING ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company)))) WITH CHECK ((private.has_perm(( SELECT auth.uid() AS uid), 'approval_steps'::text, 'edit'::text) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+
+
+--
 -- Name: approval_delegations; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10587,6 +10828,13 @@ GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
 
 
 --
+-- Name: FUNCTION absence_watcher_same_company(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.absence_watcher_same_company() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION acts_as_travel_hr(p_uid uuid, p_company uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -10826,6 +11074,13 @@ REVOKE ALL ON FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_
 
 
 --
+-- Name: FUNCTION errand_extension_requester_has_time_off(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.errand_extension_requester_has_time_off() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION extension_overlaps(p_request uuid, p_employee uuid, p_start date, p_end date); Type: ACL; Schema: private; Owner: -
 --
 
@@ -10928,6 +11183,14 @@ GRANT ALL ON FUNCTION private.is_procurement(p_uid uuid, p_request uuid) TO auth
 
 
 --
+-- Name: FUNCTION is_security_only(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_security_only(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_security_only(uid uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION is_travel_hr(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -10954,6 +11217,13 @@ GRANT ALL ON FUNCTION private.is_valid_national_id(p text) TO authenticated;
 --
 
 GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
+
+
+--
+-- Name: FUNCTION leave_request_requester_has_time_off(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.leave_request_requester_has_time_off() FROM PUBLIC;
 
 
 --
@@ -12228,6 +12498,26 @@ REVOKE ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_st
 GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO postgres;
 GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO service_role;
 GRANT ALL ON FUNCTION public.submit_leave_request_v2(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_signature_data text, p_signature_authorized boolean, p_reason text, p_replacement_id uuid, p_auto_approval_consent boolean, p_delegation_preview jsonb, p_temporary_ceo_authorized boolean) TO authenticated;
+
+
+--
+-- Name: FUNCTION watched_absences(p_from date, p_to date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.watched_absences(p_from date, p_to date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.watched_absences(p_from date, p_to date) TO postgres;
+GRANT ALL ON FUNCTION public.watched_absences(p_from date, p_to date) TO authenticated;
+GRANT ALL ON FUNCTION public.watched_absences(p_from date, p_to date) TO service_role;
+
+
+--
+-- Name: TABLE absence_watchers; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.absence_watchers TO postgres;
+GRANT ALL ON TABLE public.absence_watchers TO anon;
+GRANT ALL ON TABLE public.absence_watchers TO authenticated;
+GRANT ALL ON TABLE public.absence_watchers TO service_role;
 
 
 --

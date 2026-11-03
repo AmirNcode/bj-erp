@@ -111,13 +111,13 @@ select pg_temp.expect('seven roles seeded for the company (FR-70 added Procureme
 select pg_temp.expect('enum-only insert gets role_id',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k = 'hr') and r.system_key = 'hr'), '1');
-select pg_temp.expect('hr preset has 17 permissions',
+select pg_temp.expect('hr preset has 16 permissions',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id = rp.role_id
-    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '17');
-select pg_temp.expect('security preset has 5, finance 2',
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '16');
+select pg_temp.expect('security preset has 4, finance 2',
   (select string_agg(n::text, ',' order by k) from (
      select r.system_key::text k, count(*) n from public.role_permissions rp join public.roles r on r.id = rp.role_id
-      where r.company_id = (select id from fx where k = 'company') and r.system_key in ('security','finance') group by 1) s), '2,5');
+      where r.company_id = (select id from fx where k = 'company') and r.system_key in ('security','finance') group by 1) s), '2,4');
 -- R2 (2026-10-12 owner presets): HR += work_settings, holidays edit; Security +=
 -- absences read; Finance += finance read; personal_info_own on no preset.
 -- R5 (2026-10-13): HR += special_leave edit (main's FR-65) and, by owner ruling
@@ -126,14 +126,14 @@ select pg_temp.expect('hr preset contents',
   (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
      from public.role_permissions rp join public.roles r on r.id = rp.role_id
     where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'),
-  'absences=read,approval_steps=edit,calendar=read,clearance=edit,departments=edit,finance=read,holidays=edit,'
+  'approval_steps=edit,calendar=read,clearance=edit,departments=edit,finance=read,holidays=edit,'
   || 'leave_accrual=edit,leave_balances=edit,leave_requests=read,people=edit,people_create=edit,personal_info=edit,'
   || 'reports=read,role_manager=edit,special_leave=edit,work_settings=edit');
 select pg_temp.expect('security preset contents',
   (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
      from public.role_permissions rp join public.roles r on r.id = rp.role_id
     where r.company_id = (select id from fx where k = 'company') and r.system_key = 'security'),
-  'absences=read,calendar=read,leave_balances=read,leave_requests=read,people=read');
+  'calendar=read,leave_balances=read,leave_requests=read,people=read');
 select pg_temp.expect('finance preset contents',
   (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
      from public.role_permissions rp join public.roles r on r.id = rp.role_id
@@ -141,10 +141,10 @@ select pg_temp.expect('finance preset contents',
   'clearance=read,finance=read');
 select pg_temp.expect('personal_info_own is on no preset of any company',
   (select count(*)::text from public.role_permissions where permission = 'personal_info_own'), '0');
-select pg_temp.expect('catalog: 21 keys (approval_delegate, FR-70 travel_booking added; passwords remain admin-only) incl. absences, finance, personal_info_own, special_leave',
+select pg_temp.expect('catalog: 20 keys (FR-75 dropped absences; passwords remain admin-only) incl. finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '21:4');
+  '20:3');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -159,11 +159,11 @@ select pg_temp.expect('hr preset covers the security and finance presets (owner 
                        join public.roles hr on hr.id = h.role_id
                       where hr.company_id = r.company_id and hr.system_key = 'hr' and h.permission = rp.permission), 0)),
   '0');
-select pg_temp.expect('catalog shapes: absences R, finance R, personal_info_own E',
+select pg_temp.expect('catalog shapes: absences gone (FR-75), finance R, personal_info_own E',
   (select private.permission_allows('absences','read')::text || private.permission_allows('absences','edit')::text
        || private.permission_allows('finance','read')::text || private.permission_allows('finance','edit')::text
        || private.permission_allows('personal_info_own','edit')::text || private.permission_allows('personal_info_own','read')::text),
-  'truefalsetruefalsetruefalse');
+  'falsefalsetruefalsetruefalse');
 do $$
 declare v_new uuid;
 begin
@@ -383,10 +383,10 @@ select pg_temp.expect('legacy settings.edit: hr yes (work_settings + holidays ed
   (select private.has_permission((select id from fx where k='hr'),'settings.edit')::text
        || private.has_permission((select id from fx where k='sec'),'settings.edit')::text
        || private.has_permission((select id from fx where k='admin'),'settings.edit')::text), 'truefalsetrue');
-select pg_temp.expect('legacy absences.view: security yes, hr yes (owner ruling a), admin yes',
+select pg_temp.expect('legacy absences.view (FR-75): a watcher row, not a role; security, hr without one no; admin yes',
   (select private.has_permission((select id from fx where k='sec'),'absences.view')::text
        || private.has_permission((select id from fx where k='hr'),'absences.view')::text
-       || private.has_permission((select id from fx where k='admin'),'absences.view')::text), 'truetruetrue');
+       || private.has_permission((select id from fx where k='admin'),'absences.view')::text), 'falsefalsetrue');
 select pg_temp.expect('legacy finance.view: finance yes, hr yes (owner ruling a), admin yes',
   (select private.has_permission((select id from fx where k='fin'),'finance.view')::text
        || private.has_permission((select id from fx where k='hr'),'finance.view')::text
@@ -779,7 +779,7 @@ select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwor
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '21');
+            -> 'claims' -> 'app_perms'))::text), '20');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');
@@ -881,8 +881,8 @@ select pg_temp.expect('… and holds exactly the new permissions',
 -- ruling a) see the real preset.
 select pg_temp.expect('(setup) the Security preset is back to its seed',
   pg_temp.try_su(format($q$insert into public.role_permissions select %s::uuid, p, 'read'
-    from unnest(array['absences','calendar','leave_balances','leave_requests','people']) p on conflict do nothing$q$,
-    pg_temp.role_id('company', 'security'))), 'ok:3');
+    from unnest(array['calendar','leave_balances','leave_requests','people']) p on conflict do nothing$q$,
+    pg_temp.role_id('company', 'security'))), 'ok:2');
 select pg_temp.expect('system role not editable',
   pg_temp.try_as('admin', format($q$select public.app_save_role(%s, 'Manager', '{}')$q$, pg_temp.role_id('company', 'manager'))), '22023');
 select pg_temp.expect('another company''s role is not found',
@@ -1038,10 +1038,10 @@ select pg_temp.expect('… and create an employee who holds Security',
   pg_temp.try_as('nosign', format($q$select public.app_create_employee('9990000987','FR55 c6','Temp!2026x',%s, %s, p_role_ids => array[%s]::uuid[])$q$,
     pg_temp.id('company'), pg_temp.id('dept'), pg_temp.role_id('company', 'security'))), 'ok:1');
 -- D5 on Security: role_assign alone is not enough, the caller must hold every
--- Security permission. nosign without absences is refused, with it allowed (above).
+-- Security permission. nosign without calendar is refused, with it allowed (above).
 -- (hr is refused too, but only because the HR preset lacks role_assign.)
-delete from public.role_permissions where role_id = (select id from fx where k='r_nosign') and permission = 'absences';
-select pg_temp.expect('… without absences read nosign may not give Security (D5); hr (no role_assign) may not either',
+delete from public.role_permissions where role_id = (select id from fx where k='r_nosign') and permission = 'calendar';
+select pg_temp.expect('… without calendar read nosign may not give Security (D5); hr (no role_assign) may not either',
   pg_temp.try_as('nosign', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
     pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))) || ' '
   || (select private.role_within((select id from public.roles where company_id = (select id from fx where k='company') and system_key = 'security'),
@@ -1049,7 +1049,7 @@ select pg_temp.expect('… without absences read nosign may not give Security (D
   || pg_temp.try_as('hr', format('select public.app_set_user_role_ids(%s, array[%s, %s]::uuid[])', pg_temp.id('emp'),
     pg_temp.role_id('company', 'employee'), pg_temp.role_id('company', 'security'))) || ' '
   || private.has_perm((select id from fx where k='hr'), 'role_assign', 'edit')::text, '42501 false 42501 false');
-insert into public.role_permissions values ((select id from fx where k='r_nosign'), 'absences', 'read');
+insert into public.role_permissions values ((select id from fx where k='r_nosign'), 'calendar', 'read');
 -- clearance read makes Finance's permissions a subset of nosign's, so only the identity rule refuses.
 insert into public.role_permissions values ((select id from fx where k='r_nosign'), 'clearance', 'read');
 -- A fresh plain target (created by hr above), so the Security scenarios cannot leak in.
@@ -1191,7 +1191,7 @@ begin
     select * from (values
       ('payroll', 'Payroll',  '{"finance":"read"}'::jsonb,                                          '9990000990'),
       ('selfie',  'SelfInfo', '{"personal_info_own":"edit"}'::jsonb,                                '9990000991'),
-      ('board',   'Board',    '{"absences":"read","people":"read","leave_requests":"read"}'::jsonb, '9990000992'),
+      ('board',   'Board',    '{"people":"read","leave_requests":"read"}'::jsonb,                  '9990000992'),
       ('wsonly',  'WorkOnly', '{"work_settings":"edit"}'::jsonb,                                    '9990000993'),
       ('reqs',    'ReqsOnly', '{"people":"read","leave_requests":"read"}'::jsonb,                     '9990000994')
     ) as t(k, rname, perms, code)
@@ -1210,13 +1210,12 @@ begin
   end loop;
 end $$;
 
--- role editor: the new items' shapes and dependencies (D6: the absences board
--- reads leave_requests and profiles through RLS).
-select pg_temp.expect('R2 editor: absences needs people and leave_requests',
+-- role editor: absences is no catalog item since FR-75 (absence_watchers), at any level.
+select pg_temp.expect('R2 editor: absences refused (FR-75), with or without its old dependencies',
   pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsBad', '{"absences":"read"}')$q$) || ' '
   || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsBad', '{"absences":"read","people":"read"}')$q$) || ' '
   || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'AbsOk', '{"absences":"read","people":"read","leave_requests":"read"}')$q$),
-  '22023 22023 ok:1');
+  '22023 22023 22023');
 select pg_temp.expect('R2 editor: finance read and personal_info_own edit stand alone; wrong levels refused',
   pg_temp.try_as('admin', $q$select public.app_save_role(null, 'FinOk', '{"finance":"read"}')$q$) || ' '
   || pg_temp.try_as('admin', $q$select public.app_save_role(null, 'OwnOk', '{"personal_info_own":"edit"}')$q$) || ' '
@@ -1226,11 +1225,11 @@ select pg_temp.expect('R2 editor: finance read and personal_info_own edit stand 
   'ok:1 ok:1 22023 22023 22023');
 
 -- legacy aliases for custom roles
-select pg_temp.expect('R2 legacy keys from custom roles: finance.view, absences.view, personal_info.edit_own yes; personal_info.edit no',
+select pg_temp.expect('R2 legacy keys from custom roles: finance.view, personal_info.edit_own yes; absences.view (no watcher row), personal_info.edit no',
   (select private.has_permission((select id from fx where k='payroll'),'finance.view')::text
        || private.has_permission((select id from fx where k='board'),'absences.view')::text
        || private.has_permission((select id from fx where k='selfie'),'personal_info.edit_own')::text
-       || private.has_permission((select id from fx where k='selfie'),'personal_info.edit')::text), 'truetruetruefalse');
+       || private.has_permission((select id from fx where k='selfie'),'personal_info.edit')::text), 'truefalsetruefalse');
 select pg_temp.expect('R2 settings.edit needs work_settings AND holidays edit',
   (select private.has_permission((select id from fx where k='wsonly'),'settings.edit')::text), 'false');
 select pg_temp.expect('R2 work_settings edit alone: edits work settings, not holidays',
@@ -1266,17 +1265,16 @@ select pg_temp.expect('R2 finance list: Finance preset, a custom finance role an
   || pg_temp.try_as('board', 'select count(*) from public.finance_approved_requests(current_date - 30, current_date + 30)'),
   'ok:1 ok:1 ok:1 42501 42501');
 
--- absences: the board's gate is the absences item (legacy absences.view and the
--- app_perms claim); its rows come through leave_requests_select (leave_requests
--- read, a dependency). 'reqs' holds the dependencies without the item.
-select pg_temp.expect('R2 absences board: the gate is absences read (alias + claims), not its dependencies',
+-- absences: since FR-75 no role gives the board (legacy absences.view = a watcher row;
+-- no app_perms claim). 'board' and 'reqs' hold leave_requests and people read only.
+select pg_temp.expect('R2 absences board: no role opens it (alias + claims), FR-75',
   (select private.has_permission((select id from fx where k='board'),'absences.view')::text
        || private.has_permission((select id from fx where k='reqs'),'absences.view')::text
        || private.has_permission((select id from fx where k='help'),'absences.view')::text) || ' '
   || pg_temp.val_as('board', 'select coalesce(public.app_my_permissions()->>''absences'', ''-'')') || ' '
   || pg_temp.val_as('reqs', 'select coalesce(public.app_my_permissions()->>''absences'', ''-'')'),
-  'truefalsefalse read -');
-select pg_temp.expect('R2 absences board: an absences holder reads every approved request; helpdesk none',
+  'falsefalsefalse - -');
+select pg_temp.expect('R2 leave_requests read gives every approved request; helpdesk none',
   pg_temp.try_as('board', 'select 1 from public.leave_requests where status = ''approved''') || ' '
   || pg_temp.try_as('help', 'select 1 from public.leave_requests where status = ''approved'''),
   (select 'ok:' || count(*) from public.leave_requests where status = 'approved') || ' ok:0');
@@ -1318,7 +1316,7 @@ begin
       ('hrlite',    'HRLite',    (select jsonb_object_agg(rp.permission, rp.level) from public.role_permissions rp
                                    join public.roles hr on hr.id = rp.role_id
                                   where hr.company_id = (select id from fx where k = 'company') and hr.system_key = 'hr'
-                                    and rp.permission not in ('absences', 'finance')),                       '9990000944'),
+                                    and rp.permission not in ('finance')),                       '9990000944'),
       ('stepper',   'Stepper',   (select jsonb_object_agg(k, case when private.permission_allows(k, 'edit') then 'edit' else 'read' end)
                                    from private.permission_keys() k where k <> 'clearance'),                 '9990000945')
     ) as t(k, rname, perms, code)
@@ -1378,11 +1376,11 @@ select pg_temp.expect('R5 special leave: a role without the item, an employee an
   '42501: not allowed to grant special leave | 42501 42501');
 select pg_temp.expect('R5 special leave: the admin still grants to themself (main''s rule)',
   pg_temp.try_as('admin', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('admin'), 'bereavement', 'R5 admin')), 'ok:1');
--- (a): hr acts on a Security holder; a role without absences read does not.
-select pg_temp.expect('R5 special leave: hr grants to a security holder (ruling a); HRLite (no absences) may not',
+-- (a): hr acts on a Security holder; since FR-75 so does HRLite (Security has no absences read).
+select pg_temp.expect('R5 special leave: hr and HRLite grant to a security holder (FR-75)',
   pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('sec'), 'bereavement', 'R5 sec')) || ' '
   || pg_temp.try_as('hrlite', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('sec'), 'bereavement', 'x')),
-  'ok:1 42501');
+  'ok:1 ok:1');
 -- revoke runs the same guard
 do $$
 begin
@@ -1412,10 +1410,10 @@ select pg_temp.expect('R5 special_leave_grants_select keys on has_perm, special_
   'true true');
 
 -- (a): HR covers the Security and Finance presets; a role without those items does not.
-select pg_temp.expect('R5 (a): HRLite (hr minus absences / finance) not on security or finance holders; on a plain employee yes',
+select pg_temp.expect('R5 (a): HRLite (hr minus finance) not on finance holders; on security (FR-75) and a plain employee yes',
   (select private.can_act_on((select id from fx where k='hrlite'), (select id from fx where k='sec'))::text
        || private.can_act_on((select id from fx where k='hrlite'), (select id from fx where k='fin'))::text
-       || private.can_act_on((select id from fx where k='hrlite'), (select id from fx where k='plain'))::text), 'falsefalsetrue');
+       || private.can_act_on((select id from fx where k='hrlite'), (select id from fx where k='plain'))::text), 'truefalsetrue');
 
 -- hr identity: hr holders sign approval steps AND clearance HR rows by role, so
 -- acting on them (or giving / taking hr) needs approval_steps edit and clearance

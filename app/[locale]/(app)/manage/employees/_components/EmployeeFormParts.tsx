@@ -3,9 +3,11 @@
 /** Pieces shared by the Add and Edit employee forms. */
 
 import { useLocale, useTranslations } from 'next-intl';
+import { Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatNumber } from '@/lib/i18n/format';
+import { cn } from '@/lib/utils';
 import {
   daysHoursToMinutes,
   minutesToDaysHours,
@@ -148,10 +150,12 @@ export function readDaysHours(
 
 /**
  * Every role of the company (app_list_roles order: system, preset, custom), by
- * its English name (D11). Native checkboxes, picked in e2e by
- * `[data-testid="role-<systemKey or id>"] input`. Values are role ids; boxes
- * outside `editable` render disabled, and the admin box always is (D1: it moves
- * only by Transfer admin), with `adminHint` saying where.
+ * its English name (D11), as on/off pill buttons (owner, 2026-11-03: checkboxes
+ * were easy to mis-tick). Each pill is a label around a visually hidden native
+ * checkbox, so e2e still picks `[data-testid="role-<systemKey or id>"] input`.
+ * Values are role ids; pills outside `editable` render disabled, and the admin
+ * pill always is (D1: it moves only by Transfer admin), with `adminHint` saying
+ * where. FR-76: a hint says what Security without Employee means.
  */
 export function RoleCheckboxes({
   label,
@@ -170,40 +174,46 @@ export function RoleCheckboxes({
   editable: readonly string[];
   adminHint: string;
 }) {
+  const t = useTranslations('manage.employees');
   const hasAdmin = roles.some((r) => r.systemKey === 'admin');
+  const hasSecurity = roles.some((r) => r.systemKey === 'security');
   return (
     <div className="space-y-2">
       <span className="block text-sm font-medium leading-none">{label}</span>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2">
         {roles.map((role) => {
           const canToggle = role.systemKey !== 'admin' && editable.includes(role.id);
+          const on = selected.includes(role.id);
           return (
             <label
               key={role.id}
               data-testid={`role-${role.systemKey ?? role.id}`}
-              className={`flex items-center gap-2 ${canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}
+              className={cn(
+                'inline-flex min-h-10 select-none items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition-colors',
+                'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2',
+                on
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-input bg-background text-foreground hover:bg-accent',
+                canToggle ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+              )}
             >
               <input
                 type="checkbox"
                 value={role.systemKey ?? role.id}
-                checked={selected.includes(role.id)}
+                checked={on}
                 disabled={!canToggle}
                 onChange={() =>
-                  onChange(
-                    selected.includes(role.id)
-                      ? selected.filter((id) => id !== role.id)
-                      : [...selected, role.id]
-                  )
+                  onChange(on ? selected.filter((id) => id !== role.id) : [...selected, role.id])
                 }
-                className="rounded border-input text-primary focus:ring-ring"
+                className="sr-only"
               />
-              <span className="text-sm" dir="ltr">
-                {role.name}
-              </span>
+              {on && <Check className="size-4" aria-hidden="true" />}
+              <span dir="ltr">{role.name}</span>
             </label>
           );
         })}
       </div>
+      {hasSecurity && <p className="text-xs text-muted-foreground">{t('securityOnlyHint')}</p>}
       {hasAdmin && <p className="text-xs text-muted-foreground">{adminHint}</p>}
     </div>
   );

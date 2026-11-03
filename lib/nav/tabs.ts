@@ -1,4 +1,6 @@
 import { can, type Perms } from '@/lib/permissions/catalog';
+import type { AbsenceWatch } from '@/lib/absences/watch';
+import { hasTimeOff } from '@/lib/auth/timeOff';
 
 /**
  * Pure nav model — which navigation entries a user sees, given their roles and
@@ -55,7 +57,7 @@ const BASE: Tab[] = [
 ];
 
 type ManageEntry = NavItem & {
-  allowed: (roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean) => boolean;
+  allowed: (roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean, absencesPage?: boolean) => boolean;
 };
 
 // Approvals are identity-based (the approval chain routes to a person), not a permission.
@@ -66,8 +68,8 @@ const isAdmin = (roles: string[]) => roles.includes('admin');
 // FR-62: finance's list of completed approvals (finance read). Whoever already
 // has a Manage group finds it there (admin, the hr preset under ruling a); for
 // anyone else (the finance preset) it is a tab, so the mobile bar stays at five
-// items. The approved-absences board (absences read) is never a tab: an admin
-// opens it from Manage, every other holder sees it on Home (FR-56).
+// items. The approved-absences board is never a tab: it sits in Manage for the admin
+// and for absence watchers with the full page on (FR-75).
 const FINANCE_TAB: Tab = { key: 'finance', href: '/finance', labelKey: 'finance' };
 // FR-70: procurement's booking list follows the same rule as Finance.
 const PROCUREMENT_TAB: Tab = { key: 'procurement', href: '/procurement', labelKey: 'procurement' };
@@ -89,25 +91,28 @@ const MANAGE: ManageEntry[] = [
   { key: 'approvalSteps', href: '/manage/approval-steps', labelKey: 'approvalSteps', testId: 'nav-approval-steps', allowed: (_roles, perms) => can(perms, 'approval_steps', 'read') },
   // FR-37 reports: reports permission.
   { key: 'reports', href: '/manage/reports', labelKey: 'reports', testId: 'nav-reports', allowed: (_roles, perms) => can(perms, 'reports', 'read') },
-  // FR-56: the admin's way to the approved-absences board (absences read is
-  // implicit for the admin); other holders see it on Home (homeAbsencesBoard).
-  { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: isAdmin },
+  // FR-56/75: the approved-absences board, for the admin and for absence watchers
+  // with the full page on (absence_watchers.full_page).
+  { key: 'absences', href: '/absences', labelKey: 'absences', testId: 'nav-absences', allowed: (roles, _perms, _canApprove, _hasReports, absencesPage) => isAdmin(roles) || absencesPage === true },
   // FR-62: inside Manage only for someone who has a Manage group anyway.
-  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove, hasReports) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove, hasReports) },
-  { key: 'procurement', href: '/procurement', labelKey: 'procurement', testId: 'nav-procurement', allowed: (roles, perms, canApprove, hasReports) => can(perms, 'travel_booking', 'edit') && hasManageGroup(roles, perms, canApprove, hasReports) },
+  { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove, hasReports, absencesPage) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) },
+  { key: 'procurement', href: '/procurement', labelKey: 'procurement', testId: 'nav-procurement', allowed: (roles, perms, canApprove, hasReports, absencesPage) => can(perms, 'travel_booking', 'edit') && hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) },
 ];
 
 /** True when the caller reaches a Manage page other than Finance/Procurement (which follow the group). */
-function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean) {
-  return MANAGE.some((i) => !FOLLOWS_GROUP.includes(i.key) && i.allowed(roles, perms, canApprove, hasReports));
+function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean, hasReports?: boolean, absencesPage?: boolean) {
+  return MANAGE.some((i) => !FOLLOWS_GROUP.includes(i.key) && i.allowed(roles, perms, canApprove, hasReports, absencesPage));
 }
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
 export function tabsForRoles(
-  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean
+  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean, absencesPage?: boolean,
+  timeOff?: boolean
 ): Tab[] {
-  const tabs = [...BASE];
-  const manage = hasManageGroup(roles, perms, canApprove, hasReports) || canDelegate === true;
+  // FR-76: security staff without the Employee role send no requests. `timeOff` is the live
+  // answer (getCachedTimeOff); without it, the roles claim decides.
+  const tabs = BASE.filter((t) => t.key !== 'request' || (timeOff ?? hasTimeOff(roles)));
+  const manage = hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (can(perms, 'travel_booking', 'edit') && !manage) tabs.push(PROCUREMENT_TAB);
   if (manage) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
@@ -116,13 +121,13 @@ export function tabsForRoles(
 
 /** The labelled Manage group, filtered to what this caller can reach. */
 export function manageItemsForRoles(
-  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean
+  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean, absencesPage?: boolean
 ): NavItem[] {
   return MANAGE.filter((item) => item.key === 'finance' && canDelegate === true
     ? can(perms, 'finance', 'read')
     : item.key === 'procurement' && canDelegate === true
       ? can(perms, 'travel_booking', 'edit')
-      : item.allowed(roles, perms, canApprove, hasReports)).map(({ key, href, labelKey, testId }) => ({
+      : item.allowed(roles, perms, canApprove, hasReports, absencesPage)).map(({ key, href, labelKey, testId }) => ({
     key,
     href,
     labelKey,
@@ -142,10 +147,7 @@ export function settingsItemForRoles(roles: string[], perms: Perms, canDelegate?
     : null;
 }
 
-/**
- * FR-56: the approved-absences board on Home, for every holder of absences read
- * except the admin, who opens it from Manage › Absences instead.
- */
-export function homeAbsencesBoard(roles: string[], perms: Perms): boolean {
-  return !isAdmin(roles) && can(perms, 'absences', 'read');
+/** FR-75: the 30-day approved-absences tile on Home, for absence watchers with the tile on. */
+export function homeAbsencesBoard(watch: AbsenceWatch | null): boolean {
+  return watch?.homeTile === true;
 }

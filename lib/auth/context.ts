@@ -26,6 +26,8 @@ import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { can, parsePermsClaim, type Level, type PermKey, type Perms } from '@/lib/permissions/catalog';
+import { watchFromRow, type AbsenceWatch } from '@/lib/absences/watch';
+import { hasTimeOff } from '@/lib/auth/timeOff';
 
 export type AuthUser = { id: string; email?: string };
 
@@ -72,6 +74,32 @@ export const getCachedPermissions = cache(async (userId: string): Promise<Perms>
   const supabase = await createClient();
   const { data } = await supabase.rpc('app_my_permissions');
   return parsePermsClaim(data) ?? {};
+});
+
+/**
+ * FR-75: the caller's own absence_watchers row (null when not on the list). Live, not a claim:
+ * the list changes on Manage › Approval steps and should show on the next page load.
+ */
+export const getCachedAbsenceWatch = cache(async (userId: string): Promise<AbsenceWatch | null> => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('absence_watchers')
+    .select('leave_day, leave_hour, errand_day, errand_hour, home_tile, full_page')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data ? watchFromRow(data) : null;
+});
+
+/**
+ * FR-76: whether the caller files requests and holds leave. Live user_roles, not the claim: when
+ * HR adds or removes Employee, the Request tab and pages follow on the next page load instead of
+ * after the token refresh (up to 1h). On a failed read, the claim decides.
+ */
+export const getCachedTimeOff = cache(async (userId: string): Promise<boolean> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from('user_roles').select('role').eq('user_id', userId);
+  if (error || !data) return hasTimeOff(await getCachedRoles(userId));
+  return hasTimeOff(data.map((r) => r.role).filter((r): r is NonNullable<typeof r> => r != null));
 });
 
 /** The caller's own profile row (all columns), fetched at most once per request. */

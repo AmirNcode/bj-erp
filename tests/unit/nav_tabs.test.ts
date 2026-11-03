@@ -1,15 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { homeAbsencesBoard, manageItemsForRoles, settingsItemForRoles, tabsForRoles } from '@/lib/nav/tabs';
 import { fullPerms, type Perms } from '@/lib/permissions/catalog';
+import { FULL_WATCH } from '@/lib/absences/watch';
 
 // The presets as seeded (migration 20261013200001, seed_company_roles).
 const HR: Perms = {
   people: 'edit', people_create: 'edit', role_manager: 'edit', personal_info: 'edit', clearance: 'edit',
   departments: 'edit', leave_balances: 'edit', leave_accrual: 'edit', special_leave: 'edit',
-  leave_requests: 'read', calendar: 'read', absences: 'read', reports: 'read', finance: 'read',
+  leave_requests: 'read', calendar: 'read', reports: 'read', finance: 'read',
   approval_steps: 'edit', work_settings: 'edit', holidays: 'edit',
 };
-const SEC: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read', absences: 'read' };
+const SEC: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read' };
 const FIN: Perms = { clearance: 'read', finance: 'read' };
 
 describe('tabsForRoles', () => {
@@ -43,8 +44,21 @@ describe('tabsForRoles', () => {
   it('security preset now reaches the manage tab (FR-55)', () => {
     expect(tabsForRoles(['security'], SEC).map((t) => t.key)).toContain('manage');
   });
-  it('security gets no absences tab — the board is on their Home (FR-56)', () => {
+  it('security gets no absences tab — the board is never a tab (FR-56/75)', () => {
     expect(tabsForRoles(['employee', 'security'], SEC).map((t) => t.key)).not.toContain('absences');
+  });
+  it('FR-76: security without Employee gets no request tab; with Employee it does', () => {
+    expect(tabsForRoles(['security'], SEC).map((t) => t.key)).not.toContain('request');
+    expect(tabsForRoles(['employee', 'security'], SEC).map((t) => t.key)).toContain('request');
+    expect(tabsForRoles(['admin'], fullPerms()).map((t) => t.key)).toContain('request');
+  });
+
+  it('FR-76: the live timeOff flag wins over a stale roles claim', () => {
+    const keys = (roles: string[], timeOff?: boolean) =>
+      tabsForRoles(roles, SEC, undefined, undefined, undefined, undefined, timeOff).map((t) => t.key);
+    expect(keys(['security'], true)).toContain('request');
+    expect(keys(['employee', 'security'], false)).not.toContain('request');
+    expect(keys(['security'], undefined)).not.toContain('request');
   });
   it('finance preset gets the finance tab and no Manage (FR-62)', () => {
     const tabs = tabsForRoles(['employee', 'finance'], FIN);
@@ -126,7 +140,7 @@ describe('manageItemsForRoles', () => {
       'procurement',
     ]);
   });
-  it('hr preset gets Finance in Manage, never Manage › Absences (that board is on Home)', () => {
+  it('hr preset gets Finance in Manage; Manage › Absences only as a watcher (FR-75)', () => {
     expect(keys(['hr'], HR)).toContain('finance');
     expect(keys(['hr'], HR)).not.toContain('absences');
   });
@@ -177,21 +191,30 @@ describe('settingsItemForRoles', () => {
   });
 });
 
-describe('homeAbsencesBoard', () => {
-  it('security preset sees the board on Home', () => {
-    expect(homeAbsencesBoard(['security'], SEC)).toBe(true);
+describe('homeAbsencesBoard (FR-75: a watcher row, not a role)', () => {
+  it('a watcher with the Home tile on sees it', () => {
+    expect(homeAbsencesBoard(FULL_WATCH)).toBe(true);
+    expect(homeAbsencesBoard({ ...FULL_WATCH, fullPage: false })).toBe(true);
   });
-  it('the hr preset too (ruling a), and any custom absences holder', () => {
-    expect(homeAbsencesBoard(['hr'], HR)).toBe(true);
-    expect(homeAbsencesBoard(['employee'], { people: 'read', leave_requests: 'read', absences: 'read' })).toBe(true);
+  it('the tile off, or no row at all: no tile', () => {
+    expect(homeAbsencesBoard({ ...FULL_WATCH, homeTile: false })).toBe(false);
+    expect(homeAbsencesBoard(null)).toBe(false);
   });
-  it('never the admin: they open it from Manage › Absences', () => {
-    expect(homeAbsencesBoard(['admin'], fullPerms())).toBe(false);
-    expect(homeAbsencesBoard(['admin', 'security'], fullPerms())).toBe(false);
+});
+
+describe('Manage › Absences (FR-75)', () => {
+  const keys = (roles: string[], perms: Perms, absencesPage?: boolean) =>
+    manageItemsForRoles(roles, perms, undefined, undefined, undefined, absencesPage).map((i) => i.key);
+  it('a watcher with the full page on finds it in Manage, and so gets the Manage tab', () => {
+    expect(keys(['employee'], {}, true)).toEqual(['absences']);
+    expect(tabsForRoles(['employee'], {}, undefined, undefined, undefined, true).map((t) => t.key)).toContain('manage');
   });
-  it('the security role without the permission sees no board', () => {
-    expect(homeAbsencesBoard(['security'], { people: 'read', leave_requests: 'read' })).toBe(false);
-    expect(homeAbsencesBoard(['employee'], {})).toBe(false);
+  it('no full page: no item, whatever the roles', () => {
+    expect(keys(['employee', 'security'], SEC, false)).not.toContain('absences');
+    expect(keys(['hr'], HR)).not.toContain('absences');
+  });
+  it('the admin always', () => {
+    expect(keys(['admin'], fullPerms(), false)).toContain('absences');
   });
 });
 

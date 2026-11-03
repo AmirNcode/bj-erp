@@ -12,8 +12,19 @@ import { AbsenceRow } from './AbsencesBoard';
  * under way shows too), split into work errands and leave, each in start-date
  * order — so HR can enter them into the attendance (fingerprint) system. Owner,
  * 2026-11-02: a fixed window, no picker; the calendar shows anything further.
+ * `sections` leaves out a section none of whose request types the watcher follows (FR-75).
  */
-export function UpcomingAbsences({ absences, days, locale }: { absences: Absence[]; days: number; locale: string }) {
+export function UpcomingAbsences({
+  absences,
+  days,
+  locale,
+  sections = { leave: true, errands: true },
+}: {
+  absences: Absence[];
+  days: number;
+  locale: string;
+  sections?: { leave: boolean; errands: boolean };
+}) {
   const t = useTranslations('absences');
   const n = formatNumber(days, locale);
   const errands = absences.filter((a) => a.kind === 'errand');
@@ -40,9 +51,11 @@ export function UpcomingAbsences({ absences, days, locale }: { absences: Absence
     <Card className="gap-2 p-4" data-testid="absences-upcoming">
       <h2 className="text-lg font-semibold">{t('upcomingTitle', { days: n })}</h2>
       <p className="text-xs text-muted-foreground">{t('upcomingHint', { days: n })}</p>
-      {section(t('errandsSection'), <Briefcase className="size-4" aria-hidden="true" />, errands, t('errandsEmpty', { days: n }), 'absences-upcoming-errands')}
-      <div className="border-t" />
-      {section(t('leaveSection'), <Palmtree className="size-4" aria-hidden="true" />, leave, t('leaveEmpty', { days: n }), 'absences-upcoming-leave')}
+      {sections.errands &&
+        section(t('errandsSection'), <Briefcase className="size-4" aria-hidden="true" />, errands, t('errandsEmpty', { days: n }), 'absences-upcoming-errands')}
+      {sections.errands && sections.leave && <div className="border-t" />}
+      {sections.leave &&
+        section(t('leaveSection'), <Palmtree className="size-4" aria-hidden="true" />, leave, t('leaveEmpty', { days: n }), 'absences-upcoming-leave')}
     </Card>
   );
 }

@@ -614,6 +614,7 @@
       "lockedSelf": "Ask an admin to change your own department, manager, title, roles or status.",
       "lockedAbove": "This person has access you don't have, so only the admin or someone with more access can change their record.",
       "readOnlyNote": "You can view this record but not change its details.",
+      "securityOnlyHint": "Security without Employee (a subcontractor): no requests and no leave balance. Add Employee to give both.",
       "adminTransferHint": "Admin is moved with Transfer admin in Settings › Roles.",
       "accountActions": "Account",
       "loginCode": "Login code",
@@ -747,6 +748,39 @@
           "added": "Approval step added.",
           "errorLabel": "Error",
           "selectOne": "{count} people found — select one"
+        }
+      },
+      "absenceWatchers": {
+        "title": "Absence notifications",
+        "hint": "People listed here see fully approved absences of the types switched on, so they can enter them into the attendance (fingerprint) system in time. Nobody else does; the administrator always sees everything under Manage › Absences.",
+        "empty": "Nobody is listed yet.",
+        "add": "Add person",
+        "edit": "Edit",
+        "remove": "Remove",
+        "removeConfirm": "{name} will no longer see approved absences.",
+        "removed": "Removed from absence notifications.",
+        "saved": "Saved.",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saving": "Saving…",
+        "addTitle": "Add a person to absence notifications",
+        "editTitle": "Absence notifications for {name}",
+        "intro": "Choose which approved requests this person sees, and where.",
+        "person": "Person",
+        "alreadyListed": "This person is already listed; saving replaces their choices.",
+        "typesLabel": "Request types",
+        "viewsLabel": "Shown on",
+        "needsChoice": "Turn on at least one request type and one place.",
+        "inactive": "Account disabled",
+        "types": {
+          "leaveDay": "Daily leave",
+          "leaveHour": "Hourly leave",
+          "errandDay": "Daily work trip",
+          "errandHour": "Hourly work errand"
+        },
+        "views": {
+          "homeTile": "Home tile (next 30 days)",
+          "fullPage": "Full absences page (any day)"
         }
       },
       "holidayImport": {
@@ -953,6 +987,9 @@
     "approvalStepNeedsPerson": "This step must name a specific person.",
     "approvalStepNotSaved": "The approval step was not saved. Try again.",
     "duplicateApprovalStep": "That approval step already exists.",
+    "noTimeOff": "Security staff without the Employee role have no time off: they cannot send requests, and their requests cannot be approved.",
+    "absenceWatcherIncomplete": "Turn on at least one request type and one view.",
+    "absenceWatcherNotSaved": "The person was not saved. Try again.",
     "notAllowedToReview": "You are not allowed to review requests.",
     "onlyPending": "This request is no longer pending: it was cancelled or already decided.",
     "cannotCancel": "Only pending requests, or approved requests that have not started yet, can be cancelled.",
@@ -1522,10 +1559,6 @@
       "special_leave": {
         "label": "Leave outside the list",
         "description": "Grant marriage or bereavement leave days."
-      },
-      "absences": {
-        "label": "Approved absences",
-        "description": "See who is away today or on a chosen day."
       },
       "finance": {
         "label": "Finance",

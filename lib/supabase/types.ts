@@ -20,6 +20,56 @@ export type Database = {
   }
   public: {
     Tables: {
+      absence_watchers: {
+        Row: {
+          user_id: string
+          company_id: string
+          leave_day: boolean
+          leave_hour: boolean
+          errand_day: boolean
+          errand_hour: boolean
+          home_tile: boolean
+          full_page: boolean
+          created_at: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          user_id: string
+          company_id: string
+          leave_day?: boolean
+          leave_hour?: boolean
+          errand_day?: boolean
+          errand_hour?: boolean
+          home_tile?: boolean
+          full_page?: boolean
+          created_at?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          user_id?: string
+          company_id?: string
+          leave_day?: boolean
+          leave_hour?: boolean
+          errand_day?: boolean
+          errand_hour?: boolean
+          home_tile?: boolean
+          full_page?: boolean
+          created_at?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "absence_watchers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       approval_executive_settings: {
         Row: {
           company_id: string
@@ -1701,6 +1751,15 @@ export type Database = {
       app_admin_set_personnel_no: {
         Args: { p_user: string; p_personnel_no: string }
         Returns: undefined
+      }
+      watched_absences: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          id: string; kind: Database["public"]["Enums"]["request_kind"]; unit: Database["public"]["Enums"]["leave_unit"]
+          start_date: string; end_date: string; start_time: string | null; end_time: string | null
+          employee_name: string; personnel_no: string | null; department_name_fa: string | null
+          department_name_en: string | null; leave_type_name_fa: string | null; leave_type_name_en: string | null
+        }[]
       }
       app_approval_history: {
         Args: { p_limit?: number; p_offset?: number }

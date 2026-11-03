@@ -13,6 +13,10 @@ type Props = {
   canDelegate?: boolean;
   /** FR-74: someone reports to the caller (Employees shows them). */
   hasReports?: boolean;
+  /** FR-75: absence watcher with the full Absences page on. */
+  absencesPage?: boolean;
+  /** FR-76: live; false hides the Request tab. */
+  timeOff?: boolean;
   locale: string;
   appName: string;
   /** Side-panel footer identity: name and "{role} ، profile". */
@@ -34,6 +38,8 @@ export function AppShell({
   canApprove,
   canDelegate,
   hasReports,
+  absencesPage,
+  timeOff,
   locale,
   appName,
   profile,
@@ -56,13 +62,15 @@ export function AppShell({
         canApprove={canApprove}
         canDelegate={canDelegate}
         hasReports={hasReports}
+        absencesPage={absencesPage}
+        timeOff={timeOff}
         locale={locale}
         appName={appName}
         profile={profile}
         initialUpdatedAt={initialUpdatedAt}
         pendingCount={pendingCount}
       />
-      <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} hasReports={hasReports} locale={locale} />
+      <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} hasReports={hasReports} absencesPage={absencesPage} timeOff={timeOff} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
   );
