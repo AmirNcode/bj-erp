@@ -33,6 +33,11 @@ end; $$;
 create function pg_temp.sig() returns text language sql immutable as $$
   select 'data:image/png;base64,iVBORw0KGgo'||repeat('A',89);
 $$;
+-- Runs p_sql as the superuser (triggers still fire): 'ok' or the SQLSTATE.
+create function pg_temp.try(p_sql text) returns text language plpgsql as $$
+begin execute p_sql; return 'ok';
+exception when others then return sqlstate; end;
+$$;
 create function pg_temp.err(p_result text) returns text language sql as $$
   select case when left(p_result,6)='ERROR ' then split_part(p_result,' ',2) else 'ok' end;
 $$;
@@ -62,7 +67,7 @@ begin
   for who in select * from (values
     ('admin',array['admin'],'9990078001'),('boss',array['manager','employee'],'9990078002'),
     ('guard',array['security'],'9990078003'),('both',array['security','employee'],'9990078004'),
-    ('emp',array['employee'],'9990078005')) t(k,roles,code) loop
+    ('emp',array['employee'],'9990078005'),('switch',array['security','employee'],'9990078006')) t(k,roles,code) loop
     insert into so_fx values(who.k,gen_random_uuid());
     insert into auth.users(id,email) values(pg_temp.fx(who.k),who.code||'@secure-fixture.invalid');
     insert into public.profiles(id,company_id,department_id,employee_code,personnel_no,full_name,must_change_password)
@@ -70,7 +75,7 @@ begin
     insert into public.user_roles(user_id,role) select pg_temp.fx(who.k),r::public.app_role from unnest(who.roles) r;
   end loop;
   perform pg_temp.login('admin');
-  update public.profiles set manager_id=pg_temp.fx('boss') where id in (pg_temp.fx('guard'),pg_temp.fx('both'),pg_temp.fx('emp'));
+  update public.profiles set manager_id=pg_temp.fx('boss') where id in (pg_temp.fx('guard'),pg_temp.fx('both'),pg_temp.fx('emp'),pg_temp.fx('switch'));
   insert into public.work_settings(company_id,weekend_days,work_start,work_end,approval_order_enforced)
     values(v_company,'{}','07:00','15:00',false);
   insert into public.leave_types(company_id,name_fa,name_en,is_paid,affects_balance,allow_half_day,allow_hourly)
@@ -107,9 +112,53 @@ select pg_temp.fx(k),pg_temp.fx('annual'),600,
   from unnest(array['guard','both']) k;
 select public.accrue_leave(pg_temp.fx('guard'),pg_temp.fx('annual'));
 select public.accrue_leave(pg_temp.fx('both'),pg_temp.fx('annual'));
-select pg_temp.expect('accrual: none for security-only',
-  (select count(*)::text from public.leave_ledger where employee_id=pg_temp.fx('guard') and period_month is not null),'0');
+select pg_temp.expect('accrual: security-only months marked with 0-minute rows',
+  (select (count(*)>1)::text||'/'||coalesce(sum(delta_minutes),0) from public.leave_ledger
+    where employee_id=pg_temp.fx('guard') and period_month is not null),'true/0');
 select pg_temp.expect('accrual: posted for security + employee',
   (select (count(*)>0)::text from public.leave_ledger where employee_id=pg_temp.fx('both') and period_month is not null),'true');
+-- Employee added later: the marked months are not backfilled; only an unposted month accrues.
+insert into public.user_roles(user_id,role) values(pg_temp.fx('guard'),'employee');
+delete from public.leave_ledger l using public.jalali_months jm
+ where l.employee_id=pg_temp.fx('guard') and l.period_month=jm.gregorian_start
+   and (now() at time zone 'Asia/Tehran')::date between jm.gregorian_start and jm.gregorian_end;
+select pg_temp.expect('accrual: Employee added later earns this month only, no backfill',
+  public.accrue_leave(pg_temp.fx('guard'),pg_temp.fx('annual'))::text,'600');
+
+-- Requests filed while still an Employee: once the role goes, the final approval is refused
+-- (leave and errand extensions); rejecting stays possible.
+select pg_temp.expect('switch: leave filed while an employee',pg_temp.leave('switch',20),'ok');
+do $$
+declare v_errand uuid; v_ext uuid;
+begin
+  insert into public.leave_requests(employee_id,company_id,kind,errand_location,start_date,end_date,
+    requested_minutes,status,serial_year,serial_seq)
+  values(pg_temp.fx('switch'),pg_temp.fx('company'),'errand','x',current_date+30,current_date+31,960,'approved',1,979002)
+  returning id into v_errand;
+  insert into public.errand_extensions(request_id,company_id,old_end_date,new_end_date,reason,requested_by)
+  values(v_errand,pg_temp.fx('company'),current_date+31,current_date+32,'x',pg_temp.fx('boss'))
+  returning id into v_ext;
+  insert into so_fx values('switch_errand',v_errand),('switch_ext',v_ext);
+  delete from public.user_roles where user_id=pg_temp.fx('switch') and role='employee';
+end; $$;
+select pg_temp.expect('switch: now security-only',private.is_security_only(pg_temp.fx('switch'))::text,'true');
+select pg_temp.expect('pending leave of a now security-only person: approval refused',
+  pg_temp.try(format($q$update public.leave_requests set status='approved'
+    where employee_id=%L and status='pending'$q$,pg_temp.fx('switch'))),'42501');
+select pg_temp.expect('… rejecting it still works',
+  pg_temp.try(format($q$update public.leave_requests set status='rejected',decided_by=%L,decided_at=now()
+    where employee_id=%L and status='pending'$q$,pg_temp.fx('boss'),pg_temp.fx('switch'))),'ok');
+select pg_temp.expect('pending errand extension: approval refused',
+  pg_temp.try(format($q$update public.errand_extensions set status='approved',evidence='manual',
+    decided_by=%L,decided_at=now() where id=%L$q$,pg_temp.fx('admin'),pg_temp.fx('switch_ext'))),'42501');
+select pg_temp.expect('… rejecting it still works',
+  pg_temp.try(format($q$update public.errand_extensions set status='rejected',decided_by=%L,decided_at=now()
+    where id=%L$q$,pg_temp.fx('admin'),pg_temp.fx('switch_ext'))),'ok');
+select pg_temp.expect('new errand extension for a security-only person refused',
+  pg_temp.try(format($q$insert into public.errand_extensions(request_id,company_id,old_end_date,new_end_date,reason,requested_by)
+    values(%L,%L,current_date+31,current_date+33,'x',%L)$q$,
+    pg_temp.fx('switch_errand'),pg_temp.fx('company'),pg_temp.fx('boss'))),'42501');
+select pg_temp.expect('an approved request stays approved (history)',
+  (select status::text from public.leave_requests where id=pg_temp.fx('switch_errand')),'approved');
 
 rollback;

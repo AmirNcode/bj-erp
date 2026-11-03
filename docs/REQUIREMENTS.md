@@ -406,7 +406,9 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-76** ☐ **Security staff without Employee have no time off.** Security staff are a subcontractor:
   someone with the Security role and without Employee sees no Request tab (every `/request` page sends
   them Home), no **My Recent Requests** or **My Balances** on Home, cannot file a request (refused by the
-  database) and earns no monthly accrual. Security + Employee keeps requests and leave. On New/Edit
+  database, as is approving one filed before Employee was removed, or extending a work trip) and earns
+  no monthly accrual — adding Employee later does not pay those months back. A role change shows on the
+  next page load. Security + Employee keeps requests and leave. On New/Edit
   Employee the roles are on/off pill buttons (selected = filled blue with a check), with a hint
   explaining Security without Employee. *(Owner, 2026-11-03; unreleased.)*
 - **FR-75** ☐ **Absence notifications per person.** On Manage › Approval steps, whoever edits the

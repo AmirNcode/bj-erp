@@ -987,7 +987,7 @@
     "approvalStepNeedsPerson": "This step must name a specific person.",
     "approvalStepNotSaved": "The approval step was not saved. Try again.",
     "duplicateApprovalStep": "That approval step already exists.",
-    "noTimeOff": "Security staff without the Employee role cannot send requests.",
+    "noTimeOff": "Security staff without the Employee role have no time off: they cannot send requests, and their requests cannot be approved.",
     "absenceWatcherIncomplete": "Turn on at least one request type and one view.",
     "absenceWatcherNotSaved": "The person was not saved. Try again.",
     "notAllowedToReview": "You are not allowed to review requests.",

@@ -106,10 +106,12 @@ function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean, has
 
 /** Bottom-bar tabs (mobile). Profile is reached from the bar's own profile tab. */
 export function tabsForRoles(
-  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean, absencesPage?: boolean
+  roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean, absencesPage?: boolean,
+  timeOff?: boolean
 ): Tab[] {
-  // FR-76: security staff without the Employee role send no requests.
-  const tabs = BASE.filter((t) => t.key !== 'request' || hasTimeOff(roles));
+  // FR-76: security staff without the Employee role send no requests. `timeOff` is the live
+  // answer (getCachedTimeOff); without it, the roles claim decides.
+  const tabs = BASE.filter((t) => t.key !== 'request' || (timeOff ?? hasTimeOff(roles)));
   const manage = hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (can(perms, 'travel_booking', 'edit') && !manage) tabs.push(PROCUREMENT_TAB);

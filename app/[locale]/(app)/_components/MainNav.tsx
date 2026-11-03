@@ -24,6 +24,8 @@ type Props = {
   canDelegate?: boolean;
   hasReports?: boolean;
   absencesPage?: boolean;
+  /** FR-76: live; false hides the Request tab. */
+  timeOff?: boolean;
   locale: string;
   appName?: string;
   /** Side-panel footer: the caller's name and "{role} ، profile" line. */
@@ -60,6 +62,7 @@ export function MainNav({
   canDelegate,
   hasReports,
   absencesPage,
+  timeOff,
   locale,
   appName,
   profile,
@@ -68,7 +71,7 @@ export function MainNav({
 }: Props) {
   const t = useTranslations('nav');
   const pathname = usePathname();
-  const tabs = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage);
+  const tabs = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage, timeOff);
   const manageItems = manageItemsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage);
   const settings = settingsItemForRoles(roles, perms, canDelegate);
 

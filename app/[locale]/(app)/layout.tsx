@@ -94,6 +94,7 @@ export default async function AppLayout({ children, params }: Props) {
       canDelegate={capabilities.canDelegate}
       hasReports={capabilities.hasReports}
       absencesPage={capabilities.absencesPage}
+      timeOff={capabilities.timeOff}
       locale={locale}
       appName={t('appName')}
       profile={profileSummary}

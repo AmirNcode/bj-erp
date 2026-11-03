@@ -12,13 +12,14 @@ type Props = {
   canDelegate?: boolean;
   hasReports?: boolean;
   absencesPage?: boolean;
+  timeOff?: boolean;
   locale: string;
 };
 
-export function RoutePrefetcher({ roles, perms, locale, canApprove, canDelegate, hasReports, absencesPage }: Props) {
+export function RoutePrefetcher({ roles, perms, locale, canApprove, canDelegate, hasReports, absencesPage, timeOff }: Props) {
   const router = useRouter();
   const hrefs = useMemo(() => {
-    const list = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage).map((tab) => tab.href);
+    const list = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage, timeOff).map((tab) => tab.href);
     // The side panel's first Manage item (the employees hub) is the usual
     // entry into the group on desktop.
     const firstManage = manageItemsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage)[0];
@@ -26,7 +27,7 @@ export function RoutePrefetcher({ roles, perms, locale, canApprove, canDelegate,
     // Profile lives in the side panel footer / mobile bar — still warm it.
     list.push('/profile');
     return list;
-  }, [roles, perms, canApprove, canDelegate, hasReports, absencesPage]);
+  }, [roles, perms, canApprove, canDelegate, hasReports, absencesPage, timeOff]);
 
   useEffect(() => {
     for (const href of hrefs) {

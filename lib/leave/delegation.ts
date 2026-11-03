@@ -7,6 +7,8 @@ export type ApprovalCapabilities = {
   hasReports: boolean;
   /** FR-75: the caller's absence_watchers row has the full Absences page on. */
   absencesPage: boolean;
+  /** FR-76: the caller files requests (not Security without Employee); live user_roles. */
+  timeOff: boolean;
 };
 export type DelegateCandidate = { profile_id: string; full_name: string; employee_code: string | null };
 export type DelegationGrant = {

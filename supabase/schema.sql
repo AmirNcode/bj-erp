@@ -1413,6 +1413,23 @@ end; $$;
 
 
 --
+-- Name: errand_extension_requester_has_time_off(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.errand_extension_requester_has_time_off() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only((select employee_id from public.leave_requests where id = new.request_id)) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+
+--
 -- Name: extension_overlaps(uuid, uuid, date, date); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1854,7 +1871,8 @@ CREATE FUNCTION private.leave_request_requester_has_time_off() RETURNS trigger
     SET search_path TO ''
     AS $$
 begin
-  if private.is_security_only(new.employee_id) then
+  if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
+     and private.is_security_only(new.employee_id) then
     raise exception 'no time off for this account' using errcode = '42501';
   end if;
   return new;
@@ -3230,12 +3248,8 @@ declare
   v_amount    int;
   v_already   int;
   v_rows      int;
+  v_no_time_off boolean;
 begin
-  -- FR-76: security staff without the Employee role earn no leave.
-  if private.is_security_only(p_employee_id) then
-    return public.current_leave_balance(p_employee_id, p_leave_type_id);
-  end if;
-
   select accrual_minutes_per_month, annual_cap_minutes, accrual_start_month
     into v_rate, v_cap, v_start
     from public.employee_leave_policies
@@ -3277,6 +3291,9 @@ begin
 
   select hire_date into v_hire from public.profiles where id = p_employee_id;
   v_balance := public.current_leave_balance(p_employee_id, p_leave_type_id);
+  -- FR-76: security staff without the Employee role earn no leave. Their months still get a
+  -- 0-minute row, so the month counts as posted and a later Employee role does not backfill it.
+  v_no_time_off := private.is_security_only(p_employee_id);
 
   for v_m in
     select jm.jalali_year, jm.jalali_month, jm.gregorian_start, jm.gregorian_end
@@ -3311,11 +3328,16 @@ begin
       v_amount := least(v_amount, greatest(v_cap - v_already, 0));
     end if;
 
-    if v_amount > 0 then
+    if v_no_time_off then
+      v_amount := 0;
+    end if;
+
+    if v_amount > 0 or v_no_time_off then
       insert into public.leave_ledger(employee_id, leave_type_id, entry_type,
                                       delta_minutes, balance_after_minutes, period_month, note)
       values (p_employee_id, p_leave_type_id, 'allocation',
-              v_amount, v_balance + v_amount, v_m.gregorian_start, 'monthly accrual')
+              v_amount, v_balance + v_amount, v_m.gregorian_start,
+              case when v_no_time_off then 'no accrual: security only' else 'monthly accrual' end)
       on conflict do nothing;
       get diagnostics v_rows = row_count;
       if v_rows = 1 then
@@ -9419,6 +9441,13 @@ CREATE TRIGGER employee_personal_info_before_update BEFORE UPDATE ON public.empl
 
 
 --
+-- Name: errand_extensions errand_extensions_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER errand_extensions_requester_has_time_off BEFORE INSERT OR UPDATE OF status ON public.errand_extensions FOR EACH ROW EXECUTE FUNCTION private.errand_extension_requester_has_time_off();
+
+
+--
 -- Name: holidays holidays_audit_change; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9436,7 +9465,7 @@ CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per
 -- Name: leave_requests leave_requests_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER leave_requests_requester_has_time_off BEFORE INSERT ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_requester_has_time_off();
+CREATE TRIGGER leave_requests_requester_has_time_off BEFORE INSERT OR UPDATE OF status ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_requester_has_time_off();
 
 
 --
@@ -11042,6 +11071,13 @@ REVOKE ALL ON FUNCTION private.effective_approval_delegate(p_principal uuid, p_a
 --
 
 REVOKE ALL ON FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_consent boolean, p_preview jsonb, p_temporary_ceo_authorized boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION errand_extension_requester_has_time_off(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.errand_extension_requester_has_time_off() FROM PUBLIC;
 
 
 --

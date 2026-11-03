@@ -52,6 +52,14 @@ describe('tabsForRoles', () => {
     expect(tabsForRoles(['employee', 'security'], SEC).map((t) => t.key)).toContain('request');
     expect(tabsForRoles(['admin'], fullPerms()).map((t) => t.key)).toContain('request');
   });
+
+  it('FR-76: the live timeOff flag wins over a stale roles claim', () => {
+    const keys = (roles: string[], timeOff?: boolean) =>
+      tabsForRoles(roles, SEC, undefined, undefined, undefined, undefined, timeOff).map((t) => t.key);
+    expect(keys(['security'], true)).toContain('request');
+    expect(keys(['employee', 'security'], false)).not.toContain('request');
+    expect(keys(['security'], undefined)).not.toContain('request');
+  });
   it('finance preset gets the finance tab and no Manage (FR-62)', () => {
     const tabs = tabsForRoles(['employee', 'finance'], FIN);
     expect(tabs.find((t) => t.key === 'finance')).toMatchObject({ href: '/finance' });

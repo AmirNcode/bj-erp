@@ -15,6 +15,10 @@ was deployed; semantic versioning starts at the first tag.
   see the **Request** tab, and Home no longer shows them **My Recent Requests** or **My Balances**. The
   database refuses any request for them and monthly accrual skips them. Anyone with Security **and**
   Employee keeps everything.
+- Review fixes: the skipped months stay skipped if Employee is added later (no back-pay of leave);
+  a request filed before Employee was removed can be rejected but not approved; work-trip extensions
+  are refused for them too; the Request tab and pages follow a role change on the next page load
+  instead of after the sign-in token refreshes (up to an hour).
 - **New / Edit Employee:** the roles are now on/off buttons (filled blue with a check when on)
   instead of small checkboxes, with a hint under them about Security without Employee.
 - Migration `20261103120000_security_only_no_time_off`.

@@ -12,7 +12,6 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions, getCachedAbsenceWatch } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { homeAbsencesBoard } from '@/lib/nav/tabs';
-import { hasTimeOff } from '@/lib/auth/timeOff';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
@@ -88,7 +87,8 @@ async function HomeBoardData({
   ]);
   const canApprove = capabilities.canApprove;
   // FR-76: security staff without Employee have no requests or balances, so neither card.
-  const timeOff = hasTimeOff(roles);
+  // Live roles (capabilities), not the token claim.
+  const timeOff = capabilities.timeOff;
 
   // Upcoming time off for the team directory (non-approvers only). "Today" in
   // the company timezone, not the server's (UTC).

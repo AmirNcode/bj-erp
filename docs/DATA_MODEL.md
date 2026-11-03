@@ -573,11 +573,15 @@ A separate table so the write never touches `leave_requests` and its triggers.
 `app_request_approval_progress` rows also carry `is_mine` (FR-71, migration `20261021120000`).
 
 ### Security-only staff (2026-11-03, FR-76, unreleased)
-`private.is_security_only(uid)` = a `user_roles.role = 'security'` row and no `'employee'` row. BEFORE INSERT
-trigger `leave_requests_requester_has_time_off` raises `no time off for this account` (42501) for such an
-`employee_id`, so every `submit_*` function and direct insert is refused. `accrue_leave` returns the current
-balance without posting for them, so no accrual path credits them. Existing rows stay. Migration
-`20261103120000_security_only_no_time_off`.
+`private.is_security_only(uid)` = a `user_roles.role = 'security'` row and no `'employee'` row. Trigger
+`leave_requests_requester_has_time_off` (BEFORE INSERT OR UPDATE OF status) raises `no time off for this
+account` (42501) for such an `employee_id` on insert (every `submit_*` function and direct insert) and on
+the change to `approved` (a request filed before Employee was removed); rejecting or cancelling still
+works. `errand_extensions_requester_has_time_off` does the same for extensions (new one, or approving a
+pending one). `accrue_leave` posts **0-minute** `allocation` rows (note `no accrual: security only`) for
+their months instead of the monthly amount: the month counts as posted (`leave_ledger_period_uniq`), so
+adding Employee later accrues from the next unposted month and never backfills the security-only months.
+Existing rows and approved requests stay. Migration `20261103120000_security_only_no_time_off`.
 
 ### `absence_watchers` (2026-11-02, FR-75, unreleased)
 `user_id → profiles` (PK, on delete cascade) · `company_id → companies` · booleans `leave_day`,

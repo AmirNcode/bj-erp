@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — PR #16 review fixes (FR-76 accrual backfill, approval/extension bypass, live roles) · merge
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/absence-watchers @ 7dcb863 (PR #16)
+**Trigger:** Amir asked for a review of PR #16, then: fix the findings (self-adding as an absence watcher with `approval_steps` edit is intended, so no change there), including the stale-token point, and merge to `main` to deploy.
+
+**What changed**
+- `supabase/migrations/20261103120000_security_only_no_time_off.sql` (edited in place: no persistent DB had applied it — local `postgres` ledger ends at `20261102130001`, Liara never got the PR):
+  - `accrue_leave`: a security-only person now gets 0-minute `allocation` rows (`no accrual: security only`) for each month instead of an early return. Before, adding Employee later made the loop backfill every month since `accrual_start_month`.
+  - `leave_requests_requester_has_time_off` is now `BEFORE INSERT OR UPDATE OF status` and also refuses the change to `approved` (a request filed before Employee was removed). Rejecting/cancelling still works.
+  - New `private.errand_extension_requester_has_time_off` + trigger on `errand_extensions` (insert, or approving a pending one): extensions never touched `leave_requests` inserts, so they got past FR-76.
+- `lib/auth/context.ts` `getCachedTimeOff` (live `user_roles`; claim as fallback on a failed read) → `ApprovalCapabilities.timeOff` (`lib/leave/delegation.ts`, `lib/auth/approval-capabilities.ts`) → `layout.tsx` → `AppShell` → `MainNav`/`RoutePrefetcher` → `tabsForRoles(..., timeOff)` (`lib/nav/tabs.ts`). `/request` layout and Home use it too. The Request tab/pages now follow a role change on the next page load, not after the token refresh.
+- `messages/*.json` `errors.noTimeOff` now also covers approvals.
+- Tests: `tests/sql/security-only.sql` 12 → 21 (no backfill after Employee is added; approval and extension refused after Employee removed; reject still OK); `tests/unit/nav_tabs.test.ts` live-flag case.
+- `supabase/schema.sql` dumped from the clone (3 restore-only CHECK hunks reverted). Docs: DATA_MODEL, PERMISSIONS (self-add intended), REQUIREMENTS FR-76, CHANGELOG, CLAUDE.md FR-76 line.
+
+**Actions outside the repo**
+- Throwaway clone `sec_dry` of local `postgres` with `20261102140000`, `20261102150000`, `20261103120000` applied; every `tests/sql/*` run; schema dumped; `sec_dry` dropped. Local `postgres` NOT migrated.
+- Merge of PR #16 to `main` (deploys to Liara via CI) — result in the next entry.
+
+**Verification**
+- Clone: all `tests/sql/*` PASS (security-only 21, absence-watchers 28, fr55 355, …) except the pre-existing `approval-delegation.sql` failure ("overlapping leave request exists" for ceo), same as before.
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 112 files / 1050 pass; `npm run build` OK.
+- Not clicked through in a browser: the local DB lacks the PR's migrations (Home calls `watched_absences`).
+
+**For the next agent**
+- On deploy, the first balance read / accrual run posts 0-minute rows for the 3 security-only users' unposted months; `accrue_all_leave`'s `rows_posted` counts them once.
+- A pending request of someone who became security-only now errors on approval with `noTimeOff`; HR must reject it.
+
 ## 2026-11-03 — Security-only staff: no requests or leave (FR-76) · role pill toggles
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
