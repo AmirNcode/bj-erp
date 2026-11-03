@@ -9,6 +9,16 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Security staff without Employee: no requests or leave (FR-76) · role buttons — `claude/absence-watchers` (not deployed)
+
+- People with the **Security** role and **without Employee** (subcontractor security staff) no longer
+  see the **Request** tab, and Home no longer shows them **My Recent Requests** or **My Balances**. The
+  database refuses any request for them and monthly accrual skips them. Anyone with Security **and**
+  Employee keeps everything.
+- **New / Edit Employee:** the roles are now on/off buttons (filled blue with a check when on)
+  instead of small checkboxes, with a hint under them about Security without Employee.
+- Migration `20261103120000_security_only_no_time_off`.
+
 ### Absence notifications per person (FR-75) — `main` (not deployed)
 
 - **Manage › Approval steps** has a new **Absence notifications** section. Add a person by name or

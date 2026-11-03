@@ -47,6 +47,11 @@ describe('tabsForRoles', () => {
   it('security gets no absences tab — the board is never a tab (FR-56/75)', () => {
     expect(tabsForRoles(['employee', 'security'], SEC).map((t) => t.key)).not.toContain('absences');
   });
+  it('FR-76: security without Employee gets no request tab; with Employee it does', () => {
+    expect(tabsForRoles(['security'], SEC).map((t) => t.key)).not.toContain('request');
+    expect(tabsForRoles(['employee', 'security'], SEC).map((t) => t.key)).toContain('request');
+    expect(tabsForRoles(['admin'], fullPerms()).map((t) => t.key)).toContain('request');
+  });
   it('finance preset gets the finance tab and no Manage (FR-62)', () => {
     const tabs = tabsForRoles(['employee', 'finance'], FIN);
     expect(tabs.find((t) => t.key === 'finance')).toMatchObject({ href: '/finance' });

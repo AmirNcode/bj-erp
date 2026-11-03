@@ -572,6 +572,13 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
 A separate table so the write never touches `leave_requests` and its triggers.
 `app_request_approval_progress` rows also carry `is_mine` (FR-71, migration `20261021120000`).
 
+### Security-only staff (2026-11-03, FR-76, unreleased)
+`private.is_security_only(uid)` = a `user_roles.role = 'security'` row and no `'employee'` row. BEFORE INSERT
+trigger `leave_requests_requester_has_time_off` raises `no time off for this account` (42501) for such an
+`employee_id`, so every `submit_*` function and direct insert is refused. `accrue_leave` returns the current
+balance without posting for them, so no accrual path credits them. Existing rows stay. Migration
+`20261103120000_security_only_no_time_off`.
+
 ### `absence_watchers` (2026-11-02, FR-75, unreleased)
 `user_id → profiles` (PK, on delete cascade) · `company_id → companies` · booleans `leave_day`,
 `leave_hour`, `errand_day`, `errand_hour` (request types; leave = every leave type, split by `unit`;

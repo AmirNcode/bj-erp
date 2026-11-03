@@ -1730,6 +1730,19 @@ $$;
 
 
 --
+-- Name: is_security_only(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_security_only(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.user_roles where user_id = uid and role = 'security')
+     and not exists (select 1 from public.user_roles where user_id = uid and role = 'employee');
+$$;
+
+
+--
 -- Name: is_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1830,6 +1843,22 @@ begin
   end if;
   return new;
 end; $$;
+
+
+--
+-- Name: leave_request_requester_has_time_off(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.leave_request_requester_has_time_off() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if private.is_security_only(new.employee_id) then
+    raise exception 'no time off for this account' using errcode = '42501';
+  end if;
+  return new;
+end $$;
 
 
 --
@@ -3202,6 +3231,11 @@ declare
   v_already   int;
   v_rows      int;
 begin
+  -- FR-76: security staff without the Employee role earn no leave.
+  if private.is_security_only(p_employee_id) then
+    return public.current_leave_balance(p_employee_id, p_leave_type_id);
+  end if;
+
   select accrual_minutes_per_month, annual_cap_minutes, accrual_start_month
     into v_rate, v_cap, v_start
     from public.employee_leave_policies
@@ -9399,6 +9433,13 @@ CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per
 
 
 --
+-- Name: leave_requests leave_requests_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER leave_requests_requester_has_time_off BEFORE INSERT ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.leave_request_requester_has_time_off();
+
+
+--
 -- Name: leave_types leave_types_audit_change; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -11106,6 +11147,14 @@ GRANT ALL ON FUNCTION private.is_procurement(p_uid uuid, p_request uuid) TO auth
 
 
 --
+-- Name: FUNCTION is_security_only(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_security_only(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_security_only(uid uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION is_travel_hr(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -11132,6 +11181,13 @@ GRANT ALL ON FUNCTION private.is_valid_national_id(p text) TO authenticated;
 --
 
 GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
+
+
+--
+-- Name: FUNCTION leave_request_requester_has_time_off(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.leave_request_requester_has_time_off() FROM PUBLIC;
 
 
 --

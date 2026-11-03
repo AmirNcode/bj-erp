@@ -403,6 +403,12 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-76** ☐ **Security staff without Employee have no time off.** Security staff are a subcontractor:
+  someone with the Security role and without Employee sees no Request tab (every `/request` page sends
+  them Home), no **My Recent Requests** or **My Balances** on Home, cannot file a request (refused by the
+  database) and earns no monthly accrual. Security + Employee keeps requests and leave. On New/Edit
+  Employee the roles are on/off pill buttons (selected = filled blue with a check), with a hint
+  explaining Security without Employee. *(Owner, 2026-11-03; unreleased.)*
 - **FR-75** ☐ **Absence notifications per person.** On Manage › Approval steps, whoever edits the
   approval steps adds a person (name or personnel-number search) and switches on the request types
   they follow (daily leave, hourly leave, daily work trip, hourly work errand) and where they see

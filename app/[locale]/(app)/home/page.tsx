@@ -12,6 +12,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions, getCachedAbsenceWatch } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { homeAbsencesBoard } from '@/lib/nav/tabs';
+import { hasTimeOff } from '@/lib/auth/timeOff';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getCalendarEntries } from '@/lib/actions/leave/calendar';
@@ -86,6 +87,8 @@ async function HomeBoardData({
     getApprovalCapabilities(),
   ]);
   const canApprove = capabilities.canApprove;
+  // FR-76: security staff without Employee have no requests or balances, so neither card.
+  const timeOff = hasTimeOff(roles);
 
   // Upcoming time off for the team directory (non-approvers only). "Today" in
   // the company timezone, not the server's (UTC).
@@ -114,8 +117,8 @@ async function HomeBoardData({
     pendingExtensions,
   ] = await Promise.all([
     getCachedProfile(userId),
-    getMyLeaveRequests(),
-    getMyBalanceUsage(),
+    timeOff ? getMyLeaveRequests() : Promise.resolve(null),
+    timeOff ? getMyBalanceUsage() : Promise.resolve(null),
     canApprove ? Promise.resolve(null) : getCalendarEntries(today, rangeEnd),
     canApprove ? Promise.resolve(null) : getMyTeamDirectory(),
     canApprove ? getPendingApprovals() : Promise.resolve(null),
@@ -147,7 +150,7 @@ async function HomeBoardData({
   const board = buildHomeBoard({
     roles,
     canApprove,
-    requests: requestsRes.ok ? requestsRes.requests : [],
+    requests: requestsRes?.ok ? requestsRes.requests : [],
     team: calendarRes?.ok ? calendarRes.entries : [],
     directory: directoryRes?.ok ? directoryRes.members : [],
     pendingCount,
@@ -247,7 +250,7 @@ async function HomeBoardData({
   // ── my balance ───────────────────────────────────────────────────────────
   // Only the remaining amount (owner, 2026-10-07). Types without a balance
   // (unpaid leave) have nothing to show, so they are left out.
-  const usage = (usageRes.ok ? usageRes.usage : [])
+  const usage = (usageRes?.ok ? usageRes.usage : [])
     .filter((u) => u.hasBalance)
     .map((u) => ({
       id: u.leaveTypeId,
@@ -318,6 +321,7 @@ async function HomeBoardData({
             : null
         }
         usage={usage}
+        timeOff={timeOff}
         nextHoliday={nextHoliday}
         alternating={alternating}
         coverDuties={

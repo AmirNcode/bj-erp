@@ -49,6 +49,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ☐ **Security-only staff (FR-76) after deploy (owner):** sign in as a security-only person (Security,
+  no Employee; 3 on the local roster): no Request tab, no My Recent Requests / My Balances on Home.
+  Anyone who should keep leave needs Employee ticked too.
 - ☐ **Absence notifications (FR-75) after deploy (owner):** on Liara, Manage › Approval steps ›
   Absence notifications should list the old HR/Security holders (all four types, Home tile). Add the
   fingerprint clerk with only the types they enter; untick the rest for people who do not need it.

@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — Security-only staff: no requests or leave (FR-76) · role pill toggles
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/absence-watchers @ 1cf684f (PR #16)
+**Trigger:** Amir: security is a subcontractor — remove the Request page and Home's My Recent Requests / My Balances for the security role unless the person also has Employee; make the New/Edit Employee role options real on/off buttons. Added to PR #16.
+
+**Decisions (owner, this session)**
+- Hide in UI and refuse in the DB; stop accrual too; pill toggles; Employee is not auto-unticked (a hint explains).
+
+**What changed**
+- Migration `supabase/migrations/20261103120000_security_only_no_time_off.sql`: `private.is_security_only`, BEFORE INSERT trigger `leave_requests_requester_has_time_off` (`no time off for this account`, 42501), `accrue_leave` recreated with an early return.
+- `lib/auth/timeOff.ts` (`isSecurityOnly`, `hasTimeOff`); `lib/nav/tabs.ts` drops the request tab; new `app/[locale]/(app)/request/layout.tsx` guard; Home skips the two reads and hides the two cards (`timeOff` prop on `HomeBoard`); `db-error` + messages `noTimeOff`.
+- `RoleCheckboxes` (`EmployeeFormParts.tsx`) is now pill toggles: label with `data-testid="role-…"` around an `sr-only` native checkbox (e2e `[data-testid=role-x] input` unchanged), filled `bg-primary` + `Check` icon when on; hint `manage.employees.securityOnlyHint`.
+- Tests: new `tests/sql/security-only.sql` (12), `tests/unit/time-off.test.ts`, `tests/unit/role-pills.test.tsx`, `nav_tabs` case. `supabase/schema.sql` regenerated from the clone (3 restore-only CHECK hunks reverted). Docs: PERMISSIONS, DATA_MODEL, REQUIREMENTS FR-76, CHANGELOG, TASKS, CLAUDE.md.
+
+**Actions outside the repo**
+- Throwaway clone `aw_dry` of local `postgres` with `20261102140000`, `20261102150000`, `20261103120000` applied; every `tests/sql/*` run; schema dumped; clone dropped. Local `postgres` NOT migrated. Nothing on Liara.
+
+**Verification**
+- Clone: all `tests/sql/*` PASS except the pre-existing `approval-delegation.sql` failure (same as before this change).
+- `tsc`, lint clean; `test:unit` 1049 pass; `npm run build` OK.
+- Pills checked on a temporary `zz-` page (en + fa): toggle on/off, admin locked, hint shown. Home/Request hiding not clicked through with a security login (local DB not migrated) — covered by unit + SQL tests.
+
+**For the next agent**
+- Local roster: 3 active security-only users and the admin lack Employee. The admin is unaffected (rule is security-only).
+- The approval-delegation SQL failure is still open (TASKS).
+
 ## 2026-11-03 — Absence notifications per person (FR-75)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

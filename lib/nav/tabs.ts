@@ -1,5 +1,6 @@
 import { can, type Perms } from '@/lib/permissions/catalog';
 import type { AbsenceWatch } from '@/lib/absences/watch';
+import { hasTimeOff } from '@/lib/auth/timeOff';
 
 /**
  * Pure nav model — which navigation entries a user sees, given their roles and
@@ -107,7 +108,8 @@ function hasManageGroup(roles: string[], perms: Perms, canApprove?: boolean, has
 export function tabsForRoles(
   roles: string[], perms: Perms, canApprove?: boolean, canDelegate?: boolean, hasReports?: boolean, absencesPage?: boolean
 ): Tab[] {
-  const tabs = [...BASE];
+  // FR-76: security staff without the Employee role send no requests.
+  const tabs = BASE.filter((t) => t.key !== 'request' || hasTimeOff(roles));
   const manage = hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (can(perms, 'travel_booking', 'edit') && !manage) tabs.push(PROCUREMENT_TAB);
