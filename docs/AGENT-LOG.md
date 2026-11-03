@@ -84,7 +84,7 @@ Copy this block verbatim and fill it in.
 **Branch / HEAD at start:** main @ 732f93e, clean
 **Trigger:** Amir: security staff are a subcontractor with no personnel number; only for the admin, let the personnel-number field take any value, special characters included.
 
-**What changed (uncommitted, on `main` working tree)**
+**What changed (`main`, commit `28e0ec3`)**
 - Migration `supabase/migrations/20261102140000_admin_free_personnel_no.sql`: new `private.valid_personnel_no(pno, admin)` (admin: 1–64 chars, no surrounding whitespace; others: 1–10 digits); `profiles_personnel_no_format` CHECK relaxed to 1–64 trimmed chars; `create_employee_impl` uses it with `p_path = 'admin'` (bulk/HR paths unchanged), lower-cases the auth email and checks `employee_code` case-insensitively; `app_create_employee` raises `login code required` when the admin leaves the login code empty and the number is not a valid login code; `app_admin_set_personnel_no` accepts any such number and moves the login code only when the number is a valid login code.
 - `lib/employees/code.ts`: `isValidPersonnelNo(value, admin)`, new `displayPersonnelNo`. `lib/actions/employees.ts`: admin flag passed; `login code required` pre-check; `setPersonnelNo` returns `{ ok: true }` (the returned code was unused and could be wrong now).
 - UI: `NewEmployeeForm` (admin: text input, dir auto, max 64), `PersonnelNoDialog` (text input), `AbsencesBoard` + `FinanceList` no longer render `Number(personnel_no)` (would show NaN for `SEC001`).
@@ -99,7 +99,8 @@ Copy this block verbatim and fill it in.
 - `tests/sql/admin-free-personnel-no.sql` 23 PASS, `admin-login-code.sql` 31 PASS, `fr51-hr-employee-admin.sql` PASS on the clone. `tsc --noEmit` and `npm run lint` clean; `npm run test:unit` 109 files / 1034 tests pass; `npm run build` OK. Not clicked through in a browser.
 
 **For the next agent**
-- Not committed or deployed; push to `main` deploys to Liara. Bulk import and the personal-info CSV still require digits (by design: the owner asked for admin only).
+- Committed `28e0ec3` and pushed to `main` (Amir asked). Actions run 41548997636 build + deploy success; `https://bjeng.app/api/health` ok afterwards. Not clicked through on Liara.
+- Bulk import and the personal-info CSV still require digits (by design: the owner asked for admin only).
 
 ## 2026-11-02 — Review PR #15, merge to main, clean branches and worktrees
 
