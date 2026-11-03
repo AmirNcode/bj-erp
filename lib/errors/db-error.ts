@@ -192,6 +192,14 @@ const RULES: Rule[] = [
   // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).
   { re: /not allowed to change the approval order setting/, key: 'approvalOrderNotAllowed' },
   // FR-65 special leave.
+  // FR-77/78 admin panel and SMS.
+  { re: /^admin only$/, key: 'notAllowed' },
+  { re: /^invalid mobile$/, key: 'smsInvalidMobile' },
+  { re: /^sms is off$/, key: 'smsOff' },
+  { re: /^no api key$|sms_settings_live_needs_key/, key: 'smsNoApiKey' },
+  { re: /sms_settings_api_key/, key: 'smsBadApiKey' },
+  { re: /sms_settings_sender_line/, key: 'smsBadSenderLine' },
+  { re: /sms_settings_site_label/, key: 'smsBadSiteLabel' },
   { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
   { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
   { re: /annual leave type not found/, key: 'annualTypeMissing' },

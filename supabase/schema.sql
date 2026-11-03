@@ -20,13 +20,6 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: private; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA private;
-
-
---
 -- Name: public; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -38,6 +31,13 @@ CREATE SCHEMA public;
 --
 
 COMMENT ON SCHEMA public IS 'standard public schema';
+
+
+--
+-- Name: private; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA private;
 
 
 --
@@ -565,6 +565,25 @@ begin
           jsonb_build_object('fields', to_jsonb(v_fields)));
   return new;
 end; $$;
+
+
+--
+-- Name: audit_redact(jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.audit_redact(p jsonb) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case when p is null or jsonb_typeof(p) <> 'object' then p else
+    (select coalesce(jsonb_object_agg(k, case
+        when k ~* '(^|_)(signature_data|password|secret|api_key|token)$' and v <> 'null'::jsonb
+          then to_jsonb('[hidden]'::text)
+        when jsonb_typeof(v) = 'string' and length(v #>> '{}') > 500
+          then to_jsonb(left(v #>> '{}', 120) || '…'::text)
+        else v end), '{}'::jsonb)
+       from jsonb_each(p) as e(k, v)) end;
+$$;
 
 
 --
@@ -1845,6 +1864,23 @@ end; $_$;
 
 
 --
+-- Name: jalali_text(date, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.jalali_text(p_date date, p_lang text DEFAULT 'fa'::text) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select case when p_lang = 'fa' then translate(t, '0123456789', '۰۱۲۳۴۵۶۷۸۹') else t end
+    from (select coalesce(
+      (select m.jalali_year || '/' || lpad(m.jalali_month::text, 2, '0') || '/'
+              || lpad((p_date - m.gregorian_start + 1)::text, 2, '0')
+         from public.jalali_months m where p_date between m.gregorian_start and m.gregorian_end),
+      to_char(p_date, 'YYYY/MM/DD')) as t) x;
+$$;
+
+
+--
 -- Name: leave_request_per_diem_daily_only(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1916,6 +1952,22 @@ CREATE FUNCTION private.natural_step_authority(p_uid uuid, p_request uuid, p_ste
       when s.role='manager' then private.is_manager_of(p_uid,r.employee_id)
       else private.has_role(p_uid,s.role) end),false);
 $$;
+
+
+--
+-- Name: normalize_ir_mobile(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.normalize_ir_mobile(p text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case when d ~ '^9[0-9]{9}$' then '0' || d end
+    from (select regexp_replace(regexp_replace(
+                   translate(coalesce(p, ''), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
+                   '[^0-9]', '', 'g'),
+                 '^(0098|98|0)', '') as d) x;
+$_$;
 
 
 --
@@ -2098,6 +2150,19 @@ $$;
 
 
 --
+-- Name: record_backup(text, bigint, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.record_backup(p_file text, p_bytes bigint, p_sha256 text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  insert into private.backup_runs (file_name, size_bytes, sha256) values (p_file, p_bytes, p_sha256);
+  delete from private.backup_runs where finished_at < now() - interval '90 days';
+$$;
+
+
+--
 -- Name: refresh_separation_status(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2195,6 +2260,22 @@ CREATE FUNCTION private.request_step_decided(p_request uuid, p_step uuid, p_deci
         and (select count(*) from public.approval_steps candidate where candidate.role=s.role
           and private.request_step_applies(p_request,candidate.id))=1)));
 $$;
+
+
+--
+-- Name: require_admin(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.require_admin() RETURNS uuid
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.is_admin(auth.uid()) then
+    raise exception 'admin only' using errcode = '42501';
+  end if;
+  return private.caller_company();
+end $$;
 
 
 --
@@ -2491,6 +2572,323 @@ begin
   insert into public.audit_log(actor_id,action,entity,entity_id,after) values
     (r.employee_id,'set_own_per_diem','leave_requests',r.id,jsonb_build_object('per_diem_rials',p_per_diem_rials));
 end; $$;
+
+
+--
+-- Name: sms_dispatch(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_dispatch() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  o record;
+  s private.sms_settings%rowtype;
+  resp record;
+  v_json jsonb;
+  v_ref text;
+  v_status text;
+  v_body jsonb;
+  v_url text;
+  v_req bigint;
+begin
+  -- 1. Replies to earlier sends.
+  for o in select * from public.sms_outbox where status = 'sending' order by sending_since
+           for update skip locked loop
+    select * into resp from net._http_response where id = o.net_request_id;
+    if not found then
+      if o.sending_since < now() - interval '10 minutes' then
+        perform private.sms_fail(o.id, 'no reply from provider', true);
+      end if;
+      continue;
+    end if;
+    begin v_json := resp.content::jsonb; exception when others then v_json := null; end;
+    v_ref := v_json->>'recId';
+    v_status := v_json->>'status';
+    if resp.status_code between 200 and 299 and v_ref ~ '^[0-9]{6,}$' then
+      update public.sms_outbox set status = 'sent', provider_ref = v_ref, sent_at = now(),
+             error = nullif(v_status, ''), net_request_id = null, sending_since = null
+       where id = o.id;
+    elsif resp.timed_out or resp.status_code is null or resp.status_code >= 500 then
+      perform private.sms_fail(o.id, coalesce(resp.error_msg, 'HTTP ' || resp.status_code, 'timeout'), true);
+    else
+      perform private.sms_fail(o.id, coalesce(nullif(v_status, ''), nullif(v_ref, ''),
+        'HTTP ' || resp.status_code || ' ' || left(coalesce(resp.content, ''), 200)), false);
+    end if;
+  end loop;
+
+  -- 2. Credit checks the admin asked for.
+  for s in select * from private.sms_settings where credit_request_id is not null for update skip locked loop
+    select * into resp from net._http_response where id = s.credit_request_id;
+    continue when not found;
+    begin v_json := resp.content::jsonb; exception when others then v_json := null; end;
+    update private.sms_settings
+       set credit_amount = case when resp.status_code between 200 and 299 and v_json ? 'amount'
+                                then (v_json->>'amount')::numeric else credit_amount end,
+           credit_error = case when resp.status_code between 200 and 299 and v_json ? 'amount' then null
+                               else left(coalesce(nullif(v_json->>'status', ''), resp.error_msg,
+                                         'HTTP ' || resp.status_code), 300) end,
+           credit_checked_at = now(), credit_request_id = null
+     where company_id = s.company_id;
+  end loop;
+
+  -- 3. Due texts.
+  for o in select * from public.sms_outbox where status = 'queued' and next_attempt_at <= now()
+           order by created_at limit 20 for update skip locked loop
+    select * into s from private.sms_settings where company_id = o.company_id;
+    if o.event = 'approver_new' and not exists (select 1 from public.leave_requests r
+        where r.id = o.request_id and r.status = 'pending') then
+      update public.sms_outbox set status = 'skipped', skip_reason = 'request_decided' where id = o.id;
+      continue;
+    end if;
+    if s.mode is null or s.mode = 'off' then
+      update public.sms_outbox set status = 'skipped', skip_reason = 'sms_off',
+             body = private.sms_mask(event, body, args),
+             args = case when event = 'password_reset' then '{}' else args end
+       where id = o.id;
+      continue;
+    end if;
+    if s.mode = 'dry_run' then
+      update public.sms_outbox set status = 'dry_run', sent_at = now(),
+             body = private.sms_mask(event, body, args),
+             args = case when event = 'password_reset' then '{}' else args end
+       where id = o.id;
+      continue;
+    end if;
+    -- live
+    if s.send_method = 'pattern' and o.event <> 'test' then
+      v_body := jsonb_build_object('to', o.to_mobile, 'args', to_jsonb(o.args),
+        'bodyId', case o.event when 'approver_new' then s.body_approver_new
+                               when 'employee_decision' then s.body_employee_decision
+                               when 'password_reset' then s.body_password_reset end);
+      v_url := 'https://console.melipayamak.com/api/send/shared/' || s.api_key;
+      if v_body->'bodyId' = 'null'::jsonb then
+        perform private.sms_fail(o.id, 'no pattern body id for ' || o.event, false);
+        update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
+         where id = o.id and event = 'password_reset';
+        continue;
+      end if;
+    else
+      if s.sender_line is null then
+        perform private.sms_fail(o.id, 'no sender line', false);
+        update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
+         where id = o.id and event = 'password_reset';
+        continue;
+      end if;
+      v_body := jsonb_build_object('from', s.sender_line, 'to', o.to_mobile, 'text', o.body);
+      v_url := 'https://console.melipayamak.com/api/send/simple/' || s.api_key;
+    end if;
+    v_req := net.http_post(url := v_url, body := v_body,
+                           headers := '{"Content-Type": "application/json"}'::jsonb,
+                           timeout_milliseconds := 15000);
+    update public.sms_outbox
+       set status = 'sending', net_request_id = v_req, sending_since = now(), attempts = attempts + 1,
+           body = private.sms_mask(event, body, args),
+           args = case when event = 'password_reset' then '{}' else args end
+     where id = o.id;
+  end loop;
+end $_$;
+
+
+--
+-- Name: sms_enqueue_request(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_enqueue_request(p_request uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  r public.leave_requests%rowtype;
+  s private.sms_settings%rowtype;
+  e public.profiles%rowtype;
+  st record;
+  u record;
+  v_order boolean;
+  v_any_step boolean := false;
+  v_lang text;
+  v_kind text;
+  v_date text;
+  v_word text;
+begin
+  select * into r from public.leave_requests where id = p_request;
+  if not found then return; end if;
+  select * into s from private.sms_settings where company_id = r.company_id;
+  if not found or s.mode = 'off' then return; end if;
+  select * into e from public.profiles where id = r.employee_id;
+
+  if r.status = 'pending' and s.notify_approver_new then
+    select coalesce(w.approval_order_enforced, false) into v_order
+      from public.work_settings w where w.company_id = r.company_id;
+    for st in
+      select a.id, a.step_order from public.approval_steps a
+       where a.company_id = r.company_id and private.request_step_applies(r.id, a.id)
+       order by a.step_order, a.id
+    loop
+      v_any_step := true;
+      continue when private.request_step_decided(r.id, st.id);
+      continue when coalesce(v_order, false) and exists (select 1 from public.approval_steps prev
+        where prev.company_id = r.company_id and prev.step_order < st.step_order
+          and private.request_step_applies(r.id, prev.id)
+          and not private.request_step_decided(r.id, prev.id, 'approved'));
+      for u in
+        select p.id, p.language_pref from public.profiles p
+         where p.company_id = r.company_id and p.active and p.id <> r.employee_id
+           and private.can_approve_step(p.id, r.id, st.id)
+      loop
+        v_lang := case when u.language_pref = 'en' then 'en' else 'fa' end;
+        v_kind := private.sms_kind_label(r.kind, r.unit, v_lang);
+        v_date := private.jalali_text(r.start_date, v_lang);
+        perform private.sms_queue(r.company_id, 'approver_new', u.id, r.id, st.id,
+          case when v_lang = 'en'
+            then format('%s''s %s request (%s) is waiting for your approval.%s%s', e.full_name, v_kind, v_date, chr(10), s.site_label)
+            else format('درخواست %s %s (%s) منتظر تأیید شماست.%s%s', v_kind, e.full_name, v_date, chr(10), s.site_label) end,
+          array[e.full_name, v_kind, v_date]);
+      end loop;
+    end loop;
+    -- No configured step applies: the legacy chain, decided by the direct manager.
+    if not v_any_step and e.manager_id is not null then
+      select p.id, p.language_pref into u from public.profiles p where p.id = e.manager_id and p.active;
+      if found then
+        v_lang := case when u.language_pref = 'en' then 'en' else 'fa' end;
+        v_kind := private.sms_kind_label(r.kind, r.unit, v_lang);
+        v_date := private.jalali_text(r.start_date, v_lang);
+        perform private.sms_queue(r.company_id, 'approver_new', u.id, r.id, null,
+          case when v_lang = 'en'
+            then format('%s''s %s request (%s) is waiting for your approval.%s%s', e.full_name, v_kind, v_date, chr(10), s.site_label)
+            else format('درخواست %s %s (%s) منتظر تأیید شماست.%s%s', v_kind, e.full_name, v_date, chr(10), s.site_label) end,
+          array[e.full_name, v_kind, v_date]);
+      end if;
+    end if;
+  elsif r.status in ('approved', 'rejected') and s.notify_employee_decision then
+    v_lang := case when e.language_pref = 'en' then 'en' else 'fa' end;
+    v_kind := private.sms_kind_label(r.kind, r.unit, v_lang);
+    v_date := private.jalali_text(r.start_date, v_lang);
+    v_word := case when v_lang = 'en' then case when r.status = 'approved' then 'approved' else 'rejected' end
+                   else case when r.status = 'approved' then 'تأیید شد' else 'رد شد' end end;
+    perform private.sms_queue(r.company_id, 'employee_decision', r.employee_id, r.id, null,
+      case when v_lang = 'en'
+        then format('Your %s request (%s) was %s.%s%s', v_kind, v_date, v_word, chr(10), s.site_label)
+        else format('درخواست %s شما (%s) %s.%s%s', v_kind, v_date, v_word, chr(10), s.site_label) end,
+      array[v_kind, v_date, v_word]);
+  end if;
+end $$;
+
+
+--
+-- Name: sms_fail(uuid, text, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_fail(p_id uuid, p_error text, p_retry boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  update public.sms_outbox o
+     set status = case when p_retry and o.attempts < 3 then 'queued' else 'failed' end,
+         next_attempt_at = now() + case o.attempts when 1 then interval '1 minute' else interval '5 minutes' end,
+         error = left(p_error, 500), net_request_id = null, sending_since = null
+   where o.id = p_id;
+end $$;
+
+
+--
+-- Name: sms_kind_label(public.request_kind, public.leave_unit, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_kind_label(p_kind public.request_kind, p_unit public.leave_unit, p_lang text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case when p_lang = 'en' then
+    case when p_kind = 'leave' then case when p_unit = 'hour' then 'hourly leave' else 'daily leave' end
+         else case when p_unit = 'hour' then 'work errand' else 'work trip' end end
+  else
+    case when p_kind = 'leave' then case when p_unit = 'hour' then 'مرخصی ساعتی' else 'مرخصی روزانه' end
+         else case when p_unit = 'hour' then 'مأموریت ساعتی' else 'مأموریت روزانه' end end
+  end;
+$$;
+
+
+--
+-- Name: sms_mask(text, text, text[]); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_mask(p_event text, p_body text, p_args text[]) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case when p_event = 'password_reset' and coalesce(array_length(p_args, 1), 0) >= 1
+    then replace(p_body, p_args[1], '••••') else p_body end;
+$$;
+
+
+--
+-- Name: sms_on_approval(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_on_approval() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  begin
+    perform private.sms_enqueue_request(new.request_id);
+  exception when others then
+    raise warning 'sms enqueue failed for request %: % %', new.request_id, sqlstate, sqlerrm;
+  end;
+  return null;
+end $$;
+
+
+--
+-- Name: sms_on_request(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_on_request() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  begin
+    perform private.sms_enqueue_request(new.id);
+  exception when others then
+    raise warning 'sms enqueue failed for request %: % %', new.id, sqlstate, sqlerrm;
+  end;
+  return null;
+end $$;
+
+
+--
+-- Name: sms_queue(uuid, text, uuid, uuid, uuid, text, text[], text, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_queue(p_company uuid, p_event text, p_recipient uuid, p_request uuid, p_step uuid, p_body text, p_args text[], p_mobile text DEFAULT NULL::text, p_actor uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_mobile text; v_id uuid;
+begin
+  if p_event = 'approver_new' and exists (select 1 from public.sms_outbox o
+      where o.event = 'approver_new' and o.request_id = p_request and o.recipient_id = p_recipient
+        and o.created_at = now()) then
+    return null;
+  end if;
+  v_mobile := private.normalize_ir_mobile(coalesce(p_mobile,
+    (select i.mobile from public.employee_personal_info i where i.employee_id = p_recipient)));
+  -- A skipped row is never dispatched, so it is masked now: no plaintext password stays behind.
+  insert into public.sms_outbox (company_id, event, recipient_id, request_id, step_id, to_mobile,
+                                 body, args, status, skip_reason, created_by)
+  values (p_company, p_event, p_recipient, p_request, p_step, v_mobile,
+          case when v_mobile is null then private.sms_mask(p_event, p_body, p_args) else p_body end,
+          case when v_mobile is null and p_event = 'password_reset' then '{}' else coalesce(p_args, '{}') end,
+          case when v_mobile is null then 'skipped' else 'queued' end,
+          case when v_mobile is null then 'no_mobile' end, p_actor)
+  on conflict do nothing
+  returning id into v_id;
+  return v_id;
+end $$;
 
 
 --
@@ -3410,6 +3808,97 @@ end; $$;
 
 
 --
+-- Name: app_admin_overview(date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_admin_overview(p_from date, p_to date) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  v_now timestamptz := now();
+  v_order boolean;
+  v_result jsonb;
+begin
+  if p_from is null or p_to is null or p_to < p_from then
+    raise exception 'invalid range' using errcode = '22023';
+  end if;
+  select coalesce(w.approval_order_enforced, false) into v_order
+    from public.work_settings w where w.company_id = v_company;
+
+  with people as (
+    select p.id, p.active, p.must_change_password, u.last_sign_in_at
+      from public.profiles p
+      left join auth.users u on u.id = p.id
+     where p.company_id = v_company and not private.is_admin(p.id)
+  ),
+  reqs as (
+    select r.*
+      from public.leave_requests r
+     where r.company_id = v_company
+       and (r.created_at at time zone 'Asia/Tehran')::date between p_from and p_to
+  ),
+  decided as (
+    select extract(epoch from (r.decided_at - r.created_at)) / 3600.0 as hours
+      from reqs r
+     where r.status in ('approved', 'rejected') and r.decided_at is not null
+  ),
+  stuck as (
+    select r.id, r.serial_year, r.serial_seq, r.kind, r.unit, r.created_at, e.full_name,
+           floor(extract(epoch from (v_now - r.created_at)) / 86400)::int as days_waiting,
+           (select jsonb_build_object('step_role', s.role, 'manager_scope', s.manager_scope,
+                     'step_order', s.step_order)
+              from public.approval_steps s
+             where s.company_id = r.company_id
+               and private.request_step_applies(r.id, s.id)
+               and not private.request_step_decided(r.id, s.id)
+             order by s.step_order, s.id limit 1) as waiting_on
+      from public.leave_requests r
+      join public.profiles e on e.id = r.employee_id
+     where r.company_id = v_company and r.status = 'pending'
+       and r.created_at < v_now - interval '3 days'
+  ),
+  by_department as (
+    select d.id, d.name_fa, d.name_en, count(*) as requests,
+           sum(r.requested_minutes)::bigint as minutes
+      from reqs r
+      join public.profiles e on e.id = r.employee_id
+      left join public.departments d on d.id = e.department_id
+     where r.status = 'approved' and r.kind = 'leave'
+     group by d.id, d.name_fa, d.name_en
+  )
+  select jsonb_build_object(
+    'people', (select jsonb_build_object(
+        'active', count(*) filter (where active),
+        'inactive', count(*) filter (where not active),
+        'never_signed_in', count(*) filter (where active and last_sign_in_at is null),
+        'must_change_password', count(*) filter (where active and must_change_password),
+        'signed_in_7d', count(*) filter (where active and last_sign_in_at >= v_now - interval '7 days'),
+        'signed_in_30d', count(*) filter (where active and last_sign_in_at >= v_now - interval '30 days'))
+      from people),
+    'requests', (select coalesce(jsonb_agg(jsonb_build_object('kind', kind, 'unit', unit,
+        'status', status, 'count', n) order by kind, unit, status), '[]')
+      from (select kind, unit, status, count(*) as n from reqs group by kind, unit, status) g),
+    'speed', (select jsonb_build_object('decided', count(*),
+        'median_hours', round((percentile_cont(0.5) within group (order by hours))::numeric, 1),
+        'p90_hours', round((percentile_cont(0.9) within group (order by hours))::numeric, 1))
+      from decided),
+    'stuck', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'serial_year', serial_year,
+        'serial_seq', serial_seq, 'kind', kind, 'unit', unit, 'employee_name', full_name,
+        'created_at', created_at, 'days_waiting', days_waiting, 'waiting_on', waiting_on)
+        order by created_at), '[]') from stuck),
+    'leave_by_department', (select coalesce(jsonb_agg(jsonb_build_object('department_id', id,
+        'name_fa', name_fa, 'name_en', name_en, 'requests', requests, 'minutes', minutes)
+        order by minutes desc), '[]') from by_department),
+    'minutes_per_day', private.company_minutes_per_day(v_company),
+    'approval_order_enforced', v_order
+  ) into v_result;
+  return v_result;
+end $$;
+
+
+--
 -- Name: app_admin_set_personnel_no(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3452,6 +3941,62 @@ begin
     perform private.set_login_code(v_caller, p_user, v_pno);
   end if;
 end; $$;
+
+
+--
+-- Name: app_admin_system(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_admin_system() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_company uuid := private.require_admin();
+  v_migrations jsonb := '[]';
+  v_migration_count bigint := 0;
+  v_jobs jsonb := '[]';
+  v_result jsonb;
+begin
+  if to_regclass('bj_deploy.schema_migrations') is not null then
+    execute $q$select coalesce(jsonb_agg(to_jsonb(m) order by m.filename desc), '[]')
+                 from (select * from bj_deploy.schema_migrations order by filename desc limit 10) m$q$
+      into v_migrations;
+    execute 'select count(*) from bj_deploy.schema_migrations' into v_migration_count;
+  end if;
+  if to_regclass('cron.job') is not null then
+    execute $q$select coalesce(jsonb_agg(jsonb_build_object('jobname', j.jobname,
+                   'schedule', j.schedule, 'active', j.active,
+                   'last_status', d.status, 'last_start', d.start_time, 'last_end', d.end_time,
+                   'last_message', left(d.return_message, 300),
+                   'failures_24h', (select count(*) from cron.job_run_details f where f.jobid = j.jobid
+                     and f.status = 'failed' and f.start_time > now() - interval '24 hours'))
+                   order by j.jobname), '[]')
+                 from cron.job j
+                 left join lateral (select * from cron.job_run_details x where x.jobid = j.jobid
+                   order by x.start_time desc limit 1) d on true$q$
+      into v_jobs;
+  end if;
+
+  select jsonb_build_object(
+    'database_bytes', pg_database_size(current_database()),
+    'postgres_version', current_setting('server_version'),
+    'tables', (select coalesce(jsonb_agg(t order by (t->>'bytes')::bigint desc), '[]') from (
+        select jsonb_build_object('name', n.nspname || '.' || c.relname,
+                 'rows', greatest(c.reltuples, 0)::bigint,
+                 'bytes', pg_total_relation_size(c.oid)) as t
+          from pg_class c join pg_namespace n on n.oid = c.relnamespace
+         where c.relkind = 'r' and n.nspname in ('public', 'private', 'auth')
+         order by pg_total_relation_size(c.oid) desc limit 10) x),
+    'migrations', v_migrations,
+    'migration_count', v_migration_count,
+    'jobs', v_jobs,
+    'backups', (select coalesce(jsonb_agg(jsonb_build_object('file_name', file_name,
+        'size_bytes', size_bytes, 'finished_at', finished_at) order by finished_at desc), '[]')
+      from (select * from private.backup_runs order by finished_at desc limit 5) b)
+  ) into v_result;
+  return v_result;
+end $_$;
 
 
 --
@@ -3545,6 +4090,49 @@ CREATE FUNCTION public.app_approval_queue(p_status public.leave_status DEFAULT '
     from public.leave_requests r where r.status=p_status and private.can_read_approval_request(auth.uid(),r.id)
       and (r.employee_id<>auth.uid() or private.is_admin(auth.uid()));
 $$;
+
+
+--
+-- Name: app_audit_log(date, date, uuid, text, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_audit_log(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_actor uuid DEFAULT NULL::uuid, p_entity text DEFAULT NULL::text, p_action text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+  v_result jsonb;
+begin
+  with scoped as (
+    select a.*
+      from public.audit_log a
+      left join public.profiles ap on ap.id = a.actor_id
+     where (ap.company_id = v_company or a.actor_id is null)
+       and (p_from is null or (a.created_at at time zone 'Asia/Tehran')::date >= p_from)
+       and (p_to is null or (a.created_at at time zone 'Asia/Tehran')::date <= p_to)
+       and (p_actor is null or a.actor_id = p_actor)
+       and (p_entity is null or a.entity = p_entity)
+       and (p_action is null or a.action = p_action)
+  )
+  select jsonb_build_object(
+    'total', (select count(*) from scoped),
+    'rows', (select coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'created_at', s.created_at,
+        'actor_id', s.actor_id, 'actor_name', p.full_name, 'action', s.action, 'entity', s.entity,
+        'entity_id', s.entity_id, 'entity_label', case
+          when s.entity = 'profiles' then (select full_name from public.profiles where id = s.entity_id)
+          when s.entity = 'leave_requests' then (select r.serial_year || '-' || lpad(r.serial_seq::text, 4, '0')
+            from public.leave_requests r where r.id = s.entity_id) end,
+        'before', private.audit_redact(s.before), 'after', private.audit_redact(s.after))
+        order by s.created_at desc, s.id), '[]')
+      from (select * from scoped order by created_at desc, id limit v_limit offset greatest(coalesce(p_offset, 0), 0)) s
+      left join public.profiles p on p.id = s.actor_id),
+    'entities', (select coalesce(jsonb_agg(distinct a.entity), '[]') from public.audit_log a),
+    'actions', (select coalesce(jsonb_agg(distinct a.action), '[]') from public.audit_log a)
+  ) into v_result;
+  return v_result;
+end $$;
 
 
 --
@@ -4691,6 +5279,35 @@ end; $$;
 
 
 --
+-- Name: app_enqueue_password_sms(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_enqueue_password_sms(p_employee uuid, p_password text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  s private.sms_settings%rowtype;
+  e public.profiles%rowtype;
+  v_id uuid;
+  v_en boolean;
+begin
+  select * into e from public.profiles where id = p_employee and company_id = v_company;
+  if not found then raise exception 'employee not found' using errcode = 'P0002'; end if;
+  if char_length(coalesce(p_password, '')) < 6 then raise exception 'invalid password' using errcode = '22023'; end if;
+  select * into s from private.sms_settings where company_id = v_company;
+  if s.mode is null or s.mode = 'off' or not s.notify_password_reset then return 'off'; end if;
+  v_en := e.language_pref = 'en';
+  v_id := private.sms_queue(v_company, 'password_reset', e.id, null, null,
+    case when v_en then format('Your temporary password: %s%sLogin code: %s%s%s', p_password, chr(10), e.employee_code, chr(10), s.site_label)
+         else format('رمز موقت شما: %s%sکد ورود: %s%s%s', p_password, chr(10), e.employee_code, chr(10), s.site_label) end,
+    array[p_password, e.employee_code], null, auth.uid());
+  return (select status from public.sms_outbox where id = v_id);
+end $$;
+
+
+--
 -- Name: app_export_personal_info(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4879,6 +5496,16 @@ begin
           jsonb_build_object('employee_id', p_employee_id, 'kind', p_kind, 'minutes', v_minutes, 'note', v_note));
   return v_id;
 end; $$;
+
+
+--
+-- Name: app_health(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_health() RETURNS boolean
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$ select true; $$;
 
 
 --
@@ -6064,6 +6691,48 @@ end; $$;
 
 
 --
+-- Name: app_set_sms_settings(text, text, text, text, integer, integer, integer, boolean, boolean, boolean, text, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text DEFAULT NULL::text, p_clear_api_key boolean DEFAULT false) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  v_before private.sms_settings%rowtype;
+  v_after private.sms_settings%rowtype;
+begin
+  insert into private.sms_settings (company_id) values (v_company) on conflict do nothing;
+  select * into v_before from private.sms_settings where company_id = v_company for update;
+  update private.sms_settings set
+      mode = p_mode,
+      username = nullif(btrim(coalesce(p_username, '')), ''),
+      sender_line = nullif(regexp_replace(translate(coalesce(p_sender_line, ''),
+        '۰۱۲۳۴۵۶۷۸۹', '0123456789'), '\s', '', 'g'), ''),
+      send_method = p_send_method,
+      body_approver_new = p_body_approver_new,
+      body_employee_decision = p_body_employee_decision,
+      body_password_reset = p_body_password_reset,
+      notify_approver_new = coalesce(p_notify_approver_new, true),
+      notify_employee_decision = coalesce(p_notify_employee_decision, true),
+      notify_password_reset = coalesce(p_notify_password_reset, true),
+      site_label = btrim(coalesce(p_site_label, 'bjeng.app')),
+      api_key = case when p_clear_api_key then null
+                     when nullif(btrim(coalesce(p_api_key, '')), '') is not null then btrim(p_api_key)
+                     else api_key end,
+      updated_by = auth.uid(), updated_at = now()
+   where company_id = v_company
+  returning * into v_after;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (auth.uid(), 'update_sms_settings', 'sms_settings', v_company,
+          to_jsonb(v_before) - 'api_key' - 'credit_request_id',
+          (to_jsonb(v_after) - 'api_key' - 'credit_request_id')
+            || jsonb_build_object('api_key_changed', v_before.api_key is distinct from v_after.api_key));
+end $$;
+
+
+--
 -- Name: app_set_travel_booking(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6357,6 +7026,103 @@ begin
           jsonb_build_object('separation_id', s.id));
   perform private.refresh_separation_status(s.id);
 end; $$;
+
+
+--
+-- Name: app_sms_check_credit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sms_check_credit() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.require_admin(); s private.sms_settings%rowtype;
+begin
+  select * into s from private.sms_settings where company_id = v_company for update;
+  if s.api_key is null then raise exception 'no api key' using errcode = '22023'; end if;
+  update private.sms_settings
+     set credit_request_id = net.http_get(url := 'https://console.melipayamak.com/api/receive/credit/' || s.api_key,
+                                          timeout_milliseconds := 15000),
+         credit_error = null
+   where company_id = v_company;
+end $$;
+
+
+--
+-- Name: app_sms_log(text, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sms_log(p_status text DEFAULT NULL::text, p_event text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.require_admin(); v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 200);
+begin
+  return (with scoped as (
+    select o.* from public.sms_outbox o
+     where o.company_id = v_company
+       and (p_status is null or o.status = p_status)
+       and (p_event is null or o.event = p_event))
+  select jsonb_build_object(
+    'total', (select count(*) from scoped),
+    'rows', (select coalesce(jsonb_agg(jsonb_build_object('id', x.id, 'event', x.event,
+        'recipient_id', x.recipient_id, 'recipient_name', p.full_name, 'request_id', x.request_id,
+        'to_mobile', x.to_mobile,
+        'body', case when x.status = 'queued' then private.sms_mask(x.event, x.body, x.args) else x.body end,
+        'status', x.status, 'skip_reason', x.skip_reason, 'attempts', x.attempts, 'error', x.error,
+        'provider_ref', x.provider_ref, 'created_at', x.created_at, 'sent_at', x.sent_at)
+        order by x.created_at desc, x.id), '[]')
+      from (select * from scoped order by created_at desc, id limit v_limit offset greatest(coalesce(p_offset, 0), 0)) x
+      left join public.profiles p on p.id = x.recipient_id),
+    'counts', (select coalesce(jsonb_object_agg(status, n), '{}') from
+      (select status, count(*) as n from public.sms_outbox where company_id = v_company
+        and created_at > now() - interval '30 days' group by status) c)));
+end $$;
+
+
+--
+-- Name: app_sms_settings(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sms_settings() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.require_admin(); v_result jsonb;
+begin
+  select (to_jsonb(s) - 'api_key' - 'credit_request_id')
+         || jsonb_build_object('has_api_key', s.api_key is not null,
+                               'credit_pending', s.credit_request_id is not null,
+                               'api_key_hint', case when s.api_key is not null then '…' || right(s.api_key, 4) end)
+    into v_result from private.sms_settings s where s.company_id = v_company;
+  return coalesce(v_result, '{}'::jsonb);
+end $$;
+
+
+--
+-- Name: app_sms_test(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sms_test(p_mobile text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  s private.sms_settings%rowtype;
+  v_mobile text := private.normalize_ir_mobile(p_mobile);
+  v_id uuid;
+begin
+  if v_mobile is null then raise exception 'invalid mobile' using errcode = '22023'; end if;
+  select * into s from private.sms_settings where company_id = v_company;
+  if s.mode is null or s.mode = 'off' then raise exception 'sms is off' using errcode = '22023'; end if;
+  insert into public.sms_outbox (company_id, event, to_mobile, body, created_by)
+  values (v_company, 'test', v_mobile, 'پیام آزمایشی سامانه' || chr(10) || s.site_label, auth.uid())
+  returning id into v_id;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (auth.uid(), 'sms_test', 'sms_outbox', v_id, jsonb_build_object('mode', s.mode));
+  return v_id;
+end $$;
 
 
 --
@@ -7732,6 +8498,82 @@ $$;
 
 
 --
+-- Name: backup_runs; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.backup_runs (
+    id bigint NOT NULL,
+    file_name text NOT NULL,
+    size_bytes bigint NOT NULL,
+    sha256 text,
+    finished_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE backup_runs; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.backup_runs IS 'FR-77: one row per successful database dump, written by deploy/liara/backup.sh via private.record_backup.';
+
+
+--
+-- Name: backup_runs_id_seq; Type: SEQUENCE; Schema: private; Owner: -
+--
+
+ALTER TABLE private.backup_runs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME private.backup_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: sms_settings; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.sms_settings (
+    company_id uuid NOT NULL,
+    mode text DEFAULT 'dry_run'::text NOT NULL,
+    provider text DEFAULT 'melipayamak'::text NOT NULL,
+    api_key text,
+    username text,
+    sender_line text,
+    send_method text DEFAULT 'line'::text NOT NULL,
+    body_approver_new integer,
+    body_employee_decision integer,
+    body_password_reset integer,
+    notify_approver_new boolean DEFAULT true NOT NULL,
+    notify_employee_decision boolean DEFAULT true NOT NULL,
+    notify_password_reset boolean DEFAULT true NOT NULL,
+    site_label text DEFAULT 'bjeng.app'::text NOT NULL,
+    credit_amount numeric,
+    credit_checked_at timestamp with time zone,
+    credit_error text,
+    credit_request_id bigint,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sms_settings_api_key CHECK (((api_key IS NULL) OR (api_key ~ '^[A-Za-z0-9._~-]{8,200}$'::text))),
+    CONSTRAINT sms_settings_live_needs_key CHECK (((mode <> 'live'::text) OR (api_key IS NOT NULL))),
+    CONSTRAINT sms_settings_mode CHECK ((mode = ANY (ARRAY['off'::text, 'dry_run'::text, 'live'::text]))),
+    CONSTRAINT sms_settings_provider CHECK ((provider = 'melipayamak'::text)),
+    CONSTRAINT sms_settings_send_method CHECK ((send_method = ANY (ARRAY['line'::text, 'pattern'::text]))),
+    CONSTRAINT sms_settings_sender_line CHECK (((sender_line IS NULL) OR (sender_line ~ '^[0-9]{4,20}$'::text))),
+    CONSTRAINT sms_settings_site_label CHECK (((char_length(btrim(site_label)) >= 1) AND (char_length(btrim(site_label)) <= 60)))
+);
+
+
+--
+-- Name: TABLE sms_settings; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.sms_settings IS 'FR-78: SMS provider settings per company. api_key never leaves the database except to the provider.';
+
+
+--
 -- Name: absence_watchers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8428,6 +9270,45 @@ CREATE TABLE public.separations (
 
 
 --
+-- Name: sms_outbox; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sms_outbox (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    event text NOT NULL,
+    recipient_id uuid,
+    request_id uuid,
+    step_id uuid,
+    to_mobile text,
+    body text NOT NULL,
+    args text[] DEFAULT '{}'::text[] NOT NULL,
+    status text DEFAULT 'queued'::text NOT NULL,
+    skip_reason text,
+    attempts integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone DEFAULT now() NOT NULL,
+    net_request_id bigint,
+    sending_since timestamp with time zone,
+    provider_ref text,
+    error text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    sent_at timestamp with time zone,
+    CONSTRAINT sms_outbox_event CHECK ((event = ANY (ARRAY['approver_new'::text, 'employee_decision'::text, 'password_reset'::text, 'test'::text]))),
+    CONSTRAINT sms_outbox_mobile CHECK (((to_mobile IS NULL) OR (to_mobile ~ '^09[0-9]{9}$'::text))),
+    CONSTRAINT sms_outbox_skipped_reason CHECK (((status = 'skipped'::text) = (skip_reason IS NOT NULL))),
+    CONSTRAINT sms_outbox_status CHECK ((status = ANY (ARRAY['queued'::text, 'sending'::text, 'sent'::text, 'dry_run'::text, 'failed'::text, 'skipped'::text])))
+);
+
+
+--
+-- Name: TABLE sms_outbox; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.sms_outbox IS 'FR-78: one row per text. Written only by security-definer functions; the admin reads it in the SMS tab.';
+
+
+--
 -- Name: special_leave_grants; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8591,6 +9472,22 @@ COMMENT ON COLUMN public.work_settings.biweekly_anchor IS 'FR-41: any date whose
 --
 
 ALTER TABLE ONLY public.leave_ledger ALTER COLUMN seq SET DEFAULT nextval('public.leave_ledger_seq_seq'::regclass);
+
+
+--
+-- Name: backup_runs backup_runs_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.backup_runs
+    ADD CONSTRAINT backup_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sms_settings sms_settings_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_settings
+    ADD CONSTRAINT sms_settings_pkey PRIMARY KEY (company_id);
 
 
 --
@@ -8815,6 +9712,14 @@ ALTER TABLE ONLY public.separation_units
 
 ALTER TABLE ONLY public.separations
     ADD CONSTRAINT separations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sms_outbox sms_outbox_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sms_outbox
+    ADD CONSTRAINT sms_outbox_pkey PRIMARY KEY (id);
 
 
 --
@@ -9252,6 +10157,41 @@ CREATE UNIQUE INDEX separations_one_live ON public.separations USING btree (empl
 
 
 --
+-- Name: sms_outbox_approver_once; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sms_outbox_approver_once ON public.sms_outbox USING btree (request_id, COALESCE(step_id, '00000000-0000-0000-0000-000000000000'::uuid), recipient_id) WHERE (event = 'approver_new'::text);
+
+
+--
+-- Name: sms_outbox_company_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sms_outbox_company_created_idx ON public.sms_outbox USING btree (company_id, created_at DESC);
+
+
+--
+-- Name: sms_outbox_decision_once; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX sms_outbox_decision_once ON public.sms_outbox USING btree (request_id) WHERE (event = 'employee_decision'::text);
+
+
+--
+-- Name: sms_outbox_due_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sms_outbox_due_idx ON public.sms_outbox USING btree (next_attempt_at) WHERE (status = 'queued'::text);
+
+
+--
+-- Name: sms_outbox_sending_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sms_outbox_sending_idx ON public.sms_outbox USING btree (sending_since) WHERE (status = 'sending'::text);
+
+
+--
 -- Name: special_leave_grants_employee; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9511,6 +10451,27 @@ CREATE TRIGGER role_permissions_guard BEFORE INSERT OR UPDATE ON public.role_per
 
 
 --
+-- Name: leave_request_approvals sms_on_approval_insert; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER sms_on_approval_insert AFTER INSERT ON public.leave_request_approvals DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.sms_on_approval();
+
+
+--
+-- Name: leave_requests sms_on_request_insert; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER sms_on_request_insert AFTER INSERT ON public.leave_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION private.sms_on_request();
+
+
+--
+-- Name: leave_requests sms_on_request_status; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE CONSTRAINT TRIGGER sms_on_request_status AFTER UPDATE OF status ON public.leave_requests DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN ((old.status IS DISTINCT FROM new.status)) EXECUTE FUNCTION private.sms_on_request();
+
+
+--
 -- Name: travel_bookings travel_booking_first_done; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -9564,6 +10525,22 @@ CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.wor
 --
 
 CREATE TRIGGER work_settings_set_updated_at BEFORE UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: sms_settings sms_settings_company_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_settings
+    ADD CONSTRAINT sms_settings_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sms_settings sms_settings_updated_by_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_settings
+    ADD CONSTRAINT sms_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -10084,6 +11061,38 @@ ALTER TABLE ONLY public.separations
 
 ALTER TABLE ONLY public.separations
     ADD CONSTRAINT separations_finance_signed_by_fkey FOREIGN KEY (finance_signed_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: sms_outbox sms_outbox_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sms_outbox
+    ADD CONSTRAINT sms_outbox_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sms_outbox sms_outbox_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sms_outbox
+    ADD CONSTRAINT sms_outbox_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: sms_outbox sms_outbox_recipient_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sms_outbox
+    ADD CONSTRAINT sms_outbox_recipient_id_fkey FOREIGN KEY (recipient_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: sms_outbox sms_outbox_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sms_outbox
+    ADD CONSTRAINT sms_outbox_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE SET NULL;
 
 
 --
@@ -10715,6 +11724,19 @@ CREATE POLICY separations_select ON public.separations FOR SELECT TO authenticat
 
 
 --
+-- Name: sms_outbox; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sms_outbox ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sms_outbox sms_outbox_select_admin; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY sms_outbox_select_admin ON public.sms_outbox FOR SELECT TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+
+
+--
 -- Name: special_leave_grants; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10809,14 +11831,6 @@ CREATE POLICY work_settings_update_editor ON public.work_settings FOR UPDATE TO 
 
 
 --
--- Name: SCHEMA private; Type: ACL; Schema: -; Owner: -
---
-
-GRANT USAGE ON SCHEMA private TO authenticated;
-GRANT USAGE ON SCHEMA private TO supabase_auth_admin;
-
-
---
 -- Name: SCHEMA public; Type: ACL; Schema: -; Owner: -
 --
 
@@ -10825,6 +11839,14 @@ GRANT USAGE ON SCHEMA public TO anon;
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT USAGE ON SCHEMA public TO service_role;
 GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
+
+
+--
+-- Name: SCHEMA private; Type: ACL; Schema: -; Owner: -
+--
+
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT USAGE ON SCHEMA private TO supabase_auth_admin;
 
 
 --
@@ -11307,6 +12329,13 @@ GRANT ALL ON FUNCTION private.reads_people(uid uuid) TO authenticated;
 
 
 --
+-- Name: FUNCTION record_backup(p_file text, p_bytes bigint, p_sha256 text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.record_backup(p_file text, p_bytes bigint, p_sha256 text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION refresh_separation_status(p_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -11347,6 +12376,13 @@ REVOKE ALL ON FUNCTION private.request_step_applies(p_request uuid, p_step uuid)
 --
 
 REVOKE ALL ON FUNCTION private.request_step_decided(p_request uuid, p_step uuid, p_decision public.leave_status) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION require_admin(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.require_admin() FROM PUBLIC;
 
 
 --
@@ -11426,6 +12462,48 @@ REVOKE ALL ON FUNCTION private.set_login_code(p_actor uuid, p_uid uuid, p_code t
 --
 
 REVOKE ALL ON FUNCTION private.set_requester_per_diem(p_request uuid, p_per_diem_rials bigint) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_dispatch(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_dispatch() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_enqueue_request(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_enqueue_request(p_request uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_fail(p_id uuid, p_error text, p_retry boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_fail(p_id uuid, p_error text, p_retry boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_on_approval(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_on_approval() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_on_request(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_on_request() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_queue(p_company uuid, p_event text, p_recipient uuid, p_request uuid, p_step uuid, p_body text, p_args text[], p_mobile text, p_actor uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_queue(p_company uuid, p_event text, p_recipient uuid, p_request uuid, p_step uuid, p_body text, p_args text[], p_mobile text, p_actor uuid) FROM PUBLIC;
 
 
 --
@@ -11572,6 +12650,16 @@ GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id 
 
 
 --
+-- Name: FUNCTION app_admin_overview(p_from date, p_to date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_admin_overview(p_from date, p_to date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_admin_overview(p_from date, p_to date) TO postgres;
+GRANT ALL ON FUNCTION public.app_admin_overview(p_from date, p_to date) TO authenticated;
+GRANT ALL ON FUNCTION public.app_admin_overview(p_from date, p_to date) TO service_role;
+
+
+--
 -- Name: FUNCTION app_admin_set_personnel_no(p_user uuid, p_personnel_no text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11579,6 +12667,16 @@ REVOKE ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personne
 GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO postgres;
 GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel_no text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_admin_system(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_admin_system() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_admin_system() TO postgres;
+GRANT ALL ON FUNCTION public.app_admin_system() TO authenticated;
+GRANT ALL ON FUNCTION public.app_admin_system() TO service_role;
 
 
 --
@@ -11609,6 +12707,16 @@ REVOKE ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) F
 GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO postgres;
 GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO service_role;
 GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO authenticated;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO service_role;
 
 
 --
@@ -11742,6 +12850,16 @@ GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO service_role
 
 
 --
+-- Name: FUNCTION app_enqueue_password_sms(p_employee uuid, p_password text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_enqueue_password_sms(p_employee uuid, p_password text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_enqueue_password_sms(p_employee uuid, p_password text) TO postgres;
+GRANT ALL ON FUNCTION public.app_enqueue_password_sms(p_employee uuid, p_password text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_enqueue_password_sms(p_employee uuid, p_password text) TO service_role;
+
+
+--
 -- Name: FUNCTION app_export_personal_info(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11779,6 +12897,17 @@ REVOKE ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO postgres;
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_grant_special_leave(p_employee_id uuid, p_kind text, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_health(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_health() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_health() TO postgres;
+GRANT ALL ON FUNCTION public.app_health() TO anon;
+GRANT ALL ON FUNCTION public.app_health() TO authenticated;
+GRANT ALL ON FUNCTION public.app_health() TO service_role;
 
 
 --
@@ -12032,6 +13161,16 @@ GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb
 
 
 --
+-- Name: FUNCTION app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION app_set_travel_booking(p_request uuid, p_on boolean); Type: ACL; Schema: public; Owner: -
 --
 
@@ -12089,6 +13228,46 @@ REVOKE ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO postgres;
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sign_separation_row(p_row_id uuid, p_signature_data text, p_signature_authorized boolean, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sms_check_credit(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sms_check_credit() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_check_credit() TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_check_credit() TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_check_credit() TO service_role;
+
+
+--
+-- Name: FUNCTION app_sms_log(p_status text, p_event text, p_limit integer, p_offset integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sms_log(p_status text, p_event text, p_limit integer, p_offset integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_log(p_status text, p_event text, p_limit integer, p_offset integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_log(p_status text, p_event text, p_limit integer, p_offset integer) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_log(p_status text, p_event text, p_limit integer, p_offset integer) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sms_settings(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sms_settings() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_settings() TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_settings() TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_settings() TO service_role;
+
+
+--
+-- Name: FUNCTION app_sms_test(p_mobile text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sms_test(p_mobile text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO service_role;
 
 
 --
@@ -12766,6 +13945,16 @@ GRANT SELECT ON TABLE public.separation_units TO authenticated;
 GRANT ALL ON TABLE public.separations TO postgres;
 GRANT ALL ON TABLE public.separations TO service_role;
 GRANT SELECT ON TABLE public.separations TO authenticated;
+
+
+--
+-- Name: TABLE sms_outbox; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sms_outbox TO postgres;
+GRANT ALL ON TABLE public.sms_outbox TO anon;
+GRANT ALL ON TABLE public.sms_outbox TO authenticated;
+GRANT ALL ON TABLE public.sms_outbox TO service_role;
 
 
 --

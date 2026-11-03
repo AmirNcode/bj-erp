@@ -779,6 +779,16 @@ through an unsigned browser approval endpoint.
 - `home_dismissed_requests`: RLS, own rows readable (`employee_id = auth.uid()`), no write privileges.
   `app_dismiss_home_request(id)`: active caller, own request only (else P0002), status `rejected` only.
 
+### Admin panel and SMS (FR-77 / FR-78, 2026-11-03, unreleased)
+
+The single admin only — not a catalog item, not delegable. Each function starts with
+`private.require_admin()` (42501 otherwise): `app_admin_overview(from, to)`, `app_admin_system()`,
+`app_audit_log(…)`, `app_sms_settings()` (never returns `api_key`), `app_set_sms_settings(…)`,
+`app_sms_test(mobile)`, `app_sms_check_credit()`, `app_sms_log(…)`, `app_enqueue_password_sms(employee,
+password)`. `private.sms_settings` is unreachable from PostgREST; `sms_outbox` has one RLS policy (admin
+SELECT, own company) and no write policy. `app_health()` is open to anon (returns only true). UI guard:
+`/admin` layout → `requireAdminPage(locale, '/home')`.
+
 ### Admin-only identity RPCs (2026-11-02)
 
 `app_create_employee(…, p_login_code)`: only the admin may pass a login code. `app_admin_set_personnel_no(uuid, text)`: admin only, same company; the login code follows the number. `app_approval_history(int, int)`: decided requests the caller approved or rejected a step of (`leave_request_approvals.approver_id`); the admin sees every decided request of the company.

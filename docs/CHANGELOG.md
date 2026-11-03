@@ -9,6 +9,23 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin panel (FR-77) · SMS notifications (FR-78) — `claude/admin-panel` (not deployed)
+
+- **Admin panel** (side panel under Settings; Manage on mobile), for the admin only: **Overview**
+  (people, sign-ins, requests by type and status, approval speed, requests waiting over 3 days, approved
+  leave by department, SMS counts), **SMS**, **System** (version, service checks, database size and
+  biggest tables, recent migrations, scheduled jobs, backups) and **Audit log** (filter by period, area,
+  action; each entry opens to its before/after; signatures, passwords and keys hidden).
+- **SMS** through Melipayamak: texts to the people who can sign the next step when a request is filed or
+  a step is approved, to the requester on the final approval or rejection, and to an employee when the
+  admin resets their password and ticks **Text it to the employee**. Modes Off / **Dry run** (default:
+  logged, never sent) / Live; sending from the line or by approved pattern; test text, balance check and
+  a log with reasons (e.g. no mobile on file). The API key is typed once and never shown again.
+- The database queues and sends (pg_cron every 30 s + pg_net): no new secret or setting in the app
+  container, no compose change. `backup.sh` records each dump for the System tab; release images carry
+  their commit for the Version box.
+- Migrations `20261103140000_admin_panel`, `20261103140001_sms_notifications` (enables `pg_net`).
+
 ### Security staff without Employee: no requests or leave (FR-76) · role buttons — `claude/absence-watchers` (not deployed)
 
 - People with the **Security** role and **without Employee** (subcontractor security staff) no longer

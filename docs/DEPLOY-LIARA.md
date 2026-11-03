@@ -111,6 +111,11 @@ password, saved on the VM at `/root/bj-liara/admin-password` (root only). The
 login code is `admin`. No public demo passwords or sample employee accounts are
 loaded. Save the initial password securely and change it after first login.
 
+The admin panel's System tab (FR-77) shows the newest dumps: after each successful dump `backup.sh`
+calls `private.record_backup` (best effort; never fails the backup). SMS (FR-78) is sent from the `db`
+container by pg_net to `console.melipayamak.com`, so the VM needs outbound HTTPS from Docker (it has it);
+the on-prem no-internet target cannot send.
+
 `bj-liara-backup.timer` runs `liara/backup.sh` daily at approximately 02:00 UTC.
 It retains 14 days of full logical database dumps, including Auth and application
 data. Pre-deploy backups also remain in `/opt/bj-erp/backups`. These do not back

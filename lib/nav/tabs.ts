@@ -45,7 +45,7 @@ export type ManageKey =
   | 'absences'
   | 'finance'
   | 'procurement';
-export type NavItemKey = ManageKey | 'settings';
+export type NavItemKey = ManageKey | 'settings' | 'admin';
 export type NavItem = { key: NavItemKey; href: string; labelKey: string; testId: string };
 
 const BASE: Tab[] = [
@@ -145,6 +145,11 @@ export function settingsItemForRoles(roles: string[], perms: Perms, canDelegate?
   return general || canDelegate === true || (canDelegate === undefined && can(perms, 'approval_delegate'))
     ? { key: 'settings', href: general ? '/settings' : '/settings/roles', labelKey: 'settings', testId: 'nav-settings' }
     : null;
+}
+
+/** FR-77: the admin panel, for the single admin only (not a permission, never delegated). */
+export function adminItemForRoles(roles: string[]): NavItem | null {
+  return isAdmin(roles) ? { key: 'admin', href: '/admin', labelKey: 'admin', testId: 'nav-admin' } : null;
 }
 
 /** FR-75: the 30-day approved-absences tile on Home, for absence watchers with the tile on. */

@@ -403,6 +403,21 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-77** ☐ **Admin panel.** The admin alone (not a permission, not delegable) has a nav item
+  «پنل مدیر سیستم» with four tabs. **Overview:** people (active, never signed in, still on the issued
+  password, signed in within 7/30 days), requests by type and status in a date range, approval speed
+  (median and 90th percentile), requests pending over 3 days, leave by department, SMS counts.
+  **SMS:** FR-78 settings and log. **System:** version, service checks, database size and biggest
+  tables, recent migrations, scheduled jobs and their last run, SMS queue, newest backups (red after
+  36 hours). **Audit log:** filterable `audit_log` with a before/after diff; signatures, passwords and
+  secrets hidden. *(Owner, 2026-11-03; spec `docs/specs/2026-11-03-admin-panel-sms-design.md`; unreleased.)*
+- **FR-78** ☐ **SMS notifications.** Texts go to the people who can sign the next open approval
+  step when a request is filed or a step is approved, to the requester when a request is finally
+  approved or rejected, and to an employee when the admin resets their password and ticks **Text it
+  to the employee** (the stored text is masked right after sending). Numbers come from personal info
+  (normalised to `09…`; none → logged as skipped). Modes Off / Dry run (default: logged, never sent) /
+  Live. Credentials are typed in the SMS tab and never shown again. Provider adapter: Melipayamak
+  (line or approved-pattern sending); the database queues and sends (pg_cron + pg_net). *(Owner, 2026-11-03; same spec; unreleased.)*
 - **FR-76** ☐ **Security staff without Employee have no time off.** Security staff are a subcontractor:
   someone with the Security role and without Employee sees no Request tab (every `/request` page sends
   them Home), no **My Recent Requests** or **My Balances** on Home, cannot file a request (refused by the

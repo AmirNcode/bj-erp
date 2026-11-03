@@ -78,6 +78,74 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — Admin panel (FR-77) + SMS notifications (FR-78): design and build
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ d7b63f1 → new branch `claude/admin-panel`
+**Trigger:** Amir: admin-only panel (backend, stats) with an SMS section; the client's IT sent partial
+Melipayamak details (username, `5000…` sender line; API key "coming"). Amir approved the spec ("build it").
+
+**What changed**
+- Spec `docs/specs/2026-11-03-admin-panel-sms-design.md`; FR-77, FR-78 in `docs/REQUIREMENTS.md`.
+- `supabase/migrations/20261103140000_admin_panel.sql`: `private.backup_runs` + `private.record_backup`,
+  `private.require_admin`, `app_health`, `app_admin_overview`, `app_admin_system`, `private.audit_redact`,
+  `app_audit_log`.
+- `supabase/migrations/20261103140001_sms_notifications.sql`: `create extension pg_net`;
+  `private.sms_settings`, `public.sms_outbox` (admin-read RLS); deferred constraint triggers on
+  `leave_requests` / `leave_request_approvals` → `private.sms_enqueue_request`; `private.sms_dispatch`
+  (pg_net → console.melipayamak.com) on pg_cron `bj-sms-dispatch` (30 s) + `bj-purge-sms-outbox`
+  (nightly, 180 days); admin RPCs `app_sms_settings` (never returns the key), `app_set_sms_settings`,
+  `app_sms_test`, `app_sms_check_credit`, `app_sms_log`, `app_enqueue_password_sms`.
+- **Design change vs. the approved plan:** sending moved from an app-side worker with a `SMS_WORKER_JWT`
+  into the database, and backups are recorded by `backup.sh` instead of a read-only mount — both
+  avoid compose changes, which `apply-release.sh` refuses ("Infrastructure changed"). `/api/health` left
+  as is (it deliberately skips Postgres). Spec §3.6 / §4 updated.
+- App: `app/[locale]/(app)/admin/{layout,page}.tsx`, `admin/{sms,system,audit}/*`, `_components/{AdminTabs,parts}`;
+  `lib/actions/admin.ts`, `lib/admin/{types,format}.ts`, `lib/auth/adminGuard.ts` (moved from
+  `settings/roles/_components/adminGuard.ts`, which re-exports); nav item `admin` (`lib/nav/tabs.ts`
+  `adminItemForRoles`, `nav-icons.tsx`, `MainNav.tsx`, `manage/page.tsx`); reset password gets
+  "Text it to the employee" (`lib/actions/employees.ts` `resetPassword(id, {textIt})`,
+  `EditEmployeeForm.tsx`); `lib/errors/db-error.ts` SMS rules; `lib/supabase/types.ts`; fa/en messages.
+- Deploy: `deploy/Dockerfile` ARG/ENV `APP_VERSION`, `APP_BUILT_AT`; `deploy/liara/package-release.sh`
+  passes them; `deploy/liara/backup.sh` calls `private.record_backup` (best effort). No compose change.
+- Tests: `tests/sql/sms.sql` (61 assertions), `tests/sql/admin-panel.sql`, `tests/unit/admin_format.test.ts`,
+  `tests/unit/nav_tabs.test.ts` (admin item). `supabase/schema.sql` = HEAD + the base→new delta of a
+  clone dump (the pg_net install reorders the schema/ACL blocks; content unchanged).
+- Docs: DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, MEMORY (3 lessons), DEPLOY-LIARA.
+
+**Actions outside the repo**
+- Throwaway clones `adm_dry` (local `postgres` + `20261102140000`, `…150000`, `20261103120000` + both new
+  migrations) and `adm_base` (same without the new ones) in `bj-erp-db-1`; temporary containers
+  `bjadm-rest`, `bjadm-auth`, `bjadm-gw` (port 54331) on `adm_dry`, with `auth.*` ownership given back to
+  `supabase_auth_admin` and throwaway passwords for the admin and one HR account **in the clone only**.
+  All removed / dropped at the end. Local `postgres` NOT migrated. Nothing run on Liara.
+- Web lookups: Melipayamak docs; console API shapes from `HRashidi/melipayamak` source.
+
+**Verification**
+- Every `tests/sql/*` on `adm_dry`: all pass except `approval-delegation.sql` (the known clone failure in
+  TASKS, "overlapping leave request exists"). `npx tsc --noEmit` clean, `npm run lint` clean,
+  `npm run test:unit` 1071 passed, `npm run build` ok (4 admin routes), `npm run test:deploy` passed.
+- Browser (dev server → clone): admin sees all four tabs (en desktop, fa RTL 375 px, no horizontal
+  overflow); settings save (key never returned; audit row without it); Persian-digit test mobile
+  normalised and logged as dry_run; a real committed request queued an approver text at commit
+  (skipped: no mobile); System shows services up, 113 migrations, a recorded backup; non-admin HR is
+  redirected Home and has no nav link; reset password + "Text it" shows "not texted: no mobile".
+- Found and fixed during the check: a skipped password row kept the plaintext (now masked at insert,
+  test added); redaction hid `api_key_changed`; Overview requests table cramped; Farsi log text in the
+  English UI; settings "saved" note lost on remount.
+- **Not verified:** a real send to Melipayamak (no key yet), pg_cron scheduling (the clone has no
+  pg_cron; dispatch was run by hand), `backup.sh` on the VM.
+
+**State left behind**
+- Uncommitted on `claude/admin-panel`. Not pushed, no PR.
+
+**For the next agent**
+- Console endpoint shapes are from a community client, not official docs: send one real test text
+  before trusting Live. If IT's "key" is a panel password, add a `rest.payamak-panel.com` path in
+  `private.sms_dispatch`.
+- Migrations `20261103140000`/`…01` are not frozen yet (no persistent DB applied them).
+- Proposed CLAUDE.md lines are in the final message to Amir, not applied.
+
 ## 2026-11-03 — PR #16 deploy result
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

@@ -27,6 +27,10 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+# Shown on the admin panel's System tab (FR-77). Release builds pass the commit SHA.
+ARG APP_VERSION=dev
+ARG APP_BUILT_AT=
+ENV APP_VERSION=$APP_VERSION APP_BUILT_AT=$APP_BUILT_AT
 
 # `output: 'standalone'` emits a self-contained server + minimal node_modules.
 COPY --from=builder /app/.next/standalone ./

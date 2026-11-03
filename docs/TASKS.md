@@ -44,8 +44,13 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   first login (training session) will hit it. Onboard in groups, or raise
   `RATE_LIMIT_TOKEN_PER_IP_5_MINUTES` (default 300) in the VM `.env` and recreate `auth`. See the
   comment in `deploy/docker-compose.yml`.
-- ☐ **SMS notifications** for approvers (owner plans an SMS service). Replaces the generic
-  notifications item below once a provider is chosen.
+- ◐ **Admin panel + SMS notifications (FR-77, FR-78)** built on branch `claude/admin-panel` (not committed,
+  not deployed). After deploy (owner): SMS starts in **Dry run**; check Admin panel › SMS log for who would
+  be texted and how many are `skipped: no mobile` (fill mobiles in personal info). When IT sends the
+  Melipayamak **console API key**: save it, **Check balance**, send one test text to your own number, then
+  switch to Live. Ask IT whether the `5000…` line is service or promotional; if promotional, get pattern
+  templates approved for the three events and switch to Pattern. Check `select jobname from cron.job`
+  shows `bj-sms-dispatch` and `bj-purge-sms-outbox`, and that the System tab lists a backup the next day.
 
 ## Product backlog
 

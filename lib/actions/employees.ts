@@ -6,6 +6,7 @@ import { requireCaller } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
+import type { PasswordSmsResult } from '@/lib/admin/types';
 
 export type CreateEmployeeInput = {
   personnel_no: string;
@@ -197,8 +198,9 @@ export async function setActive(
  * Admin-only. The new password is shown once to the admin.
  */
 export async function resetPassword(
-  id: string
-): Promise<{ ok: true; tempPassword: string } | DbErrorResult> {
+  id: string,
+  options: { textIt?: boolean } = {}
+): Promise<{ ok: true; tempPassword: string; sms: PasswordSmsResult } | DbErrorResult> {
   const c = await requireCaller({ anyOf: ['admin'] }) // admin-only (20261013200007);
   if (!c.ok) return c;
 
@@ -211,7 +213,17 @@ export async function resetPassword(
 
   if (error) return dbErr(error.message);
 
-  return { ok: true, tempPassword };
+  // FR-78: the password is already reset; a texting problem only changes the note shown.
+  let sms: PasswordSmsResult = null;
+  if (options.textIt) {
+    const { data, error: smsError } = await c.supabase.rpc('app_enqueue_password_sms', {
+      p_employee: id,
+      p_password: tempPassword,
+    });
+    sms = smsError ? 'failed' : data === 'queued' || data === 'skipped' || data === 'off' ? data : 'failed';
+  }
+
+  return { ok: true, tempPassword, sms };
 }
 
 // ---------------------------------------------------------------------------

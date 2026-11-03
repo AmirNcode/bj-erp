@@ -10,7 +10,8 @@ OUT="$PWD/.bj-deploy/liara/artifacts/$VERSION"
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 mkdir -p "$OUT" "$STAGE/stack/sql/init" "$STAGE/stack/migrations"
-docker build --platform linux/amd64 -f deploy/Dockerfile -t "bj-erp-app:$VERSION" .
+docker build --platform linux/amd64 -f deploy/Dockerfile -t "bj-erp-app:$VERSION" \
+  --build-arg APP_VERSION="$VERSION" --build-arg APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
 [ "$(docker image inspect "bj-erp-app:$VERSION" --format '{{.Architecture}}')" = amd64 ]
 docker save "bj-erp-app:$VERSION" | gzip -1 > "$STAGE/app-image.tar.gz"
 cp deploy/install.sh deploy/update.sh deploy/remote-job.sh deploy/docker-compose*.yml "$STAGE/stack/"
