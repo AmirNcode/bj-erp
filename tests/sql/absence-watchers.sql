@@ -97,10 +97,10 @@ select pg_temp.expect('admin: all four approved, never pending',pg_temp.seen('ad
 select pg_temp.expect('plain employee may not add a watcher',
   pg_temp.err(pg_temp.as_scalar('plain',format($q$insert into public.absence_watchers(user_id,company_id)
     values(%L,%L) returning 'x'$q$,pg_temp.fx('plain'),pg_temp.fx('company')))),'42501');
-select pg_temp.expect('hr adds the clerk: hourly leave only, tile',
+select pg_temp.expect('hr adds the clerk: hourly leave only, full page',
   pg_temp.err(pg_temp.as_scalar('hrp',format($q$insert into public.absence_watchers
     (user_id,company_id,leave_day,leave_hour,errand_day,errand_hour,home_tile,full_page)
-    values(%L,%L,false,true,false,false,true,false) returning 'x'$q$,pg_temp.fx('clerk'),pg_temp.fx('company')))),'ok');
+    values(%L,%L,false,true,false,false,false,true) returning 'x'$q$,pg_temp.fx('clerk'),pg_temp.fx('company')))),'ok');
 select pg_temp.expect('updated_by is the caller',
   (select (updated_by = pg_temp.fx('hrp'))::text from public.absence_watchers where user_id=pg_temp.fx('clerk')),'true');
 select pg_temp.expect('clerk sees hourly leave only',pg_temp.seen('clerk'),'b_leave_hour');
@@ -119,9 +119,33 @@ select pg_temp.expect('both views off is refused',
     set home_tile=false,full_page=false where user_id=%L returning 'x'$q$,pg_temp.fx('clerk')))),'23514');
 select pg_temp.expect('hr widens the clerk to errands',
   pg_temp.err(pg_temp.as_scalar('hrp',format($q$update public.absence_watchers
-    set errand_day=true,errand_hour=true,full_page=true where user_id=%L returning 'x'$q$,pg_temp.fx('clerk')))),'ok');
+    set errand_day=true,errand_hour=true,home_tile=true where user_id=%L returning 'x'$q$,pg_temp.fx('clerk')))),'ok');
 select pg_temp.expect('clerk now sees hourly leave and both errands',pg_temp.seen('clerk'),
   'b_leave_hour,c_errand_day,d_errand_hour');
+-- The view is enforced in the database: with the tile only, the 30-day window from today.
+do $$
+declare v_id uuid;
+begin
+  insert into public.leave_requests(employee_id,company_id,kind,errand_location,unit,start_date,end_date,
+                                    requested_minutes,status,serial_year,serial_seq)
+    values(pg_temp.fx('rep'),pg_temp.fx('company'),'errand','Fixture site','day',
+           (now() at time zone 'Asia/Tehran')::date+5,(now() at time zone 'Asia/Tehran')::date+5,480,'approved',1,978010)
+    returning id into v_id;
+  insert into aw_fx values('f_soon',v_id);
+end $$;
+create function pg_temp.seen_wide(p_key text) returns text language sql as $$
+  select pg_temp.as_scalar(p_key,$q$select coalesce(string_agg(f.k,',' order by f.k),'-')
+    from public.watched_absences(date '2000-01-01', date '2099-12-31') w
+    join aw_fx f on f.id = w.id$q$);
+$$;
+select pg_temp.expect('full page: any range',pg_temp.seen_wide('clerk'),
+  'b_leave_hour,c_errand_day,d_errand_hour,f_soon');
+select pg_temp.expect('hr turns the clerk''s full page off',
+  pg_temp.err(pg_temp.as_scalar('hrp',format($q$update public.absence_watchers
+    set full_page=false where user_id=%L returning 'x'$q$,pg_temp.fx('clerk')))),'ok');
+select pg_temp.expect('tile only: today through 30 days, whatever range is asked',pg_temp.seen_wide('clerk'),'f_soon');
+select pg_temp.expect('admin: any range',pg_temp.seen_wide('admin'),
+  'a_leave_day,b_leave_hour,c_errand_day,d_errand_hour,f_soon');
 select pg_temp.expect('plain may not edit the clerk',
   pg_temp.as_scalar('plain',format($q$with u as (update public.absence_watchers set leave_day=true
     where user_id=%L returning 1) select count(*)::text from u$q$,pg_temp.fx('clerk'))),'0');

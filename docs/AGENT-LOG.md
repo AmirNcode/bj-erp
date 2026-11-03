@@ -104,6 +104,7 @@ Copy this block verbatim and fill it in.
 **For the next agent**
 - Committed on `claude/absence-watchers` and opened as a PR; another agent reviews before merge. Not deployed. Merging to `main` deploys; migration runs before the app swap and the old app keeps working (alias kept, old catalog key just disappears from claims).
 - `approval-delegation.sql` failure is pre-existing; not investigated.
+- Follow-up (automated security review of the commit): a tile-only watcher could call `watched_absences` for any range. Fixed in the same (unapplied) migration: without `full_page` the RPC returns only today..+30 (Tehran). `tests/sql/absence-watchers.sql` now 28 PASS, fr55 355 PASS on a fresh clone (dropped after). Edited in place: no persistent DB had applied it.
 
 ## 2026-11-02 — Admin may enter any personnel number (security subcontractor logins)
 

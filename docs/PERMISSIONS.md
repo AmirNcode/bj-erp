@@ -266,8 +266,9 @@ information").
   types (daily leave, hourly leave, daily work trip, hourly work errand) and views (Home tile, full
   Absences page). Rows come from `public.watched_absences(from, to)` (SECURITY DEFINER): approved
   requests of the caller's types only, who and when, no reason or location; the admin gets every type
-  without a row, a caller with no row gets none. So a watcher needs no `leave_requests` or `people`
-  read. The legacy alias `absences.view` = admin, or has a watcher row. The migration pre-filled every
+  without a row, a caller with no row gets none. A watcher without the full page gets only today
+  (Tehran) through 30 days ahead, whatever range they ask (the Home tile's window). So a watcher needs
+  no `leave_requests` or `people` read. The legacy alias `absences.view` = admin, or has a watcher row. The migration pre-filled every
   active non-admin holder of `absences` read (all four types, Home tile).
 
 ### `special_leave_grants` (FR-65)

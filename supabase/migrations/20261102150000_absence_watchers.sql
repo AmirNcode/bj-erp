@@ -77,7 +77,9 @@ grant all on table public.absence_watchers to service_role;
 
 -- Approved requests overlapping [p_from, p_to], limited to the caller's watched types. The admin
 -- sees every type; a caller with no row sees nothing. Only who and when: no reason, no location.
--- Definer, so a watcher needs no leave_requests or people read.
+-- Definer, so a watcher needs no leave_requests or people read. The view is enforced here too: a
+-- watcher without the full page (Home tile only) gets today (Tehran) through 30 days ahead, the
+-- tile's window, whatever range they ask for.
 create function public.watched_absences(p_from date, p_to date)
     returns table(id uuid, kind public.request_kind, unit public.leave_unit, start_date date,
                   end_date date, start_time time, end_time time, employee_name text,
@@ -89,6 +91,8 @@ create function public.watched_absences(p_from date, p_to date)
   with me as (
     select p.company_id,
            private.is_admin(p.id) as admin,
+           coalesce(w.full_page, false) as full_page,
+           (now() at time zone 'Asia/Tehran')::date as today,
            w.leave_day, w.leave_hour, w.errand_day, w.errand_hour
       from public.profiles p
       left join public.absence_watchers w on w.user_id = p.id
@@ -103,6 +107,8 @@ create function public.watched_absences(p_from date, p_to date)
     left join public.leave_types t on t.id = r.leave_type_id
    where r.status = 'approved'
      and r.end_date >= p_from and r.start_date <= p_to
+     and (me.admin or me.full_page
+          or (r.end_date >= me.today and r.start_date <= me.today + 30))
      and (me.admin
           or (r.kind = 'leave'  and r.unit = 'day'  and coalesce(me.leave_day, false))
           or (r.kind = 'leave'  and r.unit = 'hour' and coalesce(me.leave_hour, false))
