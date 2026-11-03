@@ -78,6 +78,27 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — PR #16 deploy result
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ 7847f25 (merge of PR #16)
+**Trigger:** Amir: merge PR #16 to `main` to deploy (follow-up to the entry below).
+
+**What changed**
+- Only this entry.
+
+**Actions outside the repo**
+- `gh pr merge 16 --merge` → `7847f25`; GitHub Actions run 41591179556 (audit, lint, unit, deploy tests, package, SSH apply) all green. Migrations `20261102150000_absence_watchers` and `20261103120000_security_only_no_time_off` applied on Liara by the release (the `20261102140000` one was already there).
+
+**Verification**
+- `curl https://bjeng.app/api/health` → `{"status":"ok","service":"bj-erp-app"}`. No signed-in check on Liara.
+
+**State left behind**
+- `main` deployed. Branch `claude/absence-watchers` merged, not deleted.
+
+**For the next agent**
+- The owner checks in TASKS.md (FR-75 watchers list, FR-76 security-only sign-in) are still open.
+
 ## 2026-11-03 — PR #16 review fixes (FR-76 accrual backfill, approval/extension bypass, live roles) · merge
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
