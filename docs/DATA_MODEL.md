@@ -572,6 +572,14 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
 A separate table so the write never touches `leave_requests` and its triggers.
 `app_request_approval_progress` rows also carry `is_mine` (FR-71, migration `20261021120000`).
 
+### `absence_watchers` (2026-11-02, FR-75, unreleased)
+`user_id → profiles` (PK, on delete cascade) · `company_id → companies` · booleans `leave_day`,
+`leave_hour`, `errand_day`, `errand_hour` (request types; leave = every leave type, split by `unit`;
+work trip = `kind='errand' unit='day'`, work errand = `unit='hour'`) and `home_tile`, `full_page`
+(views) · `created_at`, `updated_at`, `updated_by` (set by trigger). CHECKs: at least one type and one
+view. A trigger refuses a person from another company. Read by `watched_absences(from, to)`; replaces
+the retired `absences` permission item (migration `20261102150000`).
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`

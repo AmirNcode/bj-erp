@@ -14,7 +14,7 @@ test database). They do not claim production release.
 | **admin** | The owner. Full read/write across the company. Override on any decision. |
 | **manager** | Leads a team. Reads company-wide time-off; edits/approves **direct reports** only. |
 | **employee** | Standard worker. Self-service + own-team visibility. |
-| **security** | Security department staff. **Read-only** visibility into **everyone's** calendar, and the approved-absences board (`/absences`, FR-56). **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
+| **security** | Security department staff. **Read-only** visibility into **everyone's** calendar. Since FR-75 (2026-11-02) the approved-absences tile/board is per person (absence watchers), not part of the role. **Never an approver**: since 2026-10-12 a `security` approval step can only exist inactive. |
 | **finance** | Finance (امور مالی). Signs the last step of a clearance form and reads every clearance form, including the leaver's remaining leave. Since FR-62 (2026-10-12) also reads every fully approved request with its per diem, through `finance_approved_requests()` only; since 2026-10-20 (owner review of FR-70) also pending requests, through `finance_requests()`; since 2026-11-02 work errands only (hourly and daily), never leave. *(FR-54; added 2026-10-07.)* |
 | **hr** | HR staff (منابع انسانی). Reads company-wide. Adds employees to any department, but only ever as plain employees. Co-signs every request alongside the manager, and owns the reports screen. *(FR-35; added 2026-08-18.)* Since FR-51 (2026-10-07) also edits employees (not admins, not themselves), toggles the `manager` role, and creates/renames departments. Since FR-53 reads everyone's personal information and corrects it (not an admin's), with CSV export/import. |
 | **Custom roles** (FR-55) | Created by the admin in Settings › Roles: an English name and a level per catalog item (Allowed / Read only / Not allowed). Assignable like any role; see *Configurable roles (FR-55)* below. Not approval-step roles (`approval_steps.role` stays on the `app_role` enum). |
@@ -260,8 +260,15 @@ information").
   `finance` read (`private.has_perm`); caller's company; approved and **pending** rows, plus settled
   cancelled travel trips. A pending row carries only `waiting_step`, the label of the first open step
   (`manager`, `departmentManager`, `hr`, …): no approver or signer names, no signatures, no reason.
-- The approved-absences board (`getAbsences`) needs `absences` read; rows come through
-  `leave_requests_select`, hence the dependency on `people` and `leave_requests`.
+- **FR-75 (2026-11-02, migration `20261102150000`) removed the `absences` item.** Who sees approved
+  absences is the per-person list `absence_watchers`, edited on Manage › Approval steps with
+  `approval_steps` edit (read: `approval_steps` read, or one's own row). Each row switches on request
+  types (daily leave, hourly leave, daily work trip, hourly work errand) and views (Home tile, full
+  Absences page). Rows come from `public.watched_absences(from, to)` (SECURITY DEFINER): approved
+  requests of the caller's types only, who and when, no reason or location; the admin gets every type
+  without a row, a caller with no row gets none. So a watcher needs no `leave_requests` or `people`
+  read. The legacy alias `absences.view` = admin, or has a watcher row. The migration pre-filled every
+  active non-admin holder of `absences` read (all four types, Home tile).
 
 ### `special_leave_grants` (FR-65)
 - **SELECT**: own rows, or `special_leave` edit (admin, hr preset) in the caller's company. No client
@@ -471,6 +478,8 @@ no row). Unreleased `approval_delegate` uses only Yes/No as described above.
 
 ### Catalog (19 released items; 20 on the unreleased delegation branch)
 
+Since FR-75 (2026-11-02) the catalog has 20 items: `absences` was removed (see *Permission keys added 2026-10-12*).
+
 Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 `private.permission_keys` / `permission_allows` / `permission_deps` and `lib/permissions/catalog.ts`
 (a unit test compares them with `supabase/schema.sql`).
@@ -490,7 +499,6 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | | `special_leave` | E | `people`, `leave_balances` |
 | | `leave_requests` | R/E | `people` |
 | | `calendar` | R | — |
-| | `absences` | R | `people`, `leave_requests` |
 | | `reports` | R | `people`, `leave_balances`, `leave_requests` |
 | Finance | `finance` | R | — |
 | Procurement | `travel_booking` | E (Yes/No) | — |
@@ -503,8 +511,8 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 
 | Preset | Holds |
 |---|---|
-| **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `absences`, `reports`, `finance` at read |
-| **Security** | `people`, `leave_balances`, `leave_requests`, `calendar`, `absences` at read |
+| **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `reports`, `finance` at read |
+| **Security** | `people`, `leave_balances`, `leave_requests`, `calendar` at read |
 | **Finance** | `clearance`, `finance` at read |
 | **Procurement** (FR-70) | `travel_booking` at edit |
 
@@ -513,9 +521,9 @@ catalog has 19 items; delegation adds the twentieth. `passwords` was
 removed by `20261013200007` (password resets are admin-only; a stored row counts for nothing). `admin`, `manager` and
 `employee` carry no permission rows (admin holds every item implicitly; manager has the hard-wired
 company-wide read through `reads_*`). Presets keep their name and cannot be deleted; permissions are
-editable. HR holds `work_settings`, `holidays`, `special_leave`, `absences` and `finance` read under
+editable. HR holds `work_settings`, `holidays`, `special_leave` and `finance` read under
 owner ruling (a), 2026-10-13, so the HR preset covers Security and Finance and D4 lets it act on
-their holders.
+their holders (`absences` read until FR-75 removed the item).
 
 ### Rules (D1–D7)
 

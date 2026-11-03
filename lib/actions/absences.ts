@@ -1,15 +1,13 @@
 'use server';
 
 /**
- * Approved absences on one day (FR-56) — the board for absences read (FR-55:
- * the security and hr presets; the admin implicitly).
+ * Approved absences (FR-56) for absence watchers (FR-75: a per-person list on Manage ›
+ * Approval steps; the admin sees everything without a row).
  *
- * Security needs to know who is out and that their request is fully approved;
- * it never approves. Only `approved` requests are listed — pending ones never
- * show. Reads through the `leave_requests_select` policy: absences depends on
- * leave_requests read and people read (D6), so this adds no read surface. The
- * reason and the errand location are not selected: the gate needs who and
- * when, not why.
+ * Only `approved` requests are listed — pending ones never show. Rows come from the
+ * `watched_absences` definer function, which keeps only the request types the caller
+ * follows (none without a row) and returns who and when, never the reason or the errand
+ * location — so a watcher needs no leave_requests or people read.
  */
 
 import { requireCaller } from '@/lib/auth/context';
@@ -33,36 +31,18 @@ export type Absence = {
   endTime: string | null;
 };
 
-const ABSENCE_COLUMNS = `id, kind, unit, start_date, end_date, start_time, end_time,
-       profiles!leave_requests_employee_id_fkey(full_name, personnel_no, departments!profiles_department_id_fkey(name_fa, name_en)),
-       leave_types(name_fa, name_en)`;
-
-type Row = {
-  id: string;
-  kind: Absence['kind'];
-  unit: Absence['unit'];
-  start_date: string;
-  end_date: string;
-  start_time: string | null;
-  end_time: string | null;
-  profiles: {
-    full_name: string;
-    personnel_no: string | null;
-    departments: { name_fa: string; name_en: string | null } | null;
-  } | null;
-  leave_types: { name_fa: string; name_en: string | null } | null;
-};
+type Row = Database['public']['Functions']['watched_absences']['Returns'][number];
 
 const toAbsence = (r: Row): Absence => ({
   id: r.id,
   kind: r.kind,
   unit: r.unit,
-  employeeName: r.profiles?.full_name ?? '—',
-  personnelNo: r.profiles?.personnel_no ?? null,
-  departmentNameFa: r.profiles?.departments?.name_fa ?? null,
-  departmentNameEn: r.profiles?.departments?.name_en ?? null,
-  leaveTypeNameFa: r.leave_types?.name_fa ?? null,
-  leaveTypeNameEn: r.leave_types?.name_en ?? null,
+  employeeName: r.employee_name ?? '—',
+  personnelNo: r.personnel_no,
+  departmentNameFa: r.department_name_fa,
+  departmentNameEn: r.department_name_en,
+  leaveTypeNameFa: r.leave_type_name_fa,
+  leaveTypeNameEn: r.leave_type_name_en,
   startDate: r.start_date,
   endDate: r.end_date,
   startTime: r.start_time,
@@ -78,21 +58,9 @@ const byDayThenTime = (a: Absence, b: Absence) =>
 export async function getApprovedAbsences(
   date: string
 ): Promise<{ ok: true; absences: Absence[] } | DbErrorResult> {
-  const c = await requireCaller({ perm: ['absences', 'read'] });
-  if (!c.ok) return c;
   if (!isValidIsoDate(date)) return dbErr('invalid date');
-
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select(ABSENCE_COLUMNS)
-    .eq('status', 'approved')
-    .lte('start_date', date)
-    .gte('end_date', date)
-    .order('start_time', { ascending: true, nullsFirst: true });
-  if (error) return dbErr(error.message);
-
-  const absences = ((data ?? []) as unknown as Row[]).map(toAbsence).sort(byDayThenTime);
-  return { ok: true, absences };
+  const r = await watchedAbsences(date, date);
+  return r.ok ? { ok: true, absences: r.absences.sort(byDayThenTime) } : r;
 }
 
 /**
@@ -104,22 +72,21 @@ export async function getUpcomingAbsences(
   from: string,
   to: string
 ): Promise<{ ok: true; absences: Absence[] } | DbErrorResult> {
-  const c = await requireCaller({ perm: ['absences', 'read'] });
-  if (!c.ok) return c;
   if (!isValidIsoDate(from) || !isValidIsoDate(to)) return dbErr('invalid date');
+  const r = await watchedAbsences(from, to);
+  return r.ok
+    ? { ok: true, absences: r.absences.sort((a, b) => a.startDate.localeCompare(b.startDate) || byDayThenTime(a, b)) }
+    : r;
+}
 
-  const { data, error } = await c.supabase
-    .from('leave_requests')
-    .select(ABSENCE_COLUMNS)
-    .eq('status', 'approved')
-    // Overlap, so an absence already under way on `from` is listed too.
-    .gte('end_date', from)
-    .lte('start_date', to)
-    .order('start_date', { ascending: true });
+// Overlap with [from, to], so an absence already under way on `from` is listed too.
+async function watchedAbsences(
+  from: string,
+  to: string
+): Promise<{ ok: true; absences: Absence[] } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('watched_absences', { p_from: from, p_to: to });
   if (error) return dbErr(error.message);
-
-  const absences = ((data ?? []) as unknown as Row[])
-    .map(toAbsence)
-    .sort((a, b) => a.startDate.localeCompare(b.startDate) || byDayThenTime(a, b));
-  return { ok: true, absences };
+  return { ok: true, absences: (data ?? []).map(toAbsence) };
 }

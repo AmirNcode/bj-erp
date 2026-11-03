@@ -26,6 +26,7 @@ import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { can, parsePermsClaim, type Level, type PermKey, type Perms } from '@/lib/permissions/catalog';
+import { watchFromRow, type AbsenceWatch } from '@/lib/absences/watch';
 
 export type AuthUser = { id: string; email?: string };
 
@@ -72,6 +73,20 @@ export const getCachedPermissions = cache(async (userId: string): Promise<Perms>
   const supabase = await createClient();
   const { data } = await supabase.rpc('app_my_permissions');
   return parsePermsClaim(data) ?? {};
+});
+
+/**
+ * FR-75: the caller's own absence_watchers row (null when not on the list). Live, not a claim:
+ * the list changes on Manage › Approval steps and should show on the next page load.
+ */
+export const getCachedAbsenceWatch = cache(async (userId: string): Promise<AbsenceWatch | null> => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('absence_watchers')
+    .select('leave_day, leave_hour, errand_day, errand_hour, home_tile, full_page')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return data ? watchFromRow(data) : null;
 });
 
 /** The caller's own profile row (all columns), fetched at most once per request. */

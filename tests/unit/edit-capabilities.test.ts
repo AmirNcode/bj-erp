@@ -19,14 +19,13 @@ const HR: Perms = {
   special_leave: 'edit',
   leave_requests: 'read',
   calendar: 'read',
-  absences: 'read',
   reports: 'read',
   finance: 'read',
   approval_steps: 'edit',
   work_settings: 'edit',
   holidays: 'edit',
 };
-const SECURITY: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read', absences: 'read' };
+const SECURITY: Perms = { people: 'read', leave_balances: 'read', leave_requests: 'read', calendar: 'read' };
 const FINANCE: Perms = { clearance: 'read', finance: 'read' };
 
 const role = (id: string, systemKey: string | null, kind: RoleRow['kind'], name: string, permissions: Perms): RoleRow => ({
@@ -285,7 +284,7 @@ describe('employeeEditCapabilities', () => {
 
   const WIDE: Perms = {
     people: 'edit', leave_balances: 'read', leave_requests: 'read', calendar: 'read',
-    clearance: 'read', absences: 'read', finance: 'read',
+    clearance: 'read', finance: 'read',
   };
   // An hr role stripped of every item, so only the identity clause can lock its holders.
   const HR_BARE = role('r-hr', 'hr', 'preset', 'HR', {});

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { Suspense } from 'react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions, getCachedAbsenceWatch } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { homeAbsencesBoard } from '@/lib/nav/tabs';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
@@ -46,6 +46,7 @@ import { BoardSkeleton } from '@/components/Skeletons';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getUpcomingAbsences } from '@/lib/actions/absences';
 import { upcomingAbsenceWindow, UPCOMING_ABSENCE_DAYS } from '@/lib/absences/upcoming';
+import { filterWatched, watchedSections } from '@/lib/absences/watch';
 import { UpcomingAbsences } from '../absences/UpcomingAbsences';
 
 type Props = {
@@ -352,17 +353,23 @@ async function ProfileReminder({ locale, userId }: { locale: string; userId: str
   return <ProfileReminderCard locale={locale} needsInfo={needsInfo} needsSignature={needsSignature} />;
 }
 
-// ── FR-56: absences holders (security, hr) see who is out next on Home ─────
-// Owner, 2026-11-02: only the next 30 days, no day picker. The admin opens the
-// same card from Manage › Absences instead.
+// ── FR-56/75: absence watchers with the Home tile see who is out next ──────
+// Owner, 2026-11-02: only the next 30 days, no day picker, and only the request
+// types the watcher follows (Manage › Approval steps).
 async function HomeAbsences({ locale, userId }: { locale: string; userId: string }) {
-  const [roles, perms] = await Promise.all([getCachedRoles(userId), getCachedPermissions(userId)]);
-  if (!homeAbsencesBoard(roles, perms)) return null;
+  const watch = await getCachedAbsenceWatch(userId);
+  if (!homeAbsencesBoard(watch)) return null;
   const ahead = upcomingAbsenceWindow(todayInAppTz());
   const upcoming = await getUpcomingAbsences(ahead.from, ahead.to);
   return upcoming.ok ? (
     <div data-testid="home-absences">
-      <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
+      {/* The function already filters a watcher's rows; this also filters an admin's (who gets all). */}
+      <UpcomingAbsences
+        absences={filterWatched(upcoming.absences, watch)}
+        days={UPCOMING_ABSENCE_DAYS}
+        locale={locale}
+        sections={watchedSections(watch)}
+      />
     </div>
   ) : (
     <p role="alert" className="text-sm text-destructive" data-testid="home-absences">

@@ -133,6 +133,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
   pre-deploy dump; keep schema compatible with the still-running old app (add first, drop later).
 - **Never hand-run SQL on a server.** Only the migration ledger (`bj_deploy.schema_migrations`)
   may change schema, so every deploy stays reproducible.
+- **Local `postgres` DB lags `main`** (since 2026-11-02 it lacks `20261102140000`+): a dry-run clone must apply those first, or `schema:dump`-from-clone loses them.
 - **Local stack:** run `./deploy/bj-deploy` from the main checkout (`deploy/.env` and
   `.bj-deploy/local` are untracked, absent in worktrees). LAN URL = `APP_ORIGIN` in `deploy/.env`;
   if the Mac IP changes, edit it and recreate all containers. After migrations, restart `bj-erp-rest-1`.
@@ -160,6 +161,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Local SQL as superuser:** `postgres` is not one in the db image; use `supabase_admin` with `PGPASSWORD` from `deploy/.env` (see `tests/sql/*` header).
 - **plpgsql `IF` with a `CASE`:** `if x > case when … then … end then` is a syntax error (the parser stops at the first `then`). Wrap the CASE in parentheses.
 - **Adding a column to `travel_bookings`** breaks SQL tests that build a `row(…)::public.travel_bookings` literal (`tests/sql/travel-booking.sql`); add the value there too.
+- **Who sees approved absences = `absence_watchers` rows (FR-75), not a permission.** Edited on Manage › Approval steps (`approval_steps` edit); data via `watched_absences(from,to)`; the nav's `absencesPage` capability comes from the caller's row. The `absences` catalog item is gone.
 - **Travel costs never reach the traveller:** `my_travel_itineraries()` strips per-stay `cost_rials` (`private.travel_itinerary_without_costs`); finance reads only `hotel_cost_rials` (= the stays' sum).
 - **`jspdf` must stay ≥ 4.2.1:** 3.x has a critical advisory and CI runs `npm audit --omit=dev`. `html-to-image`/`jspdf` load with `import()` on click.
 - **Worktrees:** a symlinked `node_modules` passes `tsc`/vitest but breaks `next build` (Turbopack refuses files outside the root); clone it with `cp -Rc ../bj/node_modules node_modules` (APFS, instant).

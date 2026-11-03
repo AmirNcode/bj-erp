@@ -1,10 +1,11 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 21 items:
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 20 items:
  * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
- * the FR-55 review decision) plus main's absences, finance, personal_info_own (own
+ * the FR-55 review decision) plus main's finance, personal_info_own (own
  * personal information, an explicit exception to D3) and special_leave, and FR-70's
- * travel_booking (20261020120001). Pure. Drives
+ * travel_booking (20261020120001). FR-75 (20261102150000) removed absences: who sees
+ * approved absences is a per-person list (absence_watchers). Pure. Drives
  * the role editor, the nav and the edit capabilities. The database is the
  * authority; tests/unit/permissions-catalog.test.ts keeps the two in step.
  */
@@ -13,7 +14,7 @@ export type Level = 'read' | 'edit';
 export type PermKey =
   | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
-  | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'absences' | 'reports'
+  | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'reports'
   | 'finance' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
   | 'travel_booking';
 /** RE: read and edit · E: action only · R: read only. */
@@ -25,9 +26,7 @@ export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   { key: 'employees', items: ['people', 'people_create', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
-  // absences sits after calendar here (both "who is away" views); SQL permission_keys() lists it
-  // after reports. Order is display only: the tests compare sets and counts, so keep both as is.
-  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'absences', 'reports'] },
+  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'reports'] },
   { key: 'finance', items: ['finance'] },
   // FR-70: procurement books approved out-of-town trips.
   { key: 'procurement', items: ['travel_booking'] },
@@ -39,7 +38,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   people: 'RE', people_create: 'E', role_manager: 'E', role_assign: 'E',
   personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
   leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
-  calendar: 'R', absences: 'R', reports: 'R', finance: 'R',
+  calendar: 'R', reports: 'R', finance: 'R',
   approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
   travel_booking: 'E',
 };
@@ -67,9 +66,6 @@ export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] =
   { key: 'reports', keyLevel: 'read', needs: 'people' },
   { key: 'reports', keyLevel: 'read', needs: 'leave_balances' },
   { key: 'reports', keyLevel: 'read', needs: 'leave_requests' },
-  // The approved-absences board reads leave_requests joined to profiles through RLS.
-  { key: 'absences', keyLevel: 'read', needs: 'people' },
-  { key: 'absences', keyLevel: 'read', needs: 'leave_requests' },
   { key: 'special_leave', keyLevel: 'read', needs: 'people' },
   { key: 'special_leave', keyLevel: 'read', needs: 'leave_balances' },
 ];

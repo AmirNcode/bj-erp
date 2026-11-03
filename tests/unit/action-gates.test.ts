@@ -38,7 +38,8 @@ vi.mock('@/lib/cache/invalidate-app', () => ({ invalidateAppCache: vi.fn() }));
 vi.mock('next-intl/server', () => ({ getTranslations: async () => (key: string) => key }));
 
 const { grantSpecialLeave, revokeSpecialLeave } = await import('@/lib/actions/specialLeave');
-const { getApprovedAbsences } = await import('@/lib/actions/absences');
+const { saveAbsenceWatcher, removeAbsenceWatcher } = await import('@/lib/actions/absence-watchers');
+const { FULL_WATCH } = await import('@/lib/absences/watch');
 const { getFinanceApprovals } = await import('@/lib/actions/finance');
 const { upsertHoliday, bulkUpsertHolidays, deleteHoliday } = await import('@/lib/actions/settings');
 const { importEmployees } = await import('@/lib/actions/employees');
@@ -63,11 +64,18 @@ const CASES: Case[] = [
     allowed: { people: 'read', leave_balances: 'read', special_leave: 'edit' },
     refused: { people: 'edit', leave_balances: 'edit' },
   },
+  // FR-75: the absence-notifications list is edited with approval_steps edit.
   {
-    name: 'getApprovedAbsences: absences read',
-    run: () => getApprovedAbsences('2026-10-13'),
-    allowed: { people: 'read', leave_requests: 'read', absences: 'read' },
-    refused: { people: 'read', leave_requests: 'read' },
+    name: 'saveAbsenceWatcher: approval_steps edit',
+    run: () => saveAbsenceWatcher({ userId: 'emp', watch: FULL_WATCH }),
+    allowed: { people: 'read', approval_steps: 'edit' },
+    refused: { people: 'read', approval_steps: 'read' },
+  },
+  {
+    name: 'removeAbsenceWatcher: approval_steps edit',
+    run: () => removeAbsenceWatcher('emp'),
+    allowed: { people: 'read', approval_steps: 'edit' },
+    refused: { people: 'read', approval_steps: 'read' },
   },
   {
     name: 'getFinanceApprovals: finance read',

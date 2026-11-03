@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-03 — Absence notifications per person (FR-75)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ e179dd2, clean
+**Trigger:** Amir: the fingerprint clerk must see approved leave; replace the role-based "Approved absences" tile with a per-person list on Manage › Approval steps (name/ID search, 4 request-type switches, 2 view switches: Home tile, full Absences page).
+
+**Decisions (owner, this session)**
+- Pre-fill today's holders; two views per person; whole company; "leave" = every leave type split by day/hour. UI per owner mockup, drawn with the app's bordered checkbox rows (no switch component exists).
+
+**What changed (branch `claude/absence-watchers`, PR for review; Amir asked)**
+- Migration `supabase/migrations/20261102150000_absence_watchers.sql`: table `absence_watchers` (RLS: read own row or `approval_steps` read; write `approval_steps` edit, same company; trigger refuses another company's person and sets `updated_by`), definer `watched_absences(from,to)` (caller's types only; admin all; no row none), pre-fill of active non-admin `absences` holders (all types, Home tile, no full page), removal of the `absences` catalog item (role_permissions rows, `permission_keys/allows/deps`, `seed_company_roles`), `has_permission('absences.view')` = admin or watcher.
+- App: `lib/absences/watch.ts` (pure), `lib/actions/absence-watchers.ts` (list/save/remove/candidates), `lib/actions/absences.ts` now calls the RPC (no perm gate), `getCachedAbsenceWatch` in `lib/auth/context.ts`, `absencesPage` capability threaded through `lib/nav/tabs.ts` → layout/AppShell/MainNav/RoutePrefetcher/manage page+layout; Home tile and `/absences` gate on the watcher row; `UpcomingAbsences` `sections` prop; new `AbsenceWatchersCard` + `AbsenceWatcherDialog` on the approval-steps page (uses `PersonSearch`); catalog drops `absences`; messages `manage.settings.absenceWatchers.*`, `errors.absenceWatcher*`, `permissions.items.absences` removed; `lib/supabase/types.ts` hand-edited.
+- Tests: new `tests/sql/absence-watchers.sql` (24 assertions), `tests/unit/absence-watch.test.ts`; `tests/sql/fr55-roles-permissions.sql` and unit tests updated for the removed item (HRLite now acts on Security holders: Security no longer holds anything HR lacks).
+- `supabase/schema.sql` regenerated from the dry-run clone (3 restore-only CHECK hunks reverted). Docs: PERMISSIONS, DATA_MODEL, REQUIREMENTS (FR-75), CHANGELOG.
+
+**Actions outside the repo**
+- Local DB: throwaway clone `aw_dry` of `postgres`, applied `20261102140000` (the local DB still lacks it) and the new migration, ran every `tests/sql/*`, dumped schema, dropped `aw_dry`. The shared local `postgres` DB was NOT migrated. Nothing run on Liara.
+
+**Verification**
+- On the clone: all `tests/sql/*` PASS except `approval-delegation.sql` ("overlapping leave request exists" for ceo), which fails the same way on a clone without this migration (pre-existing, data-dependent). Pre-fill moved 5 holders on the local roster.
+- `tsc --noEmit`, `npm run lint` clean; `npm run test:unit` 110 files / 1041 tests pass; `npm run build` OK.
+- UI checked on a temporary `zz-` page with fake data (en + fa): list, Add dialog (ID search auto-picks, "already listed" hint, Save disabled with no view), Edit dialog prefilled, leave-only tile hides Work errands. Not clicked through with a real login (local DB not migrated).
+
+**For the next agent**
+- Committed on `claude/absence-watchers` and opened as a PR; another agent reviews before merge. Not deployed. Merging to `main` deploys; migration runs before the app swap and the old app keeps working (alias kept, old catalog key just disappears from claims).
+- `approval-delegation.sql` failure is pre-existing; not investigated.
+
 ## 2026-11-02 — Admin may enter any personnel number (security subcontractor logins)
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

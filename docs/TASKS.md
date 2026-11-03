@@ -49,6 +49,13 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ☐ **Absence notifications (FR-75) after deploy (owner):** on Liara, Manage › Approval steps ›
+  Absence notifications should list the old HR/Security holders (all four types, Home tile). Add the
+  fingerprint clerk with only the types they enter; untick the rest for people who do not need it.
+  Settings › Roles no longer shows "Approved absences".
+- ☐ **`tests/sql/approval-delegation.sql` fails on a clone of the local DB** ("submission failed for
+  ceo: overlapping leave request exists"), with or without FR-75 — likely the real roster's data
+  colliding with its fixture dates. Investigate (found 2026-11-03).
 - ☐ **Absences look-ahead feedback (owner, after deploy):** ask the HR clerk who updates the
   fingerprint system whether the 30-day list on Home is enough. If items slip, next step is a
   worklist with a per-request "entered in attendance system" tick, flagging cancelled-after-entry
@@ -106,8 +113,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
     `tests/e2e/hr-role.spec.ts:355-380` still expects `chain-<id>-manager` / `-hr`. Restore a role-based
     testid or update the spec.
   - **Wider `leave_requests` RLS reaches unscoped queries:** `lib/actions/reports.ts:119` and
-    `lib/actions/absences.ts:44` have no employee filter, so named step approvers now also see pending /
-    self-decided requests there. Confirm intended or filter.
+    `lib/actions/absences.ts:44` had no employee filter, so named step approvers now also see pending /
+    self-decided requests there. Confirm intended or filter. (Absences no longer reads `leave_requests`
+    since FR-75: `watched_absences` is approved-only; the reports query remains.)
   - **Nits:** trigger `approval_before_authority_mutation` does `to_jsonb(new)` on full `leave_requests`
     rows (signature PNGs) just to read `company_id` (:1803); `app_approval_queue(p_status)` accepts any
     status (HR could build whole-company history) — pin to pending; queue sort changed from `start_date`

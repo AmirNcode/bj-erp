@@ -1,7 +1,6 @@
 /**
- * Approved absences (FR-56), for absences read (FR-55; the admin implicitly).
- * Other holders (the security and hr presets) see the same board on Home; this
- * page is the admin's way in (Manage group), and still opens for them.
+ * Approved absences (FR-56), for the admin (everything) and for absence watchers
+ * with the full page on (FR-75: only the request types they follow).
  *
  * Who is out on one day with every approval in place: daily and hourly leave,
  * daily and hourly errands. Pending requests never show. The day is a URL
@@ -13,8 +12,8 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
-import { can } from '@/lib/permissions/catalog';
+import { getCachedUser, getCachedRoles, getCachedAbsenceWatch } from '@/lib/auth/context';
+import { watchedSections } from '@/lib/absences/watch';
 import { getApprovedAbsences, getUpcomingAbsences } from '@/lib/actions/absences';
 import { upcomingAbsenceWindow, UPCOMING_ABSENCE_DAYS } from '@/lib/absences/upcoming';
 import { todayInAppTz } from '@/lib/appDate';
@@ -34,8 +33,11 @@ export default async function AbsencesPage({ params, searchParams }: Props) {
 
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
-  const perms = await getCachedPermissions(user.id);
-  if (!can(perms, 'absences', 'read')) redirect(`/${locale}/home`);
+  const [roles, watch] = await Promise.all([getCachedRoles(user.id), getCachedAbsenceWatch(user.id)]);
+  const admin = roles.includes('admin');
+  if (!admin && !watch?.fullPage) redirect(`/${locale}/home`);
+  // The admin sees every type here, whatever their own watcher row says.
+  const sections = watchedSections(admin ? null : watch);
 
   const { date: raw } = await searchParams;
   const today = todayInAppTz();
@@ -60,7 +62,7 @@ export default async function AbsencesPage({ params, searchParams }: Props) {
       )}
       <div className="mt-4">
         {upcoming.ok ? (
-          <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} />
+          <UpcomingAbsences absences={upcoming.absences} days={UPCOMING_ABSENCE_DAYS} locale={locale} sections={sections} />
         ) : (
           <p role="alert" className="text-sm text-destructive">
             {upcoming.error}

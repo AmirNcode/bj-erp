@@ -5,6 +5,8 @@ export type ApprovalCapabilities = {
   isAdmin: boolean;
   /** FR-74: someone reports to the caller (profiles.manager_id), whatever their roles. */
   hasReports: boolean;
+  /** FR-75: the caller's absence_watchers row has the full Absences page on. */
+  absencesPage: boolean;
 };
 export type DelegateCandidate = { profile_id: string; full_name: string; employee_code: string | null };
 export type DelegationGrant = {

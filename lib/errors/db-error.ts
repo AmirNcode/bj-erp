@@ -88,6 +88,9 @@ const RULES: Rule[] = [
   { re: /this step must name a person|approval_steps_employee_needs_person/i, key: 'approvalStepNeedsPerson' },
   { re: /approval step was not saved/i, key: 'approvalStepNotSaved' },
   { re: /duplicate key value.*approval_steps_company_(role|person)_uniq/, key: 'duplicateApprovalStep' },
+  // FR-75 absence watchers.
+  { re: /absence watcher needs a type and a view|absence_watchers_some_(kind|view)/i, key: 'absenceWatcherIncomplete' },
+  { re: /absence watcher (?:not found|was not saved)|^person not found/i, key: 'absenceWatcherNotSaved' },
   { re: /duplicate key value.*leave_request_approvals_uniq/, key: 'alreadySignedByYou' },
   { re: /only pending requests can be/, key: 'onlyPending' },
   { re: /only pending or not-yet-started approved requests/, key: 'cannotCancel' },

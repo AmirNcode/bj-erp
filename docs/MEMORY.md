@@ -366,6 +366,26 @@ the proxied `/fa/login` hits next-intl's prefix-strip redirect back to `/login` 
 with `--hostname localhost` (or `0.0.0.0`, as the Docker image does) — not an app bug
 (2026-10-19, `next` 16.3.8, `resolve-routes.js` `getRelativeURL` vs `initUrl`).
 
+### Some access is per person, not per role (FR-75)
+Who sees approved absences is a row in `absence_watchers`, not a catalog permission (owner,
+2026-11-02: "each individual person needs to be added"). Reads go through the definer function
+`watched_absences`, so a watcher needs no `leave_requests`/`people` read. When a future "who gets
+told about X" list comes up, ask whether it is a role power or a named-person list before reaching
+for the catalog: the catalog makes everyone holding a role see it.
+
+### Retiring a catalog permission touches more than the catalog
+Delete its `role_permissions` rows **before** redefining `private.permission_allows` (the
+`role_permissions_catalog` CHECK calls it), keep the legacy `has_permission` alias answering for
+the old app during the swap, and update `seed_company_roles`. Counts and preset contents are
+asserted in `tests/sql/fr55-roles-permissions.sql`, `tests/unit/permissions-catalog.test.ts` and
+`tests/unit/permission-section.test.tsx`; removing a preset item can also change D4/`can_act_on`
+outcomes (HRLite started acting on Security holders).
+
+### Editing Persian files with shell one-liners corrupts them
+`perl -0pi` with a `\x{…}` in the replacement re-encodes the whole file (Persian strings became
+mojibake). Use `perl -CSD`, or a small Python script that reads and writes `encoding='utf-8'` and
+asserts each match count, and check `git diff` for unrelated hunks.
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

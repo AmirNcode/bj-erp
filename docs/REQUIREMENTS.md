@@ -403,6 +403,14 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-75** ☐ **Absence notifications per person.** On Manage › Approval steps, whoever edits the
+  approval steps adds a person (name or personnel-number search) and switches on the request types
+  they follow (daily leave, hourly leave, daily work trip, hourly work errand) and where they see
+  them (the 30-day Home tile, the full Absences page with a day picker). Only those people see
+  approved absences, filtered to their types; the admin always sees every type in Manage › Absences.
+  Replaces the `absences` role permission (HR and Security presets); its holders were moved to the
+  list with every type and the Home tile. Purpose: the HR clerk enters approved leave into the
+  attendance (fingerprint) system so nobody is marked absent. *(Owner, 2026-11-02; unreleased.)*
 - **FR-73** ☐ **Structured travel itinerary.** Procurement records the trip in sections: **Getting there**
   (flight: outbound + return legs, or **One way**; airline, flight no., from, to typed in; company car: every
   field optional), **Hotel** (one stay, **+ Add another stay** up to 10, or **No hotel** with cost 0; a cost per stay, their total goes to finance) and

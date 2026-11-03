@@ -9,6 +9,19 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Absence notifications per person (FR-75) — `main` (not deployed)
+
+- **Manage › Approval steps** has a new **Absence notifications** section. Add a person by name or
+  personnel number and switch on what they follow (daily leave, hourly leave, daily work trip, hourly
+  work errand) and where (the 30-day **Home tile**, the **full Absences page**). Edit or remove them
+  later. Only these people see approved absences, and only their types; the admin still sees
+  everything in Manage › Absences.
+- The **Approved absences** item is gone from Settings › Roles (and from the HR and Security presets).
+  Everyone who had it was moved to the list with all four types and the Home tile, so nothing
+  disappears on deploy. A watcher with the full page on finds Absences in the Manage menu.
+- Migration `20261102150000_absence_watchers`: table `absence_watchers`, function
+  `watched_absences(from, to)`.
+
 ### Admin may enter any personnel number — `main`
 
 - On Add Employee and in the Edit Employee personnel-number dialog the **admin** may now type
