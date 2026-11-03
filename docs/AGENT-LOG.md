@@ -137,13 +137,18 @@ Melipayamak details (username, `5000…` sender line; API key "coming"). Amir ap
   pg_cron; dispatch was run by hand), `backup.sh` on the VM.
 
 **State left behind**
-- Uncommitted on `claude/admin-panel`. Not pushed, no PR.
+- Committed on `claude/admin-panel` (`a00f249`). Not pushed, no PR (Amir: test locally first).
+- Local stack updated from the branch (`./deploy/bj-deploy update local`, verified backup
+  `backups/deploy-assistant/local/20261103T203122Z-1a204b/postgres.dump`): local `postgres` now has
+  `20261102140000` … `20261103140001` (so these migrations are frozen), `bj-erp-rest-1` restarted.
+  Checked: `/api/health` ok; `cron.job` lists `bj-sms-dispatch` (runs every 30 s, succeeded) and
+  `bj-purge-sms-outbox`; SMS mode `dry_run`. Not signed in on the local stack.
 
 **For the next agent**
 - Console endpoint shapes are from a community client, not official docs: send one real test text
   before trusting Live. If IT's "key" is a panel password, add a `rest.payamak-panel.com` path in
   `private.sms_dispatch`.
-- Migrations `20261103140000`/`…01` are not frozen yet (no persistent DB applied them).
+- Migrations `20261103140000`/`…01` are frozen (local `postgres` applied them 2026-11-03): fix with new files.
 - Proposed CLAUDE.md lines are in the final message to Amir, not applied.
 
 ## 2026-11-03 — PR #16 deploy result
