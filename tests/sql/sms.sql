@@ -39,6 +39,11 @@ create function pg_temp.sig() returns text language sql immutable as $$
 $$;
 create function pg_temp.flush() returns void language plpgsql as $$
 begin set constraints all immediate; set constraints all deferred; end; $$;
+-- One text's history as kind:status:http, oldest first.
+create function pg_temp.hist(p_id uuid) returns text language sql as $$
+  select coalesce(string_agg(kind||coalesce(':'||status,'')||coalesce(':'||http_status,''),',' order by id),'none')
+    from private.sms_outbox_events where outbox_id=p_id;
+$$;
 -- Files a daily leave for p_actor p_day days ahead and remembers it as p_key.
 create function pg_temp.file(p_key text,p_actor text,p_day int) returns text language plpgsql as $$
 declare v text;
@@ -210,12 +215,18 @@ select pg_temp.expect('after dispatch: masked body, args cleared, login code kep
   (select status||'/'||(position('Secret123' in body)=0)::text||'/'||(position('••••' in body)>0)::text||'/'
           ||(position('9990079004' in body)>0)::text||'/'||coalesce(array_length(args,1),0)
      from public.sms_outbox where event='password_reset' and recipient_id=pg_temp.fx('emp')),'dry_run/true/true/true/0');
+select pg_temp.expect('history: dry run is queued then dry_run, nothing sent',
+  pg_temp.hist((select id from public.sms_outbox where event='password_reset' and recipient_id=pg_temp.fx('emp'))),
+  'status:queued,status:dry_run');
 
 select pg_temp.expect('password to someone without a mobile: skipped',
   pg_temp.as_scalar('admin',format('select public.app_enqueue_password_sms(%L,''Nomob777x'')',pg_temp.fx('nomobile'))),'skipped');
 select pg_temp.expect('… and masked at once (never dispatched, so never masked later)',
   (select (position('Nomob777x' in body)=0)::text||'/'||coalesce(array_length(args,1),0)
      from public.sms_outbox where event='password_reset' and recipient_id=pg_temp.fx('nomobile')),'true/0');
+select pg_temp.expect('history: no mobile is skipped at once',
+  pg_temp.hist((select id from public.sms_outbox where event='password_reset' and recipient_id=pg_temp.fx('nomobile'))),
+  'status:skipped');
 
 -- ── live: request goes to pg_net; the reply decides ──
 select pg_temp.expect('live with key',pg_temp.settings('live','line','KeyAbc-9876'),'ok');
@@ -245,6 +256,37 @@ select pg_temp.expect('reply: provider error → failed, no retry',(select statu
   'failed/شماره گیرنده نامعتبر است');
 select pg_temp.expect('reply: 5xx → queued again, later',(select status||'/'||(next_attempt_at>now())::text from public.sms_outbox
   where id=pg_temp.fx('t3')),'queued/true');
+select pg_temp.expect('history: sent',pg_temp.hist(pg_temp.fx('t1')),
+  'status:queued,request,status:sending,reply:200,status:sent');
+select pg_temp.expect('history: provider refusal',pg_temp.hist(pg_temp.fx('t2')),
+  'status:queued,request,status:sending,reply:200,status:failed');
+select pg_temp.expect('history: 5xx keeps the reply and schedules a retry',
+  pg_temp.hist(pg_temp.fx('t3'))||'/'||(select (retry_at>now())::text||'/'||attempt||'/'||error
+    from private.sms_outbox_events where outbox_id=pg_temp.fx('t3') order by id desc limit 1)
+  ||'/'||(select response from private.sms_outbox_events where outbox_id=pg_temp.fx('t3') and kind='reply'),
+  'status:queued,request,status:sending,reply:502,status:queued/true/1/HTTP 502/bad gateway');
+select pg_temp.expect('history: request names the endpoint, never the URL',
+  (select endpoint||'/'||attempt from private.sms_outbox_events where outbox_id=pg_temp.fx('t1') and kind='request'),
+  'send/simple/1');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('t4',(select public.app_sms_test('09121110006'))); end $$;
+select private.sms_dispatch();
+insert into net._http_response(id,status_code,content,timed_out,error_msg)
+  select net_request_id,401,'{"recId":"0","status":"key KeyAbc-9876 is not valid"}',false,'auth KeyAbc-9876'
+    from public.sms_outbox where id=pg_temp.fx('t4');
+select private.sms_dispatch();
+select pg_temp.expect('history: the API key is scrubbed from a reply',
+  (select (position('KeyAbc-9876' in response)=0)::text||'/'||(position('***' in response)>0)::text||'/'||error
+     from private.sms_outbox_events where outbox_id=pg_temp.fx('t4') and kind='reply'),'true/true/auth ***');
+select pg_temp.expect('admin log: rows carry events, never the URL',pg_temp.as_scalar('admin',
+  $q$select (jsonb_array_length((select r->'events' from jsonb_array_elements(l->'rows') r
+             where r->>'id'=pg_temp.fx('t1')::text))=5)::text
+     ||'/'||(position('console.melipayamak.com' in l::text)=0)::text
+     from public.app_sms_log(null,'test',200) l$q$),'true/true');
+select pg_temp.expect('history: not readable directly',pg_temp.err(pg_temp.as_scalar('admin',
+  'select count(*)::text from private.sms_outbox_events')),'42501');
+delete from public.sms_outbox where id=pg_temp.fx('t1');
+select pg_temp.expect('history: deleted with its text',pg_temp.hist(pg_temp.fx('t1')),'none');
 select pg_temp.expect('pattern without a body id fails clearly',pg_temp.settings('live','pattern'),'ok');
 select pg_temp.expect('approver_new under pattern uses its body id (111)',pg_temp.file('r5','emp',18),'ok');
 select private.sms_dispatch();

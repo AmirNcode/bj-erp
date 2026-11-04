@@ -42,6 +42,14 @@ export function formatPersianConsentTimestamp(value: string, locale: string): st
   ).format(new Date(value));
 }
 
+/** Same as formatPersianConsentTimestamp, with seconds (SMS history steps are seconds apart). */
+export function formatPersianTimestampSeconds(value: string, locale: string): string {
+  return new Intl.DateTimeFormat(
+    appLocale(locale) === 'fa' ? 'fa-IR-u-ca-persian' : 'en-US-u-ca-persian',
+    { dateStyle: 'medium', timeStyle: 'medium', timeZone: APP_TIME_ZONE }
+  ).format(new Date(value));
+}
+
 /**
  * ICU's Farsi pattern for this style is «۱۴۰۵ آبان ۶, چهارشنبه», which reads
  * backwards to a Farsi reader, so Farsi is assembled as «چهارشنبه ۶ آبان ۱۴۰۵».

@@ -2685,10 +2685,16 @@ begin
     select * into resp from net._http_response where id = o.net_request_id;
     if not found then
       if o.sending_since < now() - interval '10 minutes' then
+        insert into private.sms_outbox_events (outbox_id, kind, attempt, error)
+        values (o.id, 'reply', o.attempts, 'no reply from provider');
         perform private.sms_fail(o.id, 'no reply from provider', true);
       end if;
       continue;
     end if;
+    select * into s from private.sms_settings where company_id = o.company_id;
+    insert into private.sms_outbox_events (outbox_id, kind, attempt, http_status, timed_out, error, response)
+    values (o.id, 'reply', o.attempts, resp.status_code, resp.timed_out,
+            private.sms_scrub(resp.error_msg, s.api_key), private.sms_scrub(resp.content, s.api_key));
     begin v_json := resp.content::jsonb; exception when others then v_json := null; end;
     v_ref := v_json->>'recId';
     v_status := v_json->>'status';
@@ -2768,6 +2774,10 @@ begin
     v_req := net.http_post(url := v_url, body := v_body,
                            headers := '{"Content-Type": "application/json"}'::jsonb,
                            timeout_milliseconds := 15000);
+    insert into private.sms_outbox_events (outbox_id, kind, attempt, endpoint, body_id)
+    values (o.id, 'request', o.attempts + 1,
+            case when v_body ? 'bodyId' then 'send/shared' else 'send/simple' end,
+            (v_body->>'bodyId')::integer);
     update public.sms_outbox
        set status = 'sending', net_request_id = v_req, sending_since = now(), attempts = attempts + 1,
            body = private.sms_mask(event, body, args),
@@ -2947,6 +2957,34 @@ end $$;
 
 
 --
+-- Name: sms_outbox_log_status(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_outbox_log_status() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if tg_op = 'UPDATE' and new.status is not distinct from old.status
+     and new.attempts is not distinct from old.attempts then
+    return null;
+  end if;
+  begin
+    insert into private.sms_outbox_events (outbox_id, kind, status, attempt, error, skip_reason,
+                                           retry_at, provider_ref)
+    values (new.id, 'status', new.status, new.attempts,
+            case when new.status in ('failed', 'queued', 'sent') then new.error end,
+            new.skip_reason,
+            case when new.status = 'queued' and new.attempts > 0 then new.next_attempt_at end,
+            case when new.status = 'sent' then new.provider_ref end);
+  exception when others then
+    null; -- history must never undo a text, a request or an approval
+  end;
+  return null;
+end $$;
+
+
+--
 -- Name: sms_queue(uuid, text, uuid, uuid, uuid, text, text[], text, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2975,6 +3013,19 @@ begin
   returning id into v_id;
   return v_id;
 end $$;
+
+
+--
+-- Name: sms_scrub(text, text, integer); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_scrub(p_text text, p_key text, p_len integer DEFAULT 500) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select left(case when p_key is null or p_key = '' or p_text is null then p_text
+                   else replace(p_text, p_key, '***') end, p_len);
+$$;
 
 
 --
@@ -7272,7 +7323,13 @@ begin
         'to_mobile', x.to_mobile,
         'body', case when x.status = 'queued' then private.sms_mask(x.event, x.body, x.args) else x.body end,
         'status', x.status, 'skip_reason', x.skip_reason, 'attempts', x.attempts, 'error', x.error,
-        'provider_ref', x.provider_ref, 'created_at', x.created_at, 'sent_at', x.sent_at)
+        'provider_ref', x.provider_ref, 'created_at', x.created_at, 'sent_at', x.sent_at,
+        'events', (select coalesce(jsonb_agg(jsonb_build_object('at', e.at, 'kind', e.kind,
+              'status', e.status, 'attempt', e.attempt, 'error', e.error, 'skip_reason', e.skip_reason,
+              'retry_at', e.retry_at, 'provider_ref', e.provider_ref, 'endpoint', e.endpoint,
+              'body_id', e.body_id, 'http_status', e.http_status, 'timed_out', e.timed_out,
+              'response', e.response, 'backfilled', e.backfilled) order by e.id), '[]')
+            from private.sms_outbox_events e where e.outbox_id = x.id))
         order by x.created_at desc, x.id), '[]')
       from (select * from scoped order by created_at desc, id limit v_limit offset greatest(coalesce(p_offset, 0), 0)) x
       left join public.profiles p on p.id = x.recipient_id),
@@ -8753,6 +8810,57 @@ COMMENT ON TABLE private.offsite_copies IS 'FR-77 v2: dumps the owner''s Mac hol
 
 
 --
+-- Name: sms_outbox_events; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.sms_outbox_events (
+    id bigint NOT NULL,
+    outbox_id uuid NOT NULL,
+    at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    kind text NOT NULL,
+    status text,
+    attempt integer,
+    error text,
+    skip_reason text,
+    retry_at timestamp with time zone,
+    provider_ref text,
+    endpoint text,
+    body_id integer,
+    http_status integer,
+    timed_out boolean,
+    response text,
+    backfilled boolean DEFAULT false NOT NULL,
+    CONSTRAINT sms_outbox_events_kind CHECK ((kind = ANY (ARRAY['status'::text, 'request'::text, 'reply'::text])))
+);
+
+
+--
+-- Name: TABLE sms_outbox_events; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.sms_outbox_events IS 'FR-78: step-by-step history of each SMS (status changes, provider request and reply). Never holds the API key, the URL or a request body.';
+
+
+--
+-- Name: sms_outbox_events_id_seq; Type: SEQUENCE; Schema: private; Owner: -
+--
+
+CREATE SEQUENCE private.sms_outbox_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: sms_outbox_events_id_seq; Type: SEQUENCE OWNED BY; Schema: private; Owner: -
+--
+
+ALTER SEQUENCE private.sms_outbox_events_id_seq OWNED BY private.sms_outbox_events.id;
+
+
+--
 -- Name: sms_settings; Type: TABLE; Schema: private; Owner: -
 --
 
@@ -9689,6 +9797,13 @@ COMMENT ON COLUMN public.work_settings.biweekly_anchor IS 'FR-41: any date whose
 
 
 --
+-- Name: sms_outbox_events id; Type: DEFAULT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_outbox_events ALTER COLUMN id SET DEFAULT nextval('private.sms_outbox_events_id_seq'::regclass);
+
+
+--
 -- Name: leave_ledger seq; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -9709,6 +9824,14 @@ ALTER TABLE ONLY private.backup_runs
 
 ALTER TABLE ONLY private.offsite_copies
     ADD CONSTRAINT offsite_copies_pkey PRIMARY KEY (file_name);
+
+
+--
+-- Name: sms_outbox_events sms_outbox_events_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_outbox_events
+    ADD CONSTRAINT sms_outbox_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -10005,6 +10128,13 @@ ALTER TABLE ONLY public.user_signatures
 
 ALTER TABLE ONLY public.work_settings
     ADD CONSTRAINT work_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sms_outbox_events_outbox_idx; Type: INDEX; Schema: private; Owner: -
+--
+
+CREATE INDEX sms_outbox_events_outbox_idx ON private.sms_outbox_events USING btree (outbox_id, id);
 
 
 --
@@ -10708,6 +10838,13 @@ CREATE CONSTRAINT TRIGGER sms_on_request_status AFTER UPDATE OF status ON public
 
 
 --
+-- Name: sms_outbox sms_outbox_log_status; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER sms_outbox_log_status AFTER INSERT OR UPDATE OF status, attempts ON public.sms_outbox FOR EACH ROW EXECUTE FUNCTION private.sms_outbox_log_status();
+
+
+--
 -- Name: travel_bookings travel_booking_first_done; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -10761,6 +10898,14 @@ CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.wor
 --
 
 CREATE TRIGGER work_settings_set_updated_at BEFORE UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: sms_outbox_events sms_outbox_events_outbox_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.sms_outbox_events
+    ADD CONSTRAINT sms_outbox_events_outbox_id_fkey FOREIGN KEY (outbox_id) REFERENCES public.sms_outbox(id) ON DELETE CASCADE;
 
 
 --
@@ -12764,10 +12909,24 @@ REVOKE ALL ON FUNCTION private.sms_on_request() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sms_outbox_log_status(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_outbox_log_status() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sms_queue(p_company uuid, p_event text, p_recipient uuid, p_request uuid, p_step uuid, p_body text, p_args text[], p_mobile text, p_actor uuid); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.sms_queue(p_company uuid, p_event text, p_recipient uuid, p_request uuid, p_step uuid, p_body text, p_args text[], p_mobile text, p_actor uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sms_scrub(p_text text, p_key text, p_len integer); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_scrub(p_text text, p_key text, p_len integer) FROM PUBLIC;
 
 
 --

@@ -121,6 +121,24 @@ export type SmsSettings = {
   updated_at: string;
 };
 
+/** One step in a text's history (FR-78 log, expandable). */
+export type SmsLogEvent = {
+  at: string;
+  kind: 'status' | 'request' | 'reply';
+  status: SmsStatus | null;
+  attempt: number | null;
+  error: string | null;
+  skip_reason: string | null;
+  retry_at: string | null;
+  provider_ref: string | null;
+  endpoint: string | null;
+  body_id: number | null;
+  http_status: number | null;
+  timed_out: boolean | null;
+  response: string | null;
+  backfilled: boolean;
+};
+
 export type SmsLogRow = {
   id: string;
   event: SmsEvent;
@@ -136,6 +154,8 @@ export type SmsLogRow = {
   provider_ref: string | null;
   created_at: string;
   sent_at: string | null;
+  /** Oldest first. Absent from an app_sms_log older than 20261104150000. */
+  events?: SmsLogEvent[];
 };
 
 export type SmsLog = { total: number; rows: SmsLogRow[]; counts: Partial<Record<SmsStatus, number>> };
