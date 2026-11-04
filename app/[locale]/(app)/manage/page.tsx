@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
-import { manageItemsForRoles, settingsItemForRoles, type NavItem } from '@/lib/nav/tabs';
+import { adminItemForRoles, manageItemsForRoles, settingsItemForRoles, type NavItem } from '@/lib/nav/tabs';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '../_components/PageHeader';
 import { NAV_ITEM_ICONS } from '../_components/nav-icons';
@@ -28,6 +28,7 @@ export default async function ManageIndexPage({ params }: Props) {
   const capabilities = await getApprovalCapabilities();
   const items = manageItemsForRoles(roles, perms, capabilities.canApprove, capabilities.canDelegate, capabilities.hasReports, capabilities.absencesPage);
   const settings = settingsItemForRoles(roles, perms, capabilities.canDelegate);
+  const admin = adminItemForRoles(roles);
   const Chevron = locale === 'fa' ? ChevronLeft : ChevronRight;
   // Explicit map, not t(item.labelKey): a dynamic message key has already
   // caused a production-only failure here (docs/MEMORY.md).
@@ -42,6 +43,7 @@ export default async function ManageIndexPage({ params }: Props) {
     finance: t('finance'),
     procurement: t('procurement'),
     settings: t('settings'),
+    admin: t('admin'),
   };
 
   const row = (item: NavItem) => (
@@ -66,9 +68,12 @@ export default async function ManageIndexPage({ params }: Props) {
       {items.length > 0 && <Card className="gap-0 overflow-hidden py-0">
         <ul className="divide-y divide-muted">{items.map(row)}</ul>
       </Card>}
-      {settings && (
+      {(settings || admin) && (
         <Card className="gap-0 overflow-hidden py-0">
-          <ul>{row(settings)}</ul>
+          <ul className="divide-y divide-muted">
+            {settings && row(settings)}
+            {admin && row(admin)}
+          </ul>
         </Card>
       )}
     </div>

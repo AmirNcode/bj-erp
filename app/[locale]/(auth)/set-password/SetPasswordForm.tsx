@@ -29,11 +29,13 @@ export function SetPasswordForm({ locale }: { locale: string }) {
     const v = validateNewPassword(next, confirm);
     if (!v.ok) {
       setError(
-        v.reason === 'too_short'
-          ? tPassword('tooShort')
-          : v.reason === 'too_long'
-            ? tPassword('tooLong')
-            : tPassword('mismatch')
+        {
+          too_short: tPassword('tooShort'),
+          too_long: tPassword('tooLong'),
+          needs_digit: tPassword('needsDigit'),
+          needs_symbol: tPassword('needsSymbol'),
+          mismatch: tPassword('mismatch'),
+        }[v.reason]
       );
       return;
     }

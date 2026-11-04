@@ -1765,6 +1765,41 @@ export type Database = {
         Args: { p_limit?: number; p_offset?: number }
         Returns: Json
       }
+      // FR-77 admin panel. Each refuses anyone but the admin (42501).
+      app_health: { Args: Record<PropertyKey, never>; Returns: boolean }
+      app_admin_overview: { Args: { p_from: string; p_to: string }; Returns: Json }
+      app_admin_system: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_audit_log: {
+        Args: {
+          p_from?: string | null; p_to?: string | null; p_actor?: string | null
+          p_entity?: string | null; p_action?: string | null; p_limit?: number; p_offset?: number
+          p_target?: string | null
+        }
+        Returns: Json
+      }
+      // FR-79 sign-ins and force sign-out (admin only).
+      app_admin_sign_ins: { Args: { p_limit?: number }; Returns: Json }
+      app_revoke_sessions: { Args: { p_user: string }; Returns: number }
+      app_revoke_all_sessions: { Args: Record<PropertyKey, never>; Returns: number }
+      // FR-78 SMS. The API key is write-only: app_sms_settings never returns it.
+      app_sms_settings: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_set_sms_settings: {
+        Args: {
+          p_mode: string; p_username: string | null; p_sender_line: string | null; p_send_method: string
+          p_body_approver_new: number | null; p_body_employee_decision: number | null
+          p_body_password_reset: number | null; p_notify_approver_new: boolean
+          p_notify_employee_decision: boolean; p_notify_password_reset: boolean; p_site_label: string
+          p_api_key?: string | null; p_clear_api_key?: boolean
+        }
+        Returns: undefined
+      }
+      app_sms_test: { Args: { p_mobile: string }; Returns: string }
+      app_sms_check_credit: { Args: Record<PropertyKey, never>; Returns: undefined }
+      app_sms_log: {
+        Args: { p_status?: string | null; p_event?: string | null; p_limit?: number; p_offset?: number }
+        Returns: Json
+      }
+      app_enqueue_password_sms: { Args: { p_employee: string; p_password: string }; Returns: string }
       app_set_employee_password: {
         Args: { p_password: string; p_user_id: string }
         Returns: undefined

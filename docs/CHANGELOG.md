@@ -9,6 +9,42 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin panel v2: sign-ins and sign-out (FR-79) · password rule (FR-80) — `claude/admin-panel` (not deployed)
+
+- **Admin panel is English only** now, left to right, whatever language the admin uses elsewhere.
+- New **Sign-ins** tab: the latest sign-ins and everyone signed in now (devices, last activity), with
+  **Sign out on all devices** per person and **Sign out everyone except me**. Manage › Employees ›
+  edit has the same per-person button for the admin. Resetting a password or deactivating someone
+  signs them out too. A page already open keeps working for up to 60 minutes.
+- **Passwords** now need at least one digit and one special character (still 8 or more characters).
+  Current passwords keep working; the rule applies the next time a password is set. The
+  change-password and first-login forms show the rule.
+- **Audit log:** filter by who did it (**Done by**) and whom it was about (**About**).
+- **System:** shows when the owner's Mac last reported its backup copies, and turns red if copies stop,
+  one is missing or one differs. `pull-backups-to-mac.sh` reports after each pull (re-run `install`).
+- Scheduled-job history older than 7 days is deleted nightly.
+- Migration `20261104090000_admin_panel_v2`.
+- **Security fix (PR #17 review F1):** a refused SMS settings save (for example a too-short sender
+  line) no longer sends the saved API key back in the error details or writes it to the database log.
+  Migration `20261104120000_sms_settings_errors_hide_key`.
+
+### Admin panel (FR-77) · SMS notifications (FR-78) — `claude/admin-panel` (not deployed)
+
+- **Admin panel** (side panel under Settings; Manage on mobile), for the admin only: **Overview**
+  (people, sign-ins, requests by type and status, approval speed, requests waiting over 3 days, approved
+  leave by department, SMS counts), **SMS**, **System** (version, service checks, database size and
+  biggest tables, recent migrations, scheduled jobs, backups) and **Audit log** (filter by period, area,
+  action; each entry opens to its before/after; signatures, passwords and keys hidden).
+- **SMS** through Melipayamak: texts to the people who can sign the next step when a request is filed or
+  a step is approved, to the requester on the final approval or rejection, and to an employee when the
+  admin resets their password and ticks **Text it to the employee**. Modes Off / **Dry run** (default:
+  logged, never sent) / Live; sending from the line or by approved pattern; test text, balance check and
+  a log with reasons (e.g. no mobile on file). The API key is typed once and never shown again.
+- The database queues and sends (pg_cron every 30 s + pg_net): no new secret or setting in the app
+  container, no compose change. `backup.sh` records each dump for the System tab; release images carry
+  their commit for the Version box.
+- Migrations `20261103140000_admin_panel`, `20261103140001_sms_notifications` (enables `pg_net`).
+
 ### Security staff without Employee: no requests or leave (FR-76) · role buttons — `claude/absence-watchers` (not deployed)
 
 - People with the **Security** role and **without Employee** (subcontractor security staff) no longer

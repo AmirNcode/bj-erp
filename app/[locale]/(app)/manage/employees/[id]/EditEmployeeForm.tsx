@@ -4,7 +4,8 @@ import { PersonSearch } from '@/components/PersonSearch';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
+import { updateEmployee, setRoles, setActive, resetPassword, signOutEverywhere } from '@/lib/actions/employees';
+import type { PasswordSmsResult } from '@/lib/admin/types';
 import { setLeaveBalance, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
 import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
@@ -79,6 +80,11 @@ function useLabels() {
     deactivateConfirmBody: t.raw('employees.deactivateConfirmBody') as string,
     tempPasswordLabel: t('employees.tempPasswordLabel'),
     tempPasswordHint: t('employees.tempPasswordHint'),
+    textPassword: t('employees.textPassword'),
+    smsQueued: t('employees.smsQueued'),
+    smsSkipped: t('employees.smsSkipped'),
+    smsOff: t('employees.smsOff'),
+    smsFailed: t('employees.smsFailed'),
     errorLabel: t('employees.error'),
     selectDept: t('employees.selectDept'),
     selectMgr: t('employees.selectMgr'),
@@ -167,6 +173,9 @@ export function EditEmployeeForm({
   const [amountErrors, setAmountErrors] = useState<Record<string, DaysHoursError>>({});
   const [success, setSuccess] = useState(false);
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
+  const [textPassword, setTextPassword] = useState(false);
+  const [passwordSms, setPasswordSms] = useState<PasswordSmsResult>(null);
+  const [signedOut, setSignedOut] = useState<number | null>(null);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(targetRoleIds);
   const [hireDate, setHireDate] = useState<PickerDate | null>(() =>
     employee.hire_date ? gregorianToPersianDateObject(employee.hire_date, locale) : null
@@ -301,13 +310,27 @@ export function EditEmployeeForm({
   async function handleResetPassword() {
     setError(null);
     setPending(true);
-    const result = await resetPassword(employee.id);
+    const result = await resetPassword(employee.id, { textIt: textPassword });
     setPending(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     setNewTempPassword(result.tempPassword);
+    setPasswordSms(result.sms);
+  }
+
+  async function handleSignOutEverywhere() {
+    setError(null);
+    setSignedOut(null);
+    setPending(true);
+    const result = await signOutEverywhere(employee.id);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSignedOut(result.count);
   }
 
   async function handleToggleActive() {
@@ -360,6 +383,11 @@ export function EditEmployeeForm({
               {newTempPassword}
             </p>
             <p className="text-xs text-success">{labels.tempPasswordHint}</p>
+            {passwordSms && (
+              <p className="text-xs text-muted-foreground" data-testid="reset-password-sms">
+                {{ queued: labels.smsQueued, skipped: labels.smsSkipped, off: labels.smsOff, failed: labels.smsFailed }[passwordSms]}
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -557,16 +585,44 @@ export function EditEmployeeForm({
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
             {caps.resetPassword && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleResetPassword}
-                disabled={pending}
-                data-testid="reset-password"
-                className="border-orange-300 text-orange-700 hover:bg-orange-50"
-              >
-                {labels.resetPwd}
-              </Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetPassword}
+                  disabled={pending}
+                  data-testid="reset-password"
+                  className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                >
+                  {labels.resetPwd}
+                </Button>
+                {/* FR-78: optional text of the new password (admin panel › SMS decides if it goes out). */}
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={textPassword}
+                    onChange={(e) => setTextPassword(e.target.checked)}
+                    disabled={pending}
+                    className="size-4 accent-primary"
+                    data-testid="reset-password-text-it"
+                  />
+                  {labels.textPassword}
+                </label>
+              </div>
+            )}
+            {caps.resetPassword && (
+              // FR-79: admin only, like the reset (resetPassword is admin-only since 20261013200007).
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
+                  data-testid="sign-out-everywhere">
+                  {t('signOutEverywhere')}
+                </Button>
+                {signedOut !== null && (
+                  <span role="status" className="text-xs text-muted-foreground" data-testid="signed-out-count">
+                    {t('signedOutDevices', { count: signedOut })}
+                  </span>
+                )}
+              </div>
             )}
             {!caps.org ? null : employee.active ? (
               // Deactivating locks the person out at once, so it asks first.

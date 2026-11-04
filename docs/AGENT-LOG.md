@@ -78,6 +78,262 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — PR #17 security review, F1 fix, merge and deploy
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/admin-panel @ 43f4ee6 (clean, pushed)
+**Trigger:** Amir pre-approved a full run: review PR #17 (security/auth and SQL first), fix every
+Critical/High, merge, watch the Liara deploy.
+
+**What changed**
+- `docs/reviews/pr-17-review.md` (new): verdict, 13 findings, checklist, check results.
+- F1 (High), commit b44d0c8: `supabase/migrations/20261104120000_sms_settings_errors_hide_key.sql`
+  re-creates `public.app_set_sms_settings` so a CHECK/NOT NULL failure is re-raised with only the
+  constraint/column name. Before, DETAIL `Failing row contains (…)` carried the stored API key to the
+  PostgREST caller and the DB log. `tests/sql/sms.sql` gained 5 `F1:` assertions (fail before, pass
+  after). `supabase/schema.sql` dumped. Signature unchanged, so `lib/supabase/types.ts` untouched.
+- Docs: CHANGELOG (F1 line), TASKS (review leftovers, F2 owner decision), MEMORY (CHECK DETAIL
+  leaks rows; pg_net grants), CLAUDE.md (one gotcha line).
+
+**Actions outside the repo**
+- Local Docker had stopped all `bj-erp-*` containers before the session (exited ~3 min before
+  start). `docker start bj-erp-db-1`; later `docker start` auth/rest/gateway and `docker restart
+  bj-erp-rest-1`.
+- Clones in `bj-erp-db-1`: `pr17_head` (dump of `postgres`), `pr17_main` (backup
+  `20261103T203122Z-1a204b` + every newer migration), `pr17_fix` (F1 dry run). All dropped at the end.
+  In `pr17_head` the `auth` objects were given to `supabase_auth_admin` and a throwaway GoTrue
+  v2.170.0 container `pr17-gotrue` (127.0.0.1:59999, network `bj-erp_default`) ran against it with a
+  synthetic `zz999pr17@bj-app.internal` user; container removed.
+- `./deploy/bj-deploy update local` once: verified backup
+  `backups/deploy-assistant/local/20261104T060944Z-100dfa/`, applied `20261104120000` (now **frozen**),
+  rebuilt the app. Its health check failed only because auth/rest/gateway were still stopped; after
+  starting them `/api/health` → 200.
+- Local `postgres` otherwise read-only (ledger, cron jobs, settings, counts).
+- GitHub: push to `claude/admin-panel`, `gh pr merge 17 --merge` (see the deploy result below).
+
+**Verification**
+- Branch-state and main-state clones: all 20 `tests/sql/*` pass, before and after F1; all 7 newer
+  migrations apply cleanly on main's state; `schema.sql` = fresh dump (main-state differs only in the 3
+  known re-parenthesized CHECK lines).
+- `npx tsc --noEmit`, `npm run lint`, `npm run test:unit` (113 files / 1078 tests), `npm run build`,
+  `npm run test:deploy`, `npm audit --omit=dev` (0 vulnerabilities): all pass, before and after F1.
+- Probes: non-admin → 42501 on all 12 admin RPCs; nobody can insert into `sms_outbox`/`audit_log`;
+  admin update/delete of `audit_log` hits 0 rows; sign-out deletes sessions and refresh tokens, and
+  GoTrue then answers 403 `session_not_found` / 400 `refresh_token_not_found`; GoTrue `PUT /user`
+  accepted password `abcdef` (F2).
+- **Not verified:** pg_net worker log content on failure; Melipayamak reply shapes; a signed-in admin
+  browser session; `sudo -n` for `pull-backups-to-mac.sh` on the VM.
+
+**State left behind**
+- Medium F2–F5 and Low F6–F12 open (TASKS). SMS still Dry run. Nothing run on Liara by hand.
+
+**For the next agent**
+- F2 needs an owner decision and a compose or Caddy change.
+- Before SMS goes Live, fix F4/F5 (duplicate retries, dispatcher stops on one bad row).
+
+## 2026-11-04 — Admin panel v2: sign-ins + force sign-out (FR-79), password rule (FR-80), audit by person, off-server copies
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/admin-panel @ 13877b9 (review + spec entries below, uncommitted)
+**Trigger:** Amir approved the v2 spec ("proceed with the work"): ship with FR-77/78, keep "sign out
+everyone", hold off the error log (remind him later), admin panel English only.
+
+**What changed**
+- `supabase/migrations/20261104090000_admin_panel_v2.sql`: `private.try_uuid`, `private.assert_password_ok`
+  (FR-80) used by `create_employee_impl`, `app_change_my_password`, `app_set_initial_password`,
+  `app_set_employee_password`, `app_bulk_set_employee_passwords`; `private.revoke_sessions`,
+  `app_revoke_sessions`, `app_revoke_all_sessions`, `app_admin_sign_ins`, trigger
+  `profiles_revoke_sessions_on_deactivate`; resets sign out; `private.offsite_copies` +
+  `private.record_offsite_copies(text[])`; `app_admin_system` gains `offsite`; `app_audit_log` dropped
+  and recreated with `p_target` + `about_id`/`about_name`; pg_cron `bj-purge-cron-history`.
+  `app_enqueue_password_sms` deliberately unchanged (its tests text 'Secret123').
+- `supabase/schema.sql` (dump), `lib/supabase/types.ts` (hand-edited).
+- English-only admin: `lib/admin/locale.ts`, `admin/layout.tsx` (nested `NextIntlClientProvider` with
+  the full English catalog, `dir="ltr"`), every admin page translates/formats with `ADMIN_LOCALE`;
+  `dbErr(raw, { locale })` + `adminErr` in `lib/actions/admin.ts`; `admin` namespace removed from
+  `messages/fa.json`; `tests/unit/messages-parity.test.ts` exempts it.
+- Sign-ins tab: `admin/sign-ins/{page,SignedInList}.tsx`, `AdminTabs.tsx`; actions `getAdminSignIns`,
+  `revokeSessions`, `revokeAllSessions`. Manage › Employees › edit: **Sign out on all devices**
+  (`signOutEverywhere` in `lib/actions/employees.ts`, fa + en).
+- Audit: `AuditPersonFilters.tsx` (PersonSearch for Done by / About), About label in `AuditRows.tsx`,
+  `getAuditPeople`. System: off-server copy block.
+- Password: `lib/auth/passwordPolicy.ts` (`PASSWORD_SPECIALS`, `passwordRuleProblem`),
+  `ChangePasswordForm.tsx` (rule hint), `SetPasswordForm.tsx`, `setPassword.hint`, `db-error.ts` rules.
+- `deploy/liara/pull-backups-to-mac.sh`: `report_offsite` after each pull (SQL on stdin to psql in the
+  db container via `sudo -n docker compose … exec -T db`); best effort, never fails the pull.
+- Tests: new `tests/sql/admin-panel-v2.sql`; `tests/unit/passwordPolicy.test.ts` (rule, generator).
+- Docs: spec (decisions, as built), REQUIREMENTS FR-79/80 + FR-77 v2, PERMISSIONS, DATA_MODEL,
+  CHANGELOG, TASKS (v2 item, **FR-81 reminder**, SMS templates on hold, rate-limit note).
+
+**Actions outside the repo**
+- Local `bj-erp-db-1`: throwaway clone `v2_dry` (pg_dump | pg_restore of `postgres`), migration applied
+  there, every `tests/sql/*` run against it, then dropped.
+- Local stack: `./deploy/bj-deploy update local` twice (verified backups under
+  `backups/deploy-assistant/local/20261104T051552Z-f7f87b/` and `…/20261104T052124Z-df0039/`): local `postgres` now has
+  `20261104090000` (**frozen**), `cron.job` lists `bj-purge-cron-history`; `docker restart bj-erp-rest-1`. `/api/health` on https://192.168.2.85:3500 → 200 after the second update.
+- Dev server (`bj-dev`) for a temporary no-login page `app/[locale]/zz-admin-v2` (deleted, and
+  `.next/dev/types` removed). Nothing run on Liara.
+
+**Verification**
+- Clone: all 20 `tests/sql/*` files pass (incl. `admin-panel-v2.sql`, `fr55-roles-permissions.sql`,
+  `sms.sql`, `approval-delegation.sql`).
+- `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 113 files / 1078 tests pass ·
+  `npm run build` ok (5 admin routes).
+- Browser (fake data, en provider): Sign-ins list, search, both confirm dialogs, Audit pickers, About
+  label; 375 px no overflow inside a `w-full` wrapper. Found + fixed: the Radix dialog portals to
+  `<body>` and rendered RTL; `dir="ltr"` on `AlertDialogContent` itself mis-centred it (the `rtl:`
+  variants still match `<html dir=rtl>`), so the direction sits on an inner `display: contents` div.
+- Pull script: `bash -n`, plus `report_offsite` run with a stubbed `remote` (SQL text, success count,
+  failure → `failed`, ERR trap not fired). Not run against the VM.
+- **Not verified:** a signed-in admin session (no local admin password): the real `/admin/sign-ins`,
+  audit filters with live data, the System offsite block, the Manage button, a real sign-out ending a
+  browser session. `npm run test:deploy` and e2e not run.
+
+**State left behind**
+- Everything uncommitted on `claude/admin-panel` (with the earlier review/spec entries). Not pushed.
+- `20261104090000` is applied to the local `postgres` → frozen; fix forward with a new file.
+
+**For the next agent**
+- After the Liara deploy, Amir must re-run `bash deploy/liara/pull-backups-to-mac.sh install` so the
+  installed copy (`~/Library/Application Support/bj-erp/`) reports; until then System shows
+  "No copy reported yet".
+- FR-81 error log is **on hold** at Amir's request; TASKS has the reminder. Bring it up when the
+  admin panel work is next discussed.
+- Admin-panel strings go in `messages/en.json` only (`admin.*`); anything outside the panel stays fa+en.
+
+
+## 2026-11-03 — Admin panel v2 backlog: critique and questions (step zero)
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/admin-panel @ 13877b9 (previous entry uncommitted)
+**Trigger:** Amir's v2 review prompt: critique the date-range export / archive / re-import ideas, flag risks across the backlog, ask questions. Then Amir's answers, and "write the spec".
+
+**What changed**
+- New `docs/plans/2026-11-03-admin-panel-v2-review.md`: Part 1 (all three date-range features are unsound; full dump + restore instead), Part 2 (risk flags), Part 3 (12 questions), plus the checks run, plus an "Owner answers" section (added after Amir replied).
+- New `docs/specs/2026-11-03-admin-panel-v2-design.md` (draft) and a TASKS item for it.
+- This entry.
+
+**Actions outside the repo**
+- Local `bj-erp-db-1`: read-only aggregate queries (sizes, counts, `cron.job`, `cron.job_run_details`, `private.backup_runs`), inside `begin transaction read only … rollback`.
+- Liara (`ssh liara-bj-vm`, `/opt/bj-erp`), all read-only:
+  - `sudo docker compose -f docker-compose.yml -f docker-compose.liara.yml ps`
+  - `df -h / /var`; `sudo ls -lh /var/backups/bj-erp`; `sudo du -sh /var/backups/bj-erp /opt/bj-erp/backups`; `sudo ls /opt/bj-erp/backups | wc -l`
+  - `… exec -T db psql -U supabase_admin …` → failed (password needed); then `… exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -U supabase_admin -d postgres -X'` with read-only aggregate scripts (twice). The password came from the container's env and was never printed.
+  - `… logs --no-log-prefix --tail=200 auth` and `… app`, piped to `grep -c` (counts only).
+  - Local `bj-erp-db-1`, for the spec: read-only counts of `audit_log` rows per entity and the JSON key names they carry (no values).
+  - After Amir's answers: two more read-only aggregate scripts through the same `exec -T db sh -c 'PGPASSWORD=…'` path, on `auth.audit_log_entries` and `auth.sessions` (address kind and counts only, no address printed).
+- Context7 `/supabase/auth` (logout, audit log); web search for the Melipayamak pattern docs.
+- On this Mac, read-only: `launchctl list | grep app.bjeng.backup-pull`, a count of the dumps in `~/Backups/bj-erp`, `tail -3` of its `pull.log`.
+
+**Verification**
+- No tests (nothing built). Facts behind each claim are in the review's "Checks run".
+
+**State left behind**
+- The review and this entry are uncommitted on `claude/admin-panel`, together with the previous entry.
+
+**For the next agent**
+- All 12 questions are answered ("Owner answers" in the review); 9 (SMS templates) is on hold for the client's IT.
+- Spec drafted: `docs/specs/2026-11-03-admin-panel-v2-design.md` (FR-79/80/81 + FR-77 changes). Waiting for Amir on its three open points (release together with FR-77/78, "sign out everyone", anon-writable error log). No plan or code yet. REQUIREMENTS/PERMISSIONS/DATA_MODEL not touched until the spec is approved.
+- Found during the review, not fixed: `cron.job_run_details` has no purge. After FR-78 deploys, `bj-sms-dispatch` adds about 2,880 rows a day. The fix needs a NEW migration (`20261103140001` is frozen).
+- Corrected: `auth.audit_log_entries.ip_address` is empty on every Liara row (GoTrue does not fill it); there is no shared-address problem. `auth.sessions.ip` shows distinct public client addresses, plus the app container's address for sessions refreshed server-side.
+
+## 2026-11-03 — Rewrote the Admin panel v2 review prompt
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/admin-panel @ 13877b9
+**Trigger:** Amir asked for a better version of his "Admin panel v2" prompt (feature critique plus clarifying questions).
+
+**What changed**
+- This entry only. The improved prompt is in the chat reply, not in the repo.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Read-only checks used to ground the prompt: FR-77/78 (`docs/REQUIREMENTS.md`), the admin-panel spec,
+  `deploy/liara/backup.sh` (14-day local dumps), `deploy/docker-compose.yml` (`GOTRUE_JWT_EXP` 3600,
+  per-IP token limiter), `lib/auth/passwordPolicy.ts` (min 8 in code). No tests run (nothing to test).
+
+**State left behind**
+- This entry uncommitted on `claude/admin-panel`.
+
+**For the next agent**
+- The v2 backlog (exports, session revocation, retention/archival, SMS templates, error log) is not
+  designed yet. The prompt asks for a critique and questions first, with no code.
+
+## 2026-11-03 — Admin panel (FR-77) + SMS notifications (FR-78): design and build
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** main @ d7b63f1 → new branch `claude/admin-panel`
+**Trigger:** Amir: admin-only panel (backend, stats) with an SMS section; the client's IT sent partial
+Melipayamak details (username, `5000…` sender line; API key "coming"). Amir approved the spec ("build it").
+
+**What changed**
+- Spec `docs/specs/2026-11-03-admin-panel-sms-design.md`; FR-77, FR-78 in `docs/REQUIREMENTS.md`.
+- `supabase/migrations/20261103140000_admin_panel.sql`: `private.backup_runs` + `private.record_backup`,
+  `private.require_admin`, `app_health`, `app_admin_overview`, `app_admin_system`, `private.audit_redact`,
+  `app_audit_log`.
+- `supabase/migrations/20261103140001_sms_notifications.sql`: `create extension pg_net`;
+  `private.sms_settings`, `public.sms_outbox` (admin-read RLS); deferred constraint triggers on
+  `leave_requests` / `leave_request_approvals` → `private.sms_enqueue_request`; `private.sms_dispatch`
+  (pg_net → console.melipayamak.com) on pg_cron `bj-sms-dispatch` (30 s) + `bj-purge-sms-outbox`
+  (nightly, 180 days); admin RPCs `app_sms_settings` (never returns the key), `app_set_sms_settings`,
+  `app_sms_test`, `app_sms_check_credit`, `app_sms_log`, `app_enqueue_password_sms`.
+- **Design change vs. the approved plan:** sending moved from an app-side worker with a `SMS_WORKER_JWT`
+  into the database, and backups are recorded by `backup.sh` instead of a read-only mount — both
+  avoid compose changes, which `apply-release.sh` refuses ("Infrastructure changed"). `/api/health` left
+  as is (it deliberately skips Postgres). Spec §3.6 / §4 updated.
+- App: `app/[locale]/(app)/admin/{layout,page}.tsx`, `admin/{sms,system,audit}/*`, `_components/{AdminTabs,parts}`;
+  `lib/actions/admin.ts`, `lib/admin/{types,format}.ts`, `lib/auth/adminGuard.ts` (moved from
+  `settings/roles/_components/adminGuard.ts`, which re-exports); nav item `admin` (`lib/nav/tabs.ts`
+  `adminItemForRoles`, `nav-icons.tsx`, `MainNav.tsx`, `manage/page.tsx`); reset password gets
+  "Text it to the employee" (`lib/actions/employees.ts` `resetPassword(id, {textIt})`,
+  `EditEmployeeForm.tsx`); `lib/errors/db-error.ts` SMS rules; `lib/supabase/types.ts`; fa/en messages.
+- Deploy: `deploy/Dockerfile` ARG/ENV `APP_VERSION`, `APP_BUILT_AT`; `deploy/liara/package-release.sh`
+  passes them; `deploy/liara/backup.sh` calls `private.record_backup` (best effort). No compose change.
+- Tests: `tests/sql/sms.sql` (61 assertions), `tests/sql/admin-panel.sql`, `tests/unit/admin_format.test.ts`,
+  `tests/unit/nav_tabs.test.ts` (admin item). `supabase/schema.sql` = HEAD + the base→new delta of a
+  clone dump (the pg_net install reorders the schema/ACL blocks; content unchanged).
+- Docs: DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, MEMORY (3 lessons), DEPLOY-LIARA.
+
+**Actions outside the repo**
+- Throwaway clones `adm_dry` (local `postgres` + `20261102140000`, `…150000`, `20261103120000` + both new
+  migrations) and `adm_base` (same without the new ones) in `bj-erp-db-1`; temporary containers
+  `bjadm-rest`, `bjadm-auth`, `bjadm-gw` (port 54331) on `adm_dry`, with `auth.*` ownership given back to
+  `supabase_auth_admin` and throwaway passwords for the admin and one HR account **in the clone only**.
+  All removed / dropped at the end. Local `postgres` NOT migrated. Nothing run on Liara.
+- Web lookups: Melipayamak docs; console API shapes from `HRashidi/melipayamak` source.
+
+**Verification**
+- Every `tests/sql/*` on `adm_dry`: all pass except `approval-delegation.sql` (the known clone failure in
+  TASKS, "overlapping leave request exists"). `npx tsc --noEmit` clean, `npm run lint` clean,
+  `npm run test:unit` 1071 passed, `npm run build` ok (4 admin routes), `npm run test:deploy` passed.
+- Browser (dev server → clone): admin sees all four tabs (en desktop, fa RTL 375 px, no horizontal
+  overflow); settings save (key never returned; audit row without it); Persian-digit test mobile
+  normalised and logged as dry_run; a real committed request queued an approver text at commit
+  (skipped: no mobile); System shows services up, 113 migrations, a recorded backup; non-admin HR is
+  redirected Home and has no nav link; reset password + "Text it" shows "not texted: no mobile".
+- Found and fixed during the check: a skipped password row kept the plaintext (now masked at insert,
+  test added); redaction hid `api_key_changed`; Overview requests table cramped; Farsi log text in the
+  English UI; settings "saved" note lost on remount.
+- **Not verified:** a real send to Melipayamak (no key yet), pg_cron scheduling (the clone has no
+  pg_cron; dispatch was run by hand), `backup.sh` on the VM.
+
+**State left behind**
+- Committed on `claude/admin-panel` (`a00f249`). Not pushed, no PR (Amir: test locally first).
+- Local stack updated from the branch (`./deploy/bj-deploy update local`, verified backup
+  `backups/deploy-assistant/local/20261103T203122Z-1a204b/postgres.dump`): local `postgres` now has
+  `20261102140000` … `20261103140001` (so these migrations are frozen), `bj-erp-rest-1` restarted.
+  Checked: `/api/health` ok; `cron.job` lists `bj-sms-dispatch` (runs every 30 s, succeeded) and
+  `bj-purge-sms-outbox`; SMS mode `dry_run`. Not signed in on the local stack.
+
+**For the next agent**
+- Console endpoint shapes are from a community client, not official docs: send one real test text
+  before trusting Live. If IT's "key" is a panel password, add a `rest.payamak-panel.com` path in
+  `private.sms_dispatch`.
+- Migrations `20261103140000`/`…01` are frozen (local `postgres` applied them 2026-11-03): fix with new files.
+- Proposed CLAUDE.md lines are in the final message to Amir, not applied.
+
 ## 2026-11-03 — PR #16 deploy result
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

@@ -8,6 +8,7 @@ import {
   Network,
   Plane,
   Settings,
+  ShieldCheck,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -110,6 +111,7 @@ export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
   finance: <Banknote {...itemIcon} />,
   procurement: <Plane {...itemIcon} />,
   settings: <Settings {...itemIcon} />,
+  admin: <ShieldCheck {...itemIcon} />,
 };
 
 /** Side-panel footer link to Help & guides. */

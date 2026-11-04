@@ -403,6 +403,35 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-80** ☐ **Password rule.** Every password a person or the admin sets is 8–72 characters with at
+  least one digit (0–9) and one special character (printable ASCII punctuation; a space does not
+  count). Existing passwords keep working until the next change; nobody is forced to change. Checked
+  by the database (`private.assert_password_ok`) and mirrored in the change-password and first-login
+  forms. *(Owner, 2026-11-04; spec `docs/specs/2026-11-03-admin-panel-v2-design.md`; unreleased.)*
+- **FR-79** ☐ **Sign-ins and force sign-out.** Admin panel › Sign-ins lists the newest 100 password
+  sign-ins and everyone holding a session (devices, last activity). The admin signs one person out on
+  all devices (also on Manage › Employees › edit), or everyone except themself. A password reset by the
+  admin and deactivation sign the person out too. Pages already open keep working until their token
+  expires (≤ 60 min, accepted). Never signs out the admin. *(Owner, 2026-11-04; same spec; unreleased.)*
+- **FR-77** ☐ **Admin panel.** The admin alone (not a permission, not delegable) has a nav item
+  «پنل مدیر سیستم» with four tabs. **Overview:** people (active, never signed in, still on the issued
+  password, signed in within 7/30 days), requests by type and status in a date range, approval speed
+  (median and 90th percentile), requests pending over 3 days, leave by department, SMS counts.
+  **SMS:** FR-78 settings and log. **System:** version, service checks, database size and biggest
+  tables, recent migrations, scheduled jobs and their last run, SMS queue, newest backups (red after
+  36 hours). **Audit log:** filterable `audit_log` with a before/after diff; signatures, passwords and
+  secrets hidden. *(Owner, 2026-11-03; spec `docs/specs/2026-11-03-admin-panel-sms-design.md`; unreleased.)*
+  **v2 (owner, 2026-11-04):** the panel is **English only** (LTR, in either app language); a fifth tab
+  **Sign-ins** (FR-79); Audit log filters by **Done by** and **About** (the person a row names); System
+  shows the **off-server copy** the owner's Mac reports (red after 36 h, or when a dump is missing or
+  differs); pg_cron history older than 7 days is purged nightly. An error-log tab (FR-81) is on hold.
+- **FR-78** ☐ **SMS notifications.** Texts go to the people who can sign the next open approval
+  step when a request is filed or a step is approved, to the requester when a request is finally
+  approved or rejected, and to an employee when the admin resets their password and ticks **Text it
+  to the employee** (the stored text is masked right after sending). Numbers come from personal info
+  (normalised to `09…`; none → logged as skipped). Modes Off / Dry run (default: logged, never sent) /
+  Live. Credentials are typed in the SMS tab and never shown again. Provider adapter: Melipayamak
+  (line or approved-pattern sending); the database queues and sends (pg_cron + pg_net). *(Owner, 2026-11-03; same spec; unreleased.)*
 - **FR-76** ☐ **Security staff without Employee have no time off.** Security staff are a subcontractor:
   someone with the Security role and without Employee sees no Request tab (every `/request` page sends
   them Home), no **My Recent Requests** or **My Balances** on Home, cannot file a request (refused by the

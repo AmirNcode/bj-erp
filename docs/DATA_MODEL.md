@@ -591,6 +591,36 @@ work trip = `kind='errand' unit='day'`, work errand = `unit='hour'`) and `home_t
 view. A trigger refuses a person from another company. Read by `watched_absences(from, to)`; replaces
 the retired `absences` permission item (migration `20261102150000`).
 
+### Admin panel and SMS (2026-11-03, FR-77 / FR-78, unreleased)
+- `private.backup_runs` — `file_name`, `size_bytes`, `sha256`, `finished_at`; written by
+  `deploy/liara/backup.sh` through `private.record_backup` (superuser only), kept 90 days.
+- `private.sms_settings` (PK `company_id`) — `mode` off | dry_run | live (default dry_run), `provider`
+  melipayamak, `api_key` (Melipayamak console key, URL-safe chars; never returned to the app), `username`
+  (reference), `sender_line` (digits), `send_method` line | pattern, `body_*` pattern ids per event,
+  `notify_*` per event, `site_label`, last credit check (`credit_*`). CHECK: live needs a key.
+- `public.sms_outbox` — one row per text: `event` approver_new | employee_decision | password_reset |
+  test, `recipient_id`, `request_id`, `step_id`, `to_mobile` (`09…`, from
+  `employee_personal_info.mobile`), `body`, `args` (pattern variables), `status` queued → sending → sent |
+  failed, or dry_run / skipped (`skip_reason` no_mobile | request_decided | sms_off), `attempts`,
+  `next_attempt_at`, `net_request_id` (pg_net), `provider_ref` (recId), `error`. Unique: one approver text
+  per (request, step, person); one decision text per request. Password rows are masked at the first
+  dispatch, or at once when skipped. Purged after 180 days.
+- Queueing: deferred constraint triggers on `leave_requests` (insert, status change) and
+  `leave_request_approvals` (insert) call `private.sms_enqueue_request` at commit; they never raise.
+  Recipients = active people for whom `private.can_approve_step` holds on each open step (order on: the
+  first undecided step; off: every undecided step); a person holding two open steps in one transaction
+  gets one text. No applicable step → the direct manager.
+- Sending: pg_cron `bj-sms-dispatch` (30 s) → `private.sms_dispatch()`: reads pg_net replies, then posts
+  due rows to `console.melipayamak.com/api/send/{simple|shared}/<key>`. `recId` of 6+ digits = sent;
+  5xx/timeout retry after 1 and 5 min (3 attempts); other errors fail at once.
+- v2 (2026-11-04): `private.offsite_copies` — `file_name` (PK, `daily-…Z.dump`), `sha256` of the
+  owner's Mac copy, `first_seen`, `last_seen`; upserted by `private.record_offsite_copies(text[])`
+  from `deploy/liara/pull-backups-to-mac.sh` after each pull; rows unseen for 90 days deleted.
+  `app_admin_system()->'offsite'` = last report, newest file, `missing` (dumps 36 h–7 d old never
+  reported), `mismatched` (sha256 ≠ `backup_runs.sha256`). Sign-outs delete `auth.sessions` rows
+  (refresh tokens cascade) and write `audit_log` `sessions.revoke` / `sessions.revoke_all`.
+  pg_cron `bj-purge-cron-history` (21:00 UTC) deletes `cron.job_run_details` older than 7 days.
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`

@@ -100,6 +100,10 @@ const RULES: Rule[] = [
   { re: /current password is incorrect/, key: 'wrongCurrentPassword' },
   { re: /new password must be at least 8 characters/, key: 'passwordTooShort' },
   { re: /new password must be at most 72 ASCII characters/, key: 'passwordTooLong' },
+  // FR-80 (2026-11-04): at least one digit and one special character.
+  { re: /new password must contain a digit/, key: 'passwordNeedsDigit' },
+  { re: /new password must contain a special character/, key: 'passwordNeedsSymbol' },
+  { re: /cannot sign yourself out here/, key: 'cannotSignOutSelf' },
   { re: /new password must differ from the issued password/, key: 'passwordSameAsIssued' },
   { re: /new password must differ from the current password/, key: 'passwordSameAsCurrent' },
   { re: /password change is not required/, key: 'passwordChangeNotRequired' },
@@ -192,6 +196,14 @@ const RULES: Rule[] = [
   // FR-66 / FR-55: the order switch needs approval_steps edit (RPC and scope trigger).
   { re: /not allowed to change the approval order setting/, key: 'approvalOrderNotAllowed' },
   // FR-65 special leave.
+  // FR-77/78 admin panel and SMS.
+  { re: /^admin only$/, key: 'notAllowed' },
+  { re: /^invalid mobile$/, key: 'smsInvalidMobile' },
+  { re: /^sms is off$/, key: 'smsOff' },
+  { re: /^no api key$|sms_settings_live_needs_key/, key: 'smsNoApiKey' },
+  { re: /sms_settings_api_key/, key: 'smsBadApiKey' },
+  { re: /sms_settings_sender_line/, key: 'smsBadSenderLine' },
+  { re: /sms_settings_site_label/, key: 'smsBadSiteLabel' },
   { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
   { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
   { re: /annual leave type not found/, key: 'annualTypeMissing' },
@@ -336,10 +348,11 @@ const RULES: Rule[] = [
   { re: /not authenticated/i, key: 'notAuthenticated' },
 ];
 
-export async function localizeDbError(raw: string): Promise<string> {
+export async function localizeDbError(raw: string, locale?: string): Promise<string> {
   let t: Awaited<ReturnType<typeof getTranslations>>;
   try {
-    t = await getTranslations('dbErrors');
+    // The admin panel is English only (owner, 2026-11-04): its actions pass 'en'.
+    t = locale ? await getTranslations({ locale, namespace: 'dbErrors' }) : await getTranslations('dbErrors');
   } catch {
     return raw;
   }
@@ -369,10 +382,10 @@ export function fieldForDbError(raw: string): ErrorField | undefined {
  * `field` is additive — every existing caller reads only `.error` and is
  * unaffected, and any result without a field keeps rendering in the banner.
  */
-export async function dbErr(raw: string): Promise<DbErrorResult> {
+export async function dbErr(raw: string, options: { locale?: string } = {}): Promise<DbErrorResult> {
   return {
     ok: false as const,
-    error: await localizeDbError(raw),
+    error: await localizeDbError(raw, options.locale),
     field: fieldForDbError(raw),
   };
 }

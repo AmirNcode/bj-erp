@@ -15,7 +15,13 @@ describe('messages fa/en parity', () => {
     expect(leafKeys(fa[ns]).sort()).toEqual(leafKeys(en[ns]).sort());
   });
 
-  it('the two files have the same key set overall', () => {
-    expect(leafKeys(fa).sort()).toEqual(leafKeys(en).sort());
+  it('the two files have the same key set overall, except the English-only admin panel', () => {
+    const enShared = leafKeys(en).filter((k) => !k.startsWith('admin.'));
+    expect(leafKeys(fa).sort()).toEqual(enShared.sort());
+  });
+
+  it('the admin panel is English only (owner, 2026-11-04; lib/admin/locale.ts)', () => {
+    expect('admin' in fa).toBe(false);
+    expect(leafKeys(en.admin).length).toBeGreaterThan(0);
   });
 });

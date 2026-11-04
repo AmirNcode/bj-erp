@@ -386,6 +386,40 @@ outcomes (HRLite started acting on Security holders).
 mojibake). Use `perl -CSD`, or a small Python script that reads and writes `encoding='utf-8'` and
 asserts each match count, and check `git diff` for unrelated hunks.
 
+### A compose change blocks the Liara CI deploy; keep new wiring inside the database or the image
+`deploy/liara/apply-release.sh` refuses a release whose `docker-compose*.yml`, `liara/Caddyfile` or
+`sql/init/00-init.sh` differ from the VM's ("Infrastructure changed"), so a new env var or mount means a
+manual VM step. FR-78 therefore sends SMS from Postgres (pg_cron + `pg_net`, preloaded in
+`supabase/postgres`; it only runs requests in the `postgres` DB) and FR-77 bakes the version in with a
+Docker `--build-arg`. Files under `deploy/liara/` other than the Caddyfile (e.g. `backup.sh`) do roll out.
+
+### Deferred constraint triggers never fire in the SQL tests
+`tests/sql/*` roll back, and `deferrable initially deferred` triggers run at COMMIT. Force them with
+`set constraints all immediate; set constraints all deferred;` after each step (`pg_temp.flush()` in
+`tests/sql/sms.sql`). Also: a row inserted by a function called inside a statement is not visible to that
+same statement's outer query; assert it in a second statement.
+
+### A second GoTrue on a restored clone DB
+`pg_restore --no-owner` hands `auth.*` to `supabase_admin`, and GoTrue then dies with
+`relation "schema_migrations" already exists`. Give the schema, tables, functions and enum types in
+`auth` back to `supabase_auth_admin` (sequences follow their tables). Browse through one Caddy that also
+proxies the dev server: GoTrue answers `Access-Control-Allow-Origin: *` with credentials, which
+browsers reject cross-origin.
+
+### A CHECK violation prints the whole row, secrets included
+A failed CHECK or NOT NULL on a row puts DETAIL `Failing row contains (…)` with every column value in
+the error. PostgREST hands DETAIL to the caller and the database log keeps it. Inside a SECURITY DEFINER
+function the owner can read every column, so nothing is masked. Any write to a table holding a secret
+(`private.sms_settings.api_key`) must catch `check_violation` / `not_null_violation` and re-raise with
+the constraint name only (PR #17 review F1, `20261104120000`).
+
+### pg_net opens schema `net` to anon and authenticated
+The Supabase image's event trigger grants `anon` and `authenticated` USAGE on `net`, all privileges on
+`net.http_request_queue` / `net._http_response` and EXECUTE on `net.http_get` / `net.http_post`. Safe
+only while PostgREST exposes `public` alone (`PGRST_DB_SCHEMAS`). The queue row holds the full URL
+(the Melipayamak key) until the worker sends it. Revoke before ever exposing another schema
+(PR #17 review F3).
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

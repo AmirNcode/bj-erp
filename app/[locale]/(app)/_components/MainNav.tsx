@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import {
   manageItemsForRoles,
   settingsItemForRoles,
+  adminItemForRoles,
   tabsForRoles,
   type NavItem,
 } from '@/lib/nav/tabs';
@@ -74,6 +75,7 @@ export function MainNav({
   const tabs = tabsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage, timeOff);
   const manageItems = manageItemsForRoles(roles, perms, canApprove, canDelegate, hasReports, absencesPage);
   const settings = settingsItemForRoles(roles, perms, canDelegate);
+  const admin = adminItemForRoles(roles);
 
   const isActive = (href: string) => {
     const full = `/${locale}${href}`;
@@ -87,6 +89,7 @@ export function MainNav({
   const inManage =
     manageItems.some((item) => isActive(item.href)) ||
     (settings ? isActive(settings.href) : false) ||
+    (admin ? isActive(admin.href) : false) ||
     isActive('/manage');
 
   const sideLink = (item: NavItem) => {
@@ -216,10 +219,13 @@ export function MainNav({
         </div>
       )}
 
-      {settings && (
+      {(settings || admin) && (
         <div className="hidden md:block">
           <div className="mx-1 my-3 h-px bg-muted" />
-          <ul className="flex flex-col gap-0.5">{sideLink(settings)}</ul>
+          <ul className="flex flex-col gap-0.5">
+            {settings && sideLink(settings)}
+            {admin && sideLink(admin)}
+          </ul>
         </div>
       )}
 

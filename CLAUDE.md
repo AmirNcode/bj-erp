@@ -166,6 +166,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Travel costs never reach the traveller:** `my_travel_itineraries()` strips per-stay `cost_rials` (`private.travel_itinerary_without_costs`); finance reads only `hotel_cost_rials` (= the stays' sum).
 - **`jspdf` must stay ≥ 4.2.1:** 3.x has a critical advisory and CI runs `npm audit --omit=dev`. `html-to-image`/`jspdf` load with `import()` on click.
 - **Worktrees:** a symlinked `node_modules` passes `tsc`/vitest but breaks `next build` (Turbopack refuses files outside the root); clone it with `cp -Rc ../bj/node_modules node_modules` (APFS, instant).
+- **Secret columns vs CHECK errors:** a failed CHECK/NOT NULL echoes the whole row in DETAIL (to PostgREST callers and the DB log); writes to a table holding a secret must catch and re-raise by constraint name (`app_set_sms_settings`).
 - **UI check without a login:** a temporary `app/[locale]/zz-…/page.tsx` (outside the route groups, so no auth layout) renders client components with fake data; delete it and `rm -rf .next/dev/types` before `tsc`.
 - More: `docs/MEMORY.md`.
 

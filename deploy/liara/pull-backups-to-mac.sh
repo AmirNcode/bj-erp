@@ -11,6 +11,11 @@
 # macOS notification, when the newest dump is older than 36 hours (the VM timer or
 # this job stopped) or the VM disk is over 85% full.
 #
+# After each pull it reports which dumps this Mac holds (name + sha256 of the local
+# copy) to the database, for the admin panel's System tab (FR-77 v2,
+# private.record_offsite_copies). Best effort: a failed report never fails the pull;
+# the panel then turns red after 36 hours. Re-run `install` after changing this file.
+#
 # The dumps hold personnel data and password hashes. Keep the folder on an encrypted
 # disk (FileVault) and out of synced folders (iCloud Drive, Dropbox). Restoring one:
 # docs/DEPLOY-LIARA.md, "Backups, credentials and operations".
@@ -19,6 +24,7 @@ umask 077
 
 HOST="${BJ_BACKUP_HOST:-liara-bj-vm}" # ~/.ssh/config alias, key without passphrase
 REMOTE_DIR=/var/backups/bj-erp
+REMOTE_APP_DIR=/opt/bj-erp
 DEST="${BJ_BACKUP_DIR:-$HOME/Backups/bj-erp}"
 KEEP_DAYS="${BJ_BACKUP_KEEP_DAYS:-90}"
 KEEP_MIN=14
@@ -39,6 +45,30 @@ notify() {
   osascript -e "display notification \"$1\" with title \"bj-erp backup\"" >/dev/null 2>&1 || true
 }
 remote() { ssh "${SSH_OPTS[@]}" "$HOST" "$@"; }
+
+# Reports every dump that is on the VM and on this Mac, with the sha256 of the local
+# copy, through psql in the db container (same path as backup.sh's record_backup).
+# Names and hashes are checked against fixed patterns, so the SQL holds no free text.
+report_offsite() {
+  # Runs in $(…): a failure here must reach the caller's `||`, never the pull's ERR trap.
+  trap - ERR
+  set +e
+  local name sum items=()
+  for name in "$@"; do
+    [[ $name =~ ^daily-[0-9]{8}T[0-9]{6}Z\.dump$ ]] || continue
+    [ -f "$DEST/$name" ] || continue
+    sum="$(shasum -a 256 "$DEST/$name" | awk '{print $1}')"
+    [[ $sum =~ ^[0-9a-f]{64}$ ]] || continue
+    items+=("'$name:$sum'")
+  done
+  [ "${#items[@]}" -gt 0 ] || return 0
+  local list
+  list="$(IFS=,; printf '%s' "${items[*]}")"
+  printf 'select private.record_offsite_copies(array[%s]::text[]);\n' "$list" | remote \
+    "cd $REMOTE_APP_DIR && sudo -n docker compose -f docker-compose.yml -f docker-compose.liara.yml exec -T db sh -c 'PGPASSWORD=\"\$POSTGRES_PASSWORD\" psql -U supabase_admin -d postgres -qAt -v ON_ERROR_STOP=1' >/dev/null" \
+    || return 1
+  echo "${#items[@]}"
+}
 
 pull() {
   mkdir -p "$DEST"
@@ -96,7 +126,10 @@ pull() {
     notify "The server disk is over $DISK_WARN_PERCENT% full."
   fi
 
-  log "ok: copied $copied, newest ${newest:-none}, VM disk ${disk}%"
+  # shellcheck disable=SC2086 # $names is a newline list of pattern-checked file names
+  local reported
+  reported="$(report_offsite $names)" || reported="failed"
+  log "ok: copied $copied, newest ${newest:-none}, VM disk ${disk}%, reported to admin panel: ${reported:-0}"
   date '+%Y-%m-%d %H:%M:%S' > "$DEST/last-success"
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { homeAbsencesBoard, manageItemsForRoles, settingsItemForRoles, tabsForRoles } from '@/lib/nav/tabs';
+import { adminItemForRoles, homeAbsencesBoard, manageItemsForRoles, settingsItemForRoles, tabsForRoles } from '@/lib/nav/tabs';
 import { fullPerms, type Perms } from '@/lib/permissions/catalog';
 import { FULL_WATCH } from '@/lib/absences/watch';
 
@@ -262,5 +262,14 @@ describe('procurement (FR-70)', () => {
   it('employee and hr without the permission get none', () => {
     expect(tabsForRoles(['employee'], {}).map((t) => t.key)).not.toContain('procurement');
     expect(manageItemsForRoles(['employee', 'hr'], HR).map((i) => i.key)).not.toContain('procurement');
+  });
+});
+
+describe('adminItemForRoles (FR-77)', () => {
+  it('shows the admin panel to the admin only', () => {
+    expect(adminItemForRoles(['admin'])).toEqual({ key: 'admin', href: '/admin', labelKey: 'admin', testId: 'nav-admin' });
+    expect(adminItemForRoles(['hr', 'employee'])).toBeNull();
+    expect(adminItemForRoles(['manager'])).toBeNull();
+    expect(adminItemForRoles([])).toBeNull();
   });
 });
