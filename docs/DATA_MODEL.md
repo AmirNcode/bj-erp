@@ -628,6 +628,17 @@ the retired `absences` permission item (migration `20261102150000`).
   (refresh tokens cascade) and write `audit_log` `sessions.revoke` / `sessions.revoke_all`.
   pg_cron `bj-purge-cron-history` (21:00 UTC) deletes `cron.job_run_details` older than 7 days.
 
+### `private.profile_photos` (2026-11-04, FR-82, unreleased)
+- PK `employee_id` → `profiles` (cascade), `company_id`, `photo_data` (`data:image/jpeg;base64,/9j/…`,
+  1 000–80 000 chars, base64 length a multiple of 4; CHECK `profile_photos_shape`), `locked` (HR lock),
+  `version` (from the global `private.profile_photo_version_seq` on every change, incl. lock; the image
+  URL's immutable cache key, so it never repeats, not even after remove + re-upload), `updated_at`,
+  `updated_by`.
+- Schema `private`: no PostgREST access. Read/write only through `app_profile_photo`,
+  `app_profile_photo_versions`, `app_set_profile_photo`, `app_set_profile_photo_lock`,
+  `app_remove_profile_photo`. Audit rows `photo.saved` / `photo.deleted` / `photo.locked` /
+  `photo.unlocked` (entity `profile_photos`) carry only `{locked, version}`.
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`

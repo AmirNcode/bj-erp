@@ -3,6 +3,7 @@
 import { Label } from '@/components/ui/label';
 import { nativeSelectClass } from '@/lib/native-select';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
+import { PersonAvatar } from '@/components/PersonAvatar';
 
 export type ReplacementLabels = {
   title: string;
@@ -44,22 +45,28 @@ export function ReplacementPicker({
       <Label htmlFor="replacement_id">{labels.title}</Label>
       <p className="text-xs text-muted-foreground">{labels.hint}</p>
 
-      <select
-        id="replacement_id"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`${nativeSelectClass} disabled:bg-muted`}
-        disabled={loading || noReplacement}
-        data-testid="replacement-select"
-      >
-        <option value="">{labels.select}</option>
-        {candidates.map((c) => (
-          <option key={c.profileId} value={c.profileId} disabled={c.unavailable}>
-            {c.fullName} ({c.employeeCode})
-            {c.unavailable ? ` — ${labels.onLeave}` : ''}
-          </option>
-        ))}
-      </select>
+      {/* A native <option> cannot hold an image: the chosen colleague's face sits beside it. */}
+      <div className="flex items-center gap-2">
+        {value && !noReplacement && (
+          <PersonAvatar id={value} name={candidates.find((c) => c.profileId === value)?.fullName} size="md" />
+        )}
+        <select
+          id="replacement_id"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${nativeSelectClass} disabled:bg-muted`}
+          disabled={loading || noReplacement}
+          data-testid="replacement-select"
+        >
+          <option value="">{labels.select}</option>
+          {candidates.map((c) => (
+            <option key={c.profileId} value={c.profileId} disabled={c.unavailable}>
+              {c.fullName} ({c.employeeCode})
+              {c.unavailable ? ` — ${labels.onLeave}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <label
         htmlFor="no_replacement"

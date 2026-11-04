@@ -78,6 +78,140 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — PR #19 review and fixes (photo cache key reuse, transparent images)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/sms-log-history @ 3baa67a, then claude/profile-photos-spec @ 449ff07
+**Trigger:** Amir ran `/code-review:code-review the latest PR.` (no `--comment`), then asked to fix both findings.
+
+**What changed**
+- `supabase/migrations/20261105120000_profile_photos.sql` — edited in place (bj_deploy ledger on local
+  `postgres` confirms it was never applied, so not frozen). `version` now comes from the new
+  `private.profile_photo_version_seq` in insert, replace and lock. Before, remove deleted the row, the next
+  upload restarted at 1, and `/api/photo/<id>?v=1` (`immutable`) kept serving browsers the old image.
+- `supabase/schema.sql` — the same changes, taken from a clone's dump (not `npm run schema:dump`: local
+  `postgres` does not have this migration); CHECK re-parenthesizing hunks left out.
+- `lib/photo/process.ts` — white fill moved from `cropToJpeg` to `prepareForCrop`, the first JPEG encode.
+  Transparent images came out black because the later fill only saw an already flattened JPEG.
+- `tests/sql/profile-photos.sql` — version literals replaced by `pg_temp.fresh()` (fails on any repeated
+  version), `pg_temp.locked()`, a remove + re-upload assertion.
+- `tests/unit/photo-process.test.ts` — `prepareForCrop` fills before drawing (jsdom stand-ins for canvas).
+- `docs/DATA_MODEL.md`, `docs/specs/2026-11-04-profile-photos-design.md` (§8).
+
+**Actions outside the repo**
+- Local Docker DB: created `photofix_clone`, applied the migration, ran the SQL test, dropped the clone.
+  Local `postgres` not changed. Nothing on Liara. Nothing posted to GitHub.
+- `npm ci` in the main checkout (`react-easy-crop` was missing from `node_modules`).
+
+**Verification**
+- RED first: `FAIL just under the cap accepted, new cache key after the remove: expected new, got repeat 1`,
+  and the unit test failed with no `fillRect` call. Both pass after the fix.
+- Clone dump vs `schema.sql`: only the 8 CHECK-noise lines and the header blank line differ.
+- Real `prepareForCrop` + `cropToJpeg` in headless Chromium (transpiled branch file): transparent 64 px and
+  3000 px centre pixel `[255,255,255,255]`, 50% red `[255,127,126,255]`, opaque blue `[0,0,254,255]`.
+- After `npm ci`: `tsc --noEmit` clean, `npm run lint` clean, `vitest` 1097 passed (114 files), `npm run build` OK.
+  `tests/sql/*` other than `profile-photos.sql` and e2e not run. Not checked on Safari or Firefox.
+
+**State left behind**
+- UNCOMMITTED on `claude/profile-photos-spec`, on top of 449ff07. Not pushed. PR #19 title still says
+  `docs … design draft [skip ci]`; a squash merge with that title would skip the deploy.
+
+**For the next agent**
+- The browser cache behaviour itself was not exercised end to end; the fix relies on `?v=` never repeating,
+  which the SQL test asserts. Versions now jump (failed writes burn a sequence value): harmless.
+
+## 2026-11-04 — Profile photos (FR-82): build
+
+**Agent:** Claude Opus 5.5 via Claude Code (cloud session)
+**Branch / HEAD at start:** claude/profile-photos-spec @ 116a02a
+**Trigger:** Amir approved the plan ("start building"), and asked that photos be compressed so
+48-megapixel selfies do not eat storage.
+
+**What changed**
+- `supabase/migrations/20261105120000_profile_photos.sql` — `private.profile_photos` (JPEG data URL,
+  CHECK ≤ 80 000 chars), `private.photo_can_manage`, `app_profile_photo`, `app_profile_photo_versions`,
+  `app_set_profile_photo`, `app_set_profile_photo_lock`, `app_remove_profile_photo` (audit rows in the
+  functions; CHECK errors re-raised without the row). `supabase/schema.sql` dumped (additions only).
+- `tests/sql/profile-photos.sql` (44 assertions). `tests/unit/photo-process.test.ts` (18).
+- `lib/photo/process.ts` (≤ 40 MB file → ≤ 2048 px preview → 256×256 JPEG ≤ 60 KB, EXIF dropped),
+  `lib/photo/initials.ts`, `lib/photo/usePhotoVersion.ts` (batched versions store; imports the server
+  action lazily so client unit tests do not need Supabase env), `lib/actions/photo.ts`,
+  `app/api/photo/[id]/route.ts`, `components/PersonAvatar.tsx`,
+  `components/profile-photo/ProfilePhotoCard.tsx` (react-easy-crop via next/dynamic).
+- Placement: Profile page (card after the name card), Edit employee (card under the header), employee
+  list (replaced the local initials `Avatar`), ApprovalQueue, RequestsReview, Home PendingApprovalsCard
+  (+ `employeeId` in `PendingRow`), OrgChart (replaced local `initials`), AddApprovalStepDialog,
+  ReplacementPicker, MainNav side-panel profile (`profile.id` from the layout).
+- `lib/supabase/types.ts`, `lib/errors/db-error.ts` (4 rules), `messages/fa.json` + `en.json`
+  (`profile.photo.*`, `dbErrors.photo*`), `package.json` (`react-easy-crop ^6.2.4`).
+- Docs: REQUIREMENTS FR-82, DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, spec §8 amendment, plan status.
+
+**Actions outside the repo**
+- None on Liara or the owner's Mac. In this cloud container only: started `dockerd`, pulled
+  `supabase/postgres:15.8.1.085`, `gotrue:v2.170.0`, `postgrest:v12.2.3` from `mirror.gcr.io`
+  (Docker Hub answered 429), applied all 122 migrations to a throwaway DB, made fixture users via the
+  GoTrue admin API, ran a Node gateway on :8080 and `next start` on :3000. All disposable.
+
+**Verification**
+- `tests/sql/profile-photos.sql`: all 44 PASS. Existing `fr52-53…` 59/59, `sms.sql` 77/77 on the same DB;
+  `fr51-hr-employee-admin.sql` 39/40 (one FAIL already there before this migration; not investigated).
+- `npx tsc --noEmit` clean, `npm run lint` clean, `vitest run tests/unit` 1091 passed, `npm audit
+  --omit=dev` 0 vulnerabilities, `npm run build` OK.
+- Chromium against the real stack: employee uploads an 8000×6000 JPEG (3.6 MB) at 390 px → saved,
+  `/api/photo/<id>?v=1` 200 image/jpeg 16 122 bytes, `immutable`; HR locks it from Edit employee; the
+  employee's Profile shows "Set by HR", no buttons; signed-out request 404; org chart shows the face
+  to a colleague; no horizontal scroll at 390 px in en. Found and fixed: a server-rendered avatar
+  stayed on initials because the image loaded before hydration (ref check added).
+
+**State left behind**
+- Committed and pushed on `claude/profile-photos-spec`. No PR. Not deployed. The migration was applied
+  only to throwaway DBs, not to the owner's local DB, so it is not frozen anywhere yet.
+
+**For the next agent**
+- Test-DB recipe without the owner's Mac: images from `mirror.gcr.io/<image>`; after migrations,
+  redefine `auth.uid()/role()/jwt()` to read `request.jwt.claims` (the bare image has the old
+  `request.jwt.claim.sub` form) and give them owner `supabase_auth_admin` before GoTrue starts; users
+  made through `/admin/users` need `update auth.users set role='authenticated'`.
+- Do not run `npx prettier` here: the repo has no Prettier config and it rewrites quotes.
+- Not done (spec §8): faces in the manager / department-manager selects (native selects).
+
+---
+
+## 2026-11-04 — Profile photos (FR-82): design walkthrough, spec draft
+
+**Agent:** Claude Opus 5.5 via Claude Code (cloud session)
+**Branch / HEAD at start:** main @ 1283860
+**Trigger:** HR wants profile photos to tell apart people with similar names; Amir asked to plan it.
+
+**What changed**
+- `docs/specs/2026-11-04-profile-photos-design.md` (new, DRAFT): owner decisions, `profile_photos`
+  table (JPEG data URL in Postgres, like FR-52 signatures), four RPCs, `/api/photo/[id]` cached
+  route, `PersonAvatar`, tests.
+- `docs/TASKS.md` — one backlog line.
+- Follow-up same session: owner approved the spec (keep lock, `react-easy-crop`, no print photo;
+  Profile photo card after the name card, before Org chart; HR edits via Edit employee). Spec marked
+  APPROVED; plan `docs/plans/2026-11-04-profile-photos.md` written. `react-easy-crop` 6.2.4 API
+  checked on Context7.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Docs only; nothing run. Checked `supabase/schema.sql`: `profiles_select` scope, and that
+  `get_org_chart` / `get_replacement_candidates` are SECURITY DEFINER company-wide (drove the
+  "photo goes with name" rule).
+
+**State left behind**
+- Branch `claude/profile-photos-spec`, pushed. Spec approved, plan written; no code yet.
+
+**For the next agent**
+- Owner answers: employee + HR upload, HR lock, visibility = wherever the name shows, placements =
+  employees / approvals + detail / pickers + org chart / profile + header, one-by-one upload only,
+  keep photos for leavers, audit log entries.
+- JPEG not WebP (Safari canvas cannot encode WebP). Verify any crop library via Context7.
+
+---
+
 ## 2026-11-04 — SMS log: expandable per-text history (status steps, provider request/reply)
 
 **Agent:** Claude Opus 5.5 via Claude Code

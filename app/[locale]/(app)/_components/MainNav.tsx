@@ -17,6 +17,7 @@ import { formatNumber } from '@/lib/i18n/format';
 import { HELP_ICON, NAV_ICONS, NAV_ITEM_ICONS } from './nav-icons';
 import { PageRefreshButton } from './PageRefreshButton';
 import { LanguageSwitch } from './LanguageSwitch';
+import { PersonAvatar } from '@/components/PersonAvatar';
 
 type Props = {
   roles: string[];
@@ -30,7 +31,7 @@ type Props = {
   locale: string;
   appName?: string;
   /** Side-panel footer: the caller's name and "{role} ، profile" line. */
-  profile?: { name: string; subtitle: string };
+  profile?: { id?: string; name: string; subtitle: string };
   initialUpdatedAt?: string;
   /** Pending approvals for the Approvals badge; streamed so it never blocks the shell. */
   pendingCount?: Promise<number>;
@@ -256,12 +257,16 @@ export function MainNav({
           aria-current={isActive('/profile') ? 'page' : undefined}
           className="flex items-center gap-2.5 rounded-[10px] p-1 transition-colors hover:bg-muted/50"
         >
-          <span
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground [&_svg]:size-5"
-          >
-            {NAV_ICONS.profile}
-          </span>
+          {profile?.id ? (
+            <PersonAvatar id={profile.id} name={profile.name} className="size-9" />
+          ) : (
+            <span
+              aria-hidden="true"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-secondary-foreground [&_svg]:size-5"
+            >
+              {NAV_ICONS.profile}
+            </span>
+          )}
           {profile && (
             <span className="min-w-0">
               <span className="block truncate whitespace-nowrap text-[13.5px] font-semibold text-foreground">

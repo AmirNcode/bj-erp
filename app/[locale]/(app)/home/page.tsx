@@ -222,6 +222,7 @@ async function HomeBoardData({
         : undefined;
     return {
       id: r.id,
+      employeeId: r.employee_id,
       employeeName: r.employee_name,
       departmentName: departmentName ?? null,
       summary: [typeName, dates, duration(r.requested_minutes)].join(' ، '),

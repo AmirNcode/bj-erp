@@ -799,6 +799,20 @@ from `app_set_employee_password` / `app_bulk_set_employee_passwords` (whoever ma
 callable by the app (private schema, `revoke all from public`); the first is run by
 `deploy/liara/pull-backups-to-mac.sh` as the superuser inside the db container.
 
+### Profile photos (FR-82, 2026-11-04, unreleased)
+
+Not a catalog item; reuses `people` edit. `private.profile_photos` is unreachable from PostgREST.
+- **Read** (`app_profile_photo`, `app_profile_photo_versions`): any active caller, rows of their own
+  company only ("photo goes with name": the org chart already lists every name company-wide).
+- **Write** (`app_set_profile_photo`, `app_remove_profile_photo`): self unless `locked` (42501 `photo
+  is locked by HR`; a self call cannot change `locked`), or `private.photo_can_manage(caller, target)`
+  = active, same company, not self, and admin or (`people` edit and target is not the admin). Not
+  `can_act_on`: a photo carries no identity power, so HR may set the photo of an approver or a
+  department manager too.
+- **Lock** (`app_set_profile_photo_lock`): `photo_can_manage` only.
+- Execute granted to `authenticated` only. Served by `app/api/photo/[id]` with the caller's session
+  (404 for no row / other company / signed out).
+
 ### Admin-only identity RPCs (2026-11-02)
 
 `app_create_employee(…, p_login_code)`: only the admin may pass a login code. `app_admin_set_personnel_no(uuid, text)`: admin only, same company; the login code follows the number. `app_approval_history(int, int)`: decided requests the caller approved or rejected a step of (`leave_request_approvals.approver_id`); the admin sees every decided request of the company.

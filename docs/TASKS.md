@@ -75,6 +75,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **Profile photos (FR-82):** built on `claude/profile-photos-spec` (not merged, not deployed).
+  Owner: review the as-built amendment (spec §8: HR may set anyone's photo but the admin's; manager
+  selects show no face). After deploy: upload your own photo from a phone (camera and gallery); as HR,
+  set and lock one person's photo and check their Profile shows "Set by HR".
 - ☐ **Security-only staff (FR-76) after deploy (owner):** sign in as a security-only person (Security,
   no Employee; 3 on the local roster): no Request tab, no My Recent Requests / My Balances on Home.
   Anyone who should keep leave needs Employee ticked too.

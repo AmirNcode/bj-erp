@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { nativeSelectClass } from '@/lib/native-select';
 import { autoPick } from '@/lib/employees/autoPick';
+import { PersonAvatar } from '@/components/PersonAvatar';
 import {
   Dialog,
   DialogContent,
@@ -284,7 +285,10 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
                             onClick={() => setPicked(c)}
                             className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-accent"
                           >
-                            <span>{c.fullName}</span>
+                            <span className="flex min-w-0 items-center gap-2">
+                              <PersonAvatar id={c.id} name={c.fullName} />
+                              <span className="truncate">{c.fullName}</span>
+                            </span>
                             <span className="font-mono text-xs text-muted-foreground">
                               {c.personnelNo ?? c.employeeCode}
                             </span>

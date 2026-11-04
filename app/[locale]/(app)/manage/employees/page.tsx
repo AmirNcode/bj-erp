@@ -37,7 +37,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ListSkeleton } from '@/components/Skeletons';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
-import { EmployeesTable, Avatar, type EmployeeRow } from './EmployeesTable';
+import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
+import { PersonAvatar } from '@/components/PersonAvatar';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
 type Props = {
@@ -187,7 +188,7 @@ async function EmployeesData({
                   href={`/${locale}/manage/employees/${emp.id}`}
                   className="flex min-h-[60px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
                 >
-                  <Avatar name={emp.full_name} />
+                  <PersonAvatar id={emp.id} name={emp.full_name} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate whitespace-nowrap font-medium">
                       <bdi>{emp.full_name}</bdi>

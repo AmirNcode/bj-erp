@@ -68,6 +68,7 @@ export default async function AppLayout({ children, params }: Props) {
   }
   const shown = subtitleRole(roles, customRoles);
   const profileSummary = {
+    id: user.id,
     name: profile.full_name ?? '',
     subtitle: t('profileSubtitle', { role: 'custom' in shown ? shown.custom : tRoles(shown.builtIn) }),
   };

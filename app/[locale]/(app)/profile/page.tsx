@@ -19,6 +19,8 @@ import { ChangePasswordForm } from './ChangePasswordForm';
 import { LogoutButton } from './LogoutButton';
 import { SavedSignatureCard } from './SavedSignatureCard';
 import { getMySavedSignature } from '@/lib/actions/signature';
+import { getPhotoInfo } from '@/lib/actions/photo';
+import { ProfilePhotoCard } from '@/components/profile-photo/ProfilePhotoCard';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = {
@@ -36,12 +38,13 @@ export default async function ProfilePage({ params }: Props) {
   if (!user) return null;
 
   const supabase = await createClient();
-  const [profile, savedRes, { data: personalInfo }, perms, roles] = await Promise.all([
+  const [profile, savedRes, { data: personalInfo }, perms, roles, photoRes] = await Promise.all([
     getCachedProfile(user.id),
     getMySavedSignature(),
     supabase.from('employee_personal_info').select('complete').eq('employee_id', user.id).maybeSingle(),
     getCachedPermissions(user.id),
     getCachedRoles(user.id),
+    getPhotoInfo(user.id),
   ]);
   const capabilities = await getApprovalCapabilities();
   const settingsItem = settingsItemForRoles(roles, perms, capabilities.canDelegate);
@@ -73,6 +76,18 @@ export default async function ProfilePage({ params }: Props) {
             <span className="text-muted-foreground">{t('code')}</span>
             <span className="font-mono">{profile?.employee_code ?? '—'}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* FR-82: the only place people change their own photo (HR uses Edit employee). */}
+      <Card>
+        <CardContent className="pt-2">
+          <ProfilePhotoCard
+            employeeId={user.id}
+            name={profile?.full_name ?? ''}
+            initial={photoRes.ok ? photoRes.photo : null}
+            mode="self"
+          />
         </CardContent>
       </Card>
 
