@@ -131,6 +131,12 @@ Critical/High, merge, watch the Liara deploy.
 - F2 needs an owner decision and a compose or Caddy change.
 - Before SMS goes Live, fix F4/F5 (duplicate retries, dispatcher stops on one bad row).
 
+**Deploy result**
+- PR #17 merged as 221019c. Run `deploy-liara.yml` 41784515633: build (audit, lint, unit, deploy
+  tests, package) and deploy (transfer and apply release) both succeeded. `curl -fsS
+  https://bjeng.app/api/health` → `{"status":"ok","service":"bj-erp-app"}`. Liara now runs the four
+  migrations up to `20261104120000`; SMS is in Dry run. Nothing run on Liara by hand.
+
 ## 2026-11-04 — Admin panel v2: sign-ins + force sign-out (FR-79), password rule (FR-80), audit by person, off-server copies
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)
