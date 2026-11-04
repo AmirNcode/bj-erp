@@ -59,6 +59,13 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   `bash deploy/liara/pull-backups-to-mac.sh install` once on the Mac so the installed copy reports to
   the System tab; check System › Backups shows "Off-server copy" green the next day. Not checked in a
   signed-in browser yet (no local admin login): open Sign-ins and sign out a test person.
+- ☐ **PR #17 review leftovers** (`docs/reviews/pr-17-review.md`; F1 fixed before merge). Owner
+  decision first: **F2** GoTrue's `PUT /auth/v1/user` lets a signed-in user set a password with only
+  GoTrue's 6-character rule (FR-80 bypass); fix with `GOTRUE_PASSWORD_MIN_LENGTH` +
+  `GOTRUE_PASSWORD_REQUIRED_CHARACTERS` on `auth`, or a Caddy block (both need a compose/Caddy
+  release). Before SMS goes **Live**: **F4** retries after a timeout can send twice, **F5** one bad row
+  stops the whole dispatcher. Small migration: **F3** revoke `anon`/`authenticated` on schema `net`,
+  **F6** revoke write grants on `sms_outbox`. Low: F7–F12.
 - ☐ **Reminder (owner, 2026-11-04): come back to the error log (FR-81).** Design is §4 of the v2 spec
   (server errors via `instrumentation.ts` `onRequestError`, browser crashes via error boundaries, an
   admin Errors tab, 30-day purge). Open question there: the writer is open to the public anon key

@@ -78,6 +78,59 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — PR #17 security review, F1 fix, merge and deploy
+
+**Agent:** Claude Opus 5.5 via Claude Code (desktop)
+**Branch / HEAD at start:** claude/admin-panel @ 43f4ee6 (clean, pushed)
+**Trigger:** Amir pre-approved a full run: review PR #17 (security/auth and SQL first), fix every
+Critical/High, merge, watch the Liara deploy.
+
+**What changed**
+- `docs/reviews/pr-17-review.md` (new): verdict, 13 findings, checklist, check results.
+- F1 (High), commit b44d0c8: `supabase/migrations/20261104120000_sms_settings_errors_hide_key.sql`
+  re-creates `public.app_set_sms_settings` so a CHECK/NOT NULL failure is re-raised with only the
+  constraint/column name. Before, DETAIL `Failing row contains (…)` carried the stored API key to the
+  PostgREST caller and the DB log. `tests/sql/sms.sql` gained 5 `F1:` assertions (fail before, pass
+  after). `supabase/schema.sql` dumped. Signature unchanged, so `lib/supabase/types.ts` untouched.
+- Docs: CHANGELOG (F1 line), TASKS (review leftovers, F2 owner decision), MEMORY (CHECK DETAIL
+  leaks rows; pg_net grants), CLAUDE.md (one gotcha line).
+
+**Actions outside the repo**
+- Local Docker had stopped all `bj-erp-*` containers before the session (exited ~3 min before
+  start). `docker start bj-erp-db-1`; later `docker start` auth/rest/gateway and `docker restart
+  bj-erp-rest-1`.
+- Clones in `bj-erp-db-1`: `pr17_head` (dump of `postgres`), `pr17_main` (backup
+  `20261103T203122Z-1a204b` + every newer migration), `pr17_fix` (F1 dry run). All dropped at the end.
+  In `pr17_head` the `auth` objects were given to `supabase_auth_admin` and a throwaway GoTrue
+  v2.170.0 container `pr17-gotrue` (127.0.0.1:59999, network `bj-erp_default`) ran against it with a
+  synthetic `zz999pr17@bj-app.internal` user; container removed.
+- `./deploy/bj-deploy update local` once: verified backup
+  `backups/deploy-assistant/local/20261104T060944Z-100dfa/`, applied `20261104120000` (now **frozen**),
+  rebuilt the app. Its health check failed only because auth/rest/gateway were still stopped; after
+  starting them `/api/health` → 200.
+- Local `postgres` otherwise read-only (ledger, cron jobs, settings, counts).
+- GitHub: push to `claude/admin-panel`, `gh pr merge 17 --merge` (see the deploy result below).
+
+**Verification**
+- Branch-state and main-state clones: all 20 `tests/sql/*` pass, before and after F1; all 7 newer
+  migrations apply cleanly on main's state; `schema.sql` = fresh dump (main-state differs only in the 3
+  known re-parenthesized CHECK lines).
+- `npx tsc --noEmit`, `npm run lint`, `npm run test:unit` (113 files / 1078 tests), `npm run build`,
+  `npm run test:deploy`, `npm audit --omit=dev` (0 vulnerabilities): all pass, before and after F1.
+- Probes: non-admin → 42501 on all 12 admin RPCs; nobody can insert into `sms_outbox`/`audit_log`;
+  admin update/delete of `audit_log` hits 0 rows; sign-out deletes sessions and refresh tokens, and
+  GoTrue then answers 403 `session_not_found` / 400 `refresh_token_not_found`; GoTrue `PUT /user`
+  accepted password `abcdef` (F2).
+- **Not verified:** pg_net worker log content on failure; Melipayamak reply shapes; a signed-in admin
+  browser session; `sudo -n` for `pull-backups-to-mac.sh` on the VM.
+
+**State left behind**
+- Medium F2–F5 and Low F6–F12 open (TASKS). SMS still Dry run. Nothing run on Liara by hand.
+
+**For the next agent**
+- F2 needs an owner decision and a compose or Caddy change.
+- Before SMS goes Live, fix F4/F5 (duplicate retries, dispatcher stops on one bad row).
+
 ## 2026-11-04 — Admin panel v2: sign-ins + force sign-out (FR-79), password rule (FR-80), audit by person, off-server copies
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

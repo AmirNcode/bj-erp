@@ -406,6 +406,20 @@ same statement's outer query; assert it in a second statement.
 proxies the dev server: GoTrue answers `Access-Control-Allow-Origin: *` with credentials, which
 browsers reject cross-origin.
 
+### A CHECK violation prints the whole row, secrets included
+A failed CHECK or NOT NULL on a row puts DETAIL `Failing row contains (…)` with every column value in
+the error. PostgREST hands DETAIL to the caller and the database log keeps it. Inside a SECURITY DEFINER
+function the owner can read every column, so nothing is masked. Any write to a table holding a secret
+(`private.sms_settings.api_key`) must catch `check_violation` / `not_null_violation` and re-raise with
+the constraint name only (PR #17 review F1, `20261104120000`).
+
+### pg_net opens schema `net` to anon and authenticated
+The Supabase image's event trigger grants `anon` and `authenticated` USAGE on `net`, all privileges on
+`net.http_request_queue` / `net._http_response` and EXECUTE on `net.http_get` / `net.http_post`. Safe
+only while PostgREST exposes `public` alone (`PGRST_DB_SCHEMAS`). The queue row holds the full URL
+(the Melipayamak key) until the worker sends it. Revoke before ever exposing another schema
+(PR #17 review F3).
+
 ## Working conventions with Amir
 
 - Non-technical owner. **The final message must stand alone**: outcome first, plain language,

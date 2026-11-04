@@ -24,6 +24,9 @@ was deployed; semantic versioning starts at the first tag.
   one is missing or one differs. `pull-backups-to-mac.sh` reports after each pull (re-run `install`).
 - Scheduled-job history older than 7 days is deleted nightly.
 - Migration `20261104090000_admin_panel_v2`.
+- **Security fix (PR #17 review F1):** a refused SMS settings save (for example a too-short sender
+  line) no longer sends the saved API key back in the error details or writes it to the database log.
+  Migration `20261104120000_sms_settings_errors_hide_key`.
 
 ### Admin panel (FR-77) · SMS notifications (FR-78) — `claude/admin-panel` (not deployed)
 
