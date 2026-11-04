@@ -269,6 +269,43 @@ select private.sms_dispatch();
 select pg_temp.expect('credit stored',pg_temp.as_scalar('admin',
   $q$select (s->>'credit_amount')||'/'||(s->>'credit_pending') from public.app_sms_settings() s$q$),'125000.5/false');
 
+-- ── errors never carry the key (PR #17 review F1) ──
+-- Message and DETAIL of a refused save, as an admin through PostgREST would see them.
+create function pg_temp.err_text(p_key text,p_sql text) returns text language plpgsql as $$
+declare v_msg text; v_detail text;
+begin
+  perform pg_temp.login(p_key);
+  execute 'set local role authenticated';
+  begin execute p_sql; v_msg:='no error';
+  exception when others then get stacked diagnostics v_msg=message_text,v_detail=pg_exception_detail; end;
+  execute 'reset role';
+  return coalesce(v_msg,'')||' | '||coalesce(v_detail,'');
+end; $$;
+select pg_temp.expect('F1: key saved',pg_temp.settings('dry_run','line','KeyLeakProbe12345'),'ok');
+select pg_temp.expect('F1: bad sender line names the constraint, never the key',
+  (select (position('sms_settings_sender_line' in t)>0)::text||'/'||(position('KeyLeakProbe12345' in t)=0)::text
+     from pg_temp.err_text('admin',
+       'select public.app_set_sms_settings(''dry_run'',null,''12'',''line'',null,null,null,true,true,true,''bjeng.app'')') t),
+  'true/true');
+select pg_temp.expect('F1: bad site label hides the key',
+  (select (position('sms_settings_site_label' in t)>0)::text||'/'||(position('KeyLeakProbe12345' in t)=0)::text
+     from pg_temp.err_text('admin',
+       'select public.app_set_sms_settings(''dry_run'',null,null,''line'',null,null,null,true,true,true,''   '')') t),
+  'true/true');
+select pg_temp.expect('F1: a malformed new key is not echoed',
+  (select (position('sms_settings_api_key' in t)>0)::text||'/'||(position('Bad Key 99' in t)=0)::text
+     ||'/'||(position('KeyLeakProbe12345' in t)=0)::text
+     from pg_temp.err_text('admin',
+       'select public.app_set_sms_settings(''dry_run'',null,null,''line'',null,null,null,true,true,true,''bjeng.app'',''Bad Key 99'')') t),
+  'true/true/true');
+select pg_temp.expect('F1: missing mode names the column, never the key',
+  (select (position('"mode"' in t)>0)::text||'/'||(position('KeyLeakProbe12345' in t)=0)::text
+     from pg_temp.err_text('admin',
+       'select public.app_set_sms_settings(null,null,null,''line'',null,null,null,true,true,true,''bjeng.app'')') t),
+  'true/true');
+select pg_temp.expect('F1: refused saves keep the stored key',pg_temp.as_scalar('admin',
+  $q$select (s->>'api_key_hint')||'/'||(s->>'mode') from public.app_sms_settings() s$q$),'…2345/dry_run');
+
 -- ── admin log ──
 select pg_temp.expect('admin log: totals and names',pg_temp.as_scalar('admin',
   $q$select ((l->>'total')::int>=10)::text||'/'||(l->'rows'->0 ? 'recipient_name')::text from public.app_sms_log() l$q$),'true/true');

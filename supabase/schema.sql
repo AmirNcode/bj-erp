@@ -6890,28 +6890,42 @@ declare
   v_company uuid := private.require_admin();
   v_before private.sms_settings%rowtype;
   v_after private.sms_settings%rowtype;
+  v_constraint text;
+  v_column text;
 begin
   insert into private.sms_settings (company_id) values (v_company) on conflict do nothing;
   select * into v_before from private.sms_settings where company_id = v_company for update;
-  update private.sms_settings set
-      mode = p_mode,
-      username = nullif(btrim(coalesce(p_username, '')), ''),
-      sender_line = nullif(regexp_replace(translate(coalesce(p_sender_line, ''),
-        '۰۱۲۳۴۵۶۷۸۹', '0123456789'), '\s', '', 'g'), ''),
-      send_method = p_send_method,
-      body_approver_new = p_body_approver_new,
-      body_employee_decision = p_body_employee_decision,
-      body_password_reset = p_body_password_reset,
-      notify_approver_new = coalesce(p_notify_approver_new, true),
-      notify_employee_decision = coalesce(p_notify_employee_decision, true),
-      notify_password_reset = coalesce(p_notify_password_reset, true),
-      site_label = btrim(coalesce(p_site_label, 'bjeng.app')),
-      api_key = case when p_clear_api_key then null
-                     when nullif(btrim(coalesce(p_api_key, '')), '') is not null then btrim(p_api_key)
-                     else api_key end,
-      updated_by = auth.uid(), updated_at = now()
-   where company_id = v_company
-  returning * into v_after;
+  begin
+    update private.sms_settings set
+        mode = p_mode,
+        username = nullif(btrim(coalesce(p_username, '')), ''),
+        sender_line = nullif(regexp_replace(translate(coalesce(p_sender_line, ''),
+          '۰۱۲۳۴۵۶۷۸۹', '0123456789'), '\s', '', 'g'), ''),
+        send_method = p_send_method,
+        body_approver_new = p_body_approver_new,
+        body_employee_decision = p_body_employee_decision,
+        body_password_reset = p_body_password_reset,
+        notify_approver_new = coalesce(p_notify_approver_new, true),
+        notify_employee_decision = coalesce(p_notify_employee_decision, true),
+        notify_password_reset = coalesce(p_notify_password_reset, true),
+        site_label = btrim(coalesce(p_site_label, 'bjeng.app')),
+        api_key = case when p_clear_api_key then null
+                       when nullif(btrim(coalesce(p_api_key, '')), '') is not null then btrim(p_api_key)
+                       else api_key end,
+        updated_by = auth.uid(), updated_at = now()
+     where company_id = v_company
+    returning * into v_after;
+  exception
+    -- Re-raised without DETAIL: the original one lists every column value, api_key included.
+    when check_violation then
+      get stacked diagnostics v_constraint = constraint_name;
+      raise exception 'new row for relation "sms_settings" violates check constraint "%"', v_constraint
+        using errcode = '23514';
+    when not_null_violation then
+      get stacked diagnostics v_column = column_name;
+      raise exception 'null value in column "%" of relation "sms_settings" violates not-null constraint', v_column
+        using errcode = '23502';
+  end;
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (auth.uid(), 'update_sms_settings', 'sms_settings', v_company,
           to_jsonb(v_before) - 'api_key' - 'credit_request_id',
