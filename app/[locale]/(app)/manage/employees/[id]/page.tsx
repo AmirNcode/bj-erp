@@ -23,6 +23,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSpecialLeaveGrants } from '@/lib/actions/specialLeave';
 import { SpecialLeaveCard } from './SpecialLeaveCard';
 import { PersonnelNoDialog } from './PersonnelNoDialog';
+import { getPhotoInfo } from '@/lib/actions/photo';
+import { ProfilePhotoCard } from '@/components/profile-photo/ProfilePhotoCard';
 
 type Props = {
   params: Promise<{ locale: string; id: string }>;
@@ -123,6 +125,13 @@ export default async function EditEmployeePage({ params }: Props) {
   });
   const canManageLeave = caps.leave;
 
+  // FR-82: the person themself, the admin, or a `people` edit holder on anyone but the admin
+  // (private.photo_can_manage). Others see the photo only.
+  const targetIsAdmin = allRoles.some((r) => r.systemKey === 'admin' && targetRoleIds.includes(r.id));
+  const isSelf = id === user.id;
+  const canEditPhoto = isSelf || isAdmin || (can(callerPerms, 'people', 'edit') && !targetIsAdmin);
+  const photoRes = canEditPhoto ? await getPhotoInfo(id) : null;
+
   // Fetch departments and potential managers
   const [{ data: departments }, { data: managers }] = await Promise.all([
     supabase.from('departments').select('id, name_fa, name_en').order('name_fa'),
@@ -178,6 +187,18 @@ export default async function EditEmployeePage({ params }: Props) {
           )
         }
       />
+      {photoRes?.ok && (
+        <Card data-testid="employee-photo">
+          <CardContent className="pt-4">
+            <ProfilePhotoCard
+              employeeId={id}
+              name={employee.full_name}
+              initial={photoRes.photo}
+              mode={isSelf ? 'self' : 'hr'}
+            />
+          </CardContent>
+        </Card>
+      )}
       <EditEmployeeForm
         employee={employee}
         allRoles={allRoles}

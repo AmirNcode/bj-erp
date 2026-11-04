@@ -403,6 +403,15 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-82** ☐ **Profile photos.** Everyone may set their own photo on Profile (pick a file or take one
+  on a phone, crop to a circle); HR (`people` edit) and the admin set anyone's on Manage › Employees ›
+  Edit employee and may **lock** it so the person cannot change or remove it. The photo shows next to
+  the name wherever the app lists people (employee list, approvals, Manage › Requests, Home, org chart,
+  replacement and approver pickers, the side-panel profile), to every active colleague of the company.
+  Initials stand in when there is none. Each photo is cropped and re-encoded on the device to a
+  256×256 JPEG of at most 60 KB (any size of original; EXIF/GPS dropped); the database refuses more
+  than 80 000 characters. Kept after someone leaves; every change is audited. *(Owner, 2026-11-04;
+  spec `docs/specs/2026-11-04-profile-photos-design.md`; unreleased.)*
 - **FR-80** ☐ **Password rule.** Every password a person or the admin sets is 8–72 characters with at
   least one digit (0–9) and one special character (printable ASCII punctuation; a space does not
   count). Existing passwords keep working until the next change; nobody is forced to change. Checked

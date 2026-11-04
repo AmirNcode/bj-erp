@@ -2090,6 +2090,26 @@ end; $$;
 
 
 --
+-- Name: photo_can_manage(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.photo_can_manage(p_caller uuid, p_target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_caller is distinct from p_target
+     and private.is_active(p_caller)
+     and exists (select 1 from public.profiles t
+                   join public.profiles c on c.id = p_caller and c.company_id = t.company_id
+                  where t.id = p_target)
+     and (private.is_admin(p_caller)
+          or (private.has_perm(p_caller, 'people', 'edit')
+              and not exists (select 1 from public.user_roles
+                               where user_id = p_target and role = 'admin')));
+$$;
+
+
+--
 -- Name: preserve_active_admin(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -5908,6 +5928,72 @@ end; $$;
 
 
 --
+-- Name: app_profile_photo(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_profile_photo(p_employee uuid) RETURNS TABLE(photo_data text, version integer, locked boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p.photo_data, p.version, p.locked
+    from private.profile_photos p
+   where p.employee_id = p_employee
+     and private.is_active(auth.uid())
+     and p.company_id = private.caller_company();
+$$;
+
+
+--
+-- Name: app_profile_photo_versions(uuid[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_profile_photo_versions(p_ids uuid[]) RETURNS TABLE(employee_id uuid, version integer, locked boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p.employee_id, p.version, p.locked
+    from unnest(coalesce(p_ids, '{}'::uuid[])) as v(eid)
+    join private.profile_photos p on p.employee_id = v.eid
+   where private.is_active(auth.uid())
+     and p.company_id = private.caller_company()
+   limit 2000;
+$$;
+
+
+--
+-- Name: app_remove_profile_photo(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_remove_profile_photo(p_employee uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid  uuid := auth.uid();
+  v_self boolean := p_employee = auth.uid();
+  v_before private.profile_photos;
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not (v_self or private.photo_can_manage(v_uid, p_employee)) then
+    raise exception 'not allowed to change this photo' using errcode = '42501';
+  end if;
+  select * into v_before from private.profile_photos where employee_id = p_employee for update;
+  if v_before.employee_id is null then
+    return;
+  end if;
+  if v_self and v_before.locked then
+    raise exception 'photo is locked by HR' using errcode = '42501';
+  end if;
+  delete from private.profile_photos where employee_id = p_employee;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'photo.deleted', 'profile_photos', p_employee,
+          jsonb_build_object('locked', v_before.locked, 'version', v_before.version), null);
+end $$;
+
+
+--
 -- Name: app_request_approval_context(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6855,6 +6941,110 @@ begin
   values (v_uid, 'set_initial_password', 'auth.users', v_uid);
 end;
 $$;
+
+
+--
+-- Name: app_set_profile_photo(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean DEFAULT NULL::boolean) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid      uuid := auth.uid();
+  v_self     boolean := p_employee = auth.uid();
+  v_company  uuid;
+  v_before   private.profile_photos;
+  v_locked   boolean;
+  v_version  integer;
+  v_constraint text;
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  select company_id into v_company from public.profiles where id = p_employee;
+  if v_company is null then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  if not (v_self or private.photo_can_manage(v_uid, p_employee)) then
+    raise exception 'not allowed to change this photo' using errcode = '42501';
+  end if;
+
+  select * into v_before from private.profile_photos where employee_id = p_employee for update;
+  if v_self and coalesce(v_before.locked, false) then
+    raise exception 'photo is locked by HR' using errcode = '42501';
+  end if;
+
+  v_locked := case when v_self then coalesce(v_before.locked, false)
+                   else coalesce(p_locked, v_before.locked, false) end;
+
+  begin
+    insert into private.profile_photos as pp
+           (employee_id, company_id, photo_data, locked, version, updated_at, updated_by)
+    values (p_employee, v_company, p_data, v_locked, 1, now(), v_uid)
+    on conflict (employee_id) do update
+       set photo_data = excluded.photo_data,
+           locked     = excluded.locked,
+           version    = pp.version + 1,
+           updated_at = now(),
+           updated_by = v_uid
+    returning pp.version into v_version;
+  exception
+    -- Re-raised without DETAIL: the original would echo the whole 80 KB row.
+    when check_violation then
+      get stacked diagnostics v_constraint = constraint_name;
+      raise exception 'photo data is invalid (%)', v_constraint using errcode = '22023';
+    when not_null_violation then
+      raise exception 'photo data is required' using errcode = '22023';
+  end;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'photo.saved', 'profile_photos', p_employee,
+          case when v_before.employee_id is null then null
+               else jsonb_build_object('locked', v_before.locked, 'version', v_before.version) end,
+          jsonb_build_object('locked', v_locked, 'version', v_version));
+  return v_version;
+end $$;
+
+
+--
+-- Name: app_set_profile_photo_lock(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_profile_photo_lock(p_employee uuid, p_locked boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_before private.profile_photos;
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if p_locked is null then
+    raise exception 'lock value is required' using errcode = '22023';
+  end if;
+  if not private.photo_can_manage(v_uid, p_employee) then
+    raise exception 'not allowed to change this photo' using errcode = '42501';
+  end if;
+  select * into v_before from private.profile_photos where employee_id = p_employee for update;
+  if v_before.employee_id is null then
+    raise exception 'no photo to lock' using errcode = 'P0002';
+  end if;
+  if v_before.locked = p_locked then
+    return;
+  end if;
+  update private.profile_photos
+     set locked = p_locked, version = version + 1, updated_at = now(), updated_by = v_uid
+   where employee_id = p_employee;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, case when p_locked then 'photo.locked' else 'photo.unlocked' end,
+          'profile_photos', p_employee,
+          jsonb_build_object('locked', v_before.locked),
+          jsonb_build_object('locked', p_locked));
+end $$;
 
 
 --
@@ -8810,6 +9000,30 @@ COMMENT ON TABLE private.offsite_copies IS 'FR-77 v2: dumps the owner''s Mac hol
 
 
 --
+-- Name: profile_photos; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.profile_photos (
+    employee_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    photo_data text NOT NULL,
+    locked boolean DEFAULT false NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT profile_photos_shape CHECK ((((length(photo_data) >= 1000) AND (length(photo_data) <= 80000)) AND (mod((length(photo_data) - length('data:image/jpeg;base64,'::text)), 4) = 0) AND (photo_data ~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]*={0,2}$'::text))),
+    CONSTRAINT profile_photos_version_positive CHECK ((version >= 1))
+);
+
+
+--
+-- Name: TABLE profile_photos; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.profile_photos IS 'FR-82: one profile photo per person (256x256 JPEG data URL). Read and written only through public.app_*profile_photo* functions.';
+
+
+--
 -- Name: sms_outbox_events; Type: TABLE; Schema: private; Owner: -
 --
 
@@ -9824,6 +10038,14 @@ ALTER TABLE ONLY private.backup_runs
 
 ALTER TABLE ONLY private.offsite_copies
     ADD CONSTRAINT offsite_copies_pkey PRIMARY KEY (file_name);
+
+
+--
+-- Name: profile_photos profile_photos_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.profile_photos
+    ADD CONSTRAINT profile_photos_pkey PRIMARY KEY (employee_id);
 
 
 --
@@ -10898,6 +11120,30 @@ CREATE TRIGGER work_settings_enforce_scope BEFORE INSERT OR UPDATE ON public.wor
 --
 
 CREATE TRIGGER work_settings_set_updated_at BEFORE UPDATE ON public.work_settings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+
+--
+-- Name: profile_photos profile_photos_company_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.profile_photos
+    ADD CONSTRAINT profile_photos_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: profile_photos profile_photos_employee_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.profile_photos
+    ADD CONSTRAINT profile_photos_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: profile_photos profile_photos_updated_by_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.profile_photos
+    ADD CONSTRAINT profile_photos_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -12686,6 +12932,13 @@ GRANT ALL ON FUNCTION private.permission_keys() TO supabase_auth_admin;
 
 
 --
+-- Name: FUNCTION photo_can_manage(p_caller uuid, p_target uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.photo_can_manage(p_caller uuid, p_target uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION preserve_active_admin(); Type: ACL; Schema: private; Owner: -
 --
 
@@ -13411,6 +13664,36 @@ GRANT ALL ON FUNCTION public.app_pending_errand_extensions() TO service_role;
 
 
 --
+-- Name: FUNCTION app_profile_photo(p_employee uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_profile_photo(p_employee uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_profile_photo(p_employee uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_profile_photo(p_employee uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_profile_photo(p_employee uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_profile_photo_versions(p_ids uuid[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_profile_photo_versions(p_ids uuid[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_profile_photo_versions(p_ids uuid[]) TO postgres;
+GRANT ALL ON FUNCTION public.app_profile_photo_versions(p_ids uuid[]) TO authenticated;
+GRANT ALL ON FUNCTION public.app_profile_photo_versions(p_ids uuid[]) TO service_role;
+
+
+--
+-- Name: FUNCTION app_remove_profile_photo(p_employee uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_request_approval_context(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13608,6 +13891,26 @@ REVOKE ALL ON FUNCTION public.app_set_initial_password(p_new text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_profile_photo(p_employee uuid, p_data text, p_locked boolean) TO service_role;
+
+
+--
+-- Name: FUNCTION app_set_profile_photo_lock(p_employee uuid, p_locked boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_profile_photo_lock(p_employee uuid, p_locked boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_profile_photo_lock(p_employee uuid, p_locked boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_profile_photo_lock(p_employee uuid, p_locked boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_profile_photo_lock(p_employee uuid, p_locked boolean) TO service_role;
 
 
 --

@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
 import { resetSelectableIds } from '@/lib/employees/passwordReset';
+import { PersonAvatar } from '@/components/PersonAvatar';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,18 +53,6 @@ type Props = {
   showLocks: boolean;
   locale: string;
 };
-
-export function Avatar({ name, size = 34 }: { name: string; size?: number }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{ width: size, height: size }}
-      className="flex shrink-0 items-center justify-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
-    >
-      {name.trim().charAt(0)}
-    </span>
-  );
-}
 
 /**
  * Desktop employees table. For the admin each eligible row gets a checkbox; a selection
@@ -219,7 +208,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: P
                   )}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Avatar name={emp.full_name} />
+                      <PersonAvatar id={emp.id} name={emp.full_name} />
                       <div className="min-w-0">
                         <div className="whitespace-nowrap font-medium">
                           <bdi>{emp.full_name}</bdi>

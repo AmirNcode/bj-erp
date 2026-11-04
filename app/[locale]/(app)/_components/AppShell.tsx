@@ -20,7 +20,7 @@ type Props = {
   locale: string;
   appName: string;
   /** Side-panel footer identity: name and "{role} ، profile". */
-  profile?: { name: string; subtitle: string };
+  profile?: { id?: string; name: string; subtitle: string };
   /** Pending approvals for the side-panel badge; streamed, never awaited here. */
   pendingCount?: Promise<number>;
   /** The caller's own pending requests, for the outcome banner; streamed. */

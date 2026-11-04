@@ -1795,6 +1795,20 @@ export type Database = {
       }
       app_sms_test: { Args: { p_mobile: string }; Returns: string }
       app_sms_check_credit: { Args: Record<PropertyKey, never>; Returns: undefined }
+      app_profile_photo: {
+        Args: { p_employee: string }
+        Returns: { photo_data: string; version: number; locked: boolean }[]
+      }
+      app_profile_photo_versions: {
+        Args: { p_ids: string[] }
+        Returns: { employee_id: string; version: number; locked: boolean }[]
+      }
+      app_set_profile_photo: {
+        Args: { p_employee: string; p_data: string; p_locked?: boolean | null }
+        Returns: number
+      }
+      app_set_profile_photo_lock: { Args: { p_employee: string; p_locked: boolean }; Returns: undefined }
+      app_remove_profile_photo: { Args: { p_employee: string }; Returns: undefined }
       app_sms_log: {
         Args: { p_status?: string | null; p_event?: string | null; p_limit?: number; p_offset?: number }
         Returns: Json

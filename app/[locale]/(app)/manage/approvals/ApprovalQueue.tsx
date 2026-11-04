@@ -18,6 +18,7 @@ import {
   RequestSignatureViewer,
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
+import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
 function useLabels() {
@@ -130,6 +131,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
+                        <PersonAvatar id={req.employee_id} name={req.employee_name} />
                         <div className="font-semibold text-sm text-foreground truncate">
                           {req.employee_name}
                         </div>

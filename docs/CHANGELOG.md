@@ -9,6 +9,17 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Profile photos (FR-82) — `claude/profile-photos-spec` (not deployed)
+
+- **Profile › Profile photo:** add, change or remove your own photo. Pick a picture or take one on
+  the phone, drag and zoom it into the circle, save. Any size works: a 48-megapixel selfie is stored
+  as a 256×256 photo of about 15–30 KB, and the phone's location data is dropped.
+- **HR** (Manage › Employees › Edit employee) sets anyone's photo and can **lock** it; a locked
+  photo shows "Set by HR" on the person's Profile and cannot be changed there.
+- Faces next to names in the employee list, approvals, Manage › Requests, Home's pending approvals,
+  the org chart, the replacement and approver pickers, and the side-panel profile. Initials when
+  there is no photo.
+
 ### SMS log history (FR-78) — `main` (not deployed)
 
 - Admin › SMS › Log: each text has **Show history** with every step and its time — queued, the

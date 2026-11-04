@@ -114,3 +114,29 @@ image request; lists use `loading="lazy"`.
 ## 7. Open questions
 
 - None. Possible later: bulk ZIP import by personnel number.
+
+## 8. Amendment — as built (2026-11-04)
+
+Changes made while building; owner to confirm at review.
+
+- **Table in schema `private`** (`private.profile_photos`), not `public` with no grants: PostgREST
+  cannot even see it.
+- **Who may set others' photos:** `private.photo_can_manage` = admin, or `people` edit on anyone of
+  the same company except the admin. Not `can_act_on` (§1): that rule guards identity powers
+  (password resets, signatures) and would stop an HR clerk from setting a department manager's or
+  an approver's photo. A photo carries no power; every change is audited.
+- **Fifth function** `app_set_profile_photo_lock(employee, locked)` so HR can lock / unlock without
+  re-uploading. Audit rows are written by the functions (actions `photo.saved`, `photo.deleted`,
+  `photo.locked`, `photo.unlocked`), not a trigger.
+- **Large originals:** files up to 40 MB are accepted; the picked image is first scaled to ≤ 2048 px
+  (`prepareForCrop`), so a 48 MP selfie never sits in memory at full size during cropping. Verified:
+  an 8000×6000 JPEG (3.6 MB) became a 16 KB photo.
+- **Lists:** avatars without a known version ask a client store (`lib/photo/usePhotoVersion.ts`) that
+  batches every id on screen into one `app_profile_photo_versions` call (cached 5 minutes); people
+  without a photo cost no image request. No list RPC changed.
+- **Placement as built:** employee list (desktop + mobile), approval cards, Manage › Requests rows,
+  Home pending approvals, org chart (cards + focus), approver-candidate search, replacement picker
+  (avatar of the chosen colleague beside the native select), desktop side-panel profile. Not done:
+  the **direct-manager / department-manager selects** on the employee form and department pages are
+  native `<select>`s or text search boxes that cannot show images; the mobile bottom tab keeps its
+  icon. There is no separate request-detail page; "request detail" = Manage › Requests and Home.

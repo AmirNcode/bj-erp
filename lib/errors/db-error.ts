@@ -266,6 +266,10 @@ const RULES: Rule[] = [
   { re: /holidays were not saved/i, key: 'holidayImportNotSaved' },
   // FR-52 / FR-53. The forms validate first; these surface only if the database disagrees.
   { re: /user_signatures_shape|signature image is invalid/, key: 'signatureInvalid' },
+  { re: /photo is locked by HR/, key: 'photoLocked' },
+  { re: /not allowed to change this photo/, key: 'photoNotAllowed' },
+  { re: /profile_photos_shape|photo data is (?:invalid|required)/, key: 'photoInvalid' },
+  { re: /no photo to lock/, key: 'photoMissing' },
   { re: /violates check constraint "epi_|personal info is invalid/, key: 'personalInfoInvalid' },
   {
     re: /unknown personnel number: (\S+)/,

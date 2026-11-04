@@ -14,6 +14,7 @@ import { useTranslations } from 'next-intl';
 import { Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
+import { PersonAvatar } from '@/components/PersonAvatar';
 import {
   buildOrgIndex,
   chainTo,
@@ -30,13 +31,6 @@ type Props = {
 };
 
 const TOP = 'top';
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
-  return `${first}${last ? '‌' + last : ''}`;
-}
 
 export function OrgChart({ people, myId, locale }: Props) {
   const t = useTranslations('org');
@@ -81,12 +75,7 @@ export function OrgChart({ people, myId, locale }: Props) {
         data-person={person.id}
         className="flex w-full items-center gap-3 rounded-xl border border-border bg-card p-3 text-start shadow-xs transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        <span
-          aria-hidden
-          className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary"
-        >
-          {initials(person.fullName)}
-        </span>
+        <PersonAvatar id={person.id} name={person.fullName} size="md" />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{nameWithPersonnelNo(person)}</span>
@@ -217,12 +206,7 @@ export function OrgChart({ people, myId, locale }: Props) {
           data-person={focus.id}
         >
           <div className="flex items-start gap-4">
-            <span
-              aria-hidden
-              className="flex size-14 shrink-0 items-center justify-center rounded-full bg-primary text-lg font-semibold text-primary-foreground"
-            >
-              {initials(focus.fullName)}
-            </span>
+            <PersonAvatar id={focus.id} name={focus.fullName} size="lg" />
             <div className="min-w-0 flex-1 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-lg font-bold">{nameWithPersonnelNo(focus)}</h2>

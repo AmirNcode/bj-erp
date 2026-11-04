@@ -78,6 +78,63 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — Profile photos (FR-82): build
+
+**Agent:** Claude Opus 5.5 via Claude Code (cloud session)
+**Branch / HEAD at start:** claude/profile-photos-spec @ 116a02a
+**Trigger:** Amir approved the plan ("start building"), and asked that photos be compressed so
+48-megapixel selfies do not eat storage.
+
+**What changed**
+- `supabase/migrations/20261105120000_profile_photos.sql` — `private.profile_photos` (JPEG data URL,
+  CHECK ≤ 80 000 chars), `private.photo_can_manage`, `app_profile_photo`, `app_profile_photo_versions`,
+  `app_set_profile_photo`, `app_set_profile_photo_lock`, `app_remove_profile_photo` (audit rows in the
+  functions; CHECK errors re-raised without the row). `supabase/schema.sql` dumped (additions only).
+- `tests/sql/profile-photos.sql` (44 assertions). `tests/unit/photo-process.test.ts` (18).
+- `lib/photo/process.ts` (≤ 40 MB file → ≤ 2048 px preview → 256×256 JPEG ≤ 60 KB, EXIF dropped),
+  `lib/photo/initials.ts`, `lib/photo/usePhotoVersion.ts` (batched versions store; imports the server
+  action lazily so client unit tests do not need Supabase env), `lib/actions/photo.ts`,
+  `app/api/photo/[id]/route.ts`, `components/PersonAvatar.tsx`,
+  `components/profile-photo/ProfilePhotoCard.tsx` (react-easy-crop via next/dynamic).
+- Placement: Profile page (card after the name card), Edit employee (card under the header), employee
+  list (replaced the local initials `Avatar`), ApprovalQueue, RequestsReview, Home PendingApprovalsCard
+  (+ `employeeId` in `PendingRow`), OrgChart (replaced local `initials`), AddApprovalStepDialog,
+  ReplacementPicker, MainNav side-panel profile (`profile.id` from the layout).
+- `lib/supabase/types.ts`, `lib/errors/db-error.ts` (4 rules), `messages/fa.json` + `en.json`
+  (`profile.photo.*`, `dbErrors.photo*`), `package.json` (`react-easy-crop ^6.2.4`).
+- Docs: REQUIREMENTS FR-82, DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, spec §8 amendment, plan status.
+
+**Actions outside the repo**
+- None on Liara or the owner's Mac. In this cloud container only: started `dockerd`, pulled
+  `supabase/postgres:15.8.1.085`, `gotrue:v2.170.0`, `postgrest:v12.2.3` from `mirror.gcr.io`
+  (Docker Hub answered 429), applied all 122 migrations to a throwaway DB, made fixture users via the
+  GoTrue admin API, ran a Node gateway on :8080 and `next start` on :3000. All disposable.
+
+**Verification**
+- `tests/sql/profile-photos.sql`: all 44 PASS. Existing `fr52-53…` 59/59, `sms.sql` 77/77 on the same DB;
+  `fr51-hr-employee-admin.sql` 39/40 (one FAIL already there before this migration; not investigated).
+- `npx tsc --noEmit` clean, `npm run lint` clean, `vitest run tests/unit` 1091 passed, `npm audit
+  --omit=dev` 0 vulnerabilities, `npm run build` OK.
+- Chromium against the real stack: employee uploads an 8000×6000 JPEG (3.6 MB) at 390 px → saved,
+  `/api/photo/<id>?v=1` 200 image/jpeg 16 122 bytes, `immutable`; HR locks it from Edit employee; the
+  employee's Profile shows "Set by HR", no buttons; signed-out request 404; org chart shows the face
+  to a colleague; no horizontal scroll at 390 px in en. Found and fixed: a server-rendered avatar
+  stayed on initials because the image loaded before hydration (ref check added).
+
+**State left behind**
+- Committed and pushed on `claude/profile-photos-spec`. No PR. Not deployed. The migration was applied
+  only to throwaway DBs, not to the owner's local DB, so it is not frozen anywhere yet.
+
+**For the next agent**
+- Test-DB recipe without the owner's Mac: images from `mirror.gcr.io/<image>`; after migrations,
+  redefine `auth.uid()/role()/jwt()` to read `request.jwt.claims` (the bare image has the old
+  `request.jwt.claim.sub` form) and give them owner `supabase_auth_admin` before GoTrue starts; users
+  made through `/admin/users` need `update auth.users set role='authenticated'`.
+- Do not run `npx prettier` here: the repo has no Prettier config and it rewrites quotes.
+- Not done (spec §8): faces in the manager / department-manager selects (native selects).
+
+---
+
 ## 2026-11-04 — Profile photos (FR-82): design walkthrough, spec draft
 
 **Agent:** Claude Opus 5.5 via Claude Code (cloud session)

@@ -1,6 +1,7 @@
 # Plan — Profile photos (FR-82)
 
 Spec: `docs/specs/2026-11-04-profile-photos-design.md` (approved 2026-11-04).
+**Status:** built 2026-11-04 (see spec §8 for deviations). Move to `docs/archive/` after merge.
 Branch: `claude/profile-photos-spec` (rename on first code commit if wanted).
 Each step ends green: `npx tsc --noEmit` · `npm run lint` · `npm run test:unit`.
 

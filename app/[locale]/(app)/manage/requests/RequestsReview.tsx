@@ -29,6 +29,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { todayInAppTz } from '@/lib/appDate';
 import { TravelTickToggle } from './TravelTickToggle';
 import { RequestCancelButton } from '../../request/_components/RequestCancelButton';
+import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
 function useLabels() {
@@ -167,6 +168,7 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                 <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
+                      <PersonAvatar id={r.employee_id} name={r.employee_name} />
                       <span className="font-semibold">{r.employee_name}</span>
                       {r.personnel_no ? (
                         <span className="font-mono text-xs text-muted-foreground" dir="ltr">

@@ -20,10 +20,12 @@ import {
   type ApproveOptions,
 } from '../manage/approvals/DecisionDialogs';
 import { ExtensionDecisionCard } from '../manage/approvals/ExtensionDecisionCard';
+import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** One pending request, pre-formatted on the server. */
 export type PendingRow = {
   id: string;
+  employeeId: string;
   employeeName: string;
   departmentName: string | null;
   /** "{type} ، {dates} ، {duration}" */
@@ -132,12 +134,7 @@ export function PendingApprovalsCard({ rows, total, count, locale, extensions = 
             data-testid={`home-pending-row-${row.id}`}
             className="grid grid-cols-[40px_1fr] items-center gap-3.5 border-t border-muted px-[22px] py-3.5 sm:grid-cols-[40px_1fr_auto]"
           >
-            <span
-              aria-hidden="true"
-              className="flex size-10 items-center justify-center rounded-full bg-secondary font-semibold text-secondary-foreground"
-            >
-              {row.employeeName.trim().charAt(0)}
-            </span>
+            <PersonAvatar id={row.employeeId} name={row.employeeName} size="md" />
             <div className="min-w-0 space-y-0.5">
               <div className="flex flex-wrap items-baseline gap-x-2">
                 <span className="whitespace-nowrap font-semibold">
