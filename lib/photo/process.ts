@@ -103,6 +103,9 @@ export async function prepareForCrop(
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return { ok: false, reason: 'unsupported' };
+    // JPEG has no transparency: paint white first so transparent PNGs do not turn black.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(image, 0, 0, width, height);
     const url = await canvasToBlobUrl(canvas);
@@ -127,9 +130,6 @@ export async function cropToJpeg(previewUrl: string, area: Area): Promise<PhotoR
     canvas.height = PHOTO_SIDE;
     const ctx = canvas.getContext('2d');
     if (!ctx) return { ok: false, reason: 'unsupported' };
-    // JPEG has no transparency: paint white first so transparent PNGs do not turn black.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, PHOTO_SIDE, PHOTO_SIDE);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(image, a.x, a.y, a.width, a.height, 0, 0, PHOTO_SIDE, PHOTO_SIDE);
     return encodeWithinLimit((q) => canvas.toDataURL('image/jpeg', q));

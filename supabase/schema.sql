@@ -6981,12 +6981,12 @@ begin
 
   begin
     insert into private.profile_photos as pp
-           (employee_id, company_id, photo_data, locked, version, updated_at, updated_by)
-    values (p_employee, v_company, p_data, v_locked, 1, now(), v_uid)
+           (employee_id, company_id, photo_data, locked, updated_at, updated_by)
+    values (p_employee, v_company, p_data, v_locked, now(), v_uid)
     on conflict (employee_id) do update
        set photo_data = excluded.photo_data,
            locked     = excluded.locked,
-           version    = pp.version + 1,
+           version    = excluded.version,
            updated_at = now(),
            updated_by = v_uid
     returning pp.version into v_version;
@@ -7037,7 +7037,8 @@ begin
     return;
   end if;
   update private.profile_photos
-     set locked = p_locked, version = version + 1, updated_at = now(), updated_by = v_uid
+     set locked = p_locked, version = nextval('private.profile_photo_version_seq'),
+         updated_at = now(), updated_by = v_uid
    where employee_id = p_employee;
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (v_uid, case when p_locked then 'photo.locked' else 'photo.unlocked' end,
@@ -9008,7 +9009,7 @@ CREATE TABLE private.profile_photos (
     company_id uuid NOT NULL,
     photo_data text NOT NULL,
     locked boolean DEFAULT false NOT NULL,
-    version integer DEFAULT 1 NOT NULL,
+    version integer NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
     CONSTRAINT profile_photos_shape CHECK ((((length(photo_data) >= 1000) AND (length(photo_data) <= 80000)) AND (mod((length(photo_data) - length('data:image/jpeg;base64,'::text)), 4) = 0) AND (photo_data ~ '^data:image/jpeg;base64,/9j/[A-Za-z0-9+/]*={0,2}$'::text))),
@@ -9021,6 +9022,26 @@ CREATE TABLE private.profile_photos (
 --
 
 COMMENT ON TABLE private.profile_photos IS 'FR-82: one profile photo per person (256x256 JPEG data URL). Read and written only through public.app_*profile_photo* functions.';
+
+
+--
+-- Name: profile_photo_version_seq; Type: SEQUENCE; Schema: private; Owner: -
+--
+
+CREATE SEQUENCE private.profile_photo_version_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: profile_photo_version_seq; Type: SEQUENCE OWNED BY; Schema: private; Owner: -
+--
+
+ALTER SEQUENCE private.profile_photo_version_seq OWNED BY private.profile_photos.version;
 
 
 --
@@ -10008,6 +10029,13 @@ COMMENT ON COLUMN public.work_settings.biweekly_weekend_days IS 'FR-41: ISO week
 --
 
 COMMENT ON COLUMN public.work_settings.biweekly_anchor IS 'FR-41: any date whose week is an off week. Required whenever biweekly_weekend_days is non-empty.';
+
+
+--
+-- Name: profile_photos version; Type: DEFAULT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.profile_photos ALTER COLUMN version SET DEFAULT nextval('private.profile_photo_version_seq'::regclass);
 
 
 --

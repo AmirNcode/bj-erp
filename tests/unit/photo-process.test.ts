@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PHOTO_MAX_LENGTH,
   QUALITY_STEPS,
@@ -6,6 +6,7 @@ import {
   encodeWithinLimit,
   fitWithin,
   isValidPhotoData,
+  prepareForCrop,
 } from '@/lib/photo/process';
 import { avatarColor, initials } from '@/lib/photo/initials';
 
@@ -76,4 +77,44 @@ describe('initials', () => {
 
 describe('avatarColor', () => {
   it('is stable per id', () => expect(avatarColor('abc')).toBe(avatarColor('abc')));
+});
+
+describe('prepareForCrop', () => {
+  // jsdom has no image decoder or canvas, so these stand in for the browser. The recorded calls are
+  // what decides the result: a canvas with no fill turns transparent pixels black when encoded as JPEG.
+  beforeEach(() => {
+    vi.stubGlobal(
+      'Image',
+      class {
+        naturalWidth = 640;
+        naturalHeight = 480;
+        onload?: () => void;
+        set src(_: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      }
+    );
+    vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('paints the whole canvas white before drawing, so transparency does not turn black', async () => {
+    const calls: unknown[][] = [];
+    const ctx = {
+      fillStyle: '',
+      imageSmoothingQuality: 'low',
+      fillRect: (...args: number[]) => calls.push(['fillRect', ctx.fillStyle, ...args]),
+      drawImage: () => calls.push(['drawImage']),
+    };
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done) => done(new Blob(['x'])));
+
+    const res = await prepareForCrop(new File(['x'], 'cutout.png', { type: 'image/png' }));
+
+    expect(res.ok).toBe(true);
+    expect(calls).toEqual([['fillRect', '#ffffff', 0, 0, 640, 480], ['drawImage']]);
+  });
 });

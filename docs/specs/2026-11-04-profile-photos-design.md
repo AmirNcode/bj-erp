@@ -128,6 +128,9 @@ Changes made while building; owner to confirm at review.
 - **Fifth function** `app_set_profile_photo_lock(employee, locked)` so HR can lock / unlock without
   re-uploading. Audit rows are written by the functions (actions `photo.saved`, `photo.deleted`,
   `photo.locked`, `photo.unlocked`), not a trigger.
+- **`version` comes from one global sequence** (`private.profile_photo_version_seq`), not a per-row
+  counter: remove deletes the row, so a counter would restart at 1 and browsers would keep showing
+  the old image under the immutable `?v=1` URL (found in the PR #19 review).
 - **Large originals:** files up to 40 MB are accepted; the picked image is first scaled to ≤ 2048 px
   (`prepareForCrop`), so a 48 MP selfie never sits in memory at full size during cropping. Verified:
   an 8000×6000 JPEG (3.6 MB) became a 16 KB photo.

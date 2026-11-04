@@ -78,6 +78,48 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — PR #19 review and fixes (photo cache key reuse, transparent images)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/sms-log-history @ 3baa67a, then claude/profile-photos-spec @ 449ff07
+**Trigger:** Amir ran `/code-review:code-review the latest PR.` (no `--comment`), then asked to fix both findings.
+
+**What changed**
+- `supabase/migrations/20261105120000_profile_photos.sql` — edited in place (bj_deploy ledger on local
+  `postgres` confirms it was never applied, so not frozen). `version` now comes from the new
+  `private.profile_photo_version_seq` in insert, replace and lock. Before, remove deleted the row, the next
+  upload restarted at 1, and `/api/photo/<id>?v=1` (`immutable`) kept serving browsers the old image.
+- `supabase/schema.sql` — the same changes, taken from a clone's dump (not `npm run schema:dump`: local
+  `postgres` does not have this migration); CHECK re-parenthesizing hunks left out.
+- `lib/photo/process.ts` — white fill moved from `cropToJpeg` to `prepareForCrop`, the first JPEG encode.
+  Transparent images came out black because the later fill only saw an already flattened JPEG.
+- `tests/sql/profile-photos.sql` — version literals replaced by `pg_temp.fresh()` (fails on any repeated
+  version), `pg_temp.locked()`, a remove + re-upload assertion.
+- `tests/unit/photo-process.test.ts` — `prepareForCrop` fills before drawing (jsdom stand-ins for canvas).
+- `docs/DATA_MODEL.md`, `docs/specs/2026-11-04-profile-photos-design.md` (§8).
+
+**Actions outside the repo**
+- Local Docker DB: created `photofix_clone`, applied the migration, ran the SQL test, dropped the clone.
+  Local `postgres` not changed. Nothing on Liara. Nothing posted to GitHub.
+- `npm ci` in the main checkout (`react-easy-crop` was missing from `node_modules`).
+
+**Verification**
+- RED first: `FAIL just under the cap accepted, new cache key after the remove: expected new, got repeat 1`,
+  and the unit test failed with no `fillRect` call. Both pass after the fix.
+- Clone dump vs `schema.sql`: only the 8 CHECK-noise lines and the header blank line differ.
+- Real `prepareForCrop` + `cropToJpeg` in headless Chromium (transpiled branch file): transparent 64 px and
+  3000 px centre pixel `[255,255,255,255]`, 50% red `[255,127,126,255]`, opaque blue `[0,0,254,255]`.
+- After `npm ci`: `tsc --noEmit` clean, `npm run lint` clean, `vitest` 1097 passed (114 files), `npm run build` OK.
+  `tests/sql/*` other than `profile-photos.sql` and e2e not run. Not checked on Safari or Firefox.
+
+**State left behind**
+- UNCOMMITTED on `claude/profile-photos-spec`, on top of 449ff07. Not pushed. PR #19 title still says
+  `docs … design draft [skip ci]`; a squash merge with that title would skip the deploy.
+
+**For the next agent**
+- The browser cache behaviour itself was not exercised end to end; the fix relies on `?v=` never repeating,
+  which the SQL test asserts. Versions now jump (failed writes burn a sequence value): harmless.
+
 ## 2026-11-04 — Profile photos (FR-82): build
 
 **Agent:** Claude Opus 5.5 via Claude Code (cloud session)

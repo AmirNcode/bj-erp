@@ -10,6 +10,7 @@
 begin;
 drop index public.user_roles_one_admin;
 create temp table ph_fx(k text primary key, id uuid not null);
+create temp table ph_seen(version text primary key);
 grant select on ph_fx to authenticated;
 create function pg_temp.fx(p_key text) returns uuid language sql as $$
   select id from ph_fx where k = p_key;
@@ -61,6 +62,19 @@ create function pg_temp.read(p_actor text, p_target text) returns text language 
   select coalesce(pg_temp.as_scalar(p_actor, format(
     'select version || '':'' || locked from public.app_profile_photo(%L)', pg_temp.fx(p_target))), 'none');
 $$;
+-- The lock flag alone (version numbers are global, so tests do not spell them out).
+create function pg_temp.locked(p_actor text, p_target text) returns text language sql as $$
+  select split_part(pg_temp.read(p_actor, p_target), ':', 2);
+$$;
+-- 'new' when a version was never returned before in this run. Any cache key that comes back is the
+-- bug: /api/photo/<id>?v=<version> is immutable, so browsers would keep the old image.
+create function pg_temp.fresh(p_version text) returns text language plpgsql as $$
+begin
+  if p_version !~ '^[0-9]+$' then return p_version; end if;
+  if exists (select 1 from ph_seen where version = p_version) then return 'repeat ' || p_version; end if;
+  insert into ph_seen values (p_version);
+  return 'new';
+end; $$;
 create function pg_temp.audits(p_target text) returns text language sql as $$
   -- One transaction = one now(), so count per action instead of ordering.
   select coalesce(string_agg(action || 'x' || n, ',' order by action), 'none')
@@ -98,14 +112,16 @@ end; $$;
 -- ── table out of reach ──
 select pg_temp.expect('authenticated cannot read the table',
   pg_temp.err(pg_temp.as_scalar('admin', 'select count(*)::text from private.profile_photos')), '42501');
+select pg_temp.expect('authenticated cannot touch the version sequence',
+  has_sequence_privilege('authenticated', 'private.profile_photo_version_seq', 'usage')::text, 'false');
 select pg_temp.expect('anon cannot call the read function',
   has_function_privilege('anon', 'public.app_profile_photo(uuid)', 'execute')::text, 'false');
 
 -- ── self ──
-select pg_temp.expect('self: first upload is version 1', pg_temp.set('emp', 'emp', pg_temp.jpeg()), '1');
+select pg_temp.expect('self: first upload', pg_temp.fresh(pg_temp.set('emp', 'emp', pg_temp.jpeg())), 'new');
 select pg_temp.expect('self: lock argument ignored',
-  pg_temp.set('emp', 'emp', pg_temp.jpeg(3000), 'true'), '2');
-select pg_temp.expect('self: still unlocked', pg_temp.read('emp', 'emp'), '2:false');
+  pg_temp.fresh(pg_temp.set('emp', 'emp', pg_temp.jpeg(3000), 'true')), 'new');
+select pg_temp.expect('self: still unlocked', pg_temp.locked('emp', 'emp'), 'false');
 select pg_temp.expect('self: cannot lock', pg_temp.lock('emp', 'emp', true), '42501');
 select pg_temp.expect('self: remove', pg_temp.remove('emp', 'emp'), 'ok');
 select pg_temp.expect('self: gone after remove', pg_temp.read('emp', 'emp'), 'none');
@@ -116,7 +132,8 @@ select pg_temp.expect('PNG refused',
   pg_temp.err(pg_temp.set('emp', 'emp', 'data:image/png;base64,iVBORw0KGgo' || repeat('A', 1999))), '22023');
 select pg_temp.expect('over 80 000 characters refused',
   pg_temp.err(pg_temp.set('emp', 'emp', pg_temp.jpeg(80004))), '22023');
-select pg_temp.expect('just under the cap accepted', pg_temp.set('emp', 'emp', pg_temp.jpeg(79999)), '1');
+select pg_temp.expect('just under the cap accepted, new cache key after the remove',
+  pg_temp.fresh(pg_temp.set('emp', 'emp', pg_temp.jpeg(79999))), 'new');
 select pg_temp.expect('junk characters refused',
   pg_temp.err(pg_temp.set('emp', 'emp', pg_temp.jpeg() || '<script>')), '22023');
 select pg_temp.expect('null refused', pg_temp.err(pg_temp.set('emp', 'emp', null)), '22023');
@@ -124,18 +141,22 @@ select pg_temp.expect('error does not echo the row',
   (position('AAAA' in pg_temp.set('emp', 'emp', pg_temp.jpeg(80004))) = 0)::text, 'true');
 
 -- ── HR and lock ──
-select pg_temp.expect('hr sets and locks', pg_temp.set('hr', 'emp', pg_temp.jpeg(), 'true'), '2');
+select pg_temp.expect('hr sets and locks', pg_temp.fresh(pg_temp.set('hr', 'emp', pg_temp.jpeg(), 'true')), 'new');
 select pg_temp.expect('locked: self cannot replace',
   pg_temp.err(pg_temp.set('emp', 'emp', pg_temp.jpeg())), '42501');
 select pg_temp.expect('locked: self cannot remove', pg_temp.remove('emp', 'emp'), '42501');
-select pg_temp.expect('hr replace keeps the lock', pg_temp.set('hr', 'emp', pg_temp.jpeg(2400)), '3');
-select pg_temp.expect('still locked', pg_temp.read('emp', 'emp'), '3:true');
+select pg_temp.expect('hr replace keeps the lock', pg_temp.fresh(pg_temp.set('hr', 'emp', pg_temp.jpeg(2400))), 'new');
+select pg_temp.expect('still locked', pg_temp.locked('emp', 'emp'), 'true');
 select pg_temp.expect('hr unlocks', pg_temp.lock('hr', 'emp', false), 'ok');
-select pg_temp.expect('unlock bumps version', pg_temp.read('emp', 'emp'), '4:false');
-select pg_temp.expect('unlocked: self replaces again', pg_temp.set('emp', 'emp', pg_temp.jpeg()), '5');
+select pg_temp.expect('unlocked', pg_temp.locked('emp', 'emp'), 'false');
+select pg_temp.expect('unlock changes the cache key',
+  pg_temp.fresh(split_part(pg_temp.read('emp', 'emp'), ':', 1)), 'new');
+select pg_temp.expect('unlocked: self replaces again', pg_temp.fresh(pg_temp.set('emp', 'emp', pg_temp.jpeg())), 'new');
 select pg_temp.expect('lock on no photo', pg_temp.lock('hr', 'emp2', true), 'P0002');
-select pg_temp.expect('hr sets an inactive person', pg_temp.set('hr', 'gone', pg_temp.jpeg()), '1');
+select pg_temp.expect('hr sets an inactive person', pg_temp.fresh(pg_temp.set('hr', 'gone', pg_temp.jpeg())), 'new');
 select pg_temp.expect('hr removes', pg_temp.remove('hr', 'gone'), 'ok');
+select pg_temp.expect('re-upload after remove never reuses a cache key',
+  pg_temp.fresh(pg_temp.set('hr', 'gone', pg_temp.jpeg())), 'new');
 
 -- ── who may not ──
 select pg_temp.expect('colleague cannot set', pg_temp.err(pg_temp.set('emp2', 'emp', pg_temp.jpeg())), '42501');
@@ -144,17 +165,17 @@ select pg_temp.expect('manager role is not enough', pg_temp.err(pg_temp.set('mgr
 select pg_temp.expect('hr cannot touch the admin', pg_temp.err(pg_temp.set('hr', 'admin', pg_temp.jpeg())), '42501');
 select pg_temp.expect('other company hr refused', pg_temp.err(pg_temp.set('outsider', 'emp', pg_temp.jpeg())), '42501');
 select pg_temp.expect('inactive caller refused', pg_temp.err(pg_temp.set('gone', 'gone', pg_temp.jpeg())), '42501');
-select pg_temp.expect('admin sets own', pg_temp.set('admin', 'admin', pg_temp.jpeg()), '1');
-select pg_temp.expect('admin sets anyone', pg_temp.set('admin', 'emp2', pg_temp.jpeg(), 'true'), '1');
+select pg_temp.expect('admin sets own', pg_temp.fresh(pg_temp.set('admin', 'admin', pg_temp.jpeg())), 'new');
+select pg_temp.expect('admin sets anyone', pg_temp.fresh(pg_temp.set('admin', 'emp2', pg_temp.jpeg(), 'true')), 'new');
 
 -- ── reads ──
-select pg_temp.expect('colleague reads (photo goes with name)', pg_temp.read('emp2', 'emp'), '5:false');
+select pg_temp.expect('colleague reads (photo goes with name)', pg_temp.locked('emp2', 'emp'), 'false');
 select pg_temp.expect('other company reads nothing', pg_temp.read('outsider', 'emp'), 'none');
 select pg_temp.expect('inactive caller reads nothing', pg_temp.read('gone', 'emp'), 'none');
 select pg_temp.expect('versions for a list',
   pg_temp.as_scalar('mgr', format(
-    $q$select string_agg(version || ':' || locked, ',' order by version) from public.app_profile_photo_versions(array[%L, %L, %L]::uuid[])$q$,
-    pg_temp.fx('emp'), pg_temp.fx('emp2'), pg_temp.fx('hr'))), '1:true,5:false');
+    $q$select string_agg(locked::text, ',' order by locked) from public.app_profile_photo_versions(array[%L, %L, %L]::uuid[])$q$,
+    pg_temp.fx('emp'), pg_temp.fx('emp2'), pg_temp.fx('hr'))), 'false,true');
 select pg_temp.expect('versions: other company gets nothing',
   coalesce(pg_temp.as_scalar('outsider', format(
     'select count(*)::text from public.app_profile_photo_versions(array[%L]::uuid[])', pg_temp.fx('emp'))), 'x'), '0');

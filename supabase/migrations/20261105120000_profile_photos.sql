@@ -13,12 +13,17 @@
 --
 -- No advisory locks and no writes to profiles / leave_requests, so no lock-order risk.
 
+-- The cache key of /api/photo/<id>?v=<version>, served as immutable. It must never repeat, even
+-- for a person who removes a photo and uploads another (remove deletes the row), or browsers keep
+-- the old image: hence one sequence for everybody instead of a per-row counter.
+create sequence private.profile_photo_version_seq as integer;
+
 create table private.profile_photos (
   employee_id uuid primary key references public.profiles(id) on delete cascade,
   company_id  uuid not null references public.companies(id) on delete cascade,
   photo_data  text not null,
   locked      boolean not null default false,
-  version     integer not null default 1,
+  version     integer not null default nextval('private.profile_photo_version_seq'),
   updated_at  timestamptz not null default now(),
   updated_by  uuid references public.profiles(id) on delete set null,
   -- ≤ 80 000 base64 characters ≈ 60 KB decoded. JPEG starts with FF D8 FF → base64 "/9j/".
@@ -29,10 +34,13 @@ create table private.profile_photos (
   constraint profile_photos_version_positive check (version >= 1)
 );
 
+alter sequence private.profile_photo_version_seq owned by private.profile_photos.version;
+
 comment on table private.profile_photos is
   'FR-82: one profile photo per person (256x256 JPEG data URL). Read and written only through public.app_*profile_photo* functions.';
 
 revoke all on table private.profile_photos from public, anon, authenticated;
+revoke all on sequence private.profile_photo_version_seq from public, anon, authenticated;
 
 -- ── who may write ───────────────────────────────────────────────────────────
 -- Self: allowed unless locked (checked by the callers, which know the row).
@@ -119,12 +127,12 @@ begin
 
   begin
     insert into private.profile_photos as pp
-           (employee_id, company_id, photo_data, locked, version, updated_at, updated_by)
-    values (p_employee, v_company, p_data, v_locked, 1, now(), v_uid)
+           (employee_id, company_id, photo_data, locked, updated_at, updated_by)
+    values (p_employee, v_company, p_data, v_locked, now(), v_uid)
     on conflict (employee_id) do update
        set photo_data = excluded.photo_data,
            locked     = excluded.locked,
-           version    = pp.version + 1,
+           version    = excluded.version,
            updated_at = now(),
            updated_by = v_uid
     returning pp.version into v_version;
@@ -172,7 +180,8 @@ begin
     return;
   end if;
   update private.profile_photos
-     set locked = p_locked, version = version + 1, updated_at = now(), updated_by = v_uid
+     set locked = p_locked, version = nextval('private.profile_photo_version_seq'),
+         updated_at = now(), updated_by = v_uid
    where employee_id = p_employee;
   insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
   values (v_uid, case when p_locked then 'photo.locked' else 'photo.unlocked' end,
