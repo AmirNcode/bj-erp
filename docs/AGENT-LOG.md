@@ -110,8 +110,9 @@ Copy this block verbatim and fill it in.
   375 px, no horizontal scroll.
 
 **State left behind**
-- Uncommitted on main (this + the eye-toggle entry below). Migration applied to local DB → frozen.
-  Not deployed.
+- Committed on `claude/sms-log-history` (with the eye-toggle change below), pushed, PR
+  https://github.com/AmirNcode/bj-erp/pull/18 open. Migration applied to local DB → frozen.
+  Not merged, not deployed; merging deploys to Liara.
 
 **For the next agent**
 - Local `postgres` was already current with main here, so the CLAUDE.md "local DB lags main" note is stale.
