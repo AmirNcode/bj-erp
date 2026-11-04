@@ -75,8 +75,8 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
-- ◐ **Profile photos (FR-82):** spec draft `docs/specs/2026-11-04-profile-photos-design.md` awaits
-  owner review; then plan, then build.
+- ◐ **Profile photos (FR-82):** spec approved, plan `docs/plans/2026-11-04-profile-photos.md` awaits
+  owner review; then build (branch `claude/profile-photos-spec`).
 - ☐ **Security-only staff (FR-76) after deploy (owner):** sign in as a security-only person (Security,
   no Employee; 3 on the local roster): no Request tab, no My Recent Requests / My Balances on Home.
   Anyone who should keep leave needs Employee ticked too.

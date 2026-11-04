@@ -89,6 +89,10 @@ Copy this block verbatim and fill it in.
   table (JPEG data URL in Postgres, like FR-52 signatures), four RPCs, `/api/photo/[id]` cached
   route, `PersonAvatar`, tests.
 - `docs/TASKS.md` — one backlog line.
+- Follow-up same session: owner approved the spec (keep lock, `react-easy-crop`, no print photo;
+  Profile photo card after the name card, before Org chart; HR edits via Edit employee). Spec marked
+  APPROVED; plan `docs/plans/2026-11-04-profile-photos.md` written. `react-easy-crop` 6.2.4 API
+  checked on Context7.
 
 **Actions outside the repo**
 - none
@@ -99,7 +103,7 @@ Copy this block verbatim and fill it in.
   "photo goes with name" rule).
 
 **State left behind**
-- Uncommitted on main. Spec awaits owner review; no plan, no code.
+- Branch `claude/profile-photos-spec`, pushed. Spec approved, plan written; no code yet.
 
 **For the next agent**
 - Owner answers: employee + HR upload, HR lock, visibility = wherever the name shows, placements =

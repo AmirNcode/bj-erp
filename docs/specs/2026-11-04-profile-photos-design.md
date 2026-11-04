@@ -1,6 +1,6 @@
 # Profile photos (FR-82) — design
 
-**Status:** DRAFT, awaiting owner review (2026-11-04). Not frozen until approved.
+**Status:** APPROVED by owner 2026-11-04. Frozen; changes go in a dated amendment section.
 **Why:** HR wants faces next to names so they can tell apart people with similar names.
 
 ## 1. Decisions (owner, 2026-11-04)
@@ -8,9 +8,12 @@
 | Topic | Decision |
 |---|---|
 | Who sets a photo | The employee (own photo, on Profile) **and** HR (`people` edit, `can_act_on`) + admin. |
-| Lock | An HR/admin upload may be marked **locked**; the employee cannot change or remove a locked photo. HR can unlock. |
+| Lock | Kept (owner, 2026-11-04). An HR/admin upload may be marked **locked**; the employee cannot change or remove a locked photo. HR can unlock. |
 | Who sees | **Photo goes with name:** any active employee of the company may load any colleague's photo. Org chart and replacement picker already list every name company-wide. |
 | Where shown | Manage › Employees (list + edit page) · Approvals cards + request detail · person pickers (replacement, approver candidates, manager/department-manager pickers) + org chart · own Profile + app header. |
+| Edit screens | **Profile:** a Photo card right after the Name / Employee code card, before the Org chart link — the only place people change their own photo. **HR:** Manage › Employees › Edit employee, Photo card right under the page header, with the Lock switch. |
+| Crop | `react-easy-crop` (owner, 2026-11-04). |
+| Print | No photo on printed forms (owner, 2026-11-04). |
 | Capture | One by one: pick a file or take a photo (phones offer the camera from `accept="image/*"`), crop square, save. No bulk import. |
 | Leavers | Photo kept after deactivation / separation (FR-54). HR may delete it by hand. |
 | Audit | `audit_log` entry per set / remove / lock change (who, whose, when). No image copy in the log. |
@@ -78,19 +81,26 @@ image request; lists use `loading="lazy"`.
   initials circle (first letters of the Farsi name, colour from a hash of the id); lays the
   `<img>` over it on load, hides it on error. Sizes 24 / 32 / 40 / 96. Click on large sizes
   opens a bigger view (HR identification).
-- **Profile › Photo card** (next to Saved signature): Upload / Take photo, crop, Save, Remove.
-  When locked: shows the photo, "Set by HR", no buttons.
-- **Manage › Employees › edit:** same card for HR plus a **Lock** switch. List rows: 32 px avatar.
+- **Profile › Photo card**, placed after the Name / Employee code card and before the Org chart link
+  (the Org chart link is mobile-only; on desktop the card sits before Help / Settings / Signature).
+  96 px photo (or initials), buttons Change photo / Remove. When locked: photo, "Set by HR", no
+  buttons.
+- **Manage › Employees › Edit employee:** the same card, right under the page header, plus a **Lock**
+  switch. Shown when the caller may act on the target (`people` edit + `can_act_on`, or admin);
+  when the target is the caller, it behaves as the self card. List rows: 32 px avatar.
 - **Approvals, request detail, pickers, org chart, header:** avatar beside the existing name.
   List screens call `app_profile_photo_versions` once for the ids on screen (so known
   no-photo people make no request at all, and cache keys are exact).
-- **Crop:** square crop with drag + zoom. Library choice in the plan (candidate `react-easy-crop`;
-  check its API and bundle size via Context7 first) or a small in-house cropper.
+- **Crop:** `react-easy-crop` `^6.2.4` (peer `react >=16.4`; API checked on Context7 2026-11-04):
+  `<Cropper image crop zoom aspect={1} cropShape="round" onCropChange onZoomChange
+  onCropComplete={(_, px) => …} />` inside a `position: relative` box with a fixed height; we
+  draw `croppedAreaPixels` to the canvas ourselves. Loaded with `import()` when the crop dialog
+  opens, like `jspdf`, so it stays out of the main bundle. Zoom slider below for touch and mouse.
 - **Processing** `lib/photo/process.ts`: load file → apply EXIF orientation → crop → draw to a
   256×256 canvas → `toBlob('image/jpeg', 0.8)`, step quality down until ≤ 60 KB. Re-encoding
   through canvas **strips EXIF, including GPS location** from phone photos.
 - Copy in `fa` + `en` (`profile.photo.*`, `manage.employees.photo.*`).
-- Print form: no photo (out of scope).
+- Print form: no photo (owner decision).
 
 ## 6. Tests
 
@@ -103,4 +113,4 @@ image request; lists use `loading="lazy"`.
 
 ## 7. Open questions
 
-- None blocking. Possible later: bulk ZIP import by personnel number; photo on printed forms.
+- None. Possible later: bulk ZIP import by personnel number.
