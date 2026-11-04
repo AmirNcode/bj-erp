@@ -78,6 +78,74 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — SMS log: expandable per-text history (status steps, provider request/reply)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 8caad49 (plus the uncommitted eye-toggle change below)
+**Trigger:** Amir asked for status logging per log item with a button to expand the run's steps.
+
+**What changed**
+- `supabase/migrations/20261104150000_sms_outbox_events.sql` — new `private.sms_outbox_events`
+  (+ `private.sms_scrub`), trigger `sms_outbox_log_status` on `public.sms_outbox`
+  (insert / update of status, attempts; never raises), `sms_dispatch` re-created with `request` and
+  `reply` inserts (endpoint name only; reply content/error scrubbed of the API key), `app_sms_log`
+  re-created (same signature) with `events` per row, backfill of two `backfilled` steps per old row.
+- `supabase/schema.sql` — regenerated (`npm run schema:dump`); diff only the new objects.
+- `tests/sql/sms.sql` — `pg_temp.hist()` + 10 assertions (dry run, no mobile, sent, refusal, 5xx retry,
+  endpoint not URL, key scrubbed, log carries events, table not readable by `authenticated`, cascade).
+- `app/[locale]/(app)/admin/sms/SmsLogHistory.tsx` (new, server component, native `<details>`),
+  `page.tsx` (renders it per row when `events` exists), `lib/admin/types.ts` (`SmsLogEvent`),
+  `lib/i18n/format.ts` (`formatPersianTimestampSeconds`), `messages/en.json` (`admin.sms.history.*`).
+- `docs/DATA_MODEL.md`, `docs/CHANGELOG.md`.
+
+**Actions outside the repo**
+- Local Docker DB: cloned `postgres` → `smsev_clone`, applied the migration, ran `tests/sql/sms.sql`
+  (77 PASS), dropped the clone. Then `./deploy/bj-deploy update local` applied it to local `postgres`
+  (also rebuilt the local app container); restarted `bj-erp-rest-1`. Nothing on Liara.
+
+**Verification**
+- `tsc --noEmit`, `npm run lint`, `vitest` 1078 passed, `npm run build` OK.
+- Local `app_sms_log()` as admin returns rows/total (local outbox is empty, so no live rows to see).
+- Temp page `app/[locale]/zz-smshist` (deleted) with fake events: expanded timelines at desktop and
+  375 px, no horizontal scroll.
+
+**State left behind**
+- Committed on `claude/sms-log-history` (with the eye-toggle change below), pushed, PR
+  https://github.com/AmirNcode/bj-erp/pull/18 open. Migration applied to local DB → frozen.
+  Not merged, not deployed; merging deploys to Liara.
+
+**For the next agent**
+- Local `postgres` was already current with main here, so the CLAUDE.md "local DB lags main" note is stale.
+- `fa.json` has no `admin.sms.history` keys on purpose (admin panel is English only).
+
+---
+
+## 2026-11-04 — SMS: show/hide toggle on the API key field · OTP question
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 8caad49
+**Trigger:** Amir's 3 Dry-run test texts never arrived; asked for an eye icon on the API key box and whether the SMS setup "uses OTP" as the IT person said.
+
+**What changed**
+- `app/[locale]/(app)/admin/sms/SmsSettingsForm.tsx` — Eye/EyeOff button inside the API key input (same pattern as `SetPasswordForm`), `aria-pressed`, `data-testid="sms-api-key-toggle"`; resets to hidden after a save. It reveals only what was typed — a saved key is still never sent to the browser.
+- `messages/en.json` — `admin.sms.showKey` / `hideKey` (admin panel is English-only).
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- `npx tsc --noEmit` clean, `eslint` on the form clean, `vitest run tests/unit` 1078 passed.
+- Temp page `app/[locale]/zz-smskey` (deleted after): typed a fake key, toggle flipped type to `text`, label to "Hide the API key"; screenshot looked right.
+
+**State left behind**
+- Uncommitted on main. Not deployed.
+
+**For the next agent**
+- No-texts cause: mode was Dry run (never sends). Balance check also failed with Melipayamak's "کلید کنسول معتبر نیست" (invalid console key) — Amir must re-paste the key.
+- OTP: the app has no OTP sending. Melipayamak's OTP/"service" sending = pattern (`send/shared`, approved bodyId) routed over their service lines, which reach numbers that block ads. Our Pattern mode already uses `send/shared`; it needs approved templates + bodyIds entered.
+
+---
+
 ## 2026-11-04 — PR #17 security review, F1 fix, merge and deploy
 
 **Agent:** Claude Opus 5.5 via Claude Code (desktop)

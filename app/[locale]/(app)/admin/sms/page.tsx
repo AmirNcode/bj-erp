@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { ErrorNote, Pager, PillLinks, Section } from '../_components/parts';
 import { SmsSettingsForm } from './SmsSettingsForm';
 import { SmsCreditButton, SmsTestForm } from './SmsActions';
+import { SmsLogHistory } from './SmsLogHistory';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -117,6 +118,7 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
                         .filter(Boolean).join(' · ')}
                     </p>
                   )}
+                  {row.events && <SmsLogHistory events={row.events} statusStyle={STATUS_STYLE} />}
                 </li>
               ))}
             </ul>

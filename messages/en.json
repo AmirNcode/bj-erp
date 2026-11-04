@@ -2099,6 +2099,8 @@
       "apiKeyHint": "From console.melipayamak.com. It is never shown again after saving.",
       "apiKeySaved": "A key is saved (ends {hint}). Leave empty to keep it.",
       "apiKeyNone": "No key saved yet.",
+      "showKey": "Show the API key",
+      "hideKey": "Hide the API key",
       "clearKey": "Remove the saved key",
       "username": "Username",
       "usernameHint": "For reference only; the API key signs the requests.",
@@ -2162,6 +2164,29 @@
         "sms_off": "SMS was off"
       },
       "attempts": "{count, plural, one {# attempt} other {# attempts}}",
+      "history": {
+        "show": "Show history ({count})",
+        "hide": "Hide history",
+        "empty": "No steps recorded.",
+        "backfilled": "This text was sent before history was recorded; only its start and end are shown.",
+        "queued": "Queued; the next send run (every 30 seconds) picks it up.",
+        "retry": "Will try again at {time} (attempt {attempt}).",
+        "sending": "Waiting for Melipayamak's reply.",
+        "sent": "Melipayamak accepted it (ref {ref}). Delivery to the phone is up to the operator.",
+        "dryRun": "Dry run: shown here, never sent to Melipayamak.",
+        "failed": "Failed; it will not be retried.",
+        "skipped": "Skipped: {reason}",
+        "request": "Sent to Melipayamak: {endpoint}, attempt {attempt}.",
+        "requestPattern": "Sent to Melipayamak: {endpoint} with pattern {bodyId}, attempt {attempt}.",
+        "reply": "Melipayamak replied: HTTP {code}.",
+        "replyTimedOut": "No answer: the request timed out.",
+        "replyNone": "No answer from Melipayamak.",
+        "providerSaid": "Provider message: {message}",
+        "error": "Error: {error}",
+        "response": "Raw reply",
+        "kindRequest": "Request",
+        "kindReply": "Reply"
+      },
       "noRecipient": "—"
     },
     "system": {

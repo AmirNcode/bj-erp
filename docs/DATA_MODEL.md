@@ -605,6 +605,13 @@ the retired `absences` permission item (migration `20261102150000`).
   `next_attempt_at`, `net_request_id` (pg_net), `provider_ref` (recId), `error`. Unique: one approver text
   per (request, step, person); one decision text per request. Password rows are masked at the first
   dispatch, or at once when skipped. Purged after 180 days.
+- `private.sms_outbox_events` — history of each text, shown when a log row is expanded: `kind`
+  status (written by trigger `sms_outbox_log_status` on any `status`/`attempts` change) | request
+  (`endpoint` send/simple or send/shared, `body_id`, `attempt`) | reply (`http_status`, `timed_out`,
+  `error` = pg_net error, `response` ≤ 500 chars). Status rows copy `error`, `skip_reason`, `retry_at`,
+  `provider_ref`. Never holds the URL (it carries the key) or a request body; replies are scrubbed of the
+  key. `backfilled` marks the two-step summary of texts sent before 2026-11-04. Cascades with its text.
+  Read only through `app_sms_log` (`events` per row).
 - Queueing: deferred constraint triggers on `leave_requests` (insert, status change) and
   `leave_request_approvals` (insert) call `private.sms_enqueue_request` at commit; they never raise.
   Recipients = active people for whom `private.can_approve_step` holds on each open step (order on: the

@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +29,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
   const t = useTranslations('admin.sms');
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [showKey, setShowKey] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [form, setForm] = useState<SmsSettingsInput>({
     mode: initial.mode,
@@ -63,6 +65,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
       }
       setMessage({ ok: true, text: t('saved') });
       setForm((f) => ({ ...f, apiKey: '', clearApiKey: false }));
+      setShowKey(false);
       router.refresh();
     });
   }
@@ -92,9 +95,17 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="sms-api-key">{t('apiKey')}</Label>
-          <Input id="sms-api-key" type="password" autoComplete="off" dir="ltr" value={form.apiKey}
-            onChange={(e) => set('apiKey', e.target.value)} disabled={form.clearApiKey} data-testid="sms-api-key"
-            placeholder={initial.has_api_key ? '••••••••' : ''} />
+          <div className="relative">
+            <Input id="sms-api-key" type={showKey ? 'text' : 'password'} autoComplete="off" spellCheck={false}
+              dir="ltr" value={form.apiKey} className="pe-10"
+              onChange={(e) => set('apiKey', e.target.value)} disabled={form.clearApiKey} data-testid="sms-api-key"
+              placeholder={initial.has_api_key ? '••••••••' : ''} />
+            <button type="button" onClick={() => setShowKey((v) => !v)} disabled={form.clearApiKey}
+              aria-label={showKey ? t('hideKey') : t('showKey')} aria-pressed={showKey} data-testid="sms-api-key-toggle"
+              className="absolute inset-y-0 end-0 flex items-center rounded-md px-3 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-50">
+              {showKey ? <EyeOff aria-hidden="true" className="size-4" /> : <Eye aria-hidden="true" className="size-4" />}
+            </button>
+          </div>
           <p className="text-xs text-muted-foreground">
             {initial.has_api_key ? t('apiKeySaved', { hint: initial.api_key_hint ?? '' }) : t('apiKeyNone')} {t('apiKeyHint')}
           </p>

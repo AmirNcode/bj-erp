@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### SMS log history (FR-78) — `main` (not deployed)
+
+- Admin › SMS › Log: each text has **Show history** with every step and its time — queued, the
+  request to Melipayamak, Melipayamak's reply (HTTP code and raw answer), sent / failed / retry, or
+  why it was skipped or only a dry run. Texts sent before this change show only their start and end.
+- The API key box has an eye button to check a pasted key before saving.
+
 ### Admin panel v2: sign-ins and sign-out (FR-79) · password rule (FR-80) — `claude/admin-panel` (not deployed)
 
 - **Admin panel is English only** now, left to right, whatever language the admin uses elsewhere.
