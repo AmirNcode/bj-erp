@@ -78,6 +78,37 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — Profile photos (FR-82): design walkthrough, spec draft
+
+**Agent:** Claude Opus 5.5 via Claude Code (cloud session)
+**Branch / HEAD at start:** main @ 1283860
+**Trigger:** HR wants profile photos to tell apart people with similar names; Amir asked to plan it.
+
+**What changed**
+- `docs/specs/2026-11-04-profile-photos-design.md` (new, DRAFT): owner decisions, `profile_photos`
+  table (JPEG data URL in Postgres, like FR-52 signatures), four RPCs, `/api/photo/[id]` cached
+  route, `PersonAvatar`, tests.
+- `docs/TASKS.md` — one backlog line.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Docs only; nothing run. Checked `supabase/schema.sql`: `profiles_select` scope, and that
+  `get_org_chart` / `get_replacement_candidates` are SECURITY DEFINER company-wide (drove the
+  "photo goes with name" rule).
+
+**State left behind**
+- Uncommitted on main. Spec awaits owner review; no plan, no code.
+
+**For the next agent**
+- Owner answers: employee + HR upload, HR lock, visibility = wherever the name shows, placements =
+  employees / approvals + detail / pickers + org chart / profile + header, one-by-one upload only,
+  keep photos for leavers, audit log entries.
+- JPEG not WebP (Safari canvas cannot encode WebP). Verify any crop library via Context7.
+
+---
+
 ## 2026-11-04 — SMS log: expandable per-text history (status steps, provider request/reply)
 
 **Agent:** Claude Opus 5.5 via Claude Code
