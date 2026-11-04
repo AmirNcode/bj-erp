@@ -194,6 +194,18 @@ export async function setActive(
 }
 
 /**
+ * FR-79: signs the person out on every device (admin only; never the admin themself). Pages already
+ * open keep working until their access token expires, at most 60 minutes.
+ */
+export async function signOutEverywhere(id: string): Promise<{ ok: true; count: number } | DbErrorResult> {
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_revoke_sessions', { p_user: id });
+  if (error) return dbErr(error.message);
+  return { ok: true, count: data ?? 0 };
+}
+
+/**
  * Resets an employee's password and returns the new temp password.
  * Admin-only. The new password is shown once to the admin.
  */

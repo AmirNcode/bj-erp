@@ -5,6 +5,11 @@ export const MIN_PASSWORD_LENGTH = 8;
 // the same number is also the character limit and no two accepted passwords
 // can silently collapse to the same hash input.
 export const MAX_PASSWORD_LENGTH = 72;
+/**
+ * FR-80 (owner, 2026-11-04): at least one digit and one of these. Printable ASCII punctuation; a
+ * space is allowed but does not count. Mirrors `private.assert_password_ok` in SQL, which decides.
+ */
+export const PASSWORD_SPECIALS = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
 
 /**
  * Passwords are latin. Temp passwords are generated from an ASCII alphabet and
@@ -24,9 +29,20 @@ export function toLatinPassword(value: string): string {
 
 export type PasswordValidation =
   | { ok: true }
-  | { ok: false; reason: 'empty_current' | 'too_short' | 'too_long' | 'mismatch' };
+  | { ok: false; reason: PasswordProblem };
 
-/** Client-side gate for the change-password form. The SQL fn re-checks length + current password. */
+export type PasswordProblem = 'empty_current' | 'too_short' | 'too_long' | 'needs_digit' | 'needs_symbol' | 'mismatch';
+
+/** The FR-80 rule alone (length, digit, special character), or null when the password passes. */
+export function passwordRuleProblem(password: string): 'too_short' | 'too_long' | 'needs_digit' | 'needs_symbol' | null {
+  if (password.length < MIN_PASSWORD_LENGTH) return 'too_short';
+  if (password.length > MAX_PASSWORD_LENGTH) return 'too_long';
+  if (!/[0-9]/.test(password)) return 'needs_digit';
+  if (![...password].some((ch) => PASSWORD_SPECIALS.includes(ch))) return 'needs_symbol';
+  return null;
+}
+
+/** Client-side gate for the change-password form. The SQL fn re-checks the rule + current password. */
 export function validatePassword(current: string, next: string, confirm: string): PasswordValidation {
   if (!current) return { ok: false, reason: 'empty_current' };
   return validateNewPassword(next, confirm);
@@ -36,9 +52,9 @@ export function validatePassword(current: string, next: string, confirm: string)
 export function validateNewPassword(
   next: string,
   confirm: string
-): Exclude<PasswordValidation, { reason: 'empty_current' }> {
-  if (next.length < MIN_PASSWORD_LENGTH) return { ok: false, reason: 'too_short' };
-  if (next.length > MAX_PASSWORD_LENGTH) return { ok: false, reason: 'too_long' };
+): { ok: true } | { ok: false; reason: Exclude<PasswordProblem, 'empty_current'> } {
+  const problem = passwordRuleProblem(next);
+  if (problem) return { ok: false, reason: problem };
   if (next !== confirm) return { ok: false, reason: 'mismatch' };
   return { ok: true };
 }

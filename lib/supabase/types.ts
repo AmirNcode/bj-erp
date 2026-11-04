@@ -1773,9 +1773,14 @@ export type Database = {
         Args: {
           p_from?: string | null; p_to?: string | null; p_actor?: string | null
           p_entity?: string | null; p_action?: string | null; p_limit?: number; p_offset?: number
+          p_target?: string | null
         }
         Returns: Json
       }
+      // FR-79 sign-ins and force sign-out (admin only).
+      app_admin_sign_ins: { Args: { p_limit?: number }; Returns: Json }
+      app_revoke_sessions: { Args: { p_user: string }; Returns: number }
+      app_revoke_all_sessions: { Args: Record<PropertyKey, never>; Returns: number }
       // FR-78 SMS. The API key is write-only: app_sms_settings never returns it.
       app_sms_settings: { Args: Record<PropertyKey, never>; Returns: Json }
       app_set_sms_settings: {

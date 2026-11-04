@@ -1,4 +1,5 @@
 /** FR-77 admin panel › Overview: usage stats for a period. */
+import { ADMIN_LOCALE } from '@/lib/admin/locale';
 import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getAdminOverview, getSmsLog } from '@/lib/actions/admin';
@@ -26,11 +27,11 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
   const { locale } = await params;
   setRequestLocale(locale);
   const range = parseOverviewRange((await searchParams).range);
-  const t = await getTranslations('admin');
+  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: 'admin' });
   const [result, sms] = await Promise.all([getAdminOverview(range), getSmsLog({ page: 1 })]);
   if (!result.ok) return <ErrorNote message={result.error} />;
   const { overview } = result;
-  const n = (value: number) => formatNumber(value, locale);
+  const n = (value: number) => formatNumber(value, ADMIN_LOCALE);
 
   const stepLabel = (step: StuckRequest['waiting_on']) => {
     if (!step) return t('steps.none');
@@ -66,7 +67,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
           }))}
         />
         <p className="text-xs text-muted-foreground">
-          {formatLongPersianDate(result.from, locale)} – {formatLongPersianDate(result.to, locale)}
+          {formatLongPersianDate(result.from, ADMIN_LOCALE)} – {formatLongPersianDate(result.to, ADMIN_LOCALE)}
         </p>
       </div>
 
@@ -134,7 +135,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
                         {r.employee_name} · {t(`kinds.${KIND_KEYS[`${r.kind}-${r.unit}`]}`)}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {formatSerialLocalized(r.serial_year, r.serial_seq, locale)} · {t('overview.waitingOn', { step: stepLabel(r.waiting_on) })}
+                        {formatSerialLocalized(r.serial_year, r.serial_seq, ADMIN_LOCALE)} · {t('overview.waitingOn', { step: stepLabel(r.waiting_on) })}
                       </span>
                     </span>
                     <span className="rounded-full bg-warning-foreground px-2.5 py-0.5 text-xs font-semibold text-warning">
@@ -155,7 +156,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
           ) : (
             <ul className="flex flex-col gap-3">
               {overview.leave_by_department.map((d) => {
-                const name = (locale === 'fa' ? d.name_fa : d.name_en ?? d.name_fa) ?? t('overview.noDepartment');
+                const name = (d.name_en ?? d.name_fa) ?? t('overview.noDepartment');
                 const days = n(Math.round((d.minutes / perDay) * 10) / 10);
                 return (
                   <li key={d.department_id ?? 'none'} className="text-sm">

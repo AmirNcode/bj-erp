@@ -10,6 +10,7 @@ const TABS = [
   { key: 'sms', href: '/sms' },
   { key: 'system', href: '/system' },
   { key: 'audit', href: '/audit' },
+  { key: 'signIns', href: '/sign-ins' },
 ] as const;
 
 /** Same segmented control as Settings' tabs. */

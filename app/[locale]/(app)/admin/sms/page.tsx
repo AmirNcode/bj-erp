@@ -1,4 +1,5 @@
 /** FR-78 admin panel › SMS: settings, test, balance and the log. */
+import { ADMIN_LOCALE } from '@/lib/admin/locale';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getSmsLog, getSmsSettings } from '@/lib/actions/admin';
 import { SMS_PAGE_SIZE, parsePage } from '@/lib/admin/format';
@@ -38,7 +39,7 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
   const status = STATUSES.find((s) => s === one(sp.status)) ?? null;
   const event = EVENTS.find((e) => e === one(sp.event)) ?? null;
   const page = parsePage(sp.page);
-  const t = await getTranslations('admin');
+  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: 'admin' });
   const [settings, log] = await Promise.all([getSmsSettings(), getSmsLog({ status, event, page })]);
   if (!settings.ok) return <ErrorNote message={settings.error} />;
   const s = settings.settings;
@@ -70,11 +71,11 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
           <Section title={t('sms.credit')} testId="admin-sms-credit">
             <div className="flex flex-col gap-2 text-sm">
               {s.credit_amount !== null && (
-                <p className="text-lg font-semibold tabular-nums">{t('sms.creditAmount', { amount: formatNumber(s.credit_amount, locale) })}</p>
+                <p className="text-lg font-semibold tabular-nums">{t('sms.creditAmount', { amount: formatNumber(s.credit_amount, ADMIN_LOCALE) })}</p>
               )}
               <p className="text-xs text-muted-foreground">
                 {s.credit_pending ? t('sms.creditPending')
-                  : s.credit_checked_at ? t('sms.creditChecked', { time: formatPersianConsentTimestamp(s.credit_checked_at, locale) })
+                  : s.credit_checked_at ? t('sms.creditChecked', { time: formatPersianConsentTimestamp(s.credit_checked_at, ADMIN_LOCALE) })
                     : t('sms.creditNever')}
               </p>
               {s.credit_error && <p className="text-xs text-destructive">{t('sms.creditError', { error: s.credit_error })}</p>}
@@ -107,7 +108,7 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
                     <Badge variant="outline">{t(`sms.event.${row.event}`)}</Badge>
                     <span className="font-medium">{row.recipient_name ?? t('sms.noRecipient')}</span>
                     {row.to_mobile && <span dir="ltr" className="text-xs text-muted-foreground tabular-nums">{row.to_mobile}</span>}
-                    <span className="ms-auto text-xs text-muted-foreground">{formatPersianConsentTimestamp(row.created_at, locale)}</span>
+                    <span className="ms-auto text-xs text-muted-foreground">{formatPersianConsentTimestamp(row.created_at, ADMIN_LOCALE)}</span>
                   </div>
                   <p dir="auto" className="whitespace-pre-line text-start text-muted-foreground">{row.body}</p>
                   {(row.skip_reason || row.error || row.attempts > 1) && (

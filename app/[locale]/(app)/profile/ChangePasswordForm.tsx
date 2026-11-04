@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { changeMyPassword } from '@/lib/actions/profile';
-import { validatePassword, toLatinPassword } from '@/lib/auth/passwordPolicy';
+import { validatePassword, toLatinPassword, type PasswordProblem } from '@/lib/auth/passwordPolicy';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,9 @@ function useLabels() {
     changed: tp('changed'),
     tooShort: tp('tooShort'),
     tooLong: tp('tooLong'),
+    needsDigit: tp('needsDigit'),
+    needsSymbol: tp('needsSymbol'),
+    rule: tp('rule'),
     mismatch: tp('mismatch'),
     emptyCurrent: tp('emptyCurrent'),
     errorLabel: t('error'),
@@ -36,14 +39,15 @@ export function ChangePasswordForm() {
   const [errMsg, setErrMsg] = useState('');
   const [isPending, startTransition] = useTransition();
 
-  const reasonMsg = (reason: 'empty_current' | 'too_short' | 'too_long' | 'mismatch') =>
-    reason === 'empty_current'
-      ? labels.emptyCurrent
-      : reason === 'too_short'
-        ? labels.tooShort
-        : reason === 'too_long'
-          ? labels.tooLong
-        : labels.mismatch;
+  const reasonMsg = (reason: PasswordProblem) =>
+    ({
+      empty_current: labels.emptyCurrent,
+      too_short: labels.tooShort,
+      too_long: labels.tooLong,
+      needs_digit: labels.needsDigit,
+      needs_symbol: labels.needsSymbol,
+      mismatch: labels.mismatch,
+    })[reason];
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,7 +125,9 @@ export function ChangePasswordForm() {
           value={next}
           onChange={(e) => setNext(toLatinPassword(e.target.value))}
           disabled={isPending}
+          aria-describedby="pwd-rule"
         />
+        <p id="pwd-rule" className="text-xs text-muted-foreground">{labels.rule}</p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="pwd-confirm">{labels.confirm}</Label>

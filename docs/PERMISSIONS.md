@@ -789,6 +789,16 @@ password)`. `private.sms_settings` is unreachable from PostgREST; `sms_outbox` h
 SELECT, own company) and no write policy. `app_health()` is open to anon (returns only true). UI guard:
 `/admin` layout → `requireAdminPage(locale, '/home')`.
 
+**v2 (FR-79 / FR-80, 2026-11-04):** admin only, `private.require_admin()` first:
+`app_admin_sign_ins(limit)`, `app_revoke_sessions(user)` (refuses the caller, 22023, and people of
+another company, P0002), `app_revoke_all_sessions()` (everyone in the company but the caller), and
+`app_audit_log(…, p_target)`. Execute is granted to `authenticated` only (not anon). Sign-outs also run
+from `app_set_employee_password` / `app_bulk_set_employee_passwords` (whoever may reset) and from the
+`profiles` trigger when `active` goes false, through `private.revoke_sessions` (never the caller; one
+`sessions.revoke` audit row). `private.record_offsite_copies` and `private.assert_password_ok` are not
+callable by the app (private schema, `revoke all from public`); the first is run by
+`deploy/liara/pull-backups-to-mac.sh` as the superuser inside the db container.
+
 ### Admin-only identity RPCs (2026-11-02)
 
 `app_create_employee(…, p_login_code)`: only the admin may pass a login code. `app_admin_set_personnel_no(uuid, text)`: admin only, same company; the login code follows the number. `app_approval_history(int, int)`: decided requests the caller approved or rejected a step of (`leave_request_approvals.approver_id`); the admin sees every decided request of the company.

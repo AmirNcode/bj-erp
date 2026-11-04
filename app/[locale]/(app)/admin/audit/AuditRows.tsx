@@ -28,6 +28,9 @@ export function AuditRows({ rows, times }: { rows: AuditRow[]; times: Record<str
                 <span dir="ltr" className="font-mono text-xs">{row.entity}</span>
                 {row.entity_label ? ` · ${row.entity_label}` : ''}
               </span>
+              {row.about_name && row.about_name !== row.entity_label && (
+                <span className="text-xs text-muted-foreground">{t('about')}: {row.about_name}</span>
+              )}
               <span className="ms-auto text-xs text-muted-foreground">{times[row.id]}</span>
             </button>
             {expanded && (

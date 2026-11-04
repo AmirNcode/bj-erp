@@ -53,7 +53,7 @@
   "setPassword": {
     "title": "Choose your own password",
     "intro": "The password you were given is temporary. To continue, choose a new password that only you know.",
-    "hint": "At least 8 characters, using English letters and numbers.",
+    "hint": "At least 8 characters with at least one digit and one special character (such as ! @ # $ %), using English letters.",
     "new": "New password",
     "confirm": "Confirm new password",
     "submit": "Save and continue",
@@ -295,7 +295,10 @@
       "tooShort": "New password must be at least 8 characters.",
       "tooLong": "New password must be no more than 72 characters.",
       "mismatch": "Password confirmation does not match.",
-      "emptyCurrent": "Enter your current password."
+      "emptyCurrent": "Enter your current password.",
+      "needsDigit": "New password must contain at least one digit (0–9).",
+      "needsSymbol": "New password must contain at least one special character, such as ! @ # $ or %.",
+      "rule": "At least 8 characters, with at least one digit and one special character (such as ! @ # $ %)."
     },
     "logoutConfirm": {
       "trigger": "Log out",
@@ -618,6 +621,8 @@
       "securityOnlyHint": "Security without Employee (a subcontractor): no requests and no leave balance. Add Employee to give both.",
       "adminTransferHint": "Admin is moved with Transfer admin in Settings › Roles.",
       "accountActions": "Account",
+      "signOutEverywhere": "Sign out on all devices",
+      "signedOutDevices": "{count, plural, =0 {No open sessions.} one {Signed out of # device. Open pages stop within 60 minutes.} other {Signed out of # devices. Open pages stop within 60 minutes.}}",
       "loginCode": "Login code",
       "loginCodeHint": "Leave empty to use the personnel number (if it has no spaces, @ or non-English letters). Letters, digits and symbols; no spaces or @.",
       "editPersonnelNo": "Change personnel number",
@@ -1003,6 +1008,9 @@
     "wrongCurrentPassword": "The current password is incorrect.",
     "passwordTooShort": "The new password must be at least 8 characters.",
     "passwordTooLong": "The new password must be no more than 72 ASCII characters.",
+    "passwordNeedsDigit": "The new password must contain at least one digit (0–9).",
+    "passwordNeedsSymbol": "The new password must contain at least one special character, such as ! @ # $ or %.",
+    "cannotSignOutSelf": "Use the Profile page to sign yourself out.",
     "invalidEmployeeCode": "Invalid employee code (latin letters, digits, dot, dash, underscore only).",
     "duplicateEmployeeCode": "This login code is already in use.",
     "duplicatePersonnelNo": "This personnel number is already in use by another employee.",
@@ -2011,7 +2019,8 @@
       "overview": "Overview",
       "sms": "SMS",
       "system": "System",
-      "audit": "Audit log"
+      "audit": "Audit log",
+      "signIns": "Sign-ins"
     },
     "range": {
       "label": "Period",
@@ -2183,7 +2192,14 @@
       "backups": "Backups",
       "backupsNone": "No backup recorded yet.",
       "backupStale": "The newest backup is more than 36 hours old.",
-      "backupFresh": "Backups are current."
+      "backupFresh": "Backups are current.",
+      "offsite": "Off-server copy",
+      "offsiteNone": "No copy reported yet. Run deploy/liara/pull-backups-to-mac.sh on the Mac.",
+      "offsiteLast": "Last report {time} · newest copy {file}",
+      "offsiteStale": "The Mac has not reported a copy for more than 36 hours.",
+      "offsiteMissing": "{count, plural, one {# dump older than 36 hours is} other {# dumps older than 36 hours are}} not on the Mac: {files}",
+      "offsiteMismatch": "Copy differs from the server dump: {files}",
+      "offsiteOk": "The Mac holds every dump from the last 7 days."
     },
     "audit": {
       "range": "Period",
@@ -2203,7 +2219,34 @@
       "field": "Field",
       "before": "Before",
       "after": "After",
-      "total": "{count, plural, one {# entry} other {# entries}}"
+      "total": "{count, plural, one {# entry} other {# entries}}",
+      "doneBy": "Done by",
+      "about": "About",
+      "anyone": "Anyone",
+      "clear": "Clear",
+      "aboutGap": "\"About\" finds rows that name one person. Bulk imports list many people inside one row and are not matched."
+    },
+    "signIns": {
+      "recent": "Recent sign-ins",
+      "recentHint": "Password sign-ins, newest first. The sign-in service records no address.",
+      "recentNone": "No sign-ins recorded.",
+      "signedIn": "Signed in now",
+      "signedInCount": "{people, plural, one {# person} other {# people}} · {devices, plural, one {# device} other {# devices}}",
+      "search": "Search by name or login code",
+      "noMatch": "No one matches.",
+      "none": "No one is signed in.",
+      "devices": "{count, plural, one {# device} other {# devices}}",
+      "lastActive": "Last active {time}",
+      "inactive": "Inactive",
+      "you": "You",
+      "signOut": "Sign out on all devices",
+      "signOutAll": "Sign out everyone except me",
+      "confirmOne": "Sign {name} out on every device?",
+      "confirmAll": "Sign out everyone except you? Each person must sign in again.",
+      "confirm": "Sign out",
+      "cancel": "Cancel",
+      "done": "{count, plural, =0 {No open sessions.} one {Signed out of # device.} other {Signed out of # devices.}}",
+      "openPagesNote": "Pages that are already open keep working for up to 60 minutes."
     }
   }
 }

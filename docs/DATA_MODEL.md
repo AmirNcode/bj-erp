@@ -613,6 +613,13 @@ the retired `absences` permission item (migration `20261102150000`).
 - Sending: pg_cron `bj-sms-dispatch` (30 s) → `private.sms_dispatch()`: reads pg_net replies, then posts
   due rows to `console.melipayamak.com/api/send/{simple|shared}/<key>`. `recId` of 6+ digits = sent;
   5xx/timeout retry after 1 and 5 min (3 attempts); other errors fail at once.
+- v2 (2026-11-04): `private.offsite_copies` — `file_name` (PK, `daily-…Z.dump`), `sha256` of the
+  owner's Mac copy, `first_seen`, `last_seen`; upserted by `private.record_offsite_copies(text[])`
+  from `deploy/liara/pull-backups-to-mac.sh` after each pull; rows unseen for 90 days deleted.
+  `app_admin_system()->'offsite'` = last report, newest file, `missing` (dumps 36 h–7 d old never
+  reported), `mismatched` (sha256 ≠ `backup_runs.sha256`). Sign-outs delete `auth.sessions` rows
+  (refresh tokens cascade) and write `audit_log` `sessions.revoke` / `sessions.revoke_all`.
+  pg_cron `bj-purge-cron-history` (21:00 UTC) deletes `cron.job_run_details` older than 7 days.
 
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·

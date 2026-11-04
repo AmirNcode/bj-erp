@@ -506,6 +506,30 @@ $$;
 
 
 --
+-- Name: assert_password_ok(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.assert_password_ok(p text) RETURNS void
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+begin
+  if length(coalesce(p, '')) < 8 then
+    raise exception 'new password must be at least 8 characters' using errcode = '22023';
+  end if;
+  if octet_length(p) > 72 then
+    raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
+  end if;
+  if translate(p, '0123456789', '') = p then
+    raise exception 'new password must contain a digit' using errcode = '22023';
+  end if;
+  if translate(p, '!"#$%&''()*+,-./:;<=>?@[\]^_`{|}~', '') = p then
+    raise exception 'new password must contain a special character' using errcode = '22023';
+  end if;
+end $_$;
+
+
+--
 -- Name: attach_request_signature(uuid, text, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -574,7 +598,7 @@ end; $$;
 CREATE FUNCTION private.audit_redact(p jsonb) RETURNS jsonb
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
-    AS $$
+    AS $_$
   select case when p is null or jsonb_typeof(p) <> 'object' then p else
     (select coalesce(jsonb_object_agg(k, case
         when k ~* '(^|_)(signature_data|password|secret|api_key|token)$' and v <> 'null'::jsonb
@@ -583,7 +607,7 @@ CREATE FUNCTION private.audit_redact(p jsonb) RETURNS jsonb
           then to_jsonb(left(v #>> '{}', 120) || '…'::text)
         else v end), '{}'::jsonb)
        from jsonb_each(p) as e(k, v)) end;
-$$;
+$_$;
 
 
 --
@@ -878,9 +902,7 @@ begin
     end if;
     raise exception 'invalid personnel number (1-10 digits)' using errcode = '22023';
   end if;
-  if length(coalesce(p_password, '')) < 8 then
-    raise exception 'new password must be at least 8 characters' using errcode = '22023';
-  end if;
+  perform private.assert_password_ok(p_password);  -- FR-80
   if coalesce(btrim(p_full_name), '') = '' then
     raise exception 'full name is required' using errcode = '22023';
   end if;
@@ -2114,6 +2136,20 @@ end; $$;
 
 
 --
+-- Name: profiles_revoke_on_deactivate(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.profiles_revoke_on_deactivate() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  perform private.revoke_sessions(new.id, 'deactivated');
+  return null;
+end $$;
+
+
+--
 -- Name: reads_balances(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2160,6 +2196,32 @@ CREATE FUNCTION private.record_backup(p_file text, p_bytes bigint, p_sha256 text
   insert into private.backup_runs (file_name, size_bytes, sha256) values (p_file, p_bytes, p_sha256);
   delete from private.backup_runs where finished_at < now() - interval '90 days';
 $$;
+
+
+--
+-- Name: record_offsite_copies(text[]); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.record_offsite_copies(p_copies text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_item text;
+  v_n integer := 0;
+begin
+  foreach v_item in array coalesce(p_copies, '{}') loop
+    if v_item !~ '^daily-[0-9]{8}T[0-9]{6}Z\.dump:[0-9a-f]{64}$' then
+      raise exception 'invalid offsite copy entry' using errcode = '22023';
+    end if;
+    insert into private.offsite_copies (file_name, sha256)
+    values (split_part(v_item, ':', 1), split_part(v_item, ':', 2))
+    on conflict (file_name) do update set sha256 = excluded.sha256, last_seen = now();
+    v_n := v_n + 1;
+  end loop;
+  delete from private.offsite_copies where last_seen < now() - interval '90 days';
+  return v_n;
+end $_$;
 
 
 --
@@ -2275,6 +2337,30 @@ begin
     raise exception 'admin only' using errcode = '42501';
   end if;
   return private.caller_company();
+end $$;
+
+
+--
+-- Name: revoke_sessions(uuid, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.revoke_sessions(p_user uuid, p_reason text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_actor uuid := auth.uid();
+  v_n integer;
+begin
+  if p_user is null or p_user = v_actor then return 0; end if;
+  delete from auth.sessions where user_id = p_user;
+  get diagnostics v_n = row_count;
+  if v_n > 0 or p_reason = 'admin' then
+    insert into public.audit_log (actor_id, action, entity, entity_id, after)
+    values (v_actor, 'sessions.revoke', 'auth.users', p_user,
+            jsonb_build_object('sessions', v_n, 'reason', p_reason));
+  end if;
+  return v_n;
 end $$;
 
 
@@ -3472,6 +3558,18 @@ $$;
 
 
 --
+-- Name: try_uuid(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.try_uuid(p text) RETURNS uuid
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case when p ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then p::uuid end;
+$_$;
+
+
+--
 -- Name: user_roles_sync(); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -3944,6 +4042,42 @@ end; $$;
 
 
 --
+-- Name: app_admin_sign_ins(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_admin_sign_ins(p_limit integer DEFAULT 100) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  v_limit integer := least(greatest(coalesce(p_limit, 100), 1), 500);
+  v_result jsonb;
+begin
+  select jsonb_build_object(
+    'logins', (select coalesce(jsonb_agg(jsonb_build_object('at', l.created_at, 'user_id', l.user_id,
+          'full_name', l.full_name, 'employee_code', l.employee_code) order by l.created_at desc), '[]')
+      from (select e.created_at, p.id as user_id, p.full_name, p.employee_code
+              from auth.audit_log_entries e
+              join public.profiles p on p.id = private.try_uuid(e.payload->>'actor_id')
+             where e.payload->>'action' = 'login' and p.company_id = v_company
+             order by e.created_at desc
+             limit v_limit) l),
+    'sessions', (select coalesce(jsonb_agg(jsonb_build_object('user_id', x.user_id,
+          'full_name', x.full_name, 'employee_code', x.employee_code, 'active', x.active,
+          'devices', x.devices, 'last_active', x.last_active) order by x.last_active desc nulls last), '[]')
+      from (select p.id as user_id, p.full_name, p.employee_code, p.active, count(*) as devices,
+                   max(greatest(s.updated_at, s.refreshed_at at time zone 'UTC', s.created_at)) as last_active
+              from auth.sessions s
+              join public.profiles p on p.id = s.user_id
+             where p.company_id = v_company
+             group by p.id) x)
+  ) into v_result;
+  return v_result;
+end $$;
+
+
+--
 -- Name: app_admin_system(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3993,7 +4127,18 @@ begin
     'jobs', v_jobs,
     'backups', (select coalesce(jsonb_agg(jsonb_build_object('file_name', file_name,
         'size_bytes', size_bytes, 'finished_at', finished_at) order by finished_at desc), '[]')
-      from (select * from private.backup_runs order by finished_at desc limit 5) b)
+      from (select * from private.backup_runs order by finished_at desc limit 5) b),
+    -- FR-77 v2: what the owner's Mac reported holding (deploy/liara/pull-backups-to-mac.sh).
+    'offsite', jsonb_build_object(
+      'last_report', (select max(last_seen) from private.offsite_copies),
+      'newest_file', (select file_name from private.offsite_copies order by file_name desc limit 1),
+      'missing', (select coalesce(jsonb_agg(b.file_name order by b.file_name desc), '[]')
+          from private.backup_runs b
+         where b.finished_at > now() - interval '7 days' and b.finished_at < now() - interval '36 hours'
+           and not exists (select 1 from private.offsite_copies o where o.file_name = b.file_name)),
+      'mismatched', (select coalesce(jsonb_agg(b.file_name order by b.file_name desc), '[]')
+          from private.backup_runs b join private.offsite_copies o on o.file_name = b.file_name
+         where b.sha256 is not null and o.sha256 is distinct from b.sha256))
   ) into v_result;
   return v_result;
 end $_$;
@@ -4093,10 +4238,10 @@ $$;
 
 
 --
--- Name: app_audit_log(date, date, uuid, text, text, integer, integer); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_audit_log(date, date, uuid, text, text, integer, integer, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_audit_log(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_actor uuid DEFAULT NULL::uuid, p_entity text DEFAULT NULL::text, p_action text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0) RETURNS jsonb
+CREATE FUNCTION public.app_audit_log(p_from date DEFAULT NULL::date, p_to date DEFAULT NULL::date, p_actor uuid DEFAULT NULL::uuid, p_entity text DEFAULT NULL::text, p_action text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0, p_target uuid DEFAULT NULL::uuid) RETURNS jsonb
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -4105,11 +4250,22 @@ declare
   v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 200);
   v_result jsonb;
 begin
-  with scoped as (
-    select a.*
+  with base as (
+    -- FR-77 v2: the one person a row is about, when it names one.
+    select a.*, coalesce(
+        case when a.entity in ('profiles', 'auth.users', 'user_roles', 'employee_personal_info', 'user_signatures')
+          then a.entity_id end,
+        case when a.entity = 'leave_requests'
+          then (select r.employee_id from public.leave_requests r where r.id = a.entity_id) end,
+        private.try_uuid(coalesce(a.after->>'employee_id', a.before->>'employee_id',
+                                  a.after->>'user_id', a.before->>'user_id'))) as about_id
       from public.audit_log a
+  ), scoped as (
+    select a.*
+      from base a
       left join public.profiles ap on ap.id = a.actor_id
      where (ap.company_id = v_company or a.actor_id is null)
+       and (p_target is null or a.about_id = p_target)
        and (p_from is null or (a.created_at at time zone 'Asia/Tehran')::date >= p_from)
        and (p_to is null or (a.created_at at time zone 'Asia/Tehran')::date <= p_to)
        and (p_actor is null or a.actor_id = p_actor)
@@ -4124,10 +4280,12 @@ begin
           when s.entity = 'profiles' then (select full_name from public.profiles where id = s.entity_id)
           when s.entity = 'leave_requests' then (select r.serial_year || '-' || lpad(r.serial_seq::text, 4, '0')
             from public.leave_requests r where r.id = s.entity_id) end,
+        'about_id', s.about_id, 'about_name', ab.full_name,
         'before', private.audit_redact(s.before), 'after', private.audit_redact(s.after))
         order by s.created_at desc, s.id), '[]')
       from (select * from scoped order by created_at desc, id limit v_limit offset greatest(coalesce(p_offset, 0), 0)) s
-      left join public.profiles p on p.id = s.actor_id),
+      left join public.profiles p on p.id = s.actor_id
+      left join public.profiles ab on ab.id = s.about_id),
     'entities', (select coalesce(jsonb_agg(distinct a.entity), '[]') from public.audit_log a),
     'actions', (select coalesce(jsonb_agg(distinct a.action), '[]') from public.audit_log a)
   ) into v_result;
@@ -4728,12 +4886,7 @@ begin
     if v_row.user_id = v_uid then
       raise exception 'cannot bulk-reset your own password' using errcode = '22023';
     end if;
-    if length(coalesce(v_row.password, '')) < 8 then
-      raise exception 'new password must be at least 8 characters' using errcode = '22023';
-    end if;
-    if octet_length(coalesce(v_row.password, '')) > 72 then
-      raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
-    end if;
+    perform private.assert_password_ok(v_row.password);  -- FR-80
     if not exists (
       select 1
         from auth.users u
@@ -4766,6 +4919,7 @@ begin
 
     insert into public.audit_log (actor_id, action, entity, entity_id)
     values (v_uid, 'reset_password', 'auth.users', v_row.user_id);
+    perform private.revoke_sessions(v_row.user_id, 'password_reset');  -- FR-79
   end loop;
 end;
 $$;
@@ -4832,12 +4986,7 @@ begin
   if not private.is_active(v_uid) then
     raise exception 'account is inactive' using errcode = '42501';
   end if;
-  if length(coalesce(p_new, '')) < 8 then
-    raise exception 'new password must be at least 8 characters' using errcode = '22023';
-  end if;
-  if octet_length(coalesce(p_new, '')) > 72 then
-    raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
-  end if;
+  perform private.assert_password_ok(p_new);  -- FR-80
   if p_new = p_current then
     raise exception 'new password must differ from the current password' using errcode = '22023';
   end if;
@@ -5963,6 +6112,53 @@ end; $$;
 
 
 --
+-- Name: app_revoke_all_sessions(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_revoke_all_sessions() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+  v_n integer;
+  v_people integer;
+begin
+  with gone as (
+    delete from auth.sessions s
+     using public.profiles p
+     where p.id = s.user_id and p.company_id = v_company and s.user_id <> auth.uid()
+    returning s.user_id)
+  select count(*), count(distinct user_id) into v_n, v_people from gone;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (auth.uid(), 'sessions.revoke_all', 'auth.users', null,
+          jsonb_build_object('sessions', v_n, 'people', v_people, 'reason', 'admin'));
+  return v_n;
+end $$;
+
+
+--
+-- Name: app_revoke_sessions(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_revoke_sessions(p_user uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_company uuid := private.require_admin();
+begin
+  if p_user = auth.uid() then
+    raise exception 'cannot sign yourself out here' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.profiles where id = p_user and company_id = v_company) then
+    raise exception 'employee not found' using errcode = 'P0002';
+  end if;
+  return private.revoke_sessions(p_user, 'admin');
+end $$;
+
+
+--
 -- Name: app_revoke_special_leave(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6494,12 +6690,7 @@ begin
   if not private.can_reset_password(auth.uid(), p_user_id) then
     raise exception 'not allowed to reset this password' using errcode = '42501';
   end if;
-  if length(coalesce(p_password, '')) < 8 then
-    raise exception 'new password must be at least 8 characters' using errcode = '22023';
-  end if;
-  if octet_length(coalesce(p_password, '')) > 72 then
-    raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
-  end if;
+  perform private.assert_password_ok(p_password);  -- FR-80
 
   update auth.users
      set encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf')),
@@ -6520,6 +6711,8 @@ begin
 
   insert into public.audit_log (actor_id, action, entity, entity_id)
   values (auth.uid(), 'reset_password', 'auth.users', p_user_id);
+  -- FR-79: a reset password signs the person out everywhere (never the caller).
+  perform private.revoke_sessions(p_user_id, 'password_reset');
 end;
 $$;
 
@@ -6586,12 +6779,7 @@ begin
   ) then
     raise exception 'password change is not required' using errcode = '22023';
   end if;
-  if length(coalesce(p_new, '')) < 8 then
-    raise exception 'new password must be at least 8 characters' using errcode = '22023';
-  end if;
-  if octet_length(coalesce(p_new, '')) > 72 then
-    raise exception 'new password must be at most 72 ASCII characters' using errcode = '22023';
-  end if;
+  perform private.assert_password_ok(p_new);  -- FR-80
 
   select encrypted_password = extensions.crypt(p_new, encrypted_password)
     into v_same
@@ -8532,6 +8720,25 @@ ALTER TABLE private.backup_runs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY
 
 
 --
+-- Name: offsite_copies; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.offsite_copies (
+    file_name text NOT NULL,
+    sha256 text,
+    first_seen timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE offsite_copies; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.offsite_copies IS 'FR-77 v2: dumps the owner''s Mac holds, reported by deploy/liara/pull-backups-to-mac.sh via private.record_offsite_copies.';
+
+
+--
 -- Name: sms_settings; Type: TABLE; Schema: private; Owner: -
 --
 
@@ -9480,6 +9687,14 @@ ALTER TABLE ONLY public.leave_ledger ALTER COLUMN seq SET DEFAULT nextval('publi
 
 ALTER TABLE ONLY private.backup_runs
     ADD CONSTRAINT backup_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: offsite_copies offsite_copies_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.offsite_copies
+    ADD CONSTRAINT offsite_copies_pkey PRIMARY KEY (file_name);
 
 
 --
@@ -10441,6 +10656,13 @@ CREATE TRIGGER profiles_enforce_update_scope BEFORE UPDATE ON public.profiles FO
 --
 
 CREATE TRIGGER profiles_preserve_active_admin BEFORE UPDATE OF active ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.preserve_active_admin();
+
+
+--
+-- Name: profiles profiles_revoke_sessions_on_deactivate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER profiles_revoke_sessions_on_deactivate AFTER UPDATE OF active ON public.profiles FOR EACH ROW WHEN ((old.active AND (NOT new.active))) EXECUTE FUNCTION private.profiles_revoke_on_deactivate();
 
 
 --
@@ -11956,6 +12178,13 @@ REVOKE ALL ON FUNCTION private.approval_step_snapshot(p_request uuid, p_ids uuid
 
 
 --
+-- Name: FUNCTION assert_password_ok(p text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.assert_password_ok(p text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attach_request_signature(p_request_id uuid, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: private; Owner: -
 --
 
@@ -12305,6 +12534,13 @@ REVOKE ALL ON FUNCTION private.preserve_active_admin() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION profiles_revoke_on_deactivate(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.profiles_revoke_on_deactivate() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION reads_balances(uid uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -12333,6 +12569,13 @@ GRANT ALL ON FUNCTION private.reads_people(uid uuid) TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION private.record_backup(p_file text, p_bytes bigint, p_sha256 text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION record_offsite_copies(p_copies text[]); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.record_offsite_copies(p_copies text[]) FROM PUBLIC;
 
 
 --
@@ -12383,6 +12626,13 @@ REVOKE ALL ON FUNCTION private.request_step_decided(p_request uuid, p_step uuid,
 --
 
 REVOKE ALL ON FUNCTION private.require_admin() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION revoke_sessions(p_user uuid, p_reason text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.revoke_sessions(p_user uuid, p_reason text) FROM PUBLIC;
 
 
 --
@@ -12585,6 +12835,13 @@ REVOKE ALL ON FUNCTION private.travel_itinerary_without_costs(p_it jsonb) FROM P
 
 
 --
+-- Name: FUNCTION try_uuid(p text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.try_uuid(p text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION valid_login_code(p_code text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -12670,6 +12927,16 @@ GRANT ALL ON FUNCTION public.app_admin_set_personnel_no(p_user uuid, p_personnel
 
 
 --
+-- Name: FUNCTION app_admin_sign_ins(p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_admin_sign_ins(p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_admin_sign_ins(p_limit integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_admin_sign_ins(p_limit integer) TO authenticated;
+GRANT ALL ON FUNCTION public.app_admin_sign_ins(p_limit integer) TO service_role;
+
+
+--
 -- Name: FUNCTION app_admin_system(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -12710,13 +12977,13 @@ GRANT ALL ON FUNCTION public.app_approval_queue(p_status public.leave_status) TO
 
 
 --
--- Name: FUNCTION app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer, p_target uuid); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO postgres;
-GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO authenticated;
-GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer) TO service_role;
+REVOKE ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer, p_target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer, p_target uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer, p_target uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_audit_log(p_from date, p_to date, p_actor uuid, p_entity text, p_action text, p_limit integer, p_offset integer, p_target uuid) TO service_role;
 
 
 --
@@ -13008,6 +13275,26 @@ REVOKE ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new
 GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO postgres;
 GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_request_errand_extension(p_request uuid, p_new_end date, p_reason text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_revoke_all_sessions(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_revoke_all_sessions() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_revoke_all_sessions() TO postgres;
+GRANT ALL ON FUNCTION public.app_revoke_all_sessions() TO authenticated;
+GRANT ALL ON FUNCTION public.app_revoke_all_sessions() TO service_role;
+
+
+--
+-- Name: FUNCTION app_revoke_sessions(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_revoke_sessions(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_revoke_sessions(p_user uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_revoke_sessions(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_revoke_sessions(p_user uuid) TO service_role;
 
 
 --

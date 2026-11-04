@@ -4,7 +4,7 @@ import { PersonSearch } from '@/components/PersonSearch';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { updateEmployee, setRoles, setActive, resetPassword } from '@/lib/actions/employees';
+import { updateEmployee, setRoles, setActive, resetPassword, signOutEverywhere } from '@/lib/actions/employees';
 import type { PasswordSmsResult } from '@/lib/admin/types';
 import { setLeaveBalance, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
 import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
@@ -175,6 +175,7 @@ export function EditEmployeeForm({
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
   const [textPassword, setTextPassword] = useState(false);
   const [passwordSms, setPasswordSms] = useState<PasswordSmsResult>(null);
+  const [signedOut, setSignedOut] = useState<number | null>(null);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>(targetRoleIds);
   const [hireDate, setHireDate] = useState<PickerDate | null>(() =>
     employee.hire_date ? gregorianToPersianDateObject(employee.hire_date, locale) : null
@@ -317,6 +318,19 @@ export function EditEmployeeForm({
     }
     setNewTempPassword(result.tempPassword);
     setPasswordSms(result.sms);
+  }
+
+  async function handleSignOutEverywhere() {
+    setError(null);
+    setSignedOut(null);
+    setPending(true);
+    const result = await signOutEverywhere(employee.id);
+    setPending(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setSignedOut(result.count);
   }
 
   async function handleToggleActive() {
@@ -594,6 +608,20 @@ export function EditEmployeeForm({
                   />
                   {labels.textPassword}
                 </label>
+              </div>
+            )}
+            {caps.resetPassword && (
+              // FR-79: admin only, like the reset (resetPassword is admin-only since 20261013200007).
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
+                  data-testid="sign-out-everywhere">
+                  {t('signOutEverywhere')}
+                </Button>
+                {signedOut !== null && (
+                  <span role="status" className="text-xs text-muted-foreground" data-testid="signed-out-count">
+                    {t('signedOutDevices', { count: signedOut })}
+                  </span>
+                )}
               </div>
             )}
             {!caps.org ? null : employee.active ? (

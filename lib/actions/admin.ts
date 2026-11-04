@@ -6,8 +6,11 @@ import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { addDays } from '@/lib/leave/isoDate';
 import { todayInAppTz } from '@/lib/appDate';
 import { AUDIT_PAGE_SIZE, SMS_PAGE_SIZE, normalizeIrMobile, type OverviewRange } from '@/lib/admin/format';
+import { ADMIN_LOCALE } from '@/lib/admin/locale';
 import type {
   AdminOverview,
+  AdminSignIns,
+  AuditPerson,
   AdminSystemDb,
   AuditPage,
   ServiceCheck,
@@ -25,6 +28,9 @@ import type {
  */
 const requireAdmin = () => requireCaller({ anyOf: ['admin'] });
 
+/** The panel is English only (lib/admin/locale.ts), so its errors are too. */
+const adminErr = (raw: string) => dbErr(raw, { locale: ADMIN_LOCALE });
+
 export async function getAdminOverview(
   range: OverviewRange
 ): Promise<{ ok: true; overview: AdminOverview; from: string; to: string } | DbErrorResult> {
@@ -33,7 +39,7 @@ export async function getAdminOverview(
   const to = todayInAppTz();
   const from = addDays(to, -(range - 1));
   const { data, error } = await c.supabase.rpc('app_admin_overview', { p_from: from, p_to: to });
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   return { ok: true, overview: data as unknown as AdminOverview, from, to };
 }
 
@@ -67,7 +73,7 @@ export async function getAdminSystem(): Promise<
     probe('rest', async () =>
       (await fetch(`${base}/rest/v1/`, { cache: 'no-store', headers: { apikey: anon }, signal: signal() })).ok),
   ]);
-  if (system.error) return dbErr(system.error.message);
+  if (system.error) return adminErr(system.error.message);
   return {
     ok: true,
     db: system.data as unknown as AdminSystemDb,
@@ -82,6 +88,10 @@ export type AuditFilters = {
   to?: string | null;
   entity?: string | null;
   action?: string | null;
+  /** Who did it (FR-77 v2). */
+  actor?: string | null;
+  /** Whom it was about (FR-77 v2). */
+  target?: string | null;
   page: number;
 };
 
@@ -93,11 +103,59 @@ export async function getAuditLog(filters: AuditFilters): Promise<{ ok: true; lo
     p_to: filters.to || null,
     p_entity: filters.entity || null,
     p_action: filters.action || null,
+    p_actor: filters.actor || null,
+    p_target: filters.target || null,
     p_limit: AUDIT_PAGE_SIZE,
     p_offset: (filters.page - 1) * AUDIT_PAGE_SIZE,
   });
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   return { ok: true, log: data as unknown as AuditPage };
+}
+
+/** Everyone in the company, inactive included, for the audit log's person pickers. */
+export async function getAuditPeople(): Promise<{ ok: true; people: AuditPerson[] } | DbErrorResult> {
+  const c = await requireCaller({ anyOf: ['admin'], company: true });
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase
+    .from('profiles')
+    .select('id, full_name, personnel_no')
+    .eq('company_id', c.companyId)
+    .order('full_name');
+  if (error) return adminErr(error.message);
+  return {
+    ok: true,
+    people: (data ?? []).map((p) => ({ id: p.id, name: p.full_name, personnelNo: p.personnel_no })),
+  };
+}
+
+// ── Sign-ins and sign-out (FR-79) ───────────────────────────────────────────
+
+export async function getAdminSignIns(): Promise<{ ok: true; signIns: AdminSignIns; me: string } | DbErrorResult> {
+  const c = await requireAdmin();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_admin_sign_ins', { p_limit: 100 });
+  if (error) return adminErr(error.message);
+  return { ok: true, signIns: data as unknown as AdminSignIns, me: c.user.id };
+}
+
+/** Deletes the person's sessions; pages already open keep working until their token expires (≤ 60 min). */
+export async function revokeSessions(userId: string): Promise<{ ok: true; count: number } | DbErrorResult> {
+  const c = await requireAdmin();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_revoke_sessions', { p_user: userId });
+  if (error) return adminErr(error.message);
+  invalidateAppCache();
+  return { ok: true, count: data ?? 0 };
+}
+
+/** Everyone in the company except the admin. */
+export async function revokeAllSessions(): Promise<{ ok: true; count: number } | DbErrorResult> {
+  const c = await requireAdmin();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_revoke_all_sessions');
+  if (error) return adminErr(error.message);
+  invalidateAppCache();
+  return { ok: true, count: data ?? 0 };
 }
 
 // ── SMS (FR-78) ─────────────────────────────────────────────────────────────
@@ -106,7 +164,7 @@ export async function getSmsSettings(): Promise<{ ok: true; settings: SmsSetting
   const c = await requireAdmin();
   if (!c.ok) return c;
   const { data, error } = await c.supabase.rpc('app_sms_settings');
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   return { ok: true, settings: data as unknown as SmsSettings };
 }
 
@@ -150,7 +208,7 @@ export async function saveSmsSettings(input: SmsSettingsInput): Promise<{ ok: tr
     p_api_key: input.apiKey.trim() || null,
     p_clear_api_key: input.clearApiKey,
   });
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   invalidateAppCache();
   return { ok: true };
 }
@@ -159,9 +217,9 @@ export async function sendSmsTest(mobile: string): Promise<{ ok: true } | DbErro
   const c = await requireAdmin();
   if (!c.ok) return c;
   const normalized = normalizeIrMobile(mobile);
-  if (!normalized) return dbErr('invalid mobile');
+  if (!normalized) return adminErr('invalid mobile');
   const { error } = await c.supabase.rpc('app_sms_test', { p_mobile: normalized });
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   invalidateAppCache();
   return { ok: true };
 }
@@ -170,7 +228,7 @@ export async function checkSmsCredit(): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireAdmin();
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_sms_check_credit');
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   invalidateAppCache();
   return { ok: true };
 }
@@ -188,6 +246,6 @@ export async function getSmsLog(filters: {
     p_limit: SMS_PAGE_SIZE,
     p_offset: (filters.page - 1) * SMS_PAGE_SIZE,
   });
-  if (error) return dbErr(error.message);
+  if (error) return adminErr(error.message);
   return { ok: true, log: data as unknown as SmsLog };
 }

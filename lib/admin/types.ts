@@ -65,6 +65,13 @@ export type AdminSystemDb = {
   migration_count: number;
   jobs: CronJob[];
   backups: { file_name: string; size_bytes: number; finished_at: string }[];
+  /** FR-77 v2: what the owner's Mac reported holding (deploy/liara/pull-backups-to-mac.sh). */
+  offsite: {
+    last_report: string | null;
+    newest_file: string | null;
+    missing: string[];
+    mismatched: string[];
+  };
 };
 
 export type ServiceCheck = { name: 'database' | 'auth' | 'rest'; ok: boolean; ms: number | null };
@@ -78,6 +85,9 @@ export type AuditRow = {
   entity: string;
   entity_id: string | null;
   entity_label: string | null;
+  /** The one person the row is about, when it names one (FR-77 v2). */
+  about_id: string | null;
+  about_name: string | null;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
 };
@@ -132,3 +142,20 @@ export type SmsLog = { total: number; rows: SmsLogRow[]; counts: Partial<Record<
 
 /** What the reset-password flow reports about its optional SMS. */
 export type PasswordSmsResult = 'queued' | 'skipped' | 'off' | 'failed' | null;
+
+// ── FR-79 sign-ins ──────────────────────────────────────────────────────────
+
+export type SignInEvent = { at: string; user_id: string; full_name: string; employee_code: string };
+
+export type SignedInPerson = {
+  user_id: string;
+  full_name: string;
+  employee_code: string;
+  active: boolean;
+  devices: number;
+  last_active: string | null;
+};
+
+export type AdminSignIns = { logins: SignInEvent[]; sessions: SignedInPerson[] };
+
+export type AuditPerson = { id: string; name: string; personnelNo: string | null };

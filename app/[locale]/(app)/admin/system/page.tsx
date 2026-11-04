@@ -1,4 +1,5 @@
 /** FR-77 admin panel › System: version, service checks, database, migrations, jobs, backups. */
+import { ADMIN_LOCALE } from '@/lib/admin/locale';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getAdminSystem } from '@/lib/actions/admin';
 import { backupIsStale, formatBytes } from '@/lib/admin/format';
@@ -16,13 +17,17 @@ const badStyle = 'bg-destructive/10 text-destructive border-destructive/20';
 export default async function AdminSystemPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = await getTranslations('admin.system');
+  const t = await getTranslations({ locale: ADMIN_LOCALE, namespace: 'admin.system' });
   const result = await getAdminSystem();
   if (!result.ok) return <ErrorNote message={result.error} />;
   const { db, services } = result;
-  const when = (iso: string) => formatPersianConsentTimestamp(iso, locale);
+  const when = (iso: string) => formatPersianConsentTimestamp(iso, ADMIN_LOCALE);
   const newestBackup = db.backups[0]?.finished_at ?? null;
   const stale = backupIsStale(newestBackup);
+  // FR-77 v2: the copies on the owner's Mac. Older databases have no offsite block.
+  const offsite = db.offsite ?? { last_report: null, newest_file: null, missing: [], mismatched: [] };
+  const offsiteStale = backupIsStale(offsite.last_report);
+  const offsiteBad = offsiteStale || offsite.missing.length > 0 || offsite.mismatched.length > 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -42,7 +47,7 @@ export default async function AdminSystemPage({ params }: Props) {
               <li key={s.name} className="flex items-center justify-between gap-3">
                 <span>{t(s.name)}</span>
                 <span className="flex items-center gap-2">
-                  {s.ms !== null && <span className="text-xs text-muted-foreground">{t('ms', { ms: formatNumber(s.ms, locale) })}</span>}
+                  {s.ms !== null && <span className="text-xs text-muted-foreground">{t('ms', { ms: formatNumber(s.ms, ADMIN_LOCALE) })}</span>}
                   <Badge variant="outline" className={s.ok ? okStyle : badStyle}>{s.ok ? t('up') : t('down')}</Badge>
                 </span>
               </li>
@@ -69,6 +74,28 @@ export default async function AdminSystemPage({ params }: Props) {
             </ul>
           </div>
         )}
+        <div className="mt-4 flex flex-col gap-1.5 border-t border-muted pt-3 text-sm" data-testid="admin-offsite">
+          <p className="font-medium">{t('offsite')}</p>
+          {offsite.last_report === null ? (
+            <p className="text-destructive" role="alert">{t('offsiteNone')}</p>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {t('offsiteLast', { time: when(offsite.last_report), file: offsite.newest_file ?? '—' })}
+              </p>
+              {offsiteStale && <p className="text-destructive" role="alert">{t('offsiteStale')}</p>}
+              {offsite.missing.length > 0 && (
+                <p className="text-destructive" role="alert">
+                  {t('offsiteMissing', { count: offsite.missing.length, files: offsite.missing.join(', ') })}
+                </p>
+              )}
+              {offsite.mismatched.length > 0 && (
+                <p className="text-destructive" role="alert">{t('offsiteMismatch', { files: offsite.mismatched.join(', ') })}</p>
+              )}
+              {!offsiteBad && <p className="text-success">{t('offsiteOk')}</p>}
+            </>
+          )}
+        </div>
       </Section>
 
       <Section title={t('jobs')} testId="admin-jobs">
@@ -107,7 +134,7 @@ export default async function AdminSystemPage({ params }: Props) {
               <li key={tb.name} className="flex items-center justify-between gap-3 py-1.5">
                 <span dir="ltr" className="truncate font-mono text-xs">{tb.name}</span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {t('rows', { count: formatNumber(tb.rows, locale) })} · {formatBytes(tb.bytes)}
+                  {t('rows', { count: formatNumber(tb.rows, ADMIN_LOCALE) })} · {formatBytes(tb.bytes)}
                 </span>
               </li>
             ))}

@@ -9,6 +9,22 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Admin panel v2: sign-ins and sign-out (FR-79) · password rule (FR-80) — `claude/admin-panel` (not deployed)
+
+- **Admin panel is English only** now, left to right, whatever language the admin uses elsewhere.
+- New **Sign-ins** tab: the latest sign-ins and everyone signed in now (devices, last activity), with
+  **Sign out on all devices** per person and **Sign out everyone except me**. Manage › Employees ›
+  edit has the same per-person button for the admin. Resetting a password or deactivating someone
+  signs them out too. A page already open keeps working for up to 60 minutes.
+- **Passwords** now need at least one digit and one special character (still 8 or more characters).
+  Current passwords keep working; the rule applies the next time a password is set. The
+  change-password and first-login forms show the rule.
+- **Audit log:** filter by who did it (**Done by**) and whom it was about (**About**).
+- **System:** shows when the owner's Mac last reported its backup copies, and turns red if copies stop,
+  one is missing or one differs. `pull-backups-to-mac.sh` reports after each pull (re-run `install`).
+- Scheduled-job history older than 7 days is deleted nightly.
+- Migration `20261104090000_admin_panel_v2`.
+
 ### Admin panel (FR-77) · SMS notifications (FR-78) — `claude/admin-panel` (not deployed)
 
 - **Admin panel** (side panel under Settings; Manage on mobile), for the admin only: **Overview**
