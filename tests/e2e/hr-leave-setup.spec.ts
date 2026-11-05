@@ -17,6 +17,7 @@ import {
   login,
   logout,
   createEmployee,
+  openLeaveSections,
   nextTestPersonnelNo,
 } from './_helpers';
 
@@ -38,7 +39,7 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   await expect(page.locator('[data-testid="default-quota-hint"]')).toHaveCount(0);
   // Role checkboxes stay admin-only (FR-35 D4) — this is the boundary that did
   // NOT move, and asserting it is what keeps this a real permissions test.
-  await expect(page.locator('input[type="checkbox"][value="admin"]')).toHaveCount(0);
+  await expect(page.locator('[data-testid="role-admin"] input')).toBeDisabled();
 
   // ── 2. Create an employee with a balance and an accrual rule ──────────────
   const pno = nextTestPersonnelNo();
@@ -71,6 +72,7 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   await expect(page.locator('[data-testid="policy-rate-annual"]')).toHaveValue('2');
 
   // ── 4. HR may EDIT the balance too, not only set it once ──────────────────
+  await openLeaveSections(page);
   await page.fill('[data-testid="balance-days-annual"]', '15');
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 30_000 });
@@ -96,27 +98,9 @@ test('hr is refused when editing their own record', async ({ page }) => {
     .click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
 
-  // HR reads their own record like anyone else's, but the save is refused.
-  //
-  // The refusal comes from the PROFILE scope rule, not from the balance guard:
-  // this form always submits the basic fields first, and `hire_date` is
-  // manager-of/admin-only, so `updateEmployee` rejects before a balance write is
-  // ever attempted. That is why the message here is the generic one.
-  //
-  // The balance guard added by FR-43 sits behind it as defence in depth and is
-  // verified directly against the database (see the migration's own scenarios in
-  // docs/AGENT-LOG.md): calling `set_leave_balance` or `set_employee_leave_policy`
-  // as an HR user on their OWN id raises "you cannot change your own leave
-  // balance", while an admin doing the same is allowed.
-  await page.fill('[data-testid="balance-days-annual"]', '99');
-  await page.click('button[type="submit"]');
-
-  const error = page.locator('[data-testid="edit-error"]');
-  await expect(error).toBeVisible({ timeout: 30_000 });
-
-  // And nothing changed.
-  await page.reload();
-  await expect(page.locator('[data-testid="balance-days-annual"]')).not.toHaveValue('99', {
-    timeout: 20_000,
-  });
+  // HR reads their own record like anyone else's, but the leave fields are locked:
+  // the form disables them, and the database refuses the write anyway ("you cannot
+  // change your own leave balance").
+  await openLeaveSections(page);
+  await expect(page.locator('[data-testid="balance-days-annual"]')).toBeDisabled();
 });

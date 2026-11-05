@@ -253,7 +253,8 @@ export async function createEmployee(
   await page.goto('/manage/employees/new');
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
-  await page.fill('#personnel_no', opts.personnelNo ?? nextTestPersonnelNo());
+  const personnelNo = opts.personnelNo ?? nextTestPersonnelNo();
+  await page.fill('#personnel_no', personnelNo);
   await page.fill('#first_name', opts.name);
   await page.fill('#last_name', 'E2E');
 
@@ -274,11 +275,15 @@ export async function createEmployee(
   for (const role of opts.roles) {
     const cb = page.locator(`[data-testid="role-${role}"] input[type="checkbox"]`);
     if (await cb.count()) {
-      if (!(await cb.isChecked())) await cb.check();
+      // The pill's input is visually hidden: click its label.
+      if (!(await cb.isChecked())) await page.locator(`[data-testid="role-${role}"]`).click();
     }
   }
 
-  const code = (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
+  // The admin sees a login-code box instead of the preview; left blank, the code is
+  // the personnel number.
+  const preview = page.locator('[data-testid="code-preview"]');
+  const code = (await preview.count()) ? ((await preview.textContent())?.trim() ?? '') : personnelNo;
   expect(code).toMatch(/^999[0-9]{7}$/);
 
   const pwEl = page.locator('[data-testid="temp-password"]');
@@ -437,6 +442,17 @@ async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, pre
     .check();
 }
 
+/** FR-85: Edit Employee keeps Leave balances and Monthly accrual policy collapsed. */
+export async function openLeaveSections(page: Page) {
+  for (const id of ['balances-section', 'policy-section']) {
+    const section = page.locator(`[data-testid="${id}"]`);
+    if ((await section.count()) === 0) continue;
+    await expect(section).toBeVisible({ timeout: 20_000 });
+    if ((await section.getAttribute('open')) === null) await section.locator('summary').first().click();
+    await expect(section).toHaveAttribute('open', '');
+  }
+}
+
 /**
  * Add whole `days` to an employee's Annual balance on the Edit Employee form, as an
  * admin. Returns the leave type id, which is the value of the request form's type
@@ -451,6 +467,7 @@ export async function allocate(page: Page, employeeCode: string, days: number): 
   await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 20_000 });
 
   const field = page.locator('[data-testid="balance-days-annual"]');
+  await openLeaveSections(page);
   await expect(field).toBeVisible({ timeout: 20_000 });
   const current = Number(await field.inputValue());
   await field.fill(String(current + Math.round(days)));

@@ -227,6 +227,8 @@ export type LedgerHistoryRow = {
   id: string;
   leaveTypeId: string;
   entryType: string;
+  quickAdd: boolean;
+  periodMonth: string | null;
   deltaMinutes: number;
   balanceAfterMinutes: number;
   note: string | null;
@@ -288,7 +290,7 @@ export async function getLeaveHistory(
   const { data, error } = await c.supabase
     .from('leave_ledger')
     .select(
-      'id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note, created_at, ' +
+      'id, leave_type_id, entry_type, quick_add, period_month, delta_minutes, balance_after_minutes, note, created_at, ' +
         'profiles!leave_ledger_created_by_fkey(full_name), leave_requests(serial_year, serial_seq)'
     )
     .eq('employee_id', employeeId)
@@ -300,6 +302,8 @@ export async function getLeaveHistory(
     id: string;
     leave_type_id: string;
     entry_type: string;
+    quick_add: boolean;
+    period_month: string | null;
     delta_minutes: number;
     balance_after_minutes: number;
     note: string | null;
@@ -313,6 +317,8 @@ export async function getLeaveHistory(
       id: r.id,
       leaveTypeId: r.leave_type_id,
       entryType: r.entry_type,
+      quickAdd: r.quick_add,
+      periodMonth: r.period_month,
       deltaMinutes: r.delta_minutes,
       balanceAfterMinutes: r.balance_after_minutes,
       note: r.note,

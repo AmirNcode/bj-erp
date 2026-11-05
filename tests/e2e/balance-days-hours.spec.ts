@@ -10,7 +10,7 @@
  * (FR-34), so the asserted text does not depend on the demo admin's language.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { ADMIN_CODE, ADMIN_PASSWORD, login, createEmployee } from './_helpers';
+import { ADMIN_CODE, ADMIN_PASSWORD, login, createEmployee, openLeaveSections } from './_helpers';
 
 const days = '[data-testid="balance-days-annual"]';
 const hours = '[data-testid="balance-hours-annual"]';
@@ -19,6 +19,7 @@ async function openEdit(page: Page, code: string) {
   await page.goto(`/en/manage/employees?q=${code}`);
   await page.locator('tr', { hasText: code }).first().locator('a[href*="/manage/employees/"]').click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
+  await openLeaveSections(page);
 }
 
 async function save(page: Page) {
@@ -44,11 +45,13 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
 
   // ── 2. Change only the roles: the save goes through, the balance stays ───
-  await page.locator('[data-testid="role-hr"] input').check();
+  await page.locator('[data-testid="role-hr"]').click();
   await save(page);
   await page.reload();
   await expect(page.locator('[data-testid="role-hr"] input')).toBeChecked({ timeout: 20_000 });
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
+
+  await openLeaveSections(page);
 
   // ── 3. A mixed sign is refused before anything is written ────────────────
   await page.fill(days, '-1');
@@ -58,6 +61,7 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   await expect(page.getByText('put the minus sign on both days and hours')).toBeVisible();
   await page.reload();
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800', { timeout: 20_000 });
+  await openLeaveSections(page);
 
   // ── 4. A negative balance (leave taken in advance, FR-48) ────────────────
   await page.fill(days, '-1');
