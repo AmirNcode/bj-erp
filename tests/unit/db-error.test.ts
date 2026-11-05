@@ -23,6 +23,23 @@ describe('dbErr bare permission message', () => {
   });
 });
 
+describe('dbErr FR-84 and FR-85 messages', () => {
+  it.each([
+    ['not allowed to correct this trip', 'tripCorrectNotAllowed'],
+    ['only an approved daily trip can be corrected', 'tripCorrectWrongRequest'],
+    ['an extension is waiting for HR', 'tripCorrectExtensionWaiting'],
+    ['nothing to correct', 'tripCorrectNothing'],
+    ['start date must not be after end date', 'tripCorrectDates'],
+    ['amount must be more than 0', 'balanceAddInvalid'],
+    ['amount is too large', 'balanceAddTooLarge'],
+    ['this leave type has no balance', 'balanceAddNoBalance'],
+    ['a reason is required', 'reasonRequired'],
+    ['reason is too long', 'reasonTooLong'],
+  ])('maps %s', async (raw, key) => {
+    expect((await dbErr(raw)).error).toBe(key);
+  });
+});
+
 describe('dbErr FR-55 role messages', () => {
   const msg = async (raw: string) => (await dbErr(raw)).error;
 

@@ -14,6 +14,7 @@ import type { StepRole } from '@/lib/leave/approvals';
 import type { ApprovalContextRow, ApprovalSignatures, ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { DayPart } from './shared';
 import type { RequestExtension } from '@/lib/actions/travel';
+import type { RequestCorrection } from '@/lib/travel/extensions';
 
 export type ReviewRequestRow = {
   id: string;
@@ -148,6 +149,8 @@ export type PrintableRequest = ReviewRequestRow & {
    */
   /** FR-70: extensions of a daily errand (the print form lists the approved ones). */
   extensions?: RequestExtension[];
+  /** FR-84: HR's corrections of the trip, oldest first. */
+  corrections?: RequestCorrection[];
   approvals: {
     stepRole: StepRole;
     /**
@@ -203,9 +206,12 @@ export async function getRequestForPrint(
   const row = context.data as unknown as ApprovalContextRow;
   const evidence = signatures.data as unknown as ApprovalSignatures;
   let extensions: RequestExtension[] = [];
+  let corrections: RequestCorrection[] = [];
   if (row.kind === 'errand' && row.unit === 'day') {
     const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
     if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
+    const fixes = await c.supabase.rpc('request_trip_corrections', { p_id: requestId });
+    if (!fixes.error) corrections = fixes.data ?? [];
   }
 
   // Keep ledger visibility unchanged. No visible ledger row is not proof of zero balance.
@@ -225,6 +231,7 @@ export async function getRequestForPrint(
     request: {
       ...row,
       extensions,
+      corrections,
       signature_data: evidence.requester_signature_data,
       approver_signature_data: evidence.approver_signature_data ?? null,
       approvals: evidence.approvals.filter((a) => a.decision || a.evidence_kind === 'hr_exempt').map((a) => ({

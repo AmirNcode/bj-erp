@@ -12,6 +12,8 @@ import { useLocale, useTranslations } from 'next-intl';
 import { CircleCheck, CircleDashed, CircleX, ChevronDown } from 'lucide-react';
 import { getRequestProgress, type ProgressStep } from '@/lib/actions/leave/progress';
 import type { RequestExtension } from '@/lib/actions/travel';
+import type { RequestCorrection } from '@/lib/travel/extensions';
+import { formatRials } from '@/lib/leave/perDiem';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
@@ -27,6 +29,7 @@ export function RequestProgress({
   const te = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
   const tx = useTranslations('travel.extension');
+  const tc = useTranslations('travel.correction');
   const locale = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
@@ -34,6 +37,7 @@ export function RequestProgress({
   const [configurationChanged, setConfigurationChanged] = useState(false);
   const [legacyReconciliation, setLegacyReconciliation] = useState(false);
   const [extensions, setExtensions] = useState<RequestExtension[]>([]);
+  const [corrections, setCorrections] = useState<RequestCorrection[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const load = useCallback(
@@ -45,6 +49,7 @@ export function RequestProgress({
           setConfigurationChanged(res.configurationChanged === true);
           setLegacyReconciliation(res.legacyReconciliationRequired === true);
           setExtensions(res.extensions ?? []);
+          setCorrections(res.corrections ?? []);
           setError('');
         }
         else setError(res.error);
@@ -160,6 +165,28 @@ export function RequestProgress({
                       {e.evidence === 'exempt' && <> · {tx('exempt')}</>}
                       {e.decided_by_name && e.evidence !== 'exempt' && <> · {e.decided_by_name}</>}
                       {e.decided_at && <> · {formatPersianConsentTimestamp(e.decided_at, locale)}</>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {corrections.length > 0 && (
+            <div className="mt-3 border-t pt-2 text-xs" data-testid={`progress-corrections-${requestId}`}>
+              <p className="font-medium">{tc('historyTitle')}</p>
+              <ul className="mt-1 space-y-1">
+                {corrections.map((c) => (
+                  <li key={c.corrected_at}>
+                    {(c.new_start_date !== c.old_start_date || c.new_end_date !== c.old_end_date) && (
+                      <>{tc('dates', { start: formatCalendarDate(c.new_start_date, locale), end: formatCalendarDate(c.new_end_date, locale) })} </>
+                    )}
+                    {c.per_diem_after !== c.per_diem_before && c.per_diem_after !== null && (
+                      <>{tc('perDiem', { amount: formatRials(c.per_diem_after, locale) })} </>
+                    )}
+                    <span dir="auto">{c.reason}</span>
+                    <span className="text-muted-foreground">
+                      {c.corrected_by_name && <> · {c.corrected_by_name}</>}
+                      {' · '}{formatPersianConsentTimestamp(c.corrected_at, locale)}
                     </span>
                   </li>
                 ))}

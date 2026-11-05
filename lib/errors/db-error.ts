@@ -159,6 +159,12 @@ const RULES: Rule[] = [
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
   // FR-43: HR may set an opening balance and accrual policy, but not their own.
   { re: /you cannot change your own leave balance/i, key: 'cannotSetOwnBalance' },
+  // FR-84 trip correction.
+  { re: /^not allowed to correct this trip$/, key: 'tripCorrectNotAllowed' },
+  { re: /^only an approved daily trip can be corrected$/, key: 'tripCorrectWrongRequest' },
+  { re: /^an extension is waiting for HR$/, key: 'tripCorrectExtensionWaiting' },
+  { re: /^nothing to correct$/, key: 'tripCorrectNothing' },
+  { re: /^start date must not be after end date$/, key: 'tripCorrectDates' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },
