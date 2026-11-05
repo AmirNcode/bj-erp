@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * FR-85: the person's full balance ledger, loaded the first time it is opened.
+ * FR-85: the person's full balance ledger, loaded the first time it is opened and
+ * again whenever a balance moves while it has been loaded.
  * A <details>, not a button: the leave part of the form can sit in a disabled
  * fieldset (read-only viewers), and a <summary> still opens there.
  */
 
-import { useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { ChevronDown } from 'lucide-react';
 import { getLeaveHistory, type LedgerHistoryRow } from '@/lib/actions/leave/balances';
@@ -32,14 +33,23 @@ export function BalanceHistory({ employeeId, balances, hoursPerDay }: {
   const [pending, startTransition] = useTransition();
   const duration = (minutes: number) => formatDuration(minutes, hoursPerDay, locale, durationLabelsFrom(tLeave));
 
-  const load = () => {
-    setError('');
+  const loaded = useRef(false);
+  const load = useCallback(() => {
     startTransition(async () => {
       const result = await getLeaveHistory(employeeId);
-      if (result.ok) setRows(result.rows);
-      else setError(result.error);
+      if (result.ok) {
+        loaded.current = true;
+        setError('');
+        setRows(result.rows);
+      } else setError(result.error);
     });
-  };
+  }, [employeeId]);
+
+  // A quick add or a Save refreshes `balances`; without this, loaded rows go stale.
+  const totals = balances.map((b) => `${b.leaveTypeId}:${b.balanceMinutes}`).join();
+  useEffect(() => {
+    if (loaded.current) load();
+  }, [totals, load]);
 
   const typeName = (id: string) => {
     const type = balances.find((b) => b.leaveTypeId === id);

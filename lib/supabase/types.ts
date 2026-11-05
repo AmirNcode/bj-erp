@@ -1662,6 +1662,7 @@ export type Database = {
         Returns: {
           old_end_date: string; new_end_date: string; reason: string; status: string; evidence: string | null
           requested_by_name: string; decided_by_name: string | null; decided_at: string | null
+          per_diem_before: number | null; per_diem_after: number | null;
         }[]
       }
       app_request_delegation_preview: {

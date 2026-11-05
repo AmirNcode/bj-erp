@@ -276,6 +276,10 @@ select pg_temp.assert('corrected stays open for traveller details',
 select pg_temp.expect('the traveller sees it as pending booking',pg_temp.as_scalar('worker2',format(
   'select count(*)::text from public.my_travel_pending() p where p=%L',pg_temp.fx('order1'))),'1');
 
+select pg_temp.expect('an extension''s per diem change is readable for the print form',
+  pg_temp.as_scalar('worker2',format(
+    'select count(*)::text from public.request_errand_extensions(%L) where per_diem_after is not distinct from per_diem_before and status=''approved''',
+    pg_temp.fx('order1'))),'1');
 select pg_temp.expect('procurement re-saves a corrected booking',pg_temp.err(pg_temp.as_scalar('proc',format(
   'select public.app_save_travel_booking(%L,''company_car'',0,0,''note'',true)::text',pg_temp.fx('order1')))),'ok');
 select pg_temp.expect('and it is done again',pg_temp.state('order1'),'done');

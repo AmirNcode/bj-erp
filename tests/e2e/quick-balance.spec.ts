@@ -81,6 +81,19 @@ test('quick add, breakdown, history and collapsed sections', async ({ page }) =>
   await expect(rows).toHaveCount(count + 1);
 });
 
+test('open history picks up a quick add without a reload', async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+  const emp = await createEmployee(page, { name: 'Live History Probe', roles: ['employee'] });
+  await openEdit(page, emp.code);
+  await page.locator('[data-testid="balance-history"] summary').click();
+  await expect(page.locator('[data-testid="balance-history-row"]').first()).toBeVisible({ timeout: 20_000 });
+  await quickAdd(page, '2', 'Added with history open');
+  await expect(page.locator('[data-testid="balance-history-row"]').first()).toContainText('Added with history open', {
+    timeout: 20_000,
+  });
+});
+
 test('an invalid value in a closed section opens it', async ({ page }) => {
   test.setTimeout(180_000);
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);

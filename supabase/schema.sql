@@ -8870,7 +8870,7 @@ $$;
 -- Name: request_errand_extensions(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.request_errand_extensions(p_id uuid) RETURNS TABLE(old_end_date date, new_end_date date, reason text, status text, evidence text, requested_by_name text, decided_by_name text, decided_at timestamp with time zone)
+CREATE FUNCTION public.request_errand_extensions(p_id uuid) RETURNS TABLE(old_end_date date, new_end_date date, reason text, status text, evidence text, requested_by_name text, decided_by_name text, decided_at timestamp with time zone, per_diem_before bigint, per_diem_after bigint)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -8879,7 +8879,8 @@ begin
     raise exception 'request not found' using errcode = 'P0002';
   end if;
   return query
-    select e.old_end_date, e.new_end_date, e.reason, e.status, e.evidence, q.full_name, d.full_name, e.decided_at
+    select e.old_end_date, e.new_end_date, e.reason, e.status, e.evidence, q.full_name, d.full_name, e.decided_at,
+           e.per_diem_before, e.per_diem_after
       from public.errand_extensions e
       join public.profiles q on q.id = e.requested_by
       left join public.profiles d on d.id = e.decided_by

@@ -70,6 +70,34 @@ describe('printedTripDates (FR-70 print form, FR-84 corrections)', () => {
   });
 });
 
+describe('printedTripDates: per diem changed by an extension (FR-84)', () => {
+  const extPd = (at: string, oldEnd: string, newEnd: string, before: number | null, after: number | null) =>
+    ({ old_end_date: oldEnd, new_end_date: newEnd, reason: 'e', status: 'approved', decided_at: at,
+       per_diem_before: before, per_diem_after: after }) as never;
+
+  it('keeps the signed amount when an extension changed it and nothing else did', () => {
+    const printed = printedTripDates(trip('2027-03-06', '2027-03-01', 2000),
+      [extPd('2027-03-02T00:00:00Z', '2027-03-03', '2027-03-06', 1000, 2000)], []);
+    expect(printed.signedPerDiem).toBe(1000);
+    expect(printed.changes[0]).toMatchObject({ kind: 'extension', perDiem: 2000, perDiemChanged: true });
+  });
+
+  it('keeps the signed amount when a correction follows the extension', () => {
+    const printed = printedTripDates(trip('2027-03-06', '2027-03-01', 3000),
+      [extPd('2027-03-02T00:00:00Z', '2027-03-03', '2027-03-06', 1000, 2000)],
+      [fix('2027-03-03T00:00:00Z', ['2027-03-01', '2027-03-01'], ['2027-03-06', '2027-03-06'], [2000, 3000])]);
+    expect(printed.signedPerDiem).toBe(1000);
+    expect(printed.changes.map((c) => c.perDiem)).toEqual([2000, 3000]);
+  });
+
+  it('an extension that left the amount alone reports no change', () => {
+    const printed = printedTripDates(trip('2027-03-06', '2027-03-01', 1000),
+      [extPd('2027-03-02T00:00:00Z', '2027-03-03', '2027-03-06', 1000, 1000)], []);
+    expect(printed.signedPerDiem).toBe(1000);
+    expect(printed.changes[0].perDiemChanged).toBe(false);
+  });
+});
+
 describe('canCorrectTrip (FR-84)', () => {
   const r = { kind: 'errand', unit: 'day', status: 'approved', employee_id: 'someone' };
 

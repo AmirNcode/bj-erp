@@ -4,7 +4,16 @@
  * time order: approved extensions and HR corrections mixed. Pure.
  */
 
-type Extension = { old_end_date: string; new_end_date: string; reason: string; status: string; decided_at: string | null };
+type Extension = {
+  old_end_date: string;
+  new_end_date: string;
+  reason: string;
+  status: string;
+  decided_at: string | null;
+  /** Set once approved; the amount may change at that point. */
+  per_diem_before?: number | null;
+  per_diem_after?: number | null;
+};
 
 export type RequestCorrection = {
   old_start_date: string;
@@ -46,9 +55,14 @@ export function printedTripDates(
     ...corrections.map((row) => ({ kind: 'correction' as const, at: row.corrected_at, oldEnd: row.old_end_date, row })),
   ].sort((a, b) => a.at.localeCompare(b.at));
 
-  const first = corrections[0];
-  const signedStart = first?.old_start_date ?? trip.start;
-  const signedPerDiem = first ? first.per_diem_before : trip.perDiem;
+  const signedStart = corrections[0]?.old_start_date ?? trip.start;
+  // The earliest event of either kind holds the amount as it was signed.
+  const earliest = events[0];
+  const signedPerDiem = !earliest
+    ? trip.perDiem
+    : earliest.kind === 'correction' || earliest.row.per_diem_before !== undefined
+      ? (earliest.row.per_diem_before ?? null)
+      : trip.perDiem;
 
   // Walk forward from the signed values: an extension moves only the end.
   let start = signedStart;
@@ -63,7 +77,10 @@ export function printedTripDates(
       perDiem = e.row.per_diem_after;
       return { ...base, start, perDiem, datesChanged, perDiemChanged };
     }
-    return { ...base, start, perDiem, datesChanged: true, perDiemChanged: false };
+    const after = e.row.per_diem_after === undefined ? perDiem : e.row.per_diem_after;
+    const perDiemChanged = after !== perDiem;
+    perDiem = after;
+    return { ...base, start, perDiem, datesChanged: true, perDiemChanged };
   });
 
   return { signedStart, signedEnd: events[0]?.oldEnd ?? trip.end, signedPerDiem, changes };

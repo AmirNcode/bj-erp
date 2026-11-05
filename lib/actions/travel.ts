@@ -215,6 +215,8 @@ export type RequestExtension = {
   requested_by_name: string;
   decided_by_name: string | null;
   decided_at: string | null;
+  per_diem_before: number | null;
+  per_diem_after: number | null;
 };
 
 /** Direct manager (admin: company): approved travel-booked trips not yet ended. */

@@ -271,7 +271,11 @@ export default async function PrintRequestPage({ params }: Props) {
                   data-testid={c.kind === 'extension' ? 'print-extension' : 'print-correction'}
                 >
                   {c.kind === 'extension'
-                    ? tx('printLine', { date: date(c.end), reason: c.reason })
+                    ? [
+                        tx('printLine', { date: date(c.end), reason: c.reason }),
+                        c.perDiemChanged && c.perDiem !== null
+                          && tc('printPerDiem', { amount: formatRials(c.perDiem, locale) }),
+                      ].filter(Boolean).join(' — ')
                     : [
                         c.datesChanged && tc('printDates', { start: date(c.start), end: date(c.end) }),
                         c.perDiemChanged && c.perDiem !== null
