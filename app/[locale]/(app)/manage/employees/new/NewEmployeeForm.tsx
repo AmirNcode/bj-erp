@@ -53,7 +53,8 @@ function useLabels() {
     loginCodeHint: t('employees.loginCodeHint'),
     invalidLoginCode: t('employees.loginCodeInvalid'),
     defaultQuotaHint: t('employees.defaultQuotaHint'),
-    name: t('employees.name'),
+    firstName: t('employees.firstName'),
+    lastName: t('employees.lastName'),
     department: t('employees.department'),
     manager: t('employees.manager'),
     roles: t('employees.roles'),
@@ -198,7 +199,8 @@ export function NewEmployeeForm({
 
     const result = await createEmployee({
       personnel_no: normalizedPno,
-      full_name: (fd.get('full_name') as string).trim(),
+      first_name: (fd.get('first_name') as string).trim(),
+      last_name: (fd.get('last_name') as string).trim(),
       job_title: ((fd.get('job_title') as string) || '').trim() || undefined,
       department_id: (fd.get('department_id') as string) || undefined,
       manager_id: (fd.get('manager_id') as string) || undefined,
@@ -306,9 +308,15 @@ export function NewEmployeeForm({
             </p>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="full_name">{labels.name}</Label>
-            <Input id="full_name" name="full_name" required />
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="first_name">{labels.firstName}</Label>
+              <Input id="first_name" name="first_name" required />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="last_name">{labels.lastName}</Label>
+              <Input id="last_name" name="last_name" required />
+            </div>
           </div>
 
           <div className="space-y-1.5">

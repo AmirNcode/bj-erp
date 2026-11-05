@@ -38,11 +38,12 @@ export const CHOICE_LABELS_FA: Record<string, string> = {
 
 const KEY_BY_FA_LABEL = new Map(Object.entries(CHOICE_LABELS_FA).map(([k, fa]) => [fa, k]));
 
-type CsvColumnKey = 'personnel_no' | 'full_name' | PersonalInfoKey;
+type CsvColumnKey = 'personnel_no' | 'first_name' | 'last_name' | PersonalInfoKey;
 
 const COLUMNS: { key: CsvColumnKey; labelFa: string }[] = [
   { key: 'personnel_no', labelFa: 'شماره پرسنلی' },
-  { key: 'full_name', labelFa: 'نام کامل' },
+  { key: 'first_name', labelFa: 'نام' },
+  { key: 'last_name', labelFa: 'نام خانوادگی' },
   ...PERSONAL_INFO_FIELDS.map((f) => ({ key: f.key, labelFa: f.labelFa })),
 ];
 
@@ -52,11 +53,12 @@ export function personalInfoHeader(): string[] {
 
 /** One exported row (from app_export_personal_info) → CSV cells in header order. */
 export function personalInfoCsvRow(
-  row: { personnel_no: string | null; full_name: string } & Record<PersonalInfoKey, string | number | null>
+  row: { personnel_no: string | null; first_name: string; last_name: string | null } & Record<PersonalInfoKey, string | number | null>
 ): string[] {
   return COLUMNS.map((c) => {
     if (c.key === 'personnel_no') return row.personnel_no ?? '';
-    if (c.key === 'full_name') return row.full_name;
+    if (c.key === 'first_name') return row.first_name;
+    if (c.key === 'last_name') return row.last_name ?? '';
     const field = PERSONAL_INFO_FIELDS.find((f) => f.key === c.key)!;
     const text = fieldToInput(field, row[c.key]);
     return field.kind === 'choice' ? (CHOICE_LABELS_FA[text] ?? text) : text;

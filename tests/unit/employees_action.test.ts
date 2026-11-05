@@ -8,7 +8,8 @@ import { allowedProfileFields, generateTempPassword } from '@/lib/actions/employ
 describe('allowedProfileFields', () => {
   it('admin may send every editable column, job title included', () => {
     expect(allowedProfileFields(['admin'], {})).toEqual([
-      'full_name',
+      'first_name',
+      'last_name',
       'department_id',
       'manager_id',
       'hire_date',
@@ -20,7 +21,8 @@ describe('allowedProfileFields', () => {
 
   it('a holder of people:edit may send the FR-51 set: no language, and active goes through setActive', () => {
     expect(allowedProfileFields(['employee'], { people: 'edit' })).toEqual([
-      'full_name',
+      'first_name',
+      'last_name',
       'department_id',
       'manager_id',
       'hire_date',

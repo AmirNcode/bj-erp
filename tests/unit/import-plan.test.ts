@@ -8,7 +8,7 @@ import {
   type ImportChoices,
 } from '@/lib/csv/import-plan';
 
-const H = ['full_name', 'personnel_no', 'role', 'department_code', 'department_name_fa', 'department_name_en', 'supervisor_personnel_no', 'manager_personnel_no'];
+const H = ['first_name', 'last_name', 'personnel_no', 'role', 'department_code', 'department_name_fa', 'department_name_en', 'supervisor_personnel_no', 'manager_personnel_no'];
 
 const emp = (over: Partial<ExistingEmployee> & { id: string; fullName: string }): ExistingEmployee => ({
   personnelNo: null,
@@ -45,10 +45,10 @@ const ctx: ImportContext = {
 };
 const csv = [
   H,
-  ['Boss', '1', 'manager', 'QC', '', '', '', ''],
-  ['Worker', '2', 'employee', 'QC', '', '', '', '1'],
-  ['علی رضایی', '3', 'employee', 'QC', '', '', '', '1'],
-  ['Back Again', '80', 'employee', 'QC', '', '', '', '1'],
+  ['Boss', 'One', '1', 'manager', 'QC', '', '', '', ''],
+  ['Work', 'Er', '2', 'employee', 'QC', '', '', '', '1'],
+  ['علی', 'رضایی', '3', 'employee', 'QC', '', '', '', '1'],
+  ['Back', 'Again', '80', 'employee', 'QC', '', '', '', '1'],
 ];
 
 const plan = (mode: ImportMode, choices: Partial<ImportChoices> = {}) =>
@@ -151,7 +151,7 @@ describe('buildImportPlan — conflicts for kept people', () => {
   it('deptManagerReplaced: a kept department manager the file replaces', () => {
     const p = plan('replace', { missingDefault: 'keep', resolutions: { 'sameName:p70': 'keepBoth' } });
     const c = p.conflicts.find((x) => x.kind === 'deptManagerReplaced');
-    expect(c).toMatchObject({ personId: 'm50', params: { code: 'QC', newManager: 'Boss' } });
+    expect(c).toMatchObject({ personId: 'm50', params: { code: 'QC', newManager: 'Boss One' } });
     const kept = plan('replace', {
       missingDefault: 'keep',
       resolutions: { 'sameName:p70': 'keepBoth', 'deptManagerReplaced:m50': 'keepAsManager' },

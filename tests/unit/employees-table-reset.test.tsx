@@ -13,6 +13,8 @@ import { passwordResetEligibleIds, resetSelectableIds } from '@/lib/employees/pa
 // who hold more in the list. Their rows must not be selectable, or select-all
 // sends a batch the database refuses whole.
 
+import type { EmployeesQuery } from '@/lib/employees/list';
+
 vi.mock('@/lib/actions/employees', () => ({
   bulkResetPasswords: vi.fn(async () => ({ ok: true, credentials: [] })),
 }));
@@ -26,7 +28,10 @@ afterEach(cleanup);
 const row = (id: string, code: string, extra: Partial<EmployeeRow>): EmployeeRow => ({
   id,
   employee_code: code,
+  personnel_no: code,
   full_name: `Person ${code}`,
+  first_name: 'Person',
+  last_name: code,
   active: true,
   hireDateLabel: '—',
   departmentLabel: '—',
@@ -38,6 +43,7 @@ const row = (id: string, code: string, extra: Partial<EmployeeRow>): EmployeeRow
 });
 
 // Mixed list as a helpdesk sees it: self, two eligible, the admin, a manager.
+const LIST: EmployeesQuery = { q: '', dept: null, filter: 'all', page: 1, sort: 'last', dir: 'asc' };
 const ROWS: EmployeeRow[] = [
   row('self', '100', { isSelf: true }),
   row('e1', '101', { canReset: true }),
@@ -46,12 +52,53 @@ const ROWS: EmployeeRow[] = [
   row('mgr', '103', {}),
 ];
 
-const renderTable = (rows = ROWS) =>
+const renderTable = (rows = ROWS, query: EmployeesQuery = LIST) =>
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <EmployeesTable employees={rows} canBulkReset showLocks={false} locale="en" />
+      <EmployeesTable
+        employees={rows}
+        canBulkReset
+        showLocks={false}
+        locale="en"
+        base="/en/manage/employees"
+        query={query}
+      />
     </NextIntlClientProvider>
   );
+
+describe('sortable headers (FR-83)', () => {
+  const th = (name: string) => screen.getByRole('columnheader', { name });
+
+  it('marks the default sort, and only that one, with aria-sort', () => {
+    renderTable();
+    expect(th('Last name').getAttribute('aria-sort')).toBe('ascending');
+    expect(th('First name').getAttribute('aria-sort')).toBe('none');
+    expect(th('ID').getAttribute('aria-sort')).toBe('none');
+    expect(th('Hire Date').getAttribute('aria-sort')).toBe('none');
+  });
+
+  it('a header flips the active column and starts another one ascending, always on page 1', () => {
+    renderTable(ROWS, { ...LIST, q: 'Ali', page: 3, sort: 'id', dir: 'asc' });
+    expect(th('ID').getAttribute('aria-sort')).toBe('ascending');
+    expect(screen.getByTestId('emp-sort-id').getAttribute('href')).toBe('/en/manage/employees?q=Ali&sort=id&dir=desc');
+    expect(screen.getByTestId('emp-sort-hire').getAttribute('href')).toBe('/en/manage/employees?q=Ali&sort=hire');
+    expect(screen.getByTestId('emp-sort-last').getAttribute('href')).toBe('/en/manage/employees?q=Ali');
+  });
+
+  it('shows Z→A on the active column', () => {
+    renderTable(ROWS, { ...LIST, dir: 'desc' });
+    expect(th('Last name').getAttribute('aria-sort')).toBe('descending');
+  });
+
+  it('shows a dash for an empty last name or ID, the whole name in First name, no code under it', () => {
+    renderTable([row('blank', '555', { first_name: 'Ali Reza Karimi', last_name: null, personnel_no: null })]);
+    const cells = screen.getByText('Ali Reza Karimi').closest('tr')!.querySelectorAll('td');
+    // checkbox, first, last, id
+    expect(cells[2].textContent).toBe('—');
+    expect(cells[3].textContent).toBe('—');
+    expect(screen.queryByText('555')).toBeNull();
+  });
+});
 
 describe('bulk password reset selection (Medium 2)', () => {
   it('offers a checkbox only on eligible rows', () => {

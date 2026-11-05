@@ -8,7 +8,8 @@ import {
 } from '@/lib/csv/import-rows';
 
 const H = [
-  'full_name',
+  'first_name',
+  'last_name',
   'personnel_no',
   'role',
   'department_code',
@@ -29,14 +30,15 @@ const ctx = (over: Partial<ImportContext> = {}): ImportContext => ({
   ...over,
 });
 
-/** name, pno, role, code, fa, en, sup, mgr, days, hours */
-const row = (...cells: string[]) => cells;
+/** name, pno, role, code, fa, en, sup, mgr, days, hours. Every test person gets the same last name. */
+const row = (name: string, ...cells: string[]) => [name, 'Doe', ...cells];
 
 describe('template', () => {
   it('puts the latin key in parentheses after the Farsi label', () => {
     const header = templateHeader();
     expect(header).toHaveLength(IMPORT_COLUMNS.length);
-    expect(header[0]).toBe('نام کامل (full_name)');
+    expect(header.slice(0, 2)).toEqual(['نام (first_name)', 'نام خانوادگی (last_name)']);
+    expect(header.join()).not.toContain('full_name');
     expect(header).toContain('مانده مرخصی (ساعت) (pto_hours)');
   });
 
@@ -54,26 +56,49 @@ describe('template', () => {
 
 describe('header matching', () => {
   it('reports missing required columns', () => {
-    const r = validateImportRows([['full_name', 'department_code']], ctx());
+    const r = validateImportRows([['first_name', 'last_name', 'department_code']], ctx());
     expect(r.errors.map((e) => e.field)).toEqual(['personnel_no', 'role']);
   });
 
   it('needs a department code or a department name column', () => {
-    const r = validateImportRows([['full_name', 'personnel_no', 'role']], ctx());
+    const r = validateImportRows([['first_name', 'last_name', 'personnel_no', 'role']], ctx());
     expect(r.errors).toEqual([{ line: 1, field: 'department_code', messageKey: 'missingColumn' }]);
   });
 
   it('does not confuse manager_personnel_no with personnel_no', () => {
     const r = validateImportRows(
       [
-        ['نام کامل (full_name)', 'شماره پرسنلی مدیر (manager_personnel_no)', 'شماره پرسنلی (personnel_no)', 'نقش (role)', 'کد بخش (department_code)'],
-        ['Boss', '', '1', 'manager', 'QC'],
-        ['Emp', '1', '2', 'employee', 'QC'],
+        ['نام (first_name)', 'نام خانوادگی (last_name)', 'شماره پرسنلی مدیر (manager_personnel_no)', 'شماره پرسنلی (personnel_no)', 'نقش (role)', 'کد بخش (department_code)'],
+        ['Boss', 'Doe', '', '1', 'manager', 'QC'],
+        ['Emp', 'Doe', '1', '2', 'employee', 'QC'],
       ],
       ctx()
     );
     expect(r.errors).toEqual([]);
     expect(r.rows[1]).toMatchObject({ personnel_no: '2', manager_personnel_no: '1' });
+  });
+
+  it.each([
+    ['latin key', 'full_name'],
+    ['template header', 'نام کامل (full_name)'],
+    ['Farsi label', 'نام کامل'],
+    ['HR file label', 'نام و نام خانوادگی'],
+  ])('rejects an old file with one name column (%s), and nothing else', (_label, cell) => {
+    const r = validateImportRows(
+      [
+        [cell, 'personnel_no', 'role', 'department_code'],
+        ['Ali Rezaei', '1', 'employee', 'QC'],
+      ],
+      ctx(),
+      'update'
+    );
+    expect(r.errors).toEqual([{ line: 1, field: 'first_name', messageKey: 'oldTemplate' }]);
+    expect(r.rows).toEqual([]);
+  });
+
+  it('a file with only one of the two new columns is a missing column, not an old file', () => {
+    const r = validateImportRows([['first_name', 'personnel_no', 'role', 'department_code']], ctx());
+    expect(r.errors).toEqual([{ line: 1, field: 'last_name', messageKey: 'missingColumn' }]);
   });
 
   it('ignores unknown columns such as name or notes columns', () => {
@@ -85,6 +110,28 @@ describe('header matching', () => {
       ctx()
     );
     expect(r.errors).toEqual([]);
+  });
+});
+
+describe('names', () => {
+  const r = (first: string, last: string, mode: 'add' | 'update' = 'add') =>
+    validateImportRows(
+      [H, [first, last, '1', 'employee', 'QC', '', '', '', '', '', '']],
+      mode === 'update' ? ctx({ existingEmployees: [{ personnelNo: '1', fullName: 'Old', isManager: false }] }) : ctx(),
+      mode
+    );
+
+  it('keeps the two parts, trimmed, and joins them for the preview', () => {
+    expect(r(' محمد علی ', ' کریم زاده ').rows[0]).toMatchObject({
+      first_name: 'محمد علی',
+      last_name: 'کریم زاده',
+      full_name: 'محمد علی کریم زاده',
+    });
+  });
+
+  it.each(['add', 'update'] as const)('needs both names on every row (%s)', (mode) => {
+    expect(r('', 'Doe', mode).errors).toEqual([{ line: 2, field: 'first_name', messageKey: 'required' }]);
+    expect(r('Ali', '', mode).errors).toEqual([{ line: 2, field: 'last_name', messageKey: 'required' }]);
   });
 });
 
@@ -211,7 +258,7 @@ describe('references', () => {
     );
     expect(r.warnings.find((w) => w.messageKey === 'supervisorManagerMismatch')).toMatchObject({
       line: 5,
-      params: { supervisor: 'Sup', manager: 'Boss2' },
+      params: { supervisor: 'Sup Doe', manager: 'Boss2 Doe' },
     });
   });
 });
@@ -308,7 +355,7 @@ describe('departments', () => {
     expect(r.errors).toEqual([]);
     const by = Object.fromEntries(r.departments.map((d) => [d.code, d]));
     // PLN: the head (2) reports to the CEO but is excluded; members report to 2.
-    expect(by.PLN).toMatchObject({ manager_personnel_no: '2', managerName: 'Head' });
+    expect(by.PLN).toMatchObject({ manager_personnel_no: '2', managerName: 'Head Doe' });
     // EPE: only its head, so the fallback counts everyone → the CEO.
     expect(by.EPE).toMatchObject({ manager_personnel_no: '1' });
     // EXE: nobody has a manager.
@@ -357,7 +404,7 @@ describe('departments', () => {
       ],
       ctx()
     );
-    expect(r.warnings).toEqual([{ line: 6, messageKey: 'bothSign', params: { departmentManager: 'Head' } }]);
+    expect(r.warnings).toEqual([{ line: 6, messageKey: 'bothSign', params: { departmentManager: 'Head Doe' } }]);
   });
 });
 
@@ -427,7 +474,7 @@ describe('modes (FR-49)', () => {
       inactive,
       'add'
     );
-    expect(r.departments[0]).toMatchObject({ manager_personnel_no: '1', keptExistingManager: false, managerName: 'Boss' });
+    expect(r.departments[0]).toMatchObject({ manager_personnel_no: '1', keptExistingManager: false, managerName: 'Boss Doe' });
     expect(r.warnings).toEqual([]);
   });
 });

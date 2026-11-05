@@ -109,7 +109,8 @@ select pg_temp.expect('manager may not change a report''s hire date',pg_temp.upd
 select pg_temp.expect('report''s name unchanged',(select full_name from public.profiles where id=pg_temp.fx('rep')),'Fixture rep');
 select pg_temp.expect('manager may not set a balance',pg_temp.err(pg_temp.as_scalar('boss',format(
   'select public.set_leave_balance(%L,%L,4800)::text',pg_temp.fx('rep'),pg_temp.fx('annual')))),'42501');
-select pg_temp.expect('manager still edits their own name',pg_temp.upd('boss','full_name=''Fixture boss 2''','boss'),'1');
+-- FR-83: names are no longer self-service for anyone without `people` edit.
+select pg_temp.expect('manager cannot change their own name',left(pg_temp.upd('boss','full_name=''Fixture boss 2''','boss'),11),'ERROR 42501');
 
 -- ── managers see their direct reports, not the whole company ────────────────
 select pg_temp.expect('manager sees a direct report in another department',pg_temp.sees('boss','profiles','id','rep'),'1');

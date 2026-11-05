@@ -10,7 +10,8 @@ import type { PasswordSmsResult } from '@/lib/admin/types';
 
 export type CreateEmployeeInput = {
   personnel_no: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   job_title?: string;
   department_id?: string;
   manager_id?: string;
@@ -60,7 +61,9 @@ export async function createEmployee(
 
   const { data: userId, error } = await c.supabase.rpc('app_create_employee', {
     p_personnel_no: personnelNo,
-    p_full_name: input.full_name,
+    p_full_name: null,
+    p_first_name: input.first_name,
+    p_last_name: input.last_name,
     p_password: tempPassword,
     p_company_id: c.companyId,
     ...(input.department_id ? { p_department_id: input.department_id } : {}),
@@ -103,7 +106,9 @@ export async function setPersonnelNo(
 }
 
 export type UpdateEmployeeFields = Partial<{
-  full_name: string;
+  first_name: string;
+  /** Null leaves it blank (FR-83); the database rebuilds full_name from the two. */
+  last_name: string | null;
   department_id: string | null;
   manager_id: string | null;
   hire_date: string | null;
@@ -244,7 +249,8 @@ export async function resetPassword(
 
 /** One validated CSV row (lib/csv/import-rows.ts ImportRow, FR-45). */
 export type BulkImportRow = {
-  full_name: string;
+  first_name: string;
+  last_name: string;
   personnel_no: string;
   job_title: string | null;
   role: 'manager' | 'employee';
@@ -321,7 +327,8 @@ export async function importEmployees(
 
   // Only the fields the RPC reads — the wizard's rows carry UI-only extras.
   const rows = input.rows.map((row) => ({
-    full_name: row.full_name,
+    first_name: row.first_name,
+    last_name: row.last_name,
     personnel_no: row.personnel_no,
     job_title: row.job_title,
     role: row.role,
@@ -363,8 +370,10 @@ export async function importEmployees(
     not_deleted_departments?: string[];
   };
   const byPno = new Map(rows.map((r) => [r.personnel_no, r]));
+  const fullNameOf = (r: { first_name: string; last_name: string } | undefined) =>
+    r && `${r.first_name} ${r.last_name}`;
   const credentials: IssuedCredential[] = (out.created ?? []).map((cr) => ({
-    fullName: byPno.get(cr.personnel_no)?.full_name ?? cr.personnel_no,
+    fullName: fullNameOf(byPno.get(cr.personnel_no)) ?? cr.personnel_no,
     employeeCode: cr.employee_code,
     password: (byPno.get(cr.personnel_no) as { password?: string } | undefined)?.password ?? '',
   }));

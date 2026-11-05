@@ -9,6 +9,20 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### First and last names, sortable Employees table (FR-83) — `claude/employee-name-fields` (not deployed)
+
+- **Manage › Employees** has separate First name, Last name, ID and Hire Date columns. Click a header to
+  sort; click again to flip. The sort stays through search, department, tabs, paging and reload. Default
+  is Last name, A to Z, in correct Persian order; 9 comes before 10 in ID.
+- **Existing people:** two-word names are split. Longer names stay whole in First name with an empty
+  Last name. To find them, sort Last name Z to A; open each person and move the surname across. Nothing
+  else changes until then, and every other screen keeps showing the full name.
+- **Add Employee** and **bulk import** take first and last name separately, both required. Old import
+  files with one name column are refused: download the new template.
+- **Personal-info export** has first and last name instead of the full name.
+- **Phones:** a Sort control above the list; the number on each card is now the personnel number.
+- Only the admin and HR can change a name. The number under each name on desktop is gone (see ID).
+
 ### Profile photos (FR-82) — `claude/profile-photos-spec` (not deployed)
 
 - **Profile › Profile photo:** add, change or remove your own photo. Pick a picture or take one on

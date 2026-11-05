@@ -435,6 +435,13 @@ only while PostgREST exposes `public` alone (`PGRST_DB_SCHEMAS`). The queue row 
   `.superpowers/sdd/progress.md`.
 - Keep `docs/CHANGELOG.md` + `docs/TASKS.md` updated as part of landing work, not after.
 
+## Stored generated columns on `profiles`
+
+Stored generated columns are NULL inside BEFORE triggers. `enforce_profile_update_scope` compares
+`to_jsonb(new)` with `to_jsonb(old)` to let the separation job through, so a generated column there would
+make the comparison false and the nightly job fail. Use a computed field (a `public.fn(profiles)` function:
+PostgREST can order by it) (FR-83).
+
 ## Pointers
 
 - Read order: see `CLAUDE.md`.

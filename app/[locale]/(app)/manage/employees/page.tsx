@@ -4,7 +4,7 @@
  * permission on the edit page and in RLS (FR-55); managers write nothing.
  * Absorbs the old My Team page as the `reports` filter (/team redirects here).
  *
- * All list state is in the URL (q, dept, filter, page) and the query runs
+ * All list state is in the URL (q, dept, filter, page, sort, dir) and the query runs
  * server-side, 25 rows per page. The desktop table is a client component
  * (admin bulk selection + password regeneration); the mobile cards stay
  * server-rendered.
@@ -28,6 +28,7 @@ import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import {
   EMPLOYEES_PAGE_SIZE,
   employeesHref,
+  employeesOrder,
   ilikeTerm,
   pageRange,
   parseEmployeesQuery,
@@ -46,7 +47,7 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-const LIST_SELECT = `id, employee_code, full_name, active, hire_date,
+const LIST_SELECT = `id, employee_code, personnel_no, full_name, first_name, last_name, active, hire_date,
        departments!profiles_department_id_fkey (name_fa, name_en),
        user_roles (user_id, role_id)`;
 const INCOMPLETE_EMBED = 'employee_personal_info!employee_personal_info_employee_id_fkey!inner(complete)';
@@ -98,10 +99,10 @@ async function EmployeesData({
     );
   }
   const { from, to } = pageRange(query.page);
-  const { data: employees, count, error } = await list
-    .order('full_name')
-    .order('id')
-    .range(from, to);
+  for (const { column, ...options } of employeesOrder(query.sort, query.dir)) {
+    list = list.order(column, options);
+  }
+  const { data: employees, count, error } = await list.range(from, to);
 
   // Each person's next pending/approved time off, from the reason-less view.
   const ids = (employees ?? []).map((e) => e.id);
@@ -131,7 +132,10 @@ async function EmployeesData({
     return {
       id: emp.id,
       employee_code: emp.employee_code,
+      personnel_no: emp.personnel_no,
       full_name: emp.full_name,
+      first_name: emp.first_name,
+      last_name: emp.last_name,
       active: emp.active,
       hireDateLabel: emp.hire_date ? formatCalendarDate(emp.hire_date, locale) : '—',
       departmentLabel: deptName(emp.departments),
@@ -174,6 +178,8 @@ async function EmployeesData({
         canBulkReset={canBulkReset}
         showLocks={showLocks}
         locale={locale}
+        base={base}
+        query={query}
       />
 
       {/* Mobile cards */}
@@ -194,7 +200,7 @@ async function EmployeesData({
                       <bdi>{emp.full_name}</bdi>
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      <bdi dir="ltr">{emp.employee_code}</bdi> ، {emp.departmentLabel}
+                      <bdi dir="ltr">{emp.personnel_no ?? '—'}</bdi> ، {emp.departmentLabel}
                     </span>
                   </span>
                   <Next aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />

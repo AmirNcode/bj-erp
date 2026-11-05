@@ -5,7 +5,14 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
-import { employeesHref, type EmployeesFilter, type EmployeesQuery } from '@/lib/employees/list';
+import {
+  EMPLOYEES_SORTS,
+  employeesHref,
+  type EmployeesFilter,
+  type EmployeesQuery,
+  type EmployeesSort,
+  type SortDir,
+} from '@/lib/employees/list';
 import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 
@@ -130,6 +137,26 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
             {d.name}
           </option>
         ))}
+      </select>
+
+      {/* FR-83: the phone has no table headers to click; same URL state as the desktop table. */}
+      <select
+        aria-label={tl('sortLabel')}
+        data-testid="emp-sort-select"
+        value={`${query.sort}_${query.dir}`}
+        onChange={(e) => {
+          const [sort, dir] = e.target.value.split('_') as [EmployeesSort, SortDir];
+          go({ sort, dir });
+        }}
+        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-[10px] md:hidden')}
+      >
+        {EMPLOYEES_SORTS.flatMap((sort) =>
+          (['asc', 'desc'] as const).map((dir) => (
+            <option key={`${sort}_${dir}`} value={`${sort}_${dir}`}>
+              {tl(`sortOptions.${sort}_${dir}`)}
+            </option>
+          ))
+        )}
       </select>
     </div>
   );

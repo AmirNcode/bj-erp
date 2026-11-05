@@ -65,12 +65,12 @@ test('bulk import, credentials export, duplicate rejection, password regeneratio
   const deptToken = nextTestDepartmentCode();
   const header = templateHeader();
   const dataRows = [
-    // full_name, personnel_no, job_title, role, department_code, name_fa, name_en,
+    // first_name, last_name, personnel_no, job_title, role, department_code, name_fa, name_en,
     // supervisor_personnel_no, manager_personnel_no, hire_date, pto_days, pto_hours
     // The employee comes BEFORE their supervisor: the importer sorts.
-    [`Bulk Emp ${empPno1}`, empPno1, 'Welder', 'employee', '', `بخش ${deptToken}`, `${deptToken} Bulk`, mgrPno, '', '2025-07-13', '-1', '-4'],
-    [`Bulk Mgr ${mgrPno}`, mgrPno, 'Line Lead', 'manager', '', `بخش ${deptToken}`, `${deptToken} Bulk`, '', '', '1404/04/22', '12', '3'],
-    [`Bulk Emp ${empPno2}`, empPno2, '', 'employee', 'qc', '', '', '', '', '', '0', '0'],
+    [`Bulk Emp ${empPno1}`, 'E2E', empPno1, 'Welder', 'employee', '', `بخش ${deptToken}`, `${deptToken} Bulk`, mgrPno, '', '2025-07-13', '-1', '-4'],
+    [`Bulk Mgr ${mgrPno}`, 'E2E', mgrPno, 'Line Lead', 'manager', '', `بخش ${deptToken}`, `${deptToken} Bulk`, '', '', '1404/04/22', '12', '3'],
+    [`Bulk Emp ${empPno2}`, 'E2E', empPno2, '', 'employee', 'qc', '', '', '', '', '', '0', '0'],
   ];
   const balanceDate = jalaliRangeFromGregorian(new Date(), new Date()).split(' — ')[0];
 

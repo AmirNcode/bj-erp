@@ -104,9 +104,15 @@ describe('parsePersonalInfoForm', () => {
 
 describe('personal-info CSV', () => {
   const header = personalInfoHeader();
+
+  it('exports first and last name, not the full name (FR-83)', () => {
+    expect(header.slice(0, 3)).toEqual(['شماره پرسنلی (personnel_no)', 'نام (first_name)', 'نام خانوادگی (last_name)']);
+    expect(header.join()).not.toContain('full_name');
+  });
   const exported = personalInfoCsvRow({
     personnel_no: '123',
-    full_name: 'Ali',
+    first_name: 'Ali',
+    last_name: 'Rezaei',
     national_id: '0012345679',
     birth_cert_no: null,
     father_name: 'Reza',

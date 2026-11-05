@@ -43,7 +43,8 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   // ── 2. Create an employee with a balance and an accrual rule ──────────────
   const pno = nextTestPersonnelNo();
   await page.fill('[data-testid="personnel-no"]', pno);
-  await page.fill('#full_name', 'HR Provisioned Worker');
+  await page.fill('#first_name', 'HR Provisioned Worker');
+  await page.fill('#last_name', 'E2E');
   // Department is a required field — without it the browser blocks submit and
   // nothing reaches the server at all.
   const deptSelect = page.locator('#department_id');

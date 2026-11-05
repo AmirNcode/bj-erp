@@ -84,7 +84,7 @@ export function PersonalInfoBulk({ locale, canImport }: { locale: string; canImp
     });
 
   const fieldLabel = (field: PersonalInfoImportError['field']) =>
-    field === null ? '' : field === 'personnel_no' ? t('personnelNo') : field === 'full_name' ? '' : tf(field);
+    field === null ? '' : field === 'personnel_no' ? t('personnelNo') : field === 'first_name' || field === 'last_name' ? '' : tf(field);
   const problemLabel = (e: PersonalInfoImportError) =>
     e.problem === 'missingColumn' ||
     e.problem === 'personnelNo' ||

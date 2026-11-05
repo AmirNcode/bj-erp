@@ -27,7 +27,8 @@ test.describe('Employee CRUD — admin flow', () => {
 
     // ── 4. Fill the form ──────────────────────────────────────────────────
     await page.fill('#personnel_no', personnelNo);
-    await page.fill('#full_name', fullName);
+    await page.fill('#first_name', fullName);
+    await page.fill('#last_name', 'E2E');
     await page.fill('[data-testid="alloc-days-annual"]', '12');
     await page.fill('[data-testid="alloc-days-sick"]', '3');
 

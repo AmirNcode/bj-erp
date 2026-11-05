@@ -14,7 +14,18 @@ import { validateImportRows } from '@/lib/csv/import-rows';
 
 const file = join(__dirname, '../../docs/files/Personnel_CLEAN.csv');
 const present = existsSync(file);
-const result = validateImportRows(parseCsv(present ? readFileSync(file, 'utf8') : ''), {
+
+/** The file predates FR-83's two name columns; this keeps its other checks alive. */
+function withNameParts(rows: string[][]): string[][] {
+  return rows.map((cells, i) => {
+    const [name, ...rest] = cells;
+    if (i === 0) return ['first_name', 'last_name', ...rest];
+    const words = name.trim().split(/\s+/);
+    return [words[0], words.slice(1).join(' ') || words[0], ...rest];
+  });
+}
+
+const result = validateImportRows(withNameParts(parseCsv(present ? readFileSync(file, 'utf8') : '')), {
   departments: [],
   existingEmployees: [],
   hoursPerDay: 8,

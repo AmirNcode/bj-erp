@@ -75,6 +75,12 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **First and last names (FR-83):** built on `claude/employee-name-fields` (not merged, not deployed).
+  After deploy (owner/HR): sort Manage › Employees by Last name Z to A and fix each blank (about 54
+  expected). Tell HR old import files are now refused and the personal-info export has two name columns.
+- ☐ **FR-83 follow-up (one release after it deploys):** remove `p_full_name` from `app_create_employee`
+  and the `full_name` branch of `app_bulk_create_employees` / `app_bulk_import_employees`. They exist only
+  for the old app during the deploy window.
 - ◐ **Profile photos (FR-82):** built on `claude/profile-photos-spec` (not merged, not deployed).
   Owner: review the as-built amendment (spec §8: HR may set anyone's photo but the admin's; manager
   selects show no face). After deploy: upload your own photo from a phone (camera and gallery); as HR,

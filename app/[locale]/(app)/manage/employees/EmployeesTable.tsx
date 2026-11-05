@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { Lock, Pencil } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Lock, Pencil } from 'lucide-react';
 import {
   bulkResetPasswords,
   type IssuedCredential,
@@ -15,6 +15,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
+import {
+  employeesHref,
+  nextSort,
+  type EmployeesQuery,
+  type EmployeesSort,
+} from '@/lib/employees/list';
 import { resetSelectableIds } from '@/lib/employees/passwordReset';
 import { PersonAvatar } from '@/components/PersonAvatar';
 import {
@@ -32,7 +38,12 @@ import {
 export type EmployeeRow = {
   id: string;
   employee_code: string;
+  /** The ID column (FR-83); null shows «—». */
+  personnel_no: string | null;
   full_name: string;
+  first_name: string;
+  /** Blank until someone splits the name (FR-83): first_name then holds all of it. */
+  last_name: string | null;
   active: boolean;
   hireDateLabel: string;
   departmentLabel: string;
@@ -52,14 +63,52 @@ type Props = {
   /** Manager without people edit: department and roles are read-only for them. */
   showLocks: boolean;
   locale: string;
+  /** List URL and current list state, for the sortable headers (FR-83). */
+  base: string;
+  query: EmployeesQuery;
 };
+
+const TH = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
+
+/** A sortable header: a link, so it keeps every other list param and works without state. */
+function SortableTh({
+  sort,
+  label,
+  base,
+  query,
+}: {
+  sort: EmployeesSort;
+  label: string;
+  base: string;
+  query: EmployeesQuery;
+}) {
+  const active = query.sort === sort;
+  const Icon = !active ? ChevronsUpDown : query.dir === 'asc' ? ArrowUp : ArrowDown;
+  return (
+    <th className={TH} aria-sort={!active ? 'none' : query.dir === 'asc' ? 'ascending' : 'descending'}>
+      <Link
+        href={employeesHref(base, { ...query, ...nextSort(query, sort) })}
+        replace
+        scroll={false}
+        data-testid={`emp-sort-${sort}`}
+        className="inline-flex items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        {label}
+        <Icon
+          aria-hidden="true"
+          className={cn('size-3.5 shrink-0', active ? 'text-primary' : 'text-muted-foreground/60')}
+        />
+      </Link>
+    </th>
+  );
+}
 
 /**
  * Desktop employees table. For the admin each eligible row gets a checkbox; a selection
  * opens a bar offering bulk password regeneration (the recovery path for a lost
  * one-time credentials file) — confirmed first: old passwords stop working.
  */
-export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: Props) {
+export function EmployeesTable({ employees, canBulkReset, showLocks, locale, base, query }: Props) {
   const t = useTranslations('manage.employees');
   const tl = useTranslations('manage.employees.list');
   const tr = useTranslations('manage.employees.regen');
@@ -104,8 +153,8 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: P
   const lock = showLocks ? (
     <Lock aria-label={tl('locked')} className="inline size-3 text-muted-foreground" />
   ) : null;
-  const th = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
-  const colCount = (canBulkReset ? 1 : 0) + 6;
+  const th = TH;
+  const colCount = (canBulkReset ? 1 : 0) + 8;
 
   return (
     <div className="hidden space-y-3 md:block">
@@ -166,8 +215,10 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: P
                     />
                   </th>
                 )}
-                <th className={th}>{tl('employee')}</th>
-                <th className={th}>{t('hireDate')}</th>
+                <SortableTh sort="first" label={tl('firstName')} base={base} query={query} />
+                <SortableTh sort="last" label={tl('lastName')} base={base} query={query} />
+                <SortableTh sort="id" label={tl('idColumn')} base={base} query={query} />
+                <SortableTh sort="hire" label={t('hireDate')} base={base} query={query} />
                 <th className={th}>
                   <span className="inline-flex items-center gap-1">
                     {t('department')}
@@ -209,15 +260,20 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale }: P
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <PersonAvatar id={emp.id} name={emp.full_name} />
-                      <div className="min-w-0">
-                        <div className="whitespace-nowrap font-medium">
-                          <bdi>{emp.full_name}</bdi>
-                        </div>
-                        <div className="text-xs text-muted-foreground" dir="ltr">
-                          {emp.employee_code}
-                        </div>
-                      </div>
+                      <span className="whitespace-nowrap font-medium">
+                        <bdi>{emp.first_name}</bdi>
+                      </span>
                     </div>
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 font-medium">
+                    {emp.last_name ? (
+                      <bdi>{emp.last_name}</bdi>
+                    ) : (
+                      <span className="font-normal text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                    <bdi dir="ltr">{emp.personnel_no ?? '—'}</bdi>
                   </td>
                   <td className="whitespace-nowrap px-4 py-3">{emp.hireDateLabel}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">

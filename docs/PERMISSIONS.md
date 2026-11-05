@@ -115,10 +115,11 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   **Column scope is enforced in the DB** by the `profiles_enforce_update_scope` BEFORE-UPDATE
   trigger (migration 0007, rewritten by `20261007130001`) — RLS is row-level only, so without the
   trigger a manager could PATCH any column of a report via the anon key. Branches, first match wins:
-  admin → anything; self → `full_name`/`language_pref`/compatibility-only `calendar_pref`
-  (database-constrained to `jalali`); editor on a same-company target that holds **no** `admin`
-  role row (even a deactivated admin) → `full_name`/`hire_date`/`department_id`/`manager_id`/
-  `job_title`/`active`; manager-of-row → `full_name`/`hire_date`. `employee_code`/`personnel_no`/
+  admin → anything; self → `language_pref`/compatibility-only `calendar_pref`
+  (database-constrained to `jalali`), plus `full_name`/`first_name`/`last_name` only for a `people`
+  edit holder (FR-83: nobody else renames themselves); editor on a same-company target that holds
+  **no** `admin` role row (even a deactivated admin) → `full_name`/`first_name`/`last_name`/
+  `hire_date`/`department_id`/`manager_id`/`job_title`/`active`; manager-of-row → `full_name`/`hire_date`. `employee_code`/`personnel_no`/
   `company_id` are admin-only. **FR-55:** the editor branch is `people` edit **and**
   `can_act_on(caller, target)` (D4: same company, no admin row, nothing above the caller's levels,
   plus the relationship and identity clauses). The `passwords` branch FR-55 added is gone since
