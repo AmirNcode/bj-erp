@@ -3445,7 +3445,7 @@ CREATE FUNCTION private.travel_booking_open_for_details(p_state text, p_end date
     LANGUAGE sql STABLE
     SET search_path TO ''
     AS $$
-  select p_state in ('to_book', 'extension', 'cancel_undo')
+  select p_state in ('to_book', 'extension', 'corrected', 'cancel_undo')
       or (p_state = 'done' and p_end >= (now() at time zone 'Asia/Tehran')::date);
 $$;
 
@@ -3509,6 +3509,14 @@ CREATE FUNCTION private.travel_booking_state(p_status public.leave_status, b pub
     when p_status = 'pending' then 'awaiting_approval'
     when p_status = 'approved' and b.opened_at is null then 'awaiting_approval'
     when p_status = 'approved' and b.done_at is not null then 'done'
+    when p_status = 'approved' and exists (
+      select 1 from public.request_corrections c
+       where c.request_id = b.request_id and c.corrected_at >= b.opened_at
+         and (c.old_start_date, c.old_end_date) is distinct from (c.new_start_date, c.new_end_date)
+         and c.corrected_at > coalesce((select max(e.decided_at) from public.errand_extensions e
+                                         where e.request_id = b.request_id and e.status = 'approved'),
+                                       '-infinity'::timestamptz))
+      then 'corrected'
     when p_status = 'approved' and exists (
       select 1 from public.errand_extensions e
        where e.request_id = b.request_id and e.status = 'approved' and e.decided_at >= b.opened_at)
@@ -5284,6 +5292,103 @@ $_$;
 
 
 --
+-- Name: app_correct_trip(uuid, date, date, bigint, text, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_uid uuid := auth.uid();
+  v_reason text := btrim(coalesce(p_reason, ''));
+  r public.leave_requests%rowtype;
+  v_start date;
+  v_end date;
+  v_per_diem bigint;
+  v_dates_changed boolean;
+  v_per_diem_changed boolean;
+  v_now timestamptz;
+  v_id uuid;
+begin
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+  if not private.is_travel_hr(v_uid, p_request) then
+    raise exception 'not allowed to correct this trip' using errcode = '42501';
+  end if;
+  if not coalesce(p_signature_authorized, false) or p_signature_data is null
+     or p_signature_data !~ '^data:image/png;base64,[A-Za-z0-9+/]+=*$' then
+    raise exception 'signature is required' using errcode = '22023';
+  end if;
+  if p_per_diem_rials < 0 then raise exception 'per diem must be 0 or more' using errcode = '22023'; end if;
+  if v_reason = '' then raise exception 'a reason is required' using errcode = '22023'; end if;
+  if char_length(v_reason) > 1000 then raise exception 'reason is too long' using errcode = '22023'; end if;
+
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
+  select * into r from public.leave_requests where id = p_request for update;
+  if not private.is_travel_hr(v_uid, p_request) then
+    raise exception 'not allowed to correct this trip' using errcode = '42501';
+  end if;
+
+  if r.status <> 'approved' or r.kind <> 'errand' or r.unit <> 'day' then
+    raise exception 'only an approved daily trip can be corrected' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.errand_extensions where request_id = p_request and status = 'pending') then
+    raise exception 'an extension is waiting for HR' using errcode = '22023';
+  end if;
+
+  v_start := coalesce(p_new_start, r.start_date);
+  v_end := coalesce(p_new_end, r.end_date);
+  v_per_diem := coalesce(p_per_diem_rials, r.per_diem_rials);
+  v_dates_changed := (v_start, v_end) is distinct from (r.start_date, r.end_date);
+  v_per_diem_changed := v_per_diem is distinct from r.per_diem_rials;
+
+  if not v_dates_changed and not v_per_diem_changed then
+    raise exception 'nothing to correct' using errcode = '22023';
+  end if;
+  if v_start > v_end then
+    raise exception 'start date must not be after end date' using errcode = '22023';
+  end if;
+  if v_dates_changed and private.extension_overlaps(r.id, r.employee_id, v_start, v_end) then
+    raise exception 'overlapping leave request exists' using errcode = '22023';
+  end if;
+
+  v_now := clock_timestamp();
+  insert into public.request_corrections (
+    request_id, company_id, old_start_date, new_start_date, old_end_date, new_end_date,
+    per_diem_before, per_diem_after, reason, corrected_by, corrected_at,
+    signature_data, signature_consent_at
+  ) values (
+    r.id, r.company_id, r.start_date, v_start, r.end_date, v_end,
+    r.per_diem_rials, v_per_diem, v_reason, v_uid, v_now, p_signature_data, v_now
+  ) returning id into v_id;
+
+  update public.leave_requests
+     set start_date = v_start,
+         end_date = v_end,
+         requested_minutes = case when v_dates_changed
+           then public.compute_requested_minutes(r.company_id, v_start, v_end, 'full', 'day', null, null, 'errand')
+           else requested_minutes end,
+         per_diem_rials = v_per_diem,
+         per_diem_by_requester = case when v_per_diem_changed then false else per_diem_by_requester end
+   where id = r.id;
+
+  if v_dates_changed then
+    update public.travel_bookings set done_at = null, done_by = null, updated_at = now()
+     where request_id = r.id and opened_at is not null;
+  end if;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'trip.correct', 'leave_requests', r.id,
+          jsonb_build_object('start_date', r.start_date, 'end_date', r.end_date, 'per_diem_rials', r.per_diem_rials),
+          jsonb_build_object('start_date', v_start, 'end_date', v_end, 'per_diem_rials', v_per_diem,
+                             'correction_id', v_id));
+  return v_id;
+end $_$;
+
+
+--
 -- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[], text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6683,7 +6788,7 @@ begin
   select * into b from public.travel_bookings where request_id = p_request for update;
   if b.request_id is null then raise exception 'no booking for this request' using errcode = '22023'; end if;
   v_state := private.travel_booking_state(r.status, b);
-  if not (v_state in ('to_book', 'extension')
+  if not (v_state in ('to_book', 'extension', 'corrected')
           or (v_state = 'done' and r.end_date >= (now() at time zone 'Asia/Tehran')::date)) then
     raise exception 'booking cannot be changed now' using errcode = '22023';
   end if;
@@ -6739,7 +6844,7 @@ begin
   select * into b from public.travel_bookings where request_id = p_request for update;
   if b.request_id is null then raise exception 'no booking for this request' using errcode = '22023'; end if;
   v_state := private.travel_booking_state(r.status, b);
-  if not (v_state in ('to_book', 'extension')
+  if not (v_state in ('to_book', 'extension', 'corrected')
           or (v_state = 'done' and r.end_date >= (now() at time zone 'Asia/Tehran')::date)) then
     raise exception 'booking cannot be changed now' using errcode = '22023';
   end if;
@@ -7801,6 +7906,14 @@ begin
     'transport', b.transport, 'flight_cost_rials', b.flight_cost_rials,
     'hotel_cost_rials', b.hotel_cost_rials, 'traveller_note', b.traveller_note,
     'itinerary', b.itinerary,
+    'last_correction', (
+      select jsonb_build_object('old_start_date', c.old_start_date, 'old_end_date', c.old_end_date,
+                                'new_start_date', c.new_start_date, 'new_end_date', c.new_end_date,
+                                'reason', c.reason)
+        from public.request_corrections c
+       where c.request_id = r.id
+         and (c.old_start_date, c.old_end_date) is distinct from (c.new_start_date, c.new_end_date)
+       order by c.corrected_at desc limit 1),
     'lost_rials', b.lost_rials, 'lost_note', b.lost_note, 'done_at', b.done_at,
     'extensions', coalesce((
       select jsonb_agg(jsonb_build_object('old_end_date', e.old_end_date, 'new_end_date', e.new_end_date,
@@ -8317,7 +8430,7 @@ end; $$;
 -- Name: finance_requests(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.finance_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone, status public.leave_status, travel_state text, transport text, flight_cost_rials bigint, hotel_cost_rials bigint, lost_rials bigint, waiting_step text)
+CREATE FUNCTION public.finance_requests(p_from date, p_to date) RETURNS TABLE(id uuid, serial_year integer, serial_seq integer, kind public.request_kind, employee_name text, personnel_no text, department_name_fa text, department_name_en text, leave_type_name_fa text, leave_type_name_en text, is_paid boolean, start_date date, end_date date, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, unpaid_minutes integer, errand_location text, per_diem_rials bigint, per_diem_by_requester boolean, decided_at timestamp with time zone, status public.leave_status, travel_state text, transport text, flight_cost_rials bigint, hotel_cost_rials bigint, lost_rials bigint, waiting_step text, corrected_at timestamp with time zone)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -8359,7 +8472,8 @@ begin
                 and not private.request_hr_exempt(x.id, st.id)
               order by st.step_order, st.id
               limit 1)
-           end
+           end,
+           (select max(c.corrected_at) from public.request_corrections c where c.request_id = x.id)
       from (
         select r.id, r.company_id, r.employee_id, r.serial_year, r.serial_seq, r.kind, p.full_name, p.personnel_no,
                d.name_fa as dname_fa, d.name_en as dname_en, t.name_fa as tname_fa, t.name_en as tname_en, t.is_paid,
@@ -8624,7 +8738,7 @@ CREATE FUNCTION public.my_travel_pending() RETURNS SETOF uuid
     join public.leave_requests r on r.id = b.request_id
    where r.employee_id = auth.uid()
      and r.status = 'approved'
-     and private.travel_booking_state(r.status, b) in ('to_book', 'extension');
+     and private.travel_booking_state(r.status, b) in ('to_book', 'extension', 'corrected');
 $$;
 
 
@@ -8750,6 +8864,28 @@ begin
      where e.request_id = p_id
      order by e.requested_at;
 end; $$;
+
+
+--
+-- Name: request_trip_corrections(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.request_trip_corrections(p_id uuid) RETURNS TABLE(old_start_date date, new_start_date date, old_end_date date, new_end_date date, per_diem_before bigint, per_diem_after bigint, reason text, corrected_by_name text, corrected_at timestamp with time zone)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if not private.can_read_approval_request(auth.uid(), p_id) then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+  return query
+    select c.old_start_date, c.new_start_date, c.old_end_date, c.new_end_date,
+           c.per_diem_before, c.per_diem_after, c.reason, p.full_name, c.corrected_at
+      from public.request_corrections c
+      left join public.profiles p on p.id = c.corrected_by
+     where c.request_id = p_id
+     order by c.corrected_at;
+end $$;
 
 
 --
@@ -9899,6 +10035,37 @@ COMMENT ON COLUMN public.leave_types.default_carryover_cap_minutes IS 'Unused si
 
 
 --
+-- Name: request_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.request_corrections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    request_id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    old_start_date date NOT NULL,
+    new_start_date date NOT NULL,
+    old_end_date date NOT NULL,
+    new_end_date date NOT NULL,
+    per_diem_before bigint,
+    per_diem_after bigint,
+    reason text NOT NULL,
+    corrected_by uuid,
+    corrected_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    signature_data text NOT NULL,
+    signature_consent_at timestamp with time zone NOT NULL,
+    CONSTRAINT request_corrections_dates CHECK ((new_start_date <= new_end_date)),
+    CONSTRAINT request_corrections_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 1000)))
+);
+
+
+--
+-- Name: TABLE request_corrections; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.request_corrections IS 'FR-84: one row per correction of an approved daily trip. Append-only; RPCs only.';
+
+
+--
 -- Name: role_permissions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10457,6 +10624,14 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: request_corrections request_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_corrections
+    ADD CONSTRAINT request_corrections_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10873,6 +11048,13 @@ CREATE INDEX profiles_department_id_idx ON public.profiles USING btree (departme
 --
 
 CREATE INDEX profiles_manager_id_idx ON public.profiles USING btree (manager_id);
+
+
+--
+-- Name: request_corrections_request; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX request_corrections_request ON public.request_corrections USING btree (request_id, corrected_at DESC);
 
 
 --
@@ -11802,6 +11984,30 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: request_corrections request_corrections_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_corrections
+    ADD CONSTRAINT request_corrections_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id);
+
+
+--
+-- Name: request_corrections request_corrections_corrected_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_corrections
+    ADD CONSTRAINT request_corrections_corrected_by_fkey FOREIGN KEY (corrected_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: request_corrections request_corrections_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_corrections
+    ADD CONSTRAINT request_corrections_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
 -- Name: role_permissions role_permissions_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12487,6 +12693,12 @@ COMMENT ON POLICY profiles_select_auth_admin ON public.profiles IS 'Lets the GoT
 
 CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid)))));
 
+
+--
+-- Name: request_corrections; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.request_corrections ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: role_permissions; Type: ROW SECURITY; Schema: public; Owner: -
@@ -13730,6 +13942,16 @@ GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO service_role;
 
 
 --
+-- Name: FUNCTION app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14612,6 +14834,16 @@ GRANT ALL ON FUNCTION public.request_errand_extensions(p_id uuid) TO service_rol
 
 
 --
+-- Name: FUNCTION request_trip_corrections(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.request_trip_corrections(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.request_trip_corrections(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.request_trip_corrections(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.request_trip_corrections(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION search_approver_candidates(p_query text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14918,6 +15150,14 @@ GRANT ALL ON TABLE public.leave_types TO postgres;
 GRANT ALL ON TABLE public.leave_types TO anon;
 GRANT ALL ON TABLE public.leave_types TO authenticated;
 GRANT ALL ON TABLE public.leave_types TO service_role;
+
+
+--
+-- Name: TABLE request_corrections; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.request_corrections TO postgres;
+GRANT ALL ON TABLE public.request_corrections TO service_role;
 
 
 --

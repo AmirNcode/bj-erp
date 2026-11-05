@@ -14,7 +14,7 @@ const base: FinanceRow = {
   start_date: '2027-03-01', end_date: '2027-03-02', unit: 'day', start_time: null, end_time: null, requested_minutes: 960,
   unpaid_minutes: 0, errand_location: 'Shiraz', per_diem_rials: 500000, per_diem_by_requester: false, decided_at: null,
   status: 'approved', travel_state: 'done', transport: 'flight', flight_cost_rials: 3000000, hotel_cost_rials: 2000000, lost_rials: null,
-  waiting_step: null,
+  waiting_step: null, corrected_at: null,
 };
 const cancelled: FinanceRow = { ...base, id: 'b', serial_seq: 2, status: 'cancelled', travel_state: 'settled', transport: 'company_car',
   per_diem_rials: null, flight_cost_rials: null, hotel_cost_rials: null, lost_rials: 400000 };
