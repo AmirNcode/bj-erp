@@ -78,6 +78,34 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — PR #20 code review (FR-83)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/employee-name-fields @ 89facbd
+**Trigger:** Amir ran `/code-review:code-review` on PR #20, without `--comment`.
+
+**What changed**
+- `app/[locale]/(app)/manage/employees/import/ImportWizard.tsx:197-198` — split the name cell in both `EXAMPLE_ROWS` rows
+  (Amir asked after the review). They had 12 positional cells while `IMPORT_COLUMNS` (`lib/csv/import-rows.ts:43`) now has
+  13, so wizard step 1's example sat one column off and, with balances hidden, a balance value showed under Hire date.
+  Display only: template download and parsing use headers.
+
+**Actions outside the repo**
+- None. Nothing posted to GitHub.
+
+**Verification**
+- Review: two compliance passes (root `CLAUDE.md`) found no violation. Two bug passes found this one issue; one validator
+  confirmed it. `gh pr checks 20` reports no checks on the branch.
+- Fix: `tsc --noEmit` clean; `tests/unit/csv-import-rows` + `import-plan` 56 passed. Rendered on a temporary `zz-` page,
+  deleted after: balances shown 13 headers / 13 cells, hidden 11 / 11, every value under its heading, no console errors.
+- Not run: full unit suite, build, e2e, migration.
+
+**State left behind**
+- Fix and this entry uncommitted on `claude/employee-name-fields`, not pushed.
+
+**For the next agent**
+- `EXAMPLE_ROWS` is an untyped `string[][]`, and no test ties its length to `IMPORT_COLUMNS`.
+
 ## 2026-11-04 — First/last names + sortable Employees table: implementation (FR-83)
 
 **Agent:** Claude Opus 5.5 via Claude Code

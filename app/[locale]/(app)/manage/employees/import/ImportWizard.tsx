@@ -194,8 +194,8 @@ function fill(template: string, params: Record<string, string> = {}): string {
 }
 
 const EXAMPLE_ROWS = [
-  ['رضا کریمی', '1042', 'سرپرست خط', 'manager', 'PROD', 'تولید', 'Production', '', '1001', '1404/04/22', '12', '3'],
-  ['علی رضایی', '1043', 'جوشکار', 'employee', 'PROD', '', '', '1042', '1001', '', '-1', '-4'],
+  ['رضا', 'کریمی', '1042', 'سرپرست خط', 'manager', 'PROD', 'تولید', 'Production', '', '1001', '1404/04/22', '12', '3'],
+  ['علی', 'رضایی', '1043', 'جوشکار', 'employee', 'PROD', '', '', '1042', '1001', '', '-1', '-4'],
 ];
 
 export function ImportWizard({ context, employees, existingDepartments, isAdmin, locale, today }: Props) {
