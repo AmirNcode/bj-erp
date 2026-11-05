@@ -185,6 +185,29 @@ select pg_temp.expect('the traveller refused',pg_temp.err(pg_temp.correct('worke
 select pg_temp.expect('the manager refused',pg_temp.err(pg_temp.correct('mgr','plain',null,'2026-01-05',null,'r')),'42501');
 select pg_temp.expect('procurement refused',pg_temp.err(pg_temp.correct('proc','plain',null,'2026-01-05',null,'r')),'42501');
 
+-- An hr holder's delegate acts as HR, but never on that hr holder's own trip.
+do $$
+begin
+  perform pg_temp.login('admin');
+  insert into public.role_permissions(role_id,permission,level)
+    select id,'approval_delegate','edit' from public.roles
+     where company_id=pg_temp.fx('company') and system_key='hr'
+    on conflict do nothing;
+  insert into public.approval_delegations(company_id,principal_id,delegate_id,principal_name,delegate_name,configured_by)
+    values(pg_temp.fx('company'),pg_temp.fx('hr'),pg_temp.fx('mgr'),'Fixture hr','Fixture mgr',pg_temp.fx('admin'));
+end; $$;
+select pg_temp.assert('the delegate acts as HR',private.acts_as_travel_hr(pg_temp.fx('mgr'),pg_temp.fx('company')));
+select pg_temp.expect('the delegate may correct someone else''s trip',
+  pg_temp.err(pg_temp.correct('mgr','plain',null,'2026-01-06',null,'r')),'ok');
+select pg_temp.expect('the delegate refused on the principal''s own trip',
+  pg_temp.err(pg_temp.correct('mgr','hrs_own',null,'2027-07-03',null,'r')),'42501');
+select pg_temp.expect('that refusal wrote nothing',
+  (select end_date::text from public.leave_requests where id=pg_temp.fx('hrs_own')),'2027-07-02');
+do $$ begin
+  perform pg_temp.login('admin');
+  delete from public.approval_delegations where principal_id=pg_temp.fx('hr');
+end; $$;
+
 -- ============================================================ what can be corrected
 insert into tc_fx values('pending',pg_temp.daily('worker','2027-08-01','2027-08-01')::uuid);
 select pg_temp.expect('pending refused',pg_temp.err(pg_temp.correct('hr','pending',null,'2027-08-02',null,'r')),'22023');

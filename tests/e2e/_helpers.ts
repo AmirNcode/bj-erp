@@ -407,8 +407,8 @@ export async function signRequest(
 }
 
 /** Sign the currently-open approval dialog on the queue or calendar surface. */
-export async function signApproval(page: Page, surface: 'queue' | 'calendar' = 'queue') {
-  const prefix = surface === 'calendar' ? 'cal-approval-' : 'approval-';
+export async function signApproval(page: Page, surface: 'queue' | 'calendar' | 'correct' = 'queue') {
+  const prefix = surface === 'calendar' ? 'cal-approval-' : surface === 'correct' ? 'correct-' : 'approval-';
   await drawAndAuthorizeSignature(
     page,
     `[data-testid^="${prefix}"][data-testid$="-signature-canvas"]`,

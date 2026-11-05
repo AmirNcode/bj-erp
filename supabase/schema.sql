@@ -752,6 +752,28 @@ $$;
 
 
 --
+-- Name: can_correct_trip(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_correct_trip(p_uid uuid, p_request uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (
+    select 1 from public.leave_requests r
+     where r.id = p_request and r.employee_id <> p_uid
+       and private.acts_as_travel_hr(p_uid, r.company_id)
+       and (private.is_admin(p_uid) or private.has_role(p_uid, 'hr')
+            or exists (
+              select 1 from public.user_roles ur
+                join public.profiles h on h.id = ur.user_id and h.company_id = r.company_id and h.active
+               where ur.role = 'hr' and ur.user_id <> r.employee_id
+                 and exists (select 1 from private.effective_approval_delegate(ur.user_id) d
+                              where d.delegate_id = p_uid))));
+$$;
+
+
+--
 -- Name: can_read_all(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -5313,7 +5335,7 @@ declare
 begin
   select * into r from public.leave_requests where id = p_request;
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
-  if not private.is_travel_hr(v_uid, p_request) then
+  if not private.can_correct_trip(v_uid, p_request) then
     raise exception 'not allowed to correct this trip' using errcode = '42501';
   end if;
   if not coalesce(p_signature_authorized, false) or p_signature_data is null
@@ -5327,7 +5349,7 @@ begin
   perform private.approval_lock(r.company_id);
   perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
   select * into r from public.leave_requests where id = p_request for update;
-  if not private.is_travel_hr(v_uid, p_request) then
+  if not private.can_correct_trip(v_uid, p_request) then
     raise exception 'not allowed to correct this trip' using errcode = '42501';
   end if;
 
@@ -13059,6 +13081,13 @@ GRANT ALL ON FUNCTION private.can_act_on(p_caller uuid, p_target uuid) TO authen
 --
 
 REVOKE ALL ON FUNCTION private.can_approve_step(p_uid uuid, p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION can_correct_trip(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_correct_trip(p_uid uuid, p_request uuid) FROM PUBLIC;
 
 
 --

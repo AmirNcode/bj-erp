@@ -72,7 +72,7 @@ export function printedTripDates(
 /** FR-84: which rows offer Correct. The caller must also pass the HR gate. */
 export function canCorrectTrip(
   r: { kind: string; unit: string; status: string; employee_id: string },
-  viewerId: string
+  viewerId: string | null
 ): boolean {
   return r.kind === 'errand' && r.unit === 'day' && r.status === 'approved' && r.employee_id !== viewerId;
 }

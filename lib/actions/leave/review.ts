@@ -34,6 +34,8 @@ export type ReviewRequestRow = {
   end_time: string | null;
   day_part: DayPart;
   requested_minutes: number;
+  /** FR-84: prefills the Correct dialog. */
+  per_diem_rials?: number | null;
   serial_year: number;
   serial_seq: number;
   /** Timestamps only — the images stay lazy and are never listed. */
@@ -59,7 +61,7 @@ export async function getReviewRequests(): Promise<
     .from('leave_requests')
     .select(
       `id, employee_id, kind, unit, status, start_date, end_date, start_time, end_time, day_part,
-       requested_minutes, serial_year, serial_seq, signature_consent_at,
+       requested_minutes, per_diem_rials, serial_year, serial_seq, signature_consent_at,
        approver_signature_consent_at, created_at,
        profiles!leave_requests_employee_id_fkey(
          full_name, personnel_no,
@@ -83,6 +85,7 @@ export async function getReviewRequests(): Promise<
     end_time: string | null;
     day_part: DayPart;
     requested_minutes: number;
+    per_diem_rials: number | null;
     serial_year: number;
     serial_seq: number;
     signature_consent_at: string | null;
@@ -116,6 +119,7 @@ export async function getReviewRequests(): Promise<
       end_time: r.end_time,
       day_part: r.day_part,
       requested_minutes: r.requested_minutes,
+      per_diem_rials: r.per_diem_rials,
       serial_year: r.serial_year,
       serial_seq: r.serial_seq,
       signature_consent_at: r.signature_consent_at ?? null,
