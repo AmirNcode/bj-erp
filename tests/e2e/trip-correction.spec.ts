@@ -9,7 +9,7 @@ import {
 } from './_helpers';
 
 /** An approved two-day trip; leaves the admin signed in and returns the request id. */
-async function approvedTrip(page: Page, location: string, offsetDays: number) {
+async function approvedTrip(page: Page, location: string, offsetDays: number, booked = false) {
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
   const mgr = await createEmployee(page, { name: 'Correction Manager', roles: ['manager'] });
   const emp = await createEmployee(page, { name: 'Correction Probe', roles: ['employee'] });
@@ -25,6 +25,14 @@ async function approvedTrip(page: Page, location: string, offsetDays: number) {
   await page.click('[data-testid="daily-errand-submit"]');
   await expect(page.locator('[data-testid="daily-errand-success"]')).toBeVisible({ timeout: 20_000 });
   await logout(page);
+
+  if (booked) {
+    await login(page, ADMIN_CODE, ADMIN_PASSWORD);
+    await page.goto('/en/manage/requests');
+    await page.locator('[data-testid^="travel-tick-"]').first().click();
+    await page.waitForLoadState('networkidle');
+    await logout(page);
+  }
 
   await login(page, mgr.code, mgr.password);
   await page.goto('/manage/approvals');
@@ -87,6 +95,26 @@ test('HR corrects the end date and the print form keeps the signed date', async 
   for (const printed of signed.split('\n').filter((l) => l && !l.includes('Duration'))) {
     expect(after).toContain(printed);
   }
+});
+
+test('a corrected booking goes back to procurement with the old and new dates', async ({ page }) => {
+  test.setTimeout(240_000);
+  const id = await approvedTrip(page, 'Booked site', 50, true);
+  await correct(page, id, 'Return flight moved');
+  const newEnd = jalali2DayRange(100).split(/\s+—\s+/)[1];
+  const input = page.locator('[data-testid="correct-end"] input');
+  await input.click();
+  await input.fill(newEnd);
+  await page.keyboard.press('Enter');
+  await page.locator('[data-testid="correct-reason"]').click();
+  await signApproval(page, 'correct');
+  await page.click('[data-testid="correct-submit"]');
+  await expect(page.locator('[data-testid="correct-submit"]')).toHaveCount(0, { timeout: 20_000 });
+
+  await page.goto('/en/procurement');
+  await expect(page.locator('[data-testid="procurement-group-corrected"]')).toContainText('Booked site', { timeout: 20_000 });
+  await page.goto(`/en/procurement/${id}`);
+  await expect(page.locator('[data-testid="procurement-correction-note"]')).toContainText('Return flight moved');
 });
 
 test('a save with nothing changed is refused', async ({ page }) => {

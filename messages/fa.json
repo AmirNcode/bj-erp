@@ -1572,6 +1572,7 @@
     "unpaid": "بدون حقوق: {value}",
     "hourlyErrand": "ماموریت ساعتی",
     "dailyErrand": "ماموریت روزانه",
+    "corrected": "اصلاح‌شده",
     "csv": {
       "trackingNo": "شماره پیگیری",
       "personnelNo": "شماره پرسنلی",
@@ -1595,7 +1596,8 @@
       "lost": "مبلغ از دست رفته",
       "total": "جمع",
       "status": "وضعیت",
-      "waitingOn": "در انتظار"
+      "waitingOn": "در انتظار",
+      "corrected": "تاریخ اصلاح"
     },
     "perDiemByRequester": "ثبت‌شده توسط متقاضی (مدیر منابع انسانی)",
     "grandTotal": "جمع کل هزینه‌ها",
@@ -1951,6 +1953,7 @@
     "procurementEmpty": "ماموریتی برای رزرو نیست.",
     "states": {
       "to_book": "در انتظار رزرو",
+      "corrected": "اصلاح تاریخ: رزرو را به‌روز کنید",
       "extension": "تمدید: رزرو را به‌روز کنید",
       "cancel_undo": "لغو شده: رزرو را لغو کنید",
       "done": "رزرو شد",
@@ -1958,6 +1961,7 @@
     },
     "tripDates": "تاریخ ماموریت",
     "description": "شرح ماموریت",
+    "correctedDates": "منابع انسانی تاریخ را از {from} به {to} اصلاح کرد",
     "extendedTo": "تمدید تا {date}",
     "travellerDetails": "مشخصات مسافر",
     "notRecorded": "ثبت نشده",

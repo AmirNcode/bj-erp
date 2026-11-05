@@ -45,7 +45,7 @@ export default async function BookingPage({ params }: Props) {
   const date = (d: string) => formatCalendarDate(d, locale);
   const rials = (v: number | null) => (v === null ? '—' : formatRials(v, locale));
   const traveller = b.traveller;
-  const editable = b.state === 'to_book' || b.state === 'extension' || (b.state === 'done' && !!traveller);
+  const editable = b.state === 'to_book' || b.state === 'extension' || b.state === 'corrected' || (b.state === 'done' && !!traveller);
   const value = (field: (typeof TRAVELLER_FIELDS)[number]) => {
     const v = traveller?.[field];
     if (!v) return <span className="text-destructive">{t('notRecorded')}</span>;
@@ -93,6 +93,14 @@ export default async function BookingPage({ params }: Props) {
           </div>
           <div>{t('tripDates')}: {date(b.start_date)} — {date(b.end_date)}</div>
           {b.description && <div>{t('description')}: {b.description}</div>}
+          {b.state === 'corrected' && b.last_correction && (
+            <div className="rounded-md bg-amber-50 px-3 py-2 text-amber-900" data-testid="procurement-correction-note">
+              {t('correctedDates', {
+                from: `${date(b.last_correction.old_start_date)} — ${date(b.last_correction.old_end_date)}`,
+                to: `${date(b.last_correction.new_start_date)} — ${date(b.last_correction.new_end_date)}`,
+              })}{' '}— {b.last_correction.reason}
+            </div>
+          )}
           {b.extensions.map((e) => (
             <div key={e.new_end_date} className="rounded-md bg-amber-50 px-3 py-2 text-amber-900">
               {t('extendedTo', { date: date(e.new_end_date) })} — {e.reason}

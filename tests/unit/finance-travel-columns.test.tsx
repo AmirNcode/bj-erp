@@ -28,6 +28,18 @@ function renderList(rows: FinanceRow[]) {
   );
 }
 
+describe('finance: corrected trips (FR-84)', () => {
+  it('marks a corrected row', () => {
+    renderList([{ ...base, corrected_at: '2027-03-05T10:00:00Z' }]);
+    expect(screen.getByTestId('finance-corrected-a').textContent).toContain('Corrected');
+  });
+
+  it('shows no marker on an untouched row', () => {
+    renderList([base]);
+    expect(screen.queryByTestId('finance-corrected-a')).toBeNull();
+  });
+});
+
 describe('finance: travel costs (FR-70)', () => {
   it('shows transport, ticket, hotel and the trip total', () => {
     renderList([base]);

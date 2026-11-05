@@ -1572,6 +1572,7 @@
     "unpaid": "Unpaid: {value}",
     "hourlyErrand": "Hourly work errand",
     "dailyErrand": "Daily work errand",
+    "corrected": "Corrected",
     "csv": {
       "trackingNo": "Tracking no.",
       "personnelNo": "Personnel no.",
@@ -1595,7 +1596,8 @@
       "lost": "Amount lost",
       "total": "Total",
       "status": "Status",
-      "waitingOn": "Waiting on"
+      "waitingOn": "Waiting on",
+      "corrected": "Corrected on"
     },
     "perDiemByRequester": "Entered by requester (Head of HR)",
     "grandTotal": "Total cost",
@@ -1951,6 +1953,7 @@
     "procurementEmpty": "No trips to book.",
     "states": {
       "to_book": "To book",
+      "corrected": "Dates corrected: update the booking",
       "extension": "Extension: update the booking",
       "cancel_undo": "Cancelled: undo the booking",
       "done": "Booked",
@@ -1958,6 +1961,7 @@
     },
     "tripDates": "Trip dates",
     "description": "Description",
+    "correctedDates": "HR corrected the dates from {from} to {to}",
     "extendedTo": "Extended to {date}",
     "travellerDetails": "Traveller details",
     "notRecorded": "Not recorded",

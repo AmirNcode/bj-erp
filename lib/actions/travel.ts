@@ -46,7 +46,7 @@ export async function getTravelTicks(): Promise<Record<string, { started: boolea
   return Object.fromEntries((data ?? []).map((r) => [r.request_id, { started: r.started }]));
 }
 
-export type TravelState = 'to_book' | 'extension' | 'done' | 'cancel_undo' | 'settled';
+export type TravelState = 'to_book' | 'extension' | 'corrected' | 'done' | 'cancel_undo' | 'settled';
 export type Transport = 'flight' | 'company_car';
 
 export type TravelBookingRow = {
@@ -76,6 +76,14 @@ export type TravelBookingDetail = Omit<TravelBookingRow, 'done_at'> & {
   itinerary: Itinerary | null;
   lost_note: string | null;
   done_at: string | null;
+  /** FR-84: the latest date correction, for the note procurement sees. */
+  last_correction: {
+    old_start_date: string;
+    old_end_date: string;
+    new_start_date: string;
+    new_end_date: string;
+    reason: string;
+  } | null;
   extensions: { old_end_date: string; new_end_date: string; reason: string; decided_at: string | null }[];
   /** Live from personal information; absent once the booking is closed. */
   traveller?: Partial<Record<TravellerField, string | null>>;

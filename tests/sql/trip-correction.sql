@@ -276,6 +276,10 @@ select pg_temp.assert('corrected stays open for traveller details',
 select pg_temp.expect('the traveller sees it as pending booking',pg_temp.as_scalar('worker2',format(
   'select count(*)::text from public.my_travel_pending() p where p=%L',pg_temp.fx('order1'))),'1');
 
+select pg_temp.expect('procurement re-saves a corrected booking',pg_temp.err(pg_temp.as_scalar('proc',format(
+  'select public.app_save_travel_booking(%L,''company_car'',0,0,''note'',true)::text',pg_temp.fx('order1')))),'ok');
+select pg_temp.expect('and it is done again',pg_temp.state('order1'),'done');
+
 -- ============================================================ reads
 select pg_temp.expect('procurement reads the latest correction',pg_temp.as_scalar('proc',format(
   'select public.app_travel_booking(%L)->''last_correction''->>''new_end_date''',pg_temp.fx('order1'))),'2027-11-06');
