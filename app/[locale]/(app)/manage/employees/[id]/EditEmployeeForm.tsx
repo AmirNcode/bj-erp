@@ -50,6 +50,8 @@ type Profile = {
   id: string;
   employee_code: string;
   full_name: string;
+  first_name: string;
+  last_name: string | null;
   department_id: string | null;
   manager_id: string | null;
   hire_date: string | null;
@@ -64,7 +66,8 @@ function useLabels() {
   const tTeam = useTranslations('team');
   return {
     code: t('employees.code'),
-    name: t('employees.name'),
+    firstName: t('employees.firstName'),
+    lastName: t('employees.lastName'),
     department: t('employees.department'),
     manager: t('employees.manager'),
     roles: t('employees.roles'),
@@ -227,9 +230,23 @@ export function EditEmployeeForm({
     // people-edit holder on the admin, on themselves or on someone with more
     // access, FR-55 D3/D4), so the save proceeds straight to the leave
     // sections instead of failing here on a write they were never allowed to make.
+    const nameFields = {
+      first_name: ((fd.get('first_name') as string) ?? '').trim(),
+      // FR-83: may stay blank; a blank is the marker that the name still needs splitting.
+      last_name: ((fd.get('last_name') as string) ?? '').trim() || null,
+    };
+    if (caps.name && !caps.profile) {
+      // A people edit holder on their own record: the name is all they may change.
+      const result = await updateEmployee(employee.id, nameFields);
+      if (!result.ok) {
+        setPending(false);
+        setError(result.error);
+        return;
+      }
+    }
     if (caps.profile) {
       const result = await updateEmployee(employee.id, {
-        full_name: (fd.get('full_name') as string).trim(),
+        ...nameFields,
         hire_date: hireDate ? dateObjectToGregorian(hireDate) : null,
         ...(caps.org
           ? {
@@ -395,17 +412,28 @@ export function EditEmployeeForm({
       <Card>
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-              <Label htmlFor="full_name">{labels.name}</Label>
-              <Input
-                id="full_name"
-                name="full_name"
-                required
-                defaultValue={employee.full_name}
-                // Read-only for a caller who cannot save it: an editable box
-                // whose value is silently discarded is worse than a disabled one.
-                disabled={!caps.profile}
-              />
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="first_name">{labels.firstName}</Label>
+                <Input
+                  id="first_name"
+                  name="first_name"
+                  required
+                  defaultValue={employee.first_name}
+                  // Read-only for a caller who cannot save it: an editable box
+                  // whose value is silently discarded is worse than a disabled one.
+                  disabled={!caps.name}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="last_name">{labels.lastName}</Label>
+                <Input
+                  id="last_name"
+                  name="last_name"
+                  defaultValue={employee.last_name ?? ''}
+                  disabled={!caps.name}
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">

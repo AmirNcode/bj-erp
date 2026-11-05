@@ -39,7 +39,8 @@ test.describe('duplicate personnel number', () => {
     await expect(page).toHaveURL(/\/en\/manage\/employees\/new$/);
 
     await page.fill('#personnel_no', personnelNo);
-    await page.fill('#full_name', 'Dup Second');
+    await page.fill('#first_name', 'Dup Second');
+    await page.fill('#last_name', 'E2E');
 
     const deptSelect = page.locator('#department_id');
     const firstDept = await deptSelect.locator('option').nth(1).getAttribute('value');

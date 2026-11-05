@@ -32,7 +32,7 @@ async function openEdit(page: Page, code: string) {
   await page.goto(`/en/manage/employees?q=${encodeURIComponent(code)}`);
   await page.locator('tr', { hasText: code }).first().locator('a[href*="/manage/employees/"]').click();
   await expect(page).toHaveURL(/\/manage\/employees\/[0-9a-f-]+$/, { timeout: 30_000 });
-  await expect(page.locator('#full_name')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#first_name')).toBeVisible({ timeout: 30_000 });
 }
 
 async function save(page: Page) {

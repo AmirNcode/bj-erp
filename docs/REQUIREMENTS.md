@@ -403,6 +403,17 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-83** ☐ **First and last names, sortable Employees table.** `profiles` stores first and last name
+  separately; `full_name` stays, kept equal to first + last by a database trigger, so every other screen
+  is unchanged. Existing two-word names are split; any other name keeps all its words in First name with
+  a blank Last name, which is the only marker that it still needs fixing (no review page). Add Employee
+  and bulk import require both names; Edit lets Last name stay blank. Only the admin and `people` edit
+  holders may change a name, a holder's own included; nobody else may, on themselves either. Manage ›
+  Employees has First name, Last name, ID (`personnel_no`) and Hire Date columns, each sortable on the
+  server, default Last name A→Z, with the sort in the URL; Persian names sort in Persian order, IDs
+  numerically then text; Last name Z→A lists the blanks first. Phones get a Sort control. The import
+  template and personal-info export use the two columns; old one-column import files are refused.
+  *(Owner, 2026-11-04; spec `docs/specs/2026-11-04-employee-name-fields-design.md`; unreleased.)*
 - **FR-82** ☐ **Profile photos.** Everyone may set their own photo on Profile (pick a file or take one
   on a phone, crop to a circle); HR (`people` edit) and the admin set anyone's on Manage › Employees ›
   Edit employee and may **lock** it so the person cannot change or remove it. The photo shows next to

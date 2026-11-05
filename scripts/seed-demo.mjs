@@ -63,6 +63,10 @@ function die(msg, err) {
 }
 
 async function ensureUser(code, fullName, deptId, roles, managerId) {
+  // Demo names: the last word is the last name.
+  const words = fullName.trim().split(/\s+/);
+  const lastName = words.pop();
+  const firstName = words.join(' ');
   const { data: existing, error: selErr } = await supa
     .from('profiles')
     .select('id')
@@ -76,7 +80,9 @@ async function ensureUser(code, fullName, deptId, roles, managerId) {
     // Since 20260730130002 the personnel number is the login code; the former
     // p_employee_code RPC argument no longer exists.
     p_personnel_no: code,
-    p_full_name: fullName,
+    p_full_name: null,
+    p_first_name: firstName,
+    p_last_name: lastName,
     p_password: DEMO_PW,
     p_department_id: deptId,
     p_roles: roles,

@@ -67,7 +67,8 @@ test.skip('admin creates a department and hires an employee into it', async ({ p
   await deptSelect.selectOption({ value: deptValue });
 
   await page.fill('#personnel_no', pno);
-  await page.fill('#full_name', `New Dept Hire ${pno}`);
+  await page.fill('#first_name', `New Dept Hire ${pno}`);
+  await page.fill('#last_name', 'E2E');
   await expect(page.locator('[data-testid="code-preview"]')).toHaveText(`${deptCode}-${pno}`);
 
   await page.click('button[type="submit"]');
@@ -147,7 +148,8 @@ test('admin adds a department from Manage › Departments and hires into it', as
   await deptSelect.selectOption({ value: deptValue });
 
   await page.fill('#personnel_no', pno);
-  await page.fill('#full_name', `New Dept Hire ${pno}`);
+  await page.fill('#first_name', `New Dept Hire ${pno}`);
+  await page.fill('#last_name', 'E2E');
   // The department no longer prefixes the code.
   await expect(page.locator('[data-testid="code-preview"]')).toHaveText(pno);
 

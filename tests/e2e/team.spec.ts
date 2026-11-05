@@ -36,7 +36,8 @@ async function createEmployeeWithManager(
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
   await page.fill('#personnel_no', nextTestPersonnelNo());
-  await page.fill('#full_name', opts.name);
+  await page.fill('#first_name', opts.name);
+  await page.fill('#last_name', 'E2E');
 
   // Pick the first real department
   const deptSelect = page.locator('#department_id');
@@ -165,14 +166,14 @@ test.describe('Manager "My Team" view, read-only (FR-74)', () => {
     await expect(page.locator('input[type="checkbox"]')).not.toBeVisible();
 
     // name and hire date shown, but disabled; nothing to save
-    await expect(page.locator('#full_name')).toBeVisible();
-    await expect(page.locator('#full_name')).toBeDisabled();
+    await expect(page.locator('#first_name')).toBeVisible();
+    await expect(page.locator('#first_name')).toBeDisabled();
     await expect(page.locator('[data-testid="edit-scope-note"]')).toBeVisible();
     await expect(page.locator('[data-testid="edit-save"]')).toHaveCount(0);
 
     // ── 8. Negative: M opens X's page → not found ───────────────────────
     await page.goto(`/fa/manage/employees/${nonId}`);
-    await expect(page.locator('#full_name')).toHaveCount(0, { timeout: 10000 });
+    await expect(page.locator('#first_name')).toHaveCount(0, { timeout: 10000 });
 
     // /new is HR and admin only
     await page.goto('/fa/manage/employees/new');

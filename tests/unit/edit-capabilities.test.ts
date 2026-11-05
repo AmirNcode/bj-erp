@@ -100,6 +100,7 @@ describe('employeeEditCapabilities', () => {
   it('admin may do everything, on anyone; every role but admin is toggleable', () => {
     expect(caps(ADMIN, ['admin'])).toEqual({
       profile: true,
+      name: true,
       org: true,
       editableRoleIds: ALL.filter((r) => r.systemKey !== 'admin').map((r) => r.id),
       resetPassword: true,
@@ -116,6 +117,7 @@ describe('employeeEditCapabilities', () => {
   it('hr edits an employee: profile and org fields, the manager role only', () => {
     expect(caps(hr('employee'), ['employee'])).toEqual({
       profile: true,
+      name: true,
       org: true,
       editableRoleIds: [MANAGER_ROLE.id],
       resetPassword: false,
@@ -158,6 +160,15 @@ describe('employeeEditCapabilities', () => {
     });
   });
 
+  it('name (FR-83): a people edit holder on themselves, but nobody else on themselves', () => {
+    expect(caps(hr(), ['hr'], { targetId: ME })).toMatchObject({ name: true, profile: false, org: false });
+    expect(caps(hr(), ['employee'])).toMatchObject({ name: true, profile: true });
+    expect(caps(hr(), ['admin'])).toMatchObject({ name: false, profile: false });
+    expect(caps(ADMIN, ['admin'], { targetId: ME })).toMatchObject({ name: true });
+    expect(caps(HELPDESK_CALLER, ['employee'], { targetId: ME })).toMatchObject({ name: false });
+    expect(caps({ roles: ['manager', 'employee'], perms: {} }, ['manager'], { targetId: ME }).name).toBe(false);
+  });
+
   it('own personal information follows personal_info_own: the admin implicitly, no preset (FR-63)', () => {
     expect(canEditOwnPersonalInfo(fullPerms())).toBe(true);
     expect(canEditOwnPersonalInfo(HR)).toBe(false);
@@ -196,6 +207,7 @@ describe('employeeEditCapabilities', () => {
   it('FR-74: a manager changes nothing, and reads a direct report\'s balances', () => {
     expect(caps({ roles: ['manager', 'employee'], perms: {} }, ['employee'])).toEqual({
       profile: false,
+      name: false,
       org: false,
       editableRoleIds: [],
       resetPassword: false,

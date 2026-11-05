@@ -34,7 +34,8 @@ test.describe('Leave request + allocation flow', () => {
     await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
     await page.fill('#personnel_no', personnelNo);
-    await page.fill('#full_name', fullName);
+    await page.fill('#first_name', fullName);
+    await page.fill('#last_name', 'E2E');
 
     // Select the first real department
     const deptSelect = page.locator('#department_id');

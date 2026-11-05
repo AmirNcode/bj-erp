@@ -26,7 +26,8 @@ import {
 } from '@/lib/departments/code';
 
 export type ImportColumnKey =
-  | 'full_name'
+  | 'first_name'
+  | 'last_name'
   | 'personnel_no'
   | 'job_title'
   | 'role'
@@ -40,7 +41,8 @@ export type ImportColumnKey =
   | 'pto_hours';
 
 export const IMPORT_COLUMNS: { key: ImportColumnKey; labelFa: string; required: boolean }[] = [
-  { key: 'full_name', labelFa: 'نام کامل', required: true },
+  { key: 'first_name', labelFa: 'نام', required: true },
+  { key: 'last_name', labelFa: 'نام خانوادگی', required: true },
   { key: 'personnel_no', labelFa: 'شماره پرسنلی', required: true },
   { key: 'job_title', labelFa: 'عنوان شغلی', required: false },
   { key: 'role', labelFa: 'نقش', required: true },
@@ -85,6 +87,9 @@ export type ImportRow = {
   line: number;
   /** The personnel number is already in the app (only possible outside `add`). */
   existing: boolean;
+  first_name: string;
+  last_name: string;
+  /** first + last, for the preview and the same-name check. */
   full_name: string;
   personnel_no: string;
   job_title: string | null;
@@ -124,6 +129,7 @@ export type RowError = {
   field: ImportColumnKey | 'row';
   messageKey:
     | 'missingColumn'
+    | 'oldTemplate'
     | 'required'
     | 'badPersonnelNo'
     | 'dupInFile'
@@ -191,6 +197,12 @@ function matchColumn(cell: string): ImportColumnKey | null {
   return null;
 }
 
+/** The single name column of templates before FR-83. */
+function isOldNameColumn(cell: string): boolean {
+  const c = cell.replace(/^\uFEFF/, '').trim().toLowerCase();
+  return c === 'full_name' || c.includes('(full_name)') || c === 'نام کامل' || c === 'نام و نام خانوادگی';
+}
+
 /**
  * Converts a hire-date cell to Gregorian ISO. Returns null for empty,
  * undefined for unparseable — including a day that does not exist in its month.
@@ -209,6 +221,8 @@ function parseSignedInt(raw: string): number | null {
 type Draft = {
   line: number;
   bad: boolean;
+  first_name: string;
+  last_name: string;
   full_name: string;
   personnel_no: string;
   job_title: string | null;
@@ -249,6 +263,12 @@ export function validateImportRows(
     const key = matchColumn(cell);
     if (key !== null && !colIndex.has(key)) colIndex.set(key, i);
   });
+  // FR-83: an old file has one name column. Updating with it could undo names already fixed, so
+  // it is refused outright, with a message that says what to do.
+  if (!colIndex.has('first_name') && !colIndex.has('last_name') && csvRows[0].some(isOldNameColumn)) {
+    errors.push({ line: 1, field: 'first_name', messageKey: 'oldTemplate' });
+    return result([], []);
+  }
   for (const col of IMPORT_COLUMNS) {
     if (col.required && !colIndex.has(col.key)) {
       errors.push({ line: 1, field: col.key, messageKey: 'missingColumn' });
@@ -273,7 +293,9 @@ export function validateImportRows(
     const d: Draft = {
       line,
       bad: false,
-      full_name: get('full_name'),
+      first_name: get('first_name'),
+      last_name: get('last_name'),
+      full_name: `${get('first_name')} ${get('last_name')}`.trim(),
       personnel_no: toAsciiDigits(get('personnel_no')),
       job_title: get('job_title') || null,
       role: null,
@@ -291,7 +313,8 @@ export function validateImportRows(
       d.bad = true;
     };
 
-    if (!d.full_name) fail('full_name', 'required');
+    if (!d.first_name) fail('first_name', 'required');
+    if (!d.last_name) fail('last_name', 'required');
 
     if (!d.personnel_no) fail('personnel_no', 'required');
     else if (!isValidPersonnelNo(d.personnel_no)) fail('personnel_no', 'badPersonnelNo');
@@ -566,6 +589,8 @@ export function validateImportRows(
   const rows: ImportRow[] = ordered.map((d) => ({
     line: d.line,
     existing: existingPnos.has(d.personnel_no),
+    first_name: d.first_name,
+    last_name: d.last_name,
     full_name: d.full_name,
     personnel_no: d.personnel_no,
     job_title: d.job_title,

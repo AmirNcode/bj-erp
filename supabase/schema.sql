@@ -881,10 +881,10 @@ $$;
 
 
 --
--- Name: create_employee_impl(uuid, text, uuid, uuid, uuid, text, text, text, public.app_role[], date, text, text, text); Type: FUNCTION; Schema: private; Owner: -
+-- Name: create_employee_impl(uuid, text, uuid, uuid, uuid, text, text, text, public.app_role[], date, text, text, text, text, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
-CREATE FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) RETURNS uuid
+CREATE FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_first_name text DEFAULT NULL::text, p_last_name text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -895,6 +895,10 @@ declare
   v_code      text;
   v_email     text;
   v_role      public.app_role;
+  v_first     text := nullif(btrim(coalesce(p_first_name, '')), '');
+  v_last      text := nullif(btrim(coalesce(p_last_name, '')), '');
+  -- FR-83: the parts decide; a caller that still sends only a full name is split by the trigger.
+  v_full      text := coalesce(nullif(btrim(coalesce(p_full_name, '')), ''), concat_ws(' ', v_first, v_last));
 begin
   if not private.valid_personnel_no(v_pno, p_path = 'admin') then
     if p_path = 'admin' then
@@ -903,7 +907,7 @@ begin
     raise exception 'invalid personnel number (1-10 digits)' using errcode = '22023';
   end if;
   perform private.assert_password_ok(p_password);  -- FR-80
-  if coalesce(btrim(p_full_name), '') = '' then
+  if coalesce(v_full, '') = '' then
     raise exception 'full name is required' using errcode = '22023';
   end if;
   if p_department_id is null then
@@ -950,9 +954,9 @@ begin
           jsonb_build_object('sub', v_uid::text, 'email', v_email, 'email_verified', true),
           'email', now(), now(), now());
 
-  insert into public.profiles (id, company_id, employee_code, full_name, department_id, manager_id,
-                               hire_date, language_pref, calendar_pref, personnel_no, job_title)
-  values (v_uid, p_company_id, v_code, btrim(p_full_name), p_department_id, p_manager_id,
+  insert into public.profiles (id, company_id, employee_code, full_name, first_name, last_name,
+                               department_id, manager_id, hire_date, language_pref, calendar_pref, personnel_no, job_title)
+  values (v_uid, p_company_id, v_code, v_full, v_first, v_last, p_department_id, p_manager_id,
           p_hire_date, coalesce(p_language_pref, 'fa'), coalesce(p_calendar_pref, 'jalali'),
           v_pno, nullif(btrim(coalesce(p_job_title, '')), ''));
 
@@ -963,7 +967,7 @@ begin
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
   values (p_actor, 'create_employee', 'profiles', v_uid,
           jsonb_build_object('employee_code', v_code, 'personnel_no', v_pno,
-                             'full_name', p_full_name, 'roles', to_jsonb(p_roles), 'path', p_path));
+                             'full_name', v_full, 'roles', to_jsonb(p_roles), 'path', p_path));
 
   return v_uid;
 end; $$;
@@ -1309,13 +1313,17 @@ begin
   end if;
 
   if new.id = v_uid then
-    v_allowed := array['full_name', 'language_pref', 'calendar_pref'];
+    -- FR-83: a name is no longer the person's own to change; only a people edit holder keeps it.
+    v_allowed := array['language_pref', 'calendar_pref'];
+    if private.has_perm(v_uid, 'people', 'edit') then
+      v_allowed := v_allowed || array['full_name', 'first_name', 'last_name'];
+    end if;
   elsif private.has_perm(v_uid, 'people', 'edit')
         -- FR-55 D4: same company, never an admin (even a deactivated one, so an
         -- editor cannot reactivate one), and nothing the editor does not hold.
         and private.can_act_on(v_uid, old.id)
   then
-    v_allowed := array['full_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
+    v_allowed := array['full_name', 'first_name', 'last_name', 'hire_date', 'department_id', 'manager_id', 'job_title', 'active'];
   else
     -- Password resets are the admin's alone (20261013200007).
     raise exception 'not permitted to update this profile' using errcode = '42501';
@@ -1329,6 +1337,8 @@ begin
      or (new.must_change_password is distinct from old.must_change_password
          and coalesce(current_setting('bj.password_flag_write', true), '') <> 'on')
      or (new.full_name     is distinct from old.full_name     and not ('full_name'     = any (v_allowed)))
+     or (new.first_name    is distinct from old.first_name    and not ('first_name'    = any (v_allowed)))
+     or (new.last_name     is distinct from old.last_name     and not ('last_name'     = any (v_allowed)))
      or (new.hire_date     is distinct from old.hire_date     and not ('hire_date'     = any (v_allowed)))
      or (new.department_id is distinct from old.department_id and not ('department_id' = any (v_allowed)))
      or (new.manager_id    is distinct from old.manager_id    and not ('manager_id'    = any (v_allowed)))
@@ -3088,6 +3098,21 @@ end; $$;
 
 
 --
+-- Name: split_full_name(text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.split_full_name(p_name text, OUT first_name text, OUT last_name text) RETURNS record
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case when cardinality(x.w) = 2 then x.w[1] else x.t end,
+         case when cardinality(x.w) = 2 then x.w[2] end
+    from (select a.t, regexp_split_to_array(a.t, '\s+') as w
+            from (select regexp_replace(p_name, '^\s+|\s+$', '', 'g') as t) a) x;
+$_$;
+
+
+--
 -- Name: step_applies(text, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -3344,6 +3369,40 @@ begin
   return v_req;
 end;
 $$;
+
+
+--
+-- Name: sync_profile_names(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sync_profile_names() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_parts record;
+begin
+  new.first_name := nullif(regexp_replace(new.first_name, '^\s+|\s+$', '', 'g'), '');
+  new.last_name  := nullif(regexp_replace(new.last_name, '^\s+|\s+$', '', 'g'), '');
+
+  if tg_op = 'UPDATE'
+     and new.first_name is not distinct from old.first_name
+     and new.last_name  is not distinct from old.last_name then
+    if new.full_name is not distinct from old.full_name then
+      return new;
+    end if;
+    select * into v_parts from private.split_full_name(new.full_name);
+    new.first_name := v_parts.first_name;
+    new.last_name  := v_parts.last_name;
+  elsif tg_op = 'INSERT' and new.first_name is null then
+    select * into v_parts from private.split_full_name(new.full_name);
+    new.first_name := v_parts.first_name;
+    new.last_name  := v_parts.last_name;
+  else
+    new.full_name := concat_ws(' ', new.first_name, new.last_name);
+  end if;
+  return new;
+end; $_$;
 
 
 --
@@ -4459,6 +4518,12 @@ begin
   for v_row in select * from jsonb_array_elements(p_rows) loop
     v_i := v_i + 1;
 
+    -- FR-83: rows from the new template need both names. The old app still sends full_name.
+    if v_row ? 'first_name'
+       and (coalesce(btrim(v_row->>'first_name'), '') = '' or coalesce(btrim(v_row->>'last_name'), '') = '') then
+      raise exception 'row %: first and last name are required', v_i using errcode = '22023';
+    end if;
+
     v_role := coalesce(v_row->>'role', 'employee');
     -- FR-35 / spec D4: HR may bulk-onboard, but only ordinary employees.
     if v_bulk_hr then
@@ -4490,7 +4555,8 @@ begin
       v_caller, case when v_bulk_hr then 'bulk_hr' else 'bulk' end, p_company_id, v_dept, v_mgr,
       v_row->>'personnel_no', v_row->>'full_name', v_row->>'password',
       (case when v_role = 'manager' then array['manager','employee'] else array['employee'] end)::public.app_role[],
-      nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
+      nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title',
+      v_row->>'first_name', v_row->>'last_name');
 
     v_minutes := coalesce(nullif(v_row->>'balance_minutes', ''), '0')::int;
     -- FR-55: an opening balance is leave_balances edit, as on the Add Employee form.
@@ -4698,6 +4764,12 @@ begin
   for v_row in select * from jsonb_array_elements(p_rows) loop
     v_i := v_i + 1;
 
+    -- FR-83: rows from the new template need both names. The old app still sends full_name.
+    if v_row ? 'first_name'
+       and (coalesce(btrim(v_row->>'first_name'), '') = '' or coalesce(btrim(v_row->>'last_name'), '') = '') then
+      raise exception 'row %: first and last name are required', v_i using errcode = '22023';
+    end if;
+
     v_role := coalesce(v_row->>'role', 'employee');
     if v_bulk_hr then
       v_role := 'employee';
@@ -4744,7 +4816,9 @@ begin
       v_uid := v_existing;
 
       update public.profiles
-         set full_name     = btrim(v_row->>'full_name'),
+         set full_name     = case when v_row ? 'first_name' then full_name else btrim(v_row->>'full_name') end,
+             first_name    = case when v_row ? 'first_name' then btrim(v_row->>'first_name') else first_name end,
+             last_name     = case when v_row ? 'first_name' then btrim(v_row->>'last_name') else last_name end,
              job_title     = nullif(btrim(coalesce(v_row->>'job_title', '')), ''),
              department_id = v_dept,
              manager_id    = v_mgr,
@@ -4792,7 +4866,8 @@ begin
         v_caller, case when v_bulk_hr then 'bulk_hr' else 'bulk' end, p_company_id, v_dept, v_mgr,
         v_row->>'personnel_no', v_row->>'full_name', v_row->>'password',
         (case when v_role = 'manager' then array['manager','employee'] else array['employee'] end)::public.app_role[],
-        nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title');
+        nullif(v_row->>'hire_date', '')::date, 'fa', 'jalali', v_row->>'job_title',
+      v_row->>'first_name', v_row->>'last_name');
 
       if v_minutes <> 0 then
         if v_annual_type is null then
@@ -5151,10 +5226,10 @@ $_$;
 
 
 --
--- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[], text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_create_employee(text, text, text, uuid, uuid, uuid, public.app_role[], date, text, text, text, uuid[], text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text, p_role_ids uuid[] DEFAULT NULL::uuid[], p_login_code text DEFAULT NULL::text) RETURNS uuid
+CREATE FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid DEFAULT NULL::uuid, p_manager_id uuid DEFAULT NULL::uuid, p_roles public.app_role[] DEFAULT ARRAY['employee'::public.app_role], p_hire_date date DEFAULT NULL::date, p_language_pref text DEFAULT 'fa'::text, p_calendar_pref text DEFAULT 'jalali'::text, p_job_title text DEFAULT NULL::text, p_role_ids uuid[] DEFAULT NULL::uuid[], p_login_code text DEFAULT NULL::text, p_first_name text DEFAULT NULL::text, p_last_name text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5175,6 +5250,13 @@ begin
   end if;
   v_admin := private.is_admin(v_caller);
   v_hr := private.has_perm(v_caller, 'people_create', 'edit');
+
+  -- FR-83: the app sends the parts, and a new person always has both. The old app sends only
+  -- p_full_name during deploy.
+  if (p_first_name is not null or p_last_name is not null)
+     and (coalesce(btrim(p_first_name), '') = '' or coalesce(btrim(p_last_name), '') = '') then
+    raise exception 'first and last name are required' using errcode = '22023';
+  end if;
 
   -- D1: no path adds admin, whichever branch below runs.
   -- Owner, 2026-11-02: only the admin picks a login code other than the personnel number.
@@ -5228,7 +5310,7 @@ begin
   v_uid := private.create_employee_impl(
     v_caller, case when v_admin then 'admin' else 'hr' end,
     v_company, v_dept, v_mgr, p_personnel_no, p_full_name, p_password,
-    v_roles, p_hire_date, p_language_pref, p_calendar_pref, p_job_title);
+    v_roles, p_hire_date, p_language_pref, p_calendar_pref, p_job_title, p_first_name, p_last_name);
 
   if nullif(btrim(coalesce(p_login_code, '')), '') is not null then
     perform private.set_login_code(v_caller, v_uid, p_login_code);
@@ -5531,7 +5613,7 @@ end $$;
 -- Name: app_export_personal_info(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_export_personal_info() RETURNS TABLE(personnel_no text, employee_code text, full_name text, active boolean, national_id text, birth_cert_no text, father_name text, birth_date date, birth_place text, gender text, marital_status text, bank_name text, bank_account_no text, sheba text, card_no text, mobile text, home_phone text, address text, postal_code text, emergency_name text, emergency_phone text, insurance_no text, education text, military_status text, children_count smallint)
+CREATE FUNCTION public.app_export_personal_info() RETURNS TABLE(personnel_no text, employee_code text, full_name text, first_name text, last_name text, active boolean, national_id text, birth_cert_no text, father_name text, birth_date date, birth_place text, gender text, marital_status text, bank_name text, bank_account_no text, sheba text, card_no text, mobile text, home_phone text, address text, postal_code text, emergency_name text, emergency_phone text, insurance_no text, education text, military_status text, children_count smallint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -5551,7 +5633,7 @@ begin
           jsonb_build_object('rows', v_count));
 
   return query
-    select p.personnel_no, p.employee_code, p.full_name, p.active,
+    select p.personnel_no, p.employee_code, p.full_name, p.first_name, p.last_name, p.active,
            i.national_id, i.birth_cert_no, i.father_name, i.birth_date, i.birth_place,
            i.gender, i.marital_status, i.bank_name, i.bank_account_no, i.sheba,
            i.card_no, i.mobile, i.home_phone, i.address, i.postal_code,
@@ -8489,6 +8571,69 @@ $$;
 
 
 --
+-- Name: profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.profiles (
+    id uuid NOT NULL,
+    company_id uuid NOT NULL,
+    employee_code text NOT NULL,
+    full_name text NOT NULL,
+    department_id uuid,
+    manager_id uuid,
+    hire_date date,
+    language_pref text DEFAULT 'fa'::text NOT NULL,
+    calendar_pref text DEFAULT 'jalali'::text NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    personnel_no text,
+    job_title text,
+    must_change_password boolean DEFAULT true NOT NULL,
+    first_name text NOT NULL COLLATE pg_catalog."fa-IR-x-icu",
+    last_name text COLLATE pg_catalog."fa-IR-x-icu",
+    CONSTRAINT profiles_calendar_pref_persian_only CHECK ((calendar_pref = 'jalali'::text)),
+    CONSTRAINT profiles_first_name_format CHECK (((first_name <> ''::text) AND (first_name = btrim(first_name)))),
+    CONSTRAINT profiles_last_name_format CHECK (((last_name IS NULL) OR ((last_name <> ''::text) AND (last_name = btrim(last_name))))),
+    CONSTRAINT profiles_manager_not_self CHECK (((manager_id IS NULL) OR (manager_id <> id))),
+    CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (((char_length(personnel_no) >= 1) AND (char_length(personnel_no) <= 64)) AND (personnel_no = btrim(personnel_no)))))
+);
+
+
+--
+-- Name: COLUMN profiles.calendar_pref; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.calendar_pref IS 'Compatibility column fixed to jalali; the application no longer exposes a calendar preference.';
+
+
+--
+-- Name: COLUMN profiles.must_change_password; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.must_change_password IS 'True while the account still uses an admin-issued password. Set on creation and by admin resets; cleared only by app_set_initial_password / app_change_my_password.';
+
+
+--
+-- Name: COLUMN profiles.last_name; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.last_name IS 'NULL = not split yet (the name was not exactly two words) or a one-word name; first_name then holds the whole name.';
+
+
+--
+-- Name: personnel_sort_key(public.profiles); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.personnel_sort_key(p public.profiles) RETURNS numeric
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $_$
+  select case when x.d ~ '^[0-9]+$' then x.d::numeric end
+    from (select translate(p.personnel_no, '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789') as d) x;
+$_$;
+
+
+--
 -- Name: reject_leave_request(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9677,45 +9822,6 @@ CREATE TABLE public.leave_types (
 --
 
 COMMENT ON COLUMN public.leave_types.default_carryover_cap_minutes IS 'Unused since FR-60 (2026-10-12): the whole balance carries over. Kept for schema compatibility.';
-
-
---
--- Name: profiles; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.profiles (
-    id uuid NOT NULL,
-    company_id uuid NOT NULL,
-    employee_code text NOT NULL,
-    full_name text NOT NULL,
-    department_id uuid,
-    manager_id uuid,
-    hire_date date,
-    language_pref text DEFAULT 'fa'::text NOT NULL,
-    calendar_pref text DEFAULT 'jalali'::text NOT NULL,
-    active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    personnel_no text,
-    job_title text,
-    must_change_password boolean DEFAULT true NOT NULL,
-    CONSTRAINT profiles_calendar_pref_persian_only CHECK ((calendar_pref = 'jalali'::text)),
-    CONSTRAINT profiles_manager_not_self CHECK (((manager_id IS NULL) OR (manager_id <> id))),
-    CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (((char_length(personnel_no) >= 1) AND (char_length(personnel_no) <= 64)) AND (personnel_no = btrim(personnel_no)))))
-);
-
-
---
--- Name: COLUMN profiles.calendar_pref; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.profiles.calendar_pref IS 'Compatibility column fixed to jalali; the application no longer exposes a calendar preference.';
-
-
---
--- Name: COLUMN profiles.must_change_password; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.profiles.must_change_password IS 'True while the account still uses an admin-issued password. Set on creation and by admin resets; cleared only by app_set_initial_password / app_change_my_password.';
 
 
 --
@@ -11057,6 +11163,13 @@ CREATE TRIGGER profiles_preserve_active_admin BEFORE UPDATE OF active ON public.
 --
 
 CREATE TRIGGER profiles_revoke_sessions_on_deactivate AFTER UPDATE OF active ON public.profiles FOR EACH ROW WHEN ((old.active AND (NOT new.active))) EXECUTE FUNCTION private.profiles_revoke_on_deactivate();
+
+
+--
+-- Name: profiles profiles_sync_names; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER profiles_sync_names BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.sync_profile_names();
 
 
 --
@@ -12700,10 +12813,10 @@ REVOKE ALL ON FUNCTION private.company_minutes_per_day(p_company_id uuid) FROM P
 
 
 --
--- Name: FUNCTION create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text); Type: ACL; Schema: private; Owner: -
+-- Name: FUNCTION create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_first_name text, p_last_name text); Type: ACL; Schema: private; Owner: -
 --
 
-REVOKE ALL ON FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.create_employee_impl(p_actor uuid, p_path text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_personnel_no text, p_full_name text, p_password text, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_first_name text, p_last_name text) FROM PUBLIC;
 
 
 --
@@ -13218,6 +13331,13 @@ REVOKE ALL ON FUNCTION private.special_leave_target(p_actor uuid, p_employee uui
 
 
 --
+-- Name: FUNCTION split_full_name(p_name text, OUT first_name text, OUT last_name text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.split_full_name(p_name text, OUT first_name text, OUT last_name text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION step_applies(p_scope text, p_emp uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -13236,6 +13356,13 @@ REVOKE ALL ON FUNCTION private.step_delegation(p_uid uuid, p_request uuid, p_ste
 --
 
 REVOKE ALL ON FUNCTION private.submit_leave_impl(p_leave_type_id uuid, p_start date, p_end date, p_day_part public.day_part, p_reason text, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone, p_replacement_id uuid, p_kind public.request_kind, p_location text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sync_profile_names(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sync_profile_names() FROM PUBLIC;
 
 
 --
@@ -13511,13 +13638,13 @@ GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO service_role;
 
 
 --
--- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO postgres;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text) TO postgres;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_create_employee(p_personnel_no text, p_full_name text, p_password text, p_company_id uuid, p_department_id uuid, p_manager_id uuid, p_roles public.app_role[], p_hire_date date, p_language_pref text, p_calendar_pref text, p_job_title text, p_role_ids uuid[], p_login_code text, p_first_name text, p_last_name text) TO service_role;
 
 
 --
@@ -14311,6 +14438,47 @@ GRANT ALL ON FUNCTION public.my_travel_pending() TO service_role;
 
 
 --
+-- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.profiles TO postgres;
+GRANT ALL ON TABLE public.profiles TO anon;
+GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.profiles TO authenticated;
+GRANT ALL ON TABLE public.profiles TO service_role;
+
+
+--
+-- Name: COLUMN profiles.id; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(id) ON TABLE public.profiles TO supabase_auth_admin;
+
+
+--
+-- Name: COLUMN profiles.language_pref; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(language_pref) ON TABLE public.profiles TO supabase_auth_admin;
+
+
+--
+-- Name: COLUMN profiles.active; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT(active) ON TABLE public.profiles TO supabase_auth_admin;
+
+
+--
+-- Name: FUNCTION personnel_sort_key(p public.profiles); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.personnel_sort_key(p public.profiles) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.personnel_sort_key(p public.profiles) TO postgres;
+GRANT ALL ON FUNCTION public.personnel_sort_key(p public.profiles) TO authenticated;
+GRANT ALL ON FUNCTION public.personnel_sort_key(p public.profiles) TO service_role;
+
+
+--
 -- Name: FUNCTION reject_leave_request(p_id uuid, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14658,37 +14826,6 @@ GRANT ALL ON TABLE public.leave_types TO postgres;
 GRANT ALL ON TABLE public.leave_types TO anon;
 GRANT ALL ON TABLE public.leave_types TO authenticated;
 GRANT ALL ON TABLE public.leave_types TO service_role;
-
-
---
--- Name: TABLE profiles; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.profiles TO postgres;
-GRANT ALL ON TABLE public.profiles TO anon;
-GRANT SELECT,REFERENCES,DELETE,TRIGGER,TRUNCATE,UPDATE ON TABLE public.profiles TO authenticated;
-GRANT ALL ON TABLE public.profiles TO service_role;
-
-
---
--- Name: COLUMN profiles.id; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT(id) ON TABLE public.profiles TO supabase_auth_admin;
-
-
---
--- Name: COLUMN profiles.language_pref; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT(language_pref) ON TABLE public.profiles TO supabase_auth_admin;
-
-
---
--- Name: COLUMN profiles.active; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT(active) ON TABLE public.profiles TO supabase_auth_admin;
 
 
 --

@@ -78,6 +78,115 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-04 — First/last names + sortable Employees table: implementation (FR-83)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/employee-name-fields @ 03f8b07 (uncommitted spec from the entry below)
+**Trigger:** Amir approved the spec ("Approved, go ahead").
+
+**What changed**
+- `supabase/migrations/20261106090000_employee_name_fields.sql` — new, **not applied to any real DB**, so not
+  frozen. Built by a throwaway script that copied function bodies from `schema.sql` with asserted patches.
+- `supabase/schema.sql` — dumped from the clone (`pg_dump -d names_clone`, not `npm run schema:dump`, Amir's
+  choice); 4 CHECK re-parenthesizing lines restored by script. `lib/supabase/types.ts` by hand.
+- App: `lib/employees/list.ts` (sort), `EmployeesTable`, `EmployeesToolbar`, `page.tsx`, Add/Edit forms,
+  `lib/employees/editCapabilities.ts` (`name`), `lib/actions/employees*.ts`, `lib/errors/db-error.ts`,
+  `lib/csv/import-rows.ts`, `lib/personal-info/csv.ts`, `messages/*.json`, `scripts/seed-demo.mjs`.
+- Tests: new `tests/sql/employee-names.sql`; `tests/sql/manager-read-only.sql` (self-rename now refused);
+  unit tests; e2e selectors `#full_name` → `#first_name` + `#last_name`. `personnel-clean-csv.test.ts`
+  adapts its old-format file at runtime.
+- Spec §7 amended (below). `docs/REQUIREMENTS.md`, `DATA_MODEL.md`, `PERMISSIONS.md`, `CHANGELOG.md`,
+  `TASKS.md`, `MEMORY.md`.
+
+**Dead ends**
+- Overload of `app_create_employee` (spec's first design): positional calls in `tests/sql/fr55-roles-permissions.sql`
+  bound to the new signature (`got 22023, want 42501`); baseline clone passed. Replaced by trailing defaults.
+- Backfill `from lateral` cannot reference the UPDATE target; sync trigger needed `security definer`. Both
+  caught before anything ran.
+- Browser pane: the Edit form never hydrated and Save did a native GET. The pane was hidden, which starves
+  Suspense hydration. Headless Playwright did not reproduce it; not a code bug.
+
+**Actions outside the repo**
+- Local Docker only. `names_clone` (+ `names_base` for the fr55 baseline, dropped) cloned from `postgres`. Clone
+  names and personnel numbers overwritten with invented ones before any screenshot. Second GoTrue, PostgREST
+  and Caddy on it (`names-*`), `npm run dev` on 3010. **All removed**; clone dropped, secret env files deleted.
+- `.claude/launch.json` had a temporary entry, reverted. Local `postgres` unchanged: no ledger row, no
+  `first_name` column. Nothing on Liara.
+
+**Verification**
+- Clone: `full_name` hash identical before and after (`19|157a4c64e1ef1d9b2b46ae3b95846762`); 1 blank, 18 split, 0
+  invariant breaks. All 22 `tests/sql` files pass; `employee-names.sql` 64 assertions.
+- PostgREST `v12.2.3`: `order=personnel_sort_key…` works. Browser (RTL, 39 people): every sort both ways across
+  pages, sort kept through department, tabs, search and reload; Add, Edit (blank allowed), HR own name,
+  wizard import, old-file refusal, mobile Sort, English headers; no page errors.
+- `tsc --noEmit` and `npm run lint`: no output (clean). `npm run test:unit`: 114 files, 1121 tests passed. `npm run build`: succeeded.
+- e2e specs **not run** (need an admin login on the second stack); selectors updated by hand.
+
+**State left behind**
+- Committed on `claude/employee-name-fields` and pushed; PR opened at Amir's request, not merged, not deployed. The two entries below went in the same commit.
+
+**For the next agent**
+- `CLAUDE.md`'s "local `postgres` DB lags `main`" is stale: on 2026-11-04 it lacked only the two newest migrations.
+- `pg_restore --no-owner` leaves `auth` tables owned by `supabase_admin`, and GoTrue then dies with
+  `relation "schema_migrations" already exists`. Give the schema, tables, functions and enums to
+  `supabase_auth_admin` in the clone.
+- Blank counts on Liara are unknown until deploy; about 54 expected from the October files.
+
+## 2026-11-04 — First/last names + sortable Employees table: Gate 1 questions and spec (FR-83)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/profile-photos-spec @ 2173281 (tree identical to `origin/main` @ 03f8b07), then new `claude/employee-name-fields` from `origin/main`
+**Trigger:** Amir's three-gate brief: investigate and ask, write a spec and stop, implement after approval. This session did gates 1 and 2.
+
+**What changed**
+- `docs/specs/2026-11-04-employee-name-fields-design.md` — new, draft for Amir's review, every Gate 1 answer recorded.
+- `docs/AGENT-LOG.md` — this entry. No code, schema, migration or test changed.
+
+**Actions outside the repo**
+- `git fetch`, new local branch with upstream unset, so a bare push can never target `main`. Nothing pushed.
+- Local Docker DB: read-only aggregate counts and collation checks, plus one rolled-back transaction on a temp table. Nothing applied. Nothing on Liara.
+- `docs/files/*.csv` read once by a script printing aggregate counts only; no name printed. Amir then decided the files are not used again.
+
+**Verification**
+- Default collation orders ن ه و ی; `fa-IR-x-icu` orders ن و ه ی, folds ي/ی and ك/ک, ignores ZWNJ, `ilike` works.
+- Temp table: a stored generated column is NULL in a BEFORE trigger (`rows_equal=f`). Sort key result: `007 9 10 ۱۱ SUB-1 —`, reversed `۱۱ 10 9 007 SUB-1 —`.
+- Docs (Context7): supabase-js `.order(col, { ascending, nullsFirst })`; PostgREST ordering on computed fields. Not yet run on local PostgREST `v12.2.3`.
+- Builder-check subagent from the brainstorming skill skipped: Amir's brief limits subagents to large searches. Self-reviewed instead.
+
+**State left behind**
+- Spec uncommitted, awaiting Amir's approval. This entry and the entry below are uncommitted (both carried across the branch switch). No implementation started.
+
+**For the next agent**
+- Do not use a stored generated column on `profiles`: `enforce_profile_update_scope` compares whole rows for the separation job. Spec §3.
+- `enforce_profile_update_scope` refuses a migration backfill (`auth.uid()` is null), and any column it does not list is writable by the user themself. Spec §4, §6.
+- HR's own Edit form is locked today (`caps.profile` false on self); "HR may fix own name" needs a new `name` capability. Spec §6.
+- `npm run schema:dump` needs a decision: local `postgres` lacks recent migrations. Spec §15.
+
+## 2026-11-04 — Prompt written for first/last name split + sortable employee columns
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/profile-photos-spec @ 2173281
+**Trigger:** Amir asked for a prompt (prompt-master) for splitting names and sorting Manage › Employees. Prompt only; the work itself is not started.
+
+**What changed**
+- `docs/AGENT-LOG.md` — this entry. No code, schema or spec changed.
+
+**Actions outside the repo**
+- None. Read-only aggregate counts on the local `postgres` DB (no names read).
+
+**Verification**
+- Not applicable, nothing built. Local `profiles` has only 19 rows, so its name-word counts say nothing about the 140-person Liara roster.
+
+**State left behind**
+- This entry is uncommitted. The prompt lives in the chat only.
+
+**For the next agent**
+- `personnel_no` is text and admins may set any 1–64 character value, so numeric sort needs a dedicated sort key; PostgREST cannot cast in `.order()`.
+- The list is paged server-side (25 rows), so sorting must run in the query.
+- Three-word-plus names cannot be split safely by rule: first names such as «حجت الله» are two words.
+- Amir changed the brief after the first prompt: First name and Last name are separate sortable table columns, and the agent must ask clarifying questions before any spec or code.
+- FR-82 is on `origin/main` (#19); local `main` was stale when checked.
+
 ## 2026-11-04 — PR #19 review and fixes (photo cache key reuse, transparent images)
 
 **Agent:** Claude Opus 5.5 via Claude Code

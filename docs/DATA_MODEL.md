@@ -86,7 +86,10 @@ manager).
 in-DB**, never typed) ·
 `personnel_no` (client HR number, `^[0-9]{1,10}$` — except the admin may enter any text of 1–64
 characters, e.g. for subcontractors with no company number (`private.valid_personnel_no`); unique
-per company, nullable for pre-existing users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` ·
+per company, nullable for pre-existing users; `999#######` reserved for e2e) · `job_title` (display-only, nullable) · `full_name` (always first + last: `profiles_sync_names`
+keeps it; a write of `full_name` alone is split by `private.split_full_name`) · `first_name`
+(`fa-IR-x-icu`, not null) · `last_name` (`fa-IR-x-icu`, NULL = not split yet, first_name then holds the
+whole name; FR-83) ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
 `language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali` only, default `jalali`; retained
 as a compatibility column while the UI has no calendar setting) ·
@@ -102,6 +105,9 @@ The synthetic auth email follows the code (`1042@bj-app.internal`).
 **Since 2026-11-02 the admin may set any login code** (`private.valid_login_code`: email-safe ASCII,
 no spaces or @, 1–64; unique case-insensitively, the auth email is lower-cased) on creation, and
 changing a personnel number (`app_admin_set_personnel_no`) resets the code to the new number.
+
+**FR-83 ID sort:** `public.personnel_sort_key(profiles)` is a PostgREST computed field (numeric, Persian
+digits count, NULL for text IDs). Not a stored generated column: those are NULL inside BEFORE triggers.
 
 Two consequences worth knowing before touching this:
 - **`employee_code` uniqueness is global, not per company.** The prefix used to keep `prod-1042` and

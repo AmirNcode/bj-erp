@@ -116,6 +116,7 @@ const RULES: Rule[] = [
   { re: /^login code required$/, key: 'loginCodeRequired', field: 'login_code' },
   { re: /invalid personnel number \(1-64 characters\)/, key: 'invalidPersonnelNoAdmin', field: 'personnel_no' },
   { re: /^only the admin sets a login code$|^admin required$/, key: 'notAllowed' },
+  { re: /^first and last name are required$/, key: 'namesRequired' },
   // The personnel number is what the Add Employee form actually collects — the
   // employee code is derived from it (FR-31). Both of these raised messages were
   // UNMAPPED until 2026-08-18, so a duplicate personnel number reached the user

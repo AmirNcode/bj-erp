@@ -8,8 +8,8 @@ import { can, type Perms } from '@/lib/permissions/catalog';
 
 /**
  * Returns the profile columns a caller may send through `updateEmployee`.
- * Admin: every writable column. A holder of `people` (FR-51 / FR-55): name, hire
- * date, department, manager, job title — `active` goes through `setActive`.
+ * Admin: every writable column. A holder of `people` (FR-51 / FR-55): first and last
+ * name, hire date, department, manager, job title — `active` goes through `setActive`.
  * Manager: nothing (FR-74). The profile guard trigger enforces the same per
  * target row (a non-admin editor gets nothing on an admin or on themselves);
  * this restricts WHICH columns.
@@ -17,7 +17,8 @@ import { can, type Perms } from '@/lib/permissions/catalog';
 export function allowedProfileFields(roles: string[], perms: Perms): string[] {
   if (roles.includes('admin')) {
     return [
-      'full_name',
+      'first_name',
+      'last_name',
       'department_id',
       'manager_id',
       'hire_date',
@@ -27,7 +28,7 @@ export function allowedProfileFields(roles: string[], perms: Perms): string[] {
     ];
   }
   if (can(perms, 'people')) {
-    return ['full_name', 'department_id', 'manager_id', 'hire_date', 'job_title'];
+    return ['first_name', 'last_name', 'department_id', 'manager_id', 'hire_date', 'job_title'];
   }
   return [];
 }

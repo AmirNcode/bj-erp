@@ -13,6 +13,8 @@ import { can, isWithin, levelValue, sensitivePermissions, type PermKey, type Per
 export type EditCapabilities = {
   /** Name and hire date. */
   profile: boolean;
+  /** First and last name (FR-83): `profile`, plus a `people` edit holder on themselves. */
+  name: boolean;
   /** Department, direct manager, job title, deactivate / reactivate. */
   org: boolean;
   /** Role ids the caller may toggle; the other boxes render disabled. Never the admin role. */
@@ -100,6 +102,7 @@ export function employeeEditCapabilities({
   if (callerRoles.includes('admin')) {
     return {
       profile: true,
+      name: true,
       org: true,
       editableRoleIds: assignable.map((r) => r.id),
       resetPassword: true,
@@ -142,6 +145,7 @@ export function employeeEditCapabilities({
   return {
     // FR-74: managers change nothing; only `people` edit (HR) on a D4 target.
     profile: actor && can(callerPerms, 'people'),
+    name: (actor || self) && can(callerPerms, 'people'),
     org: actor && can(callerPerms, 'people'),
     editableRoleIds: actor ? assignable.filter(mayToggle).map((r) => r.id) : [],
     // Password resets are the admin's alone (20261013200007, returned above).
@@ -178,7 +182,7 @@ export type EditFormView = {
  * manager note, name and hire date shown, nothing saveable.
  */
 export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boolean }): EditFormView {
-  const saveable = caps.profile || caps.org || caps.editableRoleIds.length > 0 || caps.leaveEdit;
+  const saveable = caps.profile || caps.name || caps.org || caps.editableRoleIds.length > 0 || caps.leaveEdit;
   const lockNote =
     caps.lockedReason === 'admin'
       ? 'lockedAdmin'

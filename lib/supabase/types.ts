@@ -1023,7 +1023,9 @@ export type Database = {
           created_at: string
           department_id: string | null
           employee_code: string
+          first_name: string
           full_name: string
+          last_name: string | null
           hire_date: string | null
           id: string
           job_title: string | null
@@ -1039,7 +1041,9 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           employee_code: string
-          full_name: string
+          first_name?: string
+          full_name?: string
+          last_name?: string | null
           hire_date?: string | null
           id: string
           job_title?: string | null
@@ -1055,7 +1059,9 @@ export type Database = {
           created_at?: string
           department_id?: string | null
           employee_code?: string
+          first_name?: string
           full_name?: string
+          last_name?: string | null
           hire_date?: string | null
           id?: string
           job_title?: string | null
@@ -1735,10 +1741,13 @@ export type Database = {
           p_calendar_pref?: string
           p_company_id: string
           p_department_id?: string
-          p_full_name: string
+          p_first_name?: string
+          /** Null from the app (FR-83); the parts decide. Only the old app sends it. */
+          p_full_name: string | null
           p_hire_date?: string
           p_job_title?: string
           p_language_pref?: string
+          p_last_name?: string
           p_login_code?: string
           p_manager_id?: string
           p_password: string
@@ -1828,6 +1837,8 @@ export type Database = {
           personnel_no: string | null
           employee_code: string
           full_name: string
+          first_name: string
+          last_name: string | null
           active: boolean
           national_id: string | null
           birth_cert_no: string | null

@@ -121,7 +121,7 @@ describe('importEmployees: opening balances need leave_balances edit', () => {
   const input = (balance: number) => ({
     mode: 'add' as const,
     rows: [{
-      full_name: 'A', personnel_no: '9990000936', job_title: null, role: 'employee' as const, department_code: 'QC',
+      first_name: 'A', last_name: 'B', personnel_no: '9990000936', job_title: null, role: 'employee' as const, department_code: 'QC',
       supervisor_personnel_no: null, manager_personnel_no: null, hire_date: null, balance_minutes: balance,
     }],
     departments: [],

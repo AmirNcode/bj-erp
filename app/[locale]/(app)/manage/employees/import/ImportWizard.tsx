@@ -118,7 +118,7 @@ type Labels = {
 };
 
 const errorKeys = [
-  'missingColumn', 'required', 'badPersonnelNo', 'dupInFile', 'dupExisting', 'badDeptCode',
+  'missingColumn', 'oldTemplate', 'required', 'badPersonnelNo', 'dupInFile', 'dupExisting', 'badDeptCode',
   'deptNamesRequired', 'deptCodeConflict', 'unknownSupervisor', 'unknownManager', 'refNotManager',
   'selfReference', 'cycle', 'badDate', 'badRole', 'badBalance', 'mixedSign', 'hoursTooLarge',
   'deptManagerTie',

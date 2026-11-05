@@ -254,7 +254,8 @@ export async function createEmployee(
   await expect(page).toHaveURL(/\/manage\/employees\/new$/);
 
   await page.fill('#personnel_no', opts.personnelNo ?? nextTestPersonnelNo());
-  await page.fill('#full_name', opts.name);
+  await page.fill('#first_name', opts.name);
+  await page.fill('#last_name', 'E2E');
 
   const deptSelect = page.locator('#department_id');
   const deptValues: string[] = [];
