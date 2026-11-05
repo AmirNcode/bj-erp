@@ -572,7 +572,7 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
 ### `request_corrections` (2026-11-05, FR-84, unreleased)
-Migrations `20261107100000`, `…110000`. RLS on, **no client policies**, RPCs only; append-only.
+Migrations `20261107100000`, `…110000`, `…120000`. RLS on, **no client policies**, RPCs only; append-only.
 `request_id` → leave_requests (cascade) · `company_id` · `old_start_date`, `new_start_date` · `old_end_date`,
 `new_end_date` · `per_diem_before`, `per_diem_after` · `reason` (1–1000) · `corrected_by` → profiles (set null)
 · `corrected_at` · `signature_data`, `signature_consent_at`. Every row keeps all six values. A date change

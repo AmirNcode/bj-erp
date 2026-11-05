@@ -174,7 +174,8 @@ each field that has quick adds:
 - Every `leave_ledger` row for the person, newest first by `seq`, read directly (policy
   `leave_ledger_select` already allows `reads_balances`).
 - Each row: Jalali date and time, leave type, entry label, signed amount in days and hours, balance
-  after, and the note or reason. A consumption or reversal row shows the request's serial. A label is
+  after, and the reason on quick-add rows (other notes are internal English strings). A consumption or
+  reversal row shows the request's serial. A label is
   needed for every `ledger_entry` value, `fa` and `en`.
 - **Who:** new nullable `leave_ledger.created_by` → profiles, filled by `app_add_leave_balance` and
   `set_leave_balance`. HR can't read `audit_log` (admin only), so without it the history can't say who

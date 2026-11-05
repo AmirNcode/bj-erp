@@ -78,6 +78,41 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-05 — Approved trip corrections and quick balance add (FR-84, FR-85)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/employee-name-fields @ 225b87a; built on `claude/approved-trip-corrections` from `origin/main` @ 8224e81
+**Trigger:** HR feedback: edit approved trips, add a forgotten per diem, give back time on early return. Owner then reshaped the Edit Employee leave sections and approved spec and plan.
+
+**What changed**
+- Spec `docs/specs/2026-11-05-approved-trip-corrections-design.md`, plan `docs/plans/2026-11-05-approved-trip-corrections.md`.
+- `supabase/migrations/20261107090000_quick_balance_add.sql`: `leave_ledger.quick_add`, `created_by`, `app_add_leave_balance`.
+- `20261107100000_trip_corrections.sql`: `request_corrections`, `app_correct_trip`, `request_trip_corrections`, booking state `corrected`, `last_correction`, `finance_requests.corrected_at`.
+- `20261107110000_trip_correction_gate.sql`: `private.can_correct_trip`, after an automated security review showed a delegate could correct their hr principal's own trip.
+- `20261107120000_extension_per_diem_read.sql`: `request_errand_extensions` returns per diem before and after, so print keeps the signed amount.
+- `EditEmployeeForm.tsx` + `BalanceQuickAdd`, `BalanceHistory`, `BalanceBreakdownLines`; `CorrectTripDialog.tsx`; `lib/travel/extensions.ts` (`printedTripDates` merges extensions and corrections).
+- e2e helpers repaired: role pills, admin login-code box, `hr-leave-setup` expectations that predate them.
+
+**Actions outside the repo**
+- Local only: `./deploy/bj-deploy update local` applied FR-82/83/84/85 migrations to the local `postgres` DB (it lagged main). Read-only `psql` on it.
+- Disposable DBs and containers for tests (`bj_t`, `bjt-auth`, `bjt-rest`, a node gateway on :18080, a generated test admin password in the clone only); removed at the end. Liara not touched.
+
+**Verification**
+- SQL on a clone: every `tests/sql/*` PASS, including `approval-delegation` (165), `trip-correction`, `balance-add`.
+- Unit 1154 pass, lint clean, `tsc` clean, `next build` OK, `npm run test:deploy` OK.
+- e2e on the isolated clone: `quick-balance`, `trip-correction`, `balance-days-hours`, `hr-leave-setup`, `manage`, `errand`, `hourly`, `hr-employee-admin` pass. `hr-role.spec.ts`: 12 of 14 in that run; 2 fail outside this work (`chain-<id>-manager` testid, a `net::ERR_ABORTED` on a redirect).
+- One full-branch review by a fresh agent on Opus: no Critical; both Important fixed with a test seen failing first. Minors deferred, listed in the PR. Owner then asked for no further review in this session.
+
+**State left behind**
+- Committed on `claude/approved-trip-corrections`, pushed, PR open. Not merged or deployed. FR-83 is on main but undeployed (its squash title had `[skip ci]`); owner ships it with this.
+- `AGENTS.md` shows an uncommitted heading change that no agent here made; left alone.
+
+**For the next agent**
+- Owner dropped: changing leave end dates for early return (HR adds to the balance instead), and the CEO delegate question (an unticked HR step in Settings › Roles). A 2-hour timer is not coming back.
+- Home "used" counts only `consumption` and `reversal`, so a quick add after early return leaves used high (`lib/home/pulse.ts:160`). Spec accepts it; owner has not asked to change it.
+
+---
+
 ## 2026-11-04 — PR #20 code review (FR-83)
 
 **Agent:** Claude Opus 5.5 via Claude Code
