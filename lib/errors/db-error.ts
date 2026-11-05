@@ -159,6 +159,12 @@ const RULES: Rule[] = [
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
   // FR-43: HR may set an opening balance and accrual policy, but not their own.
   { re: /you cannot change your own leave balance/i, key: 'cannotSetOwnBalance' },
+  // FR-85 quick add.
+  { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
+  { re: /^amount is too large$/, key: 'balanceAddTooLarge' },
+  { re: /^this leave type has no balance$/, key: 'balanceAddNoBalance' },
+  { re: /^a reason is required$/, key: 'reasonRequired' },
+  { re: /^reason is too long$/, key: 'reasonTooLong' },
   { re: /this leave type cannot be taken hourly/, key: 'hourlyNotAllowed' },
   { re: /end time must be after start time/, key: 'endBeforeStart' },
   { re: /times must fall within working hours/, key: 'outsideWorkHours' },
