@@ -9,6 +9,26 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Correct approved trips (FR-84) — not deployed
+
+- **Manage › Requests:** a **Correct** button on approved daily work errands. HR can change the start date,
+  end date and per diem, with a reason and a signature. It also works after the trip has ended, so a forgotten
+  per diem can be added any time.
+- The signed form keeps its original dates and per diem, then lists each change in order. The employee sees
+  corrections on their request. No SMS is sent.
+- Changed dates send a booking back to procurement, with the old and new dates. `/finance` marks a corrected
+  trip, and the CSV has the correction date.
+- Not available on leave, hourly errands or your own trip, or while an extension is waiting.
+
+### Add to leave balance, with history (FR-85) — not deployed
+
+- **Edit Employee:** a new **Add to balance** section for adding days and hours with a reason, saved at once.
+  **See history** lists every change to the person's balance, with who made it.
+- Each balance shows its total split into quick-added time and the rest, with the reasons.
+- **Leave balances** and **Monthly accrual policy** are now collapsed by default. The totals stay visible.
+- Someone back early from leave: add the unused time here. The request keeps its dates, so the calendar and
+  approved absences still show the original period.
+
 ### First and last names, sortable Employees table (FR-83) — `claude/employee-name-fields` (not deployed)
 
 - **Manage › Employees** has separate First name, Last name, ID and Hire Date columns. Click a header to

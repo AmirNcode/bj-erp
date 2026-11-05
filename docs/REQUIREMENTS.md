@@ -318,7 +318,8 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-61** ☑ **Per diem on HR's step.** Optional Rial amount (`leave_requests.per_diem_rials`)
   entered when an hr step of an errand is signed. *(2026-10-12.)* Daily work errands only since
   2026-10-22: an hourly errand carries no per diem (no HR field, no own-per-diem field, refused by
-  the DB) and never reaches procurement (FR-70 is daily-only).
+  the DB) and never reaches procurement (FR-70 is daily-only). **Amended 2026-11-05 (FR-84):** HR may also
+  set or change it on an approved daily trip by a correction.
 - **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
   *(2026-10-12.)* **Amended 2026-10-20 (owner review of FR-70):** leave and errands in two sections,
@@ -362,7 +363,7 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-68** ☑ **Head of HR enters their own per diem.** Amends FR-61. The designated HR head's own
   HR step is exempt (and their CEO step may approve at submission), so no approver is offered the
   per diem field. Their daily errand form (not the hourly one, since 2026-10-22) shows an optional per diem (whole Rials, 0
-  allowed), saved at submission and never editable afterwards (cancel and refile). Only the HR head
+  allowed), saved at submission and not editable by them afterwards (cancel and refile; amended 2026-11-05 by FR-84: another hr holder or the admin may correct it). Only the HR head
   recorded on the request's approval policy; anyone else sending it is refused. The amount is shown
   as "Entered by requester (Head of HR)" on My Requests, the print form and `/finance` (+ CSV
   column), and audited as `set_own_per_diem`. A later hr step signer who enters per diem replaces it
@@ -390,7 +391,8 @@ Validation/release status stays in `docs/TASKS.md`.
   with a "booking not finished" marker) and a cancelled one once settled (amount lost only).
   A Manager-role holder may also ask to extend their own trip; HR decides. The Head of HR's own trips
   skip HR at every stage: they tick «نیاز به رزرو سفر» on their own daily errand form, and their own
-  extension applies at once (exempt, per diem unchanged).
+  extension applies at once (exempt, per diem unchanged). **Amended 2026-11-05 (FR-84):** a date correction
+  adds booking state `corrected`.
   *(2026-10-20; spec `2026-10-20-travel-booking-design.md`; owner review 2026-10-20; unreleased.)*
 - **FR-71** ☐ **Sign once for several steps.** When one person can sign several open steps of a
   request (own or as a delegate; e.g. the Head of HR who is also the requester's manager), the approve
@@ -403,6 +405,24 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-85** ☐ **Quick add to a leave balance, with history.** Edit Employee gets an always-open **Add to
+  balance** section: leave type, days + hours, required reason (1–500 characters), saved at once and apart
+  from the form's Save (`app_add_leave_balance`; `leave_balances` edit, never own balance unless admin,
+  `can_act_on`). It raises the real balance, so the absolute field shows the new total. Add only: deductions
+  and mistakes use the absolute field, which keeps no reason for now. Under each balance holding quick adds:
+  total, other part + quick-added part, then each add with date, who and reason. **See history** (collapsed)
+  lists the whole ledger for anyone who can see the balances. Leave balances and Monthly accrual policy are
+  collapsed by default; Leave balances shows its totals while closed. Early return from leave uses this: the
+  request keeps its dates. *(2026-11-05; spec `2026-11-05-approved-trip-corrections-design.md`; unreleased.)*
+- **FR-84** ☐ **HR corrects an approved daily trip.** On Manage › Requests, HR corrects the start date, end
+  date and per diem of an approved daily work errand, with or without a booking and with no time limit:
+  required reason (1–1000 characters) and a signature (`app_correct_trip`). Not while an extension is pending,
+  not on overlapping dates, not on leave, hourly errands or one's own trip. A delegate of an hr holder acts as
+  HR but never on that holder's own trip. The signed values stay: `request_corrections` is append-only and the
+  print form shows the signed dates and per diem, then each later change in time order. Changed dates send a
+  booking back to procurement (state `corrected`, old and new dates shown); a per-diem change does not.
+  `/finance` marks a corrected row and the CSV has the date. The employee sees corrections on their request;
+  no SMS. *(2026-11-05; same spec; unreleased.)*
 - **FR-83** ☐ **First and last names, sortable Employees table.** `profiles` stores first and last name
   separately; `full_name` stays, kept equal to first + last by a database trigger, so every other screen
   is unchanged. Existing two-word names are split; any other name keeps all its words in First name with

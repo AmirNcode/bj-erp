@@ -398,6 +398,18 @@ retain issued credentials; password reset does not revoke existing sessions. Suc
 impersonate a principal/delegate despite valid SQL authority checks. This remains disclosed residual
 risk, not a new activation gate. All password resets remain admin-only.
 
+### Trip corrections and quick add (FR-84, FR-85, unreleased)
+
+- **`app_correct_trip`:** `private.can_correct_trip(caller, request)`: `is_travel_hr` (admin, `hr` role, delegate
+  of an `hr` holder; never the traveller) and a delegate must hold it through an `hr` holder who is not the
+  traveller. Stricter than `is_travel_hr`, which lets a delegate act on the holder's own trip. No `can_act_on`,
+  as for the other FR-70 actions. Needs a signature; the bytes stay out of `audit_log`.
+- **`request_corrections`:** no client access. `request_trip_corrections(id)` follows
+  `can_read_approval_request`.
+- **`app_add_leave_balance`:** the gates of `set_leave_balance`: admin or `leave_balances` edit, never own
+  balance unless admin, `can_act_on` for non-admins. The reason lands in `leave_ledger.note`, which the employee
+  can read through RLS.
+
 ### `leave_ledger`
 - **SELECT**: own · `is_manager_of` · `reads_balances` (FR-55).
 - **INSERT**: **server-side only** (SECURITY DEFINER fns — `allocation`, paid-portion `consumption`
