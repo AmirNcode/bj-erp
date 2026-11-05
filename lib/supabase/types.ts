@@ -572,6 +572,7 @@ export type Database = {
         Row: {
           balance_after_minutes: number
           created_at: string
+          created_by: string | null
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -579,12 +580,14 @@ export type Database = {
           leave_type_id: string
           note: string | null
           period_month: string | null
+          quick_add: boolean
           request_id: string | null
           seq: number
         }
         Insert: {
           balance_after_minutes: number
           created_at?: string
+          created_by?: string | null
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -592,12 +595,14 @@ export type Database = {
           leave_type_id: string
           note?: string | null
           period_month?: string | null
+          quick_add?: boolean
           request_id?: string | null
           seq?: number
         }
         Update: {
           balance_after_minutes?: number
           created_at?: string
+          created_by?: string | null
           delta_minutes?: number
           employee_id?: string
           entry_type?: Database["public"]["Enums"]["ledger_entry"]
@@ -605,10 +610,18 @@ export type Database = {
           leave_type_id?: string
           note?: string | null
           period_month?: string | null
+          quick_add?: boolean
           request_id?: string | null
           seq?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "leave_ledger_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leave_ledger_employee_id_fkey"
             columns: ["employee_id"]
@@ -2231,6 +2244,15 @@ export type Database = {
       reject_leave_request: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
+      }
+      app_add_leave_balance: {
+        Args: {
+          p_employee_id: string
+          p_leave_type_id: string
+          p_minutes: number
+          p_reason: string
+        }
+        Returns: number
       }
       set_leave_balance: {
         Args: {

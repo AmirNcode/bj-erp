@@ -4036,6 +4036,64 @@ end; $$;
 
 
 --
+-- Name: app_add_leave_balance(uuid, uuid, integer, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_company uuid;
+  v_current int;
+  v_ledger uuid;
+begin
+  -- The same three gates as set_leave_balance, in the same order.
+  if not (private.is_admin(v_uid) or private.has_perm(v_uid, 'leave_balances', 'edit')) then
+    raise exception 'only admins or hr can set leave balance' using errcode = '42501';
+  end if;
+  if not private.is_admin(v_uid) and p_employee_id = v_uid then
+    raise exception 'you cannot change your own leave balance' using errcode = '42501';
+  end if;
+  if not private.is_admin(v_uid) and not private.can_act_on(v_uid, p_employee_id) then
+    raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
+  end if;
+
+  select company_id into v_company from public.profiles where id = p_employee_id;
+  if p_minutes is null or p_minutes <= 0 then
+    raise exception 'amount must be more than 0' using errcode = '22023';
+  end if;
+  if p_minutes > 366 * private.company_minutes_per_day(v_company) then
+    raise exception 'amount is too large' using errcode = '22023';
+  end if;
+  if v_reason = '' then raise exception 'a reason is required' using errcode = '22023'; end if;
+  if char_length(v_reason) > 500 then raise exception 'reason is too long' using errcode = '22023'; end if;
+  if not exists (select 1 from public.leave_types
+                  where id = p_leave_type_id and company_id = v_company and affects_balance) then
+    raise exception 'this leave type has no balance' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || p_employee_id::text, 0));
+  v_current := public.current_leave_balance(p_employee_id, p_leave_type_id);
+
+  insert into public.leave_ledger(employee_id, leave_type_id, entry_type, delta_minutes,
+                                  balance_after_minutes, note, quick_add, created_by)
+  values (p_employee_id, p_leave_type_id, 'adjustment', p_minutes,
+          v_current + p_minutes, v_reason, true, v_uid)
+  returning id into v_ledger;
+
+  insert into public.audit_log(actor_id, action, entity, entity_id, after)
+  values (v_uid, 'leave_balance.add', 'leave_ledger', v_ledger,
+          jsonb_build_object('employee_id', p_employee_id, 'leave_type_id', p_leave_type_id,
+                             'previous_minutes', v_current, 'added_minutes', p_minutes));
+
+  return v_current + p_minutes;
+end $$;
+
+
+--
 -- Name: app_admin_overview(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8840,8 +8898,8 @@ begin
     return p_target_minutes;
   end if;
 
-  insert into public.leave_ledger(employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note)
-  values (p_employee_id, p_leave_type_id, 'adjustment', p_target_minutes - v_current, p_target_minutes, 'admin balance set')
+  insert into public.leave_ledger(employee_id, leave_type_id, entry_type, delta_minutes, balance_after_minutes, note, created_by)
+  values (p_employee_id, p_leave_type_id, 'adjustment', p_target_minutes - v_current, p_target_minutes, 'admin balance set', auth.uid())
   returning id into v_ledger;
 
   insert into public.audit_log(actor_id, action, entity, entity_id, after)
@@ -9613,8 +9671,24 @@ CREATE TABLE public.leave_ledger (
     delta_minutes integer NOT NULL,
     balance_after_minutes integer NOT NULL,
     period_month date,
-    seq bigint NOT NULL
+    seq bigint NOT NULL,
+    quick_add boolean DEFAULT false NOT NULL,
+    created_by uuid
 );
+
+
+--
+-- Name: COLUMN leave_ledger.quick_add; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_ledger.quick_add IS 'FR-85: added by HR with a reason (note). Drives the balance breakdown on Edit Employee.';
+
+
+--
+-- Name: COLUMN leave_ledger.created_by; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_ledger.created_by IS 'FR-85: who made a manual change. Null on older and automatic rows.';
 
 
 --
@@ -11592,6 +11666,14 @@ ALTER TABLE ONLY public.leave_allocations
 
 
 --
+-- Name: leave_ledger leave_ledger_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_ledger
+    ADD CONSTRAINT leave_ledger_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: leave_ledger leave_ledger_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13485,6 +13567,16 @@ REVOKE ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id
 GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id uuid, p_period_start date, p_period_end date, p_minutes integer) TO postgres;
 GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id uuid, p_period_start date, p_period_end date, p_minutes integer) TO authenticated;
 GRANT ALL ON FUNCTION public.allocate_leave(p_employee_id uuid, p_leave_type_id uuid, p_period_start date, p_period_end date, p_minutes integer) TO service_role;
+
+
+--
+-- Name: FUNCTION app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text) TO postgres;
+GRANT ALL ON FUNCTION public.app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_add_leave_balance(p_employee_id uuid, p_leave_type_id uuid, p_minutes integer, p_reason text) TO service_role;
 
 
 --
