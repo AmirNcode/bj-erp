@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
 
 /** What procurement must do next, first; finished work last. */
-export const STATE_ORDER: TravelState[] = ['to_book', 'extension', 'cancel_undo', 'done', 'settled'];
+export const STATE_ORDER: TravelState[] = ['to_book', 'extension', 'corrected', 'cancel_undo', 'done', 'settled'];
 
 export function ProcurementList({ rows, locale }: { rows: TravelBookingRow[]; locale: string }) {
   const t = useTranslations('travel');

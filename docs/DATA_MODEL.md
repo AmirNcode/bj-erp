@@ -571,6 +571,17 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   and settled cancelled trips. `app_extendable_trips` returns `hr_exempt` (the Head of HR's own trip:
   extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
+### `request_corrections` (2026-11-05, FR-84, unreleased)
+Migrations `20261107100000`, `…110000`, `…120000`. RLS on, **no client policies**, RPCs only; append-only.
+`request_id` → leave_requests (cascade) · `company_id` · `old_start_date`, `new_start_date` · `old_end_date`,
+`new_end_date` · `per_diem_before`, `per_diem_after` · `reason` (1–1000) · `corrected_by` → profiles (set null)
+· `corrected_at` · `signature_data`, `signature_consent_at`. Every row keeps all six values. A date change
+sets `leave_requests` dates, recomputes `requested_minutes` and clears `travel_bookings.done_at`/`done_by` once
+the booking is open; a trip has no ledger rows. State `corrected` (`private.travel_booking_state`): approved, not
+done, with a date-changing correction since `opened_at` that is newer than any approved extension.
+`request_trip_corrections(id)` reads history without the signature; `app_travel_booking` returns
+`last_correction`; `finance_requests` returns `corrected_at`.
+
 ### `home_dismissed_requests` (2026-10-21, FR-72, unreleased)
 `request_id → leave_requests` (PK, on delete cascade) · `employee_id → profiles` (on delete cascade) ·
 `dismissed_at`. A rejected request the requester removed from Home; Home's list (`recentOnHome`,
@@ -659,6 +670,10 @@ to; NULL for every other entry. A **partial unique index** on
 (`employee_id`,`leave_type_id`,`entry_type`,`period_month`) is what makes lazy accrual safe —
 posting a month twice is impossible, not merely unlikely. Reports must read `period_month`, never
 `created_at`: a lazily-posted row is created whenever someone opens a page, possibly months later.
+`quick_add boolean` (FR-85, 2026-11-05): an HR quick add, whose `note` holds the reason. It stays
+`entry_type = 'adjustment'`, because special leave and hand edits are adjustments too and Home's "used" counts
+only `consumption` and `reversal`. `created_by` → profiles (set null, FR-85): who made a manual change, filled by
+`app_add_leave_balance` and `set_leave_balance`; null on older and automatic rows.
 `seq bigint` (2026-07-29) gives ledger rows a monotonic order. **Balance = the row with the highest
 `seq`**, never the latest `created_at`: accrual writes several months in one transaction, where
 `now()` is frozen, so `created_at` ties and the winner would be arbitrary.

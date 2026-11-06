@@ -572,6 +572,7 @@ export type Database = {
         Row: {
           balance_after_minutes: number
           created_at: string
+          created_by: string | null
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -579,12 +580,14 @@ export type Database = {
           leave_type_id: string
           note: string | null
           period_month: string | null
+          quick_add: boolean
           request_id: string | null
           seq: number
         }
         Insert: {
           balance_after_minutes: number
           created_at?: string
+          created_by?: string | null
           delta_minutes: number
           employee_id: string
           entry_type: Database["public"]["Enums"]["ledger_entry"]
@@ -592,12 +595,14 @@ export type Database = {
           leave_type_id: string
           note?: string | null
           period_month?: string | null
+          quick_add?: boolean
           request_id?: string | null
           seq?: number
         }
         Update: {
           balance_after_minutes?: number
           created_at?: string
+          created_by?: string | null
           delta_minutes?: number
           employee_id?: string
           entry_type?: Database["public"]["Enums"]["ledger_entry"]
@@ -605,10 +610,18 @@ export type Database = {
           leave_type_id?: string
           note?: string | null
           period_month?: string | null
+          quick_add?: boolean
           request_id?: string | null
           seq?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "leave_ledger_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "leave_ledger_employee_id_fkey"
             columns: ["employee_id"]
@@ -1649,6 +1662,7 @@ export type Database = {
         Returns: {
           old_end_date: string; new_end_date: string; reason: string; status: string; evidence: string | null
           requested_by_name: string; decided_by_name: string | null; decided_at: string | null
+          per_diem_before: number | null; per_diem_after: number | null;
         }[]
       }
       app_request_delegation_preview: {
@@ -2094,6 +2108,7 @@ export type Database = {
           hotel_cost_rials: number | null
           lost_rials: number | null
           waiting_step: string | null
+          corrected_at: string | null
         }[]
       }
       app_settle_travel_booking: {
@@ -2231,6 +2246,41 @@ export type Database = {
       reject_leave_request: {
         Args: { p_id: string; p_reason?: string }
         Returns: undefined
+      }
+      app_correct_trip: {
+        Args: {
+          p_request: string
+          p_new_start: string | null
+          p_new_end: string | null
+          p_per_diem_rials: number | null
+          p_reason: string
+          p_signature_data: string
+          p_signature_authorized: boolean
+        }
+        Returns: string
+      }
+      request_trip_corrections: {
+        Args: { p_id: string }
+        Returns: {
+          old_start_date: string
+          new_start_date: string
+          old_end_date: string
+          new_end_date: string
+          per_diem_before: number | null
+          per_diem_after: number | null
+          reason: string
+          corrected_by_name: string | null
+          corrected_at: string
+        }[]
+      }
+      app_add_leave_balance: {
+        Args: {
+          p_employee_id: string
+          p_leave_type_id: string
+          p_minutes: number
+          p_reason: string
+        }
+        Returns: number
       }
       set_leave_balance: {
         Args: {

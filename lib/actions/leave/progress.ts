@@ -12,6 +12,7 @@ import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { StepLabel } from '@/lib/leave/approvals';
 import { progressLabel, type ApprovalContextRow, type ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { RequestExtension } from '@/lib/actions/travel';
+import type { RequestCorrection } from '@/lib/travel/extensions';
 
 export type ProgressStep = {
   order: number;
@@ -32,7 +33,7 @@ export type ProgressStep = {
 
 export async function getRequestProgress(
   requestId: string
-): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean; extensions?: RequestExtension[] } | DbErrorResult> {
+): Promise<{ ok: true; steps: ProgressStep[]; configurationChanged?: boolean; legacyReconciliationRequired?: boolean; extensions?: RequestExtension[]; corrections?: RequestCorrection[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
@@ -42,13 +43,17 @@ export async function getRequestProgress(
   const context = data as unknown as ApprovalContextRow;
   // FR-70: a daily errand may carry trip extensions; they follow the steps.
   let extensions: RequestExtension[] = [];
+  let corrections: RequestCorrection[] = [];
   if (context.kind === 'errand' && context.unit === 'day') {
     const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
     if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
+    const fixes = await c.supabase.rpc('request_trip_corrections', { p_id: requestId });
+    if (!fixes.error) corrections = fixes.data ?? [];
   }
   return {
     ok: true,
     extensions,
+    corrections,
     configurationChanged: context.configuration_changed,
     legacyReconciliationRequired: context.legacy_reconciliation_required,
     steps: context.progress.map((r) => ({

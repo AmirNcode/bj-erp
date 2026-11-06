@@ -8,7 +8,7 @@ import type { FinanceRow } from '@/lib/actions/finance';
 import type { JalaliMonthOption } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
-import { formatNumber } from '@/lib/i18n/format';
+import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { displayPersonnelNo } from '@/lib/employees/code';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
@@ -145,6 +145,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       t('csv.total'),
       t('csv.status'),
       t('csv.waitingOn'),
+      t('csv.corrected'),
     ];
     const body = [...approvedRows, ...pendingRows].map((r) => [
       formatSerial(r.serial_year, r.serial_seq),
@@ -168,6 +169,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
       String(tripTotal(r)),
       statusText(r),
       r.status === 'pending' ? waitingOn(r) : '',
+      r.corrected_at ? formatPersianConsentTimestamp(r.corrected_at, 'fa') : '',
     ]);
     downloadCsv([header, ...body].map((row) => row.map(safeCell)), `bj-finance-${from}-${to}.csv`);
   };
@@ -233,6 +235,11 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                     </td>
                     <td className="px-3 py-2">
                       {typeName(r)}
+                      {r.corrected_at && (
+                        <span className="block text-xs font-medium text-amber-700" data-testid={`finance-corrected-${r.id}`}>
+                          {t('corrected')}
+                        </span>
+                      )}
                       {r.status === 'pending' && (
                         <div className="mt-0.5 inline-block rounded bg-muted px-1.5 text-xs text-muted-foreground" data-testid={`finance-waiting-${r.id}`}>
                           {waitingOn(r)}

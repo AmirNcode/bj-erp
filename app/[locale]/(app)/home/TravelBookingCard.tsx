@@ -14,7 +14,7 @@ export async function TravelBookingCard({ locale, userId }: { locale: string; us
   if (!can(await getCachedPermissions(userId), 'travel_booking', 'edit')) return null;
   const result = await listTravelBookings();
   if (!result.ok) return null;
-  const waiting = result.rows.filter((r) => r.state === 'to_book' || r.state === 'extension' || r.state === 'cancel_undo').length;
+  const waiting = result.rows.filter((r) => r.state === 'to_book' || r.state === 'extension' || r.state === 'corrected' || r.state === 'cancel_undo').length;
   if (waiting === 0) return null;
   const t = await getTranslations('travel');
 

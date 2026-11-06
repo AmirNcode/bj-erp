@@ -9,6 +9,13 @@ import type { PasswordSmsResult } from '@/lib/admin/types';
 import { setLeaveBalance, setEmployeeLeavePolicy } from '@/lib/actions/leave/balances';
 import type { LeavePolicyRow } from '@/lib/actions/leave/balances';
 import type { BalanceItem } from '@/lib/leave/balances';
+import type { QuickAddRow } from '@/lib/leave/balanceBreakdown';
+import { formatDuration } from '@/lib/leave/duration';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
+import { ChevronDown } from 'lucide-react';
+import { BalanceQuickAdd } from './BalanceQuickAdd';
+import { BalanceHistory } from './BalanceHistory';
+import { BalanceBreakdownLines } from './BalanceBreakdownLines';
 import { balanceAdjustments } from '@/lib/leave/allocations';
 import type { DaysHoursError } from '@/lib/leave/duration';
 import { editFormView, type EditCapabilities } from '@/lib/employees/editCapabilities';
@@ -127,6 +134,8 @@ type Props = {
   departments: Department[];
   managers: Manager[];
   balances: BalanceItem[];
+  /** FR-85: quick adds, for the breakdown under each balance. */
+  quickAdds: QuickAddRow[];
   /** Company day length: the inputs below are days + hours, the ledger is minutes. */
   hoursPerDay: number;
   /**
@@ -154,6 +163,7 @@ export function EditEmployeeForm({
   departments,
   managers,
   balances,
+  quickAdds,
   hoursPerDay,
   policies,
   typeDefaults,
@@ -163,6 +173,8 @@ export function EditEmployeeForm({
   const labels = useLabels();
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
+  const tLeave = useTranslations('leave');
+  const [openSections, setOpenSections] = useState({ balances: false, policy: false });
   const t = useTranslations('manage.employees');
   const canManageLeave = caps.leave;
   const view = editFormView(caps, { showOrg });
@@ -221,6 +233,12 @@ export function EditEmployeeForm({
       : [];
     setAmountErrors(amounts.errors);
     if (Object.keys(amounts.errors).length > 0) {
+      // FR-85: never leave an error inside a closed section.
+      const keys = Object.keys(amounts.errors);
+      setOpenSections((open) => ({
+        balances: open.balances || keys.some((k) => k.startsWith('balance_')),
+        policy: open.policy || keys.some((k) => !k.startsWith('balance_')),
+      }));
       setPending(false);
       setError(tDuration('invalid'));
       return;
@@ -520,68 +538,128 @@ export function EditEmployeeForm({
             {canManageLeave && (
               <fieldset disabled={!canSaveLeave} className="space-y-5">
 
+                {/* FR-85: quick add and history. */}
                 {balances.length > 0 && (
                   <div
                     className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
-                    data-testid="balances-section"
+                    data-testid="quick-add-section"
                   >
-                    <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
-                    {balances.map((balance) => {
-                      const slug = leaveTypeSlug(balance);
-                      const label =
-                        locale === 'fa'
-                          ? balance.name_fa
-                          : balance.name_en ?? balance.name_fa;
-                      const name = `balance_${balance.leaveTypeId}`;
-                      return (
-                        <DaysHoursField
-                          key={balance.leaveTypeId}
-                          name={name}
-                          label={label}
-                          minutes={balance.balanceMinutes}
-                          hoursPerDay={hoursPerDay}
-                          // FR-48: a balance may be negative (leave taken in
-                          // advance); the database bounds it at -366 days.
-                          allowNegative
-                          testId={`balance-days-${slug}`}
-                          hoursTestId={`balance-hours-${slug}`}
-                          leaveTypeId={balance.leaveTypeId}
-                          error={amountErrors[name]}
-                        />
-                      );
-                    })}
+                    <span className="block text-sm font-semibold">{t('quickAdd.title')}</span>
+                    {canSaveLeave && (
+                      <BalanceQuickAdd employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
+                    )}
+                    <BalanceHistory employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
                   </div>
                 )}
 
-                {balances.length > 0 && policies !== null && (
-                  <div
-                    className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
-                    data-testid="policy-section"
+                {/* Collapsed with <details> so the closed fields stay in the DOM: the
+                    form reads them from FormData on Save. An invalid field opens its
+                    section, since the browser cannot focus a hidden input. */}
+                {balances.length > 0 && (
+                  <details
+                    className="group rounded-lg border border-border bg-secondary/40 p-4"
+                    data-testid="balances-section"
+                    open={openSections.balances}
+                    onToggle={(e) => {
+                      const open = e.currentTarget.open;
+                      setOpenSections((s) => ({ ...s, balances: open }));
+                    }}
+                    onInvalidCapture={() => setOpenSections((s) => ({ ...s, balances: true }))}
                   >
-                    <div>
-                      <span className="block text-sm font-semibold">{labels.policyTitle}</span>
-                      <p className="mt-1 text-sm text-muted-foreground">{labels.policyHint}</p>
+                    <summary className="flex cursor-pointer list-none items-start gap-2">
+                      <ChevronDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-180" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
+                        {balances.map((balance) => (
+                          <span
+                            key={balance.leaveTypeId}
+                            className="mt-0.5 block text-xs text-muted-foreground"
+                            data-testid={`balance-total-${leaveTypeSlug(balance)}`}
+                          >
+                            {locale === 'fa' ? balance.name_fa : balance.name_en ?? balance.name_fa}:{' '}
+                            {formatDuration(balance.balanceMinutes, hoursPerDay, locale, durationLabelsFrom(tLeave))}
+                          </span>
+                        ))}
+                      </span>
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      {balances.map((balance) => {
+                        const slug = leaveTypeSlug(balance);
+                        const label =
+                          locale === 'fa'
+                            ? balance.name_fa
+                            : balance.name_en ?? balance.name_fa;
+                        const name = `balance_${balance.leaveTypeId}`;
+                        return (
+                          <div key={balance.leaveTypeId} className="space-y-1.5">
+                            <DaysHoursField
+                              // The inputs are uncontrolled: a quick add must remount them,
+                              // or the next Save writes the old balance back over it.
+                              key={`${balance.leaveTypeId}-${balance.balanceMinutes}`}
+                              name={name}
+                              label={label}
+                              minutes={balance.balanceMinutes}
+                              hoursPerDay={hoursPerDay}
+                              // FR-48: a balance may be negative (leave taken in
+                              // advance); the database bounds it at -366 days.
+                              allowNegative
+                              testId={`balance-days-${slug}`}
+                              hoursTestId={`balance-hours-${slug}`}
+                              leaveTypeId={balance.leaveTypeId}
+                              error={amountErrors[name]}
+                            />
+                            <BalanceBreakdownLines
+                              balanceMinutes={balance.balanceMinutes}
+                              leaveTypeId={balance.leaveTypeId}
+                              quickAdds={quickAdds}
+                              hoursPerDay={hoursPerDay}
+                              testId={`balance-breakdown-${slug}`}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
-                    {balances.map((balance) => {
-                      const slug = leaveTypeSlug(balance);
-                      const label =
-                        locale === 'fa'
-                          ? balance.name_fa
-                          : balance.name_en ?? balance.name_fa;
-                      return (
-                        <AccrualPolicyFields
-                          key={`policy-${balance.leaveTypeId}`}
-                          leaveTypeId={balance.leaveTypeId}
-                          slug={slug}
-                          legend={label}
-                          defaults={policyMinutesFor(balance.leaveTypeId)}
-                          hoursPerDay={hoursPerDay}
-                          errors={amountErrors}
-                          labels={labels}
-                        />
-                      );
-                    })}
-                  </div>
+                  </details>
+                )}
+
+                {balances.length > 0 && policies !== null && (
+                  <details
+                    className="group rounded-lg border border-border bg-secondary/40 p-4"
+                    data-testid="policy-section"
+                    open={openSections.policy}
+                    onToggle={(e) => {
+                      const open = e.currentTarget.open;
+                      setOpenSections((s) => ({ ...s, policy: open }));
+                    }}
+                    onInvalidCapture={() => setOpenSections((s) => ({ ...s, policy: true }))}
+                  >
+                    <summary className="flex cursor-pointer list-none items-center gap-2">
+                      <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                      <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                    </summary>
+                    <div className="mt-3 space-y-3">
+                      <p className="text-sm text-muted-foreground">{labels.policyHint}</p>
+                      {balances.map((balance) => {
+                        const slug = leaveTypeSlug(balance);
+                        const label =
+                          locale === 'fa'
+                            ? balance.name_fa
+                            : balance.name_en ?? balance.name_fa;
+                        return (
+                          <AccrualPolicyFields
+                            key={`policy-${balance.leaveTypeId}`}
+                            leaveTypeId={balance.leaveTypeId}
+                            slug={slug}
+                            legend={label}
+                            defaults={policyMinutesFor(balance.leaveTypeId)}
+                            hoursPerDay={hoursPerDay}
+                            errors={amountErrors}
+                            labels={labels}
+                          />
+                        );
+                      })}
+                    </div>
+                  </details>
                 )}
               </fieldset>
             )}

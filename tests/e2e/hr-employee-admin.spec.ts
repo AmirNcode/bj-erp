@@ -63,7 +63,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await dept.selectOption(newDept);
   await pickManager(page, boss.code);
   await page.fill('[data-testid="job-title"]', 'Welder');
-  await page.locator('[data-testid="role-manager"] input').check();
+  await page.locator('[data-testid="role-manager"]').click();
   await save(page);
 
   await page.reload();
@@ -73,7 +73,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await expect(page.locator('[data-testid="role-manager"] input')).toBeChecked();
 
   // ── 2. and the role comes off again ──────────────────────────────────────
-  await page.locator('[data-testid="role-manager"] input').uncheck();
+  await page.locator('[data-testid="role-manager"]').click();
   await save(page);
   await page.reload();
   await expect(page.locator('[data-testid="role-manager"] input')).not.toBeChecked({ timeout: 30_000 });

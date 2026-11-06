@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
+import type { QuickAddRow } from '@/lib/leave/balanceBreakdown';
 import { todayInAppTz } from '@/lib/appDate';
 import { accrueBeforeRead } from './shared';
 
@@ -192,6 +193,143 @@ export async function setLeaveBalance(
 
   invalidateAppCache();
   return { ok: true };
+}
+
+export type AddLeaveBalanceResult = { ok: true; balanceMinutes: number } | DbErrorResult;
+
+/**
+ * FR-85: adds time to a balance with a reason. The RPC writes a marked adjustment
+ * row and re-checks the caller's authority, like setLeaveBalance.
+ */
+export async function addLeaveBalance(
+  employeeId: string,
+  leaveTypeId: string,
+  minutes: number,
+  reason: string
+): Promise<AddLeaveBalanceResult> {
+  const c = await requireCaller({ perm: ['leave_balances', 'edit'] });
+  if (!c.ok) return c;
+  if (!Number.isSafeInteger(minutes) || minutes <= 0) return dbErr('amount must be more than 0');
+
+  const { data, error } = await c.supabase.rpc('app_add_leave_balance', {
+    p_employee_id: employeeId,
+    p_leave_type_id: leaveTypeId,
+    p_minutes: minutes,
+    p_reason: reason,
+  });
+  if (error) return dbErr(error.message);
+
+  invalidateAppCache();
+  return { ok: true, balanceMinutes: data };
+}
+
+export type LedgerHistoryRow = {
+  id: string;
+  leaveTypeId: string;
+  entryType: string;
+  quickAdd: boolean;
+  periodMonth: string | null;
+  deltaMinutes: number;
+  balanceAfterMinutes: number;
+  note: string | null;
+  at: string;
+  byName: string | null;
+  requestSerial: { year: number; seq: number } | null;
+};
+
+/** The same reach as getEmployeeBalances; RLS on leave_ledger enforces it too. */
+async function canReadBalancesOf(employeeId: string) {
+  const c = await requireCaller({ company: true });
+  if (!c.ok) return c;
+  if (!can(c.perms, 'leave_balances', 'read')) {
+    const { data: target } = await c.supabase
+      .from('profiles')
+      .select('manager_id')
+      .eq('id', employeeId)
+      .maybeSingle();
+    if (target?.manager_id !== c.user.id) return dbErr('not allowed');
+  }
+  return c;
+}
+
+/** FR-85: every quick add for the person, for the breakdown under the balance fields. */
+export async function getQuickAdds(
+  employeeId: string
+): Promise<{ ok: true; rows: QuickAddRow[] } | DbErrorResult> {
+  const c = await canReadBalancesOf(employeeId);
+  if (!c.ok) return c;
+
+  const { data, error } = await c.supabase
+    .from('leave_ledger')
+    .select('id, leave_type_id, delta_minutes, note, created_at, profiles!leave_ledger_created_by_fkey(full_name)')
+    .eq('employee_id', employeeId)
+    .eq('quick_add', true)
+    .order('seq', { ascending: false });
+  if (error) return dbErr(error.message);
+
+  return {
+    ok: true,
+    rows: (data ?? []).map((r) => ({
+      id: r.id,
+      leaveTypeId: r.leave_type_id,
+      minutes: r.delta_minutes,
+      reason: r.note ?? '',
+      at: r.created_at,
+      byName: r.profiles?.full_name ?? null,
+    })),
+  };
+}
+
+/** FR-85: the person's ledger, newest first. Loaded when "See history" first opens. */
+export async function getLeaveHistory(
+  employeeId: string
+): Promise<{ ok: true; rows: LedgerHistoryRow[] } | DbErrorResult> {
+  const c = await canReadBalancesOf(employeeId);
+  if (!c.ok) return c;
+
+  const { data, error } = await c.supabase
+    .from('leave_ledger')
+    .select(
+      'id, leave_type_id, entry_type, quick_add, period_month, delta_minutes, balance_after_minutes, note, created_at, ' +
+        'profiles!leave_ledger_created_by_fkey(full_name), leave_requests(serial_year, serial_seq)'
+    )
+    .eq('employee_id', employeeId)
+    .order('seq', { ascending: false })
+    .limit(200);
+  if (error) return dbErr(error.message);
+
+  type Row = {
+    id: string;
+    leave_type_id: string;
+    entry_type: string;
+    quick_add: boolean;
+    period_month: string | null;
+    delta_minutes: number;
+    balance_after_minutes: number;
+    note: string | null;
+    created_at: string;
+    profiles: { full_name: string } | null;
+    leave_requests: { serial_year: number | null; serial_seq: number | null } | null;
+  };
+  return {
+    ok: true,
+    rows: ((data ?? []) as unknown as Row[]).map((r) => ({
+      id: r.id,
+      leaveTypeId: r.leave_type_id,
+      entryType: r.entry_type,
+      quickAdd: r.quick_add,
+      periodMonth: r.period_month,
+      deltaMinutes: r.delta_minutes,
+      balanceAfterMinutes: r.balance_after_minutes,
+      note: r.note,
+      at: r.created_at,
+      byName: r.profiles?.full_name ?? null,
+      requestSerial:
+        r.leave_requests?.serial_year != null && r.leave_requests.serial_seq != null
+          ? { year: r.leave_requests.serial_year, seq: r.leave_requests.serial_seq }
+          : null,
+    })),
+  };
 }
 
 export type LeavePolicyInput = {

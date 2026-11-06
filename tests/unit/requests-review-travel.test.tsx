@@ -6,6 +6,7 @@ import { RequestsReview } from '@/app/[locale]/(app)/manage/requests/RequestsRev
 import type { ReviewRequestRow } from '@/lib/actions/leave/review';
 
 vi.mock('@/app/[locale]/(app)/manage/requests/TravelTickToggle', () => ({ TravelTickToggle: ({ requestId }: { requestId: string }) => <span data-testid={`tick-${requestId}`} /> }));
+vi.mock('@/app/[locale]/(app)/manage/requests/CorrectTripDialog', () => ({ CorrectTripDialog: ({ trip }: { trip: { id: string } }) => <span data-testid={`correct-${trip.id}`} /> }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({ RequestCancelButton: ({ requestId }: { requestId: string }) => <span data-testid={`cancel-${requestId}`} /> }));
 afterEach(cleanup);
 
@@ -15,6 +16,25 @@ const row = (id: string, over: Partial<ReviewRequestRow> = {}): ReviewRequestRow
   start_date: '2099-03-01', end_date: '2099-03-02', start_time: null, end_time: null, day_part: 'full',
   requested_minutes: 960, serial_year: 1405, serial_seq: 1, signature_consent_at: null, approver_signature_consent_at: null,
   created_at: '2026-10-01T00:00:00Z', ...over,
+});
+
+describe('Requests page: Correct (FR-84)', () => {
+  const page = (ticks: Record<string, { started: boolean }> | null) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <RequestsReview requests={[row('a')]} locale="en" hoursPerDay={8} travelTicks={ticks} viewerId="hr" />
+      </NextIntlClientProvider>
+    );
+
+  it('offers Correct to HR', () => {
+    page({});
+    expect(screen.getByTestId('correct-a')).toBeTruthy();
+  });
+
+  it('offers nothing to a viewer who is not HR', () => {
+    page(null);
+    expect(screen.queryByTestId('correct-a')).toBeNull();
+  });
 });
 
 describe('Requests page: travel trips (FR-70)', () => {

@@ -25,6 +25,22 @@ describe('RequestProgress: trip extensions (FR-70)', () => {
     expect(text).toContain('Waiting for HR');
   });
 
+  it('lists each correction with its reason', async () => {
+    mocks.progress.mockResolvedValue({
+      ok: true, steps: [], extensions: [],
+      corrections: [{
+        old_start_date: '2027-03-01', new_start_date: '2027-03-01', old_end_date: '2027-03-03',
+        new_end_date: '2027-03-05', per_diem_before: null, per_diem_after: 2500000,
+        reason: 'Wrong dates on the form', corrected_by_name: 'Fixture HR', corrected_at: '2027-03-02T10:00:00Z',
+      }],
+    });
+    render(<NextIntlClientProvider locale="en" messages={en}><RequestProgress requestId="r3" defaultOpen /></NextIntlClientProvider>);
+    await waitFor(() => expect(screen.getByTestId('progress-corrections-r3')).toBeTruthy());
+    const text = screen.getByTestId('progress-corrections-r3').textContent ?? '';
+    expect(text).toContain('Wrong dates on the form');
+    expect(text).toContain('Fixture HR');
+  });
+
   it('shows nothing extra when there are no extensions', async () => {
     mocks.progress.mockResolvedValue({ ok: true, steps: [], extensions: [] });
     render(<NextIntlClientProvider locale="en" messages={en}><RequestProgress requestId="r2" defaultOpen /></NextIntlClientProvider>);

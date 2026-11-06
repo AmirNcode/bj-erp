@@ -71,6 +71,7 @@ export default async function PrintRequestPage({ params }: Props) {
 
   const t = await getTranslations('print');
   const tx = await getTranslations('travel.extension');
+  const tc = await getTranslations('travel.correction');
   const te = await getTranslations('approvalEvidence');
   const ts = await getTranslations('approvals.steps');
   const tLeave = await getTranslations('leave');
@@ -101,7 +102,11 @@ export default async function PrintRequestPage({ params }: Props) {
   }
 
   const r = result.request;
-  const trip = printedTripDates(r.end_date, r.extensions ?? []);
+  const trip = printedTripDates(
+    { start: r.start_date, end: r.end_date, perDiem: r.per_diem_rials ?? null },
+    r.extensions ?? [],
+    r.corrections ?? []
+  );
   const form = paperFormFor(r.kind, r.unit);
   const isErrand = r.kind === 'errand';
   const isHourly = r.unit === 'hour';
@@ -247,23 +252,37 @@ export default async function PrintRequestPage({ params }: Props) {
                   </>
                 ) : (
                   <>
-                    <Cell label={t('fields.from')} value={date(r.start_date)} className="border-0 border-b border-e" />
+                    <Cell label={t('fields.from')} value={date(trip.signedStart)} className="border-0 border-b border-e" />
                     <Cell label={t('fields.to')} value={date(trip.signedEnd)} className="border-0 border-b" />
                   </>
                 )}
               </div>
-              {trip.extended.map((e) => (
-                <div key={e.date} className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-extension">
-                  {tx('printLine', { date: date(e.date), reason: e.reason })}
-                </div>
-              ))}
-              {r.per_diem_rials != null && (
+              {trip.signedPerDiem != null && (
                 <div className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-per-diem">
                   <span className="text-[10px] text-neutral-700">{t('fields.perDiem')} :</span>{' '}
-                  <strong>{formatRials(r.per_diem_rials, locale)}</strong>
+                  <strong>{formatRials(trip.signedPerDiem, locale)}</strong>
                   {r.per_diem_by_requester && <span className="text-[10px]"> — {t('perDiemByRequester')}</span>}
                 </div>
               )}
+              {trip.changes.map((c) => (
+                <div
+                  key={`${c.kind}-${c.at}`}
+                  className="border-b border-black px-2 py-1.5 text-[12px]"
+                  data-testid={c.kind === 'extension' ? 'print-extension' : 'print-correction'}
+                >
+                  {c.kind === 'extension'
+                    ? [
+                        tx('printLine', { date: date(c.end), reason: c.reason }),
+                        c.perDiemChanged && c.perDiem !== null
+                          && tc('printPerDiem', { amount: formatRials(c.perDiem, locale) }),
+                      ].filter(Boolean).join(' — ')
+                    : [
+                        c.datesChanged && tc('printDates', { start: date(c.start), end: date(c.end) }),
+                        c.perDiemChanged && c.perDiem !== null
+                          && tc('printPerDiem', { amount: formatRials(c.perDiem, locale) }),
+                      ].filter(Boolean).concat(c.reason).join(' — ')}
+                </div>
+              ))}
               <div className="min-h-28 border-b border-black px-2 py-1.5">
                 <span className="text-[10px] text-neutral-700">{t('fields.description')} :</span>
                 <p className="mt-1 text-[12px] whitespace-pre-wrap">{r.reason ?? ''}</p>

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { ADMIN_CODE, ADMIN_PASSWORD, login } from './_helpers';
+import { ADMIN_CODE, ADMIN_PASSWORD, login, openLeaveSections } from './_helpers';
 
 
 test.describe('Employee CRUD — admin flow', () => {
@@ -59,8 +59,9 @@ test.describe('Employee CRUD — admin flow', () => {
       }
     }
 
-    uniqueCode =
-      (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
+    // The admin sees a login-code box, not the preview: left blank, the code is the
+    // personnel number.
+    uniqueCode = await page.inputValue('#personnel_no');
 
     // Submit the form
     await page.click('button[type="submit"]');
@@ -86,7 +87,7 @@ test.describe('Employee CRUD — admin flow', () => {
     const row = page.locator('tr', { hasText: uniqueCode }).first();
     await row.locator('a[href*="/manage/employees/"]').click();
     await expect(page).toHaveURL(/\/manage\/employees\/[^/]+$/);
-    await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 10000 });
+    await openLeaveSections(page);
     await page.fill('[data-testid="balance-days-annual"]', '7');
     await page.click('button[type="submit"]');
     await expect(page.getByRole('status')).toBeVisible({ timeout: 15000 });

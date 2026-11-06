@@ -28,6 +28,8 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { todayInAppTz } from '@/lib/appDate';
 import { TravelTickToggle } from './TravelTickToggle';
+import { CorrectTripDialog } from './CorrectTripDialog';
+import { canCorrectTrip } from '@/lib/travel/extensions';
 import { RequestCancelButton } from '../../request/_components/RequestCancelButton';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
@@ -237,6 +239,8 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                         started={travelTicks[r.id]?.started ?? false}
                       />
                     )}
+                    {/* FR-84: a null travelTicks means the viewer is not HR. */}
+                    {travelTicks && canCorrectTrip(r, viewerId) && <CorrectTripDialog trip={r} locale={locale} />}
                     {/* FR-70: the manager tells HR; HR cancels a travel-booked trip here. */}
                     {travelTicks?.[r.id] && r.employee_id !== viewerId && <RequestCancelButton requestId={r.id} status={r.status} startDate={r.start_date} />}
                     <StatusBadge status={r.status} labels={statusLabels} />

@@ -75,7 +75,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
-- ◐ **First and last names (FR-83):** built on `claude/employee-name-fields` (not merged, not deployed).
+- ◐ **Approved trip corrections + quick balance add (FR-84, FR-85):** built on
+  `claude/approved-trip-corrections` (not merged, not deployed). Ships with FR-83. After deploy (owner): tell HR
+  about Correct on Manage › Requests and Add to balance on Edit Employee, and that early return = add the unused
+  time (not any unpaid days on that request). Tell finance what the "Corrected" marker means.
+- ◐ **First and last names (FR-83):** merged to main as `8224e81`, not deployed. Owner (2026-11-05): ships with FR-84/85 when merged.
   After deploy (owner/HR): sort Manage › Employees by Last name Z to A and fix each blank (about 54
   expected). Tell HR old import files are now refused and the personal-info export has two name columns.
 - ☐ **FR-83 follow-up (one release after it deploys):** remove `p_full_name` from `app_create_employee`

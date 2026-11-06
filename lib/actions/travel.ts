@@ -46,7 +46,7 @@ export async function getTravelTicks(): Promise<Record<string, { started: boolea
   return Object.fromEntries((data ?? []).map((r) => [r.request_id, { started: r.started }]));
 }
 
-export type TravelState = 'to_book' | 'extension' | 'done' | 'cancel_undo' | 'settled';
+export type TravelState = 'to_book' | 'extension' | 'corrected' | 'done' | 'cancel_undo' | 'settled';
 export type Transport = 'flight' | 'company_car';
 
 export type TravelBookingRow = {
@@ -76,6 +76,14 @@ export type TravelBookingDetail = Omit<TravelBookingRow, 'done_at'> & {
   itinerary: Itinerary | null;
   lost_note: string | null;
   done_at: string | null;
+  /** FR-84: the latest date correction, for the note procurement sees. */
+  last_correction: {
+    old_start_date: string;
+    old_end_date: string;
+    new_start_date: string;
+    new_end_date: string;
+    reason: string;
+  } | null;
   extensions: { old_end_date: string; new_end_date: string; reason: string; decided_at: string | null }[];
   /** Live from personal information; absent once the booking is closed. */
   traveller?: Partial<Record<TravellerField, string | null>>;
@@ -207,6 +215,8 @@ export type RequestExtension = {
   requested_by_name: string;
   decided_by_name: string | null;
   decided_at: string | null;
+  per_diem_before: number | null;
+  per_diem_after: number | null;
 };
 
 /** Direct manager (admin: company): approved travel-booked trips not yet ended. */
@@ -237,6 +247,39 @@ export async function listPendingExtensions(): Promise<PendingExtension[]> {
   const { data, error } = await c.supabase.rpc('app_pending_errand_extensions');
   if (error) return [];
   return (data ?? []) as PendingExtension[];
+}
+
+/**
+ * FR-84: HR corrects an approved daily trip. A null field stays as it is; the
+ * signed values stay on record in `request_corrections`.
+ */
+export async function correctTrip(input: {
+  requestId: string;
+  newStart: string | null;
+  newEnd: string | null;
+  perDiemRials: number | null;
+  reason: string;
+  signatureData: string;
+  signatureAuthorized: boolean;
+}): Promise<{ ok: true } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  if (!input.signatureData || !input.signatureAuthorized) return dbErr('signature is required');
+  if (input.perDiemRials !== null && (!Number.isSafeInteger(input.perDiemRials) || input.perDiemRials < 0)) {
+    return dbErr('per diem must be 0 or more');
+  }
+  const { error } = await c.supabase.rpc('app_correct_trip', {
+    p_request: input.requestId,
+    p_new_start: input.newStart,
+    p_new_end: input.newEnd,
+    p_per_diem_rials: input.perDiemRials,
+    p_reason: input.reason,
+    p_signature_data: input.signatureData,
+    p_signature_authorized: input.signatureAuthorized,
+  });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
 }
 
 export async function decideExtension(input: {
