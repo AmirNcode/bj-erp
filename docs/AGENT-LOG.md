@@ -78,6 +78,81 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-07 — Design: admin "View as" (no code yet)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner wants to see the app as any employee, to check what they can see after a fix.
+
+**What changed**
+- This entry only. No app code, no migrations.
+
+**Actions outside the repo**
+- Local only: throwaway clone `vs_spike` of db `postgres` and two PostgREST v12.2.3 containers (`bjs-hook`, `bjs-plain`, ports 18090/18091); all removed. Liara not touched. Mockup server for brainstorming on localhost; files in git-ignored `.superpowers/`.
+
+**Verification**
+- Spike on the clone: a pre-request hook (`private.view_as_pre_request`) swapped `sub` in `request.jwt.claims` and set `transaction_read_only`. `app_my_permissions` and `profiles` returned the employee's result (0 perms, 5 rows) for the admin's token plus `x-view-as`, same as the employee's own token. Table PATCH refused (405, 25006). Employee token, no token, expired and ended sessions refused (403). Garbage id gives 400 (uuid cast): catch it in the real hook.
+- Latency over 3 rounds of 400 calls, p50: no hook 2.48-2.81 ms, hook without header 2.50-3.10 ms: within noise.
+
+**State left behind**
+- Decided by owner: strictly read-only, no notification, audit only, language switch works without saving, top strip banner, trial mode dropped for now.
+- Design approved by owner: `docs/specs/2026-11-07-view-as-design.md`. Plan written, not yet approved: `docs/plans/2026-11-07-view-as.md`. Both uncommitted. A builder check found three gaps, all fixed in it: hook setting not in backups, dead views running as admin, Farsi unreachable for an `en` admin.
+
+**For the next agent**
+- Only `signOut` needs an app block. Password change is an RPC and SMS is `sms_outbox`, so the read-only transaction covers both; an earlier message to the owner said otherwise and was corrected. A language switch in View as must not call `updateMyPrefs`.
+
+## 2026-11-06 — Question: is FR-84 live, and where is Correct?
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner, logged in on bjeng.app as head of HR, could not find how to edit approved requests.
+
+**What changed**
+- This entry only. No code.
+
+**Actions outside the repo**
+- Read-only: `gh run list`, `curl https://bjeng.app/api/health`. Live DB not touched.
+
+**Verification**
+- PR #21 merged as `3ac4002`; Deploy Liara run 42160924735 succeeded; health returns ok. Button not exercised in a browser.
+- Code read: Correct is on Manage › Requests, not on the Approvals page in the owner's screenshot.
+
+**State left behind**
+- Entry uncommitted, alongside the earlier uncommitted review entry and `AGENTS.md` change. Designated branch was deleted on the remote after the merge.
+
+**For the next agent**
+- `docs/TASKS.md`, `docs/CHANGELOG.md` and `docs/REQUIREMENTS.md` still say FR-83/84/85 are not deployed or unreleased: stale.
+
+## 2026-11-05 — Code review of PR #21 (FR-84, FR-85): no findings
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner ran `/code-review:code-review` on PR #21, passing the PR author's last report.
+
+**What changed**
+- This entry only. No code.
+
+**Actions outside the repo**
+- Read-only `gh` calls. No PR comments posted (no `--comment`). Local DB and Liara not touched.
+
+**Verification**
+- Four parallel reviewers (two CLAUDE.md compliance, two bug and logic) returned no findings, so no validation pass ran. One reviewer ran `npx tsc --noEmit --incremental false`: clean. Tests, SQL and e2e not rerun.
+- The PR's accepted minors were excluded from the review by instruction, so "no findings" says nothing about them.
+
+**State left behind**
+- PR open, not merged or deployed, still no CI report per the author. This entry is uncommitted on the branch; `AGENTS.md` heading change still uncommitted and not ours.
+
+**For the next agent**
+- Merging deploys to Liara and ships FR-83 too. Keep `[skip ci]` out of the merge title.
+
+**Follow-up: `hr-role.spec.ts` on main vs the PR (owner asked)**
+- Disposable DB `bj_mainchk` cloned from local `postgres`, rolled back to main's schema (only difference from `schema.sql`: the known re-parenthesized CHECKs), a clone-only test admin password, second GoTrue + PostgREST, a node proxy with CORS, a worktree. All removed after.
+- main 8224e81, with the PR's `_helpers.ts` plus a skip for sections with no `<summary>`: 7 of 8 pass; test at :319 fails at :355 (`chain-<id>-manager`). An earlier run, with 4 tests broken only by the helper, also failed :463 at :480 (`net::ERR_ABORTED`), so that test is flaky.
+- PR head 3c80975, same clone with the four migrations forward: 6 of 8 pass; same two failures at the same lines.
+- Both failures exist without this PR. The earlier entry's "12 of 14" does not match: the spec has 8 tests.
+- Test :319 stops at :355 on both sides, so the rest of it (manager + HR approval) was exercised on neither. `chain-…` testid gap is also noted further down this file.
+- Clone gotchas: `pg_restore --no-owner` leaves `auth` owned by `supabase_admin`, so GoTrue dies with `relation "schema_migrations" already exists`; reassign `auth` schema and tables to `supabase_auth_admin`. Browser login needs CORS on the proxy. A role-settings query printed the local stack's JWT secret to this session's transcript (not committed, local only).
+
 ## 2026-11-05 — Approved trip corrections and quick balance add (FR-84, FR-85)
 
 **Agent:** Claude Opus 5.5 via Claude Code
