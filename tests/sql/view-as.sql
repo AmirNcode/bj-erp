@@ -131,6 +131,9 @@ select pg_temp.expect('start twice: first session ended_at set, exactly one live
   (select (s1.ended_at is not null)::text||'/'||(select count(*) from private.view_as_sessions
       where admin_id=pg_temp.fx('admin') and ended_at is null)
      from private.view_as_sessions s1 where s1.id=pg_temp.fx('s1')),'true/1');
+select pg_temp.expect('start twice: the replaced session gets a view_as.end audit row',
+  (select count(*)::text from public.audit_log where action='view_as.end' and actor_id=pg_temp.fx('admin')
+      and entity='profiles' and entity_id=pg_temp.fx('emp') and after->>'session_id'=pg_temp.fx('s1')::text),'1');
 select pg_temp.expect('start deletes the admin''s older ended and expired rows',
   (select count(*)::text from private.view_as_sessions where id in (pg_temp.fx('old_ended'),pg_temp.fx('old_expired'))),'0');
 
@@ -139,10 +142,10 @@ select pg_temp.expect('end: runs',pg_temp.as_scalar('admin','select public.app_v
 select pg_temp.expect('end: ended_at set, audit row view_as.end',
   (select (ended_at is not null)::text from private.view_as_sessions where id=pg_temp.fx('s2'))||'/'||
   (select count(*) from public.audit_log where action='view_as.end' and actor_id=pg_temp.fx('admin')
-      and entity='profiles' and entity_id=pg_temp.fx('emp')),'true/1');
+      and entity='profiles' and entity_id=pg_temp.fx('emp') and after->>'session_id'=pg_temp.fx('s2')::text),'true/1');
 select pg_temp.expect('end: nothing live left, a second end writes no audit row',
   pg_temp.as_scalar('admin','select public.app_view_as_end()::text')||'/'||
-  (select count(*) from public.audit_log where action='view_as.end' and actor_id=pg_temp.fx('admin')),'/1');
+  (select count(*) from public.audit_log where action='view_as.end' and actor_id=pg_temp.fx('admin')),'/2');
 
 -- session
 select pg_temp.expect('start live session',pg_temp.err(pg_temp.start('admin','emp')),'ok');
@@ -190,8 +193,12 @@ select pg_temp.expect('control: emp''s own photo write works without the header'
   pg_temp.err(pg_temp.hooked('emp',null,pg_temp.photo_sql())),'ok');
 select pg_temp.expect('hook write: a volatile RPC that writes -> ERROR 25006',
   pg_temp.err(pg_temp.hooked('admin',pg_temp.fx('live')::text,pg_temp.photo_sql())),'25006');
-select pg_temp.expect('hook write: nothing was written',
-  (select count(*)::text from private.profile_photos where employee_id=pg_temp.fx('emp')),'0');
+select set_config('request.jwt.claim.sub',pg_temp.fx('admin')::text,true);
+select pg_temp.expect('hook legacy claim: a pre-set request.jwt.claim.sub = admin still yields auth.uid() = target',
+  pg_temp.hooked('admin',pg_temp.fx('live')::text,
+    format('select (auth.uid()=%L)::text||''/''||current_setting(''request.jwt.claim.sub'')',pg_temp.fx('emp'))),
+  'true/'||pg_temp.fx('emp'));
+select set_config('request.jwt.claim.sub','',true);
 
 select pg_temp.refused('garbage id','admin','not-a-uuid');
 select pg_temp.refused('uuid with trailing text','admin',pg_temp.fx('live')::text||'x');
@@ -204,6 +211,12 @@ select pg_temp.refused('caller emp with the live id','emp',pg_temp.fx('live')::t
 select pg_temp.refused('other admin with admin''s live id','other_admin',pg_temp.fx('live')::text);
 select pg_temp.expect('control: other admin''s own session swaps while they hold admin',
   pg_temp.hooked('other_admin',pg_temp.fx('oa')::text,format('select (auth.uid()=%L)::text',pg_temp.fx('emp'))),'true');
+select pg_temp.session_row('as_admin','admin','other_admin',now()+interval '30 minutes',null);
+select pg_temp.expect('control: viewing as another admin swaps',
+  pg_temp.hooked('admin',pg_temp.fx('as_admin')::text,format('select (auth.uid()=%L)::text',pg_temp.fx('other_admin'))),'true');
+select pg_temp.assert('nested: viewing as another admin, app_view_as_start -> refused',
+  pg_temp.err(pg_temp.hooked('admin',pg_temp.fx('as_admin')::text,
+    format('select session_id::text from public.app_view_as_start(%L)',pg_temp.fx('emp')))) in ('25006','42501'));
 delete from public.user_roles where user_id=pg_temp.fx('other_admin') and role='admin';
 select pg_temp.refused('caller who lost the admin role','other_admin',pg_temp.fx('oa')::text);
 

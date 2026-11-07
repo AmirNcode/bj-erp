@@ -63,6 +63,8 @@ begin
   v_claims := coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
   perform set_config('request.jwt.claims',
     ((v_claims - 'app_roles' - 'app_perms') || jsonb_build_object('sub', v_target))::text, true);
+  -- auth.uid() reads the legacy per-claim setting first; never let it keep the admin's sub.
+  perform set_config('request.jwt.claim.sub', v_target::text, true);
   -- Postgres refuses switching a read-only transaction back to read-write.
   perform set_config('transaction_read_only', 'on', true);
 end $$;
@@ -96,9 +98,15 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('view_as:' || v_uid::text, 0));
   delete from private.view_as_sessions s
    where s.admin_id = v_uid and (s.ended_at is not null or s.expires_at <= now());
-  -- At most one live session per admin: a second browser's view ends here.
-  update private.view_as_sessions s set ended_at = now()
-   where s.admin_id = v_uid and s.ended_at is null;
+  -- At most one live session per admin: a second browser's view ends here, audited like Exit.
+  with ended as (
+    update private.view_as_sessions s set ended_at = now()
+     where s.admin_id = v_uid and s.ended_at is null
+    returning s.id, s.target_id
+  )
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  select v_uid, 'view_as.end', 'profiles', e.target_id, jsonb_build_object('session_id', e.id)
+    from ended e;
   insert into private.view_as_sessions as s (admin_id, target_id, expires_at)
   values (v_uid, p_target, now() + interval '30 minutes')
   returning s.id, s.expires_at into v_id, v_expires;
