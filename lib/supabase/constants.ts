@@ -23,3 +23,22 @@ export const AUTH_COOKIE_NAME = 'bj-auth';
  * the app container's address would instead put everyone in one shared bucket.
  */
 export const CLIENT_IP_HEADER = 'x-bj-client-ip';
+
+/**
+ * View as (FR-86). The cookie holds the admin's view-as session id; while it
+ * exists, the server client sends it as VIEW_AS_HEADER and the PostgREST
+ * pre-request hook swaps identity to the target, read-only. The cookie's
+ * presence, not the session's health, decides the header (fail closed: a dead
+ * session gets "view-as refused" instead of running as the admin).
+ *
+ * Kept free of `next/headers`: proxy.ts imports this file.
+ */
+export const VIEW_AS_COOKIE = 'bj-view-as';
+export const VIEW_AS_HEADER = 'x-view-as';
+export const VIEW_AS_COOKIE_ATTRS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+  path: '/',
+  maxAge: 60 * 60 * 24,
+} as const;
