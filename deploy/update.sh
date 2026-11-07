@@ -186,6 +186,9 @@ if ! bj_wait_for_stack "$HEALTH_RETRIES" || ! bj_verify_running_architecture amd
 !!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
 !!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
+!!   then re-point the View as hook (role settings are not in the dump):
+!!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
+!!        exec -T db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < lib/sync-view-as-hook.sql
 WARNEOF
   fail "deploy failed; rolled back to ${PREVIOUS_VERSION}"
 fi
@@ -215,6 +218,9 @@ if [ "$LOST" != 0 ]; then
 !!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
 !!        exec -T db pg_restore -U supabase_admin -d postgres \\
 !!        --clean --if-exists < ${BACKUP_FILE}
+!!   then re-point the View as hook (role settings are not in the dump):
+!!   sudo docker compose -f docker-compose.yml -f ${BJ_COMPOSE_OVERLAY##*/} \\
+!!        exec -T db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < lib/sync-view-as-hook.sql
 LOSTEOF
   fail "row counts decreased — restore ${BACKUP_FILE}"
 fi
