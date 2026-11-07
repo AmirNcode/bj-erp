@@ -28,6 +28,7 @@ import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { can, parsePermsClaim, type Level, type PermKey, type Perms } from '@/lib/permissions/catalog';
 import { watchFromRow, type AbsenceWatch } from '@/lib/absences/watch';
 import { hasTimeOff } from '@/lib/auth/timeOff';
+import { getViewAs } from '@/lib/auth/viewAs';
 
 export type AuthUser = { id: string; email?: string };
 
@@ -39,10 +40,20 @@ const getCachedClaims = cache(async () => {
   return data.claims;
 });
 
-/** The authenticated user (or null), verified at most once per request. */
+/**
+ * The authenticated user (or null), verified at most once per request.
+ *
+ * View as (FR-86): while a view is live this is the target, so every page and
+ * action renders as them. The claims stay the admin's (`getCachedClaims`), and
+ * because `claims.sub` no longer matches, roles and permissions fall through to
+ * their database reads, which the hook answers as the target. Logged out, the
+ * cookie is ignored.
+ */
 export const getCachedUser = cache(async (): Promise<AuthUser | null> => {
   const claims = await getCachedClaims();
   if (!claims) return null;
+  const view = await getViewAs();
+  if (view?.status === 'live') return { id: view.targetId };
   return { id: claims.sub, email: claims.email };
 });
 

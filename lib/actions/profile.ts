@@ -7,6 +7,7 @@ import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { LOCALE_COOKIE, LOCALE_COOKIE_ATTRS } from '@/lib/i18n/locale';
+import { VIEW_AS_COOKIE } from '@/lib/supabase/constants';
 
 export type UpdatePrefsResult = { ok: true } | DbErrorResult;
 
@@ -50,8 +51,15 @@ export async function updateMyPrefs(input: {
   return { ok: true };
 }
 
-/** Clear the session and return to the login page. */
+/**
+ * Clear the session and return to the login page.
+ *
+ * View as (FR-86): GoTrue is not behind the read-only hook, so while the cookie
+ * exists this would sign the admin out. Do nothing instead. The return stays
+ * `void`: set-password/page.tsx binds this as a form action.
+ */
 export async function signOut(locale: string): Promise<void> {
+  if ((await cookies()).get(VIEW_AS_COOKIE)?.value) return;
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect(`/${locale}/login`);

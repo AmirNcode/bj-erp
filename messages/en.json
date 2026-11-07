@@ -1037,6 +1037,8 @@
     }
   },
   "dbErrors": {
+    "viewAsReadOnly": "Read-only while viewing. Nothing was saved.",
+    "viewAsEnded": "This view has ended. Reload the page.",
     "notAuthenticated": "You are not signed in. Please sign in again.",
     "notAllowed": "You are not allowed to perform this action.",
     "insufficientBalanceMinutes": "Insufficient leave balance ({requested} minutes requested, {available} available).",

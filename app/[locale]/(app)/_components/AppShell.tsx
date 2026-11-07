@@ -25,6 +25,8 @@ type Props = {
   pendingCount?: Promise<number>;
   /** The caller's own pending requests, for the outcome banner; streamed. */
   myPending?: Promise<WatchedRequest[]>;
+  /** FR-86: the live view, for the strip (rendered from Task 5). */
+  viewAs?: { name: string; personnelNo: string | null; expiresAt: string } | null;
   children: React.ReactNode;
 };
 

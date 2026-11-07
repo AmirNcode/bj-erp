@@ -6,6 +6,7 @@
 import { redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { getCachedUser, getCachedRoles, getCachedProfile, getCachedPermissions } from '@/lib/auth/context';
+import { redirectIfViewDead } from '@/lib/auth/viewAs';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { ROLE_PRIORITY, subtitleRole } from '@/lib/auth/roleSubtitle';
 import { parsePermsClaim, type Perms } from '@/lib/permissions/catalog';
@@ -21,6 +22,8 @@ type Props = {
 
 export default async function AppLayout({ children, params }: Props) {
   const { locale } = await params;
+  // FR-86: a dead view clears its cookie before anything reads the profile.
+  const view = await redirectIfViewDead(locale);
   const user = await getCachedUser();
 
   if (!user) {
@@ -37,8 +40,9 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
   // FR-50: an account still on its admin-issued password sees only the
-  // set-password screen until it chooses its own.
-  if (profile.must_change_password) {
+  // set-password screen until it chooses its own. Not while viewing (FR-86):
+  // that screen needs a write, so such a person could not be viewed at all.
+  if (profile.must_change_password && !view) {
     redirect(`/${locale}/set-password`);
   }
 
@@ -101,6 +105,7 @@ export default async function AppLayout({ children, params }: Props) {
       profile={profileSummary}
       pendingCount={pendingCount}
       myPending={myPending}
+      viewAs={view ? { name: view.name, personnelNo: view.personnelNo, expiresAt: view.expiresAt } : null}
     >
       {children}
     </AppShell>

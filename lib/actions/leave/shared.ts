@@ -3,7 +3,9 @@
  * nothing here is callable from the browser.
  */
 
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { VIEW_AS_COOKIE } from '@/lib/supabase/constants';
 import type { Database } from '@/lib/supabase/types';
 
 export type DayPart = Database['public']['Enums']['day_part'];
@@ -21,6 +23,9 @@ export async function accrueBeforeRead(
   supabase: Awaited<ReturnType<typeof createClient>>,
   employeeId?: string
 ): Promise<string | null> {
+  // View as (FR-86): the viewed transaction is read-only, so accrual would only
+  // fail and log on every balance read. Skip it while the cookie exists.
+  if ((await cookies()).get(VIEW_AS_COOKIE)?.value) return null;
   const { error } = employeeId
     ? await supabase.rpc('accrue_employee_leave', { p_employee_id: employeeId })
     : await supabase.rpc('accrue_my_leave');

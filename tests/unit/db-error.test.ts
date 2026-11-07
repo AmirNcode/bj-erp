@@ -174,3 +174,13 @@ describe('fieldForDbError FR-55 roles screens', () => {
     expect((await dbErr('duplicate key value violates unique constraint "roles_company_name_uniq"')).error).toBe('roleNameUsed');
   });
 });
+
+describe('dbErr view-as messages (FR-86)', () => {
+  it('maps a read-only transaction error', async () => {
+    expect((await dbErr('cannot execute UPDATE in a read-only transaction')).error).toBe('viewAsReadOnly');
+  });
+
+  it('maps a refused view', async () => {
+    expect((await dbErr('view-as refused')).error).toBe('viewAsEnded');
+  });
+});

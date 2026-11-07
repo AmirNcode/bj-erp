@@ -31,6 +31,11 @@ type Rule = {
 };
 
 const RULES: Rule[] = [
+  // View as (FR-86). The pre-request hook makes every viewed transaction read-only,
+  // so any save fails with Postgres's "cannot execute … in a read-only transaction";
+  // a dead or foreign view is refused before it runs.
+  { re: /read-only transaction/, key: 'viewAsReadOnly' },
+  { re: /^view-as refused$/, key: 'viewAsEnded' },
   { re: /delegation preview (?:refresh required|changed|required)/i, key: 'delegationPreview' },
   { re: /CEO automatic approval authority changed/i, key: 'delegationPreview' },
   { re: /CEO automatic approval responsibility consent required/i, key: 'automaticConsent' },
