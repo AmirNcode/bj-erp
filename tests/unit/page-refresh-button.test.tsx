@@ -23,6 +23,7 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/lib/actions/profile', () => ({ updateMyPrefs: vi.fn() }));
 // AppShell renders the outcome banner; its server action pulls in the Supabase client.
 vi.mock('@/lib/actions/leave/outcomes', () => ({ getMyRequestOutcomes: vi.fn() }));
+vi.mock('@/lib/actions/view-as', () => ({ endViewAs: vi.fn() }));
 
 vi.mock('@/lib/actions/refresh', () => ({
   refreshRoute: vi.fn(async () => ({ ok: true, refreshedAt: '2026-06-30T21:00:00.000Z' })),

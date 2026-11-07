@@ -3,6 +3,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { MainNav } from './MainNav';
 import { RoutePrefetcher } from './RoutePrefetcher';
 import { RequestOutcomeBanner } from './RequestOutcomeBanner';
+import { ViewAsProvider, type ViewAsInfo } from './ViewAsContext';
+import { ViewAsBar } from './ViewAsBar';
+import { ViewAsTabSync } from './ViewAsTabSync';
 import type { WatchedRequest } from '@/lib/actions/leave/outcomes';
 
 type Props = {
@@ -25,8 +28,8 @@ type Props = {
   pendingCount?: Promise<number>;
   /** The caller's own pending requests, for the outcome banner; streamed. */
   myPending?: Promise<WatchedRequest[]>;
-  /** FR-86: the live view, for the strip (rendered from Task 5). */
-  viewAs?: { name: string; personnelNo: string | null; expiresAt: string } | null;
+  /** FR-86: the live view, for the strip . */
+  viewAs?: ViewAsInfo | null;
   children: React.ReactNode;
 };
 
@@ -47,12 +50,16 @@ export function AppShell({
   profile,
   pendingCount,
   myPending,
+  viewAs,
   children,
 }: Props) {
   const initialUpdatedAt = new Date().toISOString();
 
   return (
+    <ViewAsProvider value={viewAs ?? null}>
     <div className="min-h-dvh md:ps-60">
+      {viewAs && <ViewAsBar locale={locale} />}
+      {(viewAs || roles.includes('admin')) && <ViewAsTabSync />}
       {/* Safe-area insets are 0 outside the installed iPhone PWA, so browsers keep 20px / 96px. */}
       <main className="mx-auto w-full max-w-6xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
         {myPending && <RequestOutcomeBanner pending={myPending} />}
@@ -75,5 +82,6 @@ export function AppShell({
       <RoutePrefetcher roles={roles} perms={perms} canApprove={canApprove} canDelegate={canDelegate} hasReports={hasReports} absencesPage={absencesPage} timeOff={timeOff} locale={locale} />
       <Toaster position="top-center" richColors />
     </div>
+    </ViewAsProvider>
   );
 }

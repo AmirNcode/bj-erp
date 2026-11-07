@@ -4,6 +4,7 @@ import { useTransition } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter, usePathname } from '@/i18n/navigation';
 import { updateMyPrefs } from '@/lib/actions/profile';
+import { useViewAs } from './ViewAsContext';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -22,12 +23,14 @@ export function LanguageSwitch({ locale, testIdPrefix = 'nav-lang', className }:
   const t = useTranslations('profile');
   const router = useRouter();
   const pathname = usePathname();
+  const viewing = useViewAs() !== null;
   const [isPending, startTransition] = useTransition();
 
   const choose = (next: 'fa' | 'en') => {
     if (next === locale || isPending) return;
     startTransition(async () => {
-      await updateMyPrefs({ languagePref: next });
+      // View as: the target's preference is never written.
+      if (!viewing) await updateMyPrefs({ languagePref: next });
       router.replace(pathname, { locale: next });
     });
   };

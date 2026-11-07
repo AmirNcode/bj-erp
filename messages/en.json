@@ -1036,6 +1036,12 @@
       }
     }
   },
+  "viewAs": {
+    "viewing": "Viewing as {person}",
+    "readOnly": "Read-only",
+    "exit": "Exit",
+    "notSaved": "Read-only while viewing. Nothing was saved."
+  },
   "dbErrors": {
     "viewAsReadOnly": "Read-only while viewing. Nothing was saved.",
     "viewAsEnded": "This view has ended. Reload the page.",
