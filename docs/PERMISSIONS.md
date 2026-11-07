@@ -410,6 +410,17 @@ risk, not a new activation gate. All password resets remain admin-only.
   balance unless admin, `can_act_on` for non-admins. The reason lands in `leave_ledger.note`, which the employee
   can read through RLS.
 
+### View as (FR-86, unreleased)
+- Admin only and read-only. There is **no catalog item**: HR and custom roles cannot hold it. Every
+  `app_view_as_*` RPC refuses a non-admin, and the hook checks `is_admin` (live `user_roles`) on every request.
+- `private.view_as_sessions`: RLS on, no policies, no grants; no client path. A view swaps `sub` in
+  `request.jwt.claims` to the person and sets `transaction_read_only`, so every RLS policy and RPC answers as
+  that person and every write fails (25006). The admin's own JWT is the only credential; the person never
+  authenticates and is not notified.
+- The audit log is the record: `view_as.start` and `view_as.end` (`audit_log` SELECT stays `is_admin`). A view
+  that times out has no end row. Viewing HR or finance shows the admin what that person sees, including
+  signatures and costs.
+
 ### `leave_ledger`
 - **SELECT**: own · `is_manager_of` · `reads_balances` (FR-55).
 - **INSERT**: **server-side only** (SECURITY DEFINER fns — `allocation`, paid-portion `consumption`

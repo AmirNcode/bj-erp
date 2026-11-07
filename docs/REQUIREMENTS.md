@@ -405,6 +405,20 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-86** ☐ **View as.** The admin alone (not a permission, not delegable) opens the app as any active
+  person of the company, to check what that person sees after a fix: their nav, pages, data and permission
+  outcomes, enforced by the same RLS and RPCs. Admin panel › **View as**: search by name or personnel number
+  (`PersonSearch`, a role label per result); a click starts the view, never a single match on its own. Strictly
+  **read-only**: the database refuses every write (`read-only transaction`), buttons stay visible and a press shows
+  "Read-only while viewing. Nothing was saved." The person is not told; `audit_log` holds `view_as.start` and
+  `view_as.end` (entity `profiles`, entity_id = the person). 30 minutes, each admin has one view, a new start
+  ends the old one. An amber strip at the top shows "Viewing as {name} ({personnel no}) · Read-only", a language
+  switch (swaps the URL locale only, saves nothing) and **Exit**, which returns to the View as tab. Sign-out is
+  refused while viewing, `/admin` sends the viewer home as it would the person, accrual is skipped and the
+  forced password change is not enforced. A view that ended (timeout, second browser, Exit in another tab)
+  fails closed: a press on a stale page gets "This view has ended. Reload the page.", and the next load goes to
+  View as with a note. No signing key and no `service_role` in the app. Trial mode (run an action, then cancel
+  it) is dropped for now. *(2026-11-07; spec `2026-11-07-view-as-design.md`; unreleased.)*
 - **FR-85** ☐ **Quick add to a leave balance, with history.** Edit Employee gets an always-open **Add to
   balance** section: leave type, days + hours, required reason (1–500 characters), saved at once and apart
   from the form's Save (`app_add_leave_balance`; `leave_balances` edit, never own balance unless admin,

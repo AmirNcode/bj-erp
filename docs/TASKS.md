@@ -75,6 +75,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **View as (FR-86):** built on `claude/view-as` (committed, not pushed, no PR; not deployed). Pushing `main`
+  deploys it; the deploy runs `deploy/lib/sync-view-as-hook.sql` by itself. Owner: check the Farsi strip copy.
+  Parked idea, only if reported problems turn out to be about actions: a trial mode (run an action, then roll
+  it back; PostgREST `Prefer: tx=rollback`). The owner dropped it for now (spec §1).
 - ◐ **Approved trip corrections + quick balance add (FR-84, FR-85):** built on
   `claude/approved-trip-corrections` (not merged, not deployed). Ships with FR-83. After deploy (owner): tell HR
   about Correct on Manage › Requests and Add to balance on Edit Employee, and that early return = add the unused

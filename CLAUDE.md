@@ -168,6 +168,10 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Worktrees:** a symlinked `node_modules` passes `tsc`/vitest but breaks `next build` (Turbopack refuses files outside the root); clone it with `cp -Rc ../bj/node_modules node_modules` (APFS, instant).
 - **Secret columns vs CHECK errors:** a failed CHECK/NOT NULL echoes the whole row in DETAIL (to PostgREST callers and the DB log); writes to a table holding a secret must catch and re-raise by constraint name (`app_set_sms_settings`).
 - **UI check without a login:** a temporary `app/[locale]/zz-…/page.tsx` (outside the route groups, so no auth layout) renders client components with fake data; delete it and `rm -rf .next/dev/types` before `tsc`.
+- **View as (FR-86): `createClient()` sends `x-view-as` whenever the `bj-view-as` cookie exists; only `createRealClient()` is the admin's own identity** (session check, start, exit). Using the wrong one acts as the admin or as the person by mistake.
+- **The View as hook setting (`pgrst.db_pre_request`) is a role setting, not in backups:** run `deploy/lib/sync-view-as-hook.sql` after any `pg_restore` (deploys already run it); a setting naming a missing function fails every request.
+- **Route handlers must build redirects as relative `Location` paths, never from `request.nextUrl`:** behind the gateway it holds the container origin (`https://0.0.0.0:3000`).
+- **`tests/e2e/view-as.spec.ts` runs only against the local Docker stack with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty:** otherwise the global setup rewrites the real admin's language and weekend settings.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

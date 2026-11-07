@@ -9,6 +9,17 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### View as (FR-86) — not deployed
+
+- **Admin panel › View as:** search a person by name or personnel number and open the app as them, to check
+  what they can see. Read-only for 30 minutes: nothing can be saved, buttons still show and say so when pressed.
+  The person is not told; Audit records each view.
+- An amber strip shows who you are viewing, with a language switch and **Exit**. Exit returns to View as.
+- A view that ended (time, another browser) refuses presses on a stale page and sends the next load back to
+  View as with a note.
+- Deploy: the setting that turns it on lives in `deploy/lib/sync-view-as-hook.sql`, run by every deploy; run it
+  again after any `pg_restore` (`docs/DEPLOY-LIARA.md`).
+
 ### Correct approved trips (FR-84) — not deployed
 
 - **Manage › Requests:** a **Correct** button on approved daily work errands. HR can change the start date,

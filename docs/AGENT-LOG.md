@@ -78,6 +78,43 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-07 — View as (FR-86): built, Tasks 1-8
+
+**Agent:** Claude Opus 5.5 via Claude Code (controller plus one subagent per task)
+**Branch / HEAD at start:** claude/view-as @ a5c617b (from `origin/main` 3ac4002); the design entry below and `docs/specs`/`docs/plans` were committed in `a5c617b`
+**Trigger:** Build the approved View as design (`docs/specs/2026-11-07-view-as-design.md`, plan `docs/plans/2026-11-07-view-as.md`).
+
+**What changed**
+- `supabase/migrations/20261108090000_view_as.sql`: `private.view_as_sessions`, the pre-request hook `private.view_as_pre_request` (PT403 `view-as refused`), `app_view_as_start/end/session/probe`. A review round changed it before anything applied it (legacy claim `sub`, audit of a replaced session, probe made volatile so `read_only` proves the hook).
+- `deploy/lib/sync-view-as-hook.sql`, `deploy/lib/migrations.sh`, `deploy/package.sh`, `deploy/update.sh`, `docs/DEPLOY-LIARA.md`: the `pgrst.db_pre_request` setting is synced on every deploy and re-run after a restore. `tests/deploy/view-as-hook.test.sh` is new.
+- `lib/supabase/{constants,server}.ts` (`createClient` sends `x-view-as` on cookie, `createRealClient`, `createClientForViewAs`), `lib/auth/viewAs.ts` (`getViewAs`, dead views fail closed), `lib/auth/context.ts` (target identity), layouts, `app/api/view-as/clear/route.ts`.
+- Strip (`ViewAsBar`, context, tab sync), `LanguageSwitch` and `LogoutButton` while viewing, `proxy.ts` locale redirect skipped with the cookie, Admin › View as tab with `PersonSearch` `hint` and `autoChoose`, `dbErr` rules, messages `fa` + `en` (admin panel strings `en` only).
+- `supabase/schema.sql` dump (view-as objects only). Docs: FR-86, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS, CLAUDE.md gotchas.
+- `tests/e2e/global-setup.ts`: a guard comment only (an empty anon key turns it off).
+- Parked: trial mode, owner dropped it (spec §1); noted in TASKS.
+
+**Actions outside the repo**
+- Local only. Throwaway clones of db `postgres` (`va_t` for Tasks 1 and 2, `bj_t7sql` for the SQL suite), all dropped; PostgREST v12.2.3 container `bjs-rest` on `va_t` for the hook proof, removed. The `postgres:15-alpine` image was pulled for `tests/deploy` (CI has network; `BJ_TEST_PG_IMAGE` overrides).
+- Task 7: `./deploy/bj-deploy update local` applied `20261108090000_view_as.sql` to the local `postgres` DB (backup `backups/deploy-assistant/local/20261107T185631Z-5abbb4`, every other migration skipped), restarted `bj-erp-rest-1`, rebuilt the app container twice for fixes (`bj-deploy app local`). The hook setting was reset by hand once (step 3b) and restored with `sync-view-as-hook.sql`; confirmed.
+- e2e created 999… throwaway users and a custom role; `npm run cleanup:e2e` removed 66 users, 0 left, role deleted, admin `language_pref` still `en`. One throwaway person's `personnel_no` was nulled by SQL with an admin JWT (the spec does it). One live view session ended by hand. Liara not touched.
+
+**Verification**
+- `npm run test:unit`: 122 files, 1211 passed. `npm run lint`, `npx tsc --noEmit` clean; `npm run build` exit 0; `npm run test:deploy` exit 0.
+- SQL suite on a fresh clone: 25/25 pass, including `tests/sql/view-as.sql` (50 assertions).
+- e2e `tests/e2e/view-as.spec.ts` through the gateway: 14 passed (1.2m). Page walk while viewing (employee 6 pages, manager 8, HR 14): no page writes on load; the only `read-only transaction` in the DB log was the deliberate signature save.
+- Hook-off drill on the local stack: a running view ends on reload, a start says "View as is unavailable.", sync file restored it.
+- Not done: no browser look at the strip's colours or Farsi copy by the owner; Liara and a real restore not exercised.
+
+**State left behind**
+- Branch `claude/view-as` committed, not pushed, no PR. Pushing `main` deploys to Liara. `AGENTS.md` change is not ours and stays unstaged.
+- Local app container runs the fixed build; local DB has the migration and the hook setting.
+
+**For the next agent**
+- Gateway redirect bug: route handlers must not build redirects from `request.nextUrl` (`0.0.0.0:3000`); BroadcastChannel posts reach the sender's own listener (tab id fix). Both in CLAUDE.md or tests.
+- Run `view-as.spec.ts` with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty, then `npm run cleanup:e2e` by hand. Its tests leave a live session per run (ended by the next start).
+- The probe must stay volatile (PostgREST runs a stable function read-only and would hide a missing hook). A custom-role-only person with several roles shows the alphabetically first as the label.
+- Seen, not ours: `app_pending_errand_extensions()` raises `not allowed` for non-HR callers on the approvals page; `listPendingExtensions` swallows it.
+
 ## 2026-11-07 — Design: admin "View as" (no code yet)
 
 **Agent:** Claude Opus 5.5 via Claude Code
