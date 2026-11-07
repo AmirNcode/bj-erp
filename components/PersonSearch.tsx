@@ -19,7 +19,7 @@ import { toAsciiDigits } from '@/lib/employees/code';
 import { autoPick } from '@/lib/employees/autoPick';
 import { cn } from '@/lib/utils';
 
-export type PersonSearchOption = { id: string; name: string; personnelNo: string | null };
+export type PersonSearchOption = { id: string; name: string; personnelNo: string | null; hint?: string };
 
 type Props = {
   people: PersonSearchOption[];
@@ -36,6 +36,8 @@ type Props = {
   disabled?: boolean;
   limit?: number;
   minChars?: number;
+  /** false: a lone match waits to be clicked or Enter-ed instead of being chosen after a pause. */
+  autoChoose?: boolean;
 };
 
 const label = (p: PersonSearchOption) => (p.personnelNo ? `${p.name} (${p.personnelNo})` : p.name);
@@ -69,6 +71,7 @@ export function PersonSearch({
   disabled = false,
   limit = 5,
   minChars = 2,
+  autoChoose = true,
 }: Props) {
   const t = useTranslations('personSearch');
   const listId = useId();
@@ -90,7 +93,7 @@ export function PersonSearch({
   // One match (or an exact personnel number): choose it once typing pauses, so
   // nobody has to click a single suggestion. The pause stops a half-typed name
   // that happens to match one person from being chosen mid-word.
-  const auto = selected || disabled ? null : autoPick(results, query);
+  const auto = selected || disabled || !autoChoose ? null : autoPick(results, query);
   useEffect(() => {
     if (!auto) return;
     const timer = setTimeout(() => {
@@ -193,6 +196,7 @@ export function PersonSearch({
               >
                 <span className="truncate">{p.name}</span>
                 {p.personnelNo && <span className="shrink-0 font-mono text-xs text-muted-foreground">{p.personnelNo}</span>}
+                {p.hint && <span className="shrink-0 text-xs text-muted-foreground">{p.hint}</span>}
               </li>
             ))
           )}

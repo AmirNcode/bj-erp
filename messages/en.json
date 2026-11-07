@@ -1045,6 +1045,7 @@
   "dbErrors": {
     "viewAsReadOnly": "Read-only while viewing. Nothing was saved.",
     "viewAsEnded": "This view has ended. Reload the page.",
+    "viewAsUnavailable": "View as is unavailable.",
     "notAuthenticated": "You are not signed in. Please sign in again.",
     "notAllowed": "You are not allowed to perform this action.",
     "insufficientBalanceMinutes": "Insufficient leave balance ({requested} minutes requested, {available} available).",
@@ -2132,7 +2133,13 @@
       "sms": "SMS",
       "system": "System",
       "audit": "Audit log",
-      "signIns": "Sign-ins"
+      "signIns": "Sign-ins",
+      "viewAs": "View as"
+    },
+    "viewAs": {
+      "title": "See the app as someone else",
+      "note": "Read-only for 30 minutes. Each view is recorded in Audit.",
+      "ended": "The view has ended."
     },
     "range": {
       "label": "Period",

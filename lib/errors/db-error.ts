@@ -36,6 +36,7 @@ const RULES: Rule[] = [
   // a dead or foreign view is refused before it runs.
   { re: /read-only transaction/, key: 'viewAsReadOnly' },
   { re: /^view-as refused$/, key: 'viewAsEnded' },
+  { re: /^view as unavailable$/, key: 'viewAsUnavailable' },
   { re: /delegation preview (?:refresh required|changed|required)/i, key: 'delegationPreview' },
   { re: /CEO automatic approval authority changed/i, key: 'delegationPreview' },
   { re: /CEO automatic approval responsibility consent required/i, key: 'automaticConsent' },
