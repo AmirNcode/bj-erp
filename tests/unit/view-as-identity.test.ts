@@ -159,7 +159,8 @@ describe('write guards', () => {
 });
 
 function clearRequest(query: string) {
-  return new NextRequest(`http://app.test/api/view-as/clear${query}`);
+  // The standalone server's own address, as seen behind the gateway.
+  return new NextRequest(`http://0.0.0.0:3000/api/view-as/clear${query}`);
 }
 
 function deletedCookie(res: Response) {
@@ -174,8 +175,8 @@ describe('GET /api/view-as/clear', () => {
     state.session = deadSession;
     const res = await clearRoute(clearRequest('?locale=en'));
     expect(res.status).toBe(307);
-    expect(new URL(res.headers.get('location')!).pathname + new URL(res.headers.get('location')!).search)
-      .toBe('/en/admin/view-as?ended=1');
+    // Relative: behind the gateway the server's own host is 0.0.0.0:3000, which the browser cannot reach.
+    expect(res.headers.get('location')).toBe('/en/admin/view-as?ended=1');
     const cookie = deletedCookie(res);
     expect(cookie).toBeDefined();
     expect(cookie).toMatch(/Path=\//);
@@ -185,7 +186,7 @@ describe('GET /api/view-as/clear', () => {
   it('clear route: live keeps the cookie, redirects to /en/home', async () => {
     state.cookies.set(VIEW_AS_COOKIE, SESSION);
     const res = await clearRoute(clearRequest('?locale=en'));
-    expect(new URL(res.headers.get('location')!).pathname).toBe('/en/home');
+    expect(res.headers.get('location')).toBe('/en/home');
     expect(deletedCookie(res)).toBeUndefined();
   });
 
@@ -193,7 +194,6 @@ describe('GET /api/view-as/clear', () => {
     state.cookies.set(VIEW_AS_COOKIE, SESSION);
     state.session = deadSession;
     const res = await clearRoute(clearRequest('?locale=..%2Fevil'));
-    expect(new URL(res.headers.get('location')!).pathname).toBe('/fa/admin/view-as');
-    expect(new URL(res.headers.get('location')!).host).toBe('app.test');
+    expect(res.headers.get('location')).toBe('/fa/admin/view-as?ended=1');
   });
 });

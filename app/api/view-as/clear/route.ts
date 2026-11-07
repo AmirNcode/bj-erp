@@ -20,16 +20,12 @@ export async function GET(request: NextRequest) {
   const locale = isAppLocale(raw) ? raw : DEFAULT_LOCALE;
   const view = await getViewAs();
 
-  const url = request.nextUrl.clone();
-  url.search = '';
-  if (view?.status === 'dead') {
-    url.pathname = `/${locale}/admin/view-as`;
-    url.searchParams.set('ended', '1');
-  } else {
-    url.pathname = `/${locale}/home`;
-  }
-
-  const response = NextResponse.redirect(url);
+  // A relative Location on purpose: behind the gateway, request.nextUrl carries the
+  // standalone server's own host (0.0.0.0:3000), which the browser cannot reach.
+  // Route handlers, unlike the proxy, get no relative rewrite from Next.js.
+  const location =
+    view?.status === 'dead' ? `/${locale}/admin/view-as?ended=1` : `/${locale}/home`;
+  const response = new NextResponse(null, { status: 307, headers: { Location: location } });
   if (view?.status === 'dead') {
     response.cookies.delete({ name: VIEW_AS_COOKIE, path: VIEW_AS_COOKIE_ATTRS.path });
   }

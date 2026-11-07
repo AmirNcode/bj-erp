@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { VIEW_AS_CHANNEL } from '@/lib/view-as/client';
+import { VIEW_AS_CHANNEL, isOtherTabChange } from '@/lib/view-as/client';
 
 /** Reload when another tab starts or ends a view, so no tab shows a stale identity. */
 export function ViewAsTabSync() {
@@ -12,7 +12,10 @@ export function ViewAsTabSync() {
     } catch {
       return;
     }
-    ch.onmessage = () => window.location.reload();
+    // Not our own post: the start/exit that sent it is already navigating this tab.
+    ch.onmessage = (e) => {
+      if (isOtherTabChange(e.data)) window.location.reload();
+    };
     return () => ch.close();
   }, []);
   return null;
