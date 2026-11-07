@@ -100,7 +100,7 @@ Copy this block verbatim and fill it in.
 
 **Verification**
 - `npm run test:unit`: 122 files, 1211 passed. `npm run lint`, `npx tsc --noEmit` clean; `npm run build` exit 0; `npm run test:deploy` exit 0.
-- SQL suite on a fresh clone: 25/25 pass, including `tests/sql/view-as.sql` (50 assertions).
+- SQL suite on a fresh clone: 25/25 pass, including `tests/sql/view-as.sql` (55 assertions).
 - e2e `tests/e2e/view-as.spec.ts` through the gateway: 14 passed (1.2m). Page walk while viewing (employee 6 pages, manager 8, HR 14): no page writes on load; the only `read-only transaction` in the DB log was the deliberate signature save.
 - Hook-off drill on the local stack: a running view ends on reload, a start says "View as is unavailable.", sync file restored it.
 - Not done: no browser look at the strip's colours or Farsi copy by the owner; Liara and a real restore not exercised.
@@ -110,7 +110,7 @@ Copy this block verbatim and fill it in.
 - Local app container runs the fixed build; local DB has the migration and the hook setting.
 
 **For the next agent**
-- Gateway redirect bug: route handlers must not build redirects from `request.nextUrl` (`0.0.0.0:3000`); BroadcastChannel posts reach the sender's own listener (tab id fix). Both in CLAUDE.md or tests.
+- Gateway redirect bug: route handlers must not build redirects from `request.nextUrl` (`0.0.0.0:3000`); covered by the CLAUDE.md gotcha and the relative-Location tests in `tests/unit/view-as-identity.test.ts`. BroadcastChannel posts reach the sender's own listener, so a tab reloaded itself on Exit; fixed with a per-tab id, covered by `tests/unit/view-as-tab-sync.test.tsx`.
 - Run `view-as.spec.ts` with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty, then `npm run cleanup:e2e` by hand. Its tests leave a live session per run (ended by the next start).
 - The probe must stay volatile (PostgREST runs a stable function read-only and would hide a missing hook). A custom-role-only person with several roles shows the alphabetically first as the label.
 - Seen, not ours: `app_pending_errand_extensions()` raises `not allowed` for non-HR callers on the approvals page; `listPendingExtensions` swallows it.

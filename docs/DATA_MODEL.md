@@ -665,7 +665,7 @@ advisory lock and deletes that admin's ended and expired rows). Functions: `priv
 ended or expired session, an inactive target or a caller who is no longer admin; otherwise swaps `sub` and sets
 read-only), `app_view_as_start`, `app_view_as_end`, `app_view_as_session(id)` (stable) and `app_view_as_probe()`
 (volatile on purpose: PostgREST runs a stable function read-only, which would hide a missing hook; returns
-`auth.uid()` and `transaction_read_only`) The hook is switched on by `pgrst.db_pre_request`, set by `deploy/lib/sync-view-as-hook.sql`
+`auth.uid()` and `transaction_read_only`). The hook is switched on by `pgrst.db_pre_request`, set by `deploy/lib/sync-view-as-hook.sql`
 (not a migration; a role setting is not in `pg_dump -d postgres`).
 
 ### `leave_ledger`
