@@ -3809,6 +3809,56 @@ $_$;
 
 
 --
+-- Name: view_as_pre_request(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.view_as_pre_request() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_header text := nullif(current_setting('request.headers', true), '')::jsonb ->> 'x-view-as';
+  v_caller uuid;
+  v_claims jsonb;
+  v_target uuid;
+begin
+  -- No header: the normal path for every request. Return before any table read.
+  if v_header is null then return; end if;
+
+  -- No logged-in caller (anon, service_role): nothing to swap, and a leftover cookie must
+  -- not break the login page.
+  v_caller := auth.uid();
+  if v_caller is null then return; end if;
+
+  -- Checked before the cast, so garbage gets the same 403 as an unknown id.
+  if v_header !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+    raise exception 'view-as refused' using errcode = 'PT403';
+  end if;
+
+  select s.target_id into v_target
+    from private.view_as_sessions s
+   where s.id = v_header::uuid
+     and s.admin_id = v_caller
+     and s.ended_at is null
+     and s.expires_at > now()
+     and private.is_active(s.target_id)
+     and private.is_admin(v_caller);
+  if v_target is null then
+    raise exception 'view-as refused' using errcode = 'PT403';
+  end if;
+
+  -- SQL never reads app_roles / app_perms, but drop them so no claim describes the admin.
+  v_claims := coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb, '{}'::jsonb);
+  perform set_config('request.jwt.claims',
+    ((v_claims - 'app_roles' - 'app_perms') || jsonb_build_object('sub', v_target))::text, true);
+  -- auth.uid() reads the legacy per-claim setting first; never let it keep the admin's sub.
+  perform set_config('request.jwt.claim.sub', v_target::text, true);
+  -- Postgres refuses switching a read-only transaction back to read-write.
+  perform set_config('transaction_read_only', 'on', true);
+end $_$;
+
+
+--
 -- Name: accrue_all_leave(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8076,6 +8126,110 @@ end; $$;
 
 
 --
+-- Name: app_view_as_end(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_view_as_end() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+begin
+  if v_uid is null then return; end if;
+  with ended as (
+    update private.view_as_sessions s set ended_at = now()
+     where s.admin_id = v_uid and s.ended_at is null and s.expires_at > now()
+    returning s.id, s.target_id
+  )
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  select v_uid, 'view_as.end', 'profiles', e.target_id, jsonb_build_object('session_id', e.id)
+    from ended e;
+end $$;
+
+
+--
+-- Name: app_view_as_probe(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_view_as_probe() RETURNS TABLE(uid uuid, read_only text)
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select auth.uid(), current_setting('transaction_read_only');
+$$;
+
+
+--
+-- Name: app_view_as_session(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_view_as_session(p_id uuid) RETURNS TABLE(target_id uuid, target_name text, personnel_no text, expires_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select s.target_id, p.full_name, p.personnel_no, s.expires_at
+    from private.view_as_sessions s
+    join public.profiles p on p.id = s.target_id and p.active
+   where s.id = p_id
+     and s.admin_id = auth.uid()
+     and s.ended_at is null
+     and s.expires_at > now()
+     and private.is_admin(auth.uid());
+$$;
+
+
+--
+-- Name: app_view_as_start(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_view_as_start(p_target uuid) RETURNS TABLE(session_id uuid, expires_at timestamp with time zone)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_id uuid;
+  v_expires timestamptz;
+begin
+  -- Through the hook the identity is the target, never an admin: views cannot nest.
+  if v_uid is null or not private.is_admin(v_uid) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_target is null or p_target = v_uid then
+    raise exception 'cannot view as yourself' using errcode = '22023';
+  end if;
+  if not exists (select 1
+                   from public.profiles t
+                   join public.profiles a on a.id = v_uid and a.company_id = t.company_id
+                  where t.id = p_target and t.active) then
+    raise exception 'this person cannot be viewed' using errcode = '22023';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('view_as:' || v_uid::text, 0));
+  delete from private.view_as_sessions s
+   where s.admin_id = v_uid and (s.ended_at is not null or s.expires_at <= now());
+  -- At most one live session per admin: a second browser's view ends here, audited like Exit.
+  with ended as (
+    update private.view_as_sessions s set ended_at = now()
+     where s.admin_id = v_uid and s.ended_at is null
+    returning s.id, s.target_id
+  )
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  select v_uid, 'view_as.end', 'profiles', e.target_id, jsonb_build_object('session_id', e.id)
+    from ended e;
+  insert into private.view_as_sessions as s (admin_id, target_id, expires_at)
+  values (v_uid, p_target, now() + interval '30 minutes')
+  returning s.id, s.expires_at into v_id, v_expires;
+
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'view_as.start', 'profiles', p_target,
+          jsonb_build_object('session_id', v_id, 'expires_at', v_expires));
+  return query select v_id, v_expires;
+end $$;
+
+
+--
 -- Name: approve_leave_request(uuid, text, boolean, boolean, bigint); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9500,6 +9654,26 @@ COMMENT ON TABLE private.sms_settings IS 'FR-78: SMS provider settings per compa
 
 
 --
+-- Name: view_as_sessions; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.view_as_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    admin_id uuid NOT NULL,
+    target_id uuid NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone
+);
+
+
+--
+-- Name: TABLE view_as_sessions; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON TABLE private.view_as_sessions IS 'FR-86: one row per View as session. Read only by the security definer view-as functions.';
+
+
+--
 -- Name: absence_watchers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10460,6 +10634,14 @@ ALTER TABLE ONLY private.sms_outbox_events
 
 ALTER TABLE ONLY private.sms_settings
     ADD CONSTRAINT sms_settings_pkey PRIMARY KEY (company_id);
+
+
+--
+-- Name: view_as_sessions view_as_sessions_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.view_as_sessions
+    ADD CONSTRAINT view_as_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -12295,6 +12477,12 @@ ALTER TABLE ONLY public.work_settings
 
 
 --
+-- Name: view_as_sessions; Type: ROW SECURITY; Schema: private; Owner: -
+--
+
+ALTER TABLE private.view_as_sessions ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: absence_watchers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -12932,6 +13120,8 @@ GRANT USAGE ON SCHEMA public TO supabase_auth_admin;
 
 GRANT USAGE ON SCHEMA private TO authenticated;
 GRANT USAGE ON SCHEMA private TO supabase_auth_admin;
+GRANT USAGE ON SCHEMA private TO anon;
+GRANT USAGE ON SCHEMA private TO service_role;
 
 
 --
@@ -13759,6 +13949,16 @@ GRANT ALL ON FUNCTION private.valid_login_code(p_code text) TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION private.valid_personnel_no(p_pno text, p_admin boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION view_as_pre_request(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.view_as_pre_request() FROM PUBLIC;
+GRANT ALL ON FUNCTION private.view_as_pre_request() TO anon;
+GRANT ALL ON FUNCTION private.view_as_pre_request() TO authenticated;
+GRANT ALL ON FUNCTION private.view_as_pre_request() TO service_role;
 
 
 --
@@ -14590,6 +14790,43 @@ REVOKE ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_
 GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO postgres;
 GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_update_separation(p_id uuid, p_reason text, p_last_working_day date, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_view_as_end(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_view_as_end() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_view_as_end() TO postgres;
+GRANT ALL ON FUNCTION public.app_view_as_end() TO authenticated;
+
+
+--
+-- Name: FUNCTION app_view_as_probe(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_view_as_probe() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_view_as_probe() TO postgres;
+GRANT ALL ON FUNCTION public.app_view_as_probe() TO anon;
+GRANT ALL ON FUNCTION public.app_view_as_probe() TO authenticated;
+
+
+--
+-- Name: FUNCTION app_view_as_session(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_view_as_session(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_view_as_session(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_view_as_session(p_id uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION app_view_as_start(p_target uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_view_as_start(p_target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_view_as_start(p_target uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_view_as_start(p_target uuid) TO authenticated;
 
 
 --
