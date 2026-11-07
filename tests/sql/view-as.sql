@@ -179,6 +179,11 @@ select pg_temp.expect('hook claims: without the header they stay',
 select pg_temp.expect('hook read-only: probe returns (emp, on)',
   pg_temp.hooked('admin',pg_temp.fx('live')::text,'select uid||''/''||read_only from public.app_view_as_probe()'),
   pg_temp.fx('emp')||'/on');
+select pg_temp.assert('probe is volatile, so PostgREST runs it read-write unless the hook locked it',
+  (select provolatile='v' and prosecdef from pg_proc where oid='public.app_view_as_probe()'::regprocedure));
+select pg_temp.expect('probe as admin outside the hook, fresh transaction state: (admin, off)',
+  pg_temp.as_scalar('admin','select uid||''/''||read_only from public.app_view_as_probe()'),
+  pg_temp.fx('admin')||'/off');
 select pg_temp.expect('probe without the header: (admin, off)',
   pg_temp.hooked('admin',null,'select uid||''/''||read_only from public.app_view_as_probe()'),
   pg_temp.fx('admin')||'/off');

@@ -151,8 +151,10 @@ create function public.app_view_as_session(p_id uuid)
 $$;
 
 -- Called with the header, proves the hook really swapped the identity and locked writes.
+-- Volatile on purpose: PostgREST runs a stable function in a read-only transaction, so a
+-- stable probe would report read_only 'on' even with the hook off. It writes nothing.
 create function public.app_view_as_probe() returns table(uid uuid, read_only text)
-    language sql stable security definer
+    language sql volatile security definer
     set search_path to ''
     as $$
   select auth.uid(), current_setting('transaction_read_only');
