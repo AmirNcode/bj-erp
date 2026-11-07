@@ -17,7 +17,19 @@ export function viewAsLabel(name: string, personnelNo: string | null): string {
   return personnelNo ? `${name} (${personnelNo})` : name;
 }
 
-/** Milliseconds until the session expires, plus 1.5 s so the database is past the limit. */
+const MAX_TIMEOUT = 2 ** 31 - 1;
+/** Already-expired views wait this long, so a live-view bounce cannot reload faster than once per 30 s. */
+const PAST_EXPIRY_DELAY = 30_000;
+
+/**
+ * Milliseconds until the session expires, plus 1.5 s so the database is past the limit.
+ * Finite and clamped to the setTimeout range; NaN for an unparseable date (do not arm a timer).
+ * A view already past its limit waits 30 s, which stops a reload loop if the server still calls it live.
+ */
 export function msUntilExpiry(expiresAt: string, now: number): number {
-  return Math.max(0, new Date(expiresAt).getTime() - now) + 1500;
+  const at = new Date(expiresAt).getTime();
+  if (!Number.isFinite(at) || !Number.isFinite(now)) return NaN;
+  const remaining = at - now;
+  if (remaining <= 0) return PAST_EXPIRY_DELAY;
+  return Math.min(remaining + 1500, MAX_TIMEOUT);
 }

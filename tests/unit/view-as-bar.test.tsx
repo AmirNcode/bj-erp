@@ -8,13 +8,12 @@ const mocks = vi.hoisted(() => ({
   signOut: vi.fn(),
   replace: vi.fn(),
   toastError: vi.fn(),
-  endRpc: vi.fn(),
-  deleteCookie: vi.fn(),
+  endViewAs: vi.fn(),
 }));
 vi.mock('@/lib/actions/profile', () => ({ updateMyPrefs: mocks.updatePrefs, signOut: mocks.signOut }));
 vi.mock('@/i18n/navigation', () => ({ useRouter: () => ({ replace: mocks.replace }), usePathname: () => '/home' }));
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }));
-vi.mock('@/lib/actions/view-as', () => ({ endViewAs: vi.fn() }));
+vi.mock('@/lib/actions/view-as', () => ({ endViewAs: mocks.endViewAs }));
 
 import { ViewAsBar } from '@/app/[locale]/(app)/_components/ViewAsBar';
 import { ViewAsProvider } from '@/app/[locale]/(app)/_components/ViewAsContext';
@@ -89,6 +88,53 @@ describe('view-as strip (FR-86)', () => {
 
   it('msUntilExpiry adds the margin', () => {
     expect(msUntilExpiry(new Date(10_000).toISOString(), 4_000)).toBe(6_000 + 1_500);
-    expect(msUntilExpiry(new Date(1_000).toISOString(), 4_000)).toBe(1_500);
+  });
+
+  it('msUntilExpiry is finite, clamped, NaN for junk, and waits 30 s for a past expiry', () => {
+    expect(msUntilExpiry('not a date', 0)).toBeNaN();
+    expect(msUntilExpiry(new Date(1_000).toISOString(), 4_000)).toBe(30_000);
+    expect(msUntilExpiry(new Date(1e13).toISOString(), 0)).toBe(2 ** 31 - 1);
+  });
+
+  it('does not arm the timer for an unparseable expiry', () => {
+    vi.useFakeTimers();
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign });
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <ViewAsProvider value={{ ...view, expiresAt: 'junk' }}><ViewAsBar locale="en" /></ViewAsProvider>
+      </NextIntlClientProvider>
+    );
+    vi.advanceTimersByTime(60_000);
+    expect(assign).not.toHaveBeenCalled();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('a past expiry does not navigate before 30 s', () => {
+    vi.useFakeTimers();
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign });
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <ViewAsProvider value={{ ...view, expiresAt: new Date(Date.now() - 5_000).toISOString() }}><ViewAsBar locale="en" /></ViewAsProvider>
+      </NextIntlClientProvider>
+    );
+    vi.advanceTimersByTime(29_000);
+    expect(assign).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2_000);
+    expect(assign).toHaveBeenCalledWith('/api/view-as/clear?locale=en');
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('Exit still navigates when endViewAs rejects', async () => {
+    mocks.endViewAs.mockRejectedValue(new Error('boom'));
+    const assign = vi.fn();
+    vi.stubGlobal('location', { assign });
+    wrap(<ViewAsBar locale="en" />, true);
+    fireEvent.click(screen.getByTestId('view-as-exit'));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/en/admin/view-as'));
+    vi.unstubAllGlobals();
   });
 });

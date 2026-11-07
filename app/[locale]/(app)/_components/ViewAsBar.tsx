@@ -17,11 +17,13 @@ export function ViewAsBar({ locale }: { locale: string }) {
 
   useEffect(() => {
     if (!expiresAt) return;
+    const delay = msUntilExpiry(expiresAt, Date.now());
+    if (!Number.isFinite(delay)) return;
     const id = window.setTimeout(
       // Full navigation on purpose: the cleared view must reach the server, not the router cache.
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       () => window.location.assign(`/api/view-as/clear?locale=${locale}`),
-      msUntilExpiry(expiresAt, Date.now())
+      delay
     );
     return () => window.clearTimeout(id);
   }, [expiresAt, locale]);
@@ -31,10 +33,15 @@ export function ViewAsBar({ locale }: { locale: string }) {
   const exit = async () => {
     if (leaving) return;
     setLeaving(true);
-    await endViewAs();
-    postViewAsChange();
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign(`/${locale}/admin/view-as`);
+    try {
+      await endViewAs();
+    } catch {
+      /* still leave: the next page load shows the true state */
+    } finally {
+      postViewAsChange();
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/${locale}/admin/view-as`);
+    }
   };
 
   return (
