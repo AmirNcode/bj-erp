@@ -100,7 +100,8 @@ Copy this block verbatim and fill it in.
 - PR open, waiting for review. Merging to `main` deploys to Liara and applies migration `20261108200021`.
 
 **For the next agent**
-- The PR mixes two pieces of work: FR-87 (schema + Approvals/Finance behaviour) and the Blueprint restyle. Review the migration and `tests/sql/*` separately from the styling.
+- The PR (AmirNcode/bj-erp#22) carries **three** pieces of work: View as FR-86 (14 commits, never pushed or reviewed before; migration `20261108090000` + deploy scripts), FR-87 (migration `20261108200021`) and the Blueprint restyle. Its description is the full handover for the reviewer.
+- Security review flagged FR-87 widening `personnel_no` (all approvers of a request) and `job_title` (print form). Owner accepted it on 2026-11-09: security and HR may see requesters' personnel IDs. No change.
 - `tests/e2e/responsive.spec.ts` was edited (FAB → `add-employee-link`) but not run.
 
 ## 2026-11-09 — History Cancel no longer tied to the travel tick; logo links Home
