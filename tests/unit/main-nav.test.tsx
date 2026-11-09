@@ -83,7 +83,9 @@ describe('MainNav', () => {
     renderWithIntl(<MainNav roles={['employee']} perms={{}} locale="fa" />);
 
     const homeLink = screen.getByTestId('nav-home');
-    expect(homeLink.className).toMatch(/bg-primary\/10/);
+    // Blueprint: primary text + a rule on mobile, white on the blue side panel.
+    expect(homeLink.className).toMatch(/text-primary/);
+    expect(homeLink.className).toMatch(/md:text-white/);
     expect(homeLink.getAttribute('aria-current')).toBe('page');
   });
   it('also highlights active tabs when next-intl returns an unprefixed pathname', () => {
@@ -101,7 +103,8 @@ describe('MainNav', () => {
   it('hr preset: reports, the archive and settings (FR-59)', () => {
     renderWithIntl(<MainNav roles={['hr']} perms={HR} locale="fa" />);
     expect(screen.getByTestId('nav-reports')).toBeTruthy();
-    expect(screen.getByTestId('nav-requests')).toBeTruthy();
+    expect(screen.getByTestId('nav-approvals')).toBeTruthy();
+    expect(screen.queryByTestId('nav-requests')).toBeNull();
     expect(screen.getByTestId('nav-settings')).toBeTruthy();
   });
   it('hr preset: Finance in the Manage group, no absences link (ruling a)', () => {

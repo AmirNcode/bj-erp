@@ -43,11 +43,15 @@ export function TravelTickToggle({ requestId, employeeId, ticked, started }: {
   };
 
   return (
-    <div className="space-y-1 text-start text-sm">
-      <label className="flex items-center gap-2">
+    // `contents`: the tick and its messages are items of the caller's wrapping
+    // row, so the tick stays beside its neighbours and each message takes a
+    // full line below instead of widening the tick.
+    <div className="contents">
+      {/* Phones: half the row, beside View form, same height as the buttons. */}
+      <label className="flex min-h-11 w-[calc(50%-0.25rem)] items-center gap-2 text-start text-sm leading-tight md:min-h-0 md:w-auto">
         <input
           type="checkbox"
-          className="size-4"
+          className="size-4 shrink-0"
           checked={checked}
           disabled={pending || started}
           onChange={(e) => toggle(e.target.checked)}
@@ -55,10 +59,10 @@ export function TravelTickToggle({ requestId, employeeId, ticked, started }: {
         />
         <span>{t('tickLabel')}</span>
       </label>
-      {started && <p className="text-xs text-muted-foreground">{t('startedHint')}</p>}
-      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+      {started && <p className="order-last basis-full text-xs text-muted-foreground">{t('startedHint')}</p>}
+      {error && <p role="alert" className="order-last basis-full text-xs text-destructive">{error}</p>}
       {checked && missing.length > 0 && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status" data-testid={`travel-missing-${requestId}`}>
+        <p className="order-last basis-full rounded-md bg-amber-50 px-3 py-2 text-start text-xs text-amber-900" role="status" data-testid={`travel-missing-${requestId}`}>
           {t('missingWarning', { fields: new Intl.ListFormat(locale, { type: 'conjunction' }).format(missing.map((f) => t(`fields.${f}`))) })}{' '}
           <Link href={`/${locale}/manage/employees/${employeeId}`} className="font-medium underline">
             {t('missingLink')}

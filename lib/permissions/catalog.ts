@@ -1,6 +1,6 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007). 20 items:
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007), plus Finance form reads (20261108200021). 21 items:
  * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
  * the FR-55 review decision) plus main's finance, personal_info_own (own
  * personal information, an explicit exception to D3) and special_leave, and FR-70's
@@ -15,19 +15,19 @@ export type PermKey =
   | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
   | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'reports'
-  | 'finance' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
+  | 'finance' | 'finance_forms' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
   | 'travel_booking';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
-export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'procurement' | 'approvalChain' | 'settings';
+export type SectionKey = 'employees' | 'departments' | 'leave' | 'finance' | 'finance_forms' | 'procurement' | 'approvalChain' | 'settings';
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   { key: 'employees', items: ['people', 'people_create', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
   { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'reports'] },
-  { key: 'finance', items: ['finance'] },
+  { key: 'finance', items: ['finance', 'finance_forms'] },
   // FR-70: procurement books approved out-of-town trips.
   { key: 'procurement', items: ['travel_booking'] },
   { key: 'approvalChain', items: ['approval_steps', 'approval_delegate'] },
@@ -38,7 +38,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   people: 'RE', people_create: 'E', role_manager: 'E', role_assign: 'E',
   personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
   leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
-  calendar: 'R', reports: 'R', finance: 'R',
+  calendar: 'R', reports: 'R', finance: 'R', finance_forms: 'R',
   approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
   travel_booking: 'E',
 };
@@ -51,6 +51,7 @@ export function sensitivePermissions(perms: Perms): PermKey[] {
 
 /** D6. `keyLevel` 'read' = applies at any level; 'edit' = only when the key is edit. */
 export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] = [
+  { key: 'finance_forms', keyLevel: 'read', needs: 'finance' },
   { key: 'people_create', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'leave_balances' },

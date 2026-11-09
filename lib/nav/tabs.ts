@@ -84,9 +84,8 @@ const MANAGE: ManageEntry[] = [
   { key: 'employees', href: '/manage/employees', labelKey: 'employees', testId: 'nav-manage', allowed: (_roles, perms) => can(perms, 'people', 'read') },
   // FR-51: departments permission (read lists, edit creates/renames/sets managers).
   { key: 'departments', href: '/manage/departments', labelKey: 'departments', testId: 'nav-departments', allowed: (_roles, perms) => can(perms, 'departments', 'read') },
-  { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles, _perms, canApprove) => canApprove ?? isApprover(roles) },
+  { key: 'approvals', href: '/manage/approvals', labelKey: 'approvals', testId: 'nav-approvals', allowed: (roles, perms, canApprove) => (canApprove ?? isApprover(roles)) || can(perms, 'leave_requests', 'read') },
   // FR-38 review screen: leave_requests read.
-  { key: 'requests', href: '/manage/requests', labelKey: 'requests', testId: 'nav-requests', allowed: (_roles, perms) => can(perms, 'leave_requests', 'read') },
   // FR-42: approval_steps permission.
   { key: 'approvalSteps', href: '/manage/approval-steps', labelKey: 'approvalSteps', testId: 'nav-approval-steps', allowed: (_roles, perms) => can(perms, 'approval_steps', 'read') },
   // FR-37 reports: reports permission.

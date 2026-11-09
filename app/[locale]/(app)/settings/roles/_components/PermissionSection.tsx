@@ -103,6 +103,7 @@ export function PermissionSection({
         {items.map((k) => {
           const note = notes[k];
           const level = perms[k];
+          const toggleLevel = k === 'finance_forms' ? 'read' : 'edit';
           return (
             <div
               key={k}
@@ -128,18 +129,18 @@ export function PermissionSection({
                   </div>
                 )}
               </div>
-              {k === 'approval_delegate' || k === 'travel_booking' ? (
+              {k === 'approval_delegate' || k === 'travel_booking' || k === 'finance_forms' ? (
                 <ToggleGroup.Root
                   type="single"
-                  value={level === 'edit' ? 'edit' : 'none'}
-                  onValueChange={(v) => { if (v === 'edit' || v === 'none') setRow(k, v); }}
+                  value={level === toggleLevel ? toggleLevel : 'none'}
+                  onValueChange={(v) => { if (v === toggleLevel || v === 'none') setRow(k, v); }}
                   aria-label={t.items[k].label}
                   data-testid={`perm-${k}`}
                   className="inline-flex shrink-0 self-start rounded-lg bg-muted p-1"
                 >
-                  {(['edit', 'none'] as const).map((v) => (
+                  {([toggleLevel, 'none'] as const).map((v) => (
                     <ToggleGroup.Item key={v} value={v} data-testid={`perm-${k}-${v}`} className="min-h-10 min-w-16 rounded-md px-3 text-sm data-[state=on]:bg-card data-[state=on]:font-semibold data-[state=on]:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      {v === 'edit' ? t.levels.yes : t.levels.no}
+                      {v !== 'none' ? t.levels.yes : t.levels.no}
                     </ToggleGroup.Item>
                   ))}
                 </ToggleGroup.Root>

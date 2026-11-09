@@ -74,7 +74,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
     <form onSubmit={submit} className="flex flex-col gap-5" data-testid="sms-settings-form">
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">{t('mode')}</legend>
-        <div className="flex w-fit flex-wrap gap-1 rounded-[10px] bg-muted p-[3px]" role="radiogroup">
+        <div className="flex w-fit flex-wrap gap-1 rounded-md bg-muted p-[3px]" role="radiogroup">
           {MODES.map((m) => (
             <label
               key={m}

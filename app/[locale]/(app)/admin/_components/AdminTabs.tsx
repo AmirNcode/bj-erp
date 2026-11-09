@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { cn } from '@/lib/utils';
+import { tabClass, tabListClass } from '@/lib/ui/tabs';
 
 const TABS = [
   { key: 'overview', href: '' },
@@ -14,13 +14,15 @@ const TABS = [
   { key: 'viewAs', href: '/view-as' },
 ] as const;
 
-/** Same segmented control as Settings' tabs. */
+/** Same underlined tabs as Settings. */
 export function AdminTabs({ locale }: { locale: string }) {
   const t = useTranslations('admin');
-  const pathname = usePathname();
+  // Farsi (default locale) pathnames carry no prefix; compare without it.
+  const raw = usePathname();
+  const pathname = raw.startsWith(`/${locale}/`) || raw === `/${locale}` ? raw : `/${locale}${raw}`;
   const base = `/${locale}/admin`;
   return (
-    <nav aria-label={t('title')} className="flex w-fit max-w-full overflow-x-auto rounded-[10px] bg-muted p-[3px]">
+    <nav aria-label={t('title')} className={tabListClass}>
       {TABS.map((tab) => {
         const href = `${base}${tab.href}`;
         const on = tab.href === '' ? pathname === base : pathname.startsWith(href);
@@ -30,10 +32,7 @@ export function AdminTabs({ locale }: { locale: string }) {
             href={href}
             data-testid={`admin-tab-${tab.key}`}
             aria-current={on ? 'page' : undefined}
-            className={cn(
-              'inline-flex h-10 items-center whitespace-nowrap rounded-lg px-4 text-[13px] transition-colors sm:h-[30px]',
-              on ? 'bg-card font-semibold text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            )}
+            className={tabClass(on)}
           >
             {t(`tabs.${tab.key}`)}
           </Link>

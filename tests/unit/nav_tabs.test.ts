@@ -111,7 +111,7 @@ describe('manageItemsForRoles', () => {
     expect(keys(['employee'], {})).toEqual([]);
   });
   it('security preset now reaches employees and the archive (spec: visible difference)', () => {
-    expect(keys(['security'], SEC)).toEqual(['employees', 'requests']);
+    expect(keys(['security'], SEC)).toEqual(['employees', 'approvals']);
   });
   it('manager with no perms keeps only approvals (Employees needs people read, 2026-11-02)', () => {
     expect(keys(['employee', 'manager'], {})).toEqual(['approvals']);
@@ -121,7 +121,6 @@ describe('manageItemsForRoles', () => {
       'employees',
       'departments',
       'approvals',
-      'requests',
       'approvalSteps',
       'reports',
       'finance',
@@ -132,7 +131,6 @@ describe('manageItemsForRoles', () => {
       'employees',
       'departments',
       'approvals',
-      'requests',
       'approvalSteps',
       'reports',
       'absences',

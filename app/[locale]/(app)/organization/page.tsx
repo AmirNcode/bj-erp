@@ -27,7 +27,7 @@ export default async function OrganizationPage({ params }: Props) {
 
   return (
     <main className="mx-auto w-full max-w-4xl p-6">
-      <PageHeader title={tNav('organization')} />
+      <PageHeader section title={tNav('organization')} />
       {chart.ok ? (
         // useSearchParams in the client chart needs a Suspense boundary.
         <Suspense fallback={null}>

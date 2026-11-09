@@ -621,4 +621,22 @@ insert into tb_fx values('head_mgr3',pg_temp.ext('mgr','head_req','2027-08-26'):
 select pg_temp.expect('their manager''s request still takes the exempt path',pg_temp.ext_status('head_mgr3'),'approved/exempt');
 
 -- @@ next section
+-- The new list keeps every financial value and row from the prior version.
+select pg_temp.login('admin');
+select pg_temp.expect('finance v2 preserves calculations and rows',(
+ select count(*)::text from (
+  (select to_jsonb(o) from public.finance_requests('2027-03-01','2027-12-31') o
+   except select to_jsonb(n)-'first_name'-'last_name'-'department_id'-'can_print' from public.finance_requests_v2('2027-03-01','2027-12-31') n)
+  union all
+  (select to_jsonb(n)-'first_name'-'last_name'-'department_id'-'can_print' from public.finance_requests_v2('2027-03-01','2027-12-31') n
+   except select to_jsonb(o) from public.finance_requests('2027-03-01','2027-12-31') o)
+ ) diff),'0');
+-- Give an existing non-approver the two Finance permissions solely for this fixture.
+insert into public.role_permissions(role_id,permission,level)
+select id,k,'read' from public.roles cross join unnest(array['finance','finance_forms']) k
+where company_id=pg_temp.fx('company') and system_key='procurement' on conflict do nothing;
+select pg_temp.expect('finance prints settled cancelled trip',pg_temp.as_scalar('proc',format(
+ $$select public.app_request_print(%L)#>>'{context,status}'$$,pg_temp.fx('w2_req'))),'cancelled');
+select pg_temp.expect('finance prints extension history',pg_temp.as_scalar('proc',format(
+ $$select (jsonb_array_length(public.app_request_print(%L)->'extensions')>0)::text$$,pg_temp.fx('head_req'))),'true');
 rollback;

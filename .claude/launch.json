@@ -4,8 +4,20 @@
     {
       "name": "bj-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
+    },
+    {
+      "name": "bj-dev-isolated",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "set -a; . .bj-deploy/approvals-finance/.env; NEXT_PUBLIC_SUPABASE_URL=$APP_ORIGIN NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY exec npx next dev -p 3100"
+      ],
+      "port": 3100
     }
   ]
 }

@@ -58,7 +58,7 @@ export default async function DepartmentsPage({ params }: Props) {
 
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
-      <PageHeader title={tNav('departments')} />
+      <PageHeader section title={tNav('departments')} />
 
       <Card>
         <CardContent>

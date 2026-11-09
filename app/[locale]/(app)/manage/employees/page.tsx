@@ -35,7 +35,6 @@ import {
   type EmployeesQuery,
 } from '@/lib/employees/list';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { ListSkeleton } from '@/components/Skeletons';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
 import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
@@ -182,12 +181,12 @@ async function EmployeesData({
         query={query}
       />
 
-      {/* Mobile cards */}
-      <Card className="gap-0 overflow-hidden py-0 md:hidden">
+      {/* Mobile rows: hairlines, no box */}
+      <div className="-mx-4 border-y border-border md:hidden">
         {rows.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">{t('noEmployees')}</p>
         ) : (
-          <ul className="divide-y divide-muted">
+          <ul className="divide-y divide-border">
             {rows.map((emp) => (
               <li key={emp.id} className={emp.active ? undefined : 'opacity-55'}>
                 <Link
@@ -209,7 +208,7 @@ async function EmployeesData({
             ))}
           </ul>
         )}
-      </Card>
+      </div>
 
       {total > 0 && (
         <nav
@@ -226,7 +225,7 @@ async function EmployeesData({
           </span>
           <div className="flex gap-2">
             {query.page > 1 ? (
-              <Button variant="outline" size="sm" className="rounded-[10px]" asChild>
+              <Button variant="outline" size="sm" asChild>
                 <Link
                   href={employeesHref(base, { ...query, page: query.page - 1 })}
                   data-testid="emp-page-prev"
@@ -236,13 +235,13 @@ async function EmployeesData({
                 </Link>
               </Button>
             ) : (
-              <Button variant="outline" size="sm" className="rounded-[10px]" disabled>
+              <Button variant="outline" size="sm" disabled>
                 <Prev aria-hidden="true" />
                 {tl('prev')}
               </Button>
             )}
             {query.page < lastPage ? (
-              <Button variant="outline" size="sm" className="rounded-[10px]" asChild>
+              <Button variant="outline" size="sm" asChild>
                 <Link
                   href={employeesHref(base, { ...query, page: query.page + 1 })}
                   data-testid="emp-page-next"
@@ -252,7 +251,7 @@ async function EmployeesData({
                 </Link>
               </Button>
             ) : (
-              <Button variant="outline" size="sm" className="rounded-[10px]" disabled>
+              <Button variant="outline" size="sm" disabled>
                 {tl('next')}
                 <Next aria-hidden="true" />
               </Button>
@@ -321,15 +320,16 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   const inactiveCount = inactiveRes.count ?? 0;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div data-wide className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        {/* Phones: the top bar already names the section. */}
+        <div className="max-md:sr-only">
           <p className="text-[12.5px] text-muted-foreground">{tNav('manage')}</p>
           <h1 className="text-2xl font-bold tracking-tight">{tl('title')}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {canSeePersonalInfo && (
-            <Button variant="outline" className="rounded-[10px]" asChild>
+            <Button variant="outline" asChild>
               <Link href={`${base}/personal-info`} data-testid="personal-info-link">
                 <IdCard aria-hidden="true" />
                 {tl('personalInfoLink')}
@@ -339,7 +339,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           {/* FR-54: clearance forms (فرم تسویه حساب): clearance read lists them,
               edit files new ones (the clearance pages gate each). */}
           {can(perms, 'clearance', 'read') && (
-            <Button variant="outline" className="rounded-[10px]" asChild>
+            <Button variant="outline" asChild>
               <Link href={`/${locale}/clearance`} data-testid="clearance-link">
                 <ClipboardCheck aria-hidden="true" />
                 {tClr('employeesButton')}
@@ -347,7 +347,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
             </Button>
           )}
           {can(perms, 'people_create') && (
-            <Button variant="outline" className="rounded-[10px]" asChild>
+            <Button variant="outline" asChild>
               <Link href={`${base}/import`} data-testid="import-link">
                 <Upload aria-hidden="true" />
                 {t('employees.regen.importLink')}
@@ -356,7 +356,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
           )}
           {/* Add Department lives under Manage › Departments (D9). */}
           {canAdd && (
-            <Button className="hidden rounded-[10px] sm:inline-flex" asChild>
+            // Phones: full width, first, above the filters (owner, 2026-11-09).
+            <Button className="max-sm:order-first max-sm:h-11 max-sm:w-full" asChild>
               <Link href={`${base}/new`} data-testid="add-employee-link">
                 <Plus aria-hidden="true" />
                 {t('employees.addNew')}
@@ -398,17 +399,6 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
         />
       </Suspense>
 
-      {/* Mobile: floating add button (the header one is desktop-only). */}
-      {canAdd && (
-        <Link
-          href={`${base}/new`}
-          aria-label={t('employees.addNew')}
-          data-testid="add-employee-fab"
-          className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] end-4 z-30 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg sm:hidden"
-        >
-          <Plus aria-hidden="true" className="size-6" />
-        </Link>
-      )}
     </div>
   );
 }

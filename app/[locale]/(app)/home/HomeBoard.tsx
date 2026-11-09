@@ -341,7 +341,7 @@ export function HomeBoard({
               <>
                 <div
                   aria-hidden="true"
-                  className="w-14 shrink-0 overflow-hidden rounded-[10px] border text-center"
+                  className="w-14 shrink-0 overflow-hidden rounded-md border text-center"
                 >
                   <div className="truncate bg-primary px-1 py-0.5 text-[11px] text-primary-foreground">
                     {nextHoliday.month}

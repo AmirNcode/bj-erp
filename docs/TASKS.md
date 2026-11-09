@@ -75,6 +75,8 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Product backlog
 
+- ◐ **Approvals and Finance usability (FR-87):** implemented on `codex/approvals-finance-layout`, uncommitted and not deployed. Apply `20261108200021` before the app. After deployment, owner: enable **Finance → View/print work-errand forms** for desired roles (off by default), confirm the renamed Leave review permission, and check the merged Approvals/HR controls with a real account. Existing local Farsi redirect loop remains outside this change; RTL components were validated in a locale fixture.
+
 - ◐ **View as (FR-86):** built on `claude/view-as` (committed, not pushed, no PR; not deployed). Pushing `main`
   deploys it; the deploy runs `deploy/lib/sync-view-as-hook.sql` by itself. Owner: check the Farsi strip copy.
   Parked idea, only if reported problems turn out to be about actions: a trial mode (run an action, then roll

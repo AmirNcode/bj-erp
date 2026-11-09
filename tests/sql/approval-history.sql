@@ -65,7 +65,7 @@ begin
     (v_a,v_company,'الف','Fixture A','office','AHA');
   for who in select * from (values
     ('admin','admin','9990076001'),('boss','manager','9990076002'),('boss2','manager','9990076003'),
-    ('hrp','hr','9990076004'),('rep','employee','9990076005'),('peer','employee','9990076006')) t(k,role,code) loop
+    ('hrp','hr','9990076004'),('fin','finance','9990076007'),('rep','employee','9990076005'),('peer','employee','9990076006')) t(k,role,code) loop
     insert into ah_fx values(who.k,gen_random_uuid());
     insert into auth.users(id,email) values(pg_temp.fx(who.k),who.code||'@history-fixture.invalid');
     insert into public.profiles(id,company_id,department_id,employee_code,personnel_no,full_name,must_change_password)
@@ -111,4 +111,86 @@ select pg_temp.expect('paged',pg_temp.as_scalar('admin','select jsonb_array_leng
 select pg_temp.expect('anon may not call it',
   has_function_privilege('anon','public.app_approval_history(integer,integer)','execute')::text,'false');
 
+-- Unified review history: same approver scope, broader archive-reader scope, filters before paging.
+select pg_temp.expect('merged HR sees both completed requests',pg_temp.as_scalar('hrp',
+  $$select public.app_approval_history_v2()->>'total'$$),'2');
+select pg_temp.expect('merged manager retains own decisions only',pg_temp.as_scalar('boss',
+  $$select public.app_approval_history_v2()->>'total'$$),'1');
+select pg_temp.expect('history status filter before pagination',pg_temp.as_scalar('hrp',
+  $$select public.app_approval_history_v2(1,0,'','rejected','leave')#>>'{rows,0,id}'$$),pg_temp.fx('rejected')::text);
+select pg_temp.expect('history search before pagination',pg_temp.as_scalar('hrp',
+  $$select public.app_approval_history_v2(1,0,'Fixture peer')#>>'{rows,0,id}'$$),pg_temp.fx('rejected')::text);
+select pg_temp.expect('history pending filter has no closed rows',pg_temp.as_scalar('hrp',
+  $$select public.app_approval_history_v2(20,0,'','pending')->>'total'$$),'0');
+select pg_temp.expect('history includes avatar identity',pg_temp.as_scalar('hrp',
+  $$select public.app_approval_history_v2(1,0,'Fixture peer')#>>'{rows,0,employee_id}'$$),pg_temp.fx('peer')::text);
+select pg_temp.expect('finance alone has no archive',pg_temp.as_scalar('fin',
+  $$select public.app_approval_history_v2()->>'total'$$),'0');
+
+insert into ah_fx values('errand',pg_temp.as_scalar('rep',format(
+  $$select public.submit_daily_errand_request_v2(%L,%L,'Tehran',%L,true,'Private site visit',false,null,false,null)$$,
+  current_date+20,current_date+21,pg_temp.sig()))::uuid);
+select pg_temp.expect('finance print off by default',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_print(%L)::text',pg_temp.fx('errand')))),'P0002');
+select pg_temp.login('admin');
+insert into public.role_permissions(role_id,permission,level)
+select id,'finance_forms','read' from public.roles where company_id=pg_temp.fx('company') and system_key='finance';
+select pg_temp.expect('finance print permission appears',pg_temp.as_scalar('fin',
+  $$select public.app_my_permissions()->>'finance_forms'$$),'read');
+select pg_temp.expect('complete form includes reason',pg_temp.as_scalar('fin',format(
+  $$select public.app_request_print(%L)#>>'{context,reason}'$$,pg_temp.fx('errand'))),'Private site visit');
+select pg_temp.expect('complete form includes signature',pg_temp.as_scalar('fin',format(
+  $$select public.app_request_print(%L)#>>'{signatures,requester_signature_data}'$$,pg_temp.fx('errand'))),pg_temp.sig());
+select pg_temp.expect('complete form includes ID',pg_temp.as_scalar('fin',format(
+  $$select public.app_request_print(%L)#>>'{context,personnel_no}'$$,pg_temp.fx('errand'))),'9990076005');
+select pg_temp.expect('finance form cannot read leave',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_print(%L)::text',pg_temp.fx('approved')))),'P0002');
+select pg_temp.expect('finance form does not widen approval context',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_approval_context(%L)::text',pg_temp.fx('errand')))),'P0002');
+select pg_temp.expect('finance form does not widen request RLS',pg_temp.as_scalar('fin',format(
+  'select count(*)::text from public.leave_requests where id=%L',pg_temp.fx('errand'))),'0');
+select pg_temp.expect('finance form does not widen queue',pg_temp.as_scalar('fin',
+  $$select jsonb_array_length(public.app_approval_queue())::text$$),'0');
+select pg_temp.expect('finance v2 exposes print eligibility and real names',pg_temp.as_scalar('fin',format(
+  $$select concat(first_name,'/',last_name,'/',can_print::text) from public.finance_requests_v2(%L,%L) where id=%L$$,
+  current_date,current_date+30,pg_temp.fx('errand'))),'Fixture/rep/true');
+select pg_temp.login('admin');
+update public.leave_requests set status='approved' where id=pg_temp.fx('errand');
+select pg_temp.expect('finance can print approved errands',pg_temp.as_scalar('fin',format(
+  $$select public.app_request_print(%L)#>>'{context,status}'$$,pg_temp.fx('errand'))),'approved');
+select pg_temp.login('admin');
+update public.leave_requests set status='cancelled' where id=pg_temp.fx('errand');
+select pg_temp.expect('finance cannot print unsettled cancelled errands',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_print(%L)::text',pg_temp.fx('errand')))),'P0002');
+select pg_temp.login('admin');
+update public.leave_requests set status='pending' where id=pg_temp.fx('errand');
+select pg_temp.expect('private print implementation not callable',
+  has_function_privilege('authenticated','private.request_data_app_request_approval_context(uuid,boolean)','execute')::text,'false');
+select pg_temp.expect('anonymous print not callable',has_function_privilege('anon','public.app_request_print(uuid)','execute')::text,'false');
+select pg_temp.login('admin');
+update public.leave_requests set status='rejected' where id=pg_temp.fx('errand');
+select pg_temp.expect('finance print rejects rejected errands',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_print(%L)::text',pg_temp.fx('errand')))),'P0002');
+select pg_temp.login('admin');
+update public.leave_requests set status='pending' where id=pg_temp.fx('errand');
+delete from public.role_permissions where permission='finance_forms' and role_id in
+  (select id from public.roles where company_id=pg_temp.fx('company') and system_key='finance');
+select pg_temp.expect('revocation immediately removes print access',pg_temp.err(pg_temp.as_scalar('fin',format(
+  'select public.app_request_print(%L)::text',pg_temp.fx('errand')))),'P0002');
+select pg_temp.expect('existing requester print remains',pg_temp.as_scalar('rep',format(
+  $$select public.app_request_print(%L)#>>'{context,id}'$$,pg_temp.fx('errand'))),pg_temp.fx('errand')::text);
+
+-- A Finance grant in another company cannot open this company's form.
+select pg_temp.login('admin');
+do $$ declare cid uuid:=gen_random_uuid(); uid uuid:=gen_random_uuid(); begin
+ insert into public.companies(id,name) values(cid,'Other synthetic company');
+ insert into auth.users(id,email) values(uid,'other-finance@history-fixture.invalid');
+ insert into public.profiles(id,company_id,employee_code,full_name) values(uid,cid,'9990076099','Other Finance');
+ insert into public.user_roles(user_id,role) values(uid,'finance');
+ insert into public.role_permissions(role_id,permission,level)
+ select id,'finance_forms','read' from public.roles where company_id=cid and system_key='finance';
+ insert into ah_fx values('other_fin',uid);
+end $$;
+select pg_temp.expect('finance cannot print another company request',pg_temp.err(pg_temp.as_scalar('other_fin',format(
+ 'select public.app_request_print(%L)::text',pg_temp.fx('errand')))),'P0002');
 rollback;

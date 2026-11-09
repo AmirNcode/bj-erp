@@ -52,7 +52,7 @@ export function ViewAsBar({ locale }: { locale: string }) {
       <Eye className="size-4 shrink-0" aria-hidden />
       <span className="min-w-0 flex-1 text-sm font-semibold">
         {t('viewing', { person: viewAsLabel(view.name, view.personnelNo) })}
-        <span className="ms-2 rounded-full border border-warning/40 px-2 py-0.5 text-xs font-medium">{t('readOnly')}</span>
+        <span className="ms-2 rounded-sm border border-warning/40 px-2 py-0.5 text-xs font-medium">{t('readOnly')}</span>
       </span>
       <LanguageSwitch locale={locale} testIdPrefix="view-as-lang" className="w-28" />
       <button

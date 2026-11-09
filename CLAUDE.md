@@ -75,6 +75,7 @@ docs/
   REQUIREMENTS.md          numbered functional (FR-*) + non-functional (NFR-*) requirements
   DATA_MODEL.md            tables, columns, enums, ledger + day-counting logic (source of truth)
   PERMISSIONS.md           roles, visibility matrix, RLS policy descriptions (source of truth)
+  DESIGN.md                "Blueprint" design system: tokens, tables, tabs, buttons, cards, phone rules
   TASKS.md                 open work only
   CHANGELOG.md             what changed, per release (Keep a Changelog format)
   MEMORY.md                durable lessons (gotchas that outlive a change)
@@ -90,7 +91,7 @@ docs/
 - **Always:** this file → the newest 3 entries of **`docs/AGENT-LOG.md`** (what the last agents
   did) → `docs/TASKS.md` (open work).
 - **When the task touches it:** `docs/DATA_MODEL.md` (schema, ledger maths) ·
-  `docs/PERMISSIONS.md` (roles, RLS) · `docs/REQUIREMENTS.md` (FR/NFR) · the matching spec in
+  `docs/PERMISSIONS.md` (roles, RLS) · `docs/DESIGN.md` (any UI work) · `docs/REQUIREMENTS.md` (FR/NFR) · the matching spec in
   `docs/specs/` · `supabase/schema.sql` (current SQL) · `docs/MEMORY.md` (lessons) · `docs/PLAN.md`.
 - **Only on demand:** `docs/CHANGELOG.md`, `docs/plans/`, the deploy runbooks.
 - **Never, unless the user asks:** `docs/archive/`. Root `.ignore` hides it from ripgrep search.
@@ -172,6 +173,13 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **The View as hook setting (`pgrst.db_pre_request`) is a role setting, not in backups:** run `deploy/lib/sync-view-as-hook.sql` after any `pg_restore` (deploys already run it); a setting naming a missing function fails every request.
 - **Route handlers must build redirects as relative `Location` paths, never from `request.nextUrl`:** behind the gateway it holds the container origin (`https://0.0.0.0:3000`).
 - **`tests/e2e/view-as.spec.ts` runs only against the local Docker stack with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty:** otherwise the global setup rewrites the real admin's language and weekend settings.
+- **UI follows `docs/DESIGN.md` (Blueprint).** Every table gets `className="data-table"` (header band + row hover: mandatory); tabs come from `lib/ui/tabs.ts`, never pills; no `shadow-*`, no `rounded-[Npx]`, `rounded-full` only for circles.
+- **Full-width page = `data-wide` on the page's root element** (`AppShell` lifts `max-w-6xl`); never widen just the table.
+- **Light only:** `dark:` utilities are dead (`@custom-variant dark` in `globals.css`); they once followed the OS and greyed inputs.
+- **Two blues:** `--sidebar` `#20409a` (logo blue: side panel, phone top bar) and `--primary` `#2E3C92` (buttons). The logo PNG's white is transparent: on blue it needs the white plate from `MainNav`.
+- **Phone titles:** `MobileTopBar` shows the section name, so top-level pages pass `section` to `PageHeader`; a new nav section needs a row in its `SECTIONS` list.
+- **`usePathname()` has no locale prefix in Farsi** (default locale): compare paths with and without `/${locale}` (see `AdminTabs`, `MainNav.isActive`).
+- **Dev server against the isolated demo stack:** `bj-dev-isolated` in `.claude/launch.json` (:3100); sign in at `http://localhost:3501` first (the gateway's CORS rejects :3100, the cookie is shared).
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

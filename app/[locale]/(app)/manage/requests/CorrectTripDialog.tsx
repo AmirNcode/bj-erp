@@ -19,13 +19,13 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { correctTrip } from '@/lib/actions/travel';
-import type { ReviewRequestRow } from '@/lib/actions/leave/review';
+import type { ReviewActionRequest } from './RequestReviewActions';
 import { dateObjectToGregorian, gregorianToPersianDateObject, type PickerDate } from '@/lib/leave/dateConvert';
 import { parseRials } from '@/lib/leave/perDiem';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { RequestSignatureFields } from '../../request/_components/RequestSignature';
 
-export function CorrectTripDialog({ trip, locale }: { trip: ReviewRequestRow; locale: string }) {
+export function CorrectTripDialog({ trip, locale, buttonClassName }: { trip: ReviewActionRequest; locale: string; buttonClassName?: string }) {
   const t = useTranslations('travel.correction');
   const tc = useTranslations('common');
   const tSignature = useTranslations('signature');
@@ -80,7 +80,7 @@ export function CorrectTripDialog({ trip, locale }: { trip: ReviewRequestRow; lo
   return (
     <AlertDialog open={open} onOpenChange={(next) => { setOpen(next); if (next) reset(); }}>
       <AlertDialogTrigger asChild>
-        <Button size="sm" variant="outline" data-testid={`correct-trip-${trip.id}`}>{t('open')}</Button>
+        <Button size="sm" variant="outline" className={buttonClassName} data-testid={`correct-trip-${trip.id}`}>{t('open')}</Button>
       </AlertDialogTrigger>
       <AlertDialogContent size="default" className="max-h-[90vh] overflow-y-auto">
         <AlertDialogHeader>

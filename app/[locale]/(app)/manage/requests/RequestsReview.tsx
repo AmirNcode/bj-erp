@@ -26,11 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
-import { todayInAppTz } from '@/lib/appDate';
-import { TravelTickToggle } from './TravelTickToggle';
-import { CorrectTripDialog } from './CorrectTripDialog';
-import { canCorrectTrip } from '@/lib/travel/extensions';
-import { RequestCancelButton } from '../../request/_components/RequestCancelButton';
+import { RequestReviewActions } from './RequestReviewActions';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
@@ -78,7 +74,6 @@ const STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
 
 export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null, viewerId = null }: Props) {
   const labels = useLabels();
-  const today = todayInAppTz();
   const [status, setStatus] = useState<string>('all');
   const [kind, setKind] = useState<string>('all');
   const [query, setQuery] = useState('');
@@ -230,19 +225,7 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                   </div>
 
                   <div className="flex shrink-0 items-center gap-3">
-                    {travelTicks && r.employee_id !== viewerId && r.kind === 'errand' && r.unit === 'day'
-                      && (r.status === 'pending' || r.status === 'approved') && r.end_date >= today && (
-                      <TravelTickToggle
-                        requestId={r.id}
-                        employeeId={r.employee_id}
-                        ticked={!!travelTicks[r.id]}
-                        started={travelTicks[r.id]?.started ?? false}
-                      />
-                    )}
-                    {/* FR-84: a null travelTicks means the viewer is not HR. */}
-                    {travelTicks && canCorrectTrip(r, viewerId) && <CorrectTripDialog trip={r} locale={locale} />}
-                    {/* FR-70: the manager tells HR; HR cancels a travel-booked trip here. */}
-                    {travelTicks?.[r.id] && r.employee_id !== viewerId && <RequestCancelButton requestId={r.id} status={r.status} startDate={r.start_date} />}
+                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId ?? ''} />
                     <StatusBadge status={r.status} labels={statusLabels} />
                     <Link
                       href={`/${locale}/print/request/${r.id}`}

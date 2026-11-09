@@ -24,7 +24,7 @@ export default async function AdminLayout({ children, params }: Props) {
   return (
     <NextIntlClientProvider locale={ADMIN_LOCALE} messages={messages}>
       <div dir="ltr" lang={ADMIN_LOCALE} className="mx-auto flex w-full max-w-[1000px] flex-col gap-5" data-testid="admin-panel">
-        <PageHeader title={t('title')} />
+        <PageHeader section title={t('title')} />
         <AdminTabs locale={locale} />
         {children}
       </div>

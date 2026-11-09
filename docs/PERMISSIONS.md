@@ -840,3 +840,10 @@ Not a catalog item; reuses `people` edit. `private.profile_photos` is unreachabl
 ### Admin-only identity RPCs (2026-11-02)
 
 `app_create_employee(…, p_login_code)`: only the admin may pass a login code. `app_admin_set_personnel_no(uuid, text)`: admin only, same company; the login code follows the number. `app_approval_history(int, int)`: decided requests the caller approved or rejected a step of (`leave_request_approvals.approver_id`); the admin sees every decided request of the company.
+
+
+## FR-87: unified Approvals and Finance form reads (2026-11-08, not deployed)
+
+`leave_requests` keeps its existing key and levels; its role-editor label is now **Approvals — request review** in Leave. `/manage/approvals` admits either an approver or a request-review reader. Pending review rows may include non-actionable and own requests for review readers; Home counts and badges still use the actionable queue. `app_approval_history_v2` adds authorized archive history, search/status/type filters before pagination, and employee IDs for avatars. Approvers without review permission retain their own-decision history. HR travel/correction/cancellation controls keep their existing guards. `/manage/requests` redirects.
+
+Finance's `finance_forms` is read-only, shown as Yes/No and dependent on `finance` read. It defaults off for existing non-admin roles; admin access is implicit. `app_request_print` additionally admits same-company pending/approved work errands and settled cancelled travel requests when both permissions are present. It includes the complete form's reason, signatures, extensions and corrections. It does not grant leave reads, approval authority, profile browsing or general `leave_requests` RLS access. Existing independent print rights remain valid. Shared `private.request_data_*` implementations are not executable by clients; existing public context/signature/progress RPCs retain their original guards.

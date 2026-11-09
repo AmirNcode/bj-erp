@@ -176,7 +176,7 @@ export function HolidayEditor({
   };
 
   const fieldClass =
-    'h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+    'h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
   return (
     <Card className="gap-0 py-0" data-testid="holiday-editor">
@@ -256,7 +256,7 @@ export function HolidayEditor({
               data-testid="holiday-add"
               onClick={onAdd}
               disabled={isPending}
-              className="rounded-[10px]"
+              className="rounded-md"
             >
               <Plus aria-hidden="true" />
               {labels.addHoliday}

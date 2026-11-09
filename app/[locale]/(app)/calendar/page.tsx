@@ -108,7 +108,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <PageHeader title={t('title')} />
+      <PageHeader section title={t('title')} />
       <Suspense fallback={<ListSkeleton count={4} />}>
         <CalendarData locale={locale} month={month} />
       </Suspense>

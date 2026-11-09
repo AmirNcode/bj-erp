@@ -53,9 +53,7 @@ describe('printed approval evidence', () => {
     evidence: { delegate_name: 'Historical delegate', submitted_at: submittedAt, consent_at: submittedAt },
   };
   function serve(approvals: object[]) {
-    mocks.rpc.mockImplementation(async (name: string) => name === 'app_request_approval_context'
-      ? { data: context, error: null }
-      : { data: { requester_signature_data: null, approvals }, error: null });
+    mocks.rpc.mockResolvedValue({ data: { context, signatures: { requester_signature_data: null, approvals }, extensions: [], corrections: [] }, error: null });
   }
 
   it('preserves exact identities and step order for multiple signed steps with the same role', async () => {
@@ -110,20 +108,18 @@ describe('approval evidence boundaries', () => {
   });
 
   it('prints only scoped context and evidence and suppresses any PNG attached to automatic or exempt evidence', async () => {
-    mocks.rpc.mockImplementation(async (name: string) => name === 'app_request_approval_context'
-      ? { data: { id: 'r', leave_type_id: null }, error: null }
-      : { data: { requester_signature_data: 'requester', approvals: [
+    mocks.rpc.mockResolvedValue({ data: { context: { id: 'r', leave_type_id: null }, signatures: { requester_signature_data: 'requester', approvals: [
         { ...step, evidence_kind: 'automatic', decision: 'approved', signature_data: 'must-not-print', signed_at: '2026-10-20T09:00:00Z' },
         { ...step, step_id: 'hr', evidence_kind: 'hr_exempt', signature_data: 'must-not-print' },
         { ...step, step_id: 'other', evidence_kind: 'delegated', decision: 'approved', signer_name: 'Delegate', signature_data: 'actual-signature' },
-      ] }, error: null });
+      ] }, extensions: [], corrections: [] }, error: null });
     const result = await getRequestForPrint('r');
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.request.approvals.map((a) => a.signatureData)).toEqual([null, null, 'actual-signature']);
     expect(result.request.approvals[0]).toMatchObject({ stepId: 'direct', authorityRef: 'authority', principalName: 'CEO' });
     expect(mocks.from).not.toHaveBeenCalled();
-    expect(mocks.rpc.mock.calls.map((args) => args[0])).toEqual(['app_request_approval_context', 'get_leave_request_signatures']);
+    expect(mocks.rpc.mock.calls.map((args) => args[0])).toEqual(['app_request_print']);
   });
 
   it('fails closed when the scoped signature projection denies access', async () => {

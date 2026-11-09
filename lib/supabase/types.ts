@@ -2094,6 +2094,17 @@ export type Database = {
           lost_rials: number | null
         }[]
       }
+      app_request_print: { Args: { p_id: string }; Returns: Json }
+      app_approval_history_v2: {
+        Args: { p_limit?: number; p_offset?: number; p_query?: string; p_status?: string; p_kind?: string }
+        Returns: Json
+      }
+      finance_requests_v2: {
+        Args: { p_from: string; p_to: string }
+        Returns: (Database['public']['Functions']['finance_requests']['Returns'][number] & {
+          first_name: string | null; last_name: string | null; department_id: string | null; can_print: boolean
+        })[]
+      }
       finance_requests: {
         Args: { p_from: string; p_to: string }
         Returns: {

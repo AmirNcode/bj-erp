@@ -786,3 +786,8 @@ profiles 1─* leave_ledger     *─1 leave_types   leave_requests 1─* leave_l
 companies 1─* holidays        companies 1─1 work_settings
 profiles 1─* audit_log(actor)
 ```
+
+
+## FR-87 request-list and print projections (2026-11-08, not deployed)
+
+Migration `20261108200021_approvals_finance_usability.sql` adds the catalog permission `finance_forms` (read, depends on finance), defaulting off for non-admin roles. No stored financial columns change. `finance_requests_v2(from,to)` preserves the original rows/calculations and adds stored first/last names, department ID, and request-scoped `can_print`. `app_approval_history_v2(limit,offset,query,status,kind)` filters before pagination and includes authorized archive readers. `app_request_print(id)` aggregates guarded context, signature evidence, extensions and corrections; reusable private projection functions keep the original public RPCs compatible. The original finance/history RPCs remain available through the deployment window. Dates stay Gregorian ISO in URLs/storage and Persian in the calendar UI.

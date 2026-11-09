@@ -5,6 +5,7 @@
  * and the queue of requests the caller can sign right now.
  */
 
+import { can } from '@/lib/permissions/catalog';
 import { requireCaller } from '@/lib/auth/context';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
@@ -103,6 +104,8 @@ export async function rejectRequest(
 }
 
 export type PendingApproval = {
+  personnel_no?: string | null;
+  per_diem_rials?: number | null;
   id: string;
   /** 'errand' rows are work trips (BJ-F 50207) — no type, no balance effect. */
   kind: Database['public']['Enums']['request_kind'];
@@ -206,7 +209,7 @@ export async function getApprovalConfig(): Promise<{
 }
 
 /** Pending request context and exact decision entitlements projected by the database. */
-export async function getPendingApprovals(): Promise<
+export async function getPendingApprovals(includeReview = false): Promise<
   { ok: true; requests: PendingApproval[] } | DbErrorResult
 > {
   const c = await requireCaller();
@@ -226,6 +229,8 @@ export async function getPendingApprovals(): Promise<
       kind: row.kind,
       errand_location: row.errand_location,
       employee_name: row.employee_name,
+      personnel_no: row.personnel_no,
+      per_diem_rials: row.per_diem_rials,
       employee_id: row.employee_id,
       employee_manager_id: row.employee_manager_id,
       department_id: row.department_id,
@@ -273,7 +278,7 @@ export async function getPendingApprovals(): Promise<
     if (missingError) return;
     r.travel = { employeeId: r.employee_id, missingFields: (data ?? []) as TravellerField[] };
   }));
-  return { ok: true, requests: actionable };
+  return { ok: true, requests: includeReview && can(c.perms, 'leave_requests', 'read') ? requests : actionable };
 }
 
 /**
@@ -293,6 +298,12 @@ export async function getPendingApprovalIds(): Promise<
 const APPROVAL_HISTORY_PAGE_SIZE = 20;
 
 export type ApprovalHistoryRow = {
+  employee_id: string;
+  per_diem_rials: number | null;
+  day_part: DayPart;
+  created_at: string;
+  signature_consent_at: string | null;
+  approver_signature_consent_at: string | null;
   id: string;
   kind: 'leave' | 'errand';
   status: 'approved' | 'rejected' | 'cancelled';
@@ -321,16 +332,20 @@ export type ApprovalHistoryRow = {
  * Scope lives in app_approval_history. `page` is 1-based.
  */
 export async function getApprovalHistory(
-  page: number
+  page: number,
+  filters: { query?: string; status?: string; kind?: string } = {}
 ): Promise<{ ok: true; total: number; pageSize: number; rows: ApprovalHistoryRow[] } | DbErrorResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const p = Number.isInteger(page) && page > 0 ? page : 1;
-  const { data, error } = await c.supabase.rpc('app_approval_history', {
+  const { data, error } = await c.supabase.rpc('app_approval_history_v2', {
+    p_query: filters.query ?? '', p_status: filters.status ?? 'all', p_kind: filters.kind ?? 'all',
     p_limit: APPROVAL_HISTORY_PAGE_SIZE,
     p_offset: (p - 1) * APPROVAL_HISTORY_PAGE_SIZE,
   });
   if (error) return dbErr(error.message);
   const result = (data ?? {}) as { total?: number; rows?: ApprovalHistoryRow[] };
+  const lastPage = Math.max(1, Math.ceil((result.total ?? 0) / APPROVAL_HISTORY_PAGE_SIZE));
+  if (p > lastPage) return getApprovalHistory(lastPage, filters);
   return { ok: true, total: result.total ?? 0, pageSize: APPROVAL_HISTORY_PAGE_SIZE, rows: result.rows ?? [] };
 }

@@ -9,6 +9,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }));
 afterEach(cleanup);
 
 const base: FinanceRow = {
+  first_name: 'Sara', last_name: 'Test', department_id: 'dept-1', can_print: true,
   id: 'a', serial_year: 1405, serial_seq: 1, kind: 'errand', employee_name: 'Sara', personnel_no: '101',
   department_name_fa: null, department_name_en: 'HQ', leave_type_name_fa: null, leave_type_name_en: null, is_paid: null,
   start_date: '2027-03-01', end_date: '2027-03-02', unit: 'day', start_time: null, end_time: null, requested_minutes: 960,
@@ -23,7 +24,7 @@ const plain: FinanceRow = { ...base, id: 'c', serial_seq: 3, travel_state: null,
 function renderList(rows: FinanceRow[]) {
   render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <FinanceList rows={rows} months={[]} from="2027-03-01" to="2027-03-31" locale="en" hoursPerDay={8} />
+      <FinanceList rows={rows} from="2027-03-01" to="2027-03-31" locale="en" hoursPerDay={8} />
     </NextIntlClientProvider>
   );
 }
@@ -140,5 +141,27 @@ describe('finance: approved and pending sections', () => {
     const [, first, second] = text.replace(/^﻿/, '').split(/\r?\n/);
     expect(first).toContain('Approved — Booking not finished,');
     expect(second).toContain('Pending,Waiting on: HR');
+  });
+});
+
+
+describe('finance: table search and form access', () => {
+  it('combines department/search filters and hides forms without permission', () => {
+    renderList([base, { ...plain, first_name: 'Ali', employee_name: 'Ali Test', personnel_no: '202', department_id: 'other', department_name_en: 'Other', can_print: false }]);
+    expect(screen.getByTestId('finance-print-a').getAttribute('href')).toBe('/en/print/request/a');
+    expect(screen.queryByTestId('finance-print-c')).toBeNull();
+    fireEvent.change(screen.getByTestId('finance-search'), { target: { value: '۲۰۲' } });
+    expect(screen.queryByTestId('finance-row-a')).toBeNull();
+    expect(screen.getByTestId('finance-row-c')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('finance-department'), { target: { value: 'dept-1' } });
+    expect(screen.queryByTestId('finance-row-c')).toBeNull();
+  });
+  it('sorts displayed amounts numerically and exposes the direction', () => {
+    renderList([base, plain]);
+    fireEvent.click(screen.getByTestId('finance-sort-perDiem'));
+    expect(screen.getByTestId('finance-sort-perDiem').closest('th')?.getAttribute('aria-sort')).toBe('ascending');
+    expect([...document.querySelectorAll('tbody tr')].map(r => r.getAttribute('data-testid'))).toEqual(['finance-row-c','finance-row-a']);
+    fireEvent.click(screen.getByTestId('finance-sort-perDiem'));
+    expect([...document.querySelectorAll('tbody tr')].map(r => r.getAttribute('data-testid'))).toEqual(['finance-row-a','finance-row-c']);
   });
 });

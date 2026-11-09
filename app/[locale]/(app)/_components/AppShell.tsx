@@ -1,6 +1,7 @@
 import type { Perms } from '@/lib/permissions/catalog';
 import { Toaster } from '@/components/ui/sonner';
 import { MainNav } from './MainNav';
+import { MobileTopBar } from './MobileTopBar';
 import { RoutePrefetcher } from './RoutePrefetcher';
 import { RequestOutcomeBanner } from './RequestOutcomeBanner';
 import { ViewAsProvider, type ViewAsInfo } from './ViewAsContext';
@@ -34,8 +35,9 @@ type Props = {
 };
 
 /**
- * No top header: logo, nav, refresh, profile and the language switch all live
- * in the side panel (desktop). Mobile keeps the bottom tab bar.
+ * Desktop: logo, nav, refresh, profile and the language switch all live in the
+ * side panel. Mobile: a top bar (section name + logo) and the bottom tab bar.
+ * A page that sets `data-wide` on an element (data tables) gets the full width.
  */
 export function AppShell({
   roles,
@@ -60,8 +62,9 @@ export function AppShell({
     <div className="min-h-dvh md:ps-60">
       {viewAs && <ViewAsBar locale={locale} />}
       {(viewAs || roles.includes('admin')) && <ViewAsTabSync />}
-      {/* Safe-area insets are 0 outside the installed iPhone PWA, so browsers keep 20px / 96px. */}
-      <main className="mx-auto w-full max-w-6xl px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
+      <MobileTopBar locale={locale} appName={appName} />
+      {/* The top bar takes the top safe-area inset; the bottom one is 0 outside the installed iPhone PWA. */}
+      <main className="mx-auto w-full max-w-6xl px-4 pt-5 has-[[data-wide]]:max-w-none pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
         {myPending && <RequestOutcomeBanner pending={myPending} />}
         {children}
       </main>

@@ -26,6 +26,8 @@ type Props = {
   startDate: string;
   onCancelled?: () => void;
   onError?: (message: string) => void;
+  /** A full-size outline button instead of the small text one (approval cards). */
+  buttonClassName?: string;
 };
 
 /** Shared cancellation control for My Requests and the Home recent-request card. */
@@ -35,6 +37,7 @@ export function RequestCancelButton({
   startDate,
   onCancelled,
   onError,
+  buttonClassName,
 }: Props) {
   const t = useTranslations('request');
   const tc = useTranslations('common');
@@ -66,10 +69,10 @@ export function RequestCancelButton({
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button
-          variant="ghost"
+          variant={buttonClassName ? 'outline' : 'ghost'}
           size="sm"
           disabled={isPending}
-          className="h-auto px-2 py-0.5 text-xs text-destructive"
+          className={buttonClassName ? `${buttonClassName} text-destructive hover:text-destructive` : 'h-auto px-2 py-0.5 text-xs text-destructive'}
           data-testid={`cancel-btn-${requestId}`}
         >
           {t('cancel')}

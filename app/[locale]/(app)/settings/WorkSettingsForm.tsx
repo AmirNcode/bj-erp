@@ -156,7 +156,7 @@ export function WorkSettingsForm({
               const next = isoOf(e.target.value);
               setSlots((prev) => prev.map((v, j) => (j === i ? next : v)));
             }}
-            className={cn(nativeSelectClass, 'h-9 w-40 rounded-[10px] bg-card text-[13px]')}
+            className={cn(nativeSelectClass, 'h-9 w-40 rounded-md bg-card text-[13px]')}
           >
             <option value="none">{labels.dayNone}</option>
             {WEEKDAYS.map((d) => (
@@ -222,7 +222,7 @@ export function WorkSettingsForm({
   };
 
   const inputClass =
-    'h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-[180px]';
+    'h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-[180px]';
 
   // Save covers this card only (weekly days off + working hours).
   return (
@@ -235,7 +235,7 @@ export function WorkSettingsForm({
       {/* Two fixed rows: a label column, then the row's controls stacked. */}
       <div className="flex flex-col gap-2.5 px-6 py-3.5">
         <div
-          className="grid items-start gap-x-3 gap-y-2 rounded-[10px] border p-3 sm:grid-cols-[11rem_1fr]"
+          className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-weekly-row"
         >
           <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
@@ -245,7 +245,7 @@ export function WorkSettingsForm({
         </div>
 
         <div
-          className="grid items-start gap-x-3 gap-y-2 rounded-[10px] border p-3 sm:grid-cols-[11rem_1fr]"
+          className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-biweekly-row"
         >
           <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
@@ -268,7 +268,7 @@ export function WorkSettingsForm({
                     calendar={calendarPickerConfig(locale).calendar}
                     locale={calendarPickerConfig(locale).calLocale}
                     containerClassName="w-full"
-                    inputClass="h-9 w-full rounded-[10px] border border-input bg-card px-3 text-sm"
+                    inputClass="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
@@ -350,7 +350,7 @@ export function WorkSettingsForm({
               data-testid="work-settings-save"
               onClick={onSave}
               disabled={isPending}
-              className="rounded-[10px]"
+              className="rounded-md"
             >
               {labels.save}
             </Button>

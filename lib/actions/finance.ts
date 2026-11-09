@@ -19,7 +19,7 @@ import { isValidIsoDate } from '@/lib/leave/settings-validation';
 import type { Database } from '@/lib/supabase/types';
 
 export type FinanceRow =
-  Database['public']['Functions']['finance_requests']['Returns'][number];
+  Database['public']['Functions']['finance_requests_v2']['Returns'][number];
 
 export async function getFinanceApprovals(
   from: string,
@@ -29,7 +29,7 @@ export async function getFinanceApprovals(
   if (!c.ok) return c;
   if (!isValidIsoDate(from) || !isValidIsoDate(to) || to < from) return dbErr('invalid date range');
 
-  const { data, error } = await c.supabase.rpc('finance_requests', {
+  const { data, error } = await c.supabase.rpc('finance_requests_v2', {
     p_from: from,
     p_to: to,
   });

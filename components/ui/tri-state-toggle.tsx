@@ -45,7 +45,7 @@ export function TriStateToggle({
         onValueChange={(v) => v && v !== value && onChange(v as TriValue)}
         aria-label={name}
         data-testid={testId}
-        className="inline-flex shrink-0 gap-0.5 self-start rounded-[10px] bg-muted p-[3px]"
+        className="inline-flex shrink-0 gap-0.5 self-start rounded-md bg-muted p-[3px]"
       >
         {SEGMENTS.map(({ value: seg, Icon, on }) => {
           const hint = seg === 'read' && shape === 'E' ? labels.noRead : seg === 'edit' && shape === 'R' ? labels.noEdit : null;

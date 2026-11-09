@@ -200,23 +200,17 @@ export async function getRequestForPrint(
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const [context, signatures] = await Promise.all([
-    c.supabase.rpc('app_request_approval_context', { p_id: requestId }),
-    c.supabase.rpc('get_leave_request_signatures', { p_id: requestId }),
-  ]);
-  if (context.error) return dbErr(context.error.message);
-  if (signatures.error) return dbErr(signatures.error.message);
-  if (!context.data || !signatures.data) return dbErr('request not found');
-  const row = context.data as unknown as ApprovalContextRow;
-  const evidence = signatures.data as unknown as ApprovalSignatures;
-  let extensions: RequestExtension[] = [];
-  let corrections: RequestCorrection[] = [];
-  if (row.kind === 'errand' && row.unit === 'day') {
-    const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
-    if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
-    const fixes = await c.supabase.rpc('request_trip_corrections', { p_id: requestId });
-    if (!fixes.error) corrections = fixes.data ?? [];
-  }
+  const { data, error } = await c.supabase.rpc('app_request_print', { p_id: requestId });
+  if (error) return dbErr(error.message);
+  if (!data) return dbErr('request not found');
+  const payload = data as unknown as {
+    context: ApprovalContextRow; signatures: ApprovalSignatures;
+    extensions: RequestExtension[]; corrections: RequestCorrection[];
+  };
+  const row = payload.context;
+  const evidence = payload.signatures;
+  const extensions = payload.extensions;
+  const corrections = payload.corrections;
 
   // Keep ledger visibility unchanged. No visible ledger row is not proof of zero balance.
   let currentBalance: number | null = null;

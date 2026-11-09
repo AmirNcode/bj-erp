@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn() }));
-vi.mock('@/lib/auth/context', () => ({ requireCaller: async () => ({ ok: true, supabase: { rpc: mocks.rpc } }) }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), perms: {} as Record<string,string> }));
+vi.mock('@/lib/auth/context', () => ({ requireCaller: async () => ({ ok: true, perms: mocks.perms, supabase: { rpc: mocks.rpc } }) }));
 vi.mock('@/lib/cache/invalidate-app', () => ({ invalidateAppCache: vi.fn() }));
 vi.mock('@/lib/errors/db-error', () => ({ dbErr: async (error: string) => ({ ok: false, error }) }));
 
@@ -14,7 +14,7 @@ const row = (id: string, progress: unknown[], over: Record<string, unknown> = {}
   id, kind: 'leave', employee_name: 'Employee', progress, can_override: false, can_approve: false, can_reject: false, ...over,
 });
 
-beforeEach(() => mocks.rpc.mockReset());
+beforeEach(() => { mocks.rpc.mockReset(); mocks.perms = {}; });
 
 describe('approval queue order', () => {
   it('hides a later step that is still waiting on an earlier one, even when SQL allows rejecting it', async () => {
@@ -31,4 +31,16 @@ describe('approval queue order', () => {
     const result = await getPendingApprovals();
     expect(result.ok && result.requests.map((r) => r.id)).toEqual(['override']);
   });
+});
+
+it('includes non-actionable rows only for authorized archive review, not badges', async () => {
+ mocks.perms = { leave_requests: 'read' };
+ mocks.rpc.mockResolvedValue({ data: [row('review-only', [step({})])], error: null });
+ const reviewed = await getPendingApprovals(true);
+ expect(reviewed.ok && reviewed.requests.map(r=>r.id)).toEqual(['review-only']);
+ const badge = await getPendingApprovals();
+ expect(badge.ok && badge.requests).toEqual([]);
+ mocks.perms = {};
+ const forbidden = await getPendingApprovals(true);
+ expect(forbidden.ok && forbidden.requests).toEqual([]);
 });

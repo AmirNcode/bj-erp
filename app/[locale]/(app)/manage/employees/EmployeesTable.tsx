@@ -11,7 +11,6 @@ import {
 import { CredentialsDownload } from '@/components/CredentialsDownload';
 import { STATUS_BADGE_STYLES } from '@/components/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatNumber } from '@/lib/i18n/format';
@@ -68,7 +67,7 @@ type Props = {
   query: EmployeesQuery;
 };
 
-const TH = 'px-4 py-3 text-start font-semibold whitespace-nowrap text-foreground/80';
+const TH = 'px-4 py-2.5 text-start';
 
 /** A sortable header: a link, so it keeps every other list param and works without state. */
 function SortableTh({
@@ -198,13 +197,13 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
         </div>
       )}
 
-      <Card className="overflow-hidden py-0">
+      <div className="border-b border-border">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/40">
+          <table className="data-table w-full text-sm">
+            <thead>
               <tr>
                 {canBulkReset && (
-                  <th className="w-10 px-4 py-3">
+                  <th className="w-10 px-4 py-2.5">
                     <input
                       type="checkbox"
                       aria-label="select all"
@@ -232,7 +231,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                   </span>
                 </th>
                 <th className={th}>{tl('upcomingLeave')}</th>
-                <th className="w-12 px-4 py-3">
+                <th className="w-12 px-4 py-2.5">
                   <span className="sr-only">{t('edit')}</span>
                 </th>
               </tr>
@@ -241,10 +240,10 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
               {employees.map((emp) => (
                 <tr
                   key={emp.id}
-                  className={cn('transition-colors hover:bg-muted/30', !emp.active && 'opacity-55')}
+                  className={cn(!emp.active && 'opacity-55')}
                 >
                   {canBulkReset && (
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2.5">
                       {emp.canReset && (
                         <input
                           type="checkbox"
@@ -257,7 +256,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2.5">
                     <div className="flex items-center gap-3">
                       <PersonAvatar id={emp.id} name={emp.full_name} />
                       <span className="whitespace-nowrap font-medium">
@@ -265,39 +264,39 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                       </span>
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-medium">
+                  <td className="whitespace-nowrap px-4 py-2.5 font-medium">
                     {emp.last_name ? (
                       <bdi>{emp.last_name}</bdi>
                     ) : (
                       <span className="font-normal text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                     <bdi dir="ltr">{emp.personnel_no ?? '—'}</bdi>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3">{emp.hireDateLabel}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                  <td className="whitespace-nowrap px-4 py-2.5">{emp.hireDateLabel}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 text-muted-foreground">
                     {emp.departmentLabel}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
                       {emp.roleLabels.length === 0
                         ? '—'
                         : emp.roleLabels.map((r) => (
                             <span
                               key={r}
-                              className="whitespace-nowrap rounded-full bg-secondary px-2.5 py-0.5 text-xs text-secondary-foreground"
+                              className="whitespace-nowrap rounded-sm bg-secondary px-2.5 py-0.5 text-xs text-secondary-foreground"
                             >
                               {r}
                             </span>
                           ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2.5">
                     {emp.upcoming ? (
                       <Badge
                         variant="outline"
-                        className={cn('rounded-full', STATUS_BADGE_STYLES[emp.upcoming.status])}
+                        className={cn('rounded-sm', STATUS_BADGE_STYLES[emp.upcoming.status])}
                       >
                         {emp.upcoming.label}
                       </Badge>
@@ -305,7 +304,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-2.5">
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -331,7 +330,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

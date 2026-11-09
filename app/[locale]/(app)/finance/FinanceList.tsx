@@ -3,9 +3,14 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { Download } from 'lucide-react';
+import Link from 'next/link';
+import { PersianDateField } from '@/components/PersianDateField';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave/dateConvert';
+import { FINANCE_COLUMNS, financeDepartment, filterFinanceRows, sortFinanceRows, validFinanceRange, type FinanceSort } from '@/lib/finance/list';
+import { ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import type { FinanceRow } from '@/lib/actions/finance';
-import type { JalaliMonthOption } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
@@ -18,13 +23,11 @@ import { formatRials } from '@/lib/leave/perDiem';
 import { formatSerial, formatSerialLocalized } from '@/lib/leave/serial';
 import { EmptyState } from '@/components/EmptyState';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { tripTotal } from '@/lib/travel/totals';
 
 type Props = {
   rows: FinanceRow[];
-  months: JalaliMonthOption[];
   from: string;
   to: string;
   locale: string;
@@ -42,10 +45,9 @@ function safeCell(value: string): string {
   return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
 }
 
-export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Props) {
+export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
   const t = useTranslations('finance');
   const tLeave = useTranslations('leave');
-  const tReports = useTranslations('reports');
   const tTravel = useTranslations('travel');
   const tApprovals = useTranslations('approvals');
   const router = useRouter();
@@ -55,25 +57,28 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
   const durationLabels = durationLabelsFrom(tLeave);
   const num = (n: number) => formatNumber(n, locale);
   const date = (iso: string) => formatCalendarDate(iso, locale);
-  // Explicit keys, not `months.m${n}`: dynamic message keys are avoided here
-  // (see manage/page.tsx).
-  const monthNames = [
-    tReports('months.m1'), tReports('months.m2'), tReports('months.m3'), tReports('months.m4'),
-    tReports('months.m5'), tReports('months.m6'), tReports('months.m7'), tReports('months.m8'),
-    tReports('months.m9'), tReports('months.m10'), tReports('months.m11'), tReports('months.m12'),
-  ];
-  const monthLabel = (m: JalaliMonthOption) =>
-    `${monthNames[m.jalaliMonth - 1] ?? m.jalaliMonth} ${formatNumber(m.jalaliYear, locale, { useGrouping: false })}`;
-
-  const applyRange = (f: string, tt: string) =>
-    startTransition(() => {
-      router.replace(`/${locale}/finance?from=${f}&to=${tt}`, { scroll: false });
-    });
-
-  const shown = useMemo(
-    () => (unit === 'all' ? rows : rows.filter((r) => (r.unit === 'hour') === (unit === 'hour'))),
-    [rows, unit]
-  );
+  const [query, setQuery] = useState('');
+  const [department, setDepartment] = useState('all');
+  const [sort, setSort] = useState<FinanceSort>('dates');
+  const [direction, setDirection] = useState<'asc' | 'desc'>('asc');
+  const [rangeFrom, setRangeFrom] = useState(from);
+  const [rangeTo, setRangeTo] = useState(to);
+  const [rangeError, setRangeError] = useState(false);
+  const departments = useMemo(() => {
+    const values = new Map<string, string>();
+    rows.forEach(r => values.set(r.department_id ?? 'none', r.department_id ? financeDepartment(r, locale) : t('noDepartment')));
+    return [...values].sort((a,b) => a[1].localeCompare(b[1], locale));
+  }, [rows, locale, t]);
+  const applyRange = (f: string, tt: string) => {
+    setRangeFrom(f); setRangeTo(tt);
+    const valid = validFinanceRange(f,tt);
+    setRangeError(!valid);
+    if (valid) startTransition(() => router.replace(`/${locale}/finance?from=${f}&to=${tt}`, { scroll: false }));
+  };
+  const shown = sortFinanceRows(filterFinanceRows(rows, query, department, unit), sort, direction, locale, {
+    type: r => t(r.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand'),
+    transport: r => r.transport === 'flight' || r.transport === 'company_car' ? tTravel(`transportOptions.${r.transport}`) : '',
+  });
   // FR-62: fully approved (and settled cancelled trips) apart from pending; the
   // headline totals count the approved section only.
   const approvedRows = shown.filter((r) => r.status !== 'pending');
@@ -126,7 +131,8 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
     const header = [
       t('csv.trackingNo'),
       t('csv.personnelNo'),
-      t('csv.employee'),
+      t('firstName'),
+      t('lastName'),
       t('csv.department'),
       t('csv.type'),
       t('csv.start'),
@@ -150,7 +156,8 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
     const body = [...approvedRows, ...pendingRows].map((r) => [
       formatSerial(r.serial_year, r.serial_seq),
       r.personnel_no ?? '',
-      r.employee_name,
+      r.first_name ?? '',
+      r.last_name ?? '',
       dept(r),
       typeName(r),
       formatCalendarDate(r.start_date, 'fa'),
@@ -174,65 +181,114 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
     downloadCsv([header, ...body].map((row) => row.map(safeCell)), `bj-finance-${from}-${to}.csv`);
   };
 
-  const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-[10px] bg-card');
+  const selectClass = cn(nativeSelectClass, 'h-9 bg-card md:w-auto');
+  // Money and id columns: header and cells share the end edge.
+  const numeric = new Set<FinanceSort>(['personnelId','perDiem','flightCost','hotelCost','lost','total']);
 
   const section = (key: 'approved' | 'pending', title: string, list: FinanceRow[]) => {
     const sum = totals(list);
+    const figure = 'flex flex-col gap-0.5 border-s-[3px] border-primary ps-3';
     return (
       <section className="flex flex-col gap-3" data-testid={`finance-section-${key}`}>
         <h2 className="text-sm font-semibold">{title}</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Card className="gap-1 px-4 py-3">
+        <div className="flex flex-wrap gap-x-10 gap-y-3">
+          <div className={figure}>
             <span className="text-xs text-muted-foreground">{key === 'approved' ? t('count') : t('pendingCount')}</span>
             <span className="text-xl font-semibold tabular-nums" data-testid={`finance-${key}-count`}>
               {num(list.length)}
             </span>
-          </Card>
-          <Card className="gap-1 px-4 py-3">
+          </div>
+          <div className={figure}>
             <span className="text-xs text-muted-foreground">{t('totalPerDiem')}</span>
             <span className="text-xl font-semibold tabular-nums" data-testid={`finance-${key}-total`}>
               {formatRials(sum.perDiem, locale)} <span className="text-sm font-normal">{t('rials')}</span>
             </span>
-          </Card>
-          <Card className="gap-1 px-4 py-3">
+          </div>
+          <div className={figure}>
             <span className="text-xs text-muted-foreground">{t('grandTotal')}</span>
             <span className="text-xl font-semibold tabular-nums" data-testid={`finance-${key}-grand-total`}>
               {formatRials(sum.grand, locale)} <span className="text-sm font-normal">{t('rials')}</span>
             </span>
-          </Card>
+          </div>
         </div>
         {list.length === 0 ? (
           <p className="text-sm text-muted-foreground" data-testid={`finance-${key}-empty`}>{t('sectionEmpty')}</p>
         ) : (
-          <Card className="overflow-x-auto p-0">
-            <table className="w-full min-w-[1080px] text-sm">
-              <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+          <>
+          {/* Phones: stacked rows; the 16-column table is desktop-only. */}
+          <ul className="-mx-4 divide-y divide-border border-y border-border md:hidden" data-testid={`finance-${key}-cards`}>
+            {list.map((r) => {
+              const costs: [string, number | null][] = [
+                [t('perDiem'), r.per_diem_rials],
+                [t('flightCost'), r.flight_cost_rials],
+                [t('hotelCost'), r.hotel_cost_rials],
+                [t('lost'), r.lost_rials],
+              ];
+              const shownCosts = costs.filter(([, v]) => v !== null && v !== 0);
+              return (
+                <li key={r.id} className="flex flex-col gap-1 px-4 py-3 text-sm">
+                  <div className="flex items-baseline justify-between gap-3 font-semibold">
+                    <bdi className="min-w-0 truncate">{r.employee_name}</bdi>
+                    <span className="shrink-0 tabular-nums">
+                      {formatRials(tripTotal(r), locale)} <span className="text-xs font-normal text-muted-foreground">{t('rials')}</span>
+                    </span>
+                  </div>
+                  <div className="text-[13px] text-muted-foreground">
+                    {r.personnel_no ? `${displayPersonnelNo(r.personnel_no, (n) => formatNumber(n, locale, { useGrouping: false }))} · ` : ''}
+                    {dept(r)}
+                  </div>
+                  <div className="text-[13px]">
+                    {[typeName(r), r.errand_location, dates(r)].filter(Boolean).join(' · ')}
+                  </div>
+                  {r.status !== 'approved' || bookingOpen(r) || r.corrected_at ? (
+                    <div className="text-xs text-muted-foreground">
+                      {[statusText(r), r.status === 'pending' ? waitingOn(r) : null, r.corrected_at ? t('corrected') : null].filter(Boolean).join(' · ')}
+                    </div>
+                  ) : null}
+                  {shownCosts.length > 0 && (
+                    <dl className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                      {shownCosts.map(([label, v]) => (
+                        <div key={label}>
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd className="tabular-nums">{amount(v)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  <div className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
+                    <span className="tabular-nums">{formatSerialLocalized(r.serial_year, r.serial_seq, locale)}</span>
+                    {r.can_print && (
+                      <Link href={`/${locale}/print/request/${r.id}`} target="_blank" rel="noopener" className="py-1 text-primary hover:underline">{t('viewForm')}</Link>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto border-b border-border md:block">
+            <table className="data-table w-full text-sm [&_td]:whitespace-nowrap">
+              <thead>
                 <tr className="text-start">
-                  <th className="px-3 py-2 text-start font-medium">{t('trackingNo')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('employee')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('type')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('dates')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('duration')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('location')}</th>
-                  <th className="px-3 py-2 text-end font-medium">{t('perDiem')}</th>
-                  <th className="px-3 py-2 text-start font-medium">{t('transport')}</th>
-                  <th className="px-3 py-2 text-end font-medium">{t('flightCost')}</th>
-                  <th className="px-3 py-2 text-end font-medium">{t('hotelCost')}</th>
-                  <th className="px-3 py-2 text-end font-medium">{t('lost')}</th>
-                  <th className="px-3 py-2 text-end font-medium">{t('total')}</th>
+                  {FINANCE_COLUMNS.map(column => (
+                    <th key={column} className={cn('px-3 py-2', numeric.has(column) ? 'text-end' : 'text-start')} aria-sort={sort === column ? direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+                      <button type="button" className="inline-flex items-center gap-1 whitespace-nowrap rounded focus-visible:outline-2 focus-visible:outline-ring"
+                        data-testid={`finance-sort-${column}`} onClick={() => { setSort(column); setDirection(sort === column && direction === 'asc' ? 'desc' : 'asc'); }}>
+                        {t(column)}
+                        {sort === column ? direction === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : <ArrowUpDown className="size-3 opacity-50" />}
+                      </button>
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-start">{t('viewForm')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {list.map((r) => (
                   <tr key={r.id} data-testid={`finance-row-${r.id}`}>
                     <td className="px-3 py-2 tabular-nums">{formatSerialLocalized(r.serial_year, r.serial_seq, locale)}</td>
-                    <td className="px-3 py-2">
-                      <div className="font-medium">{r.employee_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {r.personnel_no ? `${displayPersonnelNo(r.personnel_no, (n) => formatNumber(n, locale, { useGrouping: false }))} · ` : ''}
-                        {dept(r)}
-                      </div>
-                    </td>
+                    <td className="px-3 py-2 font-medium">{r.first_name || '—'}</td>
+                    <td className="px-3 py-2 font-medium">{r.last_name || '—'}</td>
+                    <td className="px-3 py-2 text-end tabular-nums">{r.personnel_no ? displayPersonnelNo(r.personnel_no, n => formatNumber(n, locale, { useGrouping: false })) : '—'}</td>
+                    <td className="px-3 py-2">{dept(r)}</td>
                     <td className="px-3 py-2">
                       {typeName(r)}
                       {r.corrected_at && (
@@ -281,11 +337,15 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
                     <td className="px-3 py-2 text-end font-medium tabular-nums" data-testid={`finance-row-total-${r.id}`}>
                       {formatRials(tripTotal(r), locale)}
                     </td>
+                    <td className="px-3 py-2">{r.can_print ? (
+                      <Link href={`/${locale}/print/request/${r.id}`} target="_blank" rel="noopener" className="text-primary hover:underline whitespace-nowrap" data-testid={`finance-print-${r.id}`}>{t('viewForm')}</Link>
+                    ) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </Card>
+          </div>
+          </>
         )}
       </section>
     );
@@ -293,34 +353,19 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
 
   return (
     <div className={cn('flex flex-col gap-4', isPending && 'opacity-70')} data-testid="finance-list">
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          aria-label={tReports('from')}
-          value={from}
-          onChange={(e) => applyRange(e.target.value, to < e.target.value ? e.target.value : to)}
-          className={selectClass}
-          data-testid="finance-from"
-        >
-          {months.map((m) => (
-            <option key={m.gregorianStart} value={m.gregorianStart}>
-              {monthLabel(m)}
-            </option>
-          ))}
-        </select>
-        <span className="text-sm text-muted-foreground">{tReports('rangeJoin')}</span>
-        <select
-          aria-label={tReports('to')}
-          value={to}
-          onChange={(e) => applyRange(from, e.target.value)}
-          className={selectClass}
-          data-testid="finance-to"
-        >
-          {months.map((m) => (
-            <option key={m.gregorianEnd} value={m.gregorianEnd}>
-              {monthLabel(m)}
-            </option>
-          ))}
-        </select>
+      {/* One row on desktop, every control the same height; the labels are for
+          screen readers. Phones: Export first and full width, then a 2-column grid. */}
+      <div className="grid grid-cols-2 gap-2 md:flex md:flex-wrap md:items-center">
+        <div className="md:w-36">
+          <Label htmlFor="finance-date-from" className="sr-only">{t('fromDate')}</Label>
+          <PersianDateField id="finance-date-from" testId="finance-from" locale={locale} value={gregorianToPersianDateObject(rangeFrom, locale)}
+            onChange={value => { if (value) applyRange(dateObjectToGregorian(value), rangeTo); }} />
+        </div>
+        <div className="md:w-36">
+          <Label htmlFor="finance-date-to" className="sr-only">{t('toDate')}</Label>
+          <PersianDateField id="finance-date-to" testId="finance-to" locale={locale} value={gregorianToPersianDateObject(rangeTo, locale)}
+            minDate={gregorianToPersianDateObject(rangeFrom, locale)} onChange={value => { if (value) applyRange(rangeFrom, dateObjectToGregorian(value)); }} />
+        </div>
         <select
           aria-label={t('kind')}
           value={unit}
@@ -332,10 +377,13 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
           <option value="day">{t('dailyErrand')}</option>
           <option value="hour">{t('hourlyErrand')}</option>
         </select>
+        <select aria-label={t('department')} value={department} onChange={e => setDepartment(e.target.value)} className={selectClass} data-testid="finance-department">
+          <option value="all">{t('allDepartments')}</option>
+          {departments.map(([id,name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+        <Input aria-label={t('search')} placeholder={t('search')} value={query} onChange={e => setQuery(e.target.value)} className="col-span-2 bg-card md:min-w-56 md:flex-1" data-testid="finance-search" />
         <Button
-          variant="outline"
-          size="sm"
-          className="ms-auto"
+          className="col-span-2 max-md:order-first max-md:h-11"
           onClick={exportCsv}
           disabled={shown.length === 0}
           data-testid="finance-export"
@@ -345,6 +393,7 @@ export function FinanceList({ rows, months, from, to, locale, hoursPerDay }: Pro
         </Button>
       </div>
 
+      {rangeError && <p role="alert" className="text-sm text-destructive">{t('invalidRange')}</p>}
       {shown.length === 0 ? (
         <EmptyState message={t('empty')} />
       ) : (

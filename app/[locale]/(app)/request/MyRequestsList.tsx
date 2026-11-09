@@ -88,7 +88,7 @@ export function MyRequestsList({
                     <div className="flex items-center gap-2">
                       {req.kind === 'errand' && (
                         <span
-                          className="inline-flex shrink-0 items-center rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
+                          className="inline-flex shrink-0 items-center rounded-sm border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
                           data-testid={`errand-badge-${req.id}`}
                         >
                           {labels.errandBadge}

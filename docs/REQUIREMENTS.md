@@ -405,6 +405,7 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-87** ☐ **Unified Approvals and Finance usability.** Approvals combines the existing queue/history with authorized archive review, search/status/type filters, profile photos and personnel IDs. Preserve HR controls and approval authority; redirect old archive URLs and rename its Leave permission label. Finance uses exact Persian calendar dates, split name/ID/department columns, name/ID search, department filtering and sortable data columns; totals/CSV follow filters. Finance and Employees desktop tables use 80% of the area beside the sidebar without widening other content. Finance's separate form permission allows complete eligible work-errand forms (reason/signatures included), defaults off outside admin, and grants no leave or approval access. *(2026-11-08; approved spec `2026-11-08-approvals-finance-layout-design.md`; implemented locally, not deployed.)*
 - **FR-86** ☐ **View as.** The admin alone (not a permission, not delegable) opens the app as any active
   person of the company, to check what that person sees after a fix: their nav, pages, data and permission
   outcomes, enforced by the same RLS and RPCs. Admin panel › **View as**: search by name or personnel number
