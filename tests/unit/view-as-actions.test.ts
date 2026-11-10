@@ -22,6 +22,7 @@ const roleName = (r: string) => `role:${r}`;
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getViewAs.mockResolvedValue(null);
+  mocks.requireCaller.mockResolvedValue({ ok: true });
 });
 
 describe('getViewAsPeople', () => {
@@ -39,6 +40,15 @@ describe('startViewAs', () => {
     const r = await startViewAs('t1');
     expect(r.ok).toBe(false);
     expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it('refuses a non-admin before opening a session', async () => {
+    mocks.requireCaller.mockResolvedValue({ ok: false, error: 'admin role required' });
+    const r = await startViewAs('t1');
+    expect(r).toEqual({ ok: false, error: 'admin role required' });
+    expect(mocks.requireCaller).toHaveBeenCalledWith({ anyOf: ['admin'] });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.set).not.toHaveBeenCalled();
   });
 
   it('sets the cookie with the agreed attributes', async () => {

@@ -13,10 +13,18 @@ import { VIEW_AS_COOKIE, VIEW_AS_COOKIE_ATTRS } from '@/lib/supabase/constants';
 
 const adminErr = (raw: string) => dbErr(raw, { locale: ADMIN_LOCALE });
 
-/** End the view: close the session in the database, then drop the cookie either way. */
+/**
+ * End the view: close the session in the database, then drop the cookie either way.
+ * Signed-in check only: while viewing, the caller resolves to the target, so an
+ * admin-role check here would stop the admin from exiting. The RPC itself acts on
+ * the real admin's own sessions.
+ */
 export async function endViewAs(): Promise<void> {
-  const supabase = await createRealClient();
-  await supabase.rpc('app_view_as_end');
+  const c = await requireCaller();
+  if (c.ok) {
+    const supabase = await createRealClient();
+    await supabase.rpc('app_view_as_end');
+  }
   (await cookies()).delete({ name: VIEW_AS_COOKIE, path: VIEW_AS_COOKIE_ATTRS.path });
 }
 
@@ -43,6 +51,9 @@ export async function getViewAsPeople(): Promise<{ ok: true; people: PersonSearc
 export async function startViewAs(targetId: string): Promise<{ ok: true } | DbErrorResult> {
   // Views do not nest: exit the current one first.
   if ((await getViewAs()) !== null) return adminErr('view as unavailable');
+  // Not viewing, so the caller is the real signed-in user. The RPC checks again.
+  const c = await requireCaller({ anyOf: ['admin'] });
+  if (!c.ok) return c;
   const supabase = await createRealClient();
   const { data, error } = await supabase.rpc('app_view_as_start', { p_target: targetId });
   if (error) return adminErr(error.message);
