@@ -23,6 +23,12 @@ export type PermNote = { kind: 'raised' | 'lowered'; by: PermKey };
 
 const BULK_CHOICES = ['allow', 'read', 'none'] as const;
 
+/** Action items drawn as a plain Yes / No switch (no Read segment to show disabled). */
+const YES_NO_KEYS: ReadonlySet<PermKey> = new Set<PermKey>([
+  'approval_delegate', 'travel_booking', 'finance_forms',
+  'edit_leave_daily', 'edit_leave_hourly', 'edit_errand_daily', 'edit_errand_hourly', 'edit_requests_own',
+]);
+
 export function PermissionSection({
   section,
   perms,
@@ -38,7 +44,7 @@ export function PermissionSection({
   notes: Partial<Record<PermKey, PermNote>>;
   t: {
     title: string;
-    /** Labels for all 16 keys: a note can name an item from another section. */
+    /** Labels for every key: a note can name an item from another section. */
     items: Record<PermKey, { label: string; description: string }>;
     levels: { edit: string; read: string; none: string; noRead: string; noEdit: string; yes: string; no: string };
     summary: Record<SectionChoice, string>;
@@ -129,7 +135,7 @@ export function PermissionSection({
                   </div>
                 )}
               </div>
-              {k === 'approval_delegate' || k === 'travel_booking' || k === 'finance_forms' ? (
+              {YES_NO_KEYS.has(k) ? (
                 <ToggleGroup.Root
                   type="single"
                   value={level === toggleLevel ? toggleLevel : 'none'}

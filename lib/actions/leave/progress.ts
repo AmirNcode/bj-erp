@@ -43,13 +43,14 @@ export async function getRequestProgress(
   const context = data as unknown as ApprovalContextRow;
   // FR-70: a daily errand may carry trip extensions; they follow the steps.
   let extensions: RequestExtension[] = [];
-  let corrections: RequestCorrection[] = [];
   if (context.kind === 'errand' && context.unit === 'day') {
     const ext = await c.supabase.rpc('request_errand_extensions', { p_id: requestId });
     if (!ext.error) extensions = (ext.data ?? []) as RequestExtension[];
-    const fixes = await c.supabase.rpc('request_trip_corrections', { p_id: requestId });
-    if (!fixes.error) corrections = fixes.data ?? [];
   }
+  // FR-91: any request type can carry edits (a trip also its FR-84 corrections).
+  let corrections: RequestCorrection[] = [];
+  const fixes = await c.supabase.rpc('request_trip_corrections', { p_id: requestId });
+  if (!fixes.error) corrections = fixes.data ?? [];
   return {
     ok: true,
     extensions,

@@ -9,6 +9,31 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Replacement on paper only (FR-90) and Edit requests (FR-91) — not deployed
+
+- **Replacement (جانشین) is a name on the paper form, nothing more.** Naming a replacement no longer gives anyone approval authority, the CEO included: requests go to the original approver also while they are away. Saved delegates (Manage › Approval steps) are unchanged. The replacement's sign-off, Home card, calendar entry and paper box stay; the temporary-authority notices and CEO attestation on the request forms are gone. Any temporary grants are revoked by the migration.
+- **Edit approved requests, per request type.** Five new toggles in Settings › Roles, section "Edit requests": edit daily leave, edit hourly leave, edit daily work trip, edit hourly work errand, and edit own requests (off for every role by default). The HR role gets the four type toggles, so HR loses nothing; the old HR-only trip correction is replaced by them.
+- **Edit button on Manage › Requests** (was Correct): change dates, times, day part, or switch daily and hourly within leave or within work trips (needs both toggles); a daily trip also takes a per diem. Reason and signature are required. Same limits as a new request, but an edit cannot make a balance leave unpaid (a leave of an unpaid type can be lengthened). The leave balance is corrected with a ledger row that Home's "used" counts. A trip made hourly loses its per diem and is refused once procurement started booking or the trip was extended. An hourly errand can be moved to any time of day.
+- **Records:** all signatures stay valid; the printed form shows the signed values, then one line per edit (editor-neutral wording). The requester and approvers see the edits on the request. No SMS.
+- **Edit on My requests:** someone whose role has "edit own requests" plus the toggle of the request's type sees Edit on their own approved requests on the Request page.
+- **Approval steps page has a Save button.** Box names, order, Active and "Require the order to be followed" are no longer saved as you change them; Save (greyed out until something changed) writes them together. Add and Remove still act at once.
+- **Fix:** the arrow of the from/to time lists (hourly requests, Edit dialog) sat on top of the time in Farsi; it is on the right again.
+
+- **Calendar:** the List/Month toggle and the list view are gone; the page always shows the month grid with the selected day's requests below it.
+
+### Form signature boxes come from the approval steps (FR-89) — not deployed
+
+- **Approval steps page:** each step now has a **signature box name** (typed when adding a step, editable on the row later). Order, Active and Remove sit in fixed columns that no longer move with the name's length.
+- **Printed forms:** after the requester (and, on daily leave, the replacement) the signature row is exactly the active approval steps, in step order, up to four per row, each titled with its box name and showing the signer's name, signature and time. No "Step N" line, no Security box, no separate "Additional approvals" strip.
+- A box prints empty until signed; a step the request skips (e.g. department manager = direct manager) prints **"Not required"**. Daily leave without a replacement prints **"No replacement selected"**. Each signature keeps the box name it was signed under, so renaming or removing a step later doesn't change old forms. Renaming a box doesn't flag pending requests as "configuration changed".
+- The Replacement box shows the replacement's own signature once they sign (FR-88), or "Declined".
+
+### The replacement signs in the app (FR-88) — not deployed
+
+- A request that names a replacement asks them to sign: Home shows "Sign as replacement", My requests lists "You are the replacement", and the Calendar shows the requests they cover. Sign uses the same pad and consent box as requesters and approvers; it can happen at any time and never holds up an approval.
+- The replacement can decline with a note. The request stays as it is and goes back to the requester (Home + My requests), who picks someone else or continues without a replacement.
+- Approvals cards show whether the replacement signed. The printed Replacement box shows their signature.
+
 ### Blueprint theme — not deployed
 
 - **New look across the app:** near-square corners (3px), white page, no shadows, hairline borders. Side panel and the new phone top bar use the logo's blue (`#20409a`); buttons keep the brand navy.

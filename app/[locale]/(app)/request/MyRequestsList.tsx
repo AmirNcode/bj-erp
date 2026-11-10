@@ -10,6 +10,12 @@ import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
 import { RequestDetails, type TravelNote } from './_components/RequestDetails';
+import { ReplacementRequestCard } from './_components/ReplacementSignoff';
+import type { ReplacementRequest } from '@/lib/actions/leave/replacement';
+import { isOpenRequest, replacementCanAnswer, requesterMustChooseReplacement } from '@/lib/leave/replacementSignoff';
+import { editableUnits, type EditKey } from '@/lib/leave/requestEdit';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
+import { EditRequestDialog } from '../manage/requests/EditRequestDialog';
 
 type Props = {
   requests: LeaveRequestWithType[];
@@ -20,7 +26,17 @@ type Props = {
   showAll?: boolean;
   /** FR-70: procurement's transport and note on the caller's booked trips. */
   travelBookings?: Record<string, TravelNote>;
+  /** FR-88: requests that name the caller as replacement (open ones are listed first). */
+  coverRequests?: ReplacementRequest[];
+  /** FR-91: the caller, and the edit permissions they hold. Edit shows on an approved
+   *  request only with `edit_requests_own` plus the key of its type (admin: all five). */
+  viewerId?: string;
+  editKeys?: readonly EditKey[];
+  /** Company working hours, for the hourly time choices of the Edit dialog. */
+  workWindow?: { start: string; end: string };
 };
+
+const DEFAULT_WORK_WINDOW = { start: WORK_SETTINGS_FALLBACK.workStart, end: WORK_SETTINGS_FALLBACK.workEnd };
 
 export function MyRequestsList({
   requests,
@@ -28,9 +44,14 @@ export function MyRequestsList({
   hoursPerDay,
   showAll = false,
   travelBookings = {},
+  coverRequests = [],
+  viewerId = '',
+  editKeys = [],
+  workWindow = DEFAULT_WORK_WINDOW,
 }: Props) {
   const labels = useRequestLabels();
   const t = useTranslations('request');
+  const tRepl = useTranslations('replacement');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -45,7 +66,15 @@ export function MyRequestsList({
   // Pending requests are what people come to check; decided ones wait behind
   // "show previous". With nothing pending, opening the section shows them all.
   const pendingCount = localRequests.filter((r) => r.status === 'pending').length;
-  const [open] = useState(() => showAll || requests.some((r) => r.status === 'pending'));
+  const openCover = coverRequests.filter((r) => isOpenRequest(r.status));
+  const [open] = useState(
+    () =>
+      showAll ||
+      requests.some((r) => r.status === 'pending') ||
+      // FR-88: something waits on the caller as replacement, or as requester after a decline.
+      openCover.some((r) => replacementCanAnswer({ status: r.status, signoffStatus: r.signoff_status })) ||
+      requests.some((r) => requesterMustChooseReplacement({ status: r.status, signoffStatus: r.replacement_signoff_status }))
+  );
   const [previousShown, setPreviousShown] = useState(showAll);
   const showEverything = previousShown || pendingCount === 0;
   const visible = showEverything
@@ -70,11 +99,23 @@ export function MyRequestsList({
         </div>
       )}
 
+      {openCover.length > 0 && (
+        <div className="mb-4 space-y-3" data-testid="my-cover-requests">
+          <h3 className="text-sm font-semibold">{tRepl('asReplacementTitle')}</h3>
+          {openCover.map((req) => (
+            <ReplacementRequestCard key={req.request_id} req={req} locale={locale} hoursPerDay={hoursPerDay} />
+          ))}
+        </div>
+      )}
+
       {localRequests.length === 0 ? (
         <p className="text-muted-foreground text-sm">{labels.noRequests}</p>
       ) : (
         <div className="space-y-3">
           {visible.map((req) => {
+            // Every row here is the caller's own request.
+            const editRow = { ...req, employee_id: viewerId };
+            const editUnits = viewerId ? editableUnits(editRow, { id: viewerId, keys: editKeys }) : [];
             return (
               <Card
                 key={req.id}
@@ -129,6 +170,10 @@ export function MyRequestsList({
                         labels={statusLabels}
                       />
                     </span>
+
+                    {editUnits.length > 0 && (
+                      <EditRequestDialog request={editRow} units={editUnits} locale={locale} workWindow={workWindow} />
+                    )}
 
                     <RequestCancelButton
                       requestId={req.id}

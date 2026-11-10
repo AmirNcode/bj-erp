@@ -233,6 +233,16 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `team_leave_calendar`, and has no client mutation/deletion path. The approver PNG is deliberately
   omitted from audit JSON; the audit row records only authorization and its timestamp.
 
+### Replacement sign-off (FR-88, unreleased)
+- `leave_request_replacement_signoffs` SELECT: the named replacement (active) or anyone who may read the
+  request (`app_can_read_approval_request`). No client writes; `app_replacement_sign` /
+  `app_replacement_decline` (the named replacement only) and `app_change_replacement` (the requester,
+  only after a decline) are SECURITY DEFINER, take `approval_lock(company)` then the employee lock.
+- The replacement gets **no** `leave_requests` base row (FR-25: the reason stays private), no
+  signatures RPC and no ledger: `my_replacement_requests()` returns explicit columns, and
+  `team_leave_calendar` shows them the request like a teammate's.
+- Neither answer touches approval: no gate on `leave_request_approvals`, decline does not change status.
+
 ### HR reports (FR-37)
 `/manage/reports` adds **no policy and no SECURITY DEFINER function**. Every report is a plain
 SELECT over `profiles`, `leave_ledger`, `leave_types`, `leave_requests` and
@@ -360,18 +370,14 @@ or print read through the same request scope. A named approver does not need bro
   A CEO delegate must already report directly to the explicitly designated CEO. Authorizing CEO
   automation additionally requires that CEO naturally owns applicable, non-exempt steps for the
   chosen delegate for both leave and errand. No role name implies CEO/HR-head identity.
-- **Authority scope:** saved/temporary grants confer only the principal's applicable approval
+- **Authority scope:** saved grants confer only the principal's applicable approval
   steps. The principal keeps authority; no personnel edits, role grants, extra profile reads,
   multi-hop delegation or delegated self-signing follow. `private.is_manager_of` and FR-55 D4/D5
-  remain unchanged. Eligible cross-department candidates join the leave Replacement picker;
-  ordinary department colleagues remain work cover only. No Replacement leaves `replacement_id`
-  null and preserves saved approval coverage. Errands add no replacement field.
-- **Temporary authority:** selected eligible Replacement takes precedence only during the
-  approved absence's snapshotted Asia/Tehran interval, exclusive end; full-day calendar bounds,
-  exact hourly times, or AM/PM halves of configured work hours. Pending sources cannot grant
-  authority to approve themselves. Cancellation ends temporary authority; eligible saved default
-  resumes afterward. Preview refresh is required after input/settings/authority changes.
-- **CEO/HR policy:** saved and temporary CEO automatic authority each need explicit attestation;
+  remain unchanged. Eligible cross-department candidates join the leave Replacement picker, but
+  **a Replacement confers no approval authority (FR-90, 2026-11-10)**: only saved delegates do, and the
+  original approver keeps authority while away. No Replacement leaves `replacement_id` null.
+  Errands add no replacement field. The preview's `temporary*` keys are always empty.
+- **CEO/HR policy:** saved CEO automatic authority needs explicit attestation;
   the requester's own responsibility consent is separate. When the effective, attested CEO delegate
   submits their own request (with consent and PNG), the exact CEO step(s) are approved automatically
   at submission, even before earlier HR review; other steps still apply. Every other request needing
@@ -398,12 +404,17 @@ retain issued credentials; password reset does not revoke existing sessions. Suc
 impersonate a principal/delegate despite valid SQL authority checks. This remains disclosed residual
 risk, not a new activation gate. All password resets remain admin-only.
 
-### Trip corrections and quick add (FR-84, FR-85, unreleased)
+### Request edits and quick add (FR-91 replacing FR-84, FR-85, unreleased)
 
-- **`app_correct_trip`:** `private.can_correct_trip(caller, request)`: `is_travel_hr` (admin, `hr` role, delegate
-  of an `hr` holder; never the traveller) and a delegate must hold it through an `hr` holder who is not the
-  traveller. Stricter than `is_travel_hr`, which lets a delegate act on the holder's own trip. No `can_act_on`,
-  as for the other FR-70 actions. Needs a signature; the bytes stay out of `audit_log`.
+- **`app_edit_request` / `app_correct_trip`:** gate `private.can_edit_request(caller, request, new_unit)`:
+  active, same company, and the admin, or the edit key of the request's current type **and** of the
+  target type (`edit_leave_daily|edit_leave_hourly|edit_errand_daily|edit_errand_hourly`; a daily/hourly
+  switch needs both) and, on the caller's own request, `edit_requests_own`. Delegates no longer inherit it
+  (the FR-84 `can_correct_trip` and its HR-holder delegate rule are gone); a delegate edits only through
+  their own role. Only approved requests. No `can_act_on`: an editor edits every other employee, the admin included
+  (owner decision 2026-11-10; `cancel_leave_request` still excludes the admin's requests). Needs a signature; the bytes stay out of
+  `audit_log`. `app_correct_trip` is a wrapper kept for the old app under the same gate;
+  `app_my_request_edit_types()` returns the caller's five keys for the Edit button.
 - **`request_corrections`:** no client access. `request_trip_corrections(id)` follows
   `can_read_approval_request`.
 - **`app_add_leave_balance`:** the gates of `set_leave_balance`: admin or `leave_balances` edit, never own
@@ -528,6 +539,11 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 | | `reports` | R | `people`, `leave_balances`, `leave_requests` |
 | Finance | `finance` | R | — |
 | Procurement | `travel_booking` | E (Yes/No) | — |
+| Edit requests (FR-91, unreleased) | `edit_leave_daily` | E | `leave_requests` |
+| | `edit_leave_hourly` | E | `leave_requests` |
+| | `edit_errand_daily` | E | `leave_requests` |
+| | `edit_errand_hourly` | E | `leave_requests` |
+| | `edit_requests_own` | E | `leave_requests` |
 | Approval chain | `approval_steps` | R/E | `people` |
 | | `approval_delegate` (unreleased) | E, Yes/No | — |
 | Settings | `work_settings` | R/E | — |
@@ -537,13 +553,13 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 
 | Preset | Holds |
 |---|---|
-| **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `reports`, `finance` at read |
+| **HR** | `people`, `people_create`, `role_manager`, `personal_info`, `clearance`, `departments`, `leave_balances`, `leave_accrual`, `special_leave`, `approval_steps`, `work_settings`, `holidays` at edit; `leave_requests`, `calendar`, `reports`, `finance` at read; the four `edit_leave_*` / `edit_errand_*` keys at edit (FR-91) |
 | **Security** | `people`, `leave_balances`, `leave_requests`, `calendar` at read |
 | **Finance** | `clearance`, `finance` at read |
 | **Procurement** (FR-70) | `travel_booking` at edit |
 
-`personal_info_own`, `role_assign` and unreleased `approval_delegate` are on no preset. The released
-catalog has 19 items; delegation adds the twentieth. `passwords` was
+`personal_info_own`, `role_assign`, unreleased `approval_delegate` and `edit_requests_own` are on no preset. The released
+catalog has 19 items; delegation adds the twentieth and FR-91 five more (25). `passwords` was
 removed by `20261013200007` (password resets are admin-only; a stored row counts for nothing). `admin`, `manager` and
 `employee` carry no permission rows (admin holds every item implicitly; manager has the hard-wired
 company-wide read through `reads_*`). Presets keep their name and cannot be deleted; permissions are

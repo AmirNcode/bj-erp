@@ -135,6 +135,8 @@ export type PendingApproval = {
   replacement_name: string | null;
   /** True when the named cover has leave overlapping this request (spec §2.1). */
   replacement_conflict: boolean;
+  /** FR-88: whether the replacement signed (null = nothing to sign). Never blocks approval. */
+  replacement_signoff_status?: 'pending' | 'signed' | 'declined' | null;
   serial_year: number;
   serial_seq: number;
   signature_consent_at: string | null;
@@ -247,6 +249,7 @@ export async function getPendingApprovals(includeReview = false): Promise<
       reason: row.reason,
       replacement_name: row.replacement_name,
       replacement_conflict: row.replacement_conflict,
+      replacement_signoff_status: row.replacement_signoff_status ?? null,
       serial_year: row.serial_year, serial_seq: row.serial_seq,
       signature_consent_at: row.signature_consent_at,
       employee_department_manager_id: row.employee_department_manager_id,

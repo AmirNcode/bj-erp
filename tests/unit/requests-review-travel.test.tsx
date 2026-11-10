@@ -4,9 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import en from '@/messages/en.json';
 import { RequestsReview } from '@/app/[locale]/(app)/manage/requests/RequestsReview';
 import type { ReviewRequestRow } from '@/lib/actions/leave/review';
+import type { EditKey } from '@/lib/leave/requestEdit';
 
 vi.mock('@/app/[locale]/(app)/manage/requests/TravelTickToggle', () => ({ TravelTickToggle: ({ requestId }: { requestId: string }) => <span data-testid={`tick-${requestId}`} /> }));
-vi.mock('@/app/[locale]/(app)/manage/requests/CorrectTripDialog', () => ({ CorrectTripDialog: ({ trip }: { trip: { id: string } }) => <span data-testid={`correct-${trip.id}`} /> }));
+vi.mock('@/app/[locale]/(app)/manage/requests/EditRequestDialog', () => ({
+  EditRequestDialog: ({ request, units }: { request: { id: string }; units: string[] }) => <span data-testid={`edit-${request.id}`} data-units={units.join(',')} />,
+}));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({ RequestCancelButton: ({ requestId }: { requestId: string }) => <span data-testid={`cancel-${requestId}`} /> }));
 afterEach(cleanup);
 
@@ -18,22 +21,44 @@ const row = (id: string, over: Partial<ReviewRequestRow> = {}): ReviewRequestRow
   created_at: '2026-10-01T00:00:00Z', ...over,
 });
 
-describe('Requests page: Correct (FR-84)', () => {
-  const page = (ticks: Record<string, { started: boolean }> | null) =>
+describe('Requests page: Edit (FR-91)', () => {
+  const page = (rows: ReviewRequestRow[], editKeys?: EditKey[], viewerId = 'hr') =>
     render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <RequestsReview requests={[row('a')]} locale="en" hoursPerDay={8} travelTicks={ticks} viewerId="hr" />
+        <RequestsReview requests={rows} locale="en" hoursPerDay={8} viewerId={viewerId} editKeys={editKeys} />
       </NextIntlClientProvider>
     );
 
-  it('offers Correct to HR', () => {
-    page({});
-    expect(screen.getByTestId('correct-a')).toBeTruthy();
+  it('offers Edit on an approved daily leave to a holder of edit_leave_daily', () => {
+    page([row('a', { kind: 'leave' })], ['edit_leave_daily']);
+    expect(screen.getByTestId('edit-a').getAttribute('data-units')).toBe('day');
   });
 
-  it('offers nothing to a viewer who is not HR', () => {
-    page(null);
-    expect(screen.queryByTestId('correct-a')).toBeNull();
+  it('offers the other unit only to a holder of both keys', () => {
+    page([row('a', { kind: 'leave' })], ['edit_leave_daily', 'edit_leave_hourly']);
+    expect(screen.getByTestId('edit-a').getAttribute('data-units')).toBe('day,hour');
+  });
+
+  it('offers nothing with no keys, or when the prop is omitted', () => {
+    page([row('a', { kind: 'leave' })], []);
+    expect(screen.queryByTestId('edit-a')).toBeNull();
+    cleanup();
+    page([row('a', { kind: 'leave' })]);
+    expect(screen.queryByTestId('edit-a')).toBeNull();
+  });
+
+  it('does not offer a leave key on a trip, nor Edit on a pending row', () => {
+    page([row('trip'), row('p', { kind: 'leave', status: 'pending' })], ['edit_leave_daily']);
+    expect(screen.queryByTestId('edit-trip')).toBeNull();
+    expect(screen.queryByTestId('edit-p')).toBeNull();
+  });
+
+  it('the viewer\'s own request needs edit_requests_own too', () => {
+    page([row('own', { kind: 'leave', employee_id: 'hr' })], ['edit_leave_daily']);
+    expect(screen.queryByTestId('edit-own')).toBeNull();
+    cleanup();
+    page([row('own', { kind: 'leave', employee_id: 'hr' })], ['edit_leave_daily', 'edit_requests_own']);
+    expect(screen.getByTestId('edit-own')).toBeTruthy();
   });
 });
 

@@ -290,7 +290,16 @@ export type ApprovalStepRow = {
    * say so rather than leaving requests silently pending.
    */
   approverInactive: boolean;
+  /** Title of this step's box on the printed form (spec 2026-11-09). */
+  boxLabel: string | null;
 };
+
+/** Trim a box title; null when blank. Over 60 characters is refused. */
+function normalizeBoxLabel(raw: string | null | undefined): string | null | 'too-long' {
+  const label = (raw ?? '').trim();
+  if (!label) return null;
+  return label.length > 60 ? 'too-long' : label;
+}
 
 export async function getApprovalSteps(): Promise<
   | { ok: true; steps: ApprovalStepRow[]; orderEnforced: boolean }
@@ -302,7 +311,7 @@ export async function getApprovalSteps(): Promise<
     c.supabase
       .from('approval_steps')
       .select(
-        'id, role, step_order, applies_to, active, approver_id, manager_scope, approver:profiles!approval_steps_approver_id_fkey(full_name, personnel_no, active)'
+        'id, role, step_order, applies_to, active, approver_id, manager_scope, box_label, approver:profiles!approval_steps_approver_id_fkey(full_name, personnel_no, active)'
       )
       .eq('company_id', c.companyId)
       .order('step_order'),
@@ -330,23 +339,31 @@ export async function getApprovalSteps(): Promise<
         approverName: approver?.full_name ?? null,
         approverPersonnelNo: approver?.personnel_no ?? null,
         approverInactive: !!s.approver_id && approver?.active === false,
+        boxLabel: s.box_label ?? null,
       };
     }),
     orderEnforced: ws?.approval_order_enforced ?? false,
   };
 }
 
-/** Activate/deactivate a step, or move it in the order. */
+/** Activate/deactivate a step, move it in the order, or rename its box. */
 export async function updateApprovalStep(input: {
   id: string;
   active?: boolean;
   stepOrder?: number;
+  boxLabel?: string;
 }): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
 
-  const patch: { active?: boolean; step_order?: number } = {};
+  const patch: { active?: boolean; step_order?: number; box_label?: string } = {};
   if (typeof input.active === 'boolean') patch.active = input.active;
+  if (typeof input.boxLabel === 'string') {
+    const label = normalizeBoxLabel(input.boxLabel);
+    if (label === null) return dbErr('signature box name is required');
+    if (label === 'too-long') return dbErr('signature box name must be at most 60 characters');
+    patch.box_label = label;
+  }
   if (typeof input.stepOrder === 'number') {
     if (!Number.isInteger(input.stepOrder) || input.stepOrder < 1 || input.stepOrder > 99) {
       return dbErr('approval step order must be between 1 and 99');
@@ -381,6 +398,7 @@ export async function createApprovalStep(input: {
   approverId?: string | null;
   stepOrder?: number;
   appliesTo?: ('leave' | 'errand')[];
+  boxLabel: string;
 }): Promise<{ ok: true; id: string } | DbErrorResult> {
   const c = await requireCaller({ perm: ['approval_steps', 'edit'], company: true });
   if (!c.ok) return c;
@@ -395,6 +413,9 @@ export async function createApprovalStep(input: {
   // Mirrors the CHECK constraint: "anyone who is an employee may approve" is
   // every colleague in the company, which is not an approval step.
   if (role === 'employee' && !approverId) return dbErr('this step must name a person');
+  const boxLabel = normalizeBoxLabel(input.boxLabel);
+  if (boxLabel === null) return dbErr('signature box name is required');
+  if (boxLabel === 'too-long') return dbErr('signature box name must be at most 60 characters');
 
   const stepOrder = input.stepOrder ?? 1;
   if (!Number.isInteger(stepOrder) || stepOrder < 1 || stepOrder > 99) {
@@ -411,6 +432,7 @@ export async function createApprovalStep(input: {
       step_order: stepOrder,
       applies_to: [...appliesTo],
       active: true,
+      box_label: boxLabel,
     })
     .select('id');
   if (error) return dbErr(error.message);

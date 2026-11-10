@@ -23,6 +23,7 @@ import { ApprovalQueue } from './ApprovalQueue';
 import { TripExtensions } from './TripExtensions';
 import { ApprovalHistory } from './ApprovalHistory';
 import { getTravelTicks, listExtendableTrips, listPendingExtensions } from '@/lib/actions/travel';
+import { getRequestEditKeys } from '@/lib/actions/leave/edit';
 import { NewRequestsBanner } from '../../_components/NewRequestsBanner';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { ListSkeleton } from '@/components/Skeletons';
@@ -38,18 +39,21 @@ async function ApprovalsData({ locale, historyPage, filters, viewerId, canReview
 
   // Durations are stored in minutes; rendering them as days and hours needs the
   // company day length.
-  const [result, workSettingsRes, extendableTrips, pendingExtensions, travelTicks] = await Promise.all([
+  const [result, workSettingsRes, extendableTrips, pendingExtensions, travelTicks, editKeys] = await Promise.all([
     getPendingApprovals(canReview),
     getWorkSettings(),
     listExtendableTrips(),
     listPendingExtensions(),
     getTravelTicks(),
+    getRequestEditKeys(),
   ]);
   const requests = result.ok ? result.requests : [];
   const loadError = result.ok ? null : result.error;
   const hoursPerDay = workSettingsRes.ok
     ? workSettingsRes.settings.hoursPerDay
     : WORK_SETTINGS_FALLBACK.hoursPerDay;
+  const workSettings = workSettingsRes.ok ? workSettingsRes.settings : WORK_SETTINGS_FALLBACK;
+  const workWindow = { start: workSettings.workStart, end: workSettings.workEnd };
 
   return (
     <>
@@ -69,7 +73,7 @@ async function ApprovalsData({ locale, historyPage, filters, viewerId, canReview
       />
       <TripExtensions trips={extendableTrips} pending={pendingExtensions} locale={locale} />
       <Suspense fallback={<ListSkeleton count={3} />}>
-        <ApprovalHistory locale={locale} page={historyPage} hoursPerDay={hoursPerDay} filters={filters} travelTicks={travelTicks} viewerId={viewerId} canReview={canReview} canCancel={canCancel} />
+        <ApprovalHistory locale={locale} page={historyPage} hoursPerDay={hoursPerDay} filters={filters} travelTicks={travelTicks} viewerId={viewerId} canReview={canReview} canCancel={canCancel} editKeys={editKeys} workWindow={workWindow} />
       </Suspense>
     </>
   );

@@ -185,17 +185,15 @@ test('hr reviews a company-wide request and prints its paper form', async ({ pag
   await expect(form).toHaveAttribute('data-form-code', 'BJ-F 50210(R0)');
   await expect(page.locator('[data-testid="print-body-leave"]')).toBeVisible();
 
-  // All four boxes from the photographed 50210, including جانشین and no حراست.
+  // Fixed requester + replacement (جانشین) boxes, then one box per approval step.
   await expect(page.locator('[data-testid="print-box-requester"]')).toBeVisible();
   await expect(page.locator('[data-testid="print-box-replacement"]')).toBeVisible();
-  await expect(page.locator('[data-testid="print-box-approver"]')).toBeVisible();
-  await expect(page.locator('[data-testid="print-box-hrManager"]')).toBeVisible();
-  await expect(page.locator('[data-testid="print-box-security"]')).toHaveCount(0);
+  expect(await page.locator('[data-testid^="print-box-step-"]').count()).toBeGreaterThan(0);
 
   // HR can see the actual signature image, not merely that one exists.
   await expect(page.locator('[data-testid="print-signature-requester"]')).toBeVisible();
-  // Unapproved, so the approver box prints empty for a wet signature.
-  await expect(page.locator('[data-testid="print-signature-approver"]')).toHaveCount(0);
+  // Unapproved, so every step box prints empty for a wet signature.
+  await expect(page.locator('[data-testid^="print-signature-step-"]')).toHaveCount(0);
 
   // The HR balance line is 50210-only.
   await expect(page.locator('[data-testid="print-balance-line"]')).toBeVisible();

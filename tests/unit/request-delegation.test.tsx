@@ -51,15 +51,13 @@ describe('request delegation preview and consent', () => {
     expect(result.current.submission).toMatchObject({ delegationPreview: complete, autoApprovalConsent: true, temporaryCeoAuthorized: false });
   });
 
-  it('requires separate CEO authorization for the temporary appointment', async () => {
+  it('ignores a stale temporary-eligible preview: no extra consent, no blocker', async () => {
     mocks.preview.mockResolvedValue({ ok: true, preview: { ...preview, is_ceo: true, temporary_eligible: true, temporary_delegate_name: 'Temporary approver' } });
     const { result } = renderHook(() => useRequestDelegation(query));
     await waitFor(() => expect(result.current.preview).not.toBeNull());
-    expect(result.current.problem()).toBe('temporaryConsentRequired');
-    act(() => result.current.setAutoApprovalConsent(true));
-    expect(result.current.problem()).toBe('temporaryConsentRequired');
-    act(() => result.current.setTemporaryCeoAuthorized(true));
+    expect(result.current.problem()).toBeNull();
     expect(result.current.blocked).toBe(false);
+    expect(result.current.submission.temporaryCeoAuthorized).toBe(false);
   });
 
   it('drops consent as soon as the absence inputs or preview revision change', async () => {
@@ -120,35 +118,42 @@ const workSettings = {
   hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240,
 };
 
-function fields(view: RequestDelegationPreview, props: { hasReplacement?: boolean; showCover?: boolean } = {}, absence: DelegationPreviewQuery = query) {
-  return <RequestDelegationFields locale="en" idPrefix="daily" workSettings={workSettings} {...props} delegation={{
+function fields(view: RequestDelegationPreview, props: { showCover?: boolean } = {}, absence: DelegationPreviewQuery = query) {
+  return <RequestDelegationFields locale="en" idPrefix="daily" workSettings={workSettings} showCover={props.showCover} delegation={{
     query: absence, preview: view, loading: false, error: '', blocked: false,
-    autoApprovalConsent: false, temporaryCeoAuthorized: false,
-    setAutoApprovalConsent: vi.fn(), setTemporaryCeoAuthorized: vi.fn(), refresh: vi.fn(), problem: () => null,
+    autoApprovalConsent: false,
+    setAutoApprovalConsent: vi.fn(), refresh: vi.fn(), problem: () => null,
     submission: { delegationPreview: null, autoApprovalConsent: false, temporaryCeoAuthorized: false },
   }} />;
 }
 
 describe('request delegation messages', () => {
-  it('separates ordinary work cover from a saved approval delegate', () => {
-    const saved = { grant_id: 'grant-1', delegate_id: 'person-1', delegate_name: 'Saved approver', ceo_authorized: false };
-    render(fields({ ...preview, saved }, { hasReplacement: true }));
-    expect(screen.getByTestId('daily-approval-cover').textContent).toContain('workCoverFallback');
+  const saved = { grant_id: 'grant-1', delegate_id: 'person-1', delegate_name: 'Saved approver', ceo_authorized: false };
+
+  it('shows the saved delegate line (a replacement no longer changes it)', () => {
+    render(fields({ ...preview, saved }));
+    expect(screen.getByTestId('daily-approval-cover').textContent).toContain('savedContinues');
     expect(screen.getByTestId('daily-approval-cover').textContent).toContain('Saved approver');
+    expect(screen.getByTestId('daily-approval-cover').textContent).not.toContain('workCoverFallback');
     expect(screen.queryByTestId('daily-auto-approval-consent')).toBeNull();
   });
 
-  it('shows permissionless approvers the admin contact path and keeps the warning advisory', () => {
+  it('says nothing about approval cover for an approver without a saved delegate', () => {
     render(fields(preview));
-    expect(screen.getByTestId('daily-no-approval-delegate').textContent).toContain('noDelegateWarning');
-    expect(screen.getByText('contactAdmin')).toBeTruthy();
-    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByTestId('daily-approval-cover')).toBeNull();
+    expect(screen.queryByTestId('daily-no-approval-delegate')).toBeNull();
+    expect(screen.queryByText('contactAdmin')).toBeNull();
+    expect(screen.getByTestId('daily-return-to-work')).toBeTruthy();
+  });
+
+  it('shows no temporary-authority checkbox for a stale temporary-eligible CEO preview', () => {
+    render(fields({ ...preview, is_ceo: true, temporary_eligible: true, temporary_delegate_name: 'Temporary approver' }));
+    expect(screen.queryByTestId('daily-temporary-ceo-authorized')).toBeNull();
   });
 
   it('hides the coverage box from ordinary employees but still shows their return day', () => {
     render(fields({ ...preview, can_approve: false, can_delegate: true }));
     expect(screen.queryByTestId('daily-delegation')).toBeNull();
-    expect(screen.queryByTestId('daily-no-approval-delegate')).toBeNull();
     // Morning off on Tue 2026-10-20: back the same day at midday.
     expect(screen.getByTestId('daily-return-to-work').textContent).toMatch(/^backAtWork:.*Tuesday.*· 11:00$/);
   });
@@ -160,7 +165,7 @@ describe('request delegation messages', () => {
   });
 
   it('lists the window line by line for approvers, with the return day inside the box', () => {
-    render(fields(preview));
+    render(fields({ ...preview, saved }));
     const lines = screen.getByTestId('daily-delegation-bounds').querySelectorAll('div');
     expect(lines).toHaveLength(3);
     expect(lines[0].textContent).toMatch(/^awayFrom:.*Tuesday.*· 07:00$/);
@@ -170,7 +175,7 @@ describe('request delegation messages', () => {
 
   it('says start and end of day instead of midnight for whole days', () => {
     const whole = { ...preview, bounds: { starts_at: '2026-10-19T20:30:00Z', ends_at: '2026-10-20T20:30:00Z' } };
-    render(fields(whole, {}, { ...query, dayPart: 'full' }));
+    render(fields({ ...whole, saved }, {}, { ...query, dayPart: 'full' }));
     const lines = screen.getByTestId('daily-delegation-bounds').querySelectorAll('div');
     expect(lines[0].textContent).toMatch(/Tuesday.*· startOfDay$/);
     expect(lines[1].textContent).toMatch(/Tuesday.*· endOfDay$/);

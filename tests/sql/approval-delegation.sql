@@ -272,9 +272,13 @@ begin
     not exists(select 1 from private.effective_approval_delegate(pg_temp.fx('ceo')) where source_request_id=v_request));
   perform pg_temp.expect('prospective replacement cannot approve source through that grant',pg_temp.as_call('b',format(
     'select public.approve_leave_request_v2(%L,%L,%L,true)',v_request,pg_temp.fx('ceo_step'),pg_temp.sig())),'42501');
-  perform pg_temp.expect('CEO temporary delegation requires distinct explicit attestation',pg_temp.as_call('ceo',format(
+  -- FR-90: naming a replacement confers nothing, so the CEO needs no attestation to name one.
+  perform pg_temp.expect('CEO names a replacement without any temporary-delegation attestation',pg_temp.as_call('ceo',format(
     'select public.submit_leave_request_v2(%L,''2026-11-04'',''2026-11-04'',''full'',%L,true,null,%L,false,null,false)',
-    pg_temp.fx('leave_type'),pg_temp.sig(),pg_temp.fx('b'))),'22023');
+    pg_temp.fx('leave_type'),pg_temp.sig(),pg_temp.fx('b'))),'ok');
+  perform pg_temp.expect('... and that request creates no grant',
+    (select count(*)::text from public.approval_delegations d join public.leave_requests r on r.id=d.source_request_id
+      where r.employee_id=pg_temp.fx('ceo')),'0');
 end; $$;
 
 -- Scoped approval-only read and actual delegated signer evidence.
@@ -508,57 +512,36 @@ select pg_temp.expect('CEO auto authority requires natural steps for every reque
 select pg_temp.login('admin');
 update public.approval_steps set active=true where id=pg_temp.fx('ceo_step');
 
--- Exact half-day boundaries and fallback to the current saved appointment.
+-- Half-day absence of the CEO (FR-90): the replacement named on it gains nothing, at any instant.
 select pg_temp.expect('admin approves future half-day source',pg_temp.as_call('admin',format(
   'select public.approve_leave_request_v2(%L,null,%L,true,true)',pg_temp.fx('half_day'),pg_temp.sig())),'ok');
-select pg_temp.expect('AM delegate starts exactly at saved 08:00',
-  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'),'2026-11-03 08:00 Asia/Tehran')),pg_temp.fx('b')::text);
-select pg_temp.expect('saved delegate handles instant before AM starts',
+select pg_temp.expect('no grant row exists for the half-day source',
+  (select count(*)::text from public.approval_delegations where source_request_id=pg_temp.fx('half_day')),'0');
+select pg_temp.expect('saved delegate stays effective at 08:00 on the absence',
+  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'),'2026-11-03 08:00 Asia/Tehran')),pg_temp.fx('a')::text);
+select pg_temp.expect('saved delegate stays effective before the absence',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'),'2026-11-03 07:59:59.999999 Asia/Tehran')),pg_temp.fx('a')::text);
-select pg_temp.expect('AM end is exclusive and saved delegate resumes at noon',
+select pg_temp.expect('saved delegate stays effective at noon',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'),'2026-11-03 12:00 Asia/Tehran')),pg_temp.fx('a')::text);
 
--- A temporary interval that has fully ended leaves the saved delegate effective.
-select pg_temp.login('admin');
-update public.approval_delegations set starts_at=clock_timestamp()-interval '70 minutes',
-  ends_at=clock_timestamp()-interval '30 minutes',activated_at=clock_timestamp()-interval '90 minutes'
-  where source_request_id=pg_temp.fx('half_day');
-select pg_temp.expect('saved A currently effective after whole temporary interval',
-  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('a')::text);
-
--- Retain the interval as history, but end that fixture before nominating another same-day source.
-select pg_temp.login('admin');
-update public.approval_delegations set revoked_at=clock_timestamp() where source_request_id=pg_temp.fx('half_day');
-
--- An approved current absence activates temporary B; late activation has no retrospective authority.
+-- An approved current absence naming B changes nothing either.
 insert into delegation_fx values('temporary_now',pg_temp.submit('ceo',(clock_timestamp() at time zone 'Asia/Tehran')::date,false,'b','full',true));
-select pg_temp.expect('source still pending retains saved A',
-  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('a')::text);
 select pg_temp.expect('admin fully approves current source',pg_temp.as_call('admin',format(
   'select public.approve_leave_request_v2(%L,null,%L,true,true)',pg_temp.fx('temporary_now'),pg_temp.sig())),'ok');
-select pg_temp.expect('approved current absence activates B',
-  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('b')::text);
-select pg_temp.assert('late approval records activation timestamp',exists(select 1 from public.approval_delegations
-  where source_request_id=pg_temp.fx('temporary_now') and activated_at>=created_at));
-select pg_temp.expect('CEO default may be edited during temporary absence',pg_temp.as_call('admin',format(
-  'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('a'))),'ok');
-select pg_temp.expect('editing saved fallback leaves active temporary B in place',
-  (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('b')::text);
-insert into delegation_fx values('temporary_auto',pg_temp.submit('b','2026-11-23',true));
-select pg_temp.expect('effective temporary CEO delegate gets the CEO step at once',
-  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('temporary_auto') and evidence_kind='automatic'),'1');
-select pg_temp.login('admin');
-update public.approval_delegations set ends_at=clock_timestamp()-interval '1 second'
-  where source_request_id=pg_temp.fx('temporary_now');
-select pg_temp.expect('expired temporary delegate is no longer offered automatic approval',pg_temp.as_scalar('b',
-  'select public.app_request_delegation_preview(''2026-11-24'',''2026-11-24'')->>''auto_approval_eligible'''),'false');
-select pg_temp.expect('saved A resumes after temporary expiry',
+select pg_temp.expect('approved current absence creates no grant',
+  (select count(*)::text from public.approval_delegations where source_request_id=pg_temp.fx('temporary_now')),'0');
+select pg_temp.expect('saved A stays effective during the absence',
   (select delegate_id::text from private.effective_approval_delegate(pg_temp.fx('ceo'))),pg_temp.fx('a')::text);
--- Internal lifecycle fixture: cancellation revokes the historical source grant immediately.
+select pg_temp.expect('CEO default may be edited during the absence',pg_temp.as_call('admin',format(
+  'select public.app_set_approval_delegate(%L,%L,true)',pg_temp.fx('ceo'),pg_temp.fx('a'))),'ok');
+select pg_temp.expect('the replacement gets no automatic CEO approval',pg_temp.as_scalar('b',
+  'select public.app_request_delegation_preview(''2026-11-24'',''2026-11-24'')->>''auto_approval_eligible'''),'false');
+select pg_temp.expect('a request by the replacement gets no automatic evidence',
+  (select count(*)::text from public.leave_request_approvals where request_id=pg_temp.fx('temporary_now') and evidence_kind='automatic'),'0');
 -- The ordinary cancellation RPC continues its existing not-yet-started rule for approved leave.
 update public.leave_requests set status='cancelled' where id=pg_temp.fx('temporary_now');
-select pg_temp.assert('source cancellation durably revokes temporary grant',exists(select 1 from public.approval_delegations
-  where source_request_id=pg_temp.fx('temporary_now') and revoked_at is not null));
+select pg_temp.expect('cancelling the absence leaves still no grant',
+  (select count(*)::text from public.approval_delegations where source_request_id=pg_temp.fx('temporary_now')),'0');
 
 -- Direct and department manager steps share a role but have distinct identities/evidence.
 select pg_temp.login('admin');

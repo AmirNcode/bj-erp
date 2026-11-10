@@ -20,6 +20,14 @@ import { formatRials } from '@/lib/leave/perDiem';
 import { RequestProgress } from '@/components/RequestProgress';
 import { RequestSignatureViewer } from './RequestSignature';
 import { useRequestLabels } from './useRequestLabels';
+import { ReplacementDeclinedNotice } from './ReplacementSignoff';
+import { requesterMustChooseReplacement } from '@/lib/leave/replacementSignoff';
+
+const SIGNOFF_LABEL = {
+  pending: 'signoffPending',
+  signed: 'signoffSigned',
+  declined: 'signoffDeclined',
+} as const;
 
 /** `pending`: approved, but procurement has not finished the travel booking. */
 export type TravelNote = MyTravel;
@@ -41,6 +49,7 @@ export function RequestDetails({
   const labels = useRequestLabels();
   const tTravel = useTranslations('travel');
   const tErrand = useTranslations('errand');
+  const tRepl = useTranslations('replacement');
   return (
     <>
       {req.kind === 'errand' && req.per_diem_rials != null && (
@@ -101,9 +110,16 @@ export function RequestDetails({
         </span>
       </div>
       {req.replacement_name && (
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground" data-testid={`request-cover-${req.id}`}>
           {labels.coverLabel}: {req.replacement_name}
+          {req.replacement_signoff_status && (
+            <> · {tRepl(SIGNOFF_LABEL[req.replacement_signoff_status])}</>
+          )}
         </div>
+      )}
+      {/* FR-88: the replacement declined; the requester names someone else or nobody. */}
+      {requesterMustChooseReplacement({ status: req.status, signoffStatus: req.replacement_signoff_status }) && (
+        <ReplacementDeclinedNotice req={req} />
       )}
       {/* Why it was rejected — optional, set by the decider. */}
       {req.status === 'rejected' && req.decision_note && (
@@ -121,6 +137,7 @@ export function RequestDetails({
           key={`${req.id}:${req.status}`}
           requestId={req.id}
           defaultOpen={progressOpen}
+          hoursPerDay={hoursPerDay}
         />
       )}
       <RequestSignatureViewer

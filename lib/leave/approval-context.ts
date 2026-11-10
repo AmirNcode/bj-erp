@@ -1,4 +1,5 @@
 import type { StepLabel, StepRole } from './approvals';
+import type { ReplacementSignoffStatus } from './replacementSignoff';
 
 /** Request-scoped projections from the database, never complete personnel rows. */
 export type ApprovalEvidenceKind = 'manual' | 'delegated' | 'automatic' | 'hr_exempt' | 'legacy' | 'pending';
@@ -29,6 +30,18 @@ export type ApprovalProgressRow = {
   historical_hr_exemption?: Record<string, unknown> | null;
   signature_data?: string | null;
   signature_consent_at?: string | null;
+  /** Print payload only: the box title, snapshot at signing or the live step's. */
+  box_label?: string | null;
+};
+
+/** Print payload only: an active approval step of the company for the request's kind. */
+export type ApprovalStepBoxRow = {
+  step_id: string;
+  step_role: StepRole;
+  step_order: number;
+  manager_scope: 'direct' | 'department';
+  named: boolean;
+  box_label: string | null;
 };
 
 export type ApprovalContextRow = {
@@ -71,6 +84,9 @@ export type ApprovalContextRow = {
   decided_by_name: string | null;
   replacement_name: string | null;
   replacement_conflict: boolean;
+  /** FR-88: the replacement's answer; null = nothing to sign. Informational, never gates. */
+  replacement_signoff_status?: ReplacementSignoffStatus | null;
+  replacement_signed_at?: string | null;
   signature_consent_at: string | null;
   approver_signature_consent_at: string | null;
   configuration_changed?: boolean;
@@ -86,7 +102,13 @@ export type ApprovalSignatures = {
   requester_consent_at: string | null;
   approver_signature_data?: string | null;
   approver_signature_consent_at?: string | null;
+  /** FR-88: the replacement's sign-off (null = no row). */
+  replacement_status?: ReplacementSignoffStatus | null;
+  replacement_signature_data?: string | null;
+  replacement_signature_consent_at?: string | null;
   approvals: ApprovalProgressRow[];
+  /** Print payload only (spec 2026-11-09). */
+  steps?: ApprovalStepBoxRow[];
 };
 
 export type ApprovalChoice = {

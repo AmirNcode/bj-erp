@@ -146,7 +146,7 @@ select pg_temp.expect('who and the signature are stored',
   (select (corrected_by=pg_temp.fx('hr'))::text||'/'||(signature_data is not null)::text||'/'||(signature_consent_at is not null)::text
      from public.request_corrections where request_id=pg_temp.fx('booked')),'true/true/true');
 select pg_temp.expect('audit has before and after, no signature',
-  (select count(*)::text from public.audit_log where action='trip.correct' and entity_id=pg_temp.fx('booked')
+  (select count(*)::text from public.audit_log where action='request.edit' and entity_id=pg_temp.fx('booked')
      and before->>'end_date'='2027-03-03' and after->>'end_date'='2027-03-05' and (after::text||before::text) not like '%base64%'),'1');
 select pg_temp.expect('start moves earlier',pg_temp.err(pg_temp.correct('hr','booked','2027-02-27',null,null,'r')),'ok');
 select pg_temp.expect('start moved',pg_temp.row_of('booked'),'2027-02-27/2027-03-05/3360/null');
@@ -197,8 +197,9 @@ begin
     values(pg_temp.fx('company'),pg_temp.fx('hr'),pg_temp.fx('mgr'),'Fixture hr','Fixture mgr',pg_temp.fx('admin'));
 end; $$;
 select pg_temp.assert('the delegate acts as HR',private.acts_as_travel_hr(pg_temp.fx('mgr'),pg_temp.fx('company')));
-select pg_temp.expect('the delegate may correct someone else''s trip',
-  pg_temp.err(pg_temp.correct('mgr','plain',null,'2026-01-06',null,'r')),'ok');
+-- FR-91: a permission is held through a role, so a delegate corrects nothing without the toggle.
+select pg_temp.expect('the delegate is refused on someone else''s trip too (FR-91: no inherited gate)',
+  pg_temp.err(pg_temp.correct('mgr','plain',null,'2026-01-06',null,'r')),'42501');
 select pg_temp.expect('the delegate refused on the principal''s own trip',
   pg_temp.err(pg_temp.correct('mgr','hrs_own',null,'2027-07-03',null,'r')),'42501');
 select pg_temp.expect('that refusal wrote nothing',
@@ -247,8 +248,8 @@ select pg_temp.expect('overlap wrote nothing',pg_temp.row_of('o'),'2027-10-01/20
 select pg_temp.expect('reason of spaces',(pg_temp.correct('hr','o',null,'2027-10-03',null,'   ') like 'ERROR 22023%reason%')::text,'true');
 select pg_temp.expect('reason too long',pg_temp.err(pg_temp.correct('hr','o',null,'2027-10-03',null,repeat('x',1001))),'22023');
 select pg_temp.expect('1000 characters allowed',pg_temp.err(pg_temp.correct('hr','o',null,'2027-10-03',null,repeat('x',1000))),'ok');
-select pg_temp.expect('nothing to correct',(pg_temp.correct('hr','o',null,null,null,'r') like 'ERROR 22023%nothing to correct%')::text,'true');
-select pg_temp.expect('same values are nothing',(pg_temp.correct('hr','o','2027-10-01','2027-10-03',null,'r') like 'ERROR 22023%nothing to correct%')::text,'true');
+select pg_temp.expect('nothing to edit (FR-91 message)',(pg_temp.correct('hr','o',null,null,null,'r') like 'ERROR 22023%nothing to edit%')::text,'true');
+select pg_temp.expect('same values are nothing',(pg_temp.correct('hr','o','2027-10-01','2027-10-03',null,'r') like 'ERROR 22023%nothing to edit%')::text,'true');
 select pg_temp.expect('start alone past the end',(pg_temp.correct('hr','o','2027-10-04',null,null,'r') like 'ERROR 22023%start date must not be after end date%')::text,'true');
 select pg_temp.expect('negative per diem',(pg_temp.correct('hr','o',null,null,'-1','r') like 'ERROR 22023%per diem must be 0 or more%')::text,'true');
 select pg_temp.expect('no signature',pg_temp.err(pg_temp.correct('hr','o',null,'2027-10-04',null,'r','not-a-png')),'22023');

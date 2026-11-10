@@ -11,10 +11,12 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import type { Database } from '@/lib/supabase/types';
 import type { StepRole } from '@/lib/leave/approvals';
+import type { PrintStep } from '@/lib/leave/paperForm';
 import type { ApprovalContextRow, ApprovalSignatures, ApprovalEvidenceKind } from '@/lib/leave/approval-context';
 import type { DayPart } from './shared';
 import type { RequestExtension } from '@/lib/actions/travel';
 import type { RequestCorrection } from '@/lib/travel/extensions';
+import { printReplacementStatus, type ReplacementSignoffStatus } from '@/lib/leave/replacementSignoff';
 
 export type ReviewRequestRow = {
   id: string;
@@ -147,6 +149,14 @@ export type PrintableRequest = ReviewRequestRow & {
   signature_data: string | null;
   approver_signature_data: string | null;
   /**
+   * FR-88: the replacement's own signature for the Replacement box. Status is null when no
+   * replacement is named; an older request with nobody asked reads `pending` (blank box).
+   * A `declined` replacement never has an image.
+   */
+  replacement_signature_data?: string | null;
+  replacement_signature_consent_at?: string | null;
+  replacement_signature_status?: ReplacementSignoffStatus | null;
+  /**
    * FR-36: one entry per signed step, so the printed sheet can put each
    * signature in its own box (تصویب کننده = manager, HR box = hr, …) instead of
    * assuming a single approver.
@@ -177,7 +187,11 @@ export type PrintableRequest = ReviewRequestRow & {
     approverName: string | null;
     signatureData: string | null;
     signatureConsentAt: string | null;
+    /** Box title: snapshot at signing, else the live step's (spec 2026-11-09). */
+    boxLabel?: string | null;
   }[];
+  /** The company's active steps for this request's kind: one printed box each. */
+  steps: PrintStep[];
   /**
    * The employee's CURRENT balance for this request's leave type, for BJ-F
    * 50210's "متقاضی دارای مرخصی استحقاقی بمدت … روز و … ساعت می باشد" line.
@@ -232,7 +246,11 @@ export async function getRequestForPrint(
       corrections,
       signature_data: evidence.requester_signature_data,
       approver_signature_data: evidence.approver_signature_data ?? null,
-      approvals: evidence.approvals.filter((a) => a.decision || a.evidence_kind === 'hr_exempt').map((a) => ({
+      replacement_signature_data: evidence.replacement_signature_data ?? null,
+      replacement_signature_consent_at: evidence.replacement_signature_consent_at ?? null,
+      replacement_signature_status: printReplacementStatus(row.replacement_name, evidence.replacement_status),
+      // Pending steps are kept too: each gets its (empty) box on the sheet.
+      approvals: evidence.approvals.map((a) => ({
         stepId: a.step_id,
         stepOrder: a.step_order,
         named: a.named,
@@ -252,6 +270,10 @@ export async function getRequestForPrint(
         // Automatic and exempt steps can never display a person's signature.
         signatureData: ['automatic', 'hr_exempt'].includes(a.evidence_kind) ? null : a.signature_data ?? null,
         signatureConsentAt: a.signed_at,
+        boxLabel: a.box_label ?? null,
+      })),
+      steps: (evidence.steps ?? []).map((s) => ({
+        stepId: s.step_id, stepOrder: s.step_order, boxLabel: s.box_label,
       })),
       current_balance_minutes: currentBalance,
     },

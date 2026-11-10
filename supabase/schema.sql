@@ -316,6 +316,10 @@ begin
       end if;
     end if;
   end if;
+  if tg_table_name='approval_steps' and tg_op='UPDATE'
+    and private.approval_box_label_only(to_jsonb(old),to_jsonb(new)) then
+    return new;
+  end if;
   if tg_op<>'INSERT' then v_old_company:=private.approval_mutation_company(tg_table_name,to_jsonb(old)); end if;
   if tg_op<>'DELETE' then v_new_company:=private.approval_mutation_company(tg_table_name,to_jsonb(new)); end if;
   for v_company in select distinct company from unnest(array[v_old_company,v_new_company]) company
@@ -346,6 +350,10 @@ begin
         return new;
       end if;
     end if;
+  end if;
+  if tg_table_name='approval_steps' and tg_op='UPDATE'
+    and private.approval_box_label_only(to_jsonb(old),to_jsonb(new)) then
+    return new;
   end if;
   if tg_op<>'INSERT' then v_old_company:=private.approval_mutation_company(tg_table_name,to_jsonb(old)); end if;
   if tg_op<>'DELETE' then v_new_company:=private.approval_mutation_company(tg_table_name,to_jsonb(new)); end if;
@@ -388,6 +396,16 @@ begin
   return jsonb_build_object('starts_at',v_start,'ends_at',v_end,
     'work_start',v_ws,'work_end',v_we,'timezone','Asia/Tehran');
 end; $$;
+
+
+--
+-- Name: approval_box_label_only(jsonb, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_box_label_only(p_old jsonb, p_new jsonb) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$ select (p_old - 'box_label' - 'updated_at') = (p_new - 'box_label' - 'updated_at') $$;
 
 
 --
@@ -455,6 +473,22 @@ begin
   end if;
   return v_company;
 end; $$;
+
+
+--
+-- Name: approval_snapshot_box_label(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.approval_snapshot_box_label() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if new.step_id is not null and new.box_label is null then
+    select s.box_label into new.box_label from public.approval_steps s where s.id = new.step_id;
+  end if;
+  return new;
+end $$;
 
 
 --
@@ -752,24 +786,22 @@ $$;
 
 
 --
--- Name: can_correct_trip(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+-- Name: can_edit_request(uuid, uuid, public.leave_unit); Type: FUNCTION; Schema: private; Owner: -
 --
 
-CREATE FUNCTION private.can_correct_trip(p_uid uuid, p_request uuid) RETURNS boolean
+CREATE FUNCTION private.can_edit_request(p_uid uuid, p_request uuid, p_new_unit public.leave_unit) RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select exists (
-    select 1 from public.leave_requests r
-     where r.id = p_request and r.employee_id <> p_uid
-       and private.acts_as_travel_hr(p_uid, r.company_id)
-       and (private.is_admin(p_uid) or private.has_role(p_uid, 'hr')
-            or exists (
-              select 1 from public.user_roles ur
-                join public.profiles h on h.id = ur.user_id and h.company_id = r.company_id and h.active
-               where ur.role = 'hr' and ur.user_id <> r.employee_id
-                 and exists (select 1 from private.effective_approval_delegate(ur.user_id) d
-                              where d.delegate_id = p_uid))));
+  select coalesce((
+    select private.is_active(p_uid)
+       and exists (select 1 from public.profiles c where c.id = p_uid and c.company_id = r.company_id)
+       and (private.is_admin(p_uid)
+            or (private.has_perm(p_uid, private.request_edit_key(r.kind, r.unit), 'edit')
+                and private.has_perm(p_uid, private.request_edit_key(r.kind, coalesce(p_new_unit, r.unit)), 'edit')
+                and (r.employee_id <> p_uid or private.has_perm(p_uid, 'edit_requests_own', 'edit'))))
+      from public.leave_requests r
+     where r.id = p_request), false);
 $$;
 
 
@@ -1228,6 +1260,261 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: edit_request_impl(uuid, uuid, public.leave_unit, date, date, public.day_part, time without time zone, time without time zone, bigint, text, text, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.edit_request_impl(p_uid uuid, p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare
+  v_reason text := btrim(coalesce(p_reason, ''));
+  v_part public.day_part := coalesce(p_day_part, 'full');
+  r public.leave_requests%rowtype;
+  lt public.leave_types%rowtype;
+  v_per_diem bigint;
+  v_by_requester boolean;
+  v_minutes integer;
+  v_unpaid integer;
+  v_shape_changed boolean;
+  v_dates_changed boolean;
+  v_balance integer;
+  v_old_paid integer;
+  v_new_paid integer;
+  v_delta integer := 0;
+  v_win_start time;
+  v_win_end time;
+  v_cap integer;
+  v_day_used integer;
+  v_now timestamptz;
+  v_id uuid;
+begin
+  if p_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+  if not private.can_edit_request(p_uid, p_request, p_unit) then
+    raise exception 'not allowed to edit this request' using errcode = '42501';
+  end if;
+  if not coalesce(p_signature_authorized, false) or p_signature_data is null
+     or p_signature_data !~ '^data:image/png;base64,[A-Za-z0-9+/]+=*$' then
+    raise exception 'signature is required' using errcode = '22023';
+  end if;
+  if p_per_diem_rials < 0 then raise exception 'per diem must be 0 or more' using errcode = '22023'; end if;
+  if v_reason = '' then raise exception 'a reason is required' using errcode = '22023'; end if;
+  if char_length(v_reason) > 1000 then raise exception 'reason is too long' using errcode = '22023'; end if;
+
+  -- Lock order: the company's approval lock, then the employee's leave lock.
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
+  select * into r from public.leave_requests where id = p_request for update;
+  if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
+  -- The gate again: roles, activity and the request itself may have changed while waiting.
+  if not private.can_edit_request(p_uid, p_request, p_unit) then
+    raise exception 'not allowed to edit this request' using errcode = '42501';
+  end if;
+  if r.status <> 'approved' then
+    raise exception 'only an approved request can be edited' using errcode = '22023';
+  end if;
+  if r.kind = 'errand'
+     and exists (select 1 from public.errand_extensions e where e.request_id = r.id and e.status = 'pending') then
+    raise exception 'an extension is waiting for HR' using errcode = '22023';
+  end if;
+
+  -- Shape of the target.
+  if p_unit is null or p_start is null or p_end is null then
+    raise exception 'start and end dates are required' using errcode = '22023';
+  end if;
+  if p_end < p_start then
+    raise exception 'start date must not be after end date' using errcode = '22023';
+  end if;
+  if p_end - p_start > 366 then
+    raise exception 'date range too long' using errcode = '22023';
+  end if;
+  if p_unit = 'hour' then
+    if p_start <> p_end or p_start_time is null or p_end_time is null or p_end_time <= p_start_time then
+      raise exception 'end time must be after start time' using errcode = '22023';
+    end if;
+    if v_part <> 'full' then raise exception 'invalid request shape' using errcode = '22023'; end if;
+  else
+    if p_start_time is not null or p_end_time is not null
+       or (r.kind = 'errand' and v_part <> 'full') then
+      raise exception 'invalid request shape' using errcode = '22023';
+    end if;
+  end if;
+
+  -- Per diem: only on a daily errand. null keeps it; a trip turned hourly loses it (FR-61).
+  if r.kind = 'errand' and p_unit = 'day' then
+    v_per_diem := coalesce(p_per_diem_rials, r.per_diem_rials);
+  else
+    v_per_diem := null;
+  end if;
+  v_by_requester := case when v_per_diem is distinct from r.per_diem_rials then false
+                         else r.per_diem_by_requester end;
+
+  if (p_unit, p_start, p_end, v_part, p_start_time, p_end_time, v_per_diem)
+     is not distinct from (r.unit, r.start_date, r.end_date, r.day_part, r.start_time, r.end_time, r.per_diem_rials) then
+    raise exception 'nothing to edit' using errcode = '22023';
+  end if;
+  v_shape_changed := (p_unit, p_start, p_end, v_part, p_start_time, p_end_time)
+    is distinct from (r.unit, r.start_date, r.end_date, r.day_part, r.start_time, r.end_time);
+  v_dates_changed := (p_start, p_end) is distinct from (r.start_date, r.end_date);
+
+  v_minutes := r.requested_minutes;
+  v_unpaid := r.unpaid_minutes;
+
+  if v_shape_changed then
+    if r.kind = 'errand' and r.unit = 'day' and p_unit = 'hour'
+       and exists (select 1 from public.errand_extensions e where e.request_id = r.id and e.status = 'approved') then
+      raise exception 'an extended trip cannot become an hourly errand' using errcode = '22023';
+    end if;
+
+    -- A trip becomes an hourly errand only while procurement has not started on it.
+    if r.kind = 'errand' and r.unit = 'day' and p_unit = 'hour'
+       and exists (select 1 from public.travel_bookings b
+                    where b.request_id = r.id and (b.first_saved_at is not null or b.done_at is not null)) then
+      raise exception 'procurement has started booking this trip' using errcode = '22023';
+    end if;
+
+    if r.kind = 'leave' then
+      select * into lt from public.leave_types where id = r.leave_type_id;
+    end if;
+
+    -- Hourly leave: the rules of a new hourly request, the request itself excluded.
+    if r.kind = 'leave' and p_unit = 'hour' then
+      if r.unit = 'day' and not coalesce(lt.allow_hourly, false) then
+        raise exception 'this leave type cannot be taken hourly' using errcode = '22023';
+      end if;
+      select work_start, work_end, max_hourly_minutes_per_day
+        into v_win_start, v_win_end, v_cap
+        from public.work_settings where company_id = r.company_id limit 1;
+      v_win_start := coalesce(v_win_start, '07:00'::time);
+      v_win_end := coalesce(v_win_end, '15:00'::time);
+      v_cap := coalesce(v_cap, 240);
+      if p_start_time < v_win_start or p_end_time > v_win_end then
+        raise exception 'times must fall within working hours' using errcode = '22023';
+      end if;
+      if (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+        raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
+      end if;
+      if exists (
+        select 1 from public.leave_requests x
+         where x.employee_id = r.employee_id and x.id <> r.id
+           and x.kind = 'leave' and x.unit = 'hour' and x.start_date = p_start
+           and x.status in ('pending', 'approved')
+      ) then
+        raise exception 'only one hourly leave per day' using errcode = '22023';
+      end if;
+      select coalesce(sum(x.requested_minutes), 0) into v_day_used
+        from public.leave_requests x
+       where x.employee_id = r.employee_id and x.id <> r.id
+         and x.kind = 'leave' and x.unit = 'hour' and x.start_date = p_start
+         and x.status in ('pending', 'approved');
+      if v_day_used + (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+        raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
+      end if;
+    end if;
+
+    -- No overlap with the person's other requests (the request's own old range does not count).
+    if exists (
+      select 1 from public.leave_requests x
+       where x.employee_id = r.employee_id and x.id <> r.id
+         and x.status in ('pending', 'approved')
+         and x.start_date <= p_end and x.end_date >= p_start
+         and (x.unit = 'day' or p_unit = 'day'
+              or (x.start_time < p_end_time and x.end_time > p_start_time))
+    ) or (r.kind = 'errand' and p_unit = 'day'
+          and private.extension_overlaps(r.id, r.employee_id, p_start, p_end)) then
+      raise exception 'overlapping leave request exists' using errcode = '22023';
+    end if;
+
+    v_minutes := public.compute_requested_minutes(
+      r.company_id, p_start, p_end, v_part, p_unit, p_start_time, p_end_time, r.kind);
+    if v_minutes <= 0 then
+      raise exception 'requested days must be greater than 0 (all days fall on weekend/holiday or dates invalid)'
+        using errcode = '22023';
+    end if;
+
+    -- Balance. A new request may run past the balance; an edit may not create or grow an unpaid part.
+    if r.kind = 'leave' then
+      if lt.affects_balance then
+        v_old_paid := r.requested_minutes - r.unpaid_minutes;
+        v_balance := public.current_leave_balance(r.employee_id, r.leave_type_id);
+        v_new_paid := least(v_minutes, greatest(v_balance, 0) + v_old_paid);
+        v_unpaid := v_minutes - v_new_paid;
+        if v_unpaid > r.unpaid_minutes then
+          raise exception 'an edit cannot make leave unpaid' using errcode = '22023';
+        end if;
+        v_delta := v_old_paid - v_new_paid;   -- > 0 returns time, < 0 takes it
+      elsif not coalesce(lt.is_paid, false) then
+        v_unpaid := v_minutes;
+      else
+        v_unpaid := 0;
+      end if;
+    else
+      v_unpaid := 0;
+    end if;
+  end if;
+
+  v_now := clock_timestamp();
+  insert into public.request_corrections (
+    request_id, company_id, old_start_date, new_start_date, old_end_date, new_end_date,
+    per_diem_before, per_diem_after, reason, corrected_by, corrected_at,
+    signature_data, signature_consent_at,
+    old_unit, new_unit, old_day_part, new_day_part,
+    old_start_time, new_start_time, old_end_time, new_end_time, minutes_before, minutes_after
+  ) values (
+    r.id, r.company_id, r.start_date, p_start, r.end_date, p_end,
+    r.per_diem_rials, v_per_diem, v_reason, p_uid, v_now,
+    p_signature_data, v_now,
+    r.unit, p_unit, r.day_part, v_part,
+    r.start_time, p_start_time, r.end_time, p_end_time, r.requested_minutes, v_minutes
+  ) returning id into v_id;
+
+  update public.leave_requests
+     set start_date = p_start, end_date = p_end, unit = p_unit, day_part = v_part,
+         start_time = p_start_time, end_time = p_end_time,
+         requested_minutes = v_minutes, unpaid_minutes = v_unpaid,
+         per_diem_rials = v_per_diem, per_diem_by_requester = v_by_requester
+   where id = r.id;
+
+  if v_delta <> 0 then
+    insert into public.leave_ledger(employee_id, leave_type_id, request_id, entry_type,
+                                    delta_minutes, balance_after_minutes, note)
+    values (r.employee_id, r.leave_type_id, r.id,
+            (case when v_delta < 0 then 'consumption' else 'reversal' end)::public.ledger_entry,
+            v_delta, v_balance + v_delta, 'request edited');
+  end if;
+
+  -- Procurement: a daily trip whose dates moved goes back to the booking list; a trip that became
+  -- an hourly errand leaves it (its booking, if any, had not started).
+  if r.kind = 'errand' and r.unit = 'day' and p_unit = 'day' and v_dates_changed then
+    update public.travel_bookings set done_at = null, done_by = null, updated_at = now()
+     where request_id = r.id and opened_at is not null;
+  elsif r.kind = 'errand' and r.unit = 'day' and p_unit = 'hour' then
+    delete from public.travel_bookings where request_id = r.id;
+  end if;
+
+  -- Values only; never the signature.
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (p_uid, 'request.edit', 'leave_requests', r.id,
+          jsonb_build_object('unit', r.unit, 'start_date', r.start_date, 'end_date', r.end_date,
+                             'day_part', r.day_part, 'start_time', r.start_time, 'end_time', r.end_time,
+                             'requested_minutes', r.requested_minutes, 'unpaid_minutes', r.unpaid_minutes,
+                             'per_diem_rials', r.per_diem_rials),
+          jsonb_build_object('unit', p_unit, 'start_date', p_start, 'end_date', p_end,
+                             'day_part', v_part, 'start_time', p_start_time, 'end_time', p_end_time,
+                             'requested_minutes', v_minutes, 'unpaid_minutes', v_unpaid,
+                             'per_diem_rials', v_per_diem, 'ledger_delta', v_delta,
+                             'correction_id', v_id));
+  return v_id;
+end $_$;
+
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
 -- Name: approval_delegations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1440,7 +1727,7 @@ CREATE FUNCTION private.enroll_request_delegation(p_request uuid, p_auto_consent
     AS $$
 declare r public.leave_requests%rowtype; x public.approval_executive_settings%rowtype;
   d public.approval_delegations%rowtype; v_preview jsonb; v_bounds jsonb; v_steps uuid[];
-  v_step uuid; v_temp uuid;
+  v_step uuid;
 begin
   select * into r from public.leave_requests where id=p_request;
   perform private.approval_lock(r.company_id);
@@ -1449,10 +1736,6 @@ begin
     r.start_time,r.end_time,r.replacement_id);
   if p_preview is not null and p_preview->>'preview_token' is distinct from v_preview->>'preview_token' then
     raise exception 'delegation preview changed; refresh the request preview' using errcode='22023'; end if;
-  if r.day_part<>'full' and private.has_perm(r.employee_id,'approval_delegate','edit')
-      and r.replacement_id is not null and private.delegate_eligible(r.employee_id,r.replacement_id)
-      and p_preview is null then
-    raise exception 'delegation preview required; refresh the request preview' using errcode='22023'; end if;
   v_bounds:=v_preview->'bounds';
   select * into x from public.approval_executive_settings where company_id=r.company_id;
   insert into public.approval_request_policy(request_id,company_id,starts_at,ends_at,hr_head_id,
@@ -1463,23 +1746,6 @@ begin
         and s.id=any(x.hr_step_ids) and r.kind=any(s.applies_to)
         and private.step_applies(s.manager_scope,r.employee_id)),'{}') else '{}'::uuid[] end,
     private.approval_step_snapshot(r.id));
-  if r.replacement_id is not null and private.delegate_eligible(r.employee_id,r.replacement_id) then
-    if r.employee_id=x.ceo_id and p_temporary_ceo_authorized is not true then
-      raise exception 'temporary CEO delegation authorization required' using errcode='22023'; end if;
-    if r.employee_id=x.ceo_id and not private.ceo_delegate_configuration_ready(r.employee_id,r.replacement_id) then
-      raise exception 'CEO must naturally own applicable approval steps for leave and errand before automatic authority is authorized' using errcode='22023'; end if;
-    if exists (select 1 from public.approval_delegations g join public.leave_requests lr on lr.id=g.source_request_id
-      where g.principal_id=r.employee_id and g.revoked_at is null and lr.status in ('pending','approved')
-        and g.starts_at<(v_bounds->>'ends_at')::timestamptz and g.ends_at>(v_bounds->>'starts_at')::timestamptz) then
-      raise exception 'overlapping temporary approval delegation' using errcode='22023'; end if;
-    insert into public.approval_delegations(company_id,principal_id,delegate_id,principal_name,
-      delegate_name,source_request_id,starts_at,ends_at,ceo_authorized,configured_by)
-    select r.company_id,r.employee_id,r.replacement_id,p.full_name,q.full_name,r.id,
-      (v_bounds->>'starts_at')::timestamptz,(v_bounds->>'ends_at')::timestamptz,
-      -- Separate explicit attestation; the generic requester PNG does not authorize this policy.
-      r.employee_id=x.ceo_id and p_temporary_ceo_authorized is true,r.employee_id from public.profiles p,public.profiles q
-      where p.id=r.employee_id and q.id=r.replacement_id returning id into v_temp;
-  end if;
   select g.* into d from private.effective_approval_delegate(x.ceo_id) g
     where g.delegate_id=r.employee_id and g.ceo_authorized;
   if d.id is not null then
@@ -2076,7 +2342,9 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     AS $$
   select case
     when p_key in ('people_create','role_manager','role_assign','leave_accrual',
-      'personal_info_own','special_leave','approval_delegate','travel_booking') then p_level = 'edit'
+      'personal_info_own','special_leave','approval_delegate','travel_booking',
+      'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly',
+      'edit_requests_own') then p_level = 'edit'
     when p_key in ('calendar','reports','finance','finance_forms') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
       'leave_requests','approval_steps','work_settings','holidays') then p_level in ('read','edit')
@@ -2102,7 +2370,10 @@ CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text
     ('leave_accrual','read','departments'), ('leave_requests','read','people'),
     ('approval_steps','read','people'), ('reports','read','people'),
     ('reports','read','leave_balances'), ('reports','read','leave_requests'),
-    ('special_leave','read','people'), ('special_leave','read','leave_balances');
+    ('special_leave','read','people'), ('special_leave','read','leave_balances'),
+    ('edit_leave_daily','read','leave_requests'), ('edit_leave_hourly','read','leave_requests'),
+    ('edit_errand_daily','read','leave_requests'), ('edit_errand_hourly','read','leave_requests'),
+    ('edit_requests_own','read','leave_requests');
 $$;
 
 
@@ -2117,7 +2388,8 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
   select unnest(array['people','people_create','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
     'special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
-    'work_settings','holidays','finance','finance_forms','travel_booking']);
+    'work_settings','holidays','finance','finance_forms','travel_booking',
+    'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly','edit_requests_own']);
 $$;
 
 
@@ -2335,6 +2607,165 @@ $$;
 
 
 --
+-- Name: leave_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.leave_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL,
+    leave_type_id uuid,
+    start_date date NOT NULL,
+    end_date date NOT NULL,
+    day_part public.day_part DEFAULT 'full'::public.day_part NOT NULL,
+    status public.leave_status DEFAULT 'pending'::public.leave_status NOT NULL,
+    reason text,
+    decided_by uuid,
+    decided_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    decision_note text,
+    requested_minutes integer NOT NULL,
+    unit public.leave_unit DEFAULT 'day'::public.leave_unit NOT NULL,
+    start_time time without time zone,
+    end_time time without time zone,
+    replacement_id uuid,
+    company_id uuid NOT NULL,
+    serial_year integer NOT NULL,
+    serial_seq integer NOT NULL,
+    kind public.request_kind DEFAULT 'leave'::public.request_kind NOT NULL,
+    errand_location text,
+    signature_data text,
+    signature_consent_at timestamp with time zone,
+    approver_signature_data text,
+    approver_signature_consent_at timestamp with time zone,
+    unpaid_minutes integer DEFAULT 0 NOT NULL,
+    per_diem_rials bigint,
+    per_diem_by_requester boolean DEFAULT false NOT NULL,
+    CONSTRAINT leave_requests_approver_signature_shape CHECK ((((approver_signature_data IS NULL) AND (approver_signature_consent_at IS NULL)) OR ((status = ANY (ARRAY['approved'::public.leave_status, 'cancelled'::public.leave_status])) AND (approver_signature_data IS NOT NULL) AND (approver_signature_consent_at IS NOT NULL) AND ((length(approver_signature_data) >= 100) AND (length(approver_signature_data) <= 350000)) AND (mod(length(approver_signature_data), 4) = 2) AND (approver_signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
+    CONSTRAINT leave_requests_decision_note_len CHECK (((decision_note IS NULL) OR (length(decision_note) <= 500))),
+    CONSTRAINT leave_requests_kind_shape CHECK ((((kind = 'leave'::public.request_kind) AND (leave_type_id IS NOT NULL) AND (errand_location IS NULL)) OR ((kind = 'errand'::public.request_kind) AND (leave_type_id IS NULL) AND (replacement_id IS NULL) AND (errand_location IS NOT NULL) AND (btrim(errand_location) <> ''::text) AND (length(errand_location) <= 200)))),
+    CONSTRAINT leave_requests_per_diem_by_requester_shape CHECK (((NOT per_diem_by_requester) OR (per_diem_rials IS NOT NULL))),
+    CONSTRAINT leave_requests_per_diem_shape CHECK (((per_diem_rials IS NULL) OR ((per_diem_rials >= 0) AND (kind = 'errand'::public.request_kind)))),
+    CONSTRAINT leave_requests_reason_len CHECK (((reason IS NULL) OR (length(reason) <= 500))),
+    CONSTRAINT leave_requests_replacement_not_self CHECK (((replacement_id IS NULL) OR (replacement_id <> employee_id))),
+    CONSTRAINT leave_requests_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
+    CONSTRAINT leave_requests_unit_shape CHECK ((((unit = 'day'::public.leave_unit) AND (start_time IS NULL) AND (end_time IS NULL) AND (start_date <= end_date)) OR ((unit = 'hour'::public.leave_unit) AND (start_time IS NOT NULL) AND (end_time IS NOT NULL) AND (start_date = end_date) AND (end_time > start_time) AND (day_part = 'full'::public.day_part)))),
+    CONSTRAINT leave_requests_unpaid_minutes_shape CHECK (((unpaid_minutes >= 0) AND (unpaid_minutes <= requested_minutes)))
+);
+
+
+--
+-- Name: COLUMN leave_requests.decision_note; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.decision_note IS 'Optional note from the manager/admin who decided the request (currently set on reject only). Visible to the employee; never exposed via team_leave_calendar.';
+
+
+--
+-- Name: COLUMN leave_requests.signature_data; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.signature_data IS 'Requester-drawn PNG data URL. Private with the request base row; never exposed by team_leave_calendar.';
+
+
+--
+-- Name: COLUMN leave_requests.signature_consent_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.signature_consent_at IS 'Database timestamp when the requester authorized this digital signature for the request.';
+
+
+--
+-- Name: COLUMN leave_requests.approver_signature_data; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.approver_signature_data IS 'Fresh PNG data URL drawn by the manager/admin who approved the request. Private base-row evidence.';
+
+
+--
+-- Name: COLUMN leave_requests.approver_signature_consent_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.approver_signature_consent_at IS 'Database timestamp when the approving manager/admin authorized their digital signature.';
+
+
+--
+-- Name: COLUMN leave_requests.unpaid_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.unpaid_minutes IS 'Minutes of this request not covered by paid leave. Estimated at submission and finalized atomically on approval.';
+
+
+--
+-- Name: COLUMN leave_requests.per_diem_rials; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.per_diem_rials IS 'FR-61: per diem in Rials, entered on the hr approval step of an errand. Read by finance through finance_approved_requests().';
+
+
+--
+-- Name: COLUMN leave_requests.per_diem_by_requester; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_requests.per_diem_by_requester IS 'True when the designated Head of HR entered per diem on their own errand at submission; false when an hr step signer entered it.';
+
+
+--
+-- Name: replacement_signoff_open(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.replacement_signoff_open(p_request uuid, p_uid uuid) RETURNS public.leave_requests
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare r public.leave_requests%rowtype; s public.leave_request_replacement_signoffs%rowtype;
+begin
+  if p_uid is null or not private.is_active(p_uid) then
+    raise exception 'not allowed to sign this request' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null or r.replacement_id is distinct from p_uid then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
+  select * into r from public.leave_requests where id = p_request for update;
+  select * into s from public.leave_request_replacement_signoffs where request_id = p_request for update;
+  if r.replacement_id is distinct from p_uid or s.request_id is null or s.replacement_id <> p_uid then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+  if s.status <> 'pending' then
+    raise exception 'you have already answered this request' using errcode = '22023';
+  end if;
+  if r.status not in ('pending', 'approved') then
+    raise exception 'this request is no longer open for your signature' using errcode = '22023';
+  end if;
+  return r;
+end $$;
+
+
+--
+-- Name: replacement_signoff_sync(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.replacement_signoff_sync() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if tg_op = 'UPDATE' then
+    if new.replacement_id is not distinct from old.replacement_id then return null; end if;
+    delete from public.leave_request_replacement_signoffs where request_id = new.id;
+  end if;
+  if new.replacement_id is not null and new.status in ('pending', 'approved') then
+    insert into public.leave_request_replacement_signoffs (request_id, replacement_id)
+    values (new.id, new.replacement_id)
+    on conflict (request_id) do nothing;
+  end if;
+  return null;
+end $$;
+
+
+--
 -- Name: request_data_app_request_approval_context(uuid, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2362,6 +2793,7 @@ begin
     'replacement_name',rp.full_name,'decided_by_name',dp.full_name,
     'replacement_conflict',case when r.replacement_id is null then false else
       private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,r.unit,r.start_time,r.end_time) end,
+    'replacement_signoff_status',rs.status,'replacement_signed_at',rs.signature_consent_at,
     'can_override',r.status='pending' and private.is_admin(auth.uid()),
     'can_approve',r.status='pending' and (private.is_admin(auth.uid()) or exists
       (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_approve')::boolean)),
@@ -2373,6 +2805,7 @@ begin
   into v_result from public.profiles p left join public.departments dep on dep.id=p.department_id
     left join public.leave_types lt on lt.id=r.leave_type_id
     left join public.profiles rp on rp.id=r.replacement_id left join public.profiles dp on dp.id=r.decided_by
+    left join public.leave_request_replacement_signoffs rs on rs.request_id=r.id
     left join public.approval_request_policy pol on pol.request_id=r.id where p.id=r.employee_id;
   return v_result;
 end; $$;
@@ -2498,12 +2931,23 @@ begin
   select jsonb_build_object('requester_signature_data',r.signature_data,
     'requester_consent_at',r.signature_consent_at,'approver_signature_data',r.approver_signature_data,
     'approver_signature_consent_at',r.approver_signature_consent_at,
+    'replacement_status',rs.status,'replacement_signature_data',rs.signature_data,
+    'replacement_signature_consent_at',rs.signature_consent_at,
     'approvals',coalesce((select jsonb_agg(item||jsonb_build_object('signature_data',a.signature_data,
-      'signature_consent_at',a.signature_consent_at) order by (item->>'step_order')::integer)
+      'signature_consent_at',a.signature_consent_at,
+      'box_label',coalesce(a.box_label,st.box_label)) order by (item->>'step_order')::integer)
       from jsonb_array_elements(v_progress) item left join public.leave_request_approvals a
         on a.request_id=r.id and (a.step_id=(item->>'step_id')::uuid
-          or (a.step_id is null and item->>'step_id' is null and a.step_role::text=item->>'step_role'))),'[]'))
-    into v_result from public.leave_requests r where r.id=p_id;
+          or (a.step_id is null and item->>'step_id' is null and a.step_role::text=item->>'step_role'))
+        left join public.approval_steps st on st.id=(item->>'step_id')::uuid),'[]'),
+    'steps',coalesce((select jsonb_agg(jsonb_build_object('step_id',s.id,'step_role',s.role,
+      'step_order',s.step_order,'manager_scope',s.manager_scope,'named',s.approver_id is not null,
+      'box_label',s.box_label) order by s.step_order,s.id)
+      from public.approval_steps s
+      where s.company_id=r.company_id and s.active and r.kind=any(s.applies_to)),'[]'))
+    into v_result from public.leave_requests r
+    left join public.leave_request_replacement_signoffs rs on rs.request_id=r.id
+    where r.id=p_id;
   return v_result;
 end; $$;
 
@@ -2536,7 +2980,7 @@ end; $$;
 -- Name: request_data_request_trip_corrections(uuid, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
-CREATE FUNCTION private.request_data_request_trip_corrections(p_id uuid, p_print boolean) RETURNS TABLE(old_start_date date, new_start_date date, old_end_date date, new_end_date date, per_diem_before bigint, per_diem_after bigint, reason text, corrected_by_name text, corrected_at timestamp with time zone)
+CREATE FUNCTION private.request_data_request_trip_corrections(p_id uuid, p_print boolean) RETURNS TABLE(old_start_date date, new_start_date date, old_end_date date, new_end_date date, per_diem_before bigint, per_diem_after bigint, reason text, corrected_by_name text, corrected_at timestamp with time zone, old_unit public.leave_unit, new_unit public.leave_unit, old_day_part public.day_part, new_day_part public.day_part, old_start_time time without time zone, new_start_time time without time zone, old_end_time time without time zone, new_end_time time without time zone, minutes_before integer, minutes_after integer)
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -2547,12 +2991,27 @@ begin
   end if;
   return query
     select c.old_start_date, c.new_start_date, c.old_end_date, c.new_end_date,
-           c.per_diem_before, c.per_diem_after, c.reason, p.full_name, c.corrected_at
+           c.per_diem_before, c.per_diem_after, c.reason, p.full_name, c.corrected_at,
+           c.old_unit, c.new_unit, c.old_day_part, c.new_day_part,
+           c.old_start_time, c.new_start_time, c.old_end_time, c.new_end_time,
+           c.minutes_before, c.minutes_after
       from public.request_corrections c
       left join public.profiles p on p.id = c.corrected_by
      where c.request_id = p_id
      order by c.corrected_at;
 end $$;
+
+
+--
+-- Name: request_edit_key(public.request_kind, public.leave_unit); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_edit_key(p_kind public.request_kind, p_unit public.leave_unit) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select 'edit_' || p_kind::text || '_' || case p_unit when 'day' then 'daily' else 'hourly' end;
+$$;
 
 
 --
@@ -2749,6 +3208,8 @@ begin
       ('hr','calendar','read'), ('hr','reports','read'), ('hr','approval_steps','edit'),
       ('hr','work_settings','edit'), ('hr','holidays','edit'), ('hr','special_leave','edit'),
       ('hr','finance','read'),
+      ('hr','edit_leave_daily','edit'), ('hr','edit_leave_hourly','edit'),
+      ('hr','edit_errand_daily','edit'), ('hr','edit_errand_hourly','edit'),
       ('security','people','read'), ('security','leave_balances','read'),
       ('security','leave_requests','read'), ('security','calendar','read'),
       ('finance','clearance','read'), ('finance','finance','read'),
@@ -5609,6 +6070,61 @@ $$;
 
 
 --
+-- Name: app_change_replacement(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_change_replacement(p_request uuid, p_replacement_id uuid DEFAULT NULL::uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid(); r public.leave_requests%rowtype;
+  s public.leave_request_replacement_signoffs%rowtype; v_dept uuid;
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not allowed to change this request' using errcode = '42501';
+  end if;
+  select * into r from public.leave_requests where id = p_request;
+  if r.id is null or r.employee_id <> v_uid then
+    raise exception 'request not found' using errcode = 'P0002';
+  end if;
+  perform private.approval_lock(r.company_id);
+  perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
+  select * into r from public.leave_requests where id = p_request for update;
+  select * into s from public.leave_request_replacement_signoffs where request_id = p_request for update;
+  if s.request_id is null or s.status <> 'declined' then
+    raise exception 'only a declined replacement can be changed' using errcode = '22023';
+  end if;
+  if r.status not in ('pending', 'approved') then
+    raise exception 'this request is no longer open for your signature' using errcode = '22023';
+  end if;
+  if p_replacement_id is not null then
+    select department_id into v_dept from public.profiles where id = v_uid;
+    if p_replacement_id = s.replacement_id then
+      raise exception 'choose a different replacement' using errcode = '22023';
+    end if;
+    if not exists (
+      select 1 from public.profiles p
+       where p.id = p_replacement_id and p.active and p.company_id = r.company_id
+         and ((v_dept is not null and p.department_id = v_dept)
+              or private.delegate_eligible(v_uid, p.id))
+         and p.id <> v_uid
+    ) then
+      raise exception 'replacement must be an active colleague in your department' using errcode = '22023';
+    end if;
+    if private.replacement_is_away(p_replacement_id, r.start_date, r.end_date, r.unit,
+         r.start_time, r.end_time) then
+      raise exception 'replacement is on leave during this period' using errcode = '22023';
+    end if;
+  end if;
+  update public.leave_requests set replacement_id = p_replacement_id where id = p_request;
+  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
+  values (v_uid, 'replacement_change', 'leave_requests', p_request,
+          jsonb_build_object('replacement_id', s.replacement_id),
+          jsonb_build_object('replacement_id', p_replacement_id));
+end $$;
+
+
+--
 -- Name: app_cleanup_e2e_users(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5678,94 +6194,27 @@ $_$;
 CREATE FUNCTION public.app_correct_trip(p_request uuid, p_new_start date, p_new_end date, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
+    AS $$
 declare
   v_uid uuid := auth.uid();
-  v_reason text := btrim(coalesce(p_reason, ''));
   r public.leave_requests%rowtype;
-  v_start date;
-  v_end date;
-  v_per_diem bigint;
-  v_dates_changed boolean;
-  v_per_diem_changed boolean;
-  v_now timestamptz;
-  v_id uuid;
 begin
   select * into r from public.leave_requests where id = p_request;
   if r.id is null then raise exception 'request not found' using errcode = 'P0002'; end if;
-  if not private.can_correct_trip(v_uid, p_request) then
-    raise exception 'not allowed to correct this trip' using errcode = '42501';
+  if not private.can_edit_request(v_uid, p_request, r.unit) then
+    raise exception 'not allowed to edit this request' using errcode = '42501';
   end if;
-  if not coalesce(p_signature_authorized, false) or p_signature_data is null
-     or p_signature_data !~ '^data:image/png;base64,[A-Za-z0-9+/]+=*$' then
-    raise exception 'signature is required' using errcode = '22023';
-  end if;
-  if p_per_diem_rials < 0 then raise exception 'per diem must be 0 or more' using errcode = '22023'; end if;
-  if v_reason = '' then raise exception 'a reason is required' using errcode = '22023'; end if;
-  if char_length(v_reason) > 1000 then raise exception 'reason is too long' using errcode = '22023'; end if;
-
+  -- Same locks as the edit (re-entrant), taken before the dates are read for the coalesce below.
   perform private.approval_lock(r.company_id);
   perform pg_advisory_xact_lock(hashtextextended('leave:' || r.employee_id::text, 0));
-  select * into r from public.leave_requests where id = p_request for update;
-  if not private.can_correct_trip(v_uid, p_request) then
-    raise exception 'not allowed to correct this trip' using errcode = '42501';
-  end if;
-
+  select * into r from public.leave_requests where id = p_request;
   if r.status <> 'approved' or r.kind <> 'errand' or r.unit <> 'day' then
     raise exception 'only an approved daily trip can be corrected' using errcode = '22023';
   end if;
-  if exists (select 1 from public.errand_extensions where request_id = p_request and status = 'pending') then
-    raise exception 'an extension is waiting for HR' using errcode = '22023';
-  end if;
-
-  v_start := coalesce(p_new_start, r.start_date);
-  v_end := coalesce(p_new_end, r.end_date);
-  v_per_diem := coalesce(p_per_diem_rials, r.per_diem_rials);
-  v_dates_changed := (v_start, v_end) is distinct from (r.start_date, r.end_date);
-  v_per_diem_changed := v_per_diem is distinct from r.per_diem_rials;
-
-  if not v_dates_changed and not v_per_diem_changed then
-    raise exception 'nothing to correct' using errcode = '22023';
-  end if;
-  if v_start > v_end then
-    raise exception 'start date must not be after end date' using errcode = '22023';
-  end if;
-  if v_dates_changed and private.extension_overlaps(r.id, r.employee_id, v_start, v_end) then
-    raise exception 'overlapping leave request exists' using errcode = '22023';
-  end if;
-
-  v_now := clock_timestamp();
-  insert into public.request_corrections (
-    request_id, company_id, old_start_date, new_start_date, old_end_date, new_end_date,
-    per_diem_before, per_diem_after, reason, corrected_by, corrected_at,
-    signature_data, signature_consent_at
-  ) values (
-    r.id, r.company_id, r.start_date, v_start, r.end_date, v_end,
-    r.per_diem_rials, v_per_diem, v_reason, v_uid, v_now, p_signature_data, v_now
-  ) returning id into v_id;
-
-  update public.leave_requests
-     set start_date = v_start,
-         end_date = v_end,
-         requested_minutes = case when v_dates_changed
-           then public.compute_requested_minutes(r.company_id, v_start, v_end, 'full', 'day', null, null, 'errand')
-           else requested_minutes end,
-         per_diem_rials = v_per_diem,
-         per_diem_by_requester = case when v_per_diem_changed then false else per_diem_by_requester end
-   where id = r.id;
-
-  if v_dates_changed then
-    update public.travel_bookings set done_at = null, done_by = null, updated_at = now()
-     where request_id = r.id and opened_at is not null;
-  end if;
-
-  insert into public.audit_log (actor_id, action, entity, entity_id, before, after)
-  values (v_uid, 'trip.correct', 'leave_requests', r.id,
-          jsonb_build_object('start_date', r.start_date, 'end_date', r.end_date, 'per_diem_rials', r.per_diem_rials),
-          jsonb_build_object('start_date', v_start, 'end_date', v_end, 'per_diem_rials', v_per_diem,
-                             'correction_id', v_id));
-  return v_id;
-end $_$;
+  return private.edit_request_impl(v_uid, p_request, 'day',
+    coalesce(p_new_start, r.start_date), coalesce(p_new_end, r.end_date), 'full', null, null,
+    p_per_diem_rials, p_reason, p_signature_data, p_signature_authorized);
+end $$;
 
 
 --
@@ -6121,6 +6570,19 @@ begin
   insert into public.home_dismissed_requests(request_id, employee_id) values (p_id, v_uid)
     on conflict (request_id) do nothing;
 end; $$;
+
+
+--
+-- Name: app_edit_request(uuid, public.leave_unit, date, date, public.day_part, time without time zone, time without time zone, bigint, text, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select private.edit_request_impl(auth.uid(), p_request, p_unit, p_start, p_end, p_day_part,
+    p_start_time, p_end_time, p_per_diem_rials, p_reason, p_signature_data, p_signature_authorized);
+$$;
 
 
 --
@@ -6510,6 +6972,21 @@ $$;
 
 
 --
+-- Name: app_my_request_edit_types(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_my_request_edit_types() RETURNS text[]
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(array_agg(k order by k), '{}'::text[])
+    from unnest(array['edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly',
+                      'edit_requests_own']) as k
+   where private.has_perm(auth.uid(), k, 'edit');
+$$;
+
+
+--
 -- Name: app_password_reset_eligible(uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6619,6 +7096,58 @@ end $$;
 
 
 --
+-- Name: app_replacement_decline(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_replacement_decline(p_request uuid, p_note text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid(); r public.leave_requests%rowtype; v_now timestamptz;
+  v_note text := nullif(btrim(p_note), '');
+begin
+  if length(v_note) > 500 then
+    raise exception 'note is too long (max 500 characters)' using errcode = '22023';
+  end if;
+  r := private.replacement_signoff_open(p_request, v_uid);
+  v_now := clock_timestamp();
+  -- The request itself is untouched (status, approvals): it goes back to the requester.
+  update public.leave_request_replacement_signoffs
+     set status = 'declined', note = v_note, decided_at = v_now
+   where request_id = p_request;
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'replacement_decline', 'leave_requests', p_request,
+          jsonb_build_object('note', v_note));
+end $$;
+
+
+--
+-- Name: app_replacement_sign(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_uid uuid := auth.uid(); r public.leave_requests%rowtype; v_now timestamptz;
+begin
+  perform private.separation_check_signature(p_signature_data, p_signature_authorized);
+  -- Any moment while the request is pending or approved (an HR-exempt or fully signed
+  -- request is already approved; the paper form still wants the replacement's box).
+  r := private.replacement_signoff_open(p_request, v_uid);
+  v_now := clock_timestamp();
+  update public.leave_request_replacement_signoffs
+     set status = 'signed', signature_data = p_signature_data,
+         signature_consent_at = v_now, decided_at = v_now
+   where request_id = p_request;
+  -- The PNG stays out of the audit row, like the approver's.
+  insert into public.audit_log (actor_id, action, entity, entity_id, after)
+  values (v_uid, 'replacement_sign', 'leave_requests', p_request,
+          jsonb_build_object('signature_authorized', true, 'consent_at', v_now));
+end $$;
+
+
+--
 -- Name: app_request_approval_context(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6659,7 +7188,8 @@ begin
   select id into v_saved from public.approval_delegations where principal_id=v_uid
     and source_request_id is null and revoked_at is null and private.delegate_eligible(v_uid,delegate_id);
   select id into v_effective from private.effective_approval_delegate(v_uid);
-  v_temporary:=p_replacement_id is not null and private.delegate_eligible(v_uid,p_replacement_id);
+  -- FR-90: a replacement is a name on the paper form and never receives approval authority.
+  v_temporary:=false;
   select d.id into v_authority from public.approval_executive_settings x
     cross join lateral private.effective_approval_delegate(x.ceo_id) d
     where x.company_id=v_company and d.delegate_id=v_uid and d.ceo_authorized;
@@ -9133,6 +9663,29 @@ end; $$;
 
 
 --
+-- Name: my_replacement_requests(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_replacement_requests() RETURNS TABLE(request_id uuid, employee_name text, kind public.request_kind, leave_type_name_fa text, leave_type_name_en text, leave_type_color text, start_date date, end_date date, day_part public.day_part, unit public.leave_unit, start_time time without time zone, end_time time without time zone, requested_minutes integer, status public.leave_status, serial_year integer, serial_seq integer, created_at timestamp with time zone, signoff_status text, signed_at timestamp with time zone, signoff_note text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select r.id, p.full_name, r.kind, lt.name_fa, lt.name_en, lt.color,
+         r.start_date, r.end_date, r.day_part, r.unit, r.start_time, r.end_time,
+         r.requested_minutes, r.status, r.serial_year, r.serial_seq, r.created_at,
+         s.status, s.signature_consent_at, s.note
+    from public.leave_requests r
+    join public.profiles p on p.id = r.employee_id
+    left join public.leave_types lt on lt.id = r.leave_type_id
+    left join public.leave_request_replacement_signoffs s on s.request_id = r.id
+   where private.is_active(auth.uid())
+     and r.replacement_id = auth.uid()
+   order by r.created_at desc
+   limit 200;
+$$;
+
+
+--
 -- Name: my_travel_bookings(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9297,7 +9850,7 @@ $$;
 -- Name: request_trip_corrections(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.request_trip_corrections(p_id uuid) RETURNS TABLE(old_start_date date, new_start_date date, old_end_date date, new_end_date date, per_diem_before bigint, per_diem_after bigint, reason text, corrected_by_name text, corrected_at timestamp with time zone)
+CREATE FUNCTION public.request_trip_corrections(p_id uuid) RETURNS TABLE(old_start_date date, new_start_date date, old_end_date date, new_end_date date, per_diem_before bigint, per_diem_after bigint, reason text, corrected_by_name text, corrected_at timestamp with time zone, old_unit public.leave_unit, new_unit public.leave_unit, old_day_part public.day_part, new_day_part public.day_part, old_start_time time without time zone, new_start_time time without time zone, old_end_time time without time zone, new_end_time time without time zone, minutes_before integer, minutes_after integer)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -9989,7 +10542,9 @@ CREATE TABLE public.approval_steps (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     approver_id uuid,
     manager_scope text DEFAULT 'direct'::text NOT NULL,
+    box_label text,
     CONSTRAINT approval_steps_applies_to_nonempty CHECK ((array_length(applies_to, 1) >= 1)),
+    CONSTRAINT approval_steps_box_label_len CHECK (((box_label IS NULL) OR ((char_length(btrim(box_label)) >= 1) AND (char_length(btrim(box_label)) <= 60)))),
     CONSTRAINT approval_steps_employee_needs_person CHECK (((role <> 'employee'::public.app_role) OR (approver_id IS NOT NULL))),
     CONSTRAINT approval_steps_manager_scope_valid CHECK (((manager_scope = ANY (ARRAY['direct'::text, 'department'::text])) AND ((manager_scope = 'direct'::text) OR ((role = 'manager'::public.app_role) AND (approver_id IS NULL))))),
     CONSTRAINT approval_steps_role_allowed CHECK (((role = ANY (ARRAY['manager'::public.app_role, 'hr'::public.app_role, 'employee'::public.app_role])) OR ((role = ANY (ARRAY['security'::public.app_role, 'admin'::public.app_role])) AND (NOT active))))
@@ -10008,6 +10563,13 @@ COMMENT ON TABLE public.approval_steps IS 'FR-36: which roles must sign a reques
 --
 
 COMMENT ON COLUMN public.approval_steps.approver_id IS 'FR-42: when set, ONLY this person may fill the step. NULL = filled by anyone holding `role` (the pre-FR-42 behaviour).';
+
+
+--
+-- Name: COLUMN approval_steps.box_label; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.approval_steps.box_label IS 'Title of this step''s signature box on the printed request form (admin-edited).';
 
 
 --
@@ -10304,6 +10866,7 @@ CREATE TABLE public.leave_request_approvals (
     signer_name_snapshot text,
     authority_id uuid,
     evidence jsonb DEFAULT '{}'::jsonb NOT NULL,
+    box_label text,
     CONSTRAINT leave_approval_automatic_shape CHECK (((evidence_kind <> 'automatic'::text) OR ((approver_id IS NULL) AND (signature_data IS NULL) AND (signature_consent_at IS NULL) AND (principal_id IS NOT NULL) AND (authority_id IS NOT NULL) AND (step_id IS NOT NULL)))),
     CONSTRAINT leave_approval_evidence_kind CHECK ((evidence_kind = ANY (ARRAY['legacy'::text, 'manual'::text, 'delegated'::text, 'automatic'::text]))),
     CONSTRAINT leave_request_approvals_decision CHECK ((decision = ANY (ARRAY['approved'::public.leave_status, 'rejected'::public.leave_status]))),
@@ -10328,6 +10891,39 @@ COMMENT ON COLUMN public.leave_request_approvals.step_id IS 'FR-42: which approv
 
 
 --
+-- Name: COLUMN leave_request_approvals.box_label; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.leave_request_approvals.box_label IS 'Signature-box title of the step when this decision was recorded (printed-form history).';
+
+
+--
+-- Name: leave_request_replacement_signoffs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.leave_request_replacement_signoffs (
+    request_id uuid NOT NULL,
+    replacement_id uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    signature_data text,
+    signature_consent_at timestamp with time zone,
+    note text,
+    decided_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT replacement_signoff_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
+    CONSTRAINT replacement_signoff_shape CHECK ((((status = 'pending'::text) AND (signature_data IS NULL) AND (signature_consent_at IS NULL) AND (decided_at IS NULL) AND (note IS NULL)) OR ((status = 'signed'::text) AND (signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND (decided_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)) OR ((status = 'declined'::text) AND (signature_data IS NULL) AND (signature_consent_at IS NULL) AND (decided_at IS NOT NULL)))),
+    CONSTRAINT replacement_signoff_status CHECK ((status = ANY (ARRAY['pending'::text, 'signed'::text, 'declined'::text])))
+);
+
+
+--
+-- Name: TABLE leave_request_replacement_signoffs; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.leave_request_replacement_signoffs IS 'FR-88: the named replacement signs (or declines) a leave request. Created by trigger when a request names a replacement; written only by app_replacement_sign / app_replacement_decline; replaced when the requester names someone else (app_change_replacement). Never gates approval. Absent for requests filed before FR-88.';
+
+
+--
 -- Name: leave_request_serials; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10337,109 +10933,6 @@ CREATE TABLE public.leave_request_serials (
     last_seq integer DEFAULT 0 NOT NULL,
     kind public.request_kind DEFAULT 'leave'::public.request_kind NOT NULL
 );
-
-
---
--- Name: leave_requests; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.leave_requests (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    employee_id uuid NOT NULL,
-    leave_type_id uuid,
-    start_date date NOT NULL,
-    end_date date NOT NULL,
-    day_part public.day_part DEFAULT 'full'::public.day_part NOT NULL,
-    status public.leave_status DEFAULT 'pending'::public.leave_status NOT NULL,
-    reason text,
-    decided_by uuid,
-    decided_at timestamp with time zone,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    decision_note text,
-    requested_minutes integer NOT NULL,
-    unit public.leave_unit DEFAULT 'day'::public.leave_unit NOT NULL,
-    start_time time without time zone,
-    end_time time without time zone,
-    replacement_id uuid,
-    company_id uuid NOT NULL,
-    serial_year integer NOT NULL,
-    serial_seq integer NOT NULL,
-    kind public.request_kind DEFAULT 'leave'::public.request_kind NOT NULL,
-    errand_location text,
-    signature_data text,
-    signature_consent_at timestamp with time zone,
-    approver_signature_data text,
-    approver_signature_consent_at timestamp with time zone,
-    unpaid_minutes integer DEFAULT 0 NOT NULL,
-    per_diem_rials bigint,
-    per_diem_by_requester boolean DEFAULT false NOT NULL,
-    CONSTRAINT leave_requests_approver_signature_shape CHECK ((((approver_signature_data IS NULL) AND (approver_signature_consent_at IS NULL)) OR ((status = ANY (ARRAY['approved'::public.leave_status, 'cancelled'::public.leave_status])) AND (approver_signature_data IS NOT NULL) AND (approver_signature_consent_at IS NOT NULL) AND ((length(approver_signature_data) >= 100) AND (length(approver_signature_data) <= 350000)) AND (mod(length(approver_signature_data), 4) = 2) AND (approver_signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
-    CONSTRAINT leave_requests_decision_note_len CHECK (((decision_note IS NULL) OR (length(decision_note) <= 500))),
-    CONSTRAINT leave_requests_kind_shape CHECK ((((kind = 'leave'::public.request_kind) AND (leave_type_id IS NOT NULL) AND (errand_location IS NULL)) OR ((kind = 'errand'::public.request_kind) AND (leave_type_id IS NULL) AND (replacement_id IS NULL) AND (errand_location IS NOT NULL) AND (btrim(errand_location) <> ''::text) AND (length(errand_location) <= 200)))),
-    CONSTRAINT leave_requests_per_diem_by_requester_shape CHECK (((NOT per_diem_by_requester) OR (per_diem_rials IS NOT NULL))),
-    CONSTRAINT leave_requests_per_diem_shape CHECK (((per_diem_rials IS NULL) OR ((per_diem_rials >= 0) AND (kind = 'errand'::public.request_kind)))),
-    CONSTRAINT leave_requests_reason_len CHECK (((reason IS NULL) OR (length(reason) <= 500))),
-    CONSTRAINT leave_requests_replacement_not_self CHECK (((replacement_id IS NULL) OR (replacement_id <> employee_id))),
-    CONSTRAINT leave_requests_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
-    CONSTRAINT leave_requests_unit_shape CHECK ((((unit = 'day'::public.leave_unit) AND (start_time IS NULL) AND (end_time IS NULL) AND (start_date <= end_date)) OR ((unit = 'hour'::public.leave_unit) AND (start_time IS NOT NULL) AND (end_time IS NOT NULL) AND (start_date = end_date) AND (end_time > start_time) AND (day_part = 'full'::public.day_part)))),
-    CONSTRAINT leave_requests_unpaid_minutes_shape CHECK (((unpaid_minutes >= 0) AND (unpaid_minutes <= requested_minutes)))
-);
-
-
---
--- Name: COLUMN leave_requests.decision_note; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.decision_note IS 'Optional note from the manager/admin who decided the request (currently set on reject only). Visible to the employee; never exposed via team_leave_calendar.';
-
-
---
--- Name: COLUMN leave_requests.signature_data; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.signature_data IS 'Requester-drawn PNG data URL. Private with the request base row; never exposed by team_leave_calendar.';
-
-
---
--- Name: COLUMN leave_requests.signature_consent_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.signature_consent_at IS 'Database timestamp when the requester authorized this digital signature for the request.';
-
-
---
--- Name: COLUMN leave_requests.approver_signature_data; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.approver_signature_data IS 'Fresh PNG data URL drawn by the manager/admin who approved the request. Private base-row evidence.';
-
-
---
--- Name: COLUMN leave_requests.approver_signature_consent_at; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.approver_signature_consent_at IS 'Database timestamp when the approving manager/admin authorized their digital signature.';
-
-
---
--- Name: COLUMN leave_requests.unpaid_minutes; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.unpaid_minutes IS 'Minutes of this request not covered by paid leave. Estimated at submission and finalized atomically on approval.';
-
-
---
--- Name: COLUMN leave_requests.per_diem_rials; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.per_diem_rials IS 'FR-61: per diem in Rials, entered on the hr approval step of an errand. Read by finance through finance_approved_requests().';
-
-
---
--- Name: COLUMN leave_requests.per_diem_by_requester; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.leave_requests.per_diem_by_requester IS 'True when the designated Head of HR entered per diem on their own errand at submission; false when an hr step signer entered it.';
 
 
 --
@@ -10490,6 +10983,16 @@ CREATE TABLE public.request_corrections (
     corrected_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
     signature_data text NOT NULL,
     signature_consent_at timestamp with time zone NOT NULL,
+    old_unit public.leave_unit DEFAULT 'day'::public.leave_unit NOT NULL,
+    new_unit public.leave_unit DEFAULT 'day'::public.leave_unit NOT NULL,
+    old_day_part public.day_part DEFAULT 'full'::public.day_part NOT NULL,
+    new_day_part public.day_part DEFAULT 'full'::public.day_part NOT NULL,
+    old_start_time time without time zone,
+    new_start_time time without time zone,
+    old_end_time time without time zone,
+    new_end_time time without time zone,
+    minutes_before integer,
+    minutes_after integer,
     CONSTRAINT request_corrections_dates CHECK ((new_start_date <= new_end_date)),
     CONSTRAINT request_corrections_reason_check CHECK (((char_length(reason) >= 1) AND (char_length(reason) <= 1000)))
 );
@@ -10499,7 +11002,7 @@ CREATE TABLE public.request_corrections (
 -- Name: TABLE request_corrections; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.request_corrections IS 'FR-84: one row per correction of an approved daily trip. Append-only; RPCs only.';
+COMMENT ON TABLE public.request_corrections IS 'FR-84/FR-91: one row per edit of an approved request (any of the four types). Append-only; RPCs only. Rows from before FR-91 are daily trips: unit day, day part full, minutes null.';
 
 
 --
@@ -10711,7 +11214,7 @@ CREATE VIEW public.team_leave_calendar AS
    FROM ((public.leave_requests lr
      JOIN public.profiles p ON ((p.id = lr.employee_id)))
      LEFT JOIN public.leave_types lt ON ((lt.id = lr.leave_type_id)))
-  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())))
+  WHERE (private.is_active(auth.uid()) AND (lr.status = ANY (ARRAY['pending'::public.leave_status, 'approved'::public.leave_status])) AND ((lr.employee_id = auth.uid()) OR (lr.replacement_id = auth.uid()) OR private.same_team(auth.uid(), lr.employee_id) OR private.reads_calendar(auth.uid())))
 UNION ALL
  SELECT e.id,
     lr.employee_id,
@@ -11026,6 +11529,14 @@ ALTER TABLE ONLY public.leave_ledger
 
 ALTER TABLE ONLY public.leave_request_approvals
     ADD CONSTRAINT leave_request_approvals_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: leave_request_replacement_signoffs leave_request_replacement_signoffs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_request_replacement_signoffs
+    ADD CONSTRAINT leave_request_replacement_signoffs_pkey PRIMARY KEY (request_id);
 
 
 --
@@ -11412,6 +11923,13 @@ CREATE UNIQUE INDEX leave_request_approvals_step_uniq ON public.leave_request_ap
 
 
 --
+-- Name: leave_request_replacement_signoffs_replacement_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX leave_request_replacement_signoffs_replacement_idx ON public.leave_request_replacement_signoffs USING btree (replacement_id, status);
+
+
+--
 -- Name: leave_requests_dates_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11741,6 +12259,13 @@ CREATE TRIGGER approval_request_source_lifecycle AFTER UPDATE ON public.leave_re
 
 
 --
+-- Name: leave_request_approvals approval_snapshot_box_label; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER approval_snapshot_box_label BEFORE INSERT ON public.leave_request_approvals FOR EACH ROW EXECUTE FUNCTION private.approval_snapshot_box_label();
+
+
+--
 -- Name: approval_steps approval_steps_set_updated_at; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -11871,6 +12396,13 @@ CREATE TRIGGER profiles_revoke_sessions_on_deactivate AFTER UPDATE OF active ON 
 --
 
 CREATE TRIGGER profiles_sync_names BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION private.sync_profile_names();
+
+
+--
+-- Name: leave_requests replacement_signoff_sync; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER replacement_signoff_sync AFTER INSERT OR UPDATE OF replacement_id ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.replacement_signoff_sync();
 
 
 --
@@ -12338,6 +12870,22 @@ ALTER TABLE ONLY public.leave_request_approvals
 
 ALTER TABLE ONLY public.leave_request_approvals
     ADD CONSTRAINT leave_request_approvals_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
+
+
+--
+-- Name: leave_request_replacement_signoffs leave_request_replacement_signoffs_replacement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_request_replacement_signoffs
+    ADD CONSTRAINT leave_request_replacement_signoffs_replacement_id_fkey FOREIGN KEY (replacement_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: leave_request_replacement_signoffs leave_request_replacement_signoffs_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_request_replacement_signoffs
+    ADD CONSTRAINT leave_request_replacement_signoffs_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.leave_requests(id) ON DELETE CASCADE;
 
 
 --
@@ -13052,6 +13600,12 @@ CREATE POLICY leave_request_approvals_select ON public.leave_request_approvals F
 
 
 --
+-- Name: leave_request_replacement_signoffs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.leave_request_replacement_signoffs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: leave_request_serials; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -13143,6 +13697,13 @@ COMMENT ON POLICY profiles_select_auth_admin ON public.profiles IS 'Lets the GoT
 --
 
 CREATE POLICY profiles_update ON public.profiles FOR UPDATE TO authenticated USING ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid))))) WITH CHECK ((private.is_active(( SELECT auth.uid() AS uid)) AND (private.is_admin(( SELECT auth.uid() AS uid)) OR private.has_perm(( SELECT auth.uid() AS uid), 'people'::text, 'edit'::text) OR (id = ( SELECT auth.uid() AS uid)))));
+
+
+--
+-- Name: leave_request_replacement_signoffs replacement_signoffs_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY replacement_signoffs_select ON public.leave_request_replacement_signoffs FOR SELECT TO authenticated USING ((((replacement_id = auth.uid()) AND private.is_active(auth.uid())) OR public.app_can_read_approval_request(request_id)));
 
 
 --
@@ -13457,6 +14018,13 @@ REVOKE ALL ON FUNCTION private.approval_mutation_company(p_table text, p_row jso
 
 
 --
+-- Name: FUNCTION approval_snapshot_box_label(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.approval_snapshot_box_label() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION approval_source_lifecycle(); Type: ACL; Schema: private; Owner: -
 --
 
@@ -13515,10 +14083,10 @@ REVOKE ALL ON FUNCTION private.can_approve_step(p_uid uuid, p_request uuid, p_st
 
 
 --
--- Name: FUNCTION can_correct_trip(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
+-- Name: FUNCTION can_edit_request(p_uid uuid, p_request uuid, p_new_unit public.leave_unit); Type: ACL; Schema: private; Owner: -
 --
 
-REVOKE ALL ON FUNCTION private.can_correct_trip(p_uid uuid, p_request uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.can_edit_request(p_uid uuid, p_request uuid, p_new_unit public.leave_unit) FROM PUBLIC;
 
 
 --
@@ -13606,6 +14174,13 @@ REVOKE ALL ON FUNCTION private.department_manager_for(p_emp uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.department_step_applies(p_emp uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION edit_request_impl(p_uid uuid, p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.edit_request_impl(p_uid uuid, p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) FROM PUBLIC;
 
 
 --
@@ -13907,6 +14482,30 @@ REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_star
 
 
 --
+-- Name: TABLE leave_requests; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.leave_requests TO postgres;
+GRANT ALL ON TABLE public.leave_requests TO anon;
+GRANT ALL ON TABLE public.leave_requests TO authenticated;
+GRANT ALL ON TABLE public.leave_requests TO service_role;
+
+
+--
+-- Name: FUNCTION replacement_signoff_open(p_request uuid, p_uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.replacement_signoff_open(p_request uuid, p_uid uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION replacement_signoff_sync(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.replacement_signoff_sync() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION request_data_app_request_approval_context(p_id uuid, p_print boolean); Type: ACL; Schema: private; Owner: -
 --
 
@@ -13939,6 +14538,13 @@ REVOKE ALL ON FUNCTION private.request_data_request_errand_extensions(p_id uuid,
 --
 
 REVOKE ALL ON FUNCTION private.request_data_request_trip_corrections(p_id uuid, p_print boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_edit_key(p_kind public.request_kind, p_unit public.leave_unit); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_edit_key(p_kind public.request_kind, p_unit public.leave_unit) FROM PUBLIC;
 
 
 --
@@ -14454,6 +15060,16 @@ GRANT ALL ON FUNCTION public.app_change_my_password(p_current text, p_new text) 
 
 
 --
+-- Name: FUNCTION app_change_replacement(p_request uuid, p_replacement_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_change_replacement(p_request uuid, p_replacement_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_change_replacement(p_request uuid, p_replacement_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_change_replacement(p_request uuid, p_replacement_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_change_replacement(p_request uuid, p_replacement_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_cleanup_e2e_users(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14531,6 +15147,16 @@ REVOKE ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO postgres;
 GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.app_dismiss_home_request(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_edit_request(p_request uuid, p_unit public.leave_unit, p_start date, p_end date, p_day_part public.day_part, p_start_time time without time zone, p_end_time time without time zone, p_per_diem_rials bigint, p_reason text, p_signature_data text, p_signature_authorized boolean) TO service_role;
 
 
 --
@@ -14635,6 +15261,16 @@ GRANT ALL ON FUNCTION public.app_my_permissions() TO service_role;
 
 
 --
+-- Name: FUNCTION app_my_request_edit_types(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_my_request_edit_types() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_my_request_edit_types() TO postgres;
+GRANT ALL ON FUNCTION public.app_my_request_edit_types() TO authenticated;
+GRANT ALL ON FUNCTION public.app_my_request_edit_types() TO service_role;
+
+
+--
 -- Name: FUNCTION app_password_reset_eligible(p_ids uuid[]); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14682,6 +15318,26 @@ REVOKE ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) FROM PUB
 GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO postgres;
 GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.app_remove_profile_photo(p_employee uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_replacement_decline(p_request uuid, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_replacement_decline(p_request uuid, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_replacement_decline(p_request uuid, p_note text) TO postgres;
+GRANT ALL ON FUNCTION public.app_replacement_decline(p_request uuid, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_replacement_decline(p_request uuid, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean) TO postgres;
+GRANT ALL ON FUNCTION public.app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.app_replacement_sign(p_request uuid, p_signature_data text, p_signature_authorized boolean) TO service_role;
 
 
 --
@@ -15301,6 +15957,16 @@ GRANT ALL ON FUNCTION public.jalali_month_of(p_date date) TO service_role;
 
 
 --
+-- Name: FUNCTION my_replacement_requests(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_replacement_requests() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_replacement_requests() TO postgres;
+GRANT ALL ON FUNCTION public.my_replacement_requests() TO authenticated;
+GRANT ALL ON FUNCTION public.my_replacement_requests() TO service_role;
+
+
+--
 -- Name: FUNCTION my_travel_bookings(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15704,21 +16370,20 @@ GRANT ALL ON TABLE public.leave_request_approvals TO service_role;
 
 
 --
+-- Name: TABLE leave_request_replacement_signoffs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.leave_request_replacement_signoffs TO postgres;
+GRANT ALL ON TABLE public.leave_request_replacement_signoffs TO service_role;
+GRANT SELECT ON TABLE public.leave_request_replacement_signoffs TO authenticated;
+
+
+--
 -- Name: TABLE leave_request_serials; Type: ACL; Schema: public; Owner: -
 --
 
 GRANT ALL ON TABLE public.leave_request_serials TO postgres;
 GRANT ALL ON TABLE public.leave_request_serials TO service_role;
-
-
---
--- Name: TABLE leave_requests; Type: ACL; Schema: public; Owner: -
---
-
-GRANT ALL ON TABLE public.leave_requests TO postgres;
-GRANT ALL ON TABLE public.leave_requests TO anon;
-GRANT ALL ON TABLE public.leave_requests TO authenticated;
-GRANT ALL ON TABLE public.leave_requests TO service_role;
 
 
 --

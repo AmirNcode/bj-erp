@@ -38,16 +38,8 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await page.goto('/calendar');
     await expect(page.locator('[data-testid="calendar-view"]')).toBeVisible({ timeout: 10_000 });
 
-    // Sees the coworker's leave entry (name + dates + type)...
-    await expect(
-      page.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
-    ).toBeVisible({ timeout: 10_000 });
-    // Teammates receive neither the private image nor its consent metadata.
-    await expect(page.locator('[data-testid^="signature-viewer-"]')).toHaveCount(0);
-
-    // The month toggle highlights days with time-off, shows a count, and the
+    // The month grid highlights days with time-off and shows a count; the
     // selected-day detail lists who is off plus their return date.
-    await page.locator('[data-testid="calendar-month-toggle"]').click();
     await expect(page.locator('[data-testid="calendar-month-grid"]')).toBeVisible();
 
     // "Today" is Asia/Tehran (lib/appDate.ts) — the UTC date is one day
@@ -59,8 +51,13 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
       timeout: 10_000,
     });
     await page.locator(`[data-testid="calendar-day-${todayIso}"]`).click();
-    await expect(page.locator('[data-testid="calendar-day-detail"]')).toContainText(requesterName);
-    await expect(page.locator('[data-testid="calendar-day-detail"]')).toContainText(/Returns|بازگشت/);
+    const dayDetail = page.locator('[data-testid="calendar-day-detail"]');
+    await expect(
+      dayDetail.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(dayDetail).toContainText(/Returns|بازگشت/);
+    // Teammates receive neither the private image nor its consent metadata.
+    await expect(page.locator('[data-testid^="signature-viewer-"]')).toHaveCount(0);
 
     // Mobile must stay as a seven-column month grid, not one day per row.
     await page.setViewportSize({ width: 390, height: 844 });
@@ -93,8 +90,9 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await logout(page);
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
     await page.goto('/calendar');
+    await page.locator(`[data-testid="calendar-day-${todayIso}"]`).click();
     const entryCard = page
-      .locator('[data-testid^="cal-entry-"]')
+      .locator('[data-testid="calendar-day-detail"] [data-testid^="cal-entry-"]')
       .filter({ hasText: requesterName })
       .first();
     await expect(entryCard).toBeVisible({ timeout: 10_000 });
@@ -113,8 +111,6 @@ test.describe('Calendar visibility + reason privacy (FR-22, FR-25)', () => {
     await expect(entryCard.locator('[data-testid^="cal-approve-btn-"]')).toHaveCount(0, {
       timeout: 10_000,
     });
-    await expect(
-      page.locator('[data-testid^="cal-entry-"]').filter({ hasText: requesterName }).first()
-    ).toBeVisible();
+    await expect(entryCard).toBeVisible();
   });
 });

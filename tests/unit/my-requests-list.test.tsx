@@ -3,9 +3,16 @@ import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MyRequestsList } from '@/app/[locale]/(app)/request/MyRequestsList';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
+import type { ReplacementRequest } from '@/lib/actions/leave/replacement';
+import type { EditKey } from '@/lib/leave/requestEdit';
 import en from '@/messages/en.json';
 
 // Leaf widgets that call server actions; only their presence matters here.
+// FR-88 pieces call server actions; rendered in their own tests.
+vi.mock('@/app/[locale]/(app)/request/_components/ReplacementSignoff', () => ({
+  ReplacementDeclinedNotice: ({ req }: { req: { id: string } }) => <div data-testid={'replacement-declined-notice-' + req.id} />,
+  ReplacementRequestCard: ({ req }: { req: { request_id: string } }) => <div data-testid={'replacement-request-' + req.request_id} />,
+}));
 vi.mock('@/components/RequestProgress', () => ({
   RequestProgress: ({ requestId, defaultOpen }: { requestId: string; defaultOpen?: boolean }) => (
     <div data-testid={`progress-${requestId}`} data-open={String(!!defaultOpen)} />
@@ -13,6 +20,11 @@ vi.mock('@/components/RequestProgress', () => ({
 }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({
   RequestCancelButton: () => null,
+}));
+vi.mock('@/app/[locale]/(app)/manage/requests/EditRequestDialog', () => ({
+  EditRequestDialog: ({ request, units }: { request: { id: string }; units: string[] }) => (
+    <div data-testid={`edit-${request.id}`} data-units={units.join(',')} />
+  ),
 }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({
   RequestSignatureViewer: () => null,
@@ -55,10 +67,10 @@ function req(id: string, status: string): LeaveRequestWithType {
   } as unknown as LeaveRequestWithType;
 }
 
-function renderList(requests: LeaveRequestWithType[], showAll = false) {
+function renderList(requests: LeaveRequestWithType[], showAll = false, coverRequests: ReplacementRequest[] = []) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <MyRequestsList requests={requests} locale="en" hoursPerDay={8} showAll={showAll} />
+      <MyRequestsList requests={requests} locale="en" hoursPerDay={8} showAll={showAll} coverRequests={coverRequests} />
     </NextIntlClientProvider>
   );
 }
@@ -107,5 +119,58 @@ describe('MyRequestsList', () => {
     expect(isOpen()).toBe(true);
     expect(screen.getByTestId('request-row-a1')).toBeTruthy();
     expect(screen.queryByTestId('show-previous-requests')).toBeNull();
+  });
+
+  // FR-88
+  it('lists open requests naming the caller as replacement and opens for one to sign', () => {
+    const cover = (id: string, status: string, signoff: string | null) =>
+      ({ request_id: id, status, signoff_status: signoff }) as unknown as ReplacementRequest;
+    renderList([req('a1', 'approved')], false, [
+      cover('c1', 'pending', 'pending'),
+      cover('c2', 'approved', 'signed'),
+      cover('c3', 'cancelled', 'pending'),
+    ]);
+
+    expect(isOpen()).toBe(true);
+    expect(screen.getByTestId('replacement-request-c1')).toBeTruthy();
+    expect(screen.getByTestId('replacement-request-c2')).toBeTruthy();
+    expect(screen.queryByTestId('replacement-request-c3')).toBeNull();
+  });
+
+  it('asks the requester to choose again after their replacement declined', () => {
+    const declined = {
+      ...req('a1', 'approved'),
+      replacement_name: 'Cover',
+      replacement_signoff_status: 'declined',
+    } as LeaveRequestWithType;
+    renderList([declined]);
+
+    expect(isOpen()).toBe(true);
+    expect(screen.getByTestId('replacement-declined-notice-a1')).toBeTruthy();
+    expect(screen.getByTestId('request-cover-a1').textContent).toContain('the replacement declined');
+  });
+
+  // FR-91
+  it('offers Edit on the caller\'s approved requests only with edit_requests_own and the type key', () => {
+    const list = [req('p1', 'pending'), req('a1', 'approved')];
+    const renderWith = (editKeys: EditKey[]) => {
+      cleanup();
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <MyRequestsList requests={list} locale="en" hoursPerDay={8} showAll viewerId="me" editKeys={editKeys} />
+        </NextIntlClientProvider>
+      );
+    };
+
+    renderWith([]);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+    renderWith(['edit_leave_daily']);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+    renderWith(['edit_requests_own']);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+
+    renderWith(['edit_requests_own', 'edit_leave_daily', 'edit_leave_hourly']);
+    expect(screen.getByTestId('edit-a1').dataset.units).toBe('day,hour');
+    expect(screen.queryByTestId('edit-p1')).toBeNull();
   });
 });

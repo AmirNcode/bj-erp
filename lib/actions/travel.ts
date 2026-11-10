@@ -249,39 +249,6 @@ export async function listPendingExtensions(): Promise<PendingExtension[]> {
   return (data ?? []) as PendingExtension[];
 }
 
-/**
- * FR-84: HR corrects an approved daily trip. A null field stays as it is; the
- * signed values stay on record in `request_corrections`.
- */
-export async function correctTrip(input: {
-  requestId: string;
-  newStart: string | null;
-  newEnd: string | null;
-  perDiemRials: number | null;
-  reason: string;
-  signatureData: string;
-  signatureAuthorized: boolean;
-}): Promise<{ ok: true } | DbErrorResult> {
-  const c = await requireCaller();
-  if (!c.ok) return c;
-  if (!input.signatureData || !input.signatureAuthorized) return dbErr('signature is required');
-  if (input.perDiemRials !== null && (!Number.isSafeInteger(input.perDiemRials) || input.perDiemRials < 0)) {
-    return dbErr('per diem must be 0 or more');
-  }
-  const { error } = await c.supabase.rpc('app_correct_trip', {
-    p_request: input.requestId,
-    p_new_start: input.newStart,
-    p_new_end: input.newEnd,
-    p_per_diem_rials: input.perDiemRials,
-    p_reason: input.reason,
-    p_signature_data: input.signatureData,
-    p_signature_authorized: input.signatureAuthorized,
-  });
-  if (error) return dbErr(error.message);
-  invalidateAppCache();
-  return { ok: true };
-}
-
 export async function decideExtension(input: {
   extensionId: string;
   approve: boolean;

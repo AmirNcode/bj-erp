@@ -23,18 +23,45 @@ describe('dbErr bare permission message', () => {
   });
 });
 
+describe('dbErr FR-88 replacement messages', () => {
+  it.each([
+    ['you have already answered this request', 'replacementAlreadyAnswered'],
+    ['this request is no longer open for your signature', 'replacementRequestClosed'],
+    ['not allowed to sign this request', 'replacementNotAllowed'],
+    ['not allowed to change this request', 'replacementNotAllowed'],
+    ['note is too long (max 500 characters)', 'replacementNoteTooLong'],
+    ['only a declined replacement can be changed', 'replacementNotDeclined'],
+    ['choose a different replacement', 'replacementSamePerson'],
+    ['replacement is the temporary approval delegate; cancel and file again', 'replacementIsDelegate'],
+    ['replacement must be an active colleague in your department', 'replacementNotColleague'],
+  ])('%s → %s', async (raw, key) => {
+    expect((await dbErr(raw)).error).toBe(key);
+  });
+});
+
 describe('dbErr FR-84 and FR-85 messages', () => {
   it.each([
-    ['not allowed to correct this trip', 'tripCorrectNotAllowed'],
     ['only an approved daily trip can be corrected', 'tripCorrectWrongRequest'],
     ['an extension is waiting for HR', 'tripCorrectExtensionWaiting'],
-    ['nothing to correct', 'tripCorrectNothing'],
     ['start date must not be after end date', 'tripCorrectDates'],
     ['amount must be more than 0', 'balanceAddInvalid'],
     ['amount is too large', 'balanceAddTooLarge'],
     ['this leave type has no balance', 'balanceAddNoBalance'],
     ['a reason is required', 'reasonRequired'],
     ['reason is too long', 'reasonTooLong'],
+  ])('maps %s', async (raw, key) => {
+    expect((await dbErr(raw)).error).toBe(key);
+  });
+});
+
+describe('dbErr FR-91 edit-request messages', () => {
+  it.each([
+    ['not allowed to edit this request', 'requestEditNotAllowed'],
+    ['only an approved request can be edited', 'requestEditNotApproved'],
+    ['nothing to edit', 'requestEditNothing'],
+    ['an edit cannot make leave unpaid', 'requestEditUnpaid'],
+    ['procurement has started booking this trip', 'requestEditBookingStarted'],
+    ['an extended trip cannot become an hourly errand', 'requestEditExtended'],
   ])('maps %s', async (raw, key) => {
     expect((await dbErr(raw)).error).toBe(key);
   });

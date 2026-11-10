@@ -93,6 +93,8 @@ const RULES: Rule[] = [
   { re: /invalid approval step role|approval_steps_role_allowed/i, key: 'invalidApprovalStepRole' },
   { re: /this step must name a person|approval_steps_employee_needs_person/i, key: 'approvalStepNeedsPerson' },
   { re: /approval step was not saved/i, key: 'approvalStepNotSaved' },
+  { re: /signature box name is required/i, key: 'approvalStepBoxLabelRequired' },
+  { re: /signature box name must be at most|approval_steps_box_label_len/i, key: 'approvalStepBoxLabelTooLong' },
   { re: /duplicate key value.*approval_steps_company_(role|person)_uniq/, key: 'duplicateApprovalStep' },
   // FR-76: security staff without the Employee role.
   { re: /no time off for this account/i, key: 'noTimeOff' },
@@ -165,12 +167,17 @@ const RULES: Rule[] = [
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
   // FR-43: HR may set an opening balance and accrual policy, but not their own.
   { re: /you cannot change your own leave balance/i, key: 'cannotSetOwnBalance' },
-  // FR-84 trip correction.
-  { re: /^not allowed to correct this trip$/, key: 'tripCorrectNotAllowed' },
+  // FR-84 trip correction (`app_correct_trip` is now a wrapper of FR-91's edit).
   { re: /^only an approved daily trip can be corrected$/, key: 'tripCorrectWrongRequest' },
   { re: /^an extension is waiting for HR$/, key: 'tripCorrectExtensionWaiting' },
-  { re: /^nothing to correct$/, key: 'tripCorrectNothing' },
   { re: /^start date must not be after end date$/, key: 'tripCorrectDates' },
+  // FR-91 edit of an approved request (`app_edit_request`).
+  { re: /^not allowed to edit this request$/, key: 'requestEditNotAllowed' },
+  { re: /^only an approved request can be edited$/, key: 'requestEditNotApproved' },
+  { re: /^nothing to edit$/, key: 'requestEditNothing' },
+  { re: /^an edit cannot make leave unpaid$/, key: 'requestEditUnpaid' },
+  { re: /^procurement has started booking this trip$/, key: 'requestEditBookingStarted' },
+  { re: /^an extended trip cannot become an hourly errand$/, key: 'requestEditExtended' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },
@@ -242,6 +249,15 @@ const RULES: Rule[] = [
   { re: /duplicate key value.*leave_requests_serial_uniq/, key: 'serialCollision' },
   { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
   { re: /replacement is on leave during this period/, key: 'replacementAway' },
+  // FR-88: the replacement signs or declines; the requester answers a decline.
+  { re: /you have already answered this request/, key: 'replacementAlreadyAnswered' },
+  { re: /this request is no longer open for your signature/, key: 'replacementRequestClosed' },
+  { re: /not allowed to sign this request/, key: 'replacementNotAllowed' },
+  { re: /^note is too long \(max 500 characters\)$/, key: 'replacementNoteTooLong' },
+  { re: /only a declined replacement can be changed/, key: 'replacementNotDeclined' },
+  { re: /choose a different replacement/, key: 'replacementSamePerson' },
+  { re: /replacement is the temporary approval delegate/, key: 'replacementIsDelegate' },
+  { re: /not allowed to change this request/, key: 'replacementNotAllowed' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },
   // FR-48: negative balances are allowed down to one year of workdays.
   { re: /target balance is out of range/, key: 'balanceOutOfRange' },

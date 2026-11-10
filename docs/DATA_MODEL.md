@@ -377,6 +377,22 @@ reverse-case warning. Operational cover alone grants no approval authority. Elig
 delegation requires the principal's permission and an approved source absence; No Replacement keeps
 `replacement_id` null and does not erase the saved delegate. **Never exposed through `team_leave_calendar`.**
 
+**Replacement sign-off (2026-11-09, FR-88, unreleased):** `leave_request_replacement_signoffs`
+(`request_id` PK → leave_requests, `replacement_id → profiles`, `status text` pending|signed|declined,
+`signature_data`, `signature_consent_at`, `note` ≤500, `decided_at`, `created_at`; a shape CHECK ties
+each status to its columns, the PNG bounded like the others). Its own table so `to_jsonb(leave_requests)`
+(the approval context) never carries another PNG. Trigger `replacement_signoff_sync` (after insert /
+update of `replacement_id` on leave_requests) creates a `pending` row when an open request names someone
+and drops/recreates it when the replacement changes. Transitions: pending → signed
+(`app_replacement_sign`, the replacement, request pending or approved); pending → declined
+(`app_replacement_decline`, same, optional note; the request is untouched); declined → new pending row
+for someone else, or no row (`app_change_replacement`, the requester only, request pending or approved;
+refused while a temporary approval delegation is sourced from the request). No row = nothing to sign
+(no replacement, or filed before FR-88). The answer never gates approval. Reads: `my_replacement_requests()`
+(explicit columns, no reason), the context's `replacement_signoff_status` / `replacement_signed_at`,
+and the signatures projection's `replacement_status` / `replacement_signature_data` /
+`replacement_signature_consent_at` (print). `team_leave_calendar` also admits `replacement_id = auth.uid()`.
+
 **Hourly (2026-07-29, FR-26):** `unit leave_unit` (`day|hour`, default `day`) · `start_time time` ·
 `end_time time`, both company-local and NULL for daily requests. A CHECK constraint
 (`leave_requests_unit_shape`) makes a malformed row impossible even if a function is wrong:
@@ -412,6 +428,12 @@ errand, or inclusive calendar days × configured `hours_per_day` for a daily err
 Company configuration: **which exact steps a request requires**. The original unique
 (`company_id`,`role`) constraint was replaced by the partial indexes described below.
 Seeded `manager` (order 1) then `hr` (order 2) for every company, both kinds.
+
+**Signature box name (2026-11-09, FR-89):** `box_label text` (nullable; CHECK trimmed length 1–60 when
+set). The title of the step's box on the printed form; the app requires it for new steps (nullable only
+so an old app can insert during a deploy). Backfilled: direct manager «تصویب کننده», department manager
+«مدیر واحد», `hr` «امور اداری و منابع انسانی», named person «امور اداری». A `box_label`-only UPDATE
+skips the approval-authority triggers (no company lock, no `configuration_changed`).
 
 `role = 'manager'` means **the requester's own direct manager**, resolved per request via
 `private.is_manager_of` — not "anyone holding the manager role", which would contradict FR-17's
@@ -467,6 +489,10 @@ only STABLE, and an index expression must be IMMUTABLE — Postgres rejects it o
 "has this step been decided?" test keys on `step_id`. In the unreleased branch a legacy null-step
 role decision satisfies a current step only when that mapping is unambiguous; one old manager row
 cannot satisfy both direct-manager and department-manager steps. Ambiguity is surfaced for review.
+
+**`box_label` (2026-11-09, FR-89):** the step's box name at the moment of the decision, set by the
+BEFORE INSERT trigger `approval_snapshot_box_label` from `approval_steps.box_label`. The printed form
+titles a signed box with it, so a later rename or removal does not rewrite history.
 
 **Deliberately NOT a foreign key to `approval_steps`.** Configuration can be reordered or
 deactivated later, and recorded evidence must not change or vanish when it is.
@@ -571,15 +597,29 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   and settled cancelled trips. `app_extendable_trips` returns `hr_exempt` (the Head of HR's own trip:
   extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
-### `request_corrections` (2026-11-05, FR-84, unreleased)
-Migrations `20261107100000`, `…110000`, `…120000`. RLS on, **no client policies**, RPCs only; append-only.
+### `request_corrections` (2026-11-05, FR-84; widened 2026-11-10, FR-91, unreleased)
+Migrations `20261107100000`, `…110000`, `…120000`, then `20261110120000` (FR-91). RLS on, **no client policies**, RPCs only; append-only.
 `request_id` → leave_requests (cascade) · `company_id` · `old_start_date`, `new_start_date` · `old_end_date`,
 `new_end_date` · `per_diem_before`, `per_diem_after` · `reason` (1–1000) · `corrected_by` → profiles (set null)
 · `corrected_at` · `signature_data`, `signature_consent_at`. Every row keeps all six values. A date change
 sets `leave_requests` dates, recomputes `requested_minutes` and clears `travel_bookings.done_at`/`done_by` once
 the booking is open; a trip has no ledger rows. State `corrected` (`private.travel_booking_state`): approved, not
 done, with a date-changing correction since `opened_at` that is newer than any approved extension.
-`request_trip_corrections(id)` reads history without the signature; `app_travel_booking` returns
+**FR-91** adds ten columns, one row per edit of an approved request of any type: `old_unit`, `new_unit`
+(`leave_unit`, default `day`) · `old_day_part`, `new_day_part` (default `full`) · `old_start_time`,
+`new_start_time`, `old_end_time`, `new_end_time` (nullable) · `minutes_before`, `minutes_after` (nullable;
+null on rows from before FR-91, which are daily trips). The first row's `old_*` values are the signed
+ones. `app_edit_request` also rewrites unit, day part, times, `requested_minutes`, `unpaid_minutes` and
+`per_diem_rials` on `leave_requests`. **Ledger:** a leave edit that changes the paid minutes posts one
+row (note `request edited`) for the difference: `reversal` when shorter (time returned), `consumption`
+when longer (time taken), so Home's "used" follows it (migration `20261110130000`);
+the ledger stays append-only. **An edit may not create or grow an unpaid part** (a new request may run
+past the balance; an edit is refused with "an edit cannot make leave unpaid"); shrinking a request that
+already has an unpaid part is allowed. A trip edited to an hourly errand clears `per_diem_rials`
+(FR-61) and deletes its `travel_bookings` row; refused once procurement has started booking
+(`first_saved_at` or `done_at` set) or while an extension is pending. An hourly errand turned into a trip
+enters procurement as a newly approved one.
+`request_trip_corrections(id)` reads history without the signature (and now the ten new columns); `app_travel_booking` returns
 `last_correction`; `finance_requests` returns `corrected_at`.
 
 ### `home_dismissed_requests` (2026-10-21, FR-72, unreleased)

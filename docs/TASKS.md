@@ -3,6 +3,20 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-90 / FR-91 replacement on paper only, edit requests (local, not deployed)
+
+- ☐ e2e specs for request edit not yet run against a stack (`request-edit.spec`, `trip-correction.spec`).
+- ☐ Deploy FR-90/FR-91 (migrations `20261110100000`, `20261110110000`, `20261110120000`). After deploy (owner): tell HR the Correct button is now Edit and covers all four request types; the admin switches the toggles per role in Settings › Roles (edit own requests is off for everyone).
+
+## FR-89 signature boxes (local, not deployed)
+
+- ☐ Owner tests on the local demo stack (`http://localhost:3501`), then PR + review. Before Liara: check the backfilled box names on the real steps after deploy (Approval steps page) and rename as wanted.
+- ☐ e2e not run for `approval-step-person.spec` / `hr-role.spec` after the box-id changes.
+
+## FR-88 replacement sign-off (local, not deployed)
+
+- ☐ e2e spec for sign / decline / choose again (only SQL + unit tests so far).
+
 ## Liara (production host, testing phase)
 
 - ◐ **Cold-start check:** after initial post-power-on timeouts, a provider restart restored access
@@ -83,7 +97,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   it back; PostgREST `Prefer: tx=rollback`). The owner dropped it for now (spec §1).
 - ◐ **Approved trip corrections + quick balance add (FR-84, FR-85):** built on
   `claude/approved-trip-corrections` (not merged, not deployed). Ships with FR-83. After deploy (owner): tell HR
-  about Correct on Manage › Requests and Add to balance on Edit Employee, and that early return = add the unused
+  about Edit (was Correct, FR-91) on Manage › Requests and Add to balance on Edit Employee, and that early return = add the unused
   time (not any unpaid days on that request). Tell finance what the "Corrected" marker means.
 - ◐ **First and last names (FR-83):** merged to main as `8224e81`, not deployed. Owner (2026-11-05): ships with FR-84/85 when merged.
   After deploy (owner/HR): sort Manage › Employees by Last name Z to A and fix each blank (about 54

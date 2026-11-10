@@ -44,6 +44,11 @@ function useLabels() {
     rejectSuccess: t('rejectSuccess'),
     coverLabel: tRepl('coverLabel'),
     coverConflict: tRepl('coverConflict'),
+    coverSignoff: {
+      pending: tRepl('signoffPending'),
+      signed: tRepl('signoffSigned'),
+      declined: tRepl('signoffDeclined'),
+    },
     trackingNo: tLeave('trackingNo'),
     errandBadge: tErrand('badge'),
     errandLocation: tErrand('location'),
@@ -195,6 +200,12 @@ export function ApprovalQueue({ requests, locale, hoursPerDay, travelTicks = nul
                           {req.replacement_conflict && (
                             <span className="ms-1 text-destructive" data-testid={`cover-conflict-${req.id}`}>
                               ({labels.coverConflict})
+                            </span>
+                          )}
+                          {/* FR-88: for information only; approval never waits for it. */}
+                          {req.replacement_signoff_status && (
+                            <span className="ms-1 text-muted-foreground" data-testid={`cover-signoff-${req.id}`}>
+                              · {labels.coverSignoff[req.replacement_signoff_status]}
                             </span>
                           )}
                         </div>

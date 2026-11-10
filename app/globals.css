@@ -104,7 +104,9 @@ select:not([multiple]):not([size]) {
   background-position: right 0.75rem center;
   padding-inline-end: 2.25rem;
 }
-[dir='rtl'] select:not([multiple]):not([size]) {
+/* A select that sets its own dir="ltr" (the time selects) keeps the arrow on the
+   right, where its end padding is; on the left it sat on top of the value. */
+[dir='rtl'] select:not([multiple]):not([size]):not([dir='ltr']) {
   background-position: left 0.75rem center;
 }
 

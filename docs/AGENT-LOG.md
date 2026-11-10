@@ -78,6 +78,270 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-10 — PR #23 review fixes (print crash, edit ledger rows, extended trip), merge to main
+
+**Agent:** Claude Fable 5.2 via Claude Code (orchestrator and reviewer); a Sonnet subagent did the three UI fixes, an Opus (medium effort) subagent the SQL fix
+**Branch / HEAD at start:** feat/form-signature-boxes @ 6d43a77
+**Trigger:** Amir: fix the findings of the review below with lower-tier subagents, review their output, then merge to main.
+
+**Owner decisions (2026-11-10)**
+- A leave of an unpaid type may be lengthened by an edit (the "no unpaid growth" rule is for balance leave).
+- An editor may edit the admin's request (decision 7 of the spec includes the admin).
+
+**What changed**
+- `app/[locale]/(print)/print/request/[id]/page.tsx` — `const date` moved above the FR-91 edit lines (it was used before its declaration: ReferenceError for a trip that began as an hourly errand and was extended).
+- `supabase/migrations/20261110130000_request_edit_fixes.sql` (new) — `private.edit_request_impl` again, two changes: the ledger row of an edit is `consumption` (longer) or `reversal` (shorter) instead of `adjustment`, so Home's "used" counts it; trip → hourly errand is refused once an extension was approved (`an extended trip cannot become an hourly errand`). `supabase/schema.sql` patched in that function only.
+- `lib/errors/db-error.ts`, `messages/{en,fa}.json` — `requestEditExtended`.
+- `app/[locale]/(app)/manage/requests/EditRequestDialog.tsx` — an hourly errand offers 00:00–23:30 like the errand form; hourly leave keeps the work window.
+- `app/[locale]/(app)/manage/approval-steps/ApprovalStepsCard.tsx` — a save with no refusal clears the draft.
+- Tests: `tests/sql/request-edit.sql` (ledger types, extended trip, the two owner decisions), unit tests `print-request-edits`, `edit-request-dialog`, `approval-steps-card`, `db-error`, `home_pulse`.
+- Docs: REQUIREMENTS (FR-91), DATA_MODEL, PERMISSIONS, CHANGELOG, the FR-90/91 spec (amendments section).
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `fix_pr23_sql` (subagent) and `verify_pr23_fx` (orchestrator), both dropped; `postgres` only read by `pg_dump`. The new migration is NOT applied to the local `postgres` database, and the local app image was not rebuilt.
+- Pushed the branch and merged PR #23 into `main`, which starts the Liara deploy (see the chat for the result).
+
+**Verification**
+- `npx tsc --noEmit` exit 0 · `npm run lint` exit 0 · `npm run test:unit` 129 files / 1290 tests pass.
+- Clone with only the new migration applied on top: `request-edit` 148 PASS, `replacement-paper-only` 22, `replacement-signoff` 65, `signature-box-labels` 15; `trip-correction` stops at the known live-data assertion ("client cannot read the table") after 70 PASS.
+- New migration body = the `20261110120000` body plus exactly the two hunks (`diff`). `edit_request_impl` in `schema.sql` equals the clone's `pg_dump` (245 lines, empty diff).
+- The subagent re-loaded the old body on its clone and saw `request-edit.sql` fail at the ledger assertion, so the test catches the defect.
+- Not run: Playwright, `npm run test:deploy` (CI runs it), a signed-in browser check.
+
+**State left behind**
+- Committed, pushed and merged. Local stack `bj-approvals-finance` still runs the build and schema from before these fixes.
+
+**For the next agent**
+- Local edits made before this fix left `adjustment` rows with note `request edited` in the local DB only; production has none.
+- Shortening an extended trip to end before the extension's old end date is not tested.
+
+## 2026-11-10 — Review of PR #23 at 6d43a77 (FR-90, FR-91, approval steps Save)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** feat/form-signature-boxes @ 6d43a77 (= PR head)
+**Trigger:** Amir: independent read-only review of PR #23, priority on 75e5c5f..6d43a77; findings only.
+
+**What changed**
+- This entry only. No code, test, migration or schema change.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: created throwaway DB `review_pr23_fable` (`pg_dump -Fc -d postgres | pg_restore --no-owner`, 19 ignored cron/graphql errors), ran SQL tests and rolled-back experiments there, dropped it. `postgres` was only read (pg_dump, one `select` on `bj_deploy.schema_migrations`). Nothing on Liara.
+- Scratchpad only: a copy of `tests/unit/print-request-edits.test.tsx` with one extra case, run with its own vitest config; deleted.
+
+**Verification**
+- `npx tsc --noEmit` exit 0 · `npm run lint` exit 0 · `npm run test:unit` 129 files / 1283 tests pass.
+- On the clone: `replacement-paper-only` 22 PASS, `request-edit` 138, `replacement-signoff` 65, `signature-box-labels` 15. `trip-correction` stops at "client cannot read the table" (70 PASS before it), `approval-delegation` at "nonadmin presets default to No", `fr55-roles-permissions` reports 4 FAIL notices: all three are live-data drift (table grants to anon/authenticated on `request_corrections`; the local HR role was given `edit_requests_own` by a `role.update` on 2026-11-10), not the PR.
+- Ledger checksums of the three `20261110*` migrations equal the files. A schema dump of the clone differs from `supabase/schema.sql` only in GRANT/REVOKE and CHECK lines; no function body differs.
+- The migration's revoke `update` ran without a JWT on a fixture row (trigger `approval_authority_lock` does not block it).
+- Playwright not run (as instructed). No signed-in browser check.
+
+**State left behind**
+- Uncommitted: this entry. Findings reported in chat; none fixed.
+
+**Findings (all confirmed unless marked)**
+- Major: `app/[locale]/(print)/print/request/[id]/page.tsx:145` calls `date()` before `const date` (line 164). A trip that began as an hourly errand and has an approved extension throws `ReferenceError: Cannot access 'date' before initialization` (probe test). The state is reachable (clone experiment: hourly errand → trip → tick → extension approved).
+- Major: an edit posts its ledger difference as `adjustment` (`20261110120000_request_edit.sql:243`), and Home's used / entitled counts only `consumption` and `reversal` (`lib/home/pulse.ts:160`). After an edit of a balance leave, "used" keeps the old amount and "entitled" moves (code reading; not run).
+- Minor: a trip with an approved extension and a ticked, not started booking can be edited to an hourly errand; the booking is deleted and the approved extension row stays on a one-hour errand.
+- Minor: a leave of an unpaid type can be lengthened (unpaid minutes 240 → 2400); the spec says an edit is refused when unpaid minutes would rise.
+- Minor: `private.can_edit_request` has no `can_act_on` / admin exclusion, so a non-admin editor edits the admin's request (`cancel_leave_request` refuses the same caller). The spec says "every other employee"; owner to confirm.
+- Minor: `EditRequestDialog.tsx:60` offers only working-hours slots for an hourly errand; the errand form offers 00:00–23:30.
+- Minor (code reading, not run): `ApprovalStepsCard` never clears `edits` / `enforcedEdit`; after a save, a later change by someone else makes the old draft dirty again and the next Save writes it back.
+
+**For the next agent**
+- The spec's "no temporary grants exist: the amendment is unreleased" is not what `main` shows (`enroll_request_delegation` on main inserts them); the live backup holds none, and the revoke handles any.
+- A vitest probe outside the repo works with a config whose `root` is the scratch folder, `resolve.alias['@']` the repo, and a `node_modules` symlink beside the test.
+
+## 2026-11-10 — Time-select arrow, Edit on My requests, Save button on Approval steps; commit + PR #23 update
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** feat/form-signature-boxes @ 75e5c5f (FR-90/FR-91 work uncommitted)
+**Trigger:** Amir, three screenshots: fix the chevron of the hour selects; show Edit on My requests for people who may edit their own; a Save button on Request approval steps instead of auto-save. Then commit, update PR #23, write a review prompt.
+
+**What changed**
+- `app/globals.css` — the RTL chevron rule now skips `select[dir='ltr']`. The time selects are `dir="ltr"` inside an RTL page, so the arrow was drawn at the left, on top of the value, while the end padding was on the right.
+- `app/[locale]/(app)/request/MyRequestsList.tsx`, `request/page.tsx` — the page loads `getRequestEditKeys()`; each card renders `EditRequestDialog` when `editableUnits` allows (approved + `edit_requests_own` + the type key). No DB change: `app_edit_request` already allowed it.
+- `app/[locale]/(app)/manage/approval-steps/ApprovalStepsCard.tsx` — box name, order, active and the order switch are a draft (`edits` by step id, `enforcedEdit`); Save calls `updateApprovalStep` per changed step (changed fields only), then `setApprovalOrderEnforced`; stops at the first refusal. Dirty = draft differs from props, so no reset is needed after the refresh. Add / Remove unchanged (immediate).
+- `messages/{en,fa}.json` — `manage.settings.approvalSteps.save` / `saving`.
+- Tests: new `tests/unit/approval-steps-card.test.tsx`; FR-91 case in `my-requests-list.test.tsx`; `my-travel-note.test.tsx` mocks `EditRequestDialog` (the list now imports a server action).
+- `docs/CHANGELOG.md`.
+
+**Actions outside the repo**
+- none (dev server `bj-dev-isolated` on :3100 started and stopped for a visual check; a temporary `app/[locale]/zz-check` page was created and deleted).
+
+**Verification**
+- `npx tsc --noEmit` clean · `npm run lint` clean · `npm run test:unit` 129 files / 1283 tests pass.
+- Browser, temporary no-login page in Farsi: time selects show the arrow on the right clear of the value, an ordinary select keeps it on the left; Save is disabled, and enabled after toggling the order switch.
+- **Not checked:** Edit on My requests and a real Save while signed in (real passwords); Playwright not run. The local Docker app image was NOT rebuilt, so localhost:3501 still runs the earlier build.
+
+**State left behind**
+- Committed and pushed on `feat/form-signature-boxes` together with the FR-90/FR-91 work; PR #23 description updated.
+
+**For the next agent**
+- Save on the approval steps is several writes, not one transaction: a refusal midway leaves the earlier steps saved.
+- `tests/e2e/approval-step-person.spec.ts` does not edit rows, so it needed no change; a future e2e that edits order/active must click `approval-steps-save`.
+
+## 2026-11-10 — FR-90 replacement on paper only + FR-91 edit-request permissions: spec, plan, build
+
+**Agent:** Claude Fable 5.2 via Claude Code (orchestrator); Sonnet subagents built tasks 1–6; orchestrator reviewed each diff
+**Branch / HEAD at start:** feat/form-signature-boxes @ 75e5c5f
+**Trigger:** Amir, after HR feedback: a replacement must not receive approvals; "edit requests" as per-type role permissions; build with lower-tier subagents; update the local deploy.
+
+**Owner decisions (2026-11-10)**
+- Replacement never gives approval authority, CEO included; saved delegates stay.
+- Edit: approved requests only; duration and daily ↔ hourly within one family; signatures stay; refused on overlap / balance / hourly limit; replaces the FR-84 HR gate.
+- Five toggles: four per type plus `edit_requests_own` (off for every role by default; admin always).
+- Reverses the 2026-11-05 decision that regular leave dates are never corrected.
+
+**What changed**
+- Spec `docs/specs/2026-11-10-replacement-paper-only-edit-requests-design.md`, plan `docs/plans/2026-11-10-replacement-paper-only-edit-requests.md`.
+- Migrations `20261110100000_replacement_paper_only.sql` (no temporary grant from a replacement; preview `temporary*` always empty; old grants revoked), `20261110110000_edit_request_permissions.sql` (five keys, `private.can_edit_request`, `app_my_request_edit_types`, hr preset gets the four type keys), `20261110120000_request_edit.sql` (`request_corrections` +10 columns, `private.edit_request_impl`, `app_edit_request`, `app_correct_trip` now a wrapper, `can_correct_trip` dropped). `supabase/schema.sql` patched by object (matches the migrated DB apart from the usual grant / CHECK noise).
+- App: `lib/leave/requestEdit.ts`, `lib/leave/requestChanges.ts`, `lib/actions/leave/edit.ts`, `manage/requests/EditRequestDialog.tsx` (replaces `CorrectTripDialog.tsx`), `RequestReviewActions`, `ApprovalHistory`, approvals page, `RequestProgress` (edit lines for all types), print page, catalog + role editor, request forms (replacement-as-delegate copy removed), `messages/*`.
+- Tests: `tests/sql/replacement-paper-only.sql`, `tests/sql/request-edit.sql`; updated `approval-delegation.sql`, `trip-correction.sql`, `fr55-roles-permissions.sql`; new unit tests `request-edit`, `request-changes`, `edit-request-dialog`, `print-request-edits`; e2e `request-edit.spec.ts` (new) and `trip-correction.spec.ts` (new ids).
+- Docs: REQUIREMENTS, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS, CLAUDE.md (two gotchas).
+
+**Actions outside the repo**
+- Local stack is `bj-approvals-finance` (localhost:3501, live backup, SMS off, cron inactive). No `bj-erp-*` stack exists.
+- Throwaway clones in `bj-approvals-finance-db-1` (`fr90`, `fr90base`, `fr91base`, `fr91new`) for dry-runs and SQL tests; all dropped.
+- `pg_dump -Fc` of its `postgres` to the session scratchpad before migrating (not in the repo).
+- Applied the three migrations to its `postgres` with `bj_apply_and_record_migration` (release `approvals-finance-local`): **all three are now FROZEN**. Restarted `rest`; rebuilt and restarted `app` from the working tree. `/api/health` 200, `/login` 200. Nothing on Liara.
+
+**Verification**
+- `npm run lint` clean · `npx tsc --noEmit` clean · `npm run test:unit` 128 files / 1278 tests pass · app image built (`next build` inside the Docker build).
+- SQL on clones: `replacement-paper-only` 22 PASS, `request-edit` 138 PASS, `replacement-signoff` 65, `sign-once` 40, `stranded-request` 32. Older files stop at the same assertions as before the migrations because the clone is real data, not the synthetic DB they expect (anon grants, table lockdown); on a scratch clone with those fixed, `trip-correction` 76, `travel-booking` 224, `travel-itinerary` 46, `balance-add` 19, `hr-head-own-per-diem` 27 all pass.
+- **Not run:** Playwright (the two e2e specs are type-checked only). **Not done:** a signed-in browser check of the Edit dialog, edit lines and print form — the stack uses real passwords, which agents do not type.
+
+**State left behind**
+- Everything uncommitted on `feat/form-signature-boxes`. Local stack runs the new code and schema.
+
+**For the next agent**
+- Calls Amir has seen only as a list: reason + signature on every edit; an edit may not create or grow an unpaid part; delegates of HR holders lose trip edit; replacement picker population unchanged.
+- Edit behaviour worth knowing: if the balance grew since approval, an edit of a request with an unpaid part converts unpaid to paid up to the balance; the replacement-on-leave check is not re-run on edit; a non-null per diem is ignored unless the target is a daily trip.
+- SQL test files assume a synthetic DB; on a live-backup clone compare against a baseline run.
+- `docs/PERMISSIONS.md` "Catalog (19 released items…)" heading was already stale; the catalog now has 26 keys.
+- I told Amir at first that FR-84 allowed editing one's own trip. It does not; corrected in chat and in the spec.
+
+## 2026-11-10 — Review of PR #23 (FR-88 replacement sign-off, FR-89 signature boxes, calendar)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/form-signature-boxes @ 75e5c5f (= PR head)
+**Trigger:** Amir: independent review of PR #23, findings only (no fixes, commits or GitHub comments).
+
+**What changed**
+- This entry only. No code changed.
+
+**Actions outside the repo**
+- Isolated demo stack `bj-approvals-finance-db-1`: confirmed its ledger checksums for `20261109120000` / `20261109130000` equal the PR files; created throwaway DB `review_pr23_x` (pg_dump | pg_restore of `postgres`), ran SQL tests there, dropped it. Nothing else touched.
+
+**Verification**
+- `npx tsc --noEmit` clean; `npm run lint` clean; `npm run test:unit` 124 files / 1239 tests passed.
+- `tests/sql/replacement-signoff.sql` 65 PASS, `tests/sql/signature-box-labels.sql` 15 PASS on the clone.
+- Full `tests/sql/*` on the clone: 15 of 27 files fail on objects this PR does not touch (anon grants on `watched_absences` etc., FR-55 role counts, admin-panel backup names). The demo DB's own grants differ from `schema.sql` (e.g. anon has EXECUTE on `watched_absences` in its `postgres` DB), so this is demo-stack drift, not the PR. The 2026-11-09 entry's "all pass except fr55" does not reproduce on this stack.
+- PR function bodies in `schema.sql` match a schema dump of the clone (11 functions compared).
+- e2e not run (as instructed).
+
+**State left behind**
+- Findings reported in chat. Main one: a replacement who declines keeps the temporary approval delegation created from the request (`app_replacement_decline` does not revoke it; `approval_source_lifecycle` activates it on approval; `app_change_replacement` then refuses).
+
+**For the next agent**
+- Do not trust the demo stack for full SQL-suite results; its grants drift from `schema.sql`.
+
+## 2026-11-09 — FR-89 form signature boxes from approval steps; merged FR-88 + calendar work; local deploy
+
+**Agent:** Claude Opus 5.5 via Claude Code (coordinator; two worktree subagents, entries below)
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 69813a0 → new branch `feat/form-signature-boxes` from origin/main @ fe1a121 (owner: all this work on a new branch)
+**Trigger:** Amir: printed forms' signature row should be the approval steps he configures (box name per step, editable), no Security box, no "Additional approvals" strip, "Not required" / "No replacement selected"; replacement signs in the app (FR-88, subagent); calendar list toggle removed (subagent).
+
+**What changed**
+- Brainstormed with the owner; spec `docs/specs/2026-11-09-form-signature-boxes-design.md` (approved).
+- `supabase/migrations/20261109130000_signature_box_labels.sql`: `approval_steps.box_label` (+CHECK 1–60, backfill), `leave_request_approvals.box_label` + BEFORE INSERT snapshot trigger, box-label-only updates skip both approval-authority triggers (`private.approval_box_label_only`), print signatures payload gains `box_label` per approval and `steps` (active steps for the kind). Timestamp is AFTER FR-88's `20261109120000` on purpose: both redefine `request_data_get_leave_request_signatures`; mine keeps FR-88's replacement fields.
+- `lib/leave/paperForm.ts`: fixed per-form box lists and `signatureSourceFor` removed; `replacementBox` flag + pure `stepBoxes()`. Print page rebuilt around it (requester, replacement, step boxes, ≤4 per row); FR-88 replacement signature/"Declined" shown in the Replacement box.
+- Approval steps UI: box-name column (inline edit on blur), fixed grid columns; Add dialog asks for the box name first. `createApprovalStep` requires `boxLabel`; `updateApprovalStep` accepts it. New fa/en strings; unused print keys (`additionalApprovals`, old `boxes.*`, `approvalEvidence.stepLabel`) removed.
+- Tests: `tests/sql/signature-box-labels.sql` (16 assertions), `stepBoxes` unit tests, print tests updated/added; e2e `hr-role.spec` and `approval-step-person.spec` updated for new ids/field.
+- Merged both subagents' uncommitted worktree diffs into this branch with `git apply --3way` (my changes staged first so the 3-way merge could run; nothing committed). Conflicts (logs, changelog, messages, review.ts, schema.sql) were all additive; `schema.sql` regenerated from a clone.
+
+**Actions outside the repo**
+- Isolated demo stack `bj-approvals-finance` (localhost:3501): applied `20261109120000_replacement_signoff` + `20261109130000_signature_box_labels` through `bj_apply_migrations` (ledger tag approvals-finance-local) — both are now FROZEN; rebuilt the app container from this working tree; restarted `rest`. Health OK. Signed in as demo admin; Approval steps and a print page load.
+- Throwaway DB `sigbox_dry` in `bj-approvals-finance-db-1` (clone of its `postgres`) for dry-runs and the schema dump; dropped.
+
+**Verification**
+- SQL: every `tests/sql/*.sql` on the clone with both migrations: all pass except `fr55-roles-permissions.sql` (8 roles vs 7 expected) which fails identically on the un-migrated DB — pre-existing.
+- `npx tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 1239 passed. Visual check of the steps card (desktop + phone) on a temp page, since deleted.
+- Not run: e2e; `npm run build` not run separately (the Docker app build passed).
+
+**State left behind**
+- Branch `feat/form-signature-boxes`, everything uncommitted (index staged by the 3-way merge). Demo stack has no approval steps (its seed creates none, and the department-manager step can't be added from the dialog).
+- Subagent worktrees `.claude/worktrees/agent-ae612bed8c3c4f74b` and `agent-a7b4241771dd09db8` still exist (their changes are now in this branch).
+
+**For the next agent**
+- Owner will test locally, then ask for a PR and an independent review.
+- Owner confirmed 2026-11-09: approval signatures already given stay valid after a replacement declines and the requester picks someone else (matches the build).
+- Owner: no SMS for FR-88 at this stage (TASKS item dropped).
+
+**Later the same session — demo stack switched to LIVE data (owner request)**
+- Saved the demo DB (`pg_dump -Fc`, session scratchpad, not in the repo), removed volume `bj-approvals-finance_db-data`, started a fresh `db`, restored `~/Backups/bj-erp/daily-20261109T021229Z.dump` (sha256 OK) per DEPLOY-LIARA (list without the graphql ACL entry, `--clean --if-exists --exit-on-error --single-transaction`, then `restore-graphql.sql`).
+- First restore rolled back: `role "supabase_functions_admin" does not exist` (live cluster has it, a fresh local one doesn't). Created it `NOLOGIN` locally and re-ran: OK (148 profiles, 39 requests).
+- In the local copy only: `private.sms_settings` set `mode='off'`, `api_key`/`username` NULL (backup had live SMS with a real key); `update cron.job set active=false` (4 jobs; the stack also runs `cron.launch_active_jobs=off`).
+- Applied pending migrations via `bj_apply_migrations` (view_as, approvals_finance_usability, FR-88, FR-89 — the backup predates the PR #22 deploy). Stack up, health OK. Print payload checked in SQL as the admin JWT (rolled back): real steps print «مدیر واحد · تصویب کننده · امور اداری»; live has direct manager AND department manager both at order 2.
+- Did not sign in through the browser (would need the real admin password). Login on :3501 uses everyone's real passwords.
+- Owner rule added: local runs use the newest live backup unless demo is asked for (`docs/DEPLOY-ASSISTANT.md` section, CLAUDE.md lines). Committed f22d159, pushed `feat/form-signature-boxes`, opened PR #23 (not merged; review prompt handed to the owner for an independent reviewer).
+
+## 2026-11-09 — Calendar: remove the List/Month toggle and the list view
+
+**Agent:** Claude Opus 5.5 via Claude Code (subagent, worktree)
+**Branch / HEAD at start:** worktree-agent-ae612bed8c3c4f74b @ fe1a121
+**Trigger:** User: the Calendar list view is redundant (the selected day's requests already list below the month grid); remove the toggle and list view.
+
+**What changed**
+- `app/[locale]/(app)/calendar/CalendarView.tsx` — dropped the `viewMode` state (it defaulted to `'list'`; never in the URL, so no `?view=` param to handle), the List/Month toggle group, `renderList()`, the `List`/`CalendarDays` icons and the `empty`/`listView`/`monthView` labels. The page always renders the month grid + day-detail card. Day-detail rows now carry `data-testid="cal-entry-<id>"` (the list cards used to).
+- `messages/en.json`, `messages/fa.json` — removed `calendar.empty`, `calendar.listView`, `calendar.monthView` (no other users).
+- `tests/e2e/calendar.spec.ts` — no toggle click; teammate and admin click today's tile and find the entry inside `calendar-day-detail`; the admin approves from there.
+- `docs/CHANGELOG.md` — Unreleased line.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- `npx tsc --noEmit` clean; `npm run lint` clean; `npm run test:unit` 1219 passed / 5 skipped.
+- Rendered CalendarView with fake data on a temporary `app/[locale]/zz-calcheck` page (dev server :3177, dummy Supabase env): month grid shows by default, no toggle, day detail lists both entries with Approve/Reject. Temp page and `.next/dev/types` removed.
+- e2e `calendar.spec.ts` not run (needs a reachable Supabase stack).
+
+**State left behind**
+- Uncommitted in the worktree. Data fetching (`page.tsx`, `getCalendarEntries`) untouched — another agent is adding replacement-person requests there.
+
+**For the next agent**
+- The errand marker testid `cal-errand-<id>` lived only on list cards and is gone (no test used it).
+
+## 2026-11-09 — FR-88: the replacement signs the request in the app
+
+**Agent:** Claude Opus 5.5 via Claude Code (subagent, worktree `agent-a7b4241771dd09db8`)
+**Branch / HEAD at start:** worktree-agent-a7b4241771dd09db8 @ fe1a121
+**Trigger:** Amir (via coordinator): the named replacement sees the request on Home, My requests and the Calendar, signs it with the usual pad, and the print form can show it. Mid-task correction: the signature never gates approval; declining does not reject but sends it back to the requester to pick someone else or "no replacement".
+
+**What changed**
+- `supabase/migrations/20261109120000_replacement_signoff.sql` (new) — table `leave_request_replacement_signoffs` + RLS select policy; trigger `replacement_signoff_sync` on leave_requests; `app_replacement_sign`, `app_replacement_decline`, `app_change_replacement`, `my_replacement_requests()`; `team_leave_calendar` admits `replacement_id = auth.uid()`; approval context gains `replacement_signoff_status`/`replacement_signed_at`; signatures projection gains `replacement_status`/`replacement_signature_data`/`replacement_signature_consent_at`.
+- `supabase/schema.sql` — patched with the before/after dump diff of a clone (no CHECK re-parenthesis hunks). `lib/supabase/types.ts` — hand-added table + 4 functions.
+- `lib/leave/replacementSignoff.ts` (state helpers), `lib/actions/leave/replacement.ts` (actions, each starts with `requireCaller`), `requests.ts` (own rows embed the sign-off), `review.ts` (`PrintableRequest.replacement_signature_*`, additive), `approvals.ts` + `ApprovalQueue.tsx` (status shown next to the cover), `db-error.ts` (7 keys).
+- UI: `request/_components/ReplacementSignoff.tsx` (sign/decline dialogs, cover card, requester's "choose again" box), `home/ReplacementSignoffCard.tsx` + `home/page.tsx`, `MyRequestsList.tsx` + `request/page.tsx`, `RequestDetails.tsx`. Strings in `messages/{fa,en}.json` (`replacement.*`, `dbErrors.*`).
+- Tests: `tests/sql/replacement-signoff.sql` (65 assertions), `tests/unit/replacement-signoff.test.ts`, extra cases in `db-error.test.ts` and `my-requests-list.test.tsx`; three tsx tests mock the new component.
+- Docs: REQUIREMENTS FR-88, DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS.
+- Not touched (other agents): print page, `lib/leave/paperForm.ts`, `manage/approval-steps/`, the calendar list/month toggle.
+
+**Actions outside the repo**
+- In container `bj-approvals-finance-db-1` (isolated stack): created DB `fr88_repl_clone` from its `postgres` (= main's migrations), applied the migration, ran the SQL suite, dumped the schema; recreated once after the rework; dropped at the end. Its `postgres` DB untouched. Shared `bj-erp-db-1` was not running and was not used. Nothing on Liara.
+
+**Verification**
+- SQL: all 27 `tests/sql/*.sql` pass on the clone (incl. the new file). Dump after migration equals `schema.sql` except the 5 known CHECK re-parenthesis lines.
+- `npx tsc --noEmit` clean; `npm run lint` clean; `npm run test:unit` 1226 passed / 5 skipped (+ db-error 41); `npm run build` (dummy public env) passes.
+- Not run: e2e; no browser check of the new cards.
+
+**State left behind**
+- All uncommitted in the worktree. Migration not applied to any persistent DB.
+
+**For the next agent**
+- First design gated approvals and rejected on decline; reworked on the owner's correction before finishing (no gate trigger remains).
+- Open assumption: approval signatures stay valid after a decline and a new replacement. Changing the replacement is refused while a temporary approval delegation is sourced from the request (cancel and refile).
+- The replacement never gets the base row (FR-25 reason privacy); they read `my_replacement_requests()`.
+
 ## 2026-11-09 — Pre-merge review of PR #22 and fixes
 
 **Agent:** Claude Opus 5.5 via Claude Code

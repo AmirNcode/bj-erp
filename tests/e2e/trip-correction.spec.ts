@@ -1,5 +1,5 @@
 /**
- * FR-84: HR corrects an approved daily trip from Manage › Requests. The signed dates
+ * FR-84/FR-91: an editor (here the admin) edits an approved daily trip from Manage › Requests. The signed dates
  * stay on the print form, with the correction listed after them. Uses throwaway users.
  */
 import { test, expect, type Page } from '@playwright/test';
@@ -52,22 +52,22 @@ async function approvedTrip(page: Page, location: string, offsetDays: number, bo
   return id;
 }
 
-async function correct(page: Page, id: string, reason: string, perDiem?: string) {
+async function openEdit(page: Page, id: string, reason: string, perDiem?: string) {
   await page.goto('/en/manage/requests');
-  await page.click(`[data-testid="correct-trip-${id}"]`);
-  if (perDiem) await page.fill('[data-testid="correct-per-diem"]', perDiem);
-  await page.fill('[data-testid="correct-reason"]', reason);
+  await page.click(`[data-testid="edit-request-${id}"]`);
+  if (perDiem) await page.fill('[data-testid="edit-per-diem"]', perDiem);
+  await page.fill('[data-testid="edit-reason"]', reason);
 }
 
-test('HR adds a missing per diem to an approved trip', async ({ page }) => {
+test('an editor adds a missing per diem to an approved trip', async ({ page }) => {
   test.setTimeout(240_000);
   const id = await approvedTrip(page, 'Per diem site', 20);
-  await correct(page, id, 'Forgot the per diem', '2500000');
-  const canvas = page.locator('[data-testid^="correct-"][data-testid$="-signature-canvas"]');
+  await openEdit(page, id, 'Forgot the per diem', '2500000');
+  const canvas = page.locator('[data-testid^="edit-"][data-testid$="-signature-canvas"]');
   await expect(canvas).toBeVisible();
-  await signApproval(page, 'correct');
-  await page.click('[data-testid="correct-submit"]');
-  await expect(page.locator('[data-testid="correct-submit"]')).toHaveCount(0, { timeout: 20_000 });
+  await signApproval(page, 'edit');
+  await page.click('[data-testid="edit-submit"]');
+  await expect(page.locator('[data-testid="edit-submit"]')).toHaveCount(0, { timeout: 20_000 });
 
   await page.goto(`/en/print/request/${id}`);
   await expect(page.locator('[data-testid="print-correction"]')).toContainText('Forgot the per diem');
@@ -75,21 +75,21 @@ test('HR adds a missing per diem to an approved trip', async ({ page }) => {
   await expect(page.locator('[data-testid="print-per-diem"]')).toHaveCount(0);
 });
 
-test('HR corrects the end date and the print form keeps the signed date', async ({ page }) => {
+test('an editor changes the end date and the print form keeps the signed date', async ({ page }) => {
   test.setTimeout(240_000);
   const id = await approvedTrip(page, 'Date fix site', 40);
   await page.goto(`/en/print/request/${id}`);
   const signed = await page.locator('main').innerText();
-  await correct(page, id, 'Wrong end date on the form');
+  await openEdit(page, id, 'Wrong end date on the form');
   const newEnd = jalali2DayRange(90).split(/\s+—\s+/)[1];
-  const input = page.locator('[data-testid="correct-end"] input');
+  const input = page.locator('[data-testid="edit-end"] input');
   await input.click();
   await input.fill(newEnd);
   await page.keyboard.press('Enter');
-  await page.locator('[data-testid="correct-reason"]').click();
-  await signApproval(page, 'correct');
-  await page.click('[data-testid="correct-submit"]');
-  await expect(page.locator('[data-testid="correct-submit"]')).toHaveCount(0, { timeout: 20_000 });
+  await page.locator('[data-testid="edit-reason"]').click();
+  await signApproval(page, 'edit');
+  await page.click('[data-testid="edit-submit"]');
+  await expect(page.locator('[data-testid="edit-submit"]')).toHaveCount(0, { timeout: 20_000 });
 
   await page.goto(`/en/print/request/${id}`);
   const line = page.locator('[data-testid="print-correction"]');
@@ -102,19 +102,19 @@ test('HR corrects the end date and the print form keeps the signed date', async 
   }
 });
 
-test('a corrected booking goes back to procurement with the old and new dates', async ({ page }) => {
+test('an edited booking goes back to procurement with the old and new dates', async ({ page }) => {
   test.setTimeout(240_000);
   const id = await approvedTrip(page, 'Booked site', 50, true);
-  await correct(page, id, 'Return flight moved');
+  await openEdit(page, id, 'Return flight moved');
   const newEnd = jalali2DayRange(100).split(/\s+—\s+/)[1];
-  const input = page.locator('[data-testid="correct-end"] input');
+  const input = page.locator('[data-testid="edit-end"] input');
   await input.click();
   await input.fill(newEnd);
   await page.keyboard.press('Enter');
-  await page.locator('[data-testid="correct-reason"]').click();
-  await signApproval(page, 'correct');
-  await page.click('[data-testid="correct-submit"]');
-  await expect(page.locator('[data-testid="correct-submit"]')).toHaveCount(0, { timeout: 20_000 });
+  await page.locator('[data-testid="edit-reason"]').click();
+  await signApproval(page, 'edit');
+  await page.click('[data-testid="edit-submit"]');
+  await expect(page.locator('[data-testid="edit-submit"]')).toHaveCount(0, { timeout: 20_000 });
 
   await page.goto('/en/procurement');
   await expect(page.locator('[data-testid="procurement-group-corrected"]')).toContainText('Booked site', { timeout: 20_000 });
@@ -122,11 +122,10 @@ test('a corrected booking goes back to procurement with the old and new dates', 
   await expect(page.locator('[data-testid="procurement-correction-note"]')).toContainText('Return flight moved');
 });
 
-test('a save with nothing changed is refused', async ({ page }) => {
+test('Save stays disabled until something changed', async ({ page }) => {
   test.setTimeout(240_000);
   const id = await approvedTrip(page, 'No change site', 30);
-  await correct(page, id, 'No real change');
-  await signApproval(page, 'correct');
-  await page.click('[data-testid="correct-submit"]');
-  await expect(page.locator('[data-testid="correct-error"]')).toContainText('Nothing changed', { timeout: 20_000 });
+  await openEdit(page, id, 'No real change');
+  await signApproval(page, 'edit');
+  await expect(page.locator('[data-testid="edit-submit"]')).toBeDisabled();
 });

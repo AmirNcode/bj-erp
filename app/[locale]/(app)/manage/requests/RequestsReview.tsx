@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { StatusBadge } from '@/components/StatusBadge';
 import { EmptyState } from '@/components/EmptyState';
 import { RequestReviewActions } from './RequestReviewActions';
+import type { EditKey } from '@/lib/leave/requestEdit';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
@@ -68,11 +69,14 @@ type Props = {
   travelTicks?: Record<string, { started: boolean }> | null;
   /** The signed-in viewer: no travel switch or travel cancel on their own requests (the server refuses both). */
   viewerId?: string | null;
+  /** FR-91: the viewer's edit permissions; none = no Edit button. */
+  editKeys?: readonly EditKey[];
+  workWindow?: { start: string; end: string };
 };
 
 const STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
 
-export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null, viewerId = null }: Props) {
+export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = null, viewerId = null, editKeys, workWindow }: Props) {
   const labels = useLabels();
   const [status, setStatus] = useState<string>('all');
   const [kind, setKind] = useState<string>('all');
@@ -225,7 +229,7 @@ export function RequestsReview({ requests, locale, hoursPerDay, travelTicks = nu
                   </div>
 
                   <div className="flex shrink-0 items-center gap-3">
-                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId ?? ''} />
+                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId ?? ''} editKeys={editKeys} workWindow={workWindow} />
                     <StatusBadge status={r.status} labels={statusLabels} />
                     <Link
                       href={`/${locale}/print/request/${r.id}`}

@@ -204,7 +204,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
           <p className="text-sm text-muted-foreground">{labels.dailyLimitHint}</p>
 
           <ReplacementField replacement={replacement} labels={labels} delegationEnabled={delegation.preview?.can_delegate} />
-          <RequestDelegationFields idPrefix="hourly" delegation={delegation} workSettings={workSettings} locale={locale} hasReplacement={!!replacement.replacementId} />
+          <RequestDelegationFields idPrefix="hourly" delegation={delegation} workSettings={workSettings} locale={locale} />
 
           <div className="space-y-1.5">
             <Label htmlFor="hourly_reason">{labels.reason}</Label>

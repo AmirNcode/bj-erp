@@ -5,9 +5,15 @@ import en from '@/messages/en.json';
 import { MyRequestsList } from '@/app/[locale]/(app)/request/MyRequestsList';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
 
+// FR-88 pieces call server actions; rendered in their own tests.
+vi.mock('@/app/[locale]/(app)/request/_components/ReplacementSignoff', () => ({
+  ReplacementDeclinedNotice: ({ req }: { req: { id: string } }) => <div data-testid={'replacement-declined-notice-' + req.id} />,
+  ReplacementRequestCard: ({ req }: { req: { request_id: string } }) => <div data-testid={'replacement-request-' + req.request_id} />,
+}));
 vi.mock('@/components/RequestProgress', () => ({ RequestProgress: () => null }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({ RequestCancelButton: () => null }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({ RequestSignatureViewer: () => null }));
+vi.mock('@/app/[locale]/(app)/manage/requests/EditRequestDialog', () => ({ EditRequestDialog: () => null }));
 afterEach(cleanup);
 
 const errand = {

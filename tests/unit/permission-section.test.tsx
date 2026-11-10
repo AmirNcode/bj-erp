@@ -152,3 +152,17 @@ it('offers a Yes/No Finance form toggle and raises the Finance dependency', () =
   fireEvent.click(screen.getByTestId('perm-finance_forms-none'));
   expect(onChange).toHaveBeenLastCalledWith({finance:'read'}, [], []);
 });
+
+describe('edit request permissions (FR-91)', () => {
+  it('shows five Yes/No switches; Yes raises leave requests and people', () => {
+    const onChange = vi.fn();
+    render(<PermissionSection section="requestEdits" perms={{}} onChange={onChange} notes={{}} t={t} defaultOpen />);
+    expect(screen.getByTestId('perm-section-count-requestEdits').textContent).toBe('5');
+    const toggle = screen.getByTestId('perm-edit_leave_daily');
+    expect(within(toggle).getAllByRole('radio')).toHaveLength(2);
+    fireEvent.click(within(toggle).getByRole('radio', { name: 'Yes' }));
+    const [perms, raised] = onChange.mock.calls[0];
+    expect(perms).toEqual({ edit_leave_daily: 'edit', leave_requests: 'read', people: 'read' });
+    expect([...raised].sort()).toEqual(['leave_requests', 'people']);
+  });
+});

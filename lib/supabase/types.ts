@@ -654,6 +654,7 @@ export type Database = {
       }
       approval_steps: {
         Row: {
+          box_label: string | null
           approver_id: string | null
           id: string
           company_id: string
@@ -666,6 +667,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          box_label?: string | null
           approver_id?: string | null
           id?: string
           company_id: string
@@ -678,6 +680,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          box_label?: string | null
           approver_id?: string | null
           id?: string
           company_id?: string
@@ -705,8 +708,40 @@ export type Database = {
           },
         ]
       }
+      leave_request_replacement_signoffs: {
+        // FR-88: the named replacement's signature or decline. Written only through RPCs.
+        Row: {
+          request_id: string
+          replacement_id: string
+          status: "pending" | "signed" | "declined"
+          signature_data: string | null
+          signature_consent_at: string | null
+          note: string | null
+          decided_at: string | null
+          created_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: "leave_request_replacement_signoffs_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_request_replacement_signoffs_replacement_id_fkey"
+            columns: ["replacement_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_request_approvals: {
         Row: {
+          box_label: string | null
           evidence_kind: string
           principal_id: string | null
           principal_name: string | null
@@ -725,6 +760,7 @@ export type Database = {
           created_at: string
         }
         Insert: {
+          box_label?: string | null
           evidence_kind?: string
           principal_id?: string | null
           principal_name?: string | null
@@ -743,6 +779,7 @@ export type Database = {
           created_at?: string
         }
         Update: {
+          box_label?: string | null
           evidence_kind?: string
           principal_id?: string | null
           principal_name?: string | null
@@ -1620,6 +1657,43 @@ export type Database = {
         }
         Returns: undefined
       }
+      my_replacement_requests: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          request_id: string
+          employee_name: string
+          kind: Database["public"]["Enums"]["request_kind"]
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          leave_type_color: string | null
+          start_date: string
+          end_date: string
+          day_part: Database["public"]["Enums"]["day_part"]
+          unit: Database["public"]["Enums"]["leave_unit"]
+          start_time: string | null
+          end_time: string | null
+          requested_minutes: number
+          status: Database["public"]["Enums"]["leave_status"]
+          serial_year: number
+          serial_seq: number
+          created_at: string
+          signoff_status: "pending" | "signed" | "declined" | null
+          signed_at: string | null
+          signoff_note: string | null
+        }[]
+      }
+      app_replacement_sign: {
+        Args: { p_request: string; p_signature_data: string; p_signature_authorized: boolean }
+        Returns: undefined
+      }
+      app_replacement_decline: {
+        Args: { p_request: string; p_note?: string | null }
+        Returns: undefined
+      }
+      app_change_replacement: {
+        Args: { p_request: string; p_replacement_id?: string | null }
+        Returns: undefined
+      }
       my_travel_itineraries: {
         Args: Record<PropertyKey, never>
         Returns: { request_id: string; transport: string | null; itinerary: Json | null; traveller_note: string | null }[]
@@ -2300,8 +2374,39 @@ export type Database = {
           reason: string
           corrected_by_name: string | null
           corrected_at: string
+          // FR-91: before/after of the unit, day part, times and minutes. A pre-FR-91 row has
+          // unit 'day', day part 'full', no times and no minutes.
+          old_unit: Database["public"]["Enums"]["leave_unit"]
+          new_unit: Database["public"]["Enums"]["leave_unit"]
+          old_day_part: Database["public"]["Enums"]["day_part"]
+          new_day_part: Database["public"]["Enums"]["day_part"]
+          old_start_time: string | null
+          new_start_time: string | null
+          old_end_time: string | null
+          new_end_time: string | null
+          minutes_before: number | null
+          minutes_after: number | null
         }[]
       }
+      // FR-91: edit an approved request (all four types); returns the request_corrections id.
+      app_edit_request: {
+        Args: {
+          p_request: string
+          p_unit: Database["public"]["Enums"]["leave_unit"]
+          p_start: string
+          p_end: string
+          p_day_part: Database["public"]["Enums"]["day_part"]
+          p_start_time: string | null
+          p_end_time: string | null
+          p_per_diem_rials: number | null
+          p_reason: string
+          p_signature_data: string
+          p_signature_authorized: boolean
+        }
+        Returns: string
+      }
+      // FR-91: the edit_* permission keys the caller holds (admin: all five).
+      app_my_request_edit_types: { Args: never; Returns: string[] }
       app_add_leave_balance: {
         Args: {
           p_employee_id: string

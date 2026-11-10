@@ -56,6 +56,9 @@ export type AddStepLabels = {
   cancel: string;
   added: string;
   errorLabel: string;
+  /** Spec 2026-11-09: the step's signature box title on the printed form. */
+  boxLabel: string;
+  boxLabelPlaceholder: string;
   /** Localized role names, shared with the queue. */
   roles: Record<string, string>;
 };
@@ -73,6 +76,7 @@ const ROLE_OPTIONS = ['manager', 'hr'] as const;
 
 export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
   const [open, setOpen] = useState(false);
+  const [boxLabel, setBoxLabel] = useState('');
   const [mode, setMode] = useState<'role' | 'person'>('role');
   const [role, setRole] = useState<string>('');
   const [order, setOrder] = useState(3);
@@ -87,6 +91,7 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
   const available = ROLE_OPTIONS.filter((r) => !usedRoles.includes(r));
 
   const reset = () => {
+    setBoxLabel('');
     setMode('role');
     setRole('');
     setOrder(3);
@@ -132,6 +137,7 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
 
   const submit = () => {
     setError('');
+    if (!boxLabel.trim()) return;
     if (mode === 'role' && !role) return;
     if (mode === 'person' && !picked) return;
 
@@ -143,6 +149,7 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
         role: mode === 'person' ? 'employee' : role,
         approverId: mode === 'person' ? picked!.id : null,
         stepOrder: order,
+        boxLabel,
       });
       if (!result.ok) {
         setError(result.error);
@@ -156,7 +163,7 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
     });
   };
 
-  const canSubmit = mode === 'role' ? !!role : !!picked;
+  const canSubmit = !!boxLabel.trim() && (mode === 'role' ? !!role : !!picked);
 
   return (
     <Dialog
@@ -178,6 +185,21 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* The box comes first: the admin is laying out the form's signature
+              row, then choosing who signs each box. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="step-box-label">{labels.boxLabel}</Label>
+            <Input
+              id="step-box-label"
+              value={boxLabel}
+              maxLength={60}
+              disabled={isPending}
+              placeholder={labels.boxLabelPlaceholder}
+              data-testid="approval-step-box-label"
+              onChange={(e) => setBoxLabel(e.target.value)}
+            />
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="step-kind">{labels.kind}</Label>
             {/* Native <select> — must stay native for Playwright selectOption. */}
