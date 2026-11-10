@@ -28,8 +28,13 @@ async function approvedTrip(page: Page, location: string, offsetDays: number, bo
 
   if (booked) {
     await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-    await page.goto('/en/manage/requests');
-    await page.locator('[data-testid^="travel-tick-"]').first().click();
+    // Tick this trip, not whichever pending errand Approvals lists first (FR-87).
+    await page.goto('/en/manage/approvals');
+    const card = page.locator('[data-testid^="approval-row-"]', { hasText: location }).first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    const tripId = ((await card.getAttribute('data-testid')) ?? '').replace('approval-row-', '');
+    await page.locator(`[data-testid="travel-tick-${tripId}"]`).click();
+    await expect(page.locator(`[data-testid="travel-tick-${tripId}"]`)).toBeChecked({ timeout: 20_000 });
     await page.waitForLoadState('networkidle');
     await logout(page);
   }

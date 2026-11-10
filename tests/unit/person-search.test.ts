@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createElement } from 'react';
+import { act, cleanup, fireEvent } from '@testing-library/react';
 import { searchPeople } from '@/components/PersonSearch';
 
 const people = [
@@ -24,5 +26,46 @@ describe('searchPeople', () => {
   });
   it('caps the list', () => {
     expect(searchPeople(people, 'حس', 2)).toHaveLength(2);
+  });
+});
+
+describe('PersonSearch', () => {
+  const messages = { personSearch: { placeholder: 'p', noResults: 'n', clear: 'c', selectOne: 's' } };
+  const mount = async (props: Record<string, unknown>) => {
+    const { render } = await import('@testing-library/react');
+    const { NextIntlClientProvider } = await import('next-intl');
+    const { PersonSearch } = await import('@/components/PersonSearch');
+    const onChange = vi.fn();
+    const utils = render(
+      createElement(
+        NextIntlClientProvider as unknown as React.ComponentType<Record<string, unknown>>,
+        { locale: 'en', messages },
+        createElement(PersonSearch, { people, value: null, onChange, testId: 'ps', ...props })
+      )
+    );
+    return { ...utils, onChange };
+  };
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => { vi.useRealTimers(); cleanup(); });
+
+  it('does not choose on its own with autoChoose={false}', async () => {
+    const { getByTestId, onChange } = await mount({ autoChoose: false });
+    fireEvent.change(getByTestId('ps'), { target: { value: '1450' } });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+  it('still chooses on its own by default', async () => {
+    const { getByTestId, onChange } = await mount({});
+    fireEvent.change(getByTestId('ps'), { target: { value: '1450' } });
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onChange).toHaveBeenCalledWith('c');
+  });
+  it('shows the hint on a result', async () => {
+    const { getByTestId } = await mount({
+      autoChoose: false,
+      people: [{ id: 'x', name: 'Ali', personnelNo: '5', hint: 'Manager' }],
+    });
+    fireEvent.change(getByTestId('ps'), { target: { value: 'Al' } });
+    expect(getByTestId('ps-option').textContent).toContain('Manager');
   });
 });

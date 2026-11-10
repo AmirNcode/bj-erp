@@ -84,8 +84,11 @@ export function withLocalePrefix(pathname: string, locale: AppLocale): string {
  */
 export function shouldRedirectToPreferredLocale(
   pathname: string,
-  preferred: AppLocale
+  preferred: AppLocale,
+  viewing = false
 ): boolean {
+  // FR-86: while viewing, the target's stored language must not move the admin's tab.
+  if (viewing) return false;
   return localePrefixOf(pathname) === null && preferred !== DEFAULT_LOCALE;
 }
 

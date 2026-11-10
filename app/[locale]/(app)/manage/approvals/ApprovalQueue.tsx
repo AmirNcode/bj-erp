@@ -14,10 +14,13 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import {
   RequestSignatureViewer,
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
+import Link from 'next/link';
+import { RequestReviewActions, type TravelTicks } from '../requests/RequestReviewActions';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
@@ -67,13 +70,16 @@ function useLabels() {
 
 type Props = {
   requests: PendingApproval[];
+  travelTicks?: TravelTicks;
+  viewerId?: string;
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
 };
 
-export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
+export function ApprovalQueue({ requests, locale, hoursPerDay, travelTicks = null, viewerId = '' }: Props) {
   const labels = useLabels();
+  const tHistory = useTranslations('approvals.history');
   const router = useRouter();
   // A decision can leave another step for the same signer; refresh the live queue.
   const tEvidence = useTranslations('approvalEvidence');
@@ -126,41 +132,48 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                 ? req.leave_type_name_fa
                 : req.leave_type_name_en ?? req.leave_type_name_fa;
             return (
-              <Card key={req.id} data-testid={`approval-row-${req.id}`}>
-                <CardContent className="py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
+              <Card key={req.id} className="gap-0 py-0" data-testid={`approval-row-${req.id}`}>
+                {/* Phones: one centred column — who, what, signature, then
+                    Approve/Reject on one line and View form + travel tick below.
+                    Desktop: details at the start, the two decisions at the end,
+                    secondary actions in a footer row. Nothing here is shrink-0
+                    with free text in it: a long travel warning once squeezed the
+                    details into a one-word column. */}
+                <CardContent className="grid gap-x-6 gap-y-4 p-4 text-center md:grid-cols-[minmax(0,1fr)_9rem] md:p-5 md:text-start">
+                  <div className="min-w-0">
+                    <div className="flex flex-col items-center gap-1.5 md:flex-row md:gap-2.5">
+                      <PersonAvatar id={req.employee_id} name={req.employee_name} />
+                      <div className="min-w-0 max-w-full truncate text-[15px] font-semibold text-foreground">
+                        <bdi>{req.employee_name}</bdi>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <PersonAvatar id={req.employee_id} name={req.employee_name} />
-                        <div className="font-semibold text-sm text-foreground truncate">
-                          {req.employee_name}
-                        </div>
+                        <span className="text-xs tabular-nums text-muted-foreground" dir="ltr">{req.personnel_no ?? '—'}</span>
                         {/* A work errand is not time off — tag it so the manager
                             never reads one as a leave request. */}
                         {req.kind === 'errand' && (
                           <span
-                            className="inline-flex shrink-0 items-center rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
+                            className="inline-flex shrink-0 items-center rounded-sm bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-primary"
                             data-testid={`errand-badge-${req.id}`}
                           >
                             {labels.errandBadge}
                           </span>
                         )}
                       </div>
+                    </div>
+
+                    <div className="mt-3 space-y-1 text-[13px] text-muted-foreground">
                       {req.kind === 'errand' ? (
-                        <div
-                          className="text-xs text-muted-foreground mt-0.5"
-                          data-testid={`errand-location-${req.id}`}
-                        >
+                        <div className="text-sm text-foreground" data-testid={`errand-location-${req.id}`}>
                           {labels.errandLocation}: {req.errand_location ?? '—'}
                         </div>
                       ) : (
-                        <div className="text-xs text-muted-foreground mt-0.5">{typeName}</div>
+                        <div className="text-sm text-foreground">{typeName}</div>
                       )}
-                      <div className="text-xs text-muted-foreground">
+                      <div>
                         {formatCalendarDate(req.start_date, locale)} —{' '}
                         {formatCalendarDate(req.end_date, locale)}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div>
                         {req.unit === 'hour'
                           ? formatTimeRange(req.start_time, req.end_time, locale)
                           : labels.dayPartLabels[req.day_part]}{' '}
@@ -168,7 +181,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                       </div>
                       {/* Labelled شماره پیگیری — NOT the شماره on the paper form,
                           which is the requester's personnel number (spec §5). */}
-                      <div className="text-xs text-muted-foreground">
+                      <div>
                         {labels.trackingNo}:{' '}
                         {/* testid marks the VALUE, not the label — a caller reading
                             `serial-*` wants the number, not the chrome around it. */}
@@ -176,28 +189,8 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                           {formatSerialLocalized(req.serial_year, req.serial_seq, locale)}
                         </span>
                       </div>
-                      {/* FR-36: who has signed and who is still needed. A queue
-                          that only says "pending" hides half the state now that
-                          two people must sign. */}
-                      <div
-                        className="mt-1 flex flex-wrap items-center gap-1.5 text-xs"
-                        data-testid={`chain-${req.id}`}
-                      >
-                        <span className="text-muted-foreground">{labels.chainTitle}:</span>
-                        {(req.progress ?? []).map((step, index) => (
-                          <span key={step.step_id ?? `legacy-${index}`} className="rounded bg-secondary px-1.5 py-0.5" data-testid={`chain-${req.id}-${step.step_id ?? index}`}>
-                            {step.decision === 'approved' || step.evidence_kind === 'hr_exempt' ? '✓ ' : '○ '}
-                            {step.named ? step.expected_name : labels.stepLabels[progressLabel(step)]}
-                            {step.evidence_kind === 'automatic' && ` · ${tEvidence('automaticShort')}`}
-                            {step.evidence_kind === 'hr_exempt' && ` · ${tEvidence('hrExempt')}`}
-                            {step.evidence_kind === 'delegated' && ` · ${tEvidence('onBehalf', { name: step.principal_name ?? '—' })}`}
-                          </span>
-                        ))}
-                      </div>
-                      {req.configuration_changed && <p className="mt-2 text-xs text-warning">{tEvidence('configurationChanged')}</p>}
-                      {req.legacy_reconciliation_required && <p className="mt-2 text-xs text-warning">{tEvidence('legacyReconciliation')}</p>}
                       {req.replacement_name && (
-                        <div className="text-xs text-muted-foreground mt-1" data-testid={`cover-${req.id}`}>
+                        <div data-testid={`cover-${req.id}`}>
                           {labels.coverLabel}: {req.replacement_name}
                           {req.replacement_conflict && (
                             <span className="ms-1 text-destructive" data-testid={`cover-conflict-${req.id}`}>
@@ -207,52 +200,89 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                         </div>
                       )}
                       {req.reason && (
-                        <div className="text-xs text-muted-foreground mt-1">
+                        <div>
                           {labels.reason}: {req.reason}
                         </div>
                       )}
-                      <RequestSignatureViewer
-                        requestId={req.id}
-                        consentAt={req.signature_consent_at}
-                        labels={labels.requesterSignature}
-                        locale={locale}
-                      />
                     </div>
 
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <ApproveDialog
-                        id={req.id}
-                        labels={labels}
-                        disabled={isPending || (!req.natural_step && !req.can_override)}
-                        options={{
-                          hasNaturalStep: req.natural_step !== null,
-                          canOverride: req.can_override,
-                          perDiemNatural: req.per_diem_natural,
-                          perDiemOverride: req.per_diem_override,
-                          steps: req.decision_steps,
-                          travel: req.travel,
-                        }}
-                        onApprove={(signatureData, signatureAuthorized, extras) =>
-                          decide(req.id, labels.approveSuccess, (id) =>
-                            approveRequest(id, { signatureData, signatureAuthorized, ...extras })
-                          )
-                        }
-                      />
-
-                      <RejectDialog
-                        id={req.id}
-                        labels={labels}
-                        disabled={isPending || req.can_reject === false}
-                        steps={req.rejection_steps}
-                        note={rejectNotes[req.id] ?? ''}
-                        onNoteChange={(v) => setRejectNotes((n) => ({ ...n, [req.id]: v }))}
-                        onReject={(stepId) =>
-                          decide(req.id, labels.rejectSuccess, (id) =>
-                            rejectRequest(id, rejectNotes[id], stepId)
-                          )
-                        }
-                      />
+                    {/* FR-36: who has signed and who is still needed. A queue
+                        that only says "pending" hides half the state now that
+                        two people must sign. */}
+                    <div
+                      className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs md:justify-start"
+                      data-testid={`chain-${req.id}`}
+                    >
+                      <span className="text-muted-foreground">{labels.chainTitle}:</span>
+                      {(req.progress ?? []).map((step, index) => (
+                        <span key={step.step_id ?? `legacy-${index}`} className="rounded-sm bg-secondary px-1.5 py-0.5" data-testid={`chain-${req.id}-${step.step_id ?? index}`}>
+                          {step.decision === 'approved' || step.evidence_kind === 'hr_exempt' ? '✓ ' : '○ '}
+                          {step.named ? step.expected_name : labels.stepLabels[progressLabel(step)]}
+                          {step.evidence_kind === 'automatic' && ` · ${tEvidence('automaticShort')}`}
+                          {step.evidence_kind === 'hr_exempt' && ` · ${tEvidence('hrExempt')}`}
+                          {step.evidence_kind === 'delegated' && ` · ${tEvidence('onBehalf', { name: step.principal_name ?? '—' })}`}
+                        </span>
+                      ))}
                     </div>
+                    {req.configuration_changed && <p className="mt-2 text-xs text-warning">{tEvidence('configurationChanged')}</p>}
+                    {req.legacy_reconciliation_required && <p className="mt-2 text-xs text-warning">{tEvidence('legacyReconciliation')}</p>}
+
+                    {/* The button already says "View signature": no title above it. */}
+                    <RequestSignatureViewer
+                      requestId={req.id}
+                      consentAt={req.signature_consent_at}
+                      labels={labels.requesterSignature}
+                      locale={locale}
+                      hideTitle
+                      buttonClassName="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto"
+                    />
+                  </div>
+
+                  {/* Decisions: one line on phones, stacked at the end on desktop. */}
+                  <div className="flex gap-2 md:flex-col">
+                    {(req.natural_step || req.can_override) && <ApproveDialog
+                      id={req.id}
+                      labels={labels}
+                      disabled={isPending || (!req.natural_step && !req.can_override)}
+                      triggerClassName="h-11 flex-1 md:h-9 md:flex-none"
+                      options={{
+                        hasNaturalStep: req.natural_step !== null,
+                        canOverride: req.can_override,
+                        perDiemNatural: req.per_diem_natural,
+                        perDiemOverride: req.per_diem_override,
+                        steps: req.decision_steps,
+                        travel: req.travel,
+                      }}
+                      onApprove={(signatureData, signatureAuthorized, extras) =>
+                        decide(req.id, labels.approveSuccess, (id) =>
+                          approveRequest(id, { signatureData, signatureAuthorized, ...extras })
+                        )
+                      }
+                    />}
+
+                    {(req.can_reject !== false) && <RejectDialog
+                      id={req.id}
+                      labels={labels}
+                      disabled={isPending}
+                      triggerClassName="h-11 flex-1 md:h-9 md:flex-none"
+                      steps={req.rejection_steps}
+                      note={rejectNotes[req.id] ?? ''}
+                      onNoteChange={(v) => setRejectNotes((n) => ({ ...n, [req.id]: v }))}
+                      onReject={(stepId) =>
+                        decide(req.id, labels.rejectSuccess, (id) =>
+                          rejectRequest(id, rejectNotes[id], stepId)
+                        )
+                      }
+                    />}
+                  </div>
+
+                  {/* Secondary: the paper form and HR's travel tick (its warning
+                      takes its own line below them). */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-border pt-3 md:col-span-2 md:gap-x-5">
+                    <Button variant="outline" size="sm" className="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto" asChild>
+                      <Link href={`/${locale}/print/request/${req.id}`} target="_blank" rel="noopener">{tHistory('view')}</Link>
+                    </Button>
+                    <RequestReviewActions request={{ ...req, status: 'pending' }} locale={locale} travelTicks={travelTicks} viewerId={viewerId} className="contents" buttonClassName="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto" hideCancel />
                   </div>
                 </CardContent>
               </Card>

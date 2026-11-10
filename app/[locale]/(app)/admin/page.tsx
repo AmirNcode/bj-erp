@@ -88,7 +88,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
           <EmptyState message={t('overview.requestsNone')} />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="data-table w-full text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr>
                   <th className="py-1.5 text-start font-medium">{t('overview.type')}</th>
@@ -138,7 +138,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
                         {formatSerialLocalized(r.serial_year, r.serial_seq, ADMIN_LOCALE)} · {t('overview.waitingOn', { step: stepLabel(r.waiting_on) })}
                       </span>
                     </span>
-                    <span className="rounded-full bg-warning-foreground px-2.5 py-0.5 text-xs font-semibold text-warning">
+                    <span className="rounded-sm bg-warning-foreground px-2.5 py-0.5 text-xs font-semibold text-warning">
                       {t('overview.days', { count: r.days_waiting })}
                     </span>
                   </Link>

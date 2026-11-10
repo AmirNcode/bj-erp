@@ -23,6 +23,7 @@ vi.mock('@/i18n/navigation', () => ({
 vi.mock('@/lib/actions/profile', () => ({ updateMyPrefs: vi.fn() }));
 // AppShell renders the outcome banner; its server action pulls in the Supabase client.
 vi.mock('@/lib/actions/leave/outcomes', () => ({ getMyRequestOutcomes: vi.fn() }));
+vi.mock('@/lib/actions/view-as', () => ({ endViewAs: vi.fn() }));
 
 vi.mock('@/lib/actions/refresh', () => ({
   refreshRoute: vi.fn(async () => ({ ok: true, refreshedAt: '2026-06-30T21:00:00.000Z' })),
@@ -78,7 +79,7 @@ describe('PageHeader', () => {
 
 describe('AppShell side panel', () => {
 
-  it.each(['en', 'fa'])('in %s, has no header and one refresh control just before the profile link', (locale) => {
+  it.each(['en', 'fa'])('in %s, has the phone top bar and one refresh control just before the profile link', (locale) => {
     const { container } = renderWithIntl(
       <AppShell
         roles={['employee']}
@@ -92,7 +93,11 @@ describe('AppShell side panel', () => {
       locale
     );
 
-    expect(container.querySelector('header')).toBeNull();
+    // The only header is the phone top bar (hidden from md up).
+    const headers = container.querySelectorAll('header');
+    expect(headers).toHaveLength(1);
+    expect(headers[0].getAttribute('data-testid')).toBe('mobile-top-bar');
+    expect(headers[0].className).toMatch(/md:hidden/);
     const refresh = screen.getAllByTestId('page-refresh-button');
     expect(refresh).toHaveLength(1);
     const profile = screen.getByTestId('nav-profile');

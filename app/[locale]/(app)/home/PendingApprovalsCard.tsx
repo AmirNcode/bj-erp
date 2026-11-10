@@ -110,13 +110,13 @@ export function PendingApprovalsCard({ rows, total, count, locale, extensions = 
     );
   }
 
-  const actionClass = 'h-9 rounded-[10px] px-4';
+  const actionClass = 'h-9 rounded-md px-4';
 
   return (
     <Card className="gap-0 overflow-hidden py-0" data-testid="home-pending">
       <div className="flex items-center gap-2.5 px-[22px] py-4">
         <h2 className="text-base font-semibold">{labels.title}</h2>
-        <Badge variant="outline" className={cn('rounded-full', STATUS_BADGE_STYLES.pending)}>
+        <Badge variant="outline" className={cn('rounded-sm', STATUS_BADGE_STYLES.pending)}>
           {total}
         </Badge>
         <Link
@@ -195,7 +195,7 @@ export function PendingApprovalsCard({ rows, total, count, locale, extensions = 
             data-testid={`home-pending-extension-${ext.extension_id}`}
             className="space-y-2 border-t border-muted px-[22px] py-3.5"
           >
-            <Badge variant="outline" className={cn('rounded-full', STATUS_BADGE_STYLES.pending)}>
+            <Badge variant="outline" className={cn('rounded-sm', STATUS_BADGE_STYLES.pending)}>
               {tExt('badge')}
             </Badge>
             <ExtensionDecisionCard ext={ext} locale={locale} bare />

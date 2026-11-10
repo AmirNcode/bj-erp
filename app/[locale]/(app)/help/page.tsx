@@ -16,7 +16,7 @@ export default async function HelpPage({ params }: Props) {
 
   return (
     <main className="mx-auto w-full max-w-3xl p-4 md:p-6">
-      <PageHeader title={t('title')} />
+      <PageHeader section title={t('title')} />
       <p className="mb-4 text-sm text-muted-foreground">{t('intro')}</p>
       <ul className="space-y-3">
         {HELP_GUIDES.map((guide) => (
@@ -32,7 +32,7 @@ export default async function HelpPage({ params }: Props) {
                   {t(`${guide.messageKey}.description`)}
                 </span>
                 {guide.lang !== locale && (
-                  <span className="mt-1.5 inline-block rounded-full bg-muted px-2 text-[11.5px] text-muted-foreground">
+                  <span className="mt-1.5 inline-block rounded-sm bg-muted px-2 text-[11.5px] text-muted-foreground">
                     {t('persianOnly')}
                   </span>
                 )}

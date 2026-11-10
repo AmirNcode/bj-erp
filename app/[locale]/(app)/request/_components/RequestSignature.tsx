@@ -281,6 +281,9 @@ type SignatureViewerProps = {
   labels: SignatureLabels;
   locale: string;
   kind?: 'requester' | 'approver';
+  /** The button text alone names it (approval cards). */
+  hideTitle?: boolean;
+  buttonClassName?: string;
 };
 
 /**
@@ -298,6 +301,8 @@ export function RequestSignatureViewer({
   labels,
   locale,
   kind = 'requester',
+  hideTitle,
+  buttonClassName,
 }: SignatureViewerProps) {
   const [open, setOpen] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
@@ -339,15 +344,15 @@ export function RequestSignatureViewer({
   const testIdPrefix = kind === 'approver' ? 'approver-signature' : 'signature';
 
   return (
-    <div className="mt-2" data-testid={`${testIdPrefix}-viewer-${requestId}`}>
-      <p className="mb-1 text-xs font-medium text-muted-foreground">{labels.title}</p>
-      <Button type="button" variant="outline" size="sm" onClick={toggle} disabled={isPending}>
+    <div className={hideTitle ? 'mt-3' : 'mt-2'} data-testid={`${testIdPrefix}-viewer-${requestId}`}>
+      {!hideTitle && <p className="mb-1 text-xs font-medium text-muted-foreground">{labels.title}</p>}
+      <Button type="button" variant="outline" size="sm" className={buttonClassName} onClick={toggle} disabled={isPending} aria-label={hideTitle ? `${labels.title}: ${open ? labels.hide : labels.view}` : undefined}>
         {isPending ? labels.loading : open ? labels.hide : labels.view}
       </Button>
       {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
       {open && signatureData && (
         <div
-          className="mt-2 max-w-md rounded-lg border border-border bg-white p-2"
+          className="mx-auto mt-2 max-w-md rounded-lg border border-border bg-white p-2 md:mx-0"
           data-testid={`${testIdPrefix}-preview-${requestId}`}
         >
           {/* A private data URL is already encoded and should not pass through the image optimizer. */}

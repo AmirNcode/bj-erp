@@ -1,12 +1,16 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Light-only app: `dark:` utilities from the shadcn primitives must not follow
+   the OS setting (they greyed inputs and outline buttons on dark-mode devices). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light;
-  --radius: 0.75rem;
+  --radius: 3px;
 
   /* Surfaces & text */
-  --background: oklch(0.9711 0.0060 264.54);   /* page #F2F4F8 */
+  --background: #ffffff;                        /* page: white (Blueprint) */
   --foreground: oklch(0.2013 0.0144 272.55);   /* ink #14161D */
   --card: oklch(1 0 0);                          /* white */
   --card-foreground: var(--foreground);
@@ -24,9 +28,13 @@
   /* Neutrals */
   --muted: oklch(0.9242 0.0117 264.51);         /* hairline #E2E6EE */
   --muted-foreground: oklch(0.5510 0.0234 264.36); /* muted #6B7280 */
-  --border: oklch(0.8614 0.0158 257.20);        /* #CBD2DC */
-  --input: oklch(0.8614 0.0158 257.20);
+  --border: #E4E7EC;                            /* hairline between rows and around panels */
+  --input: #C6CBD6;                             /* control outline */
   --ring: oklch(0.3983 0.1418 271.41);          /* primary */
+
+  /* Side panel + mobile top bar: the logo's own blue, so its frame blends in. */
+  --sidebar: #20409a;
+  --sidebar-foreground: #ffffff;
 
   /* Status (semantic) */
   --destructive: oklch(0.5054 0.1905 27.52);    /* danger #B91C1C */
@@ -38,10 +46,12 @@
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Blueprint: near-square corners everywhere. */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -60,6 +70,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-success: var(--success);
@@ -70,7 +82,11 @@
   --font-sans: var(--font-rubik), var(--font-vazirmatn), ui-sans-serif, system-ui, sans-serif;
 }
 
-* { border-color: var(--color-border); }
+/* In the base layer, so `border-*` colour utilities can override it (unlayered,
+   it beat every one of them). */
+@layer base {
+  * { border-color: var(--color-border); }
+}
 body { background: var(--color-background); color: var(--color-foreground); }
 
 /*
@@ -268,4 +284,30 @@ select:not([multiple]):not([size]) {
 .help-guide .ltr {
   direction: ltr;
   unicode-bidi: embed;
+}
+
+/*
+ * Data tables (Blueprint): a tinted header band instead of a boxed card.
+ * Unlayered so it wins over utilities on the cells. Capitals and tracking are
+ * Latin-only: letter-spacing breaks joined Persian script.
+ */
+.data-table thead th {
+  background: var(--secondary);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* Design rule: every data table highlights the row under the pointer. */
+.data-table tbody tr {
+  transition: background-color 0.15s;
+}
+.data-table tbody tr:hover {
+  background: color-mix(in oklab, var(--secondary) 45%, transparent);
+}
+.data-table thead th:lang(en),
+.data-table thead th:lang(en) button {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }

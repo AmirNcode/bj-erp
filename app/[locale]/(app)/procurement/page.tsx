@@ -27,7 +27,7 @@ export default async function ProcurementPage({ params }: Props) {
   const [t, result] = await Promise.all([getTranslations('travel'), listTravelBookings()]);
   return (
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-4">
-      <PageHeader title={t('procurementTitle')} />
+      <PageHeader section title={t('procurementTitle')} />
       <p className="text-sm text-muted-foreground">{t('procurementHint')}</p>
       {result.ok ? (
         <ProcurementList rows={result.rows} locale={locale} />

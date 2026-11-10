@@ -96,7 +96,7 @@ export default async function RequestPage({ params, searchParams }: Props) {
 
   return (
     <main className="p-6 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">{t('title')}</h1>
+      <h1 className="mb-6 text-2xl font-bold max-md:sr-only">{t('title')}</h1>
       <Suspense fallback={<RequestPageSkeleton />}>
         <RequestPageData locale={locale} openForm={form === '1'} showAll={all === '1'} />
       </Suspense>

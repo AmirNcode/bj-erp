@@ -50,7 +50,7 @@ export default async function SettingsPage({ params }: Props) {
     <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
       {/* FR-55: General | Roles, for the admin only (the role editor is admin-only, D2). */}
       {(capabilities.isAdmin || capabilities.canDelegate) && <SettingsTabs locale={locale} active="general" />}
-      <h1 className="text-2xl font-bold tracking-tight">{tNav('settings')}</h1>
+      <h1 className="text-2xl font-bold tracking-tight max-md:sr-only">{tNav('settings')}</h1>
 
       <WorkSettingsForm
         initial={weekendDays}

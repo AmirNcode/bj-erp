@@ -38,7 +38,7 @@ export function AuditRows({ rows, times }: { rows: AuditRow[]; times: Record<str
                 <p className="mt-2 text-xs text-muted-foreground">{t('noChanges')}</p>
               ) : (
                 <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="data-table w-full text-xs">
                     <thead className="text-muted-foreground">
                       <tr>
                         <th className="py-1 text-start font-medium">{t('field')}</th>

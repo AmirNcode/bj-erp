@@ -9,6 +9,34 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Blueprint theme — not deployed
+
+- **New look across the app:** near-square corners (3px), white page, no shadows, hairline borders. Side panel and the new phone top bar use the logo's blue (`#20409a`); buttons keep the brand navy.
+- **Tabs are underlined text**, not pills: Settings, Admin panel, Employees filters. The language switch is plain text.
+- **Tables:** tinted header band instead of a boxed card. Employees and Finance use the full page width, so title, filters and table share the same edges (replaces the 80% table breakout from FR-87).
+- **Finance:** one filter row with equal-height controls; totals shown as ruled figures; numbers line up under their headers. On phones each request is a stacked row instead of a sideways-scrolling table.
+- **Phones:** top bar with the section name and company logo (logo on the right in English, left in Farsi); flat bottom bar. Add Employee and Excel export are full-width buttons above the filters (the floating add button is gone).
+- **Approvals:** request cards rebuilt. Phones show one centred column with equal-size buttons; ticking "Needs travel booking" no longer breaks the card; History uses the same cards. Pending cards have no Cancel (Reject ends the request); in History, Cancel shows for everyone allowed to cancel, not only on trips ticked for booking.
+- **All tables highlight the row under the pointer.** The logo opens Home. Design rules are written down in `docs/DESIGN.md`.
+- **Fixed:** inputs and outline buttons turned grey on devices set to dark mode; border colour utilities never applied; the Admin panel tab was not highlighted in Farsi.
+
+### Approvals and Finance usability (FR-87) — not deployed
+
+- Approvals absorbs Request archive, preserving authorized review and HR controls. Shared search/status/type filters, photos/personnel IDs, and centered history actions; old archive links redirect.
+- Finance has exact Persian calendar dates, separate name/ID/department columns, search, department filtering, sortable data columns and form links. Finance and Employees tables use the full desktop width (see Blueprint theme).
+- Settings › Roles › Finance adds a Yes/No **View/print work-errand forms** permission, off for existing non-admin roles. It includes reasons/signatures for eligible work errands, without approval or leave access. Apply migration `20261108200021` before deploying the app.
+
+### View as (FR-86) — not deployed
+
+- **Admin panel › View as:** search a person by name or personnel number and open the app as them, to check
+  what they can see. Read-only for 30 minutes: nothing can be saved, buttons still show and say so when pressed.
+  The person is not told; Audit records each view.
+- An amber strip shows who you are viewing, with a language switch and **Exit**. Exit returns to View as.
+- A view that ended (time, another browser) refuses presses on a stale page and sends the next load back to
+  View as with a note.
+- Deploy: the setting that turns it on lives in `deploy/lib/sync-view-as-hook.sql`, run by every deploy; run it
+  again after any `pg_restore` (`docs/DEPLOY-LIARA.md`).
+
 ### Correct approved trips (FR-84) — not deployed
 
 - **Manage › Requests:** a **Correct** button on approved daily work errands. HR can change the start date,

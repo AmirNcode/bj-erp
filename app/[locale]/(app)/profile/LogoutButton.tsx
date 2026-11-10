@@ -2,6 +2,8 @@
 
 import { useTransition } from 'react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
+import { useViewAs } from '../_components/ViewAsContext';
 import { signOut } from '@/lib/actions/profile';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +29,8 @@ type Props = {
  */
 export function LogoutButton({ locale }: Props) {
   const t = useTranslations('profile.logoutConfirm');
+  const tv = useTranslations('viewAs');
+  const viewing = useViewAs() !== null;
   const [isPending, startTransition] = useTransition();
 
   return (
@@ -52,7 +56,10 @@ export function LogoutButton({ locale }: Props) {
           <AlertDialogAction
             data-testid="logout-confirm"
             className="bg-destructive text-white hover:bg-destructive/90"
-            onClick={() => startTransition(async () => { await signOut(locale); })}
+            onClick={() => {
+              if (viewing) { toast.error(tv('notSaved')); return; }
+              startTransition(async () => { await signOut(locale); });
+            }}
           >
             {t('confirm')}
           </AlertDialogAction>

@@ -81,7 +81,7 @@ export function CredentialsDownload({ credentials }: Props) {
           </Button>
         </div>
         <div className="overflow-x-auto rounded-lg border border-success/20 bg-background">
-          <table className="w-full text-sm" data-testid="credentials-table">
+          <table className="data-table w-full text-sm" data-testid="credentials-table">
             <thead className="border-b bg-muted/40">
               <tr>
                 <th className="text-start px-3 py-2 font-semibold">{t('name')}</th>

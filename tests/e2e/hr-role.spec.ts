@@ -152,25 +152,31 @@ test('hr reviews a company-wide request and prints its paper form', async ({ pag
   });
   await logout(page);
 
-  // HR finds it on the review screen.
+  // HR finds it on Approvals (FR-87: the old review archive now redirects there).
+  // The old archive URL must still land on the same page.
   await login(page, hr.code, hr.password);
   await page.goto('/manage/requests');
-  await expect(page.locator('[data-testid="requests-review"]')).toBeVisible({ timeout: 20_000 });
-  await page.fill('[data-testid="review-search"]', 'Print Subject');
-  const row = page.locator('[data-testid^="review-row-"]').first();
+  await expect(page).toHaveURL(/\/manage\/approvals/, { timeout: 20_000 });
+  // A fill before hydration is lost (controlled input), so retry until the URL filter applies.
+  await expect(async () => {
+    await page.fill('[data-testid="review-search"]', 'Print Subject');
+    await expect(page).toHaveURL(/q=Print\+Subject|q=Print%20Subject/, { timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
+  const row = page.locator('[data-testid^="approval-row-"]', { hasText: 'Print Subject' }).first();
   await expect(row).toBeVisible({ timeout: 10_000 });
-  // The requester's signature is recorded and shown as such.
-  await expect(row.locator('[data-testid^="review-signed-requester-"]')).toBeVisible();
+  const requestId = (await row.getAttribute('data-testid'))!.replace('approval-row-', '');
+  // The requester's signature is recorded and HR can open it on the card.
+  await page.locator(`[data-testid="signature-viewer-${requestId}"] button`).click();
+  await expect(page.locator(`[data-testid="signature-preview-${requestId}"] img`)).toBeVisible({ timeout: 10_000 });
 
   // Filtering by a status the request does not have empties the list — proves
   // the filter does something rather than always rendering everything.
   await page.selectOption('[data-testid="review-status"]', 'rejected');
-  await expect(page.locator('[data-testid^="review-row-"]')).toHaveCount(0);
+  await expect(page.locator(`[data-testid="approval-row-${requestId}"]`)).toHaveCount(0, { timeout: 10_000 });
   await page.selectOption('[data-testid="review-status"]', 'pending');
-  await expect(page.locator('[data-testid^="review-row-"]').first()).toBeVisible();
+  await expect(page.locator(`[data-testid="approval-row-${requestId}"]`)).toBeVisible({ timeout: 10_000 });
 
-  // Open the printable form directly (the row's link opens a new tab).
-  const requestId = (await row.getAttribute('data-testid'))!.replace('review-row-', '');
+  // Open the printable form directly (the card's link opens a new tab).
   await page.goto(`/print/request/${requestId}`);
 
   const form = page.locator('[data-testid="print-form"]');

@@ -263,6 +263,13 @@ bj_adopt_known_installed_migrations() {
   done
 }
 
+# Points PostgREST's pre-request hook at private.view_as_pre_request (FR-86). The
+# setting is a role setting, which neither the migration ledger nor a pg_dump
+# carries, so every deploy re-asserts it. Idempotent.
+bj_sync_view_as_hook() {
+  pgexec -q < "$(dirname "${BASH_SOURCE[0]}")/sync-view-as-hook.sql" >/dev/null
+}
+
 bj_apply_migrations() {
   local directory="$1" release="$2" file base checksum recorded
   [ -d "$directory" ] || { bj_fail "migration directory missing: $directory"; return 1; }
@@ -289,4 +296,7 @@ bj_apply_migrations() {
   done <<EOF
 $(bj_migration_files "$directory")
 EOF
+  bj_say "Syncing the View as hook setting"
+  bj_sync_view_as_hook \
+    || { bj_fail "could not sync the View as hook setting (deploy/lib/sync-view-as-hook.sql)"; return 1; }
 }

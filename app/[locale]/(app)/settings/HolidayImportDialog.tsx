@@ -217,7 +217,7 @@ export function HolidayImportDialog({
             <div className="space-y-2" data-testid="holiday-import-errors">
               <p className="text-sm font-medium text-destructive">{labels.problemsTitle}</p>
               <div className="max-h-48 overflow-auto rounded-lg border border-destructive/30">
-                <table className="w-full text-xs">
+                <table className="data-table w-full text-xs">
                   <thead className="border-b bg-destructive/10">
                     <tr>
                       <th className="px-2 py-1 text-start">{labels.line}</th>
@@ -254,7 +254,7 @@ export function HolidayImportDialog({
                 )}
               </p>
               <div className="max-h-56 overflow-auto rounded-lg border border-border">
-                <table className="w-full text-xs">
+                <table className="data-table w-full text-xs">
                   <thead className="border-b bg-muted/40">
                     <tr>
                       <th className="px-2 py-1 text-start">{labels.columnDate}</th>

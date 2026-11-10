@@ -38,6 +38,8 @@ export default async function globalSetup() {
 
   const url = process.env.E2E_BASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  // An empty NEXT_PUBLIC_SUPABASE_ANON_KEY turns this setup off. view-as.spec.ts needs that on the local
+  // stack: the setup below rewrites the real admin's language and the weekend settings.
   if (!url || !anon) return;
 
   // The local self-host gateway presents Caddy's private CA, which this process

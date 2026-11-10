@@ -189,7 +189,7 @@ export function RoleCheckboxes({
               key={role.id}
               data-testid={`role-${role.systemKey ?? role.id}`}
               className={cn(
-                'inline-flex min-h-10 select-none items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition-colors',
+                'inline-flex min-h-10 select-none items-center gap-1.5 rounded-sm border px-4 text-sm font-medium transition-colors',
                 'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2',
                 on
                   ? 'border-primary bg-primary text-primary-foreground'

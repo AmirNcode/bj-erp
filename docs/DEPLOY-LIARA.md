@@ -134,6 +134,13 @@ This exact procedure passed the isolated restore rehearsal. Revalidate it before
 changing the Postgres image. A live database restore requires a separate recovery
 plan and explicit authorization; never point a rehearsal at `bj-erp-db-1`.
 
+After any restore (and after a restore rehearsal you intend to serve), run `deploy/lib/sync-view-as-hook.sql`
+as `supabase_admin` against `postgres`, e.g. `exec -T db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < lib/sync-view-as-hook.sql`
+from the release directory. The PostgREST setting `pgrst.db_pre_request` that switches on View as (FR-86) is a role
+setting: dumps do not carry it, so a restore onto a new cluster would leave the feature off, and a restore of a
+pre-feature dump over the same cluster would leave the setting naming a function that no longer exists, which fails
+every request. The file sets or resets it to match the restored schema; deploys run it automatically after the migrations.
+
 ```bash
 cd /opt/bj-erp
 sudo docker compose -f docker-compose.yml -f docker-compose.liara.yml ps

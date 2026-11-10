@@ -656,6 +656,18 @@ the retired `absences` permission item (migration `20261102150000`).
   `app_remove_profile_photo`. Audit rows `photo.saved` / `photo.deleted` / `photo.locked` /
   `photo.unlocked` (entity `profile_photos`) carry only `{locked, version}`.
 
+### `private.view_as_sessions` (2026-11-08, FR-86, unreleased)
+Migration `20261108090000_view_as.sql`. `id` uuid PK · `admin_id` · `target_id` (no foreign keys, so a deleted
+person leaves an ended row) · `expires_at` (start + 30 minutes) · `ended_at`. Schema `private`, RLS on with no
+policies, all grants revoked. One live row per admin (`app_view_as_start` ends the old one under a per-admin
+advisory lock and deletes that admin's ended and expired rows). Functions: `private.view_as_pre_request()`
+(PostgREST pre-request hook; reads the `x-view-as` header, raises `PT403 view-as refused` for a bad, foreign,
+ended or expired session, an inactive target or a caller who is no longer admin; otherwise swaps `sub` and sets
+read-only), `app_view_as_start`, `app_view_as_end`, `app_view_as_session(id)` (stable) and `app_view_as_probe()`
+(volatile on purpose: PostgREST runs a stable function read-only, which would hide a missing hook; returns
+`auth.uid()` and `transaction_read_only`). The hook is switched on by `pgrst.db_pre_request`, set by `deploy/lib/sync-view-as-hook.sql`
+(not a migration; a role setting is not in `pg_dump -d postgres`).
+
 ### `leave_ledger`
 `id` · `employee_id → profiles` · `leave_type_id → leave_types` ·
 `request_id → leave_requests` (nullable) · `entry_type ledger_entry` · `delta_minutes int`
@@ -774,3 +786,8 @@ profiles 1─* leave_ledger     *─1 leave_types   leave_requests 1─* leave_l
 companies 1─* holidays        companies 1─1 work_settings
 profiles 1─* audit_log(actor)
 ```
+
+
+## FR-87 request-list and print projections (2026-11-08, not deployed)
+
+Migration `20261108200021_approvals_finance_usability.sql` adds the catalog permission `finance_forms` (read, depends on finance), defaulting off for non-admin roles. No stored financial columns change. `finance_requests_v2(from,to)` preserves the original rows/calculations and adds stored first/last names, department ID, and request-scoped `can_print`. `app_approval_history_v2(limit,offset,query,status,kind)` filters before pagination and includes authorized archive readers. `app_request_print(id)` aggregates guarded context, signature evidence, extensions and corrections; reusable private projection functions keep the original public RPCs compatible. The original finance/history RPCs remain available through the deployment window. Dates stay Gregorian ISO in URLs/storage and Persian in the calendar UI.

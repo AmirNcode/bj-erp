@@ -64,7 +64,7 @@ export default async function ManageIndexPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-xl space-y-5">
-      <PageHeader title={t('manage')} />
+      <PageHeader section title={t('manage')} />
       {items.length > 0 && <Card className="gap-0 overflow-hidden py-0">
         <ul className="divide-y divide-muted">{items.map(row)}</ul>
       </Card>}

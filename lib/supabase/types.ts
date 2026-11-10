@@ -1899,6 +1899,24 @@ export type Database = {
       app_get_separation: { Args: { p_id: string }; Returns: Json }
       // FR-55: { permission key: 'read' | 'edit' } for the caller.
       app_my_permissions: { Args: never; Returns: Json }
+      app_view_as_session: {
+        Args: { p_id: string }
+        Returns: {
+          target_id: string
+          target_name: string
+          personnel_no: string | null
+          expires_at: string
+        }[]
+      }
+      app_view_as_probe: {
+        Args: never
+        Returns: { uid: string; read_only: string }[]
+      }
+      app_view_as_start: {
+        Args: { p_target: string }
+        Returns: { session_id: string; expires_at: string }[]
+      }
+      app_view_as_end: { Args: never; Returns: undefined }
       app_list_separations: {
         Args: never
         Returns: {
@@ -2075,6 +2093,17 @@ export type Database = {
           hotel_cost_rials: number | null
           lost_rials: number | null
         }[]
+      }
+      app_request_print: { Args: { p_id: string }; Returns: Json }
+      app_approval_history_v2: {
+        Args: { p_limit?: number; p_offset?: number; p_query?: string; p_status?: string; p_kind?: string }
+        Returns: Json
+      }
+      finance_requests_v2: {
+        Args: { p_from: string; p_to: string }
+        Returns: (Database['public']['Functions']['finance_requests']['Returns'][number] & {
+          first_name: string | null; last_name: string | null; department_id: string | null; can_print: boolean
+        })[]
       }
       finance_requests: {
         Args: { p_from: string; p_to: string }

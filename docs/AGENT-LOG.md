@@ -78,6 +78,395 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-09 — Pre-merge review of PR #22 and fixes
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6cb68e2
+**Trigger:** Amir: review PR #22 (View as FR-86, FR-87, Blueprint) as the last gate before deploy, then fix the approved issues (1, 2, 5).
+
+**What changed**
+- `tests/e2e/hr-role.spec.ts:155` — the HR review/print test drives Approvals (old `/manage/requests` redirect, search with a hydration retry, signature viewer, status filter) instead of the removed archive.
+- `tests/e2e/trip-correction.spec.ts:30` — ticks the trip's own `travel-tick-<id>` on Approvals; `.first()` ticked another pending errand.
+- `tests/e2e/leave.spec.ts:50`, `tests/e2e/roles.spec.ts:60` — click the role pill label (its input is `sr-only`, so `check()` is intercepted); leave.spec reads the code from the admin login-code box (blank = personnel number). Stale since 2026-11-02, not caused by this PR.
+- `lib/actions/view-as.ts` — `startViewAs` calls `requireCaller({ anyOf: ['admin'] })` after the nesting check; `endViewAs` calls `requireCaller()` only (while viewing the caller is the target, so an admin check would block Exit) and deletes the cookie either way. Unit tests added.
+
+**Actions outside the repo**
+- Isolated stack `bj-approvals-finance`: app container rebuilt from HEAD twice (`compose up -d --build app`); DB untouched apart from e2e throwaway users (cleanup:e2e run, 0 left).
+- Throwaway DB `rv_pr22` in `bj-approvals-finance-db-1`: main's `schema.sql` + data, both migrations applied, SQL suite run, dropped.
+- Nothing on Liara.
+
+**Verification**
+- Review: `tsc`, lint, unit 1221, build, `npm run test:deploy` pass; SQL suite 25/25 on `rv_pr22`; dump after both migrations equals `schema.sql` bar CHECK re-parenthesising.
+- After fixes: `tsc`, lint, unit 1224, build pass. e2e on isolated stack: hr-role (7/8), trip-correction, leave, roles, responsive pass. Only failure: `hr-role.spec.ts:325` chain testid, pre-existing (TASKS.md).
+- Not run: `view-as.spec.ts` (writes SQL to `bj-erp-db-1`, not present and out of bounds).
+
+**State left behind**
+- Three fix commits + this entry pushed to `codex/approvals-finance-layout`. Not merged.
+
+**For the next agent**
+- Not fixed (owner chose not to): print forms now draw `border-black` lines (base-layer border move); request-type tabs lose their grey outline.
+- A `next dev` against the isolated stack on :3100 cannot sign in (gateway CORS); use the stack's own app container for e2e.
+- After deploy: confirm Admin › View as starts; turn on "View/print work-errand forms" for roles that need it.
+
+## 2026-11-09 — Table row hover rule, DESIGN.md, PR opened
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491 (uncommitted FR-87 + Blueprint work present)
+**Trigger:** Amir: every table must highlight the hovered row (Finance did not); write the design system down for future agents; update CLAUDE.md; open a PR for another agent to review.
+
+**What changed**
+- `app/globals.css` — `.data-table tbody tr:hover` tint. `EmployeesTable.tsx` — its own per-row hover class removed (the rule covers it).
+- `docs/DESIGN.md` (new) — the Blueprint design system: tokens, shell, tabs, tables, buttons, figures, cards, RTL, what is not converted yet.
+- `CLAUDE.md` — DESIGN.md in the layout and read order; seven UI gotchas. `docs/CHANGELOG.md` — Blueprint section extended.
+
+**Actions outside the repo**
+- Committed everything on the branch (FR-87 by Codex + Blueprint), pushed `codex/approvals-finance-layout`, opened a PR to `main`. No merge, no deploy.
+
+**Verification**
+- `tsc --noEmit`, lint, `npm run test:unit` 1221/1221, `npm run build` pass. Browser: Finance row hover applies; both Finance tables carry `data-table`.
+- Not run: e2e, `npm run test:deploy`, SQL tests for migration `20261108200021` (FR-87, not mine).
+
+**State left behind**
+- PR open, waiting for review. Merging to `main` deploys to Liara and applies migration `20261108200021`.
+
+**For the next agent**
+- The PR (AmirNcode/bj-erp#22) carries **three** pieces of work: View as FR-86 (14 commits, never pushed or reviewed before; migration `20261108090000` + deploy scripts), FR-87 (migration `20261108200021`) and the Blueprint restyle. Its description is the full handover for the reviewer.
+- Security review flagged FR-87 widening `personnel_no` (all approvers of a request) and `job_title` (print form). Owner accepted it on 2026-11-09: security and HR may see requesters' personnel IDs. No change.
+- `tests/e2e/responsive.spec.ts` was edited (FAB → `add-employee-link`) but not run.
+
+## 2026-11-09 — History Cancel no longer tied to the travel tick; logo links Home
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491 (uncommitted FR-87 + Blueprint work present)
+**Trigger:** Amir asked why Cancel appeared in Approvals › History only after ticking "Needs travel booking", chose "always show it"; then asked for the logo to open Home on desktop and phones.
+
+**What changed**
+- `manage/requests/RequestReviewActions.tsx` — new `canCancel`; Cancel shows when `canCancel` or the trip is ticked. The component now renders for a `leave_requests` editor who is not travel HR (tick and Correct stay travel-HR only).
+- `manage/approvals/page.tsx`, `ApprovalHistory.tsx` — pass `canCancel = can(perms, 'leave_requests')` (edit).
+- `_components/MainNav.tsx`, `MobileTopBar.tsx` — logo wrapped in a link to `/home` (`nav-logo-link`, `mobile-logo-link`).
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- `tsc --noEmit`, lint, `npm run test:unit` (1221/1221) pass. Browser as demo admin: History shows Cancel on ticked and un-ticked rows, pending cards show none; both logos land on `/en/home`. Not tested as a non-admin HR user.
+
+**State left behind**
+- Nothing committed.
+
+**For the next agent**
+- Mirrors `cancel_leave_request` (schema.sql:8503): owner, admin, `leave_requests` edit, or travel HR on a ticked trip. One gap: a non-admin editor still sees Cancel on the admin's own request; the server refuses it.
+
+## 2026-11-09 — Approvals cards restyled (Blueprint follow-up)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491 (uncommitted FR-87 + Blueprint work present)
+**Trigger:** Amir: ticking "Needs travel booking" broke the pending card; phones must be one centred column with equal-size buttons; remove Cancel if it duplicates Reject; History rows should match the pending cards. Home, Reports, Calendar: skip.
+
+**What changed**
+- `manage/approvals/ApprovalQueue.tsx` — card is a grid: details, decisions (one line on phones, stacked at the end on desktop), footer row (View form + travel tick). Cause of the break: the actions column was `shrink-0` and held the long travel warning, which squeezed the details to one word per line.
+- `manage/approvals/ApprovalHistory.tsx` — one card per request, same structure; status badge at the end; actions in the footer.
+- `manage/requests/TravelTickToggle.tsx` — root is `display: contents`; the tick is half the row on phones, its messages take a full line last.
+- `manage/requests/RequestReviewActions.tsx` — `className`, `buttonClassName`, `hideCancel`. Pending cards pass `hideCancel`: Reject already ends a pending request. History keeps Cancel (the only way to cancel an approved trip), now a full-size button.
+- `request/_components/RequestSignature.tsx` — `hideTitle`, `buttonClassName`; `RequestCancelButton.tsx`, `CorrectTripDialog.tsx` — `buttonClassName`.
+
+**Actions outside the repo**
+- Isolated demo stack only: ticked "Needs travel booking" on the two pending demo errands (left ticked).
+
+**Verification**
+- `tsc --noEmit`, `npm run lint`, `npm run test:unit` (1221/1221) pass. Browser at 375px and 1440px, English: phone buttons all 127×44, no horizontal overflow. Farsi and e2e not run for this change; `npm run build` not rerun.
+
+**State left behind**
+- Nothing committed.
+
+**For the next agent**
+- Reject and Cancel are different outcomes (`rejected` vs `cancelled` status); only the pending card hides Cancel.
+
+## 2026-11-09 — Blueprint theme applied (UI polish)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491 (uncommitted FR-87 work present)
+**Trigger:** Amir picked mockup C "Blueprint" and asked to apply it: logo-blue (`#20409a`) side panel and phone top bar, navy buttons unchanged, phone Add/Export buttons full width above the filters, logo in the phone top bar.
+
+**What changed**
+- `app/globals.css` — white page, `--border` `#E4E7EC`, `--input` `#C6CBD6`, radii 2/3/3/4px, `--sidebar` tokens, `.data-table` header band (capitals only for `:lang(en)`). `* {border-color}` moved into `@layer base` (unlayered it beat every `border-*` colour utility). `@custom-variant dark` pinned to a `.dark` class: the shadcn `dark:` styles followed the OS and greyed inputs. `.wide-data-table` removed.
+- `components/ui/{button,card,input,badge}.tsx`, `lib/native-select.ts`, `components/PersianDateField.tsx` — no shadows, square badges, date field height matches inputs.
+- `rounded-[10px]` → `rounded-md` and text pills `rounded-full` → `rounded-sm` across 26 files (scripted).
+- `_components/MainNav.tsx` — blue side panel, white active rule, flat bottom bar. `MobileTopBar.tsx` (new) — section name + logo; `AppShell.tsx` renders it and widens `<main>` when a page has `data-wide`. `PageHeader.tsx` — `section` prop hides the title on phones (top bar shows it); set on 11 top-level pages.
+- `lib/ui/tabs.ts` (new) — underline tab classes; used by `SettingsTabs`, `AdminTabs`, `EmployeesToolbar`, admin `PillLinks`. `LanguageSwitch` and `PageRefreshButton` take `onDark`.
+- `manage/employees/page.tsx`, `EmployeesTable.tsx` — full width, no card box, full-width Add on phones, FAB removed.
+- `finance/page.tsx`, `FinanceList.tsx` — full width, one filter row, ruled figures, end-aligned numeric headers, phone rows (`finance-<section>-cards`).
+- `admin/_components/AdminTabs.tsx` — active tab now found on unprefixed (Farsi) paths. `parts.tsx` — stat tiles are ruled figures.
+- Tests updated to the new look: `tests/unit/{main-nav,page-refresh-button,ui-button}.test.tsx`, `tests/e2e/responsive.spec.ts` (FAB → `add-employee-link`).
+- `.claude/launch.json` — added `bj-dev-isolated` (next dev on :3100 against the `bj-approvals-finance` stack).
+
+**Actions outside the repo**
+- In the isolated demo stack only: signed in as demo `admin`, switched its language to Farsi and back to English. No shared or production data touched.
+
+**Verification**
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 1221/1221, `npm run build` passed.
+- Browser (dev on :3100, demo data): Employees, Finance, Admin, Settings, Home at 1440px and 375px, English and Farsi.
+- Not run: e2e, `test:deploy`.
+
+**State left behind**
+- Nothing committed. Dev server `bj-dev-isolated` may still be running on :3100.
+
+**For the next agent**
+- Not restyled page by page: Home cards, Reports, Calendar, Approvals, request forms. They inherit tokens (corners, borders, no shadow) but keep their card layouts.
+- Value toggles (tri-state permission toggle, calendar list/month) are still segmented controls, now square.
+- Signing in on :3100 fails (gateway CORS allows only :3501); sign in at `http://localhost:3501` first, the cookie is shared.
+- Farsi URLs have no `/fa` prefix; `/fa/...` redirects by the user's saved language.
+
+## 2026-11-09 — UI polish: review and theme mockups (no app code yet)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491 (uncommitted FR-87 work present)
+**Trigger:** Amir finds Employees/Finance tables, rounded corners, borders, misalignment and pill-style tabs ugly; asked for a review and HTML mockups of theme options before any change.
+
+**What changed**
+- `docs/AGENT-LOG.md` — this entry. No app code touched.
+
+**Actions outside the repo**
+- Wrote the mockup to the session scratchpad (`bj-theme-options.html`, not in the repo) and served it with `python3 -m http.server 8765` on 127.0.0.1 for viewing.
+
+**Verification**
+- Mockup opened in the browser pane; all four views (current approx., A Ledger, B Quiet panels, C Blueprint) and the three pages render.
+
+**State left behind**
+- Nothing committed. Waiting for Amir to pick a direction.
+
+**For the next agent**
+- Review findings: `.wide-data-table` (`app/globals.css:273`) widens only the table, so header, filters and stat cards (still inside `max-w-6xl`, `AppShell.tsx:64`) no longer share its edges; Finance toolbar mixes labelled date fields with unlabelled selects; five radius values in use (`rounded-lg` 100×, `-md` 51×, `-full` 39×, `-[10px]` 34×, `-xl` 29×); segmented pill controls live in `EmployeesToolbar.tsx:86`, `CalendarView.tsx:546`, `PermissionSection.tsx:139`, `LanguageSwitch`, admin and settings tabs.
+- Mockups are English/LTR only; the chosen theme still needs an RTL check in the real app.
+
+## 2026-11-09 — Ran approvals/finance branch in isolated local Docker
+
+**Agent:** Codex
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491
+**Trigger:** Owner requested this branch running locally in Docker; dummy data accepted.
+
+**What changed**
+- Added ignored local runtime configuration/scripts under `.bj-deploy/approvals-finance/`; no application source edits. Preserved all existing uncommitted work.
+- Built `bj-erp-app:approvals-finance-local` from current working tree using the existing Dockerfile (production Turbopack build passed).
+
+**Actions outside the repo**
+- Created separate Compose project `bj-approvals-finance`, its database volume/network and five services. Local-only gateway is `http://localhost:3501`, bound to 127.0.0.1; no production/shared database accessed.
+- Applied all migrations through `deploy/lib/migrations.sh` and its checksum ledger, including FR-87; seeded config, demo admin, 14 curated demo users, two approved and two pending synthetic work errands.
+- Fresh DB initially lacked cron/pg_net preload configuration and network listening; corrected isolated override to preload both extensions, listen on the private network and disable `cron.launch_active_jobs`. Resumed ledger safely. Admin bootstrap initially ran before auth migrations; retried after fixing connectivity. Demo per-diem writes were refused by existing guards; final sample errands omit per diem and use normal submission/admin approval RPCs.
+- Downloaded pinned PostgREST/Caddy and Node build images. Supabase changelog fetch returned unsupported markdown content-type; consulted Context7 Compose isolation docs.
+
+**Verification**
+- Docker build passed; all five services running, DB healthy; `/api/health` returned status ok.
+- Playwright signed in as demo admin, then loaded populated Approvals and Finance in both Farsi and English. Farsi routes work in this production Docker build (earlier dev redirect issue not reproduced).
+- Demo admin: `admin` / `Admin!2026`; curated users use `Demo!2026` (HR `hr-101`, finance `4002`).
+
+**State left behind**
+- Stack running for owner testing. No commit, push or production deploy. Only tracked edit this session is this journal entry.
+
+**For the next agent**
+- Manage with `.bj-deploy/approvals-finance/compose ps|stop|up -d`; isolated secrets are in its ignored `.env`. Do not confuse this project with `bj-erp`.
+
+
+## 2026-11-08 — Implemented unified Approvals and Finance usability (FR-87)
+
+**Agent:** Codex
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491
+**Trigger:** Owner approved the design/plan, then asked to resume after a usage-limit interruption.
+
+**What changed**
+- Finance: existing Persian mini-calendar fields select exact dates; separate first/last name, ID and department; name/ID search, stable department filter, accessible sorting on every data column, filtered totals/CSV and authorized complete-form links. `lib/finance/list.ts` owns tested filtering/sorting/range validation.
+- Table-only `wide-data-table` breakout on Finance/Employees targets 80% of space beside the sidebar on wide desktop; surrounding content and mobile widths remain unchanged.
+- Approvals absorbs archive navigation/access and redirects old URLs. Shared URL filters apply before history pagination; review-only pending rows preserve exact action authority, self requests and HR controls. History adds avatars/personnel IDs and centers its action group. Extracted reusable `RequestReviewActions` and presentational `ApprovalHistoryContent`.
+- Roles: Leave's archive label becomes Approvals — request review; new Yes/No `finance_forms` read permission in Finance depends on Finance read and defaults off outside implicit admin access.
+- `20261108200021_approvals_finance_usability.sql`: versioned Finance/history projections and dedicated `app_request_print`; shared private projection implementations preserve existing public RPC authorization. Finance form access admits only same-company pending/approved errands or settled cancelled trips, never leave/general request RLS/approval queues. Migration is now frozen: applied only to disposable synthetic validation DB. Matching schema dump generated; unrelated pg_dump constraint/schema-order changes excluded.
+- Bilingual messages; updated requirements, permissions, data model, changelog, tasks and approved design/plan. Added/updated unit and SQL regression tests.
+
+**Actions outside the repo**
+- Docker Desktop started; no existing containers/images/volumes were available. Pulled project-pinned `supabase/postgres:15.8.1.085` and `supabase/gotrue:v2.170.0`; created only `bj-ui-validation` and `bj-ui-validation-auth`, with cron launch disabled. Loaded current schema, auth migrations, committed Jalali reference data and synthetic baseline admin/config. No real roster or live server touched.
+- Draft migration first checked in rollback-only transactions. Existing history/travel fixtures initially failed because the fresh image's auth.uid helper predated GoTrue migrations and calendar data was absent; initialized both and passed. Older roles/signature tests required a baseline admin; seeded only the synthetic DB. Fixed new test's mistaken roles.slug reference to system_key and its stored-name/boolean text expectation.
+- Temporary `/en/zz-ui-check` fixture, Playwright scripts/logs/screenshots under `/tmp`, local webpack dev server on port 3108. Fixture removed before final build; dev server and both owned containers removed at completion. Downloaded Docker images remain cached.
+- Supabase CLI migration creation required escalation for its telemetry-file write. Turbopack build failed with `binding to a port / Operation not permitted` even after escalation; supported webpack builder passed. No dependency versions changed.
+
+**Verification**
+- Final `npm run lint`, `npx tsc --noEmit --incremental false`, `git diff --check`: clean.
+- Final `npm run test:unit`: 123 files, 1,221 tests passed. Includes new filters/sorts, calendar limits, archive-only review vs actionable badges, permission dependency and Yes/No toggle, print evidence, updated navigation.
+- `npx next build --webpack`: passed after fixture removal. Default Turbopack remains environment-blocked, not reported as passed.
+- SQL on synthetic DB: approval-history (41 PASS), travel-booking (224), trip-correction (76), sign-once (40), approval-delegation (165), fr55-roles-permissions (355), fr52-53-signature-personal-info (59); no FAIL/ERROR notices. Includes new default-off, permission grant/revoke, reason/signature/ID, rejected/unsettled/cross-company/leave denial, unchanged request RLS and queue, private helper grants, settled cancellation/extension printing, and Finance v2 financial equivalence assertions.
+- Playwright: English desktop 1933×1054 and mobile 390×844; Farsi/RTL components via explicit locale provider. Tables measured 1354.39px = 80% × (1933−240), surrounding main stayed 1152px; mobile document width 390px. Search, department selection, sort, mini-calendar opening exercised; selecting 1405/08/05 produced ISO from=2026-10-27 while retaining to=2026-12-21. No relevant component console/page errors. Screenshots `/tmp/bj-finance-desktop-en.png`, `/tmp/bj-finance-desktop-fa.png`, `/tmp/bj-finance-mobile-en.png`, `/tmp/bj-finance-mobile-fa.png`, `/tmp/bj-calendar-en.png`.
+
+**State left behind**
+- Complete implementation uncommitted on requested branch; original AGENTS.md edit preserved. No push, production migration or deployment.
+- Full signed-in browser workflow not exercised: available DB was synthetic, with no existing app stack. SQL tests cover authorization/actions and browser fixtures cover changed components.
+- Bare Farsi route on the local dev server hit the previously documented redirect loop (307 to itself), also using localhost. Farsi component rendering was verified separately; routing bug deliberately remains outside FR-87.
+
+**For the next agent**
+- Apply the frozen migration before deploying this app. Finance form permission must be enabled for desired non-admin roles after deployment; the new setting does not revoke independent HR/requester/manager print rights.
+- New private shared projection functions are intentionally not client-executable. Do not broaden can_read_approval_request merely to support Finance printing.
+- Existing local View as commits are ancestors of this branch. No commit/push was requested.
+
+
+## 2026-11-08 — Approvals and Finance: clarified design and implementation plan
+
+**Agent:** Codex
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6f20491
+**Trigger:** Owner answered the five clarification questions and requested updates to role permissions.
+
+**What changed**
+- `docs/specs/2026-11-08-approvals-finance-layout-design.md`: confirmed exact Persian date range, preserved archive scope/HR actions, table-only 80% content-area width, complete work-errand form and new role permission.
+- Replaced the draft implementation plan with the concrete sequence and validation scope. Proposed new `finance_forms` read permission dependent on Finance read, default off for existing non-admin roles; final review pending.
+- Investigated existing SQL authorization, Finance RPC, approval history/queue, role catalog, date field and table containers. No application/schema edits.
+
+**Actions outside the repo**
+- Documentation reads via Context7 (Next.js, Persian picker, Supabase functions). Supabase changelog web fetch failed due to unsupported text/markdown content type. No DB/server changes.
+
+**Verification**
+- Read bundled Next.js routing guides; no application tests/build run because this remains design work. `git diff --check` run before handoff.
+
+**State left behind**
+- Uncommitted design, plan and journal on the requested branch, plus the preserved AGENTS.md edit. Waiting on the repository-required design/plan review before implementation; no deployment.
+
+**For the next agent**
+- Implement only after review. Finance full-form access must not accidentally widen approval queues or grant leave/personnel reads. Existing independent HR/manager/requester print rights survive the new Finance-specific switch.
+
+
+## 2026-11-08 — Approvals and Finance usability: branch and clarification
+
+**Agent:** Codex
+**Branch / HEAD at start:** claude/view-as @ 6f20491
+**Trigger:** Owner requested wider tables, merged Approvals/archive, Finance calendar/search/sorting/print, a new branch and clarifying questions.
+
+**What changed**
+- Created `codex/approvals-finance-layout` from current HEAD; retained the pre-existing `AGENTS.md` edit.
+- `docs/plans/2026-11-08-approvals-finance-layout.md`: concrete draft scope, implementation sequence and verification plan; owner answers/review pending.
+- Inspected page containers, Approvals/history/archive, Finance data path, navigation and permission documentation. Archive includes HR controls absent from Approvals; Finance lacks full request print access and separate first/last-name fields.
+
+**Actions outside the repo**
+- None. No database or server changes.
+
+**Verification**
+- Initial branch creation was blocked by sandbox .git write access; approved escalation succeeded.
+- No app code changed; tests/build not run. Documentation diff checked before handoff.
+
+**State left behind**
+- New branch, uncommitted draft and journal; no push/deploy. Clarifications pending: width basis, calendar granularity, archive visibility/HR controls and Finance form contents.
+
+**For the next agent**
+- Follow CLAUDE.md design/spec/plan review gate before implementation. The branch includes current local View as work; it was not reset to remote main.
+- Preserve archive-only readers, exact approval authority and request-scoped print authorization when consolidating pages.
+
+
+## 2026-11-07 — View as (FR-86): built, Tasks 1-8
+
+**Agent:** Claude Opus 5.5 via Claude Code (controller plus one subagent per task)
+**Branch / HEAD at start:** claude/view-as @ a5c617b (from `origin/main` 3ac4002); the design entry below and `docs/specs`/`docs/plans` were committed in `a5c617b`
+**Trigger:** Build the approved View as design (`docs/specs/2026-11-07-view-as-design.md`, plan `docs/plans/2026-11-07-view-as.md`).
+
+**What changed**
+- `supabase/migrations/20261108090000_view_as.sql`: `private.view_as_sessions`, the pre-request hook `private.view_as_pre_request` (PT403 `view-as refused`), `app_view_as_start/end/session/probe`. A review round changed it before anything applied it (legacy claim `sub`, audit of a replaced session, probe made volatile so `read_only` proves the hook).
+- `deploy/lib/sync-view-as-hook.sql`, `deploy/lib/migrations.sh`, `deploy/package.sh`, `deploy/update.sh`, `docs/DEPLOY-LIARA.md`: the `pgrst.db_pre_request` setting is synced on every deploy and re-run after a restore. `tests/deploy/view-as-hook.test.sh` is new.
+- `lib/supabase/{constants,server}.ts` (`createClient` sends `x-view-as` on cookie, `createRealClient`, `createClientForViewAs`), `lib/auth/viewAs.ts` (`getViewAs`, dead views fail closed), `lib/auth/context.ts` (target identity), layouts, `app/api/view-as/clear/route.ts`.
+- Strip (`ViewAsBar`, context, tab sync), `LanguageSwitch` and `LogoutButton` while viewing, `proxy.ts` locale redirect skipped with the cookie, Admin › View as tab with `PersonSearch` `hint` and `autoChoose`, `dbErr` rules, messages `fa` + `en` (admin panel strings `en` only).
+- `supabase/schema.sql` dump (view-as objects only). Docs: FR-86, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS, CLAUDE.md gotchas.
+- `tests/e2e/global-setup.ts`: a guard comment only (an empty anon key turns it off).
+- Parked: trial mode, owner dropped it (spec §1); noted in TASKS.
+
+**Actions outside the repo**
+- Local only. Throwaway clones of db `postgres` (`va_t` for Tasks 1 and 2, `bj_t7sql` for the SQL suite), all dropped; PostgREST v12.2.3 container `bjs-rest` on `va_t` for the hook proof, removed. The `postgres:15-alpine` image was pulled for `tests/deploy` (CI has network; `BJ_TEST_PG_IMAGE` overrides).
+- Task 7: `./deploy/bj-deploy update local` applied `20261108090000_view_as.sql` to the local `postgres` DB (backup `backups/deploy-assistant/local/20261107T185631Z-5abbb4`, every other migration skipped), restarted `bj-erp-rest-1`, rebuilt the app container twice for fixes (`bj-deploy app local`). The hook setting was reset by hand once (step 3b) and restored with `sync-view-as-hook.sql`; confirmed.
+- e2e created 999… throwaway users and a custom role; `npm run cleanup:e2e` removed 66 users, 0 left, role deleted, admin `language_pref` still `en`. One throwaway person's `personnel_no` was nulled by SQL with an admin JWT (the spec does it). One live view session ended by hand. Liara not touched.
+
+**Verification**
+- `npm run test:unit`: 122 files, 1211 passed. `npm run lint`, `npx tsc --noEmit` clean; `npm run build` exit 0; `npm run test:deploy` exit 0.
+- SQL suite on a fresh clone: 25/25 pass, including `tests/sql/view-as.sql` (55 assertions).
+- e2e `tests/e2e/view-as.spec.ts` through the gateway: 14 passed (1.2m). Page walk while viewing (employee 6 pages, manager 8, HR 14): no page writes on load; the only `read-only transaction` in the DB log was the deliberate signature save.
+- Hook-off drill on the local stack: a running view ends on reload, a start says "View as is unavailable.", sync file restored it.
+- Not done: no browser look at the strip's colours or Farsi copy by the owner; Liara and a real restore not exercised.
+
+**State left behind**
+- Branch `claude/view-as` committed, not pushed, no PR. Pushing `main` deploys to Liara. `AGENTS.md` change is not ours and stays unstaged.
+- Local app container runs the fixed build; local DB has the migration and the hook setting.
+
+**For the next agent**
+- Gateway redirect bug: route handlers must not build redirects from `request.nextUrl` (`0.0.0.0:3000`); covered by the CLAUDE.md gotcha and the relative-Location tests in `tests/unit/view-as-identity.test.ts`. BroadcastChannel posts reach the sender's own listener, so a tab reloaded itself on Exit; fixed with a per-tab id, covered by `tests/unit/view-as-tab-sync.test.tsx`.
+- Run `view-as.spec.ts` with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty, then `npm run cleanup:e2e` by hand. Its tests leave a live session per run (ended by the next start).
+- The probe must stay volatile (PostgREST runs a stable function read-only and would hide a missing hook). A custom-role-only person with several roles shows the alphabetically first as the label.
+- Seen, not ours: `app_pending_errand_extensions()` raises `not allowed` for non-HR callers on the approvals page; `listPendingExtensions` swallows it.
+
+## 2026-11-07 — Design: admin "View as" (no code yet)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner wants to see the app as any employee, to check what they can see after a fix.
+
+**What changed**
+- This entry only. No app code, no migrations.
+
+**Actions outside the repo**
+- Local only: throwaway clone `vs_spike` of db `postgres` and two PostgREST v12.2.3 containers (`bjs-hook`, `bjs-plain`, ports 18090/18091); all removed. Liara not touched. Mockup server for brainstorming on localhost; files in git-ignored `.superpowers/`.
+
+**Verification**
+- Spike on the clone: a pre-request hook (`private.view_as_pre_request`) swapped `sub` in `request.jwt.claims` and set `transaction_read_only`. `app_my_permissions` and `profiles` returned the employee's result (0 perms, 5 rows) for the admin's token plus `x-view-as`, same as the employee's own token. Table PATCH refused (405, 25006). Employee token, no token, expired and ended sessions refused (403). Garbage id gives 400 (uuid cast): catch it in the real hook.
+- Latency over 3 rounds of 400 calls, p50: no hook 2.48-2.81 ms, hook without header 2.50-3.10 ms: within noise.
+
+**State left behind**
+- Decided by owner: strictly read-only, no notification, audit only, language switch works without saving, top strip banner, trial mode dropped for now.
+- Design approved by owner: `docs/specs/2026-11-07-view-as-design.md`. Plan written, not yet approved: `docs/plans/2026-11-07-view-as.md`. Both uncommitted. A builder check found three gaps, all fixed in it: hook setting not in backups, dead views running as admin, Farsi unreachable for an `en` admin.
+
+**For the next agent**
+- Only `signOut` needs an app block. Password change is an RPC and SMS is `sms_outbox`, so the read-only transaction covers both; an earlier message to the owner said otherwise and was corrected. A language switch in View as must not call `updateMyPrefs`.
+
+## 2026-11-06 — Question: is FR-84 live, and where is Correct?
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner, logged in on bjeng.app as head of HR, could not find how to edit approved requests.
+
+**What changed**
+- This entry only. No code.
+
+**Actions outside the repo**
+- Read-only: `gh run list`, `curl https://bjeng.app/api/health`. Live DB not touched.
+
+**Verification**
+- PR #21 merged as `3ac4002`; Deploy Liara run 42160924735 succeeded; health returns ok. Button not exercised in a browser.
+- Code read: Correct is on Manage › Requests, not on the Approvals page in the owner's screenshot.
+
+**State left behind**
+- Entry uncommitted, alongside the earlier uncommitted review entry and `AGENTS.md` change. Designated branch was deleted on the remote after the merge.
+
+**For the next agent**
+- `docs/TASKS.md`, `docs/CHANGELOG.md` and `docs/REQUIREMENTS.md` still say FR-83/84/85 are not deployed or unreleased: stale.
+
+## 2026-11-05 — Code review of PR #21 (FR-84, FR-85): no findings
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** claude/approved-trip-corrections @ 3c80975
+**Trigger:** Owner ran `/code-review:code-review` on PR #21, passing the PR author's last report.
+
+**What changed**
+- This entry only. No code.
+
+**Actions outside the repo**
+- Read-only `gh` calls. No PR comments posted (no `--comment`). Local DB and Liara not touched.
+
+**Verification**
+- Four parallel reviewers (two CLAUDE.md compliance, two bug and logic) returned no findings, so no validation pass ran. One reviewer ran `npx tsc --noEmit --incremental false`: clean. Tests, SQL and e2e not rerun.
+- The PR's accepted minors were excluded from the review by instruction, so "no findings" says nothing about them.
+
+**State left behind**
+- PR open, not merged or deployed, still no CI report per the author. This entry is uncommitted on the branch; `AGENTS.md` heading change still uncommitted and not ours.
+
+**For the next agent**
+- Merging deploys to Liara and ships FR-83 too. Keep `[skip ci]` out of the merge title.
+
+**Follow-up: `hr-role.spec.ts` on main vs the PR (owner asked)**
+- Disposable DB `bj_mainchk` cloned from local `postgres`, rolled back to main's schema (only difference from `schema.sql`: the known re-parenthesized CHECKs), a clone-only test admin password, second GoTrue + PostgREST, a node proxy with CORS, a worktree. All removed after.
+- main 8224e81, with the PR's `_helpers.ts` plus a skip for sections with no `<summary>`: 7 of 8 pass; test at :319 fails at :355 (`chain-<id>-manager`). An earlier run, with 4 tests broken only by the helper, also failed :463 at :480 (`net::ERR_ABORTED`), so that test is flaky.
+- PR head 3c80975, same clone with the four migrations forward: 6 of 8 pass; same two failures at the same lines.
+- Both failures exist without this PR. The earlier entry's "12 of 14" does not match: the spec has 8 tests.
+- Test :319 stops at :355 on both sides, so the rest of it (manager + HR approval) was exercised on neither. `chain-…` testid gap is also noted further down this file.
+- Clone gotchas: `pg_restore --no-owner` leaves `auth` owned by `supabase_admin`, so GoTrue dies with `relation "schema_migrations" already exists`; reassign `auth` schema and tables to `supabase_auth_admin`. Browser login needs CORS on the proxy. A role-settings query printed the local stack's JWT secret to this session's transcript (not committed, local only).
+
 ## 2026-11-05 — Approved trip corrections and quick balance add (FR-84, FR-85)
 
 **Agent:** Claude Opus 5.5 via Claude Code

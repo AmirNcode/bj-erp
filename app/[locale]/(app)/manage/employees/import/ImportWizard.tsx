@@ -322,7 +322,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
           </Button>
           <p className="text-sm text-muted-foreground">{labels.templateHint}</p>
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-xs">
+            <table className="data-table w-full text-xs">
               <thead className="border-b bg-muted/40">
                 <tr>
                   {columns.map((c) => (
@@ -435,7 +435,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
 
               {errors.length > 0 && (
                 <div className="overflow-x-auto rounded-lg border border-destructive/30">
-                  <table className="w-full text-sm" data-testid="import-errors">
+                  <table className="data-table w-full text-sm" data-testid="import-errors">
                     <thead className="border-b bg-destructive/5">
                       <tr>
                         <th className="text-start px-3 py-2 font-semibold">{labels.line}</th>
@@ -462,7 +462,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
                 <div className="space-y-2" data-testid="import-warnings">
                   <h3 className="text-sm font-semibold">{labels.warningsTitle}</h3>
                   <div className="overflow-x-auto rounded-lg border border-amber-500/40">
-                    <table className="w-full text-sm">
+                    <table className="data-table w-full text-sm">
                       <tbody className="divide-y divide-border">
                         {warnings.map((w, i) => (
                           <tr key={i}>
@@ -492,7 +492,7 @@ export function ImportWizard({ context, employees, existingDepartments, isAdmin,
                   <h3 className="text-sm font-semibold">{labels.departmentsTitle}</h3>
                   <p className="text-xs text-muted-foreground">{labels.departmentsHint}</p>
                   <div className="overflow-x-auto rounded-lg border border-border">
-                    <table className="w-full text-sm">
+                    <table className="data-table w-full text-sm">
                       <thead className="border-b bg-muted/40">
                         <tr>
                           <th className="text-start px-3 py-2 font-semibold">{labels.deptCode}</th>

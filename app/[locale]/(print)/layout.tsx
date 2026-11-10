@@ -18,6 +18,7 @@
 
 import { redirect } from 'next/navigation';
 import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
+import { redirectIfViewDead } from '@/lib/auth/viewAs';
 
 type Props = {
   children: React.ReactNode;
@@ -26,12 +27,14 @@ type Props = {
 
 export default async function PrintLayout({ children, params }: Props) {
   const { locale } = await params;
+  // FR-86: same dead-view check and identity as (app)/layout.tsx.
+  const view = await redirectIfViewDead(locale);
   const user = await getCachedUser();
   if (!user) redirect(`/${locale}/login`);
 
   const profile = await getCachedProfile(user.id);
   if (!profile?.active) redirect(`/${locale}/login`);
-  if (profile.must_change_password) redirect(`/${locale}/set-password`);
+  if (profile.must_change_password && !view) redirect(`/${locale}/set-password`);
 
   return <div className="min-h-dvh bg-white text-black">{children}</div>;
 }

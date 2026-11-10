@@ -19,7 +19,7 @@ import createMiddleware from 'next-intl/middleware';
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
 import { routing } from './i18n/routing';
-import { AUTH_COOKIE_NAME, CLIENT_IP_HEADER } from './lib/supabase/constants';
+import { AUTH_COOKIE_NAME, CLIENT_IP_HEADER, VIEW_AS_COOKIE } from './lib/supabase/constants';
 import {
   LOCALE_COOKIE,
   resolveEntryLocale,
@@ -83,7 +83,7 @@ export default async function middleware(request: NextRequest) {
     claimsData?.claims?.app_locale
   );
 
-  if (shouldRedirectToPreferredLocale(request.nextUrl.pathname, preferred)) {
+  if (shouldRedirectToPreferredLocale(request.nextUrl.pathname, preferred, request.cookies.has(VIEW_AS_COOKIE))) {
     const url = request.nextUrl.clone();
     url.pathname = withLocalePrefix(request.nextUrl.pathname, preferred);
 

@@ -392,8 +392,10 @@
       "view": "View form",
       "prev": "Newer",
       "next": "Older",
-      "pageOf": "Page {page} of {pages}"
-    }
+      "pageOf": "Page {page} of {pages}",
+      "reviewHint": "Completed requests you can review."
+    },
+    "pendingTitle": "Pending requests"
   },
   "review": {
     "title": "Request review",
@@ -1036,7 +1038,16 @@
       }
     }
   },
+  "viewAs": {
+    "viewing": "Viewing as {person}",
+    "readOnly": "Read-only",
+    "exit": "Exit",
+    "notSaved": "Read-only while viewing. Nothing was saved."
+  },
   "dbErrors": {
+    "viewAsReadOnly": "Read-only while viewing. Nothing was saved.",
+    "viewAsEnded": "This view has ended. Reload the page.",
+    "viewAsUnavailable": "View as is unavailable.",
     "notAuthenticated": "You are not signed in. Please sign in again.",
     "notAllowed": "You are not allowed to perform this action.",
     "insufficientBalanceMinutes": "Insufficient leave balance ({requested} minutes requested, {available} available).",
@@ -1615,7 +1626,18 @@
     "waitingOn": "Waiting on: {step}",
     "waitingUnknown": "Waiting for approval",
     "bookingOpen": "Booking not finished",
-    "pending": "Pending"
+    "pending": "Pending",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "personnelId": "ID",
+    "department": "Department",
+    "search": "Search name or personnel ID",
+    "allDepartments": "All departments",
+    "noDepartment": "No department",
+    "viewForm": "View/print form",
+    "invalidRange": "Choose a valid date range of up to 400 days; the end cannot precede the start.",
+    "fromDate": "From date",
+    "toDate": "To date"
   },
   "requestProgress": {
     "toggle": "Approval steps",
@@ -1705,8 +1727,8 @@
         "description": "Post the monthly accrual for everyone."
       },
       "leave_requests": {
-        "label": "Request archive",
-        "description": "Read: every request with its reason and signatures, and print. Allowed: the right to cancel someone else's request (no screen offers it yet)."
+        "label": "Approvals — request review",
+        "description": "Read: review all requests and forms on Approvals. Allowed: cancellation rights under existing rules. Approval authority is determined separately by the approval chain."
       },
       "calendar": {
         "label": "Company calendar",
@@ -1735,6 +1757,10 @@
       "travel_booking": {
         "label": "Travel booking",
         "description": "See approved errands that need travel booking and the traveller details needed to book; record the transport, ticket and hotel costs, and the amount lost after a cancellation."
+      },
+      "finance_forms": {
+        "label": "View/print work-errand forms",
+        "description": "View complete work-errand forms listed in Finance, including reasons and signatures. Requires Finance access; does not grant approval authority."
       }
     },
     "levels": {
@@ -2124,7 +2150,13 @@
       "sms": "SMS",
       "system": "System",
       "audit": "Audit log",
-      "signIns": "Sign-ins"
+      "signIns": "Sign-ins",
+      "viewAs": "View as"
+    },
+    "viewAs": {
+      "title": "See the app as someone else",
+      "note": "Read-only for 30 minutes. Each view is recorded in Audit.",
+      "ended": "The view has ended."
     },
     "range": {
       "label": "Period",

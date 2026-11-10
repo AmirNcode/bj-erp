@@ -21,9 +21,11 @@ export function formatUpdatedTime(date: Date, locale: string) {
 
 type Props = {
   initialUpdatedAt?: string;
+  /** On the blue side panel. */
+  onDark?: boolean;
 };
 
-export function PageRefreshButton({ initialUpdatedAt }: Props) {
+export function PageRefreshButton({ initialUpdatedAt, onDark }: Props) {
   const t = useTranslations('refresh');
   const locale = useLocale();
   const pathname = usePathname();
@@ -58,7 +60,12 @@ export function PageRefreshButton({ initialUpdatedAt }: Props) {
       data-testid="page-refresh-button"
       onClick={handleRefresh}
       disabled={isRefreshing}
-      className="h-[30px] self-start whitespace-nowrap rounded-full border bg-card px-3 text-[12.5px] font-semibold text-muted-foreground shadow-none hover:bg-primary/10 hover:text-primary"
+      className={cn(
+        'h-[30px] self-start whitespace-nowrap rounded-sm px-3 text-[12.5px] font-semibold',
+        onDark
+          ? 'border-white/30 bg-transparent text-white/85 hover:bg-white/10 hover:text-white'
+          : 'bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary'
+      )}
     >
       <RefreshCw
         aria-hidden="true"

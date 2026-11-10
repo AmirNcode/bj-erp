@@ -93,7 +93,7 @@ export function ImportPlanPanel({ plan, mode, choices, onChoices, labels, locale
           {summary
             .filter(([, n]) => n > 0)
             .map(([template, n]) => (
-              <li key={template} className="rounded-full bg-secondary px-2.5 py-1">
+              <li key={template} className="rounded-sm bg-secondary px-2.5 py-1">
                 {count(template, n)}
               </li>
             ))}

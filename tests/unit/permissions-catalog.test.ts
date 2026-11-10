@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(20);
+    expect(ALL_KEYS).toHaveLength(21);
     // Password resets are admin-only (20261013200007): no role can hold them.
     expect(ALL_KEYS).not.toContain('passwords');
     expect(body).not.toContain("'passwords'");
@@ -69,7 +69,7 @@ describe('section layout', () => {
   const items = (key: string) => SECTIONS.find((s) => s.key === key)!.items;
   it('finance has its own section, right after leave; procurement follows it (FR-70)', () => {
     expect(SECTIONS.map((s) => s.key)).toEqual(['employees', 'departments', 'leave', 'finance', 'procurement', 'approvalChain', 'settings']);
-    expect(items('finance')).toEqual(['finance']);
+    expect(items('finance')).toEqual(['finance', 'finance_forms']);
     expect(items('procurement')).toEqual(['travel_booking']);
   });
   it('own personal information sits right after personal information', () => {
@@ -200,11 +200,18 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(20);
+    expect(Object.keys(f)).toHaveLength(21);
     expect(f.travel_booking).toBe('edit');
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');
     expect(f.special_leave).toBe('edit');
     expect(f.people).toBe('edit');
   });
+});
+
+
+it('Finance forms depend on Finance and are removed when Finance is removed', () => {
+  expect(applyLevel({}, 'finance_forms', 'read')).toMatchObject({ perms: { finance_forms: 'read', finance: 'read' }, raised: ['finance'] });
+  expect(applyLevel({ finance_forms: 'read', finance: 'read' }, 'finance', null)).toMatchObject({ perms: {}, lowered: ['finance_forms'] });
+  expect(allows('finance_forms', 'edit')).toBe(false);
 });

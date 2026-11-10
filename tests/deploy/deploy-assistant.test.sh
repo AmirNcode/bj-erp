@@ -82,6 +82,7 @@ pass "migration manifest is sorted and checksummed"
 FAKE_LEDGER="$TMP/fake-ledger"
 FAKE_APPLIED="$TMP/fake-applied"
 : > "$FAKE_LEDGER"; : > "$FAKE_APPLIED"
+FAKE_SYNCED="$TMP/fake-synced"; : > "$FAKE_SYNCED"
 pgexec() {
   local args="$*" input='' filename='' checksum='' migration_file='' assignment
   case "$args" in
@@ -122,6 +123,10 @@ pgexec() {
   input=$(cat)
   case "$input" in
     *"create schema if not exists bj_deploy"*) return ;;
+    *"pgrst.db_pre_request"*)
+      [ "${FAKE_SYNC_FAIL:-0}" = 0 ] || return 1
+      printf 'x\n' >> "$FAKE_SYNCED"
+      return ;;
     *"select checksum_sha256"*)
       filename=$(printf '%s\n' "$args" | sed -n 's/.*-v filename=\([^ ]*\).*/\1/p')
       awk -F'|' -v filename="$filename" '$1 == filename { print $2 }' "$FAKE_LEDGER"
@@ -157,6 +162,18 @@ assert_eq "$(wc -c < "$FAKE_APPLIED" | tr -d ' ')" "$before_applied"
 bj_apply_migrations "$TMP/migrations" test-release >/dev/null
 assert_eq "$(wc -l < "$FAKE_LEDGER" | tr -d ' ')" 3
 pass "single-stdin migration SQL and ledger row are atomic, resumable, and checksum protected"
+
+# The View as hook setting is re-asserted after every migration run (even when
+# nothing is pending), and a failure to set it fails the deploy.
+synced_before=$(wc -l < "$FAKE_SYNCED" | tr -d ' ')
+bj_apply_migrations "$TMP/migrations" test-release >/dev/null
+assert_eq "$(wc -l < "$FAKE_SYNCED" | tr -d ' ')" "$((synced_before + 1))"
+FAKE_SYNC_FAIL=1
+if bj_apply_migrations "$TMP/migrations" test-release >/dev/null 2>&1; then
+  fail "a failed hook sync was accepted"
+fi
+unset FAKE_SYNC_FAIL
+pass "view-as hook setting is synced after migrations and a failure fails the deploy"
 
 (
   mkdir -p "$TMP/known-installed"

@@ -21,12 +21,11 @@ test('responsive: nav usable and no horizontal overflow on mobile + desktop', as
   const box = await page.locator('[data-testid="nav-home"]').boundingBox();
   expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
 
-  // Manage › Employees on mobile: the title, then a floating add button in
-  // place of the header one, and no horizontal scroll from the table.
+  // Manage › Employees on mobile: the title (top bar; the page's own is for
+  // screen readers), the full-width add button, and no horizontal scroll.
   await page.goto('/manage/employees');
   await expect(page.getByRole('heading', { name: /^(Employees|کارکنان)$/ })).toBeVisible();
-  await expect(page.locator('[data-testid="add-employee-fab"]')).toBeVisible();
-  await expect(page.locator('[data-testid="add-employee-link"]')).toBeHidden();
+  await expect(page.locator('[data-testid="add-employee-link"]')).toBeVisible();
   const manageOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth
   );

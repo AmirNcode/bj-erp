@@ -6,10 +6,17 @@
  */
 
 import Link from 'next/link';
+import { PersonAvatar } from '@/components/PersonAvatar';
+import { approvalHref, type RequestFilters } from '@/lib/leave/requestFilters';
+import { RequestReviewActions, type TravelTicks } from '../requests/RequestReviewActions';
 import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { getApprovalHistory, type ApprovalHistoryRow } from '@/lib/actions/leave/approvals';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+
+// Phones: every action is half the card wide and 44px tall.
+const ACTION = 'h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
@@ -19,14 +26,20 @@ import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { todayInAppTz } from '@/lib/appDate';
 
-type Props = { locale: string; page: number; hoursPerDay: number };
+type Props = { locale: string; page: number; hoursPerDay: number; filters: RequestFilters; travelTicks: TravelTicks; viewerId: string; canReview: boolean; canCancel?: boolean };
 
-export async function ApprovalHistory({ locale, page, hoursPerDay }: Props) {
-  const [t, tLeave, tErrand, res] = await Promise.all([
-    getTranslations('approvals.history'),
-    getTranslations('leave'),
-    getTranslations('errand'),
-    getApprovalHistory(page),
+export async function ApprovalHistory(props: Props) {
+  const result = await getApprovalHistory(props.page, props.filters);
+  return <ApprovalHistoryContent {...props} result={result} />;
+}
+
+export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filters, travelTicks, viewerId, canReview, canCancel, result: res }: Props & {
+  result: Awaited<ReturnType<typeof getApprovalHistory>>;
+}) {
+  const [t, tLeave, tErrand] = await Promise.all([
+    getTranslations({ locale, namespace: 'approvals.history' }),
+    getTranslations({ locale, namespace: 'leave' }),
+    getTranslations({ locale, namespace: 'errand' }),
   ]);
   const statusLabels = {
     pending: tLeave('status.pending'),
@@ -56,7 +69,7 @@ export async function ApprovalHistory({ locale, page, hoursPerDay }: Props) {
   const header = (
     <div className="mb-3 mt-8">
       <h2 className="text-lg font-semibold">{t('title')}</h2>
-      <p className="text-xs text-muted-foreground">{t('hint')}</p>
+      <p className="text-xs text-muted-foreground">{t(canReview ? 'reviewHint' : 'hint')}</p>
     </div>
   );
 
@@ -75,7 +88,7 @@ export async function ApprovalHistory({ locale, page, hoursPerDay }: Props) {
   const current = Math.min(Math.max(page, 1), lastPage);
   const Prev = locale === 'fa' ? ChevronRight : ChevronLeft;
   const Next = locale === 'fa' ? ChevronLeft : ChevronRight;
-  const href = (p: number) => `/${locale}/manage/approvals${p > 1 ? `?history=${p}` : ''}#history`;
+  const href = (p: number) => `${approvalHref(locale, filters, p)}#history`;
 
   return (
     <section id="history" data-testid="approval-history">
@@ -85,54 +98,64 @@ export async function ApprovalHistory({ locale, page, hoursPerDay }: Props) {
           {t('empty')}
         </p>
       ) : (
-        <Card className="gap-0 overflow-hidden py-0">
-          <ul className="divide-y">
-            {res.rows.map((r) => {
-              const dept =
-                locale === 'fa' ? r.department_name_fa ?? r.department_name_en : r.department_name_en ?? r.department_name_fa;
-              const mine = r.my_decisions[r.my_decisions.length - 1];
-              return (
-                <li key={r.id} className="flex items-start justify-between gap-3 px-4 py-3" data-testid={`history-${r.id}`}>
-                  <div className="min-w-0 space-y-0.5">
-                    <p className="font-medium">
-                      <bdi>{r.employee_name}</bdi>
-                      <span className="ms-2 text-xs text-muted-foreground" dir="ltr">
-                        {formatSerialLocalized(r.serial_year, r.serial_seq, locale)}
-                      </span>
-                    </p>
-                    {dept && <p className="text-xs text-muted-foreground">{dept}</p>}
-                    <p className="text-sm">{describe(r)}</p>
-                    {r.kind === 'errand' && r.errand_location && (
-                      <p className="text-xs text-muted-foreground">{r.errand_location}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      {mine
-                        ? t(mine.decision === 'approved' ? 'youApproved' : 'youRejected', {
-                            date: date(todayInAppTz(new Date(mine.at))),
-                          })
-                        : t('decidedOn', { date: date(todayInAppTz(new Date(r.decided_at))) })}
-                    </p>
-                    {mine?.note && (
-                      <p className="text-xs text-muted-foreground">
-                        {t('note')}: {mine.note}
+        // Same card as the pending queue: one centred column on phones;
+        // details at the start and the status at the end on desktop; actions
+        // in a footer row with equal-size buttons.
+        <ul className="space-y-3">
+          {res.rows.map((r) => {
+            const dept =
+              locale === 'fa' ? r.department_name_fa ?? r.department_name_en : r.department_name_en ?? r.department_name_fa;
+            const mine = r.my_decisions[r.my_decisions.length - 1];
+            return (
+              <li key={r.id} data-testid={`history-${r.id}`}>
+                <Card className="grid gap-x-6 gap-y-4 p-4 text-center md:grid-cols-[minmax(0,1fr)_auto] md:p-5 md:text-start">
+                  <div className="min-w-0">
+                    <div className="flex flex-col items-center gap-1.5 md:flex-row md:gap-2.5">
+                      <PersonAvatar id={r.employee_id} name={r.employee_name} />
+                      <div className="min-w-0 max-w-full truncate text-[15px] font-semibold">
+                        <bdi>{r.employee_name}</bdi>
+                      </div>
+                      <span className="text-xs tabular-nums text-muted-foreground" dir="ltr">{r.personnel_no ?? '—'}</span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-[13px] text-muted-foreground">
+                      <p className="text-sm text-foreground">{describe(r)}</p>
+                      {r.kind === 'errand' && r.errand_location && <p>{r.errand_location}</p>}
+                      {dept && <p>{dept}</p>}
+                      <p>
+                        {tLeave('trackingNo')}:{' '}
+                        <span className="font-mono" dir="ltr">{formatSerialLocalized(r.serial_year, r.serial_seq, locale)}</span>
                       </p>
-                    )}
+                      <p>
+                        {mine
+                          ? t(mine.decision === 'approved' ? 'youApproved' : 'youRejected', {
+                              date: date(todayInAppTz(new Date(mine.at))),
+                            })
+                          : t('decidedOn', { date: date(todayInAppTz(new Date(r.decided_at))) })}
+                      </p>
+                      {mine?.note && (
+                        <p>
+                          {t('note')}: {mine.note}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-2">
+                  <div className="flex items-start justify-center md:justify-end">
                     <StatusBadge status={r.status} labels={statusLabels} />
-                    <Link
-                      href={`/${locale}/print/request/${r.id}`}
-                      className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    >
-                      <Printer className="size-3.5" aria-hidden="true" />
-                      {t('view')}
-                    </Link>
                   </div>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-border pt-3 md:col-span-2 md:gap-x-5">
+                    <Button variant="outline" size="sm" className={ACTION} asChild>
+                      <Link href={`/${locale}/print/request/${r.id}`}>
+                        <Printer aria-hidden="true" />
+                        {t('view')}
+                      </Link>
+                    </Button>
+                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId} className="contents" buttonClassName={ACTION} canCancel={canCancel} />
+                  </div>
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
       )}
       {lastPage > 1 && (
         <nav className="mt-3 flex items-center justify-between text-sm" aria-label={t('title')}>

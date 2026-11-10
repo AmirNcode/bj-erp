@@ -15,6 +15,7 @@ import {
 } from '@/lib/employees/list';
 import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
+import { tabClass, tabListClass } from '@/lib/ui/tabs';
 
 type Props = {
   /** Locale-prefixed list path, e.g. /fa/manage/employees. */
@@ -65,12 +66,12 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
 
   return (
     <div
-      className={cn('flex w-full flex-wrap items-center gap-2.5 transition-opacity lg:flex-nowrap', isPending && 'opacity-70')}
+      className={cn('flex w-full flex-wrap items-center gap-x-2.5 gap-y-3 transition-opacity', isPending && 'opacity-70')}
       aria-busy={isPending}
     >
       <nav
         aria-label={tl('filterLabel')}
-        className="flex max-w-full shrink-0 overflow-x-auto rounded-[10px] bg-muted p-[3px]"
+        className={cn(tabListClass, 'w-full')}
       >
         {segments.map((s) => {
           const active = query.filter === s.key;
@@ -82,16 +83,11 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
               scroll={false}
               data-testid={`emp-filter-${s.key}`}
               aria-current={active ? 'page' : undefined}
-              className={cn(
-                'inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] transition-colors',
-                active
-                  ? 'bg-card font-semibold text-primary shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
+              className={tabClass(active)}
             >
               {s.label}
               {s.count !== null && (
-                <span className={cn('text-xs', active ? 'text-primary/70' : 'text-muted-foreground')}>
+                <span className="text-xs font-normal tabular-nums text-muted-foreground">
                   {s.count}
                 </span>
               )}
@@ -120,7 +116,7 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
           placeholder={tl('search')}
           aria-label={tl('search')}
           data-testid="emp-search"
-          className="h-9 w-full rounded-[10px] border border-input bg-card ps-9 pe-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="h-9 w-full rounded-md border border-input bg-card ps-9 pe-3 text-base md:text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
         />
       </form>
 
@@ -129,7 +125,7 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
         data-testid="emp-dept-filter"
         value={query.dept ?? ''}
         onChange={(e) => go({ dept: e.target.value || null })}
-        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-[10px] sm:w-56')}
+        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-md sm:w-56')}
       >
         <option value="">{tl('allDepartments')}</option>
         {departments.map((d) => (
@@ -148,7 +144,7 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
           const [sort, dir] = e.target.value.split('_') as [EmployeesSort, SortDir];
           go({ sort, dir });
         }}
-        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-[10px] md:hidden')}
+        className={cn(nativeSelectClass, 'h-9 w-full shrink-0 rounded-md md:hidden')}
       >
         {EMPLOYEES_SORTS.flatMap((sort) =>
           (['asc', 'desc'] as const).map((dir) => (

@@ -71,6 +71,7 @@ cp deploy/docker-compose.yml deploy/docker-compose.client-amd64.yml \
    deploy/install.sh deploy/update.sh deploy/remote-job.sh \
    deploy/RUNBOOK.md deploy/env.example "$OUT/"
 cp deploy/lib/common.sh deploy/lib/migrations.sh deploy/lib/health.sh "$OUT/lib/"
+cp deploy/lib/sync-view-as-hook.sql         "$OUT/lib/"
 cp deploy/caddy/Caddyfile                  "$OUT/caddy/"
 cp deploy/sql/init/00-init.sh              "$OUT/sql/init/"
 cp deploy/sql/bootstrap_admin.sql          "$OUT/sql/"

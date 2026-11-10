@@ -69,10 +69,12 @@ describe('login rate limiting wiring', () => {
   it('forwards the header from both server-side Supabase clients', () => {
     // proxy.ts is where refreshes actually happen; server.ts covers Server
     // Actions and Server Components that touch Auth.
-    for (const file of ['proxy.ts', 'lib/supabase/server.ts']) {
-      const source = readFileSync(file, 'utf8');
-      expect(source).toContain('CLIENT_IP_HEADER');
-      expect(source).toContain('global: { headers: { [CLIENT_IP_HEADER]: clientIp } }');
-    }
+    // server.ts merges it with x-view-as; tests/unit/view-as.test.ts checks
+    // that it still reaches every server client.
+    const proxy = readFileSync('proxy.ts', 'utf8');
+    expect(proxy).toContain('global: { headers: { [CLIENT_IP_HEADER]: clientIp } }');
+    const server = readFileSync('lib/supabase/server.ts', 'utf8');
+    expect(server).toContain('[CLIENT_IP_HEADER]: clientIp');
+    expect(server).toContain('global: { headers: extraHeaders }');
   });
 });

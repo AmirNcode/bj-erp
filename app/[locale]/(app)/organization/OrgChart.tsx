@@ -91,7 +91,7 @@ export function OrgChart({ people, myId, locale }: Props) {
         </span>
         {count > 0 && (
           <span
-            className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground"
+            className="shrink-0 rounded-sm bg-secondary px-2 py-0.5 text-xs text-muted-foreground"
             title={t('people', { count: fmt(count) })}
             aria-label={t('people', { count: fmt(count) })}
           >
@@ -155,7 +155,7 @@ export function OrgChart({ people, myId, locale }: Props) {
             onClick={() => go(TOP)}
             data-testid="org-top"
             className={cn(
-              'rounded-full border px-3 py-1 text-xs transition-colors',
+              'rounded-sm border px-3 py-1 text-xs transition-colors',
               focusId === TOP
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
@@ -168,7 +168,7 @@ export function OrgChart({ people, myId, locale }: Props) {
               type="button"
               onClick={() => go(myId)}
               data-testid="org-back-to-me"
-              className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary"
+              className="rounded-sm border border-border px-3 py-1 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary"
             >
               {t('backToMe')}
             </button>

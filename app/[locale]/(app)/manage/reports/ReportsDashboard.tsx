@@ -207,7 +207,7 @@ function ExportMenu({
       <Button
         type="button"
         variant="outline"
-        className="rounded-[10px]"
+        className="rounded-md"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
@@ -335,7 +335,7 @@ export function ReportsDashboard({ data, months, capacity, locale }: Props) {
     onSelect: () => downloadCsv(tableToCsvRows(r.table), `${stem}-${r.file}.csv`),
   }));
 
-  const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-[10px] bg-card');
+  const selectClass = cn(nativeSelectClass, 'h-9 w-auto rounded-md bg-card');
 
   return (
     <div className="flex flex-col gap-5" data-testid="reports-dashboard">

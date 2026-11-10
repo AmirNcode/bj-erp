@@ -21,6 +21,7 @@ import { getReportMonths } from '@/lib/actions/reports';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { todayInAppTz } from '@/lib/appDate';
+import { validFinanceRange } from '@/lib/finance/list';
 import { defaultFinanceRange } from '@/lib/finance/range';
 import { PageHeader } from '../_components/PageHeader';
 import { FinanceList } from './FinanceList';
@@ -29,8 +30,6 @@ type Props = {
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ from?: string; to?: string }>;
 };
-
-const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 export default async function FinancePage({ params, searchParams }: Props) {
   const { locale } = await params;
@@ -49,19 +48,19 @@ export default async function FinancePage({ params, searchParams }: Props) {
   const today = todayInAppTz();
   const range = defaultFinanceRange(months, today);
   const { from: rawFrom, to: rawTo } = await searchParams;
-  const from = rawFrom && ISO.test(rawFrom) ? rawFrom : range.from;
-  const to = rawTo && ISO.test(rawTo) ? rawTo : range.to;
+  const from = rawFrom ?? range.from;
+  const to = rawTo ?? range.to;
 
-  const result = await getFinanceApprovals(from, to);
+  const result = validFinanceRange(from,to) ? await getFinanceApprovals(from, to) : { ok: false as const, error: t('invalidRange') };
   const hoursPerDay = settings.ok ? settings.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
 
   return (
-    <div className="mx-auto flex w-full max-w-[1100px] flex-col">
-      <PageHeader title={t('title')} />
+    <div data-wide className="flex w-full flex-col">
+      <PageHeader section title={t('title')} />
       {result.ok ? (
         <FinanceList
+          key={`${from}:${to}`}
           rows={result.rows}
-          months={months}
           from={from}
           to={to}
           locale={locale}

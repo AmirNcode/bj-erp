@@ -140,3 +140,15 @@ describe('approval delegation permission', () => {
     expect(onChange.mock.calls[0][0]).toEqual({ approval_steps: 'read', people: 'read' });
   });
 });
+
+it('offers a Yes/No Finance form toggle and raises the Finance dependency', () => {
+  const onChange = vi.fn();
+  const { rerender } = render(<PermissionSection section="finance" perms={{}} onChange={onChange} notes={{}} t={t} defaultOpen />);
+  const toggle = screen.getByTestId('perm-finance_forms');
+  expect(within(toggle).getAllByRole('radio').map(e => e.textContent)).toEqual(['Yes','No']);
+  fireEvent.click(screen.getByTestId('perm-finance_forms-read'));
+  expect(onChange).toHaveBeenLastCalledWith({ finance_forms:'read', finance:'read' }, ['finance'], []);
+  rerender(<PermissionSection section="finance" perms={{finance:'read',finance_forms:'read'}} onChange={onChange} notes={{}} t={t} defaultOpen />);
+  fireEvent.click(screen.getByTestId('perm-finance_forms-none'));
+  expect(onChange).toHaveBeenLastCalledWith({finance:'read'}, [], []);
+});

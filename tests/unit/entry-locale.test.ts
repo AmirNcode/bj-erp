@@ -114,3 +114,10 @@ describe('shouldRedirectToPreferredLocale', () => {
     expect(shouldRedirectToPreferredLocale('/en/home', 'en')).toBe(false);
   });
 });
+
+describe('shouldRedirectToPreferredLocale while viewing (FR-86)', () => {
+  it('skips the preferred-locale redirect while viewing', () => {
+    expect(shouldRedirectToPreferredLocale('/home', 'en', true)).toBe(false);
+    expect(shouldRedirectToPreferredLocale('/home', 'en')).toBe(true);
+  });
+});

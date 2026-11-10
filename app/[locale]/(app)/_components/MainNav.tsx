@@ -37,12 +37,20 @@ type Props = {
   pendingCount?: Promise<number>;
 };
 
-// Active = existing style: tint, primary text, a 4px bar on the start edge.
-const activeItem =
-  'bg-primary/10 font-semibold text-primary before:absolute before:inset-y-2 before:start-0 before:w-1 before:rounded-full before:bg-primary before:content-[""]';
-const inactiveItem = 'text-muted-foreground hover:bg-muted/50 hover:text-foreground';
+// Blueprint. Side panel (desktop, on --sidebar): white text, the active item
+// gets a faint fill and a 3px white rule on the panel's start edge. Bottom bar
+// (mobile, on white): the active tab is primary with a 3px rule on top.
+const sideActive =
+  'bg-white/12 font-semibold text-white before:absolute before:inset-y-0 before:-start-3 before:w-[3px] before:bg-white before:content-[""]';
+const activeItem = sideActive;
+// Literal classes: Tailwind cannot see built strings.
+const inactiveItem =
+  'text-muted-foreground hover:text-foreground md:text-white/75 md:hover:bg-white/8 md:hover:text-white';
+const tabActive =
+  'font-semibold text-primary before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-primary before:content-[""] ' +
+  'md:bg-white/12 md:text-white md:before:inset-x-auto md:before:inset-y-0 md:before:-start-3 md:before:h-auto md:before:w-[3px] md:before:bg-white';
 const sideItem =
-  'relative flex items-center gap-3 whitespace-nowrap rounded-[10px] px-3 py-[9px] text-sm transition-colors';
+  'relative flex items-center gap-3 whitespace-nowrap rounded-md px-3 py-[9px] text-sm transition-colors';
 
 function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: string }) {
   const n = use(count);
@@ -50,7 +58,7 @@ function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: str
   return (
     <span
       data-testid="nav-approvals-count"
-      className="ms-auto rounded-full bg-primary px-2 text-[11.5px] font-semibold leading-5 text-primary-foreground"
+      className="ms-auto rounded-sm bg-white px-1.5 text-[11.5px] font-semibold leading-5 text-sidebar"
     >
       {formatNumber(n, locale)}
     </span>
@@ -122,13 +130,20 @@ export function MainNav({
       aria-label={t('primary')}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       className={cn(
-        'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card shadow-[0_-8px_24px_rgba(15,23,42,0.08)]', // mobile bottom bar
-        'md:inset-y-0 md:end-auto md:start-0 md:flex md:w-60 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-t-0 md:border-e md:px-3 md:pt-4 md:shadow-none' // desktop side panel (logical: start/end)
+        'fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card print:hidden', // mobile bottom bar
+        'md:inset-y-0 md:end-auto md:start-0 md:flex md:w-60 md:flex-col md:gap-0.5 md:overflow-y-auto md:border-t-0 md:bg-sidebar md:px-3 md:pt-4 md:text-sidebar-foreground' // desktop side panel (logical: start/end)
       )}
     >
       {/* Logo only, centred, 80% of the nav items' width (owner, 2026-10-13);
-          the app name is its alt text. */}
-      <div className="hidden justify-center pt-1 pb-[18px] md:flex">
+          the app name is its alt text. The PNG's white is transparent, so it
+          sits on a white plate, inset 2px so it never shows past the frame's
+          antialiased edge, and the frame melts into the panel. */}
+      <Link
+        href={`/${locale}/home`}
+        aria-label={t('home')}
+        data-testid="nav-logo-link"
+        className="hidden justify-center pt-1 pb-[18px] focus-visible:outline-2 focus-visible:outline-white md:flex"
+      >
         <Image
           src="/bj-logo.png"
           alt={appName ?? ''}
@@ -136,10 +151,10 @@ export function MainNav({
           height={591}
           sizes="173px"
           priority
-          className="h-auto w-4/5 object-contain"
+          className="h-auto w-4/5 object-contain bg-[linear-gradient(white,white)] bg-[length:calc(100%-4px)_calc(100%-4px)] bg-center bg-no-repeat"
           data-testid="nav-logo"
         />
-      </div>
+      </Link>
 
       <ul className="mx-auto flex max-w-2xl justify-around md:mx-0 md:max-w-none md:flex-col md:gap-0.5">
         {tabs.map((tab) => {
@@ -162,23 +177,11 @@ export function MainNav({
                 aria-current={active ? 'page' : undefined}
                 className={cn(
                   'relative flex min-h-14 flex-col items-center justify-center gap-1 whitespace-nowrap py-2 text-xs transition-colors',
-                  'md:min-h-0 md:flex-row md:justify-start md:gap-3 md:rounded-[10px] md:px-3 md:py-[9px] md:text-sm',
-                  active
-                    ? 'bg-primary/10 font-semibold text-primary before:absolute before:inset-x-4 before:top-0 before:h-0.5 before:rounded-full before:bg-primary before:content-[""] md:before:inset-x-auto md:before:inset-y-2 md:before:start-0 md:before:h-auto md:before:w-1'
-                    : inactiveItem
+                  'md:min-h-0 md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:py-[9px] md:text-sm',
+                  active ? tabActive : inactiveItem
                 )}
               >
-                <span
-                  aria-hidden="true"
-                  className={cn(
-                    'rounded-full p-1 transition-colors md:p-0',
-                    active
-                      ? 'bg-primary text-primary-foreground md:bg-transparent md:text-current'
-                      : 'text-current'
-                  )}
-                >
-                  {NAV_ICONS[tab.key]}
-                </span>
+                <span aria-hidden="true">{NAV_ICONS[tab.key]}</span>
                 <span>{t(tab.key)}</span>
               </Link>
             </li>
@@ -192,20 +195,10 @@ export function MainNav({
             aria-current={isActive('/profile') ? 'page' : undefined}
             className={cn(
               'relative flex min-h-14 flex-col items-center justify-center gap-1 whitespace-nowrap py-2 text-xs transition-colors',
-              isActive('/profile')
-                ? 'bg-primary/10 font-semibold text-primary before:absolute before:inset-x-4 before:top-0 before:h-0.5 before:rounded-full before:bg-primary before:content-[""]'
-                : inactiveItem
+              isActive('/profile') ? tabActive : inactiveItem
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                'rounded-full p-1',
-                isActive('/profile') ? 'bg-primary text-primary-foreground' : 'text-current'
-              )}
-            >
-              {NAV_ICONS.profile}
-            </span>
+            <span aria-hidden="true">{NAV_ICONS.profile}</span>
             <span>{t('profile')}</span>
           </Link>
         </li>
@@ -213,7 +206,7 @@ export function MainNav({
 
       {manageItems.length > 0 && (
         <div className="hidden md:block">
-          <p className="px-3 pt-4 pb-1 text-[11.5px] font-semibold text-muted-foreground">
+          <p className="px-3 pt-4 pb-1 text-[11.5px] font-semibold text-white/60">
             {t('manage')}
           </p>
           <ul className="flex flex-col gap-0.5">{manageItems.map(sideLink)}</ul>
@@ -222,7 +215,7 @@ export function MainNav({
 
       {(settings || admin) && (
         <div className="hidden md:block">
-          <div className="mx-1 my-3 h-px bg-muted" />
+          <div className="mx-1 my-3 h-px bg-white/15" />
           <ul className="flex flex-col gap-0.5">
             {settings && sideLink(settings)}
             {admin && sideLink(admin)}
@@ -248,14 +241,14 @@ export function MainNav({
       </ul>
 
       {/* Footer: refresh, profile, language — pinned to the bottom. */}
-      <div className="hidden flex-col gap-2.5 border-t border-muted pt-4 pb-4 md:flex">
-        <PageRefreshButton initialUpdatedAt={initialUpdatedAt} />
+      <div className="hidden flex-col gap-2.5 border-t border-white/15 pt-4 pb-4 md:flex">
+        <PageRefreshButton initialUpdatedAt={initialUpdatedAt} onDark />
         <Link
           href={`/${locale}/profile`}
           data-testid="nav-profile"
           aria-label={t('profile')}
           aria-current={isActive('/profile') ? 'page' : undefined}
-          className="flex items-center gap-2.5 rounded-[10px] p-1 transition-colors hover:bg-muted/50"
+          className="flex items-center gap-2.5 rounded-md p-1 transition-colors hover:bg-white/8"
         >
           {profile?.id ? (
             <PersonAvatar id={profile.id} name={profile.name} className="size-9" />
@@ -269,16 +262,16 @@ export function MainNav({
           )}
           {profile && (
             <span className="min-w-0">
-              <span className="block truncate whitespace-nowrap text-[13.5px] font-semibold text-foreground">
+              <span className="block truncate whitespace-nowrap text-[13.5px] font-semibold text-white">
                 <bdi>{profile.name}</bdi>
               </span>
-              <span className="block truncate whitespace-nowrap text-xs text-muted-foreground">
+              <span className="block truncate whitespace-nowrap text-xs text-white/70">
                 {profile.subtitle}
               </span>
             </span>
           )}
         </Link>
-        <LanguageSwitch locale={locale} />
+        <LanguageSwitch locale={locale} onDark />
       </div>
     </nav>
   );
