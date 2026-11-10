@@ -116,6 +116,7 @@ Copy this block verbatim and fill it in.
 - In the local copy only: `private.sms_settings` set `mode='off'`, `api_key`/`username` NULL (backup had live SMS with a real key); `update cron.job set active=false` (4 jobs; the stack also runs `cron.launch_active_jobs=off`).
 - Applied pending migrations via `bj_apply_migrations` (view_as, approvals_finance_usability, FR-88, FR-89 — the backup predates the PR #22 deploy). Stack up, health OK. Print payload checked in SQL as the admin JWT (rolled back): real steps print «مدیر واحد · تصویب کننده · امور اداری»; live has direct manager AND department manager both at order 2.
 - Did not sign in through the browser (would need the real admin password). Login on :3501 uses everyone's real passwords.
+- Owner rule added: local runs use the newest live backup unless demo is asked for (`docs/DEPLOY-ASSISTANT.md` section, CLAUDE.md lines). Committed f22d159, pushed `feat/form-signature-boxes`, opened PR #23 (not merged; review prompt handed to the owner for an independent reviewer).
 
 ## 2026-11-09 — Calendar: remove the List/Month toggle and the list view
 
