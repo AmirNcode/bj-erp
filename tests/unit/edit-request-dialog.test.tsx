@@ -49,6 +49,17 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('EditRequestDialog (FR-91)', () => {
+  it('an hourly errand can be moved outside working hours; hourly leave cannot', () => {
+    open(errand, ['hour']);
+    const opts = (id: string) => Array.from((screen.getByTestId(id) as HTMLSelectElement).options).map((o) => o.value);
+    expect(opts('edit-time-r1-from')).toContain('18:00');
+    expect(opts('edit-time-r1-to')).toContain('18:00');
+    cleanup();
+    open({ ...errand, kind: 'leave' }, ['hour']);
+    expect(opts('edit-time-r1-from')).not.toContain('18:00');
+    expect(opts('edit-time-r1-from')).toContain('07:00');
+  });
+
   it('a daily leave with only the daily key: dates, no switch, no per diem, no times', () => {
     open(leave, ['day']);
     expect(screen.queryByTestId('edit-unit')).toBeNull();

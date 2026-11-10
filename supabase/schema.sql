@@ -1363,6 +1363,11 @@ begin
   v_unpaid := r.unpaid_minutes;
 
   if v_shape_changed then
+    if r.kind = 'errand' and r.unit = 'day' and p_unit = 'hour'
+       and exists (select 1 from public.errand_extensions e where e.request_id = r.id and e.status = 'approved') then
+      raise exception 'an extended trip cannot become an hourly errand' using errcode = '22023';
+    end if;
+
     -- A trip becomes an hourly errand only while procurement has not started on it.
     if r.kind = 'errand' and r.unit = 'day' and p_unit = 'hour'
        and exists (select 1 from public.travel_bookings b
@@ -1475,7 +1480,9 @@ begin
   if v_delta <> 0 then
     insert into public.leave_ledger(employee_id, leave_type_id, request_id, entry_type,
                                     delta_minutes, balance_after_minutes, note)
-    values (r.employee_id, r.leave_type_id, r.id, 'adjustment', v_delta, v_balance + v_delta, 'request edited');
+    values (r.employee_id, r.leave_type_id, r.id,
+            (case when v_delta < 0 then 'consumption' else 'reversal' end)::public.ledger_entry,
+            v_delta, v_balance + v_delta, 'request edited');
   end if;
 
   -- Procurement: a daily trip whose dates moved goes back to the booking list; a trip that became

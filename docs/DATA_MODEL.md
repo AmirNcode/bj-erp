@@ -611,7 +611,8 @@ done, with a date-changing correction since `opened_at` that is newer than any a
 null on rows from before FR-91, which are daily trips). The first row's `old_*` values are the signed
 ones. `app_edit_request` also rewrites unit, day part, times, `requested_minutes`, `unpaid_minutes` and
 `per_diem_rials` on `leave_requests`. **Ledger:** a leave edit that changes the paid minutes posts one
-`adjustment` row (note `request edited`) for the difference (shorter returns time, longer takes it);
+row (note `request edited`) for the difference: `reversal` when shorter (time returned), `consumption`
+when longer (time taken), so Home's "used" follows it (migration `20261110130000`);
 the ledger stays append-only. **An edit may not create or grow an unpaid part** (a new request may run
 past the balance; an edit is refused with "an edit cannot make leave unpaid"); shrinking a request that
 already has an unpaid part is allowed. A trip edited to an hourly errand clears `per_diem_rials`

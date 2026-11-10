@@ -354,10 +354,10 @@ select pg_temp.expect('fixture: three days consumed',pg_temp.ledger('s1')||'/'||
 select pg_temp.expect('shrink to two days',
   pg_temp.err(pg_temp.edit('ed_all','s1','day','2027-06-01','2027-06-02','full',null,null,null)),'ok');
 select pg_temp.expect('minutes follow',pg_temp.row_of('s1'),'day/2027-06-01/2027-06-02/full/-/-/960/0/null');
-select pg_temp.expect('one adjustment returns a day',pg_temp.ledger('s1'),'consumption:-1440,adjustment:480');
+select pg_temp.expect('one reversal returns a day',pg_temp.ledger('s1'),'consumption:-1440,reversal:480');
 select pg_temp.expect('balance up by 480',pg_temp.bal('e2','annual'),'1440');
 select pg_temp.expect('the ledger row carries the balance after',
-  (select balance_after_minutes::text from public.leave_ledger where request_id=pg_temp.fx('s1') and entry_type='adjustment'),'1440');
+  (select balance_after_minutes::text from public.leave_ledger where request_id=pg_temp.fx('s1') and entry_type='reversal'),'1440');
 select pg_temp.expect('the history row has both minutes and the unit',
   (select minutes_before||'/'||minutes_after||'/'||old_unit||'/'||new_unit||'/'||old_day_part||'/'||new_day_part
      from public.request_corrections where request_id=pg_temp.fx('s1')),'1440/960/day/day/full/full');
@@ -366,7 +366,7 @@ select pg_temp.expect('the history row has the dates and who',
      from public.request_corrections where request_id=pg_temp.fx('s1')),'2027-06-01/2027-06-02/2027-06-03/true/true');
 select pg_temp.expect('grow back within the balance',
   pg_temp.err(pg_temp.edit('ed_all','s1','day','2027-06-01','2027-06-03','full',null,null,null)),'ok');
-select pg_temp.expect('ledger takes it again',pg_temp.ledger('s1'),'consumption:-1440,adjustment:480,adjustment:-480');
+select pg_temp.expect('ledger takes it again',pg_temp.ledger('s1'),'consumption:-1440,reversal:480,consumption:-480');
 select pg_temp.expect('balance back to 960',pg_temp.bal('e2','annual'),'960');
 select pg_temp.expect('grow past the balance is refused',
   pg_temp.edit('ed_all','s1','day','2027-06-01','2027-06-06','full',null,null,null),pg_temp.msg('22023','an edit cannot make leave unpaid'));
@@ -390,7 +390,7 @@ select pg_temp.expect('growing the unpaid part is refused',
 select pg_temp.expect('shrink into the paid part returns the surplus',
   pg_temp.err(pg_temp.edit('ed_all','u1','day','2027-07-01','2027-07-04','full',null,null,null)),'ok');
 select pg_temp.expect('unpaid 0, 480 returned',pg_temp.row_of('u1')||'/'||pg_temp.ledger('u1')||'/'||pg_temp.bal('e3','annual'),
-  'day/2027-07-01/2027-07-04/full/-/-/1920/0/null/consumption:-2400,adjustment:480/480');
+  'day/2027-07-01/2027-07-04/full/-/-/1920/0/null/consumption:-2400,reversal:480/480');
 select pg_temp.assert('no positive ledger row exceeds what the request consumed',
   (select coalesce(sum(delta_minutes) filter (where delta_minutes>0),0) <= 2400 from public.leave_ledger where request_id=pg_temp.fx('u1')));
 
@@ -415,7 +415,7 @@ select pg_temp.assert('fixture: the request has approval rows',(select approvals
 select pg_temp.expect('daily to hourly',
   pg_temp.err(pg_temp.edit('ed_all','dh','hour','2027-09-01','2027-09-01','full','09:00','11:00',null)),'ok');
 select pg_temp.expect('an hourly shape',pg_temp.row_of('dh'),'hour/2027-09-01/2027-09-01/full/09:00:00/11:00:00/120/0/null');
-select pg_temp.expect('360 minutes return',pg_temp.ledger('dh')||'/'||pg_temp.bal('e5','annual'),'consumption:-480,adjustment:360/2280');
+select pg_temp.expect('360 minutes return',pg_temp.ledger('dh')||'/'||pg_temp.bal('e5','annual'),'consumption:-480,reversal:360/2280');
 select pg_temp.assert('replacement, signatures, decision and approvals are untouched',
   exists (select 1 from dh_before b join public.leave_requests r on r.id=pg_temp.fx('dh')
     where b.replacement_id is not distinct from r.replacement_id and b.signature_data=r.signature_data
@@ -437,7 +437,7 @@ select pg_temp.expect('hourly to two days',
   pg_temp.err(pg_temp.edit('ed_all','dh','day','2027-09-01','2027-09-02','full',null,null,null)),'ok');
 select pg_temp.expect('a daily shape again',pg_temp.row_of('dh'),'day/2027-09-01/2027-09-02/full/-/-/960/0/null');
 select pg_temp.expect('840 more are consumed',pg_temp.ledger('dh')||'/'||pg_temp.bal('e5','annual'),
-  'consumption:-480,adjustment:360,adjustment:-840/1440');
+  'consumption:-480,reversal:360,consumption:-840/1440');
 select pg_temp.mk('nh','e6','nohourly','2027-10-01','2027-10-01');
 select pg_temp.expect('a leave type that cannot be taken hourly',
   pg_temp.edit('ed_all','nh','hour','2027-10-01','2027-10-01','full','09:00','10:00',null),
@@ -509,6 +509,28 @@ select pg_temp.expect('refused while an extension waits (to hourly)',
   pg_temp.edit('ed_all','t5','hour','2028-04-01','2028-04-01','full','09:00','10:00',null),pg_temp.msg('22023','an extension is waiting for HR'));
 select pg_temp.expect('refused while an extension waits (dates)',
   pg_temp.edit('ed_all','t5','day','2028-04-01','2028-04-03','full',null,null,null),pg_temp.msg('22023','an extension is waiting for HR'));
+-- approved extension: the trip keeps its daily shape
+insert into tc_fx values('t8',pg_temp.daily('tw','2028-08-01','2028-08-02')::uuid);
+select pg_temp.as_scalar('hr',format('select public.app_set_travel_booking(%L,true)::text',pg_temp.fx('t8')));
+select pg_temp.fin('t8');
+insert into tc_fx values('t8_ext',pg_temp.as_scalar('mgr',format(
+  'select public.app_request_errand_extension(%L,''2028-08-04'',''more work'')::text',pg_temp.fx('t8')))::uuid);
+select pg_temp.expect('extension approved',pg_temp.err(pg_temp.as_scalar('hr',format(
+  'select public.app_decide_errand_extension(%L,true,%L,true)::text',pg_temp.fx('t8_ext'),pg_temp.sig()))),'ok');
+-- Approving the extension moves the trip's end to 2028-08-04.
+select pg_temp.assert('fixture: an approved extension and a ticked, not started booking',
+  exists(select 1 from public.errand_extensions where id=pg_temp.fx('t8_ext') and status='approved')
+  and exists(select 1 from public.travel_bookings where request_id=pg_temp.fx('t8')
+              and first_saved_at is null and done_at is null));
+select pg_temp.expect('an extended trip cannot become an hourly errand',
+  pg_temp.edit('ed_all','t8','hour','2028-08-01','2028-08-01','full','09:00','10:00',null),
+  pg_temp.msg('22023','an extended trip cannot become an hourly errand'));
+select pg_temp.expect('that wrote nothing',
+  pg_temp.row_of('t8')||'/'||pg_temp.history('t8')||'/'||(select count(*)::text from public.travel_bookings where request_id=pg_temp.fx('t8')),
+  'day/2028-08-01/2028-08-04/full/-/-/1920/0/null/0/1');
+select pg_temp.expect('the dates of an extended trip can still move',
+  pg_temp.err(pg_temp.edit('ed_all','t8','day','2028-08-01','2028-08-05','full',null,null,null)),'ok');
+select pg_temp.expect('dates moved, still a daily trip',pg_temp.row_of('t8'),'day/2028-08-01/2028-08-05/full/-/-/2400/0/null');
 -- hourly errand -> trip
 insert into tc_fx values('h2',pg_temp.hourly('tw','2028-05-10')::uuid);
 select pg_temp.fin('h2');
@@ -537,6 +559,17 @@ select pg_temp.expect('a hourly errand overlapping a trip',
   pg_temp.edit('ed_all','h1','hour','2028-06-02','2028-06-02','full','09:00','10:00',null),pg_temp.msg('22023','overlapping leave request exists'));
 select pg_temp.expect('a trip overlapping another trip',
   pg_temp.edit('ed_all','t7','day','2028-05-10','2028-06-06','full',null,null,null),pg_temp.msg('22023','overlapping leave request exists'));
+
+-- ============================================================ owner decisions
+select pg_temp.mk('np2','e4','unpaid','2028-09-01','2028-09-02');
+select pg_temp.expect('owner decision 2026-11-10: an unpaid-type leave may be lengthened',
+  pg_temp.err(pg_temp.edit('ed_all','np2','day','2028-09-01','2028-09-04','full',null,null,null)),'ok');
+select pg_temp.expect('unpaid follows the longer leave, no ledger row',pg_temp.row_of('np2')||'/'||pg_temp.ledger('np2'),
+  'day/2028-09-01/2028-09-04/full/-/-/1920/1920/null/none');
+select pg_temp.mk('adm','admin','gen','2028-10-01','2028-10-01');
+select pg_temp.expect('owner decision 2026-11-10: an editor may edit the admin''s request',
+  pg_temp.err(pg_temp.edit('ed_all','adm','day','2028-10-01','2028-10-02','full',null,null,null)),'ok');
+select pg_temp.expect('the admin''s request was edited',pg_temp.row_of('adm'),'day/2028-10-01/2028-10-02/full/-/-/960/0/null');
 
 -- ============================================================ input
 select pg_temp.expect('the same values are nothing to edit',

@@ -34,6 +34,7 @@ import { DateRangeFields, TimeRangeFields } from '../../request/_components/Form
 type Unit = 'day' | 'hour';
 type DayPart = 'full' | 'am' | 'pm';
 
+const ERRAND_WINDOW = { start: '00:00', end: '23:30' };
 const hm = (t: string | null) => (t ? t.slice(0, 5) : '');
 
 export function EditRequestDialog({ request, units, locale, workWindow, buttonClassName }: {
@@ -57,7 +58,8 @@ export function EditRequestDialog({ request, units, locale, workWindow, buttonCl
 
   // The signed times may be off the 30-minute grid; keep them selectable.
   const slots = (() => {
-    const grid = timeSlots(workWindow, 30);
+    // Hourly leave stays inside working hours; an hourly errand may be at any time of day.
+    const grid = timeSlots(request.kind === 'errand' ? ERRAND_WINDOW : workWindow, 30);
     const extra = [hm(request.start_time), hm(request.end_time)].filter((s) => s && !grid.includes(s));
     return extra.length ? [...grid, ...extra].sort() : grid;
   })();

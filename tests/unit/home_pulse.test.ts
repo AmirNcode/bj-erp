@@ -147,4 +147,28 @@ describe('buildBalanceUsage', () => {
     });
     expect(unpaid).toMatchObject({ hasBalance: false, usedMinutes: 720 });
   });
+  it('an edit that shortened a leave returns time (FR-91 reversal row)', () => {
+    const [annual] = buildBalanceUsage({
+      types,
+      balances: { annual: 1920 },
+      ledger: [
+        { leave_type_id: 'annual', entry_type: 'consumption', delta_minutes: -960 },
+        { leave_type_id: 'annual', entry_type: 'reversal', delta_minutes: 480 },
+      ],
+      unpaidRequests: [],
+    });
+    expect(annual).toMatchObject({ usedMinutes: 480 });
+  });
+  it('an edit that lengthened a leave takes more time (FR-91 consumption row)', () => {
+    const [annual] = buildBalanceUsage({
+      types,
+      balances: { annual: 1440 },
+      ledger: [
+        { leave_type_id: 'annual', entry_type: 'consumption', delta_minutes: -480 },
+        { leave_type_id: 'annual', entry_type: 'consumption', delta_minutes: -480 },
+      ],
+      unpaidRequests: [],
+    });
+    expect(annual).toMatchObject({ usedMinutes: 960 });
+  });
 });

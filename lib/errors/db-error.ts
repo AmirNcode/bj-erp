@@ -177,6 +177,7 @@ const RULES: Rule[] = [
   { re: /^nothing to edit$/, key: 'requestEditNothing' },
   { re: /^an edit cannot make leave unpaid$/, key: 'requestEditUnpaid' },
   { re: /^procurement has started booking this trip$/, key: 'requestEditBookingStarted' },
+  { re: /^an extended trip cannot become an hourly errand$/, key: 'requestEditExtended' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },

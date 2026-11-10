@@ -114,6 +114,7 @@ export default async function PrintRequestPage({ params }: Props) {
   const isErrand = r.kind === 'errand';
   const isHourly = r.unit === 'hour';
 
+  const date = (iso: string) => formatCalendarDate(iso, locale);
   // FR-91: the form prints the values as signed, then one line per later edit. After a change of
   // type (daily to hourly, trip to errand) the current form cannot hold the signed values: it
   // shows the current ones and the signed original gets a line of its own.
@@ -161,7 +162,6 @@ export default async function PrintRequestPage({ params }: Props) {
     </>
   );
 
-  const date = (iso: string) => formatCalendarDate(iso, locale);
   const duration = formatDuration(r.requested_minutes, hoursPerDay, locale, durationLabels);
   const bodyDuration = body.minutes !== null ? formatDuration(body.minutes, hoursPerDay, locale, durationLabels) : duration;
   const timeRange = formatTimeRange(body.startTime, body.endTime, locale);

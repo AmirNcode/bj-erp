@@ -105,6 +105,18 @@ describe('printed edits (FR-91)', () => {
     expect(ext.compareDocumentPosition(fixLine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('a trip that began as an hourly errand and was extended prints its extension line', async () => {
+    serve(
+      { kind: 'errand', unit: 'day', start_date: '2028-05-10', end_date: '2028-05-13', requested_minutes: 1920, errand_location: 'Plant' },
+      [fix({ old_unit: 'hour', new_unit: 'day', old_start_date: '2028-05-10', new_start_date: '2028-05-10', old_end_date: '2028-05-10', new_end_date: '2028-05-11', old_start_time: '09:00:00', old_end_time: '10:00:00', minutes_before: 60, minutes_after: 960, corrected_at: '2028-05-09T10:00:00Z' })],
+      [{ old_end_date: '2028-05-11', new_end_date: '2028-05-13', reason: 'more', status: 'approved', decided_at: '2028-05-10T10:00:00Z' }]
+    );
+    await renderPage();
+    expect(screen.getByTestId('print-signed-original')).toBeTruthy();
+    expect(screen.getByTestId('print-extension').textContent).toContain('more');
+    expect(screen.getByTestId('print-correction').textContent).toContain('edit reason');
+  });
+
   it('a legacy correction row without the FR-91 columns still prints', async () => {
     serve(
       { kind: 'errand', unit: 'day', start_date: '2027-03-01', end_date: '2027-03-05', requested_minutes: 2400, errand_location: 'Shiraz' },

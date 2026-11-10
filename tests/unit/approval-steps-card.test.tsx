@@ -83,6 +83,37 @@ describe('ApprovalStepsCard Save', () => {
     await waitFor(() => expect(saveButton().disabled).toBe(false));
   });
 
+  it('clears the draft after a successful save, so a later change by someone else shows and is not overwritten', async () => {
+    const view = renderCard();
+    fireEvent.change(screen.getByTestId('approval-step-order-hr'), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith({ id: 's2', stepOrder: 5 }));
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+    await waitFor(() => expect(saveButton().disabled).toBe(true));
+
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <ApprovalStepsCard
+          steps={[step({}), step({ id: 's2', role: 'hr', stepOrder: 7, boxLabel: 'HR' })]}
+          orderEnforced={false}
+          canEnforceOrder
+        />
+      </NextIntlClientProvider>
+    );
+    expect((screen.getByTestId('approval-step-order-hr') as HTMLInputElement).value).toBe('7');
+    expect(saveButton().disabled).toBe(true);
+  });
+
+  it('after a refused save the typed value is still shown', async () => {
+    mocks.update.mockResolvedValueOnce({ ok: false, error: 'refused' });
+    renderCard();
+    fireEvent.change(screen.getByTestId('approval-step-order-hr'), { target: { value: '5' } });
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(screen.getByTestId('approval-steps-error').textContent).toContain('refused'));
+    expect((screen.getByTestId('approval-step-order-hr') as HTMLInputElement).value).toBe('5');
+    await waitFor(() => expect(saveButton().disabled).toBe(false));
+  });
+
   it('has no Save for a read-only viewer', () => {
     renderCard({ canEdit: false, canEnforceOrder: false });
     expect(screen.queryByTestId('approval-steps-save')).toBeNull();

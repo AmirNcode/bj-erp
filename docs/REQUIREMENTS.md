@@ -414,9 +414,11 @@ Validation/release status stays in `docs/TASKS.md`.
   errand; both toggles needed), plus the per diem of a daily trip; never leave <-> work, leave type,
   location, description or replacement. Reason (1-1000 characters) and the editor's signature are
   required (`app_edit_request`). Same limits as a new request (overlap, hourly daily limit, working
-  hours), except an edit may not create or grow an unpaid part. The leave ledger gets an `adjustment` row
+  hours), except an edit may not create or grow an unpaid part of a balance leave (a leave of an unpaid
+  type may be lengthened). The leave ledger gets a `consumption` (longer) or `reversal` (shorter) row
   for the difference. Trip -> hourly errand clears the per diem and is refused after procurement started
-  booking or while an extension is pending; hourly errand -> trip enters procurement. All signatures stay
+  booking, while an extension is pending, or once an extension was approved; hourly errand -> trip enters
+  procurement. The admin's requests are editable like anyone's. All signatures stay
   valid and the signed values stay on the printed form, then one line per later change in time order.
   Requester and approvers see a line per edit; no SMS. Replaces the FR-84 gate. *(2026-11-10; spec
   `2026-11-10-replacement-paper-only-edit-requests-design.md`; implemented locally, not deployed.)*

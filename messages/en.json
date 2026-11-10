@@ -1288,7 +1288,8 @@
     "requestEditNotApproved": "Only an approved request can be edited.",
     "requestEditNothing": "Nothing was changed.",
     "requestEditUnpaid": "This change needs more leave than the balance holds. An edit cannot make leave unpaid.",
-    "requestEditBookingStarted": "Procurement has already started booking this trip, so it cannot become an hourly errand."
+    "requestEditBookingStarted": "Procurement has already started booking this trip, so it cannot become an hourly errand.",
+    "requestEditExtended": "This trip has been extended, so it cannot become an hourly errand."
   },
   "roles": {
     "admin": "Admin",

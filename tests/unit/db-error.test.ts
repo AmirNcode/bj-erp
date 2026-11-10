@@ -61,6 +61,7 @@ describe('dbErr FR-91 edit-request messages', () => {
     ['nothing to edit', 'requestEditNothing'],
     ['an edit cannot make leave unpaid', 'requestEditUnpaid'],
     ['procurement has started booking this trip', 'requestEditBookingStarted'],
+    ['an extended trip cannot become an hourly errand', 'requestEditExtended'],
   ])('maps %s', async (raw, key) => {
     expect((await dbErr(raw)).error).toBe(key);
   });

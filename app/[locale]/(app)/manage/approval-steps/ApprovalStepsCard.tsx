@@ -166,8 +166,9 @@ type Props = {
 export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEdit = true }: Props) {
   const labels = useLabels();
   const router = useRouter();
-  // Unsaved edits, by step id. An edit equal to the stored value is not a change, so
-  // after a save and refresh the card is clean again without clearing this.
+  // Unsaved edits, by step id. An edit equal to the stored value is not a change.
+  // A save with no refusal clears the draft, so a later change by someone else is not
+  // shown as ours and written back by the next Save.
   const [edits, setEdits] = useState<Record<string, StepEdit>>({});
   const [enforcedEdit, setEnforcedEdit] = useState<boolean | null>(null);
   const [error, setError] = useState('');
@@ -204,7 +205,11 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
         if (!result.ok) failure = result.error;
       }
       if (failure) setError(failure);
-      else toast.success(labels.saved);
+      else {
+        toast.success(labels.saved);
+        setEdits({});
+        setEnforcedEdit(null);
+      }
       router.refresh();
     });
   };

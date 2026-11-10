@@ -105,6 +105,18 @@ This reverses one owner decision of 2026-11-05 ("regular leave dates are not cor
   the family), then the matching date or date-and-time fields, day part for daily leave, per diem for a
   daily trip, reason, signature.
 
+## Amendments after the PR review (2026-11-10)
+
+- **Unpaid-type leave may be lengthened** (Amir). "An edit may not create or grow an unpaid part" applies
+  to balance leave only; a leave of an unpaid type is unpaid by nature.
+- **An editor may edit the admin's request** (Amir): decision 7 includes the admin. Cancel still does not.
+- **Ledger row type:** the difference is posted as `consumption` (longer) or `reversal` (shorter), not
+  `adjustment`, because Home's "used" counts only those two (migration `20261110130000`).
+- **Trip → hourly errand is also refused once an extension was approved**: the approved extension would
+  stay on a one-hour errand.
+- "None exist in production: the amendment is unreleased" (temporary grants) was not accurate: `main`
+  creates them. The live backup of 2026-11-10 holds none, and the migration revokes any.
+
 ## Goals, non-goals, anti-goals
 
 **Goals**

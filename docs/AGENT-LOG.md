@@ -78,6 +78,79 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-10 — PR #23 review fixes (print crash, edit ledger rows, extended trip), merge to main
+
+**Agent:** Claude Fable 5.2 via Claude Code (orchestrator and reviewer); a Sonnet subagent did the three UI fixes, an Opus (medium effort) subagent the SQL fix
+**Branch / HEAD at start:** feat/form-signature-boxes @ 6d43a77
+**Trigger:** Amir: fix the findings of the review below with lower-tier subagents, review their output, then merge to main.
+
+**Owner decisions (2026-11-10)**
+- A leave of an unpaid type may be lengthened by an edit (the "no unpaid growth" rule is for balance leave).
+- An editor may edit the admin's request (decision 7 of the spec includes the admin).
+
+**What changed**
+- `app/[locale]/(print)/print/request/[id]/page.tsx` — `const date` moved above the FR-91 edit lines (it was used before its declaration: ReferenceError for a trip that began as an hourly errand and was extended).
+- `supabase/migrations/20261110130000_request_edit_fixes.sql` (new) — `private.edit_request_impl` again, two changes: the ledger row of an edit is `consumption` (longer) or `reversal` (shorter) instead of `adjustment`, so Home's "used" counts it; trip → hourly errand is refused once an extension was approved (`an extended trip cannot become an hourly errand`). `supabase/schema.sql` patched in that function only.
+- `lib/errors/db-error.ts`, `messages/{en,fa}.json` — `requestEditExtended`.
+- `app/[locale]/(app)/manage/requests/EditRequestDialog.tsx` — an hourly errand offers 00:00–23:30 like the errand form; hourly leave keeps the work window.
+- `app/[locale]/(app)/manage/approval-steps/ApprovalStepsCard.tsx` — a save with no refusal clears the draft.
+- Tests: `tests/sql/request-edit.sql` (ledger types, extended trip, the two owner decisions), unit tests `print-request-edits`, `edit-request-dialog`, `approval-steps-card`, `db-error`, `home_pulse`.
+- Docs: REQUIREMENTS (FR-91), DATA_MODEL, PERMISSIONS, CHANGELOG, the FR-90/91 spec (amendments section).
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `fix_pr23_sql` (subagent) and `verify_pr23_fx` (orchestrator), both dropped; `postgres` only read by `pg_dump`. The new migration is NOT applied to the local `postgres` database, and the local app image was not rebuilt.
+- Pushed the branch and merged PR #23 into `main`, which starts the Liara deploy (see the chat for the result).
+
+**Verification**
+- `npx tsc --noEmit` exit 0 · `npm run lint` exit 0 · `npm run test:unit` 129 files / 1290 tests pass.
+- Clone with only the new migration applied on top: `request-edit` 148 PASS, `replacement-paper-only` 22, `replacement-signoff` 65, `signature-box-labels` 15; `trip-correction` stops at the known live-data assertion ("client cannot read the table") after 70 PASS.
+- New migration body = the `20261110120000` body plus exactly the two hunks (`diff`). `edit_request_impl` in `schema.sql` equals the clone's `pg_dump` (245 lines, empty diff).
+- The subagent re-loaded the old body on its clone and saw `request-edit.sql` fail at the ledger assertion, so the test catches the defect.
+- Not run: Playwright, `npm run test:deploy` (CI runs it), a signed-in browser check.
+
+**State left behind**
+- Committed, pushed and merged. Local stack `bj-approvals-finance` still runs the build and schema from before these fixes.
+
+**For the next agent**
+- Local edits made before this fix left `adjustment` rows with note `request edited` in the local DB only; production has none.
+- Shortening an extended trip to end before the extension's old end date is not tested.
+
+## 2026-11-10 — Review of PR #23 at 6d43a77 (FR-90, FR-91, approval steps Save)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** feat/form-signature-boxes @ 6d43a77 (= PR head)
+**Trigger:** Amir: independent read-only review of PR #23, priority on 75e5c5f..6d43a77; findings only.
+
+**What changed**
+- This entry only. No code, test, migration or schema change.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: created throwaway DB `review_pr23_fable` (`pg_dump -Fc -d postgres | pg_restore --no-owner`, 19 ignored cron/graphql errors), ran SQL tests and rolled-back experiments there, dropped it. `postgres` was only read (pg_dump, one `select` on `bj_deploy.schema_migrations`). Nothing on Liara.
+- Scratchpad only: a copy of `tests/unit/print-request-edits.test.tsx` with one extra case, run with its own vitest config; deleted.
+
+**Verification**
+- `npx tsc --noEmit` exit 0 · `npm run lint` exit 0 · `npm run test:unit` 129 files / 1283 tests pass.
+- On the clone: `replacement-paper-only` 22 PASS, `request-edit` 138, `replacement-signoff` 65, `signature-box-labels` 15. `trip-correction` stops at "client cannot read the table" (70 PASS before it), `approval-delegation` at "nonadmin presets default to No", `fr55-roles-permissions` reports 4 FAIL notices: all three are live-data drift (table grants to anon/authenticated on `request_corrections`; the local HR role was given `edit_requests_own` by a `role.update` on 2026-11-10), not the PR.
+- Ledger checksums of the three `20261110*` migrations equal the files. A schema dump of the clone differs from `supabase/schema.sql` only in GRANT/REVOKE and CHECK lines; no function body differs.
+- The migration's revoke `update` ran without a JWT on a fixture row (trigger `approval_authority_lock` does not block it).
+- Playwright not run (as instructed). No signed-in browser check.
+
+**State left behind**
+- Uncommitted: this entry. Findings reported in chat; none fixed.
+
+**Findings (all confirmed unless marked)**
+- Major: `app/[locale]/(print)/print/request/[id]/page.tsx:145` calls `date()` before `const date` (line 164). A trip that began as an hourly errand and has an approved extension throws `ReferenceError: Cannot access 'date' before initialization` (probe test). The state is reachable (clone experiment: hourly errand → trip → tick → extension approved).
+- Major: an edit posts its ledger difference as `adjustment` (`20261110120000_request_edit.sql:243`), and Home's used / entitled counts only `consumption` and `reversal` (`lib/home/pulse.ts:160`). After an edit of a balance leave, "used" keeps the old amount and "entitled" moves (code reading; not run).
+- Minor: a trip with an approved extension and a ticked, not started booking can be edited to an hourly errand; the booking is deleted and the approved extension row stays on a one-hour errand.
+- Minor: a leave of an unpaid type can be lengthened (unpaid minutes 240 → 2400); the spec says an edit is refused when unpaid minutes would rise.
+- Minor: `private.can_edit_request` has no `can_act_on` / admin exclusion, so a non-admin editor edits the admin's request (`cancel_leave_request` refuses the same caller). The spec says "every other employee"; owner to confirm.
+- Minor: `EditRequestDialog.tsx:60` offers only working-hours slots for an hourly errand; the errand form offers 00:00–23:30.
+- Minor (code reading, not run): `ApprovalStepsCard` never clears `edits` / `enforcedEdit`; after a save, a later change by someone else makes the old draft dirty again and the next Save writes it back.
+
+**For the next agent**
+- The spec's "no temporary grants exist: the amendment is unreleased" is not what `main` shows (`enroll_request_delegation` on main inserts them); the live backup holds none, and the revoke handles any.
+- A vitest probe outside the repo works with a config whose `root` is the scratch folder, `resolve.alias['@']` the repo, and a `node_modules` symlink beside the test.
+
 ## 2026-11-10 — Time-select arrow, Edit on My requests, Save button on Approval steps; commit + PR #23 update
 
 **Agent:** Claude Fable 5.2 via Claude Code

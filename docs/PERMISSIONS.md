@@ -411,7 +411,8 @@ risk, not a new activation gate. All password resets remain admin-only.
   target type (`edit_leave_daily|edit_leave_hourly|edit_errand_daily|edit_errand_hourly`; a daily/hourly
   switch needs both) and, on the caller's own request, `edit_requests_own`. Delegates no longer inherit it
   (the FR-84 `can_correct_trip` and its HR-holder delegate rule are gone); a delegate edits only through
-  their own role. Only approved requests. No `can_act_on`. Needs a signature; the bytes stay out of
+  their own role. Only approved requests. No `can_act_on`: an editor edits every other employee, the admin included
+  (owner decision 2026-11-10; `cancel_leave_request` still excludes the admin's requests). Needs a signature; the bytes stay out of
   `audit_log`. `app_correct_trip` is a wrapper kept for the old app under the same gate;
   `app_my_request_edit_types()` returns the caller's five keys for the Edit button.
 - **`request_corrections`:** no client access. `request_trip_corrections(id)` follows
