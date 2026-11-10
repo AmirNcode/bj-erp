@@ -9,6 +9,21 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+- **Calendar:** the List/Month toggle and the list view are gone; the page always shows the month grid with the selected day's requests below it.
+
+### Form signature boxes come from the approval steps (FR-89) — not deployed
+
+- **Approval steps page:** each step now has a **signature box name** (typed when adding a step, editable on the row later). Order, Active and Remove sit in fixed columns that no longer move with the name's length.
+- **Printed forms:** after the requester (and, on daily leave, the replacement) the signature row is exactly the active approval steps, in step order, up to four per row, each titled with its box name and showing the signer's name, signature and time. No "Step N" line, no Security box, no separate "Additional approvals" strip.
+- A box prints empty until signed; a step the request skips (e.g. department manager = direct manager) prints **"Not required"**. Daily leave without a replacement prints **"No replacement selected"**. Each signature keeps the box name it was signed under, so renaming or removing a step later doesn't change old forms. Renaming a box doesn't flag pending requests as "configuration changed".
+- The Replacement box shows the replacement's own signature once they sign (FR-88), or "Declined".
+
+### The replacement signs in the app (FR-88) — not deployed
+
+- A request that names a replacement asks them to sign: Home shows "Sign as replacement", My requests lists "You are the replacement", and the Calendar shows the requests they cover. Sign uses the same pad and consent box as requesters and approvers; it can happen at any time and never holds up an approval.
+- The replacement can decline with a note. The request stays as it is and goes back to the requester (Home + My requests), who picks someone else or continues without a replacement.
+- Approvals cards show whether the replacement signed. The printed Replacement box shows their signature.
+
 ### Blueprint theme — not deployed
 
 - **New look across the app:** near-square corners (3px), white page, no shadows, hairline borders. Side panel and the new phone top bar use the logo's blue (`#20409a`); buttons keep the brand navy.

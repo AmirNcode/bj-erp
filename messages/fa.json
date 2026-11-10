@@ -238,7 +238,33 @@
     "coveringFor": "برای",
     "coverConflict": "خودش هم آن زمان مرخصی است",
     "loading": "در حال دریافت همکاران…",
-    "empty": "همکار قابل انتخابی در واحد شما نیست."
+    "empty": "همکار قابل انتخابی در واحد شما نیست.",
+    "signoffPending": "در انتظار امضای جانشین",
+    "signoffSigned": "جانشین امضا کرد",
+    "signoffDeclined": "جانشین نپذیرفت",
+    "toSignTitle": "امضا به‌عنوان جانشین",
+    "asReplacementTitle": "شما جانشین هستید",
+    "forPerson": "<bdi>{name}</bdi> شما را به‌عنوان جانشین انتخاب کرده است",
+    "sign": "امضا",
+    "signTitle": "امضا به‌عنوان جانشین",
+    "signBody": "با امضا می‌پذیرید که در این مدت جانشین {name} باشید. تأییدکنندگان جداگانه تصمیم می‌گیرند.",
+    "signatureTitle": "امضای جانشین",
+    "signSuccess": "امضا ثبت شد.",
+    "decline": "نمی‌پذیرم",
+    "declineTitle": "نپذیرفتن جانشینی",
+    "declineBody": "درخواست به {name} برمی‌گردد تا جانشین دیگری انتخاب کند. تأییدها تغییری نمی‌کنند.",
+    "declineNoteLabel": "توضیح (اختیاری)",
+    "declineNotePlaceholder": "مثلاً آن روز خودم حضور ندارم",
+    "declineSuccess": "به درخواست‌کننده برگشت داده شد.",
+    "youSigned": "به‌عنوان جانشین امضا کردید.",
+    "youDeclined": "نپذیرفتید. درخواست‌کننده جانشین دیگری انتخاب می‌کند.",
+    "declinedTitle": "جانشین شما نپذیرفت",
+    "declinedBody": "<bdi>{name}</bdi> جانشینی شما را نپذیرفت. جانشین دیگری انتخاب کنید یا بدون جانشین ادامه دهید.",
+    "declinedNote": "توضیح ایشان",
+    "newReplacement": "جانشین جدید",
+    "saveReplacement": "ثبت جانشین",
+    "saveNoReplacement": "ادامه بدون جانشین",
+    "changeSaved": "ثبت شد."
   },
   "leave": {
     "status": {
@@ -265,9 +291,6 @@
   "calendar": {
     "title": "تقویم مرخصی",
     "navLink": "تقویم",
-    "empty": "این ماه مرخصی‌ای ثبت نشده است.",
-    "listView": "فهرست",
-    "monthView": "ماه",
     "offOn": "مرخصی در",
     "noOffThisDay": "در این روز کسی در مرخصی نیست.",
     "returns": "بازگشت",
@@ -432,7 +455,6 @@
     "derivedNote": "فرم رسمی جداگانه‌ای برای ماموریت روزانه در دست نیست؛ این برگه بر اساس فرم ماموریت ساعتی تنظیم شده است.",
     "balanceNote": "مانده مرخصی در لحظه چاپ محاسبه شده است، نه در زمان ثبت درخواست.",
     "unsignedNote": "کادرهای بدون امضای دیجیتال برای امضای دستی خالی گذاشته شده‌اند.",
-    "additionalApprovals": "تأییدهای تکمیلی",
     "departmentManager": "مدیر واحد",
     "forms": {
       "dailyLeave": "فرم درخواست مرخصی روزانه",
@@ -465,16 +487,14 @@
     },
     "boxes": {
       "requester": "درخواست کننده",
-      "replacement": "جانشین",
-      "approver": "تصویب کننده",
-      "security": "حراست",
-      "hrManager": "مدیر اداری و منابع انسانی",
-      "adminOffice": "امور اداری",
-      "hrOffice": "امور اداری و منابع انسانی"
+      "replacement": "جانشین"
     },
     "hrExpert": "کارشناس اداری و منابع انسانی",
     "balanceLine": "متقاضی دارای مرخصی استحقاقی بمدت {duration} می باشد.",
-    "perDiemByRequester": "ثبت‌شده توسط متقاضی (مدیر منابع انسانی)"
+    "perDiemByRequester": "ثبت‌شده توسط متقاضی (مدیر منابع انسانی)",
+    "notRequired": "لازم نیست",
+    "noReplacement": "جانشینی انتخاب نشده",
+    "replacementDeclined": "نپذیرفت"
   },
   "reports": {
     "from": "از ماه",
@@ -826,8 +846,13 @@
           "cancel": "انصراف",
           "added": "مرحله تأیید افزوده شد.",
           "errorLabel": "خطا",
-          "selectOne": "{count} نفر پیدا شد؛ یکی را انتخاب کنید"
-        }
+          "selectOne": "{count} نفر پیدا شد؛ یکی را انتخاب کنید",
+          "boxLabel": "نام کادر امضا",
+          "boxLabelPlaceholder": "مثلاً تصویب کننده"
+        },
+        "boxLabel": "کادر امضا",
+        "boxLabelHint": "عنوانی که بالای این امضا در فرم درخواست چاپ می‌شود.",
+        "signedBy": "امضاکننده"
       },
       "absenceWatchers": {
         "title": "اعلان غیبت‌ها",
@@ -1249,7 +1274,16 @@
     "photoLocked": "منابع انسانی این عکس را قفل کرده است. برای تغییر به منابع انسانی مراجعه کنید.",
     "photoNotAllowed": "اجازه تغییر عکس این فرد را ندارید.",
     "photoInvalid": "عکس نامعتبر است. دوباره آن را انتخاب کنید.",
-    "photoMissing": "عکسی برای قفل کردن وجود ندارد."
+    "photoMissing": "عکسی برای قفل کردن وجود ندارد.",
+    "approvalStepBoxLabelRequired": "نام کادر امضا را وارد کنید.",
+    "approvalStepBoxLabelTooLong": "نام کادر امضا حداکثر ۶۰ نویسه است.",
+    "replacementAlreadyAnswered": "شما قبلاً به این درخواست پاسخ داده‌اید.",
+    "replacementRequestClosed": "این درخواست دیگر باز نیست (لغو یا رد شده است).",
+    "replacementNotAllowed": "اجازهٔ این کار را روی این درخواست ندارید.",
+    "replacementNoteTooLong": "توضیح بیش از حد طولانی است (حداکثر ۵۰۰ نویسه).",
+    "replacementNotDeclined": "جانشین فقط پس از نپذیرفتن قابل تغییر است.",
+    "replacementSamePerson": "جانشین دیگری انتخاب کنید.",
+    "replacementIsDelegate": "جانشین شما اختیار تأیید شما را هم در این غیبت دارد. درخواست را لغو کنید و دوباره ثبت کنید."
   },
   "roles": {
     "admin": "Admin",
@@ -1934,7 +1968,6 @@
     "delegatedSignature": "امضاشده توسط {signer} به نمایندگی از {principal}",
     "delegatedRejection": "ردشده توسط {signer} به نمایندگی از {principal}",
     "authorityRef": "شناسه اختیار: {ref}",
-    "stepLabel": "مرحله {order}: {name}",
     "responsibleDelegate": "نماینده منصوب‌شده که مسئولیت را پذیرفته است: {name}",
     "submittedAt": "زمان ثبت درخواست: {at}",
     "responsibilityAcceptedAt": "زمان پذیرش مسئولیت: {at}",

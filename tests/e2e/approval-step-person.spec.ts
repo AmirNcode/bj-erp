@@ -40,6 +40,8 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
 
   // ── 1. Add a step naming one specific person ──────────────────────────────
   await page.click('[data-testid="approval-step-add-open"]');
+  // The signature box's name comes first (spec 2026-11-09).
+  await page.fill('[data-testid="approval-step-box-label"]', 'Chain office');
   await page.locator('[data-testid="approval-step-kind"]').selectOption('person');
   await page.fill('[data-testid="approval-step-person-search"]', 'Chain Signer');
 
@@ -54,6 +56,7 @@ test('admin adds a named-person approval step; HR can configure the chain', asyn
   // The row shows the person's NAME, not a role.
   const personRow = card.locator('li', { hasText: 'Chain Signer' });
   await expect(personRow).toBeVisible({ timeout: 20_000 });
+  await expect(personRow.locator('input[data-testid^="approval-step-box-label-"]')).toHaveValue('Chain office');
 
   // It survives a reload — proof the write landed, not just that the form said so.
   await page.reload();

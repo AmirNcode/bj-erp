@@ -10,7 +10,7 @@ import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CalendarDays, ChevronLeft, ChevronRight, List } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { approveRequest, rejectRequest } from '@/lib/actions/leave/approvals';
 import type { DecisionResult } from '@/lib/actions/leave/approvals';
@@ -49,9 +49,6 @@ function useLabels() {
   const tErrand = useTranslations('errand');
   const tSignature = useTranslations('signature');
   return {
-    empty: t('empty'),
-    listView: t('listView'),
-    monthView: t('monthView'),
     prevMonth: t('prevMonth'),
     nextMonth: t('nextMonth'),
     offOn: t('offOn'),
@@ -90,7 +87,7 @@ type Props = {
   signatureConsents?: VisibleSignatureConsent[];
   /** Today (company timezone) as YYYY-MM-DD, to highlight the current day tile. */
   todayIso?: string;
-  /** Links to the previous / next month (`?month=`); the view mode and selection carry over. */
+  /** Links to the previous / next month (`?month=`); the selection carries over. */
   prevHref?: string;
   nextHref?: string;
 };
@@ -242,7 +239,6 @@ export function CalendarView({
   nextHref,
 }: Props) {
   const labels = useLabels();
-  const [viewMode, setViewMode] = useState<'list' | 'month'>('list');
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   // Ids decided in this session — hides the buttons instantly; router.refresh()
@@ -325,70 +321,6 @@ export function CalendarView({
         ? fmt(entry.start_date)
         : `${fmt(entry.start_date)} — ${fmt(entry.end_date)}`;
 
-  const renderList = () =>
-    entries.length === 0 ? (
-      <p className="text-muted-foreground text-sm" data-testid="calendar-empty">
-        {labels.empty}
-      </p>
-    ) : (
-      <div className="space-y-2">
-        {entries.map((entry) => {
-          const color = entryColor(entry);
-          const range = rangeLabel(entry);
-          return (
-            <Card
-              key={entry.id}
-              data-testid={`cal-entry-${entry.id}`}
-              className="flex-row items-center gap-0 rounded-xl p-3"
-              style={{ borderInlineStartWidth: 4, borderInlineStartColor: color }}
-            >
-              <CardContent className="flex flex-col gap-2 p-0 w-full">
-                <div className="flex items-center gap-3 w-full">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{entry.employee_name}</div>
-                    <div className="text-xs text-muted-foreground">{range}</div>
-                  </div>
-                  <span
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-                    data-testid={entry.kind === 'errand' ? `cal-errand-${entry.id}` : undefined}
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                    {typeName(entry)}
-                  </span>
-                  <span
-                    className={cn(
-                      'text-xs shrink-0',
-                      entry.status === 'approved' ? 'text-success' : 'text-warning'
-                    )}
-                  >
-                    {statusLabel(entry)}
-                  </span>
-                </div>
-                {canDecide(entry) && (
-                  <div className="flex justify-end">
-                    <DecideButtons id={entry.id} stepIds={decisionStepIds?.[entry.id] ?? []} labels={labels} disabled={isPending} onDecide={decide} />
-                  </div>
-                )}
-                <RequestSignatureViewer
-                  requestId={entry.id}
-                  consentAt={signatureConsentById.get(entry.id)?.requesterConsentAt ?? null}
-                  labels={labels.requesterSignature}
-                  locale={locale}
-                />
-                <RequestSignatureViewer
-                  requestId={entry.id}
-                  consentAt={signatureConsentById.get(entry.id)?.approverConsentAt ?? null}
-                  labels={labels.approverSignature}
-                  locale={locale}
-                  kind="approver"
-                />
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    );
-
   const renderMonth = () => (
     <div className="space-y-4">
       <div
@@ -466,7 +398,11 @@ export function CalendarView({
                 const range = rangeLabel(entry);
 
                 return (
-                  <div key={entry.id} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                  <div
+                    key={entry.id}
+                    data-testid={`cal-entry-${entry.id}`}
+                    className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                  >
                     <span
                       className="mt-1 h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: color }}
@@ -522,8 +458,7 @@ export function CalendarView({
 
   return (
     <div data-testid="calendar-view">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-1" data-testid="calendar-month-nav">
+      <div className="mb-4 flex items-center gap-1" data-testid="calendar-month-nav">
           {prevHref && (
             <Button asChild variant="ghost" size="icon" className="size-8">
               <Link href={prevHref} scroll={false} aria-label={labels.prevMonth} data-testid="calendar-prev-month">
@@ -541,36 +476,9 @@ export function CalendarView({
               </Link>
             </Button>
           )}
-        </div>
-        <div
-          className="inline-flex w-fit rounded-lg border bg-card p-1 shadow-xs"
-          role="group"
-          aria-label={monthLabel}
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'list' ? 'default' : 'ghost'}
-            data-testid="calendar-list-toggle"
-            onClick={() => setViewMode('list')}
-          >
-            <List aria-hidden="true" />
-            {labels.listView}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={viewMode === 'month' ? 'default' : 'ghost'}
-            data-testid="calendar-month-toggle"
-            onClick={() => setViewMode('month')}
-          >
-            <CalendarDays aria-hidden="true" />
-            {labels.monthView}
-          </Button>
-        </div>
       </div>
 
-      {viewMode === 'list' ? renderList() : renderMonth()}
+      {renderMonth()}
     </div>
   );
 }

@@ -3,6 +3,15 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-89 signature boxes (local, not deployed)
+
+- ☐ Owner tests on the local demo stack (`http://localhost:3501`), then PR + review. Before Liara: check the backfilled box names on the real steps after deploy (Approval steps page) and rename as wanted.
+- ☐ e2e not run for `approval-step-person.spec` / `hr-role.spec` after the box-id changes.
+
+## FR-88 replacement sign-off (local, not deployed)
+
+- ☐ e2e spec for sign / decline / choose again (only SQL + unit tests so far).
+
 ## Liara (production host, testing phase)
 
 - ◐ **Cold-start check:** after initial post-power-on timeouts, a provider restart restored access

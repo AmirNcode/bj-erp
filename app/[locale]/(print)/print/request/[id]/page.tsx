@@ -25,14 +25,14 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { getRequestForPrint, type PrintableRequest } from '@/lib/actions/leave/review';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
-import { paperFormFor, leaveTypeCheckbox, signatureSourceFor } from '@/lib/leave/paperForm';
+import { paperFormFor, leaveTypeCheckbox, stepBoxes } from '@/lib/leave/paperForm';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatDuration } from '@/lib/leave/duration';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatRials } from '@/lib/leave/perDiem';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
-import { formatNumber, formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
+import { formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { PrintToolbar } from './PrintToolbar';
 import { printedTripDates } from '@/lib/travel/extensions';
 
@@ -126,17 +126,9 @@ export default async function PrintRequestPage({ params }: Props) {
     r.department_name_fa ??
     r.department_name_en;
 
-  // Allocate each exact step once; additional same-role approvals stay visible.
-  const displayed = r.approvals.filter((a) => a.decision === 'approved' || a.evidenceKind === 'hr_exempt');
-  const stepByRole = new Map<string, PrintableRequest['approvals'][number]>();
-  for (const box of form.boxes) {
-    const source = signatureSourceFor(box);
-    if (source?.kind !== 'step' || stepByRole.has(source.role)) continue;
-    const step = displayed.find((a) => !a.departmentStep && a.stepRole === source.role);
-    if (step) stepByRole.set(source.role, step);
-  }
-  const allocated = new Set(stepByRole.values());
-  const extraApprovals = displayed.filter((a) => !allocated.has(a));
+  // Spec 2026-11-09: the requester (and on daily leave the replacement) are
+  // fixed boxes; every other box is an approval step, titled by the admin.
+  const boxes = stepBoxes(r.steps, r.approvals, r.status);
   const stepLabels = {
     manager: ts('manager'), departmentManager: ts('departmentManager'), hr: ts('hr'),
     security: ts('security'), admin: ts('admin'), employee: ts('employee'),
@@ -151,11 +143,6 @@ export default async function PrintRequestPage({ params }: Props) {
   };
   const renderEvidence = (step: PrintableRequest['approvals'][number]) => (
     <div className="mt-1 space-y-1 text-[10px] leading-4" data-approval-step-id={step.stepId ?? 'legacy'}>
-      <p className="font-semibold">{te('stepLabel', {
-        order: step.stepOrder === undefined ? '—' : formatNumber(step.stepOrder, locale),
-        name: step.named ? step.expectedName ?? stepLabels.employee
-          : stepLabels[step.departmentStep ? 'departmentManager' : step.stepRole],
-      })}</p>
       {evidenceText(step) ? <p>{evidenceText(step)}</p> : null}
       {step.evidenceKind === 'automatic' ? <>
         <p>{te('responsibleDelegate', { name: step.delegateName ?? '—' })}</p>
@@ -167,18 +154,28 @@ export default async function PrintRequestPage({ params }: Props) {
       {step.authorityRef ? <p className="break-all text-[8px]">{te('authorityRef', { ref: step.authorityRef })}</p> : null}
     </div>
   );
-  const resolveBox = (box: Parameters<typeof signatureSourceFor>[0]) => {
-    const source = signatureSourceFor(box);
-    if (!source) return null;
-    if (source.kind === 'requester') return {
-      data: r.signature_data, at: r.signature_consent_at, name: r.employee_name,
-      step: null,
-    };
-    const step = stepByRole.get(source.role);
-    if (!step) return null;
-    return { data: step.signatureData, at: step.signatureConsentAt, name: step.approverName,
-      step };
-  };
+  type Approval = PrintableRequest['approvals'][number];
+  /** A signature that prints: approved, or evidence that stands in for one. */
+  const printed = (a: Approval | null) =>
+    !!a && (a.decision === 'approved' || a.evidenceKind === 'hr_exempt');
+  const roleTitle = (a: Approval | null) => !a ? '—'
+    : a.named ? a.expectedName ?? stepLabels.employee
+    : stepLabels[a.departmentStep ? 'departmentManager' : a.stepRole];
+  const signatureImage = (data: string | null, at: string | null, alt: string, testId: string) => data ? (
+    <>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={data} alt={alt} className="mx-auto mt-1 h-16 w-auto object-contain" data-testid={testId} />
+      {at ? (
+        <div className="text-center text-[9px] text-neutral-600">{formatPersianConsentTimestamp(at, locale)}</div>
+      ) : null}
+    </>
+  ) : null;
+  const boxCount = 1 + (form.replacementBox ? 1 : 0) + boxes.length;
+  const columns = Math.min(boxCount, 4);
+  const boxClass = 'min-h-32 border-e border-b border-black px-2 py-1';
+  const boxTitle = (title: string) => (
+    <div className="text-center text-[11px] font-semibold">{title}</div>
+  );
 
   return (
     <>
@@ -323,7 +320,8 @@ export default async function PrintRequestPage({ params }: Props) {
                     <U>{date(r.end_date)}</U> {t('fields.duration')} <U>{duration}</U>
                   </p>
                   <p>
-                    {t('fields.replacement')} : <U>{r.replacement_name ?? '—'}</U>
+                    {t('fields.replacement')} :{' '}
+                    <U>{r.replacement_name ?? <span data-testid="print-no-replacement">{t('noReplacement')}</span>}</U>
                   </p>
                 </>
               )}
@@ -361,85 +359,65 @@ export default async function PrintRequestPage({ params }: Props) {
           ) : null}
 
           {/* ── signature boxes ────────────────────────────────────────── */}
-          <div className="grid grid-cols-4" data-testid="print-signatures">
-            {form.boxes.map((box, i) => {
-              const sig = resolveBox(box);
+          {/* Up to four per row, wrapping. Each box draws its end and bottom
+              rule; the wrapper's negative margin hides the outermost ones under
+              the form's own border. */}
+          <div className="overflow-hidden">
+          <div
+            className="-mb-px -me-px grid"
+            style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+            data-testid="print-signatures"
+          >
+            <div className={boxClass} data-testid="print-box-requester">
+              {boxTitle(t('boxes.requester'))}
+              {signatureImage(r.signature_data, r.signature_consent_at, t('boxes.requester'), 'print-signature-requester')}
+            </div>
+            {form.replacementBox ? (
+              <div className={boxClass} data-testid="print-box-replacement">
+                {boxTitle(t('boxes.replacement'))}
+                <div className="mt-1 text-center text-[11px]">
+                  {r.replacement_name ?? t('noReplacement')}
+                </div>
+                {/* FR-88: the replacement signs in the app; a decline goes back to
+                    the requester, so the box says so until they choose again. */}
+                {r.replacement_signature_status === 'declined' ? (
+                  <p className="mt-1 text-center text-[10px]" data-testid="print-replacement-declined">
+                    {t('replacementDeclined')}
+                  </p>
+                ) : null}
+                {r.replacement_signature_status === 'signed'
+                  ? signatureImage(r.replacement_signature_data ?? null, r.replacement_signature_consent_at ?? null,
+                      t('boxes.replacement'), 'print-signature-replacement')
+                  : null}
+              </div>
+            ) : null}
+            {boxes.map((box) => {
+              const a = box.approval;
+              const signed = printed(a);
+              // Who signed; while still open, who is expected to (helps a wet signature).
+              const name = signed ? a?.approverName ?? null : a?.decision ? null : a?.expectedName ?? null;
               return (
-                <div
-                  key={box}
-                  data-testid={`print-box-${box}`}
-                  className={`min-h-32 px-2 py-1 ${i < form.boxes.length - 1 ? 'border-e border-black' : ''}`}
-                >
-                  <div className="text-center text-[11px] font-semibold">{t(`boxes.${box}`)}</div>
-                  {/* The replacement is named on the form but never signs in the
-                      app, so print who it is and leave the space blank. */}
-                  {box === 'replacement' && r.replacement_name ? (
-                    <div className="mt-1 text-center text-[11px]">{r.replacement_name}</div>
+                <div key={box.key} className={boxClass} data-testid={`print-box-step-${box.key}`}>
+                  {boxTitle(box.title ?? roleTitle(a))}
+                  {box.notRequired ? (
+                    <p className="mt-2 text-center text-[11px]" data-testid={`print-not-required-${box.key}`}>
+                      {t('notRequired')}
+                    </p>
                   ) : null}
-                  {box !== 'replacement' && box !== 'requester' && sig?.name ? (
-                    <div className="mt-1 text-center text-[11px]">{sig.name}</div>
-                  ) : null}
-                  {sig?.step ? renderEvidence(sig.step) : null}
-                  {!sig?.data && sig?.at && sig.step?.evidenceKind !== 'automatic' ? <p className="mt-1 text-[9px]">{formatPersianConsentTimestamp(sig.at, locale)}</p> : null}
-                  {sig?.data ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={sig.data}
-                        alt={t(`boxes.${box}`)}
-                        className="mx-auto mt-1 h-16 w-auto object-contain"
-                        data-testid={`print-signature-${box}`}
-                      />
-                      {sig.at ? (
-                        <div className="text-center text-[9px] text-neutral-600">
-                          {formatPersianConsentTimestamp(sig.at, locale)}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
+                  {name ? <div className="mt-1 text-center text-[11px]">{name}</div> : null}
+                  {a && signed ? renderEvidence(a) : null}
+                  {a && signed && !a.signatureData && a.signatureConsentAt && a.evidenceKind !== 'automatic'
+                    ? <p className="mt-1 text-[9px]">{formatPersianConsentTimestamp(a.signatureConsentAt, locale)}</p>
+                    : null}
+                  {a && signed
+                    ? signatureImage(a.signatureData, a.signatureConsentAt, box.title ?? roleTitle(a), `print-signature-step-${box.key}`)
+                    : null}
                 </div>
               );
             })}
           </div>
-        </div>
-
-        {extraApprovals.length > 0 ? (
-          <div className="mx-1 mt-2 border border-black" data-testid="print-extra-approvals">
-            <div className="border-b border-black px-2 py-0.5 text-[11px] font-semibold">
-              {t('additionalApprovals')}
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3">
-              {extraApprovals.map((a, i) => (
-                <div
-                  key={a.stepId ?? `legacy-${i}`}
-                  className={`min-h-24 flex-1 px-2 py-1 ${
-                    i < extraApprovals.length - 1 ? 'border-e border-black' : ''
-                  }`}
-                  data-testid={`print-extra-approval-${i}`}
-                >
-                  <div className="text-center text-[11px]">{a.approverName ?? '—'}</div>
-                  {renderEvidence(a)}
-                  {!a.signatureData && a.signatureConsentAt && a.evidenceKind !== 'automatic' ? <p className="mt-1 text-[9px]">{formatPersianConsentTimestamp(a.signatureConsentAt, locale)}</p> : null}
-                  {a.signatureData ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={a.signatureData}
-                        alt={a.approverName ?? ''}
-                        className="mx-auto mt-1 h-14 w-auto object-contain"
-                      />
-                      {a.signatureConsentAt ? (
-                        <div className="text-center text-[9px] text-neutral-600">
-                          {formatPersianConsentTimestamp(a.signatureConsentAt, locale)}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-              ))}
-            </div>
           </div>
-        ) : null}
+        </div>
 
         {/* Footnotes: on screen and on paper, because someone filing this sheet
             needs to know the balance is as-of-printing and why boxes are empty. */}

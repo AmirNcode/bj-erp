@@ -59,6 +59,10 @@ type Labels = {
   orderNeedsStepsEdit: string;
   /** FR-47: explains the department-manager step under its row. */
   departmentHint: string;
+  /** Spec 2026-11-09: the step's signature box title. */
+  boxLabel: string;
+  boxLabelHint: string;
+  signedBy: string;
 };
 
 /** This screen's copy. */
@@ -83,6 +87,9 @@ function useLabels(): Labels {
     removed: tApproval('removed'),
     orderNeedsStepsEdit: tApproval('orderNeedsStepsEdit'),
     departmentHint: tApproval('departmentHint'),
+    boxLabel: tApproval('boxLabel'),
+    boxLabelHint: tApproval('boxLabelHint'),
+    signedBy: tApproval('signedBy'),
     steps: {
       manager: tSteps('manager'),
       departmentManager: tSteps('departmentManager'),
@@ -114,6 +121,8 @@ function useLabels(): Labels {
       cancel: tAdd('cancel'),
       added: tAdd('added'),
       errorLabel: tAdd('errorLabel'),
+      boxLabel: tAdd('boxLabel'),
+      boxLabelPlaceholder: tAdd('boxLabelPlaceholder'),
       roles: {
         manager: tSteps('manager'),
         hr: tSteps('hr'),
@@ -125,6 +134,9 @@ function useLabels(): Labels {
   };
 }
 
+
+/** Box · signer · order · active · remove — shared by the header and every row. */
+const ROW_GRID = 'sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_5rem_4rem_5rem] sm:gap-x-4';
 
 type Props = {
   steps: ApprovalStepRow[];
@@ -173,51 +185,90 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
         {steps.length === 0 ? (
           <EmptyState message={labels.empty} />
         ) : (
-          <ul className="divide-y divide-border" data-testid="approval-steps-list">
+          <div data-testid="approval-steps-list">
+            {/* Fixed columns, so Order / Active / Remove sit in the same place on
+                every row however long the box or signer name is. Phones stack. */}
+            <div
+              className={`hidden border-b border-border pb-2 text-xs font-medium text-muted-foreground sm:grid ${ROW_GRID}`}
+              aria-hidden
+            >
+              <span>{labels.boxLabel}</span>
+              <span>{labels.signedBy}</span>
+              <span>{labels.stepOrder}</span>
+              <span>{labels.active}</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-border">
             {steps.map((step) => {
               const isDepartment = step.managerScope === 'department';
               // Test-id key: the department step shares role `manager` with the
               // direct step, so it gets its own.
               const key = step.approverId ?? (isDepartment ? 'department-manager' : step.role);
+              const signer = step.approverId ? (
+                <>
+                  {step.approverName ?? '—'}
+                  <span className="ms-1 text-xs font-normal text-muted-foreground">
+                    ({labels.personStep})
+                  </span>
+                </>
+              ) : isDepartment ? (
+                labels.steps.departmentManager
+              ) : (
+                (labels.steps[step.role] ?? step.role)
+              );
               return (
                 <li
                   key={step.id}
-                  className="flex flex-wrap items-center gap-3 py-3"
+                  className={`grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2 py-3 sm:grid ${ROW_GRID}`}
                   data-testid={
                     step.approverId
                       ? `approval-step-person-${step.approverId}`
                       : `approval-step-${key}`
                   }
                 >
-                  <span className="min-w-32 text-sm font-medium">
-                    {step.approverId ? (
-                      <>
-                        {step.approverName ?? '—'}
-                        <span className="ms-1 text-xs font-normal text-muted-foreground">
-                          ({labels.personStep})
-                        </span>
-                      </>
-                    ) : isDepartment ? (
-                      labels.steps.departmentManager
-                    ) : (
-                      (labels.steps[step.role] ?? step.role)
-                    )}
-                  </span>
+                  <div className="col-span-3 min-w-0 sm:col-span-1">
+                    <Label htmlFor={`step-box-${step.id}`} className="mb-1 text-xs text-muted-foreground sm:sr-only">
+                      {labels.boxLabel}
+                    </Label>
+                    <Input
+                      id={`step-box-${step.id}`}
+                      // Re-mount on a saved rename so the field shows the stored value.
+                      key={step.boxLabel ?? ''}
+                      defaultValue={step.boxLabel ?? ''}
+                      maxLength={60}
+                      title={labels.boxLabelHint}
+                      disabled={isPending || !canEdit}
+                      className="h-8"
+                      data-testid={`approval-step-box-label-${key}`}
+                      onBlur={(e) => {
+                        const next = e.target.value.trim();
+                        if (next === (step.boxLabel ?? '')) return;
+                        if (!next) {
+                          e.target.value = step.boxLabel ?? '';
+                          return;
+                        }
+                        run(() => updateApprovalStep({ id: step.id, boxLabel: next }));
+                      }}
+                    />
+                  </div>
 
-                  {/* A named approver whose account is disabled can never fill this
-                      step, so every request needing it is stuck. Say so here rather
-                      than leaving those requests silently pending. */}
-                  {step.approverInactive && (
-                    <span
-                      className="rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
-                      data-testid={`approval-step-inactive-${step.id}`}
-                    >
-                      {labels.inactiveApprover}
-                    </span>
-                  )}
+                  <div className="col-span-3 min-w-0 text-sm font-medium sm:col-span-1">
+                    <span className="break-words">{signer}</span>
+                    {/* A named approver whose account is disabled can never fill this
+                        step, so every request needing it is stuck. Say so here rather
+                        than leaving those requests silently pending. */}
+                    {step.approverInactive && (
+                      <span
+                        className="mt-1 block rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+                        data-testid={`approval-step-inactive-${step.id}`}
+                      >
+                        {labels.inactiveApprover}
+                      </span>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5">
-                    <Label htmlFor={`step-order-${step.id}`} className="text-xs text-muted-foreground">
+                    <Label htmlFor={`step-order-${step.id}`} className="text-xs text-muted-foreground sm:sr-only">
                       {labels.stepOrder}
                     </Label>
                     <Input
@@ -251,9 +302,10 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
                         run(() => updateApprovalStep({ id: step.id, active: e.target.checked }))
                       }
                     />
-                    {labels.active}
+                    <span className="sm:sr-only">{labels.active}</span>
                   </label>
 
+                  <div className="justify-self-end">
                   {/* The department step is seeded by migration and the Add dialog
                       cannot recreate it, so it is switched off rather than removed. */}
                   {!isDepartment && canEdit && (
@@ -263,7 +315,6 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
                         variant="destructive"
                         size="xs"
                         disabled={isPending}
-                        className="ms-auto"
                         data-testid={`approval-step-delete-${step.approverId ?? step.role}`}
                       >
                         {labels.remove}
@@ -295,15 +346,17 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
                     </AlertDialogContent>
                   </AlertDialog>
                   )}
+                  </div>
                   {isDepartment && (
-                    <p className="basis-full text-xs text-muted-foreground" data-testid="approval-step-department-hint">
+                    <p className="col-span-full text-xs text-muted-foreground" data-testid="approval-step-department-hint">
                       {labels.departmentHint}
                     </p>
                   )}
                 </li>
               );
             })}
-          </ul>
+            </ul>
+          </div>
         )}
 
         {canEdit && (

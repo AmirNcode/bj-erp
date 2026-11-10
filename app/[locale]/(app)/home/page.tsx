@@ -39,6 +39,7 @@ import { HomeBoard, type PulseCards } from './HomeBoard';
 import { ProfileReminderCard } from './ProfileReminderCard';
 import { ClearanceAwaitingCard } from './ClearanceAwaitingCard';
 import { TravelBookingCard } from './TravelBookingCard';
+import { ReplacementSignoffCard } from './ReplacementSignoffCard';
 import { createClient } from '@/lib/supabase/server';
 import type { PendingRow } from './PendingApprovalsCard';
 import { NewRequestsBanner } from '../_components/NewRequestsBanner';
@@ -403,6 +404,10 @@ export default async function HomePage({ params }: Props) {
       </Suspense>
       <Suspense fallback={null}>
         <TravelBookingCard locale={locale} userId={user.id} />
+      </Suspense>
+      {/* FR-88: sign as replacement, or answer a replacement's decline. */}
+      <Suspense fallback={null}>
+        <ReplacementSignoffCard locale={locale} />
       </Suspense>
       <Suspense
         fallback={

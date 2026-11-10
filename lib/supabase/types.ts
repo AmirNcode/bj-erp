@@ -654,6 +654,7 @@ export type Database = {
       }
       approval_steps: {
         Row: {
+          box_label: string | null
           approver_id: string | null
           id: string
           company_id: string
@@ -666,6 +667,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          box_label?: string | null
           approver_id?: string | null
           id?: string
           company_id: string
@@ -678,6 +680,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          box_label?: string | null
           approver_id?: string | null
           id?: string
           company_id?: string
@@ -705,8 +708,40 @@ export type Database = {
           },
         ]
       }
+      leave_request_replacement_signoffs: {
+        // FR-88: the named replacement's signature or decline. Written only through RPCs.
+        Row: {
+          request_id: string
+          replacement_id: string
+          status: "pending" | "signed" | "declined"
+          signature_data: string | null
+          signature_consent_at: string | null
+          note: string | null
+          decided_at: string | null
+          created_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: "leave_request_replacement_signoffs_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: true
+            referencedRelation: "leave_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_request_replacement_signoffs_replacement_id_fkey"
+            columns: ["replacement_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_request_approvals: {
         Row: {
+          box_label: string | null
           evidence_kind: string
           principal_id: string | null
           principal_name: string | null
@@ -725,6 +760,7 @@ export type Database = {
           created_at: string
         }
         Insert: {
+          box_label?: string | null
           evidence_kind?: string
           principal_id?: string | null
           principal_name?: string | null
@@ -743,6 +779,7 @@ export type Database = {
           created_at?: string
         }
         Update: {
+          box_label?: string | null
           evidence_kind?: string
           principal_id?: string | null
           principal_name?: string | null
@@ -1618,6 +1655,43 @@ export type Database = {
           p_request: string; p_transport: string | null; p_flight: number | null; p_hotel: number | null
           p_itinerary: Json; p_note: string; p_done: boolean
         }
+        Returns: undefined
+      }
+      my_replacement_requests: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          request_id: string
+          employee_name: string
+          kind: Database["public"]["Enums"]["request_kind"]
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          leave_type_color: string | null
+          start_date: string
+          end_date: string
+          day_part: Database["public"]["Enums"]["day_part"]
+          unit: Database["public"]["Enums"]["leave_unit"]
+          start_time: string | null
+          end_time: string | null
+          requested_minutes: number
+          status: Database["public"]["Enums"]["leave_status"]
+          serial_year: number
+          serial_seq: number
+          created_at: string
+          signoff_status: "pending" | "signed" | "declined" | null
+          signed_at: string | null
+          signoff_note: string | null
+        }[]
+      }
+      app_replacement_sign: {
+        Args: { p_request: string; p_signature_data: string; p_signature_authorized: boolean }
+        Returns: undefined
+      }
+      app_replacement_decline: {
+        Args: { p_request: string; p_note?: string | null }
+        Returns: undefined
+      }
+      app_change_replacement: {
+        Args: { p_request: string; p_replacement_id?: string | null }
         Returns: undefined
       }
       my_travel_itineraries: {

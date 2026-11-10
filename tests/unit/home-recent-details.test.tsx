@@ -7,6 +7,11 @@ import en from '@/messages/en.json';
 
 const mocks = vi.hoisted(() => ({ dismiss: vi.fn() }));
 vi.mock('@/lib/actions/leave/requests', () => ({ dismissFromHome: mocks.dismiss }));
+// FR-88 pieces call server actions; rendered in their own tests.
+vi.mock('@/app/[locale]/(app)/request/_components/ReplacementSignoff', () => ({
+  ReplacementDeclinedNotice: ({ req }: { req: { id: string } }) => <div data-testid={'replacement-declined-notice-' + req.id} />,
+  ReplacementRequestCard: ({ req }: { req: { request_id: string } }) => <div data-testid={'replacement-request-' + req.request_id} />,
+}));
 vi.mock('@/components/RequestProgress', () => ({
   RequestProgress: ({ requestId, defaultOpen }: { requestId: string; defaultOpen?: boolean }) => (
     <div data-testid={`progress-${requestId}`} data-open={String(!!defaultOpen)} />

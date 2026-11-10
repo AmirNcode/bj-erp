@@ -23,6 +23,22 @@ describe('dbErr bare permission message', () => {
   });
 });
 
+describe('dbErr FR-88 replacement messages', () => {
+  it.each([
+    ['you have already answered this request', 'replacementAlreadyAnswered'],
+    ['this request is no longer open for your signature', 'replacementRequestClosed'],
+    ['not allowed to sign this request', 'replacementNotAllowed'],
+    ['not allowed to change this request', 'replacementNotAllowed'],
+    ['note is too long (max 500 characters)', 'replacementNoteTooLong'],
+    ['only a declined replacement can be changed', 'replacementNotDeclined'],
+    ['choose a different replacement', 'replacementSamePerson'],
+    ['replacement is the temporary approval delegate; cancel and file again', 'replacementIsDelegate'],
+    ['replacement must be an active colleague in your department', 'replacementNotColleague'],
+  ])('%s → %s', async (raw, key) => {
+    expect((await dbErr(raw)).error).toBe(key);
+  });
+});
+
 describe('dbErr FR-84 and FR-85 messages', () => {
   it.each([
     ['not allowed to correct this trip', 'tripCorrectNotAllowed'],

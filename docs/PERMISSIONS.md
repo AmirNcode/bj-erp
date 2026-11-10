@@ -233,6 +233,16 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `team_leave_calendar`, and has no client mutation/deletion path. The approver PNG is deliberately
   omitted from audit JSON; the audit row records only authorization and its timestamp.
 
+### Replacement sign-off (FR-88, unreleased)
+- `leave_request_replacement_signoffs` SELECT: the named replacement (active) or anyone who may read the
+  request (`app_can_read_approval_request`). No client writes; `app_replacement_sign` /
+  `app_replacement_decline` (the named replacement only) and `app_change_replacement` (the requester,
+  only after a decline) are SECURITY DEFINER, take `approval_lock(company)` then the employee lock.
+- The replacement gets **no** `leave_requests` base row (FR-25: the reason stays private), no
+  signatures RPC and no ledger: `my_replacement_requests()` returns explicit columns, and
+  `team_leave_calendar` shows them the request like a teammate's.
+- Neither answer touches approval: no gate on `leave_request_approvals`, decline does not change status.
+
 ### HR reports (FR-37)
 `/manage/reports` adds **no policy and no SECURITY DEFINER function**. Every report is a plain
 SELECT over `profiles`, `leave_ledger`, `leave_types`, `leave_requests` and

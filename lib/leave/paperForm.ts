@@ -15,45 +15,23 @@
  * for hourly leave and FR-30 names 50207 for the errand, but the daily leave
  * form was only ever referred to by name. Read off the photograph, 2026-08-18.
  *
- * The signature boxes are NOT the same set on each form, which is why they are
- * listed per form rather than assumed:
- *
- *   50210: requester · replacement · approver · hrManager
- *   50208: requester · approver · security · adminOffice
- *   50207: requester · approver · security · hrOffice
- *
- * The app currently captures only two of them — the requester's and the
- * approver's (FR-32, FR-14). The rest print as empty boxes for a wet signature,
- * which is exactly what HR needs while the chain in FR-36 is still being built,
- * and they fill themselves once it lands.
+ * Signature boxes (spec 2026-11-09-form-signature-boxes-design): every form
+ * prints the requester's box first and, on the daily leave form only, the
+ * replacement's box (جانشین). Every other box is an APPROVAL STEP the admin
+ * configures on Manage › Approval steps, titled with the box name they typed,
+ * in step order — see `stepBoxes`.
  */
 
 export type RequestKind = 'leave' | 'errand';
 export type LeaveUnit = 'day' | 'hour';
-
-export type SignatureBox =
-  /** درخواست کننده — filled from `signature_data`. */
-  | 'requester'
-  /** جانشین — the app stores the person's NAME but never their signature. */
-  | 'replacement'
-  /** تصویب کننده — filled from `approver_signature_data`. */
-  | 'approver'
-  /** حراست — not captured by the app; blank for a wet signature. */
-  | 'security'
-  /** مدیر اداری و منابع انسانی — blank until FR-36 makes HR an approval step. */
-  | 'hrManager'
-  /** امور اداری — blank, as above. */
-  | 'adminOffice'
-  /** امور اداری و منابع انسانی — blank, as above. */
-  | 'hrOffice';
 
 export type PaperForm = {
   /** Message key under `print.forms.*` for the printed title. */
   titleKey: 'dailyLeave' | 'hourlyLeave' | 'hourlyErrand' | 'dailyErrand';
   /** The کد فرم printed top-right, or null when the client has no such form. */
   code: string | null;
-  /** Printed left-to-right here; the RTL layout reverses them visually. */
-  boxes: SignatureBox[];
+  /** Daily leave only: the form names a replacement (جانشین), who signs too. */
+  replacementBox: boolean;
   /**
    * True when this layout is inferred rather than copied from a photographed
    * form, so the UI can be honest about it instead of implying an official
@@ -65,21 +43,21 @@ export type PaperForm = {
 const DAILY_LEAVE: PaperForm = {
   titleKey: 'dailyLeave',
   code: 'BJ-F 50210(R0)',
-  boxes: ['requester', 'replacement', 'approver', 'hrManager'],
+  replacementBox: true,
   derived: false,
 };
 
 const HOURLY_LEAVE: PaperForm = {
   titleKey: 'hourlyLeave',
   code: 'BJ-F 50208(R0)',
-  boxes: ['requester', 'approver', 'security', 'adminOffice'],
+  replacementBox: false,
   derived: false,
 };
 
 const HOURLY_ERRAND: PaperForm = {
   titleKey: 'hourlyErrand',
   code: 'BJ-F 50207(R0)',
-  boxes: ['requester', 'approver', 'security', 'hrOffice'],
+  replacementBox: false,
   derived: false,
 };
 
@@ -95,7 +73,7 @@ const HOURLY_ERRAND: PaperForm = {
 const DAILY_ERRAND: PaperForm = {
   titleKey: 'dailyErrand',
   code: 'BJ-F 50207(R0)',
-  boxes: ['requester', 'approver', 'security', 'hrOffice'],
+  replacementBox: false,
   derived: true,
 };
 
@@ -104,40 +82,69 @@ export function paperFormFor(kind: RequestKind, unit: LeaveUnit): PaperForm {
   return unit === 'hour' ? HOURLY_LEAVE : DAILY_LEAVE;
 }
 
-/**
- * Which stored signature fills a given box, if any.
- *
- * Since FR-36 the approver boxes are backed by the approval CHAIN rather than a
- * single approver column, so each box maps to the step role that signs it:
- *
- *   تصویب کننده                  -> the `manager` step
- *   حراست                        -> the `security` step (configurable, unseeded)
- *   مدیر اداری/امور اداری/…       -> the `hr` step
- *
- * جانشین has no source at all: the app records who the replacement IS but never
- * captures their signature, so that box always prints blank for a wet one.
- *
- * Returning null is a normal outcome, not a gap to code around.
- */
-export type SignatureSource =
-  | { kind: 'requester' }
-  | { kind: 'step'; role: 'manager' | 'hr' | 'security' };
+/** One active approval step of the company, as the print payload lists it. */
+export type PrintStep = {
+  stepId: string;
+  stepOrder: number;
+  boxLabel: string | null;
+};
 
-export function signatureSourceFor(box: SignatureBox): SignatureSource | null {
-  switch (box) {
-    case 'requester':
-      return { kind: 'requester' };
-    case 'approver':
-      return { kind: 'step', role: 'manager' };
-    case 'security':
-      return { kind: 'step', role: 'security' };
-    case 'hrManager':
-    case 'adminOffice':
-    case 'hrOffice':
-      return { kind: 'step', role: 'hr' };
-    case 'replacement':
-      return null;
-  }
+/** The parts of an approval (signed, pending or exempt) the box layout needs. */
+export type BoxApproval = {
+  stepId?: string | null;
+  stepOrder?: number;
+  boxLabel?: string | null;
+};
+
+export type StepBox<A extends BoxApproval> = {
+  /** Stable key: the step id, or `legacy-<n>` for a pre-chain approval. */
+  key: string;
+  /** The box name; null falls back to the approval's role label. */
+  title: string | null;
+  /** The request's approval for this box — signed, pending, rejected or exempt. */
+  approval: A | null;
+  /** The step does not apply to this request (e.g. a skipped department manager). */
+  notRequired: boolean;
+};
+
+/**
+ * The approval-step boxes of one printed request, after the fixed requester
+ * (and replacement) boxes.
+ *
+ *  - one box per active step for the request's kind, in step order;
+ *  - a step the request has no approval row for: on a pending request the
+ *    server lists every step still owed, so a missing one does not apply to
+ *    this request ("Not required"), and likewise on an approved one; on a
+ *    rejected or cancelled request it was simply never signed (empty box);
+ *  - approvals whose step is gone or inactive (and pre-chain ones) still print,
+ *    in their own boxes at the end, titled with the name snapshot at signing.
+ *
+ * A signed box keeps the title it was signed under (`approval.boxLabel`).
+ */
+export function stepBoxes<A extends BoxApproval>(
+  steps: PrintStep[],
+  approvals: A[],
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+): StepBox<A>[] {
+  const ordered = [...steps].sort((a, b) => a.stepOrder - b.stepOrder);
+  const used = new Set<A>();
+  const boxes: StepBox<A>[] = ordered.map((step) => {
+    const approval = approvals.find((a) => a.stepId === step.stepId) ?? null;
+    if (approval) used.add(approval);
+    return {
+      key: step.stepId,
+      title: approval?.boxLabel ?? step.boxLabel,
+      approval,
+      notRequired: !approval && (status === 'pending' || status === 'approved'),
+    };
+  });
+  const rest = approvals
+    .filter((a) => !used.has(a))
+    .sort((a, b) => (a.stepOrder ?? 0) - (b.stepOrder ?? 0));
+  rest.forEach((a, i) =>
+    boxes.push({ key: a.stepId ?? `legacy-${i}`, title: a.boxLabel ?? null, approval: a, notRequired: false })
+  );
+  return boxes;
 }
 
 /**

@@ -52,8 +52,8 @@ describe('printed approval evidence', () => {
     authority_ref: 'historical-grant', statement: recordedStatement, signature_data: 'must-not-print',
     evidence: { delegate_name: 'Historical delegate', submitted_at: submittedAt, consent_at: submittedAt },
   };
-  function serve(approvals: object[]) {
-    mocks.rpc.mockResolvedValue({ data: { context, signatures: { requester_signature_data: null, approvals }, extensions: [], corrections: [] }, error: null });
+  function serve(approvals: object[], steps: object[] = []) {
+    mocks.rpc.mockResolvedValue({ data: { context, signatures: { requester_signature_data: null, approvals, steps }, extensions: [], corrections: [] }, error: null });
   }
 
   it('preserves exact identities and step order for multiple signed steps with the same role', async () => {
@@ -63,9 +63,12 @@ describe('printed approval evidence', () => {
       { ...step, step_id: 'department', step_order: 3, manager_scope: 'department', decision: 'approved', signer_name: 'Department signer' },
     ]);
     render(await PrintRequestPage({ params: Promise.resolve({ locale: 'en', id: 'r' }) }));
-    expect(screen.getByText('Step 1: Direct manager')).toBeTruthy();
-    expect(screen.getByText('Step 2: Named CEO')).toBeTruthy();
-    expect(screen.getByText('Step 3: Department manager')).toBeTruthy();
+    // No box names configured: each box falls back to its role or person.
+    expect(screen.getByTestId('print-box-step-direct').textContent).toContain('Direct manager');
+    expect(screen.getByTestId('print-box-step-named').textContent).toContain('Named CEO');
+    expect(screen.getByTestId('print-box-step-department').textContent).toContain('Department manager');
+    expect(screen.queryByText(/Step \d/)).toBeNull();
+    expect(screen.queryByText('Additional approvals')).toBeNull();
     expect(document.querySelector('[data-approval-step-id="named"]')).toBeTruthy();
     expect(document.querySelector('[data-approval-step-id="department"]')).toBeTruthy();
   });
@@ -82,13 +85,47 @@ describe('printed approval evidence', () => {
     expect(screen.getByText(recordedStatement)).toBeTruthy();
     expect(screen.getByText(/Historical delegate/)).toBeTruthy();
     expect(screen.getByText(/historical-grant/)).toBeTruthy();
-    const content = screen.getByTestId('print-box-approver').textContent ?? '';
+    const content = screen.getByTestId('print-box-step-direct').textContent ?? '';
     const labels = locale === 'fa' ? farsiMessages.approvalEvidence : messages.approvalEvidence;
     expect(content).toContain(labels.submittedAt.split('{at}')[0]);
     expect(content).toContain(labels.automaticallyApprovedAt.split('{at}')[0]);
     expect(content).toContain(formatPersianConsentTimestamp(submittedAt, locale));
     expect(content).toContain(formatPersianConsentTimestamp(processedAt, locale));
-    expect(screen.queryByTestId('print-signature-approver')).toBeNull();
+    expect(screen.queryByTestId('print-signature-step-direct')).toBeNull();
+  });
+
+  it('titles boxes with the admin’s box names, prints pending ones empty and skipped ones as not required', async () => {
+    serve([
+      { ...step, decision: 'approved', signer_name: 'Direct signer', box_label: 'تصویب کننده', signature_data: 'png-direct' },
+      { ...step, step_id: 'office', step_order: 3, named: true, expected_name: 'Office person', decision: null, evidence_kind: 'pending', box_label: 'امور اداری' },
+    ], [
+      { step_id: 'direct', step_role: 'manager', step_order: 1, manager_scope: 'direct', named: false, box_label: 'تصویب کننده' },
+      { step_id: 'department', step_role: 'manager', step_order: 2, manager_scope: 'department', named: false, box_label: 'مدیر واحد' },
+      { step_id: 'office', step_role: 'employee', step_order: 3, manager_scope: 'direct', named: true, box_label: 'امور اداری' },
+    ]);
+    render(await PrintRequestPage({ params: Promise.resolve({ locale: 'en', id: 'r' }) }));
+    const direct = screen.getByTestId('print-box-step-direct');
+    expect(direct.textContent).toContain('تصویب کننده');
+    expect(direct.textContent).toContain('Direct signer');
+    expect(screen.getByTestId('print-signature-step-direct')).toBeTruthy();
+    expect(screen.getByTestId('print-not-required-department')).toBeTruthy();
+    const office = screen.getByTestId('print-box-step-office');
+    expect(office.textContent).toContain('امور اداری');
+    expect(office.textContent).toContain('Office person');
+    expect(screen.queryByTestId('print-signature-step-office')).toBeNull();
+    // Daily leave, nobody named: the replacement box and line say so.
+    expect(screen.getByTestId('print-box-replacement').textContent).toContain('No replacement selected');
+    expect(screen.getByTestId('print-no-replacement')).toBeTruthy();
+  });
+
+  it('prints the replacement’s own signature once they sign (FR-88)', async () => {
+    mocks.rpc.mockResolvedValue({ data: { context: { ...context, replacement_name: 'Cover Person' }, signatures: {
+      requester_signature_data: null, approvals: [], steps: [],
+      replacement_status: 'signed', replacement_signature_data: 'png-cover', replacement_signature_consent_at: '2026-10-20T08:00:00Z',
+    }, extensions: [], corrections: [] }, error: null });
+    render(await PrintRequestPage({ params: Promise.resolve({ locale: 'en', id: 'r' }) }));
+    expect(screen.getByTestId('print-box-replacement').textContent).toContain('Cover Person');
+    expect(screen.getByTestId('print-signature-replacement')).toBeTruthy();
   });
 });
 

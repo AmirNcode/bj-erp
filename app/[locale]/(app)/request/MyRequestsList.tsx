@@ -10,6 +10,9 @@ import { CollapsibleSection } from '@/components/CollapsibleSection';
 import { Card } from '@/components/ui/card';
 import { RequestCancelButton } from './_components/RequestCancelButton';
 import { RequestDetails, type TravelNote } from './_components/RequestDetails';
+import { ReplacementRequestCard } from './_components/ReplacementSignoff';
+import type { ReplacementRequest } from '@/lib/actions/leave/replacement';
+import { isOpenRequest, replacementCanAnswer, requesterMustChooseReplacement } from '@/lib/leave/replacementSignoff';
 
 type Props = {
   requests: LeaveRequestWithType[];
@@ -20,6 +23,8 @@ type Props = {
   showAll?: boolean;
   /** FR-70: procurement's transport and note on the caller's booked trips. */
   travelBookings?: Record<string, TravelNote>;
+  /** FR-88: requests that name the caller as replacement (open ones are listed first). */
+  coverRequests?: ReplacementRequest[];
 };
 
 export function MyRequestsList({
@@ -28,9 +33,11 @@ export function MyRequestsList({
   hoursPerDay,
   showAll = false,
   travelBookings = {},
+  coverRequests = [],
 }: Props) {
   const labels = useRequestLabels();
   const t = useTranslations('request');
+  const tRepl = useTranslations('replacement');
   const [localRequests, setLocalRequests] = useState(requests);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -45,7 +52,15 @@ export function MyRequestsList({
   // Pending requests are what people come to check; decided ones wait behind
   // "show previous". With nothing pending, opening the section shows them all.
   const pendingCount = localRequests.filter((r) => r.status === 'pending').length;
-  const [open] = useState(() => showAll || requests.some((r) => r.status === 'pending'));
+  const openCover = coverRequests.filter((r) => isOpenRequest(r.status));
+  const [open] = useState(
+    () =>
+      showAll ||
+      requests.some((r) => r.status === 'pending') ||
+      // FR-88: something waits on the caller as replacement, or as requester after a decline.
+      openCover.some((r) => replacementCanAnswer({ status: r.status, signoffStatus: r.signoff_status })) ||
+      requests.some((r) => requesterMustChooseReplacement({ status: r.status, signoffStatus: r.replacement_signoff_status }))
+  );
   const [previousShown, setPreviousShown] = useState(showAll);
   const showEverything = previousShown || pendingCount === 0;
   const visible = showEverything
@@ -67,6 +82,15 @@ export function MyRequestsList({
       {errorMsg && (
         <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive mb-4">
           <strong>{labels.errorLabel}:</strong> {errorMsg}
+        </div>
+      )}
+
+      {openCover.length > 0 && (
+        <div className="mb-4 space-y-3" data-testid="my-cover-requests">
+          <h3 className="text-sm font-semibold">{tRepl('asReplacementTitle')}</h3>
+          {openCover.map((req) => (
+            <ReplacementRequestCard key={req.request_id} req={req} locale={locale} hoursPerDay={hoursPerDay} />
+          ))}
         </div>
       )}
 

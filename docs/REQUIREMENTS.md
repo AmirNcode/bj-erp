@@ -405,6 +405,27 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-89** ☐ **Form signature boxes from the approval steps.** Every approval step has a signature-box
+  name (`approval_steps.box_label`, 1–60 chars), set when the step is added and editable later on
+  Manage › Approval steps. The printed request form shows the requester's box, the replacement's box
+  (daily leave only) and then one box per active step for the request's kind, in step order, titled
+  with its box name; the box shows the signer's name, signature and time (no step number). Boxes never
+  hide: unsigned ones print empty, a step the request skips prints "Not required", and daily leave
+  without a replacement prints "No replacement selected". Each decision snapshots the box name
+  (`leave_request_approvals.box_label`); approvals whose step was removed still print, at the end.
+  Security is no longer a fixed box and the "Additional approvals" strip is gone.
+  *(2026-11-09; spec `2026-11-09-form-signature-boxes-design.md`; unreleased.)*
+- **FR-88** ☐ **The replacement signs the request in the app.** When a leave request (daily or hourly)
+  names a replacement (جانشین), that person sees it on Home (to sign), under Requests › My requests
+  ("You are the replacement") and on the Calendar, and signs it with the usual signature pad and
+  consent box (saved signature pre-filled), at any moment while the request is pending or approved.
+  Their signature never gates an approval step: approvers sign independently. The replacement may
+  **decline** instead (optional note); the request is not rejected: it goes back to the requester
+  (Home + My requests), who names someone else (a new sign request for them) or marks "no
+  replacement". Approval signatures already given stay valid. The replacement reads only the
+  request's explicit columns (no reason, requester signature or balances). The printed form gets the
+  replacement's signature, consent time and status (pending / signed / declined).
+  *(2026-11-09; migration `20261109120000_replacement_signoff.sql`; implemented locally, not deployed.)*
 - **FR-87** ☐ **Unified Approvals and Finance usability.** Approvals combines the existing queue/history with authorized archive review, search/status/type filters, profile photos and personnel IDs. Preserve HR controls and approval authority; redirect old archive URLs and rename its Leave permission label. Finance uses exact Persian calendar dates, split name/ID/department columns, name/ID search, department filtering and sortable data columns; totals/CSV follow filters. Finance and Employees desktop tables use 80% of the area beside the sidebar without widening other content. Finance's separate form permission allows complete eligible work-errand forms (reason/signatures included), defaults off outside admin, and grants no leave or approval access. *(2026-11-08; approved spec `2026-11-08-approvals-finance-layout-design.md`; implemented locally, not deployed.)*
 - **FR-86** ☐ **View as.** The admin alone (not a permission, not delegable) opens the app as any active
   person of the company, to check what that person sees after a fix: their nav, pages, data and permission

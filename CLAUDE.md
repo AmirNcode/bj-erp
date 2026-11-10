@@ -110,6 +110,8 @@ Supabase + dev server; run serial `--workers=1`; `E2E_BASE_URL` targets an exter
 `npm run cleanup:e2e` (delete e2e throwaway users; teardown runs it too) · `npm run seed` (demo org) ·
 `npm run schema:dump` (regenerate `supabase/schema.sql` from the local DB).
 Deploying: Liara → `docs/DEPLOY-LIARA.md`; local Docker → `docs/DEPLOY-ASSISTANT.md`.
+**Running the app locally = the newest live backup** (`~/Backups/bj-erp`), not demo data, unless the
+owner asks for demo data. Procedure: `docs/DEPLOY-ASSISTANT.md` › "Running the app locally".
 Demo-seed login (local/demo DB only): `admin` / `Admin!2026`; others `Demo!2026` (hr: `hr-101`,
 finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_ROLE_KEY` in `deploy/.env`) when seeding. Liara admin password:
 `.bj-deploy/liara/admin-password`.
@@ -180,6 +182,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Phone titles:** `MobileTopBar` shows the section name, so top-level pages pass `section` to `PageHeader`; a new nav section needs a row in its `SECTIONS` list.
 - **`usePathname()` has no locale prefix in Farsi** (default locale): compare paths with and without `/${locale}` (see `AdminTabs`, `MainNav.isActive`).
 - **Dev server against the isolated demo stack:** `bj-dev-isolated` in `.claude/launch.json` (:3100); sign in at `http://localhost:3501` first (the gateway's CORS rejects :3100, the cookie is shared).
+- **Restoring a live dump locally:** create role `supabase_functions_admin` (NOLOGIN) on the fresh cluster first, and switch SMS off (`private.sms_settings` mode `off`, key NULL) + `cron.job` inactive BEFORE the app starts — the dump has live SMS and a real key.
+- **Print signature boxes = approval steps (FR-89):** box title is `approval_steps.box_label`, snapshotted on each decision (`leave_request_approvals.box_label`); `lib/leave/paperForm.ts › stepBoxes` lays them out. Two migrations that both redefine one function must keep each other's changes (FR-88 + FR-89 both redefine `request_data_get_leave_request_signatures`).
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

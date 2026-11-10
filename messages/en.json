@@ -238,7 +238,33 @@
     "coveringFor": "For",
     "coverConflict": "also on leave then",
     "loading": "Loading colleagues…",
-    "empty": "No colleagues available in your department."
+    "empty": "No colleagues available in your department.",
+    "signoffPending": "waiting for the replacement's signature",
+    "signoffSigned": "signed by the replacement",
+    "signoffDeclined": "the replacement declined",
+    "toSignTitle": "Sign as replacement",
+    "asReplacementTitle": "You are the replacement",
+    "forPerson": "<bdi>{name}</bdi> named you as replacement",
+    "sign": "Sign",
+    "signTitle": "Sign as replacement",
+    "signBody": "By signing you agree to cover for {name} during this time off. Approvers decide separately.",
+    "signatureTitle": "Replacement signature",
+    "signSuccess": "Signed.",
+    "decline": "Decline",
+    "declineTitle": "Decline being the replacement",
+    "declineBody": "The request goes back to {name}, who will choose someone else. Approvals are not affected.",
+    "declineNoteLabel": "Note (optional)",
+    "declineNotePlaceholder": "e.g. I am away that day",
+    "declineSuccess": "Sent back to the requester.",
+    "youSigned": "You signed as replacement.",
+    "youDeclined": "You declined. The requester will choose someone else.",
+    "declinedTitle": "Your replacement declined",
+    "declinedBody": "<bdi>{name}</bdi> will not cover for you. Choose someone else, or continue without a replacement.",
+    "declinedNote": "Their note",
+    "newReplacement": "New replacement",
+    "saveReplacement": "Save replacement",
+    "saveNoReplacement": "Continue without a replacement",
+    "changeSaved": "Saved."
   },
   "leave": {
     "status": {
@@ -265,9 +291,6 @@
   "calendar": {
     "title": "Calendar",
     "navLink": "Calendar",
-    "empty": "No time-off this month.",
-    "listView": "List",
-    "monthView": "Month",
     "offOn": "Off on",
     "noOffThisDay": "No one is off this day.",
     "returns": "Returns",
@@ -432,7 +455,6 @@
     "derivedNote": "There is no separate official form for a daily work errand; this sheet follows the hourly work errand form.",
     "balanceNote": "The leave balance is calculated at the moment of printing, not at the time the request was made.",
     "unsignedNote": "Boxes without a digital signature are left blank for a handwritten one.",
-    "additionalApprovals": "Additional approvals",
     "departmentManager": "Department manager",
     "forms": {
       "dailyLeave": "Daily leave request form",
@@ -465,16 +487,14 @@
     },
     "boxes": {
       "requester": "Requester",
-      "replacement": "Replacement",
-      "approver": "Approver",
-      "security": "Security",
-      "hrManager": "Administrative & HR Manager",
-      "adminOffice": "Administrative Office",
-      "hrOffice": "Administrative & HR Office"
+      "replacement": "Replacement"
     },
     "hrExpert": "Administrative & HR Officer",
     "balanceLine": "The applicant has {duration} of annual leave remaining.",
-    "perDiemByRequester": "Entered by requester (Head of HR)"
+    "perDiemByRequester": "Entered by requester (Head of HR)",
+    "notRequired": "Not required",
+    "noReplacement": "No replacement selected",
+    "replacementDeclined": "Declined"
   },
   "reports": {
     "from": "From month",
@@ -826,8 +846,13 @@
           "cancel": "Cancel",
           "added": "Approval step added.",
           "errorLabel": "Error",
-          "selectOne": "{count} people found — select one"
-        }
+          "selectOne": "{count} people found — select one",
+          "boxLabel": "Signature box name",
+          "boxLabelPlaceholder": "e.g. Approver"
+        },
+        "boxLabel": "Signature box",
+        "boxLabelHint": "Title printed above this signature on the request form.",
+        "signedBy": "Signed by"
       },
       "absenceWatchers": {
         "title": "Absence notifications",
@@ -1249,7 +1274,16 @@
     "photoLocked": "HR has locked this photo. Ask HR to change it.",
     "photoNotAllowed": "You are not allowed to change this person's photo.",
     "photoInvalid": "The photo is invalid. Choose it again.",
-    "photoMissing": "There is no photo to lock."
+    "photoMissing": "There is no photo to lock.",
+    "approvalStepBoxLabelRequired": "Enter a name for the signature box.",
+    "approvalStepBoxLabelTooLong": "The signature box name can be at most 60 characters.",
+    "replacementAlreadyAnswered": "You have already answered this request.",
+    "replacementRequestClosed": "This request is no longer open (cancelled or rejected).",
+    "replacementNotAllowed": "You are not allowed to do this on this request.",
+    "replacementNoteTooLong": "The note is too long (at most 500 characters).",
+    "replacementNotDeclined": "The replacement can be changed only after they decline.",
+    "replacementSamePerson": "Choose a different replacement.",
+    "replacementIsDelegate": "Your replacement also holds your approval authority for this absence. Cancel the request and file it again."
   },
   "roles": {
     "admin": "Admin",
@@ -1934,7 +1968,6 @@
     "delegatedSignature": "Signed by {signer} on behalf of {principal}",
     "delegatedRejection": "Rejected by {signer} on behalf of {principal}",
     "authorityRef": "Authority reference: {ref}",
-    "stepLabel": "Step {order}: {name}",
     "responsibleDelegate": "Appointed delegate accepting responsibility: {name}",
     "submittedAt": "Submitted: {at}",
     "responsibilityAcceptedAt": "Responsibility accepted: {at}",

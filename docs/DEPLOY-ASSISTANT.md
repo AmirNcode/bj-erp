@@ -123,6 +123,33 @@ Existing local installs predate the migration manifest. Run **Safe update** once
 verified backup, adopts the known schema baseline, records checksums, applies missing migrations,
 and writes the manifest. App only is available afterward when SQL has not changed.
 
+## Running the app locally: live backup by default (owner rule, 2026-11-10)
+
+When the owner asks to run or test the app locally, load the **newest live backup**, not demo data.
+Use `npm run seed` / demo users only when the owner asks for demo data by name.
+
+The Mac already holds verified copies of the daily Liara dumps in `~/Backups/bj-erp`
+(`daily-<UTC>.dump` + `.sha256`, pulled by `deploy/liara/pull-backups-to-mac.sh`). Restore into an
+**isolated** Compose project (e.g. `.bj-deploy/<name>/compose`, as `bj-approvals-finance` does), never
+over a database you were not asked to replace:
+
+1. `shasum -a 256 -c ~/Backups/bj-erp/<dump>.sha256`. Save the old local DB first if it holds anything
+   (`pg_dump -Fc`), then give the project a fresh `db` volume.
+2. On the fresh cluster: `create role supabase_functions_admin nologin;` (the live cluster has it; a fresh
+   local one does not, and the restore aborts on its GRANT).
+3. Restore per `docs/DEPLOY-LIARA.md` (list without the ` ACL graphql_public FUNCTION graphql(` entry;
+   `pg_restore --clean --if-exists --exit-on-error --single-transaction -L list`), then
+   `deploy/liara/restore-graphql.sql` as `supabase_admin`.
+4. **Before starting the app:** `update private.sms_settings set mode='off', api_key=null, username=null;`
+   and `update cron.job set active=false;` — the dump carries live SMS with the real provider key, and a
+   local approval would text real employees. Also run the db with `cron.launch_active_jobs=off`.
+5. Apply the branch's migrations with `bj_apply_migrations` (ledger) — the backup may predate the latest
+   deploy — then start auth/rest/app and check `/api/health`.
+
+People sign in with their **real** passwords (admin: `.bj-deploy/liara/admin-password`); agents do not
+type them. The local copy is real personnel data: keep it local, never commit or upload a dump, and
+remember nothing done locally reaches production (backups are read-only; deploys ship code, not data).
+
 ## Client safe update
 
 The assistant:

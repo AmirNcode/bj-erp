@@ -11,6 +11,7 @@ import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { DelegationSubmissionInput } from '@/lib/leave/delegation';
 import type { Database } from '@/lib/supabase/types';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
+import type { ReplacementSignoffStatus } from '@/lib/leave/replacementSignoff';
 import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import { accrueBeforeRead, type DayPart } from './shared';
 
@@ -270,6 +271,10 @@ export type LeaveRequestWithType = {
   /** Portion not covered by paid leave; finalized when approved. */
   unpaid_minutes: number;
   replacement_name: string | null;
+  /** FR-88: the replacement's answer (null = nothing to sign) and their decline note. */
+  replacement_signoff_status?: ReplacementSignoffStatus | null;
+  replacement_signoff_note?: string | null;
+  replacement_id?: string | null;
   serial_year: number;
   serial_seq: number;
   status: Database['public']['Enums']['leave_status'];
@@ -299,8 +304,9 @@ export async function getMyLeaveRequests(): Promise<{
   const { data, error } = await c.supabase
     .from('leave_requests')
     .select(
-      `id, kind, errand_location, per_diem_rials, per_diem_by_requester, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, unpaid_minutes, serial_year, serial_seq, status, reason, decision_note, signature_consent_at, approver_signature_consent_at, created_at,
+      `id, kind, errand_location, per_diem_rials, per_diem_by_requester, replacement_id, start_date, end_date, day_part, unit, start_time, end_time, requested_minutes, unpaid_minutes, serial_year, serial_seq, status, reason, decision_note, signature_consent_at, approver_signature_consent_at, created_at,
        replacement:profiles!leave_requests_replacement_id_fkey(full_name),
+       replacement_signoff:leave_request_replacement_signoffs(status, note),
        leave_types(id, name_fa, name_en, color)`
     )
     .eq('employee_id', c.user.id)
@@ -308,13 +314,23 @@ export async function getMyLeaveRequests(): Promise<{
 
   if (error) return dbErr(error.message);
 
+  type Signoff = { status: ReplacementSignoffStatus; note: string | null };
   type Raw = Omit<LeaveRequestWithType, 'replacement_name'> & {
     replacement: { full_name: string } | null;
+    // One-to-one embed; PostgREST may still hand back an array.
+    replacement_signoff: Signoff | Signoff[] | null;
   };
-  const requests: LeaveRequestWithType[] = ((data ?? []) as unknown as Raw[]).map((r) => ({
-    ...r,
-    replacement_name: r.replacement?.full_name ?? null,
-  }));
+  const requests: LeaveRequestWithType[] = ((data ?? []) as unknown as Raw[]).map(
+    ({ replacement, replacement_signoff, ...r }) => {
+      const signoff = Array.isArray(replacement_signoff) ? replacement_signoff[0] : replacement_signoff;
+      return {
+        ...r,
+        replacement_name: replacement?.full_name ?? null,
+        replacement_signoff_status: signoff?.status ?? null,
+        replacement_signoff_note: signoff?.note ?? null,
+      };
+    }
+  );
 
   return { ok: true, requests };
 }

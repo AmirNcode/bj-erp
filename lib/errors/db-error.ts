@@ -93,6 +93,8 @@ const RULES: Rule[] = [
   { re: /invalid approval step role|approval_steps_role_allowed/i, key: 'invalidApprovalStepRole' },
   { re: /this step must name a person|approval_steps_employee_needs_person/i, key: 'approvalStepNeedsPerson' },
   { re: /approval step was not saved/i, key: 'approvalStepNotSaved' },
+  { re: /signature box name is required/i, key: 'approvalStepBoxLabelRequired' },
+  { re: /signature box name must be at most|approval_steps_box_label_len/i, key: 'approvalStepBoxLabelTooLong' },
   { re: /duplicate key value.*approval_steps_company_(role|person)_uniq/, key: 'duplicateApprovalStep' },
   // FR-76: security staff without the Employee role.
   { re: /no time off for this account/i, key: 'noTimeOff' },
@@ -242,6 +244,15 @@ const RULES: Rule[] = [
   { re: /duplicate key value.*leave_requests_serial_uniq/, key: 'serialCollision' },
   { re: /replacement must be an active colleague in your department/, key: 'replacementNotColleague' },
   { re: /replacement is on leave during this period/, key: 'replacementAway' },
+  // FR-88: the replacement signs or declines; the requester answers a decline.
+  { re: /you have already answered this request/, key: 'replacementAlreadyAnswered' },
+  { re: /this request is no longer open for your signature/, key: 'replacementRequestClosed' },
+  { re: /not allowed to sign this request/, key: 'replacementNotAllowed' },
+  { re: /^note is too long \(max 500 characters\)$/, key: 'replacementNoteTooLong' },
+  { re: /only a declined replacement can be changed/, key: 'replacementNotDeclined' },
+  { re: /choose a different replacement/, key: 'replacementSamePerson' },
+  { re: /replacement is the temporary approval delegate/, key: 'replacementIsDelegate' },
+  { re: /not allowed to change this request/, key: 'replacementNotAllowed' },
   { re: /target balance must be >= 0/, key: 'balanceNegative' },
   // FR-48: negative balances are allowed down to one year of workdays.
   { re: /target balance is out of range/, key: 'balanceOutOfRange' },

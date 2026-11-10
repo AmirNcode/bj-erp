@@ -377,6 +377,22 @@ reverse-case warning. Operational cover alone grants no approval authority. Elig
 delegation requires the principal's permission and an approved source absence; No Replacement keeps
 `replacement_id` null and does not erase the saved delegate. **Never exposed through `team_leave_calendar`.**
 
+**Replacement sign-off (2026-11-09, FR-88, unreleased):** `leave_request_replacement_signoffs`
+(`request_id` PK → leave_requests, `replacement_id → profiles`, `status text` pending|signed|declined,
+`signature_data`, `signature_consent_at`, `note` ≤500, `decided_at`, `created_at`; a shape CHECK ties
+each status to its columns, the PNG bounded like the others). Its own table so `to_jsonb(leave_requests)`
+(the approval context) never carries another PNG. Trigger `replacement_signoff_sync` (after insert /
+update of `replacement_id` on leave_requests) creates a `pending` row when an open request names someone
+and drops/recreates it when the replacement changes. Transitions: pending → signed
+(`app_replacement_sign`, the replacement, request pending or approved); pending → declined
+(`app_replacement_decline`, same, optional note; the request is untouched); declined → new pending row
+for someone else, or no row (`app_change_replacement`, the requester only, request pending or approved;
+refused while a temporary approval delegation is sourced from the request). No row = nothing to sign
+(no replacement, or filed before FR-88). The answer never gates approval. Reads: `my_replacement_requests()`
+(explicit columns, no reason), the context's `replacement_signoff_status` / `replacement_signed_at`,
+and the signatures projection's `replacement_status` / `replacement_signature_data` /
+`replacement_signature_consent_at` (print). `team_leave_calendar` also admits `replacement_id = auth.uid()`.
+
 **Hourly (2026-07-29, FR-26):** `unit leave_unit` (`day|hour`, default `day`) · `start_time time` ·
 `end_time time`, both company-local and NULL for daily requests. A CHECK constraint
 (`leave_requests_unit_shape`) makes a malformed row impossible even if a function is wrong:
@@ -412,6 +428,12 @@ errand, or inclusive calendar days × configured `hours_per_day` for a daily err
 Company configuration: **which exact steps a request requires**. The original unique
 (`company_id`,`role`) constraint was replaced by the partial indexes described below.
 Seeded `manager` (order 1) then `hr` (order 2) for every company, both kinds.
+
+**Signature box name (2026-11-09, FR-89):** `box_label text` (nullable; CHECK trimmed length 1–60 when
+set). The title of the step's box on the printed form; the app requires it for new steps (nullable only
+so an old app can insert during a deploy). Backfilled: direct manager «تصویب کننده», department manager
+«مدیر واحد», `hr` «امور اداری و منابع انسانی», named person «امور اداری». A `box_label`-only UPDATE
+skips the approval-authority triggers (no company lock, no `configuration_changed`).
 
 `role = 'manager'` means **the requester's own direct manager**, resolved per request via
 `private.is_manager_of` — not "anyone holding the manager role", which would contradict FR-17's
@@ -467,6 +489,10 @@ only STABLE, and an index expression must be IMMUTABLE — Postgres rejects it o
 "has this step been decided?" test keys on `step_id`. In the unreleased branch a legacy null-step
 role decision satisfies a current step only when that mapping is unambiguous; one old manager row
 cannot satisfy both direct-manager and department-manager steps. Ambiguity is surfaced for review.
+
+**`box_label` (2026-11-09, FR-89):** the step's box name at the moment of the decision, set by the
+BEFORE INSERT trigger `approval_snapshot_box_label` from `approval_steps.box_label`. The printed form
+titles a signed box with it, so a later rename or removal does not rewrite history.
 
 **Deliberately NOT a foreign key to `approval_steps`.** Configuration can be reordered or
 deactivated later, and recorded evidence must not change or vanish when it is.
