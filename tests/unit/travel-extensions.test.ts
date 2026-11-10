@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCorrectTrip, printedTripDates } from '@/lib/travel/extensions';
+import { printedTripDates } from '@/lib/travel/extensions';
 
 const ext = (old_end_date: string, new_end_date: string, status: string, decided_at: string | null, reason = 'r') =>
   ({ old_end_date, new_end_date, reason, status, decided_at }) as never;
@@ -95,22 +95,5 @@ describe('printedTripDates: per diem changed by an extension (FR-84)', () => {
       [extPd('2027-03-02T00:00:00Z', '2027-03-03', '2027-03-06', 1000, 1000)], []);
     expect(printed.signedPerDiem).toBe(1000);
     expect(printed.changes[0].perDiemChanged).toBe(false);
-  });
-});
-
-describe('canCorrectTrip (FR-84)', () => {
-  const r = { kind: 'errand', unit: 'day', status: 'approved', employee_id: 'someone' };
-
-  it('allows an approved daily trip of someone else', () => {
-    expect(canCorrectTrip(r, 'viewer')).toBe(true);
-  });
-  it.each([
-    ['the viewer\'s own trip', { ...r, employee_id: 'viewer' }],
-    ['an hourly errand', { ...r, unit: 'hour' }],
-    ['regular leave', { ...r, kind: 'leave' }],
-    ['a pending trip', { ...r, status: 'pending' }],
-    ['a cancelled trip', { ...r, status: 'cancelled' }],
-  ])('refuses %s', (_, row) => {
-    expect(canCorrectTrip(row, 'viewer')).toBe(false);
   });
 });

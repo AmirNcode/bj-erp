@@ -49,6 +49,7 @@ export type RequestDelegationPreview = {
   bounds: { starts_at: string; ends_at: string };
   saved: DelegationGrant | null;
   effective: DelegationGrant | null;
+  // FR-90: `temporary`, `temporary_eligible` and `temporary_delegate_name` are always null/false/null (a replacement never gains approval authority); kept for the preview token and the old app.
   temporary: { delegate_id: string; delegate_name: string; starts_at: string; ends_at: string } | null;
   temporary_eligible: boolean;
   temporary_delegate_name: string | null;

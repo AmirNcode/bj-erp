@@ -137,6 +137,7 @@ export function RequestDetails({
           key={`${req.id}:${req.status}`}
           requestId={req.id}
           defaultOpen={progressOpen}
+          hoursPerDay={hoursPerDay}
         />
       )}
       <RequestSignatureViewer

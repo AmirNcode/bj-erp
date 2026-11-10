@@ -167,12 +167,16 @@ const RULES: Rule[] = [
   { re: /allocation days must be greater than 0/, key: 'allocationInvalid' },
   // FR-43: HR may set an opening balance and accrual policy, but not their own.
   { re: /you cannot change your own leave balance/i, key: 'cannotSetOwnBalance' },
-  // FR-84 trip correction.
-  { re: /^not allowed to correct this trip$/, key: 'tripCorrectNotAllowed' },
+  // FR-84 trip correction (`app_correct_trip` is now a wrapper of FR-91's edit).
   { re: /^only an approved daily trip can be corrected$/, key: 'tripCorrectWrongRequest' },
   { re: /^an extension is waiting for HR$/, key: 'tripCorrectExtensionWaiting' },
-  { re: /^nothing to correct$/, key: 'tripCorrectNothing' },
   { re: /^start date must not be after end date$/, key: 'tripCorrectDates' },
+  // FR-91 edit of an approved request (`app_edit_request`).
+  { re: /^not allowed to edit this request$/, key: 'requestEditNotAllowed' },
+  { re: /^only an approved request can be edited$/, key: 'requestEditNotApproved' },
+  { re: /^nothing to edit$/, key: 'requestEditNothing' },
+  { re: /^an edit cannot make leave unpaid$/, key: 'requestEditUnpaid' },
+  { re: /^procurement has started booking this trip$/, key: 'requestEditBookingStarted' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },

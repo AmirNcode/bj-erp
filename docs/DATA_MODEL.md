@@ -597,15 +597,28 @@ Migrations `20261020120000`–`…06`. Both tables: RLS on, **no client policies
   and settled cancelled trips. `app_extendable_trips` returns `hr_exempt` (the Head of HR's own trip:
   extension applies at once; migration `…10`). `team_leave_calendar` adds a pending row for a pending extension's extra days.
 
-### `request_corrections` (2026-11-05, FR-84, unreleased)
-Migrations `20261107100000`, `…110000`, `…120000`. RLS on, **no client policies**, RPCs only; append-only.
+### `request_corrections` (2026-11-05, FR-84; widened 2026-11-10, FR-91, unreleased)
+Migrations `20261107100000`, `…110000`, `…120000`, then `20261110120000` (FR-91). RLS on, **no client policies**, RPCs only; append-only.
 `request_id` → leave_requests (cascade) · `company_id` · `old_start_date`, `new_start_date` · `old_end_date`,
 `new_end_date` · `per_diem_before`, `per_diem_after` · `reason` (1–1000) · `corrected_by` → profiles (set null)
 · `corrected_at` · `signature_data`, `signature_consent_at`. Every row keeps all six values. A date change
 sets `leave_requests` dates, recomputes `requested_minutes` and clears `travel_bookings.done_at`/`done_by` once
 the booking is open; a trip has no ledger rows. State `corrected` (`private.travel_booking_state`): approved, not
 done, with a date-changing correction since `opened_at` that is newer than any approved extension.
-`request_trip_corrections(id)` reads history without the signature; `app_travel_booking` returns
+**FR-91** adds ten columns, one row per edit of an approved request of any type: `old_unit`, `new_unit`
+(`leave_unit`, default `day`) · `old_day_part`, `new_day_part` (default `full`) · `old_start_time`,
+`new_start_time`, `old_end_time`, `new_end_time` (nullable) · `minutes_before`, `minutes_after` (nullable;
+null on rows from before FR-91, which are daily trips). The first row's `old_*` values are the signed
+ones. `app_edit_request` also rewrites unit, day part, times, `requested_minutes`, `unpaid_minutes` and
+`per_diem_rials` on `leave_requests`. **Ledger:** a leave edit that changes the paid minutes posts one
+`adjustment` row (note `request edited`) for the difference (shorter returns time, longer takes it);
+the ledger stays append-only. **An edit may not create or grow an unpaid part** (a new request may run
+past the balance; an edit is refused with "an edit cannot make leave unpaid"); shrinking a request that
+already has an unpaid part is allowed. A trip edited to an hourly errand clears `per_diem_rials`
+(FR-61) and deletes its `travel_bookings` row; refused once procurement has started booking
+(`first_saved_at` or `done_at` set) or while an extension is pending. An hourly errand turned into a trip
+enters procurement as a newly approved one.
+`request_trip_corrections(id)` reads history without the signature (and now the ten new columns); `app_travel_booking` returns
 `last_correction`; `finance_requests` returns `corrected_at`.
 
 ### `home_dismissed_requests` (2026-10-21, FR-72, unreleased)

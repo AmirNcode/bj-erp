@@ -13,6 +13,7 @@ import { getActiveLeaveTypes, getWorkSettings } from '@/lib/actions/leave/refere
 import { getMyLeaveRequests } from '@/lib/actions/leave/requests';
 import { getMyTravelBookings } from '@/lib/actions/travel';
 import { getMyReplacementRequests } from '@/lib/actions/leave/replacement';
+import { getRequestEditKeys } from '@/lib/actions/leave/edit';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
@@ -48,13 +49,15 @@ async function RequestPageData({
   if (!user) return null;
 
   // Fetch everything in parallel
-  const [leaveTypesResult, requestsResult, workSettingsResult, travelBookings, coverResult] = await Promise.all([
+  const [leaveTypesResult, requestsResult, workSettingsResult, travelBookings, coverResult, editKeys] = await Promise.all([
     getActiveLeaveTypes(),
     getMyLeaveRequests(),
     getWorkSettings(),
     getMyTravelBookings(),
     // FR-88: requests naming this person as replacement.
     getMyReplacementRequests(),
+    // FR-91: Edit on the caller's own approved requests.
+    getRequestEditKeys(),
   ]);
 
   const leaveTypes = leaveTypesResult.ok ? leaveTypesResult.types : [];
@@ -85,6 +88,9 @@ async function RequestPageData({
         showAll={showAll}
         travelBookings={travelBookings}
         coverRequests={coverResult.ok ? coverResult.requests : []}
+        viewerId={user.id}
+        editKeys={editKeys}
+        workWindow={{ start: workSettings.workStart, end: workSettings.workEnd }}
       />
     </div>
   );

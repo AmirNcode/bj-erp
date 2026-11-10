@@ -111,9 +111,9 @@ select pg_temp.expect('seven roles seeded for the company (FR-70 added Procureme
 select pg_temp.expect('enum-only insert gets role_id',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k = 'hr') and r.system_key = 'hr'), '1');
-select pg_temp.expect('hr preset has 16 permissions',
+select pg_temp.expect('hr preset has 20 permissions (FR-91: the four edit keys)',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id = rp.role_id
-    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '16');
+    where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'), '20');
 select pg_temp.expect('security preset has 4, finance 2',
   (select string_agg(n::text, ',' order by k) from (
      select r.system_key::text k, count(*) n from public.role_permissions rp join public.roles r on r.id = rp.role_id
@@ -126,7 +126,8 @@ select pg_temp.expect('hr preset contents',
   (select string_agg(rp.permission || '=' || rp.level, ',' order by rp.permission)
      from public.role_permissions rp join public.roles r on r.id = rp.role_id
     where r.company_id = (select id from fx where k = 'company') and r.system_key = 'hr'),
-  'approval_steps=edit,calendar=read,clearance=edit,departments=edit,finance=read,holidays=edit,'
+  'approval_steps=edit,calendar=read,clearance=edit,departments=edit,edit_errand_daily=edit,'
+  || 'edit_errand_hourly=edit,edit_leave_daily=edit,edit_leave_hourly=edit,finance=read,holidays=edit,'
   || 'leave_accrual=edit,leave_balances=edit,leave_requests=read,people=edit,people_create=edit,personal_info=edit,'
   || 'reports=read,role_manager=edit,special_leave=edit,work_settings=edit');
 select pg_temp.expect('security preset contents',
@@ -141,10 +142,10 @@ select pg_temp.expect('finance preset contents',
   'clearance=read,finance=read');
 select pg_temp.expect('personal_info_own is on no preset of any company',
   (select count(*)::text from public.role_permissions where permission = 'personal_info_own'), '0');
-select pg_temp.expect('catalog: 21 keys (FR-75 dropped absences; passwords remain admin-only) incl. finance, personal_info_own, special_leave',
+select pg_temp.expect('catalog: 26 keys (FR-75 dropped absences; FR-91 added five edit keys; passwords remain admin-only) incl. finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '21:3');
+  '26:3');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -779,7 +780,7 @@ select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwor
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '21');
+            -> 'claims' -> 'app_perms'))::text), '26');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');

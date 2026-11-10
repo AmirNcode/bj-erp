@@ -13,6 +13,7 @@ vi.mock('@/app/[locale]/(app)/request/_components/ReplacementSignoff', () => ({
 vi.mock('@/components/RequestProgress', () => ({ RequestProgress: () => null }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({ RequestCancelButton: () => null }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({ RequestSignatureViewer: () => null }));
+vi.mock('@/app/[locale]/(app)/manage/requests/EditRequestDialog', () => ({ EditRequestDialog: () => null }));
 afterEach(cleanup);
 
 const errand = {

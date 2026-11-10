@@ -79,10 +79,9 @@ Validation/release status stays in `docs/TASKS.md`.
   the reason rather than hidden. The named person sees "you are covering X" on Home — no consent gate.
   Being named as cover never blocks that person's own leave (deliberate asymmetry, spec §2.1).
   *(2026-07-29.)* The unreleased amendment also permits eligible same-company approval delegates
-  outside the department. Ordinary colleagues remain valid work cover without approval authority;
-  eligible temporary delegation starts only during a fully approved absence, then the saved default
-  resumes. No Replacement leaves the field null and retains saved approval coverage. Missing approval
-  cover is advisory and warns only people with approval duties.
+  outside the department as Replacement. **Amended 2026-11-10 (FR-90):** a Replacement confers no
+  approval authority, anyone's; saved delegates (Manage › Approval steps) are unchanged. No
+  Replacement leaves the field null.
 - **FR-27** ☑ **Monthly accrual.** Each employee has a per-leave-type policy (days earned per
   month, yearly cap, carryover cap, start month), defaulted from the leave type and editable by an
   admin. Accrual is posted lazily and idempotently, anchored to **Jalali month starts**, with the
@@ -405,6 +404,28 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-91** ☐ **Edit approved requests, per request type.** Five role-editor toggles in a new section
+  "Edit requests": edit daily leave, edit hourly leave, edit daily work trip, edit hourly work errand
+  (`edit_leave_daily|edit_leave_hourly|edit_errand_daily|edit_errand_hourly`) and edit own requests
+  (`edit_requests_own`); each needs `leave_requests` read, the admin always passes, the `hr` preset gets
+  the four type keys. Only **approved** requests of other employees in the company can be edited (one's
+  own only with `edit_requests_own`); a delegate edits only through their own role. Editable: dates,
+  times, day part and the unit inside one family (daily leave <-> hourly leave, daily trip <-> hourly
+  errand; both toggles needed), plus the per diem of a daily trip; never leave <-> work, leave type,
+  location, description or replacement. Reason (1-1000 characters) and the editor's signature are
+  required (`app_edit_request`). Same limits as a new request (overlap, hourly daily limit, working
+  hours), except an edit may not create or grow an unpaid part. The leave ledger gets an `adjustment` row
+  for the difference. Trip -> hourly errand clears the per diem and is refused after procurement started
+  booking or while an extension is pending; hourly errand -> trip enters procurement. All signatures stay
+  valid and the signed values stay on the printed form, then one line per later change in time order.
+  Requester and approvers see a line per edit; no SMS. Replaces the FR-84 gate. *(2026-11-10; spec
+  `2026-11-10-replacement-paper-only-edit-requests-design.md`; implemented locally, not deployed.)*
+- **FR-90** ☐ **Replacement is on paper only.** A named Replacement never receives approval authority
+  (the CEO included); requests go to the original approver also while they are away. Saved delegates
+  keep working. The replacement's sign-off (FR-88), Home card, calendar entry and paper box stay; the
+  temporary-authority notices and CEO attestation on the forms are gone. Function signatures stay for
+  the old app (`p_temporary_ceo_authorized` is ignored, the preview's `temporary*` keys are empty) and
+  the migration revokes any temporary grants. *(2026-11-10; same spec; implemented locally, not deployed.)*
 - **FR-89** ☐ **Form signature boxes from the approval steps.** Every approval step has a signature-box
   name (`approval_steps.box_label`, 1–60 chars), set when the step is added and editable later on
   Manage › Approval steps. The printed request form shows the requester's box, the replacement's box
@@ -450,7 +471,8 @@ Validation/release status stays in `docs/TASKS.md`.
   lists the whole ledger for anyone who can see the balances. Leave balances and Monthly accrual policy are
   collapsed by default; Leave balances shows its totals while closed. Early return from leave uses this: the
   request keeps its dates. *(2026-11-05; spec `2026-11-05-approved-trip-corrections-design.md`; unreleased.)*
-- **FR-84** ☐ **HR corrects an approved daily trip.** On Manage › Requests, HR corrects the start date, end
+- **FR-84** ☐ **HR corrects an approved daily trip.** *(Gate replaced 2026-11-10 by FR-91's per-type
+  permissions; delegates of an hr holder no longer inherit it; FR-91 also covers the other three types.)* On Manage › Requests, HR corrects the start date, end
   date and per diem of an approved daily work errand, with or without a booking and with no time limit:
   required reason (1–1000 characters) and a signature (`app_correct_trip`). Not while an extension is pending,
   not on overlapping dates, not on leave, hourly errands or one's own trip. A delegate of an hr holder acts as
@@ -535,7 +557,7 @@ Validation/release status stays in `docs/TASKS.md`.
 
 ### Unreleased approval delegation amendment
 
-- ◐ **Saved and temporary approval delegates.** `approval_delegate` lets natural approvers manage
+- ◐ **Saved approval delegates** (temporary windows for a Replacement withdrawn 2026-11-10, FR-90). `approval_delegate` lets natural approvers manage
   only their own saved delegate at `/settings/roles`; admin manages other principals and explicit
   CEO/HR-head identities plus actual HR-review step IDs. Role authoring stays admin-only; fixed
   Manager stays locked and gains permission only via an admin-assigned supplementary role.
@@ -543,11 +565,12 @@ Validation/release status stays in `docs/TASKS.md`.
   already report directly to the CEO. No borrowed authority qualifies someone for onward delegation.
   FR-55 D4/D5 and ordinary personnel-edit/read scopes remain intact.
 - ◐ **Exact absence preview.** All four request forms use server preview JSON and reset consent
-  on changed inputs/authority/settings. Temporary windows use Asia/Tehran and exclusive ends:
+  on changed inputs/authority/settings. Absence windows use Asia/Tehran and exclusive ends:
   full calendar days, exact hourly times, AM/PM halves of configured `work_start`–`work_end`.
-  Previewed bounds are validated/snapshotted at submission. Eligible Replacement confers temporary
-  authority only in its approved source window; ordinary cover does not. Errands gain no replacement
-  field. The original approver keeps authority; no multi-hop or delegated self-signing is allowed.
+  Previewed bounds are validated/snapshotted at submission. ~~Eligible Replacement confers temporary
+  authority~~ — withdrawn 2026-11-10 (FR-90): a Replacement confers nothing and the preview's `temporary*`
+  keys are always empty. Errands gain no replacement field. The original approver keeps authority; no
+  multi-hop or delegated self-signing is allowed.
 - ◐ **CEO delegate's own new requests.** Saved/temporary CEO automatic appointments need their
   own explicit authority attestation; the request also needs requester signature and separate
   responsibility consent. The CEO must naturally own applicable steps for both leave and errand

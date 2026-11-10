@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { PersonAvatar } from '@/components/PersonAvatar';
 import { approvalHref, type RequestFilters } from '@/lib/leave/requestFilters';
 import { RequestReviewActions, type TravelTicks } from '../requests/RequestReviewActions';
+import type { EditKey } from '@/lib/leave/requestEdit';
 import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { getTranslations } from 'next-intl/server';
 import { getApprovalHistory, type ApprovalHistoryRow } from '@/lib/actions/leave/approvals';
@@ -26,14 +27,14 @@ import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { todayInAppTz } from '@/lib/appDate';
 
-type Props = { locale: string; page: number; hoursPerDay: number; filters: RequestFilters; travelTicks: TravelTicks; viewerId: string; canReview: boolean; canCancel?: boolean };
+type Props = { locale: string; page: number; hoursPerDay: number; filters: RequestFilters; travelTicks: TravelTicks; viewerId: string; canReview: boolean; canCancel?: boolean; editKeys?: readonly EditKey[]; workWindow?: { start: string; end: string } };
 
 export async function ApprovalHistory(props: Props) {
   const result = await getApprovalHistory(props.page, props.filters);
   return <ApprovalHistoryContent {...props} result={result} />;
 }
 
-export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filters, travelTicks, viewerId, canReview, canCancel, result: res }: Props & {
+export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filters, travelTicks, viewerId, canReview, canCancel, editKeys, workWindow, result: res }: Props & {
   result: Awaited<ReturnType<typeof getApprovalHistory>>;
 }) {
   const [t, tLeave, tErrand] = await Promise.all([
@@ -149,7 +150,7 @@ export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filter
                         {t('view')}
                       </Link>
                     </Button>
-                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId} className="contents" buttonClassName={ACTION} canCancel={canCancel} />
+                    <RequestReviewActions request={r} locale={locale} travelTicks={travelTicks} viewerId={viewerId} className="contents" buttonClassName={ACTION} canCancel={canCancel} editKeys={editKeys} workWindow={workWindow} />
                   </div>
                 </Card>
               </li>

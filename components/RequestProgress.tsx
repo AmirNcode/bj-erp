@@ -13,6 +13,8 @@ import { CircleCheck, CircleDashed, CircleX, ChevronDown } from 'lucide-react';
 import { getRequestProgress, type ProgressStep } from '@/lib/actions/leave/progress';
 import type { RequestExtension } from '@/lib/actions/travel';
 import type { RequestCorrection } from '@/lib/travel/extensions';
+import { correctionChanges, describeSnapshot } from '@/lib/leave/requestChanges';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatRials } from '@/lib/leave/perDiem';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
@@ -21,15 +23,21 @@ import { cn } from '@/lib/utils';
 export function RequestProgress({
   requestId,
   defaultOpen = false,
+  hoursPerDay,
 }: {
   requestId: string;
   defaultOpen?: boolean;
+  /** Company day length: lets an edit line show the duration as days and hours. */
+  hoursPerDay?: number;
 }) {
   const t = useTranslations('requestProgress');
   const te = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
   const tx = useTranslations('travel.extension');
   const tc = useTranslations('travel.correction');
+  const tEdit = useTranslations('requestEdit');
+  const tLeave = useTranslations('leave');
+  const tReq = useTranslations('request');
   const locale = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   const [steps, setSteps] = useState<ProgressStep[] | null>(null);
@@ -173,23 +181,30 @@ export function RequestProgress({
           )}
           {corrections.length > 0 && (
             <div className="mt-3 border-t pt-2 text-xs" data-testid={`progress-corrections-${requestId}`}>
-              <p className="font-medium">{tc('historyTitle')}</p>
+              <p className="font-medium">{tEdit('historyTitle')}</p>
               <ul className="mt-1 space-y-1">
-                {corrections.map((c) => (
-                  <li key={c.corrected_at}>
-                    {(c.new_start_date !== c.old_start_date || c.new_end_date !== c.old_end_date) && (
-                      <>{tc('dates', { start: formatCalendarDate(c.new_start_date, locale), end: formatCalendarDate(c.new_end_date, locale) })} </>
-                    )}
-                    {c.per_diem_after !== c.per_diem_before && c.per_diem_after !== null && (
-                      <>{tc('perDiem', { amount: formatRials(c.per_diem_after, locale) })} </>
-                    )}
-                    <span dir="auto">{c.reason}</span>
-                    <span className="text-muted-foreground">
-                      {c.corrected_by_name && <> · {c.corrected_by_name}</>}
-                      {' · '}{formatPersianConsentTimestamp(c.corrected_at, locale)}
-                    </span>
-                  </li>
-                ))}
+                {correctionChanges(corrections).map((c) => {
+                  const describe = (s: Parameters<typeof describeSnapshot>[0]) => describeSnapshot(s, {
+                    locale, hoursPerDay, durationLabels: durationLabelsFrom(tLeave),
+                    dayPartLabels: { am: tReq('dayPartAm'), pm: tReq('dayPartPm') },
+                  });
+                  const when = formatPersianConsentTimestamp(c.at, locale);
+                  const before = describe(c.before);
+                  const after = describe(c.after);
+                  return (
+                    <li key={c.at}>
+                      {/* A per-diem-only correction leaves the dates as they were: no "x → x" line. */}
+                      {before !== after && <><bdi>{tEdit('line', { before, after })}</bdi>{' '}</>}
+                      {c.after.perDiem !== c.before.perDiem && c.after.perDiem !== null && (
+                        <>{tc('perDiem', { amount: formatRials(c.after.perDiem, locale) })}{' '}</>
+                      )}
+                      <span dir="auto">{c.reason}</span>
+                      <span className="text-muted-foreground">
+                        {' · '}{c.by ? tEdit('by', { name: c.by, date: when }) : when}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}

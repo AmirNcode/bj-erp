@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MyRequestsList } from '@/app/[locale]/(app)/request/MyRequestsList';
 import type { LeaveRequestWithType } from '@/lib/actions/leave/requests';
 import type { ReplacementRequest } from '@/lib/actions/leave/replacement';
+import type { EditKey } from '@/lib/leave/requestEdit';
 import en from '@/messages/en.json';
 
 // Leaf widgets that call server actions; only their presence matters here.
@@ -19,6 +20,11 @@ vi.mock('@/components/RequestProgress', () => ({
 }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestCancelButton', () => ({
   RequestCancelButton: () => null,
+}));
+vi.mock('@/app/[locale]/(app)/manage/requests/EditRequestDialog', () => ({
+  EditRequestDialog: ({ request, units }: { request: { id: string }; units: string[] }) => (
+    <div data-testid={`edit-${request.id}`} data-units={units.join(',')} />
+  ),
 }));
 vi.mock('@/app/[locale]/(app)/request/_components/RequestSignature', () => ({
   RequestSignatureViewer: () => null,
@@ -142,5 +148,29 @@ describe('MyRequestsList', () => {
     expect(isOpen()).toBe(true);
     expect(screen.getByTestId('replacement-declined-notice-a1')).toBeTruthy();
     expect(screen.getByTestId('request-cover-a1').textContent).toContain('the replacement declined');
+  });
+
+  // FR-91
+  it('offers Edit on the caller\'s approved requests only with edit_requests_own and the type key', () => {
+    const list = [req('p1', 'pending'), req('a1', 'approved')];
+    const renderWith = (editKeys: EditKey[]) => {
+      cleanup();
+      render(
+        <NextIntlClientProvider locale="en" messages={messages}>
+          <MyRequestsList requests={list} locale="en" hoursPerDay={8} showAll viewerId="me" editKeys={editKeys} />
+        </NextIntlClientProvider>
+      );
+    };
+
+    renderWith([]);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+    renderWith(['edit_leave_daily']);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+    renderWith(['edit_requests_own']);
+    expect(screen.queryByTestId('edit-a1')).toBeNull();
+
+    renderWith(['edit_requests_own', 'edit_leave_daily', 'edit_leave_hourly']);
+    expect(screen.getByTestId('edit-a1').dataset.units).toBe('day,hour');
+    expect(screen.queryByTestId('edit-p1')).toBeNull();
   });
 });

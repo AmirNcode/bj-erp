@@ -149,7 +149,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
           )}
 
           <ReplacementField replacement={replacement} labels={labels} delegationEnabled={delegation.preview?.can_delegate} />
-          <RequestDelegationFields idPrefix="daily" delegation={delegation} workSettings={workSettings} locale={locale} hasReplacement={!!replacement.replacementId} />
+          <RequestDelegationFields idPrefix="daily" delegation={delegation} workSettings={workSettings} locale={locale} />
 
           <div className="space-y-1.5">
             <Label htmlFor="reason">{labels.reason}</Label>

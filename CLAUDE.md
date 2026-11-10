@@ -145,6 +145,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
   first `select set_config('request.jwt.claims','{"sub":"<admin uuid>","role":"authenticated"}',true)`.
 - **`lib/leave/jalaliMonths.ts` is Node-only** (`createRequire`); importing it from app code breaks
   `npm run build`. Shared date helpers go in `lib/leave/dateConvert.ts`.
+- **Replacement confers no approval authority (FR-90):** only saved delegates (Manage › Approval steps) do; the preview's `temporary*` keys are always empty.
+- **Editing approved requests = `app_edit_request` + the five `edit_*` permissions (FR-91);** `app_correct_trip` is a wrapper kept for the old app. Mirror gate changes in `lib/leave/requestEdit.ts`.
 - **Approving = `approve_leave_request_steps` with the ids from `approvalBundle(progress)`** (FR-71: one signature for every step the caller holds). `approve_leave_request_v2` is only for the admin override and legacy no-chain requests.
 - **SQL fixtures that change `work_settings.approval_order_enforced` need an admin JWT too** (`pg_temp.login('admin')` first), like `profiles`.
 - **Reading a report vs acting on one (FR-74):** reads use `private.is_direct_manager_of` (reporting line, any role); writes and signatures use `is_manager_of` (Manager role too). The department manager reads their department's `leave_ledger` (`is_department_manager_of`) for the department step. Only `people` edit changes employees.

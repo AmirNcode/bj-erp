@@ -158,7 +158,6 @@ export function useRequestDelegation(query: DelegationPreviewQuery | null) {
     key: string; preview: RequestDelegationPreview | null; error: string;
   } | null>(null);
   const [ownConsent, setOwnConsent] = useState('');
-  const [temporaryConsent, setTemporaryConsent] = useState('');
 
   useEffect(() => {
     if (!key) return;
@@ -170,12 +169,10 @@ export function useRequestDelegation(query: DelegationPreviewQuery | null) {
         : { key: fetchKey, preview: null, error: result.error });
       // An A→B→A edit still needs a fresh acceptance when the original inputs return.
       setOwnConsent('');
-      setTemporaryConsent('');
     }).catch(() => {
       if (!cancelled) {
         setFetched({ key: fetchKey, preview: null, error: t('previewFailed') });
         setOwnConsent('');
-        setTemporaryConsent('');
       }
     });
     return () => { cancelled = true; };
@@ -185,16 +182,13 @@ export function useRequestDelegation(query: DelegationPreviewQuery | null) {
   const preview = ready ? fetched.preview : null;
   const consentKey = preview ? `${fetchKey}:${preview.preview_token}:${preview.authority_id ?? ''}` : '';
   const autoApprovalConsent = !!consentKey && ownConsent === consentKey;
-  const temporaryCeoAuthorized = !!consentKey && temporaryConsent === consentKey;
   const error = ready ? fetched.error : '';
   const loading = !!key && !ready;
   const problem = () => !preview
     ? error || t('previewRequired')
     : preview.auto_approval_eligible && !autoApprovalConsent
       ? t('ownConsentRequired')
-      : preview.is_ceo && preview.temporary_eligible && !temporaryCeoAuthorized
-        ? t('temporaryConsentRequired')
-        : null;
+      : null;
 
   return {
     /** The absence these results describe; the form also derives the return-to-work day from it. */
@@ -202,15 +196,14 @@ export function useRequestDelegation(query: DelegationPreviewQuery | null) {
     preview, loading, error,
     blocked: !!key && problem() !== null,
     autoApprovalConsent,
-    temporaryCeoAuthorized,
     setAutoApprovalConsent: (checked: boolean) => setOwnConsent(checked ? consentKey : ''),
-    setTemporaryCeoAuthorized: (checked: boolean) => setTemporaryConsent(checked ? consentKey : ''),
     refresh: () => setRevision((r) => r + 1),
     problem,
     submission: {
       delegationPreview: preview as unknown as Json | null,
       autoApprovalConsent,
-      temporaryCeoAuthorized,
+      // FR-90: a replacement never gains approval authority, so there is nothing to authorize.
+      temporaryCeoAuthorized: false,
     },
   };
 }

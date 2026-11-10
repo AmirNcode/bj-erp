@@ -1,5 +1,6 @@
 /**
- * FR-70 / FR-84 print form: the requester and approvers signed the original dates
+ * FR-70 / FR-84 print form (daily trips; FR-91 edits of the other types print through
+ * `lib/leave/requestChanges.ts`): the requester and approvers signed the original dates
  * and per diem, so the paper form prints those, then one line per later change in
  * time order: approved extensions and HR corrections mixed. Pure.
  */
@@ -15,6 +16,10 @@ type Extension = {
   per_diem_after?: number | null;
 };
 
+/**
+ * One row of `request_corrections` (FR-84 trip corrections, FR-91 edits of any request type).
+ * A row written before FR-91 has unit `day`, day part `full`, no times and no minutes.
+ */
 export type RequestCorrection = {
   old_start_date: string;
   new_start_date: string;
@@ -25,6 +30,16 @@ export type RequestCorrection = {
   reason: string;
   corrected_by_name: string | null;
   corrected_at: string;
+  old_unit: 'day' | 'hour';
+  new_unit: 'day' | 'hour';
+  old_day_part: 'full' | 'am' | 'pm';
+  new_day_part: 'full' | 'am' | 'pm';
+  old_start_time: string | null;
+  new_start_time: string | null;
+  old_end_time: string | null;
+  new_end_time: string | null;
+  minutes_before: number | null;
+  minutes_after: number | null;
 };
 
 export type TripChange = {
@@ -84,12 +99,4 @@ export function printedTripDates(
   });
 
   return { signedStart, signedEnd: events[0]?.oldEnd ?? trip.end, signedPerDiem, changes };
-}
-
-/** FR-84: which rows offer Correct. The caller must also pass the HR gate. */
-export function canCorrectTrip(
-  r: { kind: string; unit: string; status: string; employee_id: string },
-  viewerId: string | null
-): boolean {
-  return r.kind === 'errand' && r.unit === 'day' && r.status === 'approved' && r.employee_id !== viewerId;
 }

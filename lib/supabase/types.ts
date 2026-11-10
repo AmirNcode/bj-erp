@@ -2374,8 +2374,39 @@ export type Database = {
           reason: string
           corrected_by_name: string | null
           corrected_at: string
+          // FR-91: before/after of the unit, day part, times and minutes. A pre-FR-91 row has
+          // unit 'day', day part 'full', no times and no minutes.
+          old_unit: Database["public"]["Enums"]["leave_unit"]
+          new_unit: Database["public"]["Enums"]["leave_unit"]
+          old_day_part: Database["public"]["Enums"]["day_part"]
+          new_day_part: Database["public"]["Enums"]["day_part"]
+          old_start_time: string | null
+          new_start_time: string | null
+          old_end_time: string | null
+          new_end_time: string | null
+          minutes_before: number | null
+          minutes_after: number | null
         }[]
       }
+      // FR-91: edit an approved request (all four types); returns the request_corrections id.
+      app_edit_request: {
+        Args: {
+          p_request: string
+          p_unit: Database["public"]["Enums"]["leave_unit"]
+          p_start: string
+          p_end: string
+          p_day_part: Database["public"]["Enums"]["day_part"]
+          p_start_time: string | null
+          p_end_time: string | null
+          p_per_diem_rials: number | null
+          p_reason: string
+          p_signature_data: string
+          p_signature_authorized: boolean
+        }
+        Returns: string
+      }
+      // FR-91: the edit_* permission keys the caller holds (admin: all five).
+      app_my_request_edit_types: { Args: never; Returns: string[] }
       app_add_leave_balance: {
         Args: {
           p_employee_id: string

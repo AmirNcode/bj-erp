@@ -35,6 +35,7 @@ import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatPersianConsentTimestamp, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { PrintToolbar } from './PrintToolbar';
 import { printedTripDates } from '@/lib/travel/extensions';
+import { describeSnapshot, printedChanges, snapshotOf } from '@/lib/leave/requestChanges';
 
 type Props = { params: Promise<{ locale: string; id: string }> };
 
@@ -72,6 +73,8 @@ export default async function PrintRequestPage({ params }: Props) {
   const t = await getTranslations('print');
   const tx = await getTranslations('travel.extension');
   const tc = await getTranslations('travel.correction');
+  const tEdit = await getTranslations('requestEdit');
+  const tReq = await getTranslations('request');
   const te = await getTranslations('approvalEvidence');
   const ts = await getTranslations('approvals.steps');
   const tLeave = await getTranslations('leave');
@@ -111,9 +114,57 @@ export default async function PrintRequestPage({ params }: Props) {
   const isErrand = r.kind === 'errand';
   const isHourly = r.unit === 'hour';
 
+  // FR-91: the form prints the values as signed, then one line per later edit. After a change of
+  // type (daily to hourly, trip to errand) the current form cannot hold the signed values: it
+  // shows the current ones and the signed original gets a line of its own.
+  const edits = printedChanges(snapshotOf(r), r.corrections ?? []);
+  const body = edits.body;
+  const describe = (snapshot: Parameters<typeof describeSnapshot>[0]) => describeSnapshot(snapshot, {
+    locale, hoursPerDay, durationLabels, dayPartLabels: { am: tReq('dayPartAm'), pm: tReq('dayPartPm') },
+  });
+  // A daily trip signed as a trip keeps FR-84's mixed extension and correction lines.
+  const tripLines = isErrand && !isHourly && edits.signedLine === null;
+  const tripStart = tripLines ? trip.signedStart : r.start_date;
+  const tripEnd = tripLines ? trip.signedEnd : r.end_date;
+  const tripPerDiem = tripLines ? trip.signedPerDiem : (r.per_diem_rials ?? null);
+  const editLines = tripLines ? [] : [
+    ...edits.changes.map((c) => ({
+      at: c.at,
+      testId: 'print-correction',
+      text: [
+        tEdit('printLine', { after: describe(c.after) }),
+        c.after.perDiem !== c.before.perDiem && c.after.perDiem !== null
+          ? tc('printPerDiem', { amount: formatRials(c.after.perDiem, locale) }) : null,
+        c.reason,
+      ].filter(Boolean).join(' — '),
+    })),
+    // A trip that began as an hourly errand can still be extended afterwards.
+    ...(isErrand && !isHourly ? (r.extensions ?? []).filter((e) => e.status === 'approved').map((e) => ({
+      at: e.decided_at ?? '',
+      testId: 'print-extension',
+      text: tx('printLine', { date: date(e.new_end_date), reason: e.reason }),
+    })) : []),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  const signedOriginal = edits.signedLine ? (
+    <div className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-signed-original">
+      {tEdit('printSigned', { signed: describe(edits.signedLine) })}
+    </div>
+  ) : null;
+  const editBlock = (
+    <>
+      {signedOriginal}
+      {editLines.map((l) => (
+        <div key={`${l.testId}-${l.at}`} className="border-b border-black px-2 py-1.5 text-[12px]" data-testid={l.testId}>
+          {l.text}
+        </div>
+      ))}
+    </>
+  );
+
   const date = (iso: string) => formatCalendarDate(iso, locale);
   const duration = formatDuration(r.requested_minutes, hoursPerDay, locale, durationLabels);
-  const timeRange = formatTimeRange(r.start_time, r.end_time, locale);
+  const bodyDuration = body.minutes !== null ? formatDuration(body.minutes, hoursPerDay, locale, durationLabels) : duration;
+  const timeRange = formatTimeRange(body.startTime, body.endTime, locale);
   const typeName = r.leave_type_name_fa
     ? localizedLeaveTypeName(
         { name_fa: r.leave_type_name_fa, name_en: r.leave_type_name_en },
@@ -249,19 +300,20 @@ export default async function PrintRequestPage({ params }: Props) {
                   </>
                 ) : (
                   <>
-                    <Cell label={t('fields.from')} value={date(trip.signedStart)} className="border-0 border-b border-e" />
-                    <Cell label={t('fields.to')} value={date(trip.signedEnd)} className="border-0 border-b" />
+                    <Cell label={t('fields.from')} value={date(tripStart)} className="border-0 border-b border-e" />
+                    <Cell label={t('fields.to')} value={date(tripEnd)} className="border-0 border-b" />
                   </>
                 )}
               </div>
-              {trip.signedPerDiem != null && (
+              {tripPerDiem != null && (
                 <div className="border-b border-black px-2 py-1.5 text-[12px]" data-testid="print-per-diem">
                   <span className="text-[10px] text-neutral-700">{t('fields.perDiem')} :</span>{' '}
-                  <strong>{formatRials(trip.signedPerDiem, locale)}</strong>
+                  <strong>{formatRials(tripPerDiem, locale)}</strong>
                   {r.per_diem_by_requester && <span className="text-[10px]"> — {t('perDiemByRequester')}</span>}
                 </div>
               )}
-              {trip.changes.map((c) => (
+              {editBlock}
+              {(tripLines ? trip.changes : []).map((c) => (
                 <div
                   key={`${c.kind}-${c.at}`}
                   className="border-b border-black px-2 py-1.5 text-[12px]"
@@ -294,7 +346,7 @@ export default async function PrintRequestPage({ params }: Props) {
                 <p>
                   <U>{r.employee_name}</U> — {t('fields.fromTime')} <U>{timeRange?.split('–')[0] ?? '—'}</U>{' '}
                   {t('fields.toTime')} <U>{timeRange?.split('–')[1] ?? '—'}</U> {t('fields.from')}{' '}
-                  <U>{date(r.start_date)}</U>
+                  <U>{date(body.start)}</U>
                   {typeName ? <> — <U>{typeName}</U></> : null}
                   {r.replacement_name ? (
                     <>
@@ -316,8 +368,8 @@ export default async function PrintRequestPage({ params }: Props) {
                     {tick === null && typeName ? <U>{typeName}</U> : null}
                   </p>
                   <p>
-                    {t('fields.from')} <U>{date(r.start_date)}</U> {t('fields.to')}{' '}
-                    <U>{date(r.end_date)}</U> {t('fields.duration')} <U>{duration}</U>
+                    {t('fields.from')} <U>{date(body.start)}</U> {t('fields.to')}{' '}
+                    <U>{date(body.end)}</U> {t('fields.duration')} <U>{bodyDuration}</U>
                   </p>
                   <p>
                     {t('fields.replacement')} :{' '}
@@ -333,6 +385,8 @@ export default async function PrintRequestPage({ params }: Props) {
               ) : null}
             </div>
           )}
+          {/* FR-91: leave forms list their edits under the body (the errand body has its own place). */}
+          {!isErrand ? editBlock : null}
 
           {/* ── HR balance line — printed on BJ-F 50210 only ─────────────── */}
           {!isErrand && !isHourly ? (

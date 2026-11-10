@@ -13,6 +13,9 @@ import { RequestDetails, type TravelNote } from './_components/RequestDetails';
 import { ReplacementRequestCard } from './_components/ReplacementSignoff';
 import type { ReplacementRequest } from '@/lib/actions/leave/replacement';
 import { isOpenRequest, replacementCanAnswer, requesterMustChooseReplacement } from '@/lib/leave/replacementSignoff';
+import { editableUnits, type EditKey } from '@/lib/leave/requestEdit';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
+import { EditRequestDialog } from '../manage/requests/EditRequestDialog';
 
 type Props = {
   requests: LeaveRequestWithType[];
@@ -25,7 +28,15 @@ type Props = {
   travelBookings?: Record<string, TravelNote>;
   /** FR-88: requests that name the caller as replacement (open ones are listed first). */
   coverRequests?: ReplacementRequest[];
+  /** FR-91: the caller, and the edit permissions they hold. Edit shows on an approved
+   *  request only with `edit_requests_own` plus the key of its type (admin: all five). */
+  viewerId?: string;
+  editKeys?: readonly EditKey[];
+  /** Company working hours, for the hourly time choices of the Edit dialog. */
+  workWindow?: { start: string; end: string };
 };
+
+const DEFAULT_WORK_WINDOW = { start: WORK_SETTINGS_FALLBACK.workStart, end: WORK_SETTINGS_FALLBACK.workEnd };
 
 export function MyRequestsList({
   requests,
@@ -34,6 +45,9 @@ export function MyRequestsList({
   showAll = false,
   travelBookings = {},
   coverRequests = [],
+  viewerId = '',
+  editKeys = [],
+  workWindow = DEFAULT_WORK_WINDOW,
 }: Props) {
   const labels = useRequestLabels();
   const t = useTranslations('request');
@@ -99,6 +113,9 @@ export function MyRequestsList({
       ) : (
         <div className="space-y-3">
           {visible.map((req) => {
+            // Every row here is the caller's own request.
+            const editRow = { ...req, employee_id: viewerId };
+            const editUnits = viewerId ? editableUnits(editRow, { id: viewerId, keys: editKeys }) : [];
             return (
               <Card
                 key={req.id}
@@ -153,6 +170,10 @@ export function MyRequestsList({
                         labels={statusLabels}
                       />
                     </span>
+
+                    {editUnits.length > 0 && (
+                      <EditRequestDialog request={editRow} units={editUnits} locale={locale} workWindow={workWindow} />
+                    )}
 
                     <RequestCancelButton
                       requestId={req.id}

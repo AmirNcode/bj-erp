@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(21);
+    expect(ALL_KEYS).toHaveLength(26);
     // Password resets are admin-only (20261013200007): no role can hold them.
     expect(ALL_KEYS).not.toContain('passwords');
     expect(body).not.toContain("'passwords'");
@@ -68,9 +68,19 @@ describe('shapes', () => {
 describe('section layout', () => {
   const items = (key: string) => SECTIONS.find((s) => s.key === key)!.items;
   it('finance has its own section, right after leave; procurement follows it (FR-70)', () => {
-    expect(SECTIONS.map((s) => s.key)).toEqual(['employees', 'departments', 'leave', 'finance', 'procurement', 'approvalChain', 'settings']);
+    expect(SECTIONS.map((s) => s.key)).toEqual(['employees', 'departments', 'leave', 'requestEdits', 'finance', 'procurement', 'approvalChain', 'settings']);
     expect(items('finance')).toEqual(['finance', 'finance_forms']);
     expect(items('procurement')).toEqual(['travel_booking']);
+  });
+  it('Edit requests (FR-91): five action items, each needing leave_requests read', () => {
+    const keys = ['edit_leave_daily', 'edit_leave_hourly', 'edit_errand_daily', 'edit_errand_hourly', 'edit_requests_own'] as const;
+    expect(items('requestEdits')).toEqual([...keys]);
+    for (const k of keys) {
+      expect(SHAPES[k]).toBe('E');
+      expect(allows(k, 'read')).toBe(false);
+      expect(DEPENDENCIES).toContainEqual({ key: k, keyLevel: 'read', needs: 'leave_requests' });
+    }
+    expect(applyLevel({}, 'edit_leave_daily', 'edit').raised.sort()).toEqual(['leave_requests', 'people']);
   });
   it('own personal information sits right after personal information', () => {
     const e = items('employees');
@@ -200,7 +210,7 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(21);
+    expect(Object.keys(f)).toHaveLength(26);
     expect(f.travel_booking).toBe('edit');
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');
