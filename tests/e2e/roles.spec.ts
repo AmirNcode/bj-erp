@@ -59,7 +59,9 @@ test('admin creates a personal-info desk; it edits an employee, not a manager, a
     // 2. assign it to the helper
     await openEmployee(page, helper.code);
     const box = page.locator(`[data-testid="role-${roleId}"] input`);
-    await box.check();
+    // The pill's input is visually hidden: click its label.
+    if (!(await box.isChecked())) await page.locator(`[data-testid="role-${roleId}"]`).click();
+    await expect(box).toBeChecked();
     await page.getByTestId('edit-save').click();
     await expect(page.getByTestId('edit-success')).toBeVisible({ timeout: 20_000 });
     await expect(box).toBeChecked();

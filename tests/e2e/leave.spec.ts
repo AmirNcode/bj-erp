@@ -48,20 +48,18 @@ test.describe('Leave request + allocation flow', () => {
       }
     }
 
-    // Ensure 'employee' checkbox is checked
-    const labels = page.locator('label');
-    const count = await labels.count();
-    for (let i = 0; i < count; i++) {
-      const labelText = await labels.nth(i).textContent();
-      if (labelText?.trim() === 'employee') {
-        const cb = labels.nth(i).locator('input[type="checkbox"]');
-        if (!(await cb.isChecked())) await cb.check();
-        break;
-      }
+    // Ensure the Employee role is on. The pill's input is visually hidden: click its label.
+    const employeeRole = page.locator('[data-testid="role-employee"] input[type="checkbox"]');
+    if ((await employeeRole.count()) && !(await employeeRole.isChecked())) {
+      await page.locator('[data-testid="role-employee"]').click();
     }
 
-    uniqueCode =
-      (await page.locator('[data-testid="code-preview"]').textContent())?.trim() ?? '';
+    // The admin sees a login-code box instead of the preview (2026-11-02); left
+    // blank, the code is the personnel number.
+    const preview = page.locator('[data-testid="code-preview"]');
+    uniqueCode = (await preview.count())
+      ? ((await preview.textContent())?.trim() ?? '')
+      : personnelNo;
     await page.click('button[type="submit"]');
 
     // Capture temp password
