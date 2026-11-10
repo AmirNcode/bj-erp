@@ -78,6 +78,36 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-09 — Pre-merge review of PR #22 and fixes
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** codex/approvals-finance-layout @ 6cb68e2
+**Trigger:** Amir: review PR #22 (View as FR-86, FR-87, Blueprint) as the last gate before deploy, then fix the approved issues (1, 2, 5).
+
+**What changed**
+- `tests/e2e/hr-role.spec.ts:155` — the HR review/print test drives Approvals (old `/manage/requests` redirect, search with a hydration retry, signature viewer, status filter) instead of the removed archive.
+- `tests/e2e/trip-correction.spec.ts:30` — ticks the trip's own `travel-tick-<id>` on Approvals; `.first()` ticked another pending errand.
+- `tests/e2e/leave.spec.ts:50`, `tests/e2e/roles.spec.ts:60` — click the role pill label (its input is `sr-only`, so `check()` is intercepted); leave.spec reads the code from the admin login-code box (blank = personnel number). Stale since 2026-11-02, not caused by this PR.
+- `lib/actions/view-as.ts` — `startViewAs` calls `requireCaller({ anyOf: ['admin'] })` after the nesting check; `endViewAs` calls `requireCaller()` only (while viewing the caller is the target, so an admin check would block Exit) and deletes the cookie either way. Unit tests added.
+
+**Actions outside the repo**
+- Isolated stack `bj-approvals-finance`: app container rebuilt from HEAD twice (`compose up -d --build app`); DB untouched apart from e2e throwaway users (cleanup:e2e run, 0 left).
+- Throwaway DB `rv_pr22` in `bj-approvals-finance-db-1`: main's `schema.sql` + data, both migrations applied, SQL suite run, dropped.
+- Nothing on Liara.
+
+**Verification**
+- Review: `tsc`, lint, unit 1221, build, `npm run test:deploy` pass; SQL suite 25/25 on `rv_pr22`; dump after both migrations equals `schema.sql` bar CHECK re-parenthesising.
+- After fixes: `tsc`, lint, unit 1224, build pass. e2e on isolated stack: hr-role (7/8), trip-correction, leave, roles, responsive pass. Only failure: `hr-role.spec.ts:325` chain testid, pre-existing (TASKS.md).
+- Not run: `view-as.spec.ts` (writes SQL to `bj-erp-db-1`, not present and out of bounds).
+
+**State left behind**
+- Three fix commits + this entry pushed to `codex/approvals-finance-layout`. Not merged.
+
+**For the next agent**
+- Not fixed (owner chose not to): print forms now draw `border-black` lines (base-layer border move); request-type tabs lose their grey outline.
+- A `next dev` against the isolated stack on :3100 cannot sign in (gateway CORS); use the stack's own app container for e2e.
+- After deploy: confirm Admin › View as starts; turn on "View/print work-errand forms" for roles that need it.
+
 ## 2026-11-09 — Table row hover rule, DESIGN.md, PR opened
 
 **Agent:** Claude Fable 5.2 via Claude Code
