@@ -13,11 +13,25 @@ import { getMySavedSignature } from '@/lib/actions/signature';
 
 let pending: Promise<string | null> | null = null;
 
+/**
+ * Only an answer is kept. A failed call (an error result, or a thrown one such
+ * as "Failed to find Server Action" from a tab older than the running build)
+ * resolves null this time and leaves the cache empty, so the next signature box
+ * asks again instead of staying blank for the life of the page.
+ */
 function load(): Promise<string | null> {
-  pending ??= getMySavedSignature()
-    .then((res) => (res.ok ? (res.signature?.signatureData ?? null) : null))
-    .catch(() => null);
-  return pending;
+  if (pending) return pending;
+  const request: Promise<string | null> = getMySavedSignature()
+    .then((res) => {
+      if (!res.ok) throw new Error(res.error);
+      return res.signature?.signatureData ?? null;
+    })
+    .catch(() => {
+      if (pending === request) pending = null;
+      return null;
+    });
+  pending = request;
+  return request;
 }
 
 export function clearSavedSignatureCache() {

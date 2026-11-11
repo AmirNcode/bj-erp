@@ -9,6 +9,12 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### HR leave access, per diem on a named HR step, saved signature retry — not deployed
+
+- **HR can change anyone's leave.** Leave balances, Add to balance, the accrual policy and leave outside the list (marriage, bereavement) are no longer locked when the person holds access HR lacks (e.g. Procurement). Still never your own leave and never the admin's. The rest of such a record stays locked; its note now says leave can still be changed.
+- **Per diem and travel booking on the HR step when HR is a named person.** A named approval step whose person holds the HR role counts as the HR step: its approve dialog (Home and Approvals) shows the per diem field and "needs travel booking" for daily work trips, so HR no longer has to approve and then edit the request.
+- **Fix:** the approve dialog's signature box stayed empty for the rest of the page when loading the saved signature failed once (e.g. a tab opened before an update). It now tries again on the next dialog; reloading such a tab fixes it at once.
+
 ### Replacement on paper only (FR-90) and Edit requests (FR-91) — not deployed
 
 - **Replacement (جانشین) is a name on the paper form, nothing more.** Naming a replacement no longer gives anyone approval authority, the CEO included: requests go to the original approver also while they are away. Saved delegates (Manage › Approval steps) are unchanged. The replacement's sign-off, Home card, calendar entry and paper box stay; the temporary-authority notices and CEO attestation on the request forms are gone. Any temporary grants are revoked by the migration.

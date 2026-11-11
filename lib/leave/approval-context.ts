@@ -22,6 +22,8 @@ export type ApprovalProgressRow = {
   /** FR-71: the caller may sign this open step (own or delegated), apart from the order rule. */
   is_mine?: boolean;
   per_diem_allowed?: boolean;
+  /** FR-61/70 (2026-11-11): role hr, or a named step whose person holds hr. Open steps only. */
+  hr_step?: boolean;
   authority_statement?: string | null;
   /** Immutable decision statement and snapshot returned by the scoped RPC. */
   statement?: string | null;

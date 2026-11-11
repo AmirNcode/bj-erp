@@ -260,7 +260,7 @@ export async function getPendingApprovals(includeReview = false): Promise<
       natural_step: choices[0]?.label ?? null,
       can_override: row.can_override === true,
       per_diem_natural: choices.some((step) => step.perDiem),
-      per_diem_override: row.can_override === true && row.kind === 'errand' && row.unit === 'day' && progress.some((step) => step.step_role === 'hr' && !step.decision && step.evidence_kind !== 'hr_exempt'),
+      per_diem_override: row.can_override === true && row.kind === 'errand' && row.unit === 'day' && progress.some((step) => step.hr_step === true && !step.decision && step.evidence_kind !== 'hr_exempt'),
       travel: null,
       decision_steps: choices,
       rejection_steps: rejections,

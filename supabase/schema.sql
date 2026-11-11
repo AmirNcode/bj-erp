@@ -806,6 +806,30 @@ $$;
 
 
 --
+-- Name: can_manage_leave_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.can_manage_leave_of(p_caller uuid, p_target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_caller is distinct from p_target
+     and private.is_active(p_caller)
+     and exists (select 1 from public.profiles t
+                   join public.profiles c on c.id = p_caller and c.company_id = t.company_id
+                  where t.id = p_target)
+     and not exists (select 1 from public.user_roles where user_id = p_target and role = 'admin');
+$$;
+
+
+--
+-- Name: FUNCTION can_manage_leave_of(p_caller uuid, p_target uuid); Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON FUNCTION private.can_manage_leave_of(p_caller uuid, p_target uuid) IS 'Leave administration target check (2026-11-11): same company, not self, not the admin. Unlike can_act_on, no D4 (access above yours) clauses.';
+
+
+--
 -- Name: can_print_finance_request(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -1172,7 +1196,7 @@ begin
       v_evidence:=jsonb_build_object('admin_override',v_override,'actor_id',p_actor,
         'principal_id',v_principal,'principal_name',v_principal_name,'signer_name',v_actor_name);
     end if;
-    v_filled_hr:=v_filled_hr or coalesce(s.role='hr',false);
+    v_filled_hr:=v_filled_hr or coalesce(private.is_hr_step(s.id),false);
     insert into public.leave_request_approvals(request_id,step_id,step_role,approver_id,decision,
       signature_data,signature_consent_at,note,evidence_kind,principal_id,principal_name,signer_name_snapshot,authority_id,evidence,created_at)
     values(p_id,v_step,coalesce(s.role,'manager'),p_actor,p_decision,
@@ -2066,6 +2090,27 @@ COMMENT ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) IS 'FR-7
 
 
 --
+-- Name: is_hr_step(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_hr_step(p_step uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((select s.role = 'hr'
+                          or (s.approver_id is not null and private.has_role(s.approver_id, 'hr'))
+                     from public.approval_steps s where s.id = p_step), false);
+$$;
+
+
+--
+-- Name: FUNCTION is_hr_step(p_step uuid); Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON FUNCTION private.is_hr_step(p_step uuid) IS 'FR-61/FR-70: the step that takes the per diem and the travel-booking box: role hr, or a named step whose person holds the hr role (2026-11-11).';
+
+
+--
 -- Name: is_manager_of(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2880,7 +2925,8 @@ begin
         'can_reject',r.status='pending' and (v_allowed or private.is_admin(auth.uid())),
         'is_delegated',d.id is not null,'principal_id',d.principal_id,
         'principal_name',d.principal_name,'grant_id',d.id,'authority_id',d.id,
-        'per_diem_allowed',v_allowed and s.role='hr' and r.kind='errand' and r.unit='day','is_mine',v_allowed);
+        'per_diem_allowed',v_allowed and private.is_hr_step(s.id) and r.kind='errand' and r.unit='day','is_mine',v_allowed,
+        'hr_step',private.is_hr_step(s.id));
     end if;
     v_result:=v_result||jsonb_build_array(v_item||jsonb_build_object('step_id',s.id,
       'step_role',s.role,'step_order',s.step_order,'manager_scope',s.manager_scope,
@@ -3812,7 +3858,7 @@ begin
     if exists (select 1 from public.user_roles where user_id = p_employee and role = 'admin') then
       raise exception 'not allowed to grant special leave to an admin' using errcode = '42501';
     end if;
-    if not private.can_act_on(p_actor, p_employee) then
+    if not private.can_manage_leave_of(p_actor, p_employee) then
       raise exception 'not allowed to grant special leave to this employee' using errcode = '42501';
     end if;
   end if;
@@ -4808,7 +4854,7 @@ begin
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
   -- FR-55 D4: and only on someone who holds nothing the caller lacks.
-  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+  if not private.is_admin(auth.uid()) and not private.can_manage_leave_of(auth.uid(), p_employee_id) then
     raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
   return private.allocate_leave_impl(auth.uid(), p_employee_id, p_leave_type_id,
@@ -4838,7 +4884,7 @@ begin
   if not private.is_admin(v_uid) and p_employee_id = v_uid then
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
-  if not private.is_admin(v_uid) and not private.can_act_on(v_uid, p_employee_id) then
+  if not private.is_admin(v_uid) and not private.can_manage_leave_of(v_uid, p_employee_id) then
     raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
 
@@ -8997,7 +9043,7 @@ begin
   if v_company is null then raise exception 'request not found' using errcode = 'P0002'; end if;
 
   select array_agg(st.id order by st.step_order, st.id),
-         (array_agg(st.id order by st.step_order, st.id) filter (where st.role = 'hr'))[1]
+         (array_agg(st.id order by st.step_order, st.id) filter (where private.is_hr_step(st.id)))[1]
     into v_steps, v_hr
     from public.approval_steps st
    where st.id = any(p_step_ids) and st.company_id = v_company;
@@ -9919,7 +9965,7 @@ begin
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
   -- FR-55 D4: and only on someone who holds nothing the caller lacks.
-  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+  if not private.is_admin(auth.uid()) and not private.can_manage_leave_of(auth.uid(), p_employee_id) then
     raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
   if p_accrual_minutes_per_month is null or p_accrual_minutes_per_month < 0 then
@@ -9984,7 +10030,7 @@ begin
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
   -- FR-55 D4: and only on someone who holds nothing the caller lacks.
-  if not private.is_admin(auth.uid()) and not private.can_act_on(auth.uid(), p_employee_id) then
+  if not private.is_admin(auth.uid()) and not private.can_manage_leave_of(auth.uid(), p_employee_id) then
     raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
   end if;
 
@@ -14090,6 +14136,14 @@ REVOKE ALL ON FUNCTION private.can_edit_request(p_uid uuid, p_request uuid, p_ne
 
 
 --
+-- Name: FUNCTION can_manage_leave_of(p_caller uuid, p_target uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.can_manage_leave_of(p_caller uuid, p_target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.can_manage_leave_of(p_caller uuid, p_target uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION can_print_finance_request(p_uid uuid, p_id uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -14297,6 +14351,14 @@ GRANT ALL ON FUNCTION private.is_department_manager_of(p_uid uuid, p_emp uuid) T
 
 REVOKE ALL ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.is_direct_manager_of(uid uuid, target uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_hr_step(p_step uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_hr_step(p_step uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_hr_step(p_step uuid) TO authenticated;
 
 
 --

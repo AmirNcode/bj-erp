@@ -192,8 +192,10 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
 
 ### `leave_allocations`
 - **SELECT**: own · `is_manager_of` · `reads_balances` (`manager` or `leave_balances` read, FR-55).
-- **WRITE**: since FR-55, `leave_balances` edit **and** `can_act_on(caller, target)` (admin skips
-  it), through `allocate_leave`; before it, `is_admin` **or `hr`** since 2026-08-19 (FR-43). HR
+- **WRITE**: since FR-55, `leave_balances` edit **and** a target check (admin skips it), through
+  `allocate_leave`. The check was `can_act_on`; since 2026-11-11 it is `private.can_manage_leave_of`
+  (same company, not self, not the admin, **no D4**: a balance gives no access, so a person holding
+  access HR lacks, e.g. Procurement, no longer locks their leave); before it, `is_admin` **or `hr`** since 2026-08-19 (FR-43). HR
   administers leave, so the opening balance and the accrual policy belong to it as well as to admin.
   The same gate covers `set_employee_leave_policy` and `set_leave_balance`;
   `accrue_employee_leave` needs `is_manager_of` or `leave_balances` read (so the balances HR reads
@@ -288,7 +290,8 @@ information").
   writes.
 - `app_grant_special_leave(employee, kind)` / `app_revoke_special_leave(grant)`: SECURITY DEFINER,
   guarded by `private.special_leave_target`: `special_leave` edit, same company (`P0002` otherwise),
-  and for a non-admin: not on oneself, not on an admin, and `can_act_on` (FR-55 D4). The admin may
+  and for a non-admin: not on oneself, not on an admin (`can_manage_leave_of`; the FR-55 D4
+  `can_act_on` check was dropped 2026-11-11, owner decision). The admin may
   grant to themself. Marriage: one standing grant (partial unique index), only while marital status
   is `single`.
 - FR-66: hr sets `approval_order_enforced`; in FR-55 terms whoever holds `approval_steps` edit does,
@@ -418,7 +421,7 @@ risk, not a new activation gate. All password resets remain admin-only.
 - **`request_corrections`:** no client access. `request_trip_corrections(id)` follows
   `can_read_approval_request`.
 - **`app_add_leave_balance`:** the gates of `set_leave_balance`: admin or `leave_balances` edit, never own
-  balance unless admin, `can_act_on` for non-admins. The reason lands in `leave_ledger.note`, which the employee
+  balance unless admin, `can_manage_leave_of` for non-admins (was `can_act_on` until 2026-11-11). The reason lands in `leave_ledger.note`, which the employee
   can read through RLS.
 
 ### View as (FR-86, unreleased)
@@ -693,7 +696,7 @@ neither RPC clears the flag without a real change. The flag is a UI gate, not an
 is unchanged, and RLS stays the authority.
 
 `public.set_leave_balance(p_employee_id, p_leave_type_id, p_target)` (admin, or since FR-55
-`leave_balances` edit plus `can_act_on`; `42501` otherwise) sets an employee's **current** balance for a leave
+`leave_balances` edit plus `can_manage_leave_of`, `can_act_on` before 2026-11-11; `42501` otherwise) sets an employee's **current** balance for a leave
 type to an absolute value by writing an `adjustment` ledger row (audited `set_leave_balance`); additive
 grants still go through `allocate_leave`. Granted to `authenticated`, revoked from `anon`. Used by the
 admin employee create/edit forms.

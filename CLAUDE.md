@@ -186,6 +186,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Dev server against the isolated demo stack:** `bj-dev-isolated` in `.claude/launch.json` (:3100); sign in at `http://localhost:3501` first (the gateway's CORS rejects :3100, the cookie is shared).
 - **Restoring a live dump locally:** create role `supabase_functions_admin` (NOLOGIN) on the fresh cluster first, and switch SMS off (`private.sms_settings` mode `off`, key NULL) + `cron.job` inactive BEFORE the app starts — the dump has live SMS and a real key.
 - **Print signature boxes = approval steps (FR-89):** box title is `approval_steps.box_label`, snapshotted on each decision (`leave_request_approvals.box_label`); `lib/leave/paperForm.ts › stepBoxes` lays them out. Two migrations that both redefine one function must keep each other's changes (FR-88 + FR-89 both redefine `request_data_get_leave_request_signatures`).
+- **Leave admin targets use `private.can_manage_leave_of` (no D4); "the HR step" is `private.is_hr_step` (role hr, or a named person holding hr).** Never test `role='hr'` on a step directly.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements
