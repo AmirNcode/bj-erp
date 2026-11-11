@@ -68,8 +68,6 @@ async function ApprovalsData({ locale, historyPage, filters, viewerId, canReview
         requests={requests.filter(r => matchesRequest({ ...r, status: 'pending' }, filters))}
         locale={locale}
         hoursPerDay={hoursPerDay}
-        travelTicks={travelTicks}
-        viewerId={viewerId}
       />
       <TripExtensions trips={extendableTrips} pending={pendingExtensions} locale={locale} />
       <Suspense fallback={<ListSkeleton count={3} />}>

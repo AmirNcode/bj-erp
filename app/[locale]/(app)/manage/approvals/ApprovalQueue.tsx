@@ -20,7 +20,7 @@ import {
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
 import Link from 'next/link';
-import { RequestReviewActions, type TravelTicks } from '../requests/RequestReviewActions';
+import { Printer } from 'lucide-react';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
 /** This screen's copy. */
@@ -75,14 +75,14 @@ function useLabels() {
 
 type Props = {
   requests: PendingApproval[];
-  travelTicks?: TravelTicks;
-  viewerId?: string;
   locale: string;
   /** Company day length — durations are stored in minutes. */
   hoursPerDay: number;
 };
 
-export function ApprovalQueue({ requests, locale, hoursPerDay, travelTicks = null, viewerId = '' }: Props) {
+const ACTION = 'h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto';
+
+export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
   const labels = useLabels();
   const tHistory = useTranslations('approvals.history');
   const router = useRouter();
@@ -238,15 +238,25 @@ export function ApprovalQueue({ requests, locale, hoursPerDay, travelTicks = nul
                     {req.configuration_changed && <p className="mt-2 text-xs text-warning">{tEvidence('configurationChanged')}</p>}
                     {req.legacy_reconciliation_required && <p className="mt-2 text-xs text-warning">{tEvidence('legacyReconciliation')}</p>}
 
-                    {/* The button already says "View signature": no title above it. */}
-                    <RequestSignatureViewer
-                      requestId={req.id}
-                      consentAt={req.signature_consent_at}
-                      labels={labels.requesterSignature}
-                      locale={locale}
-                      hideTitle
-                      buttonClassName="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto"
-                    />
+                    {/* View signature and the paper form side by side, like History's
+                        View form + Edit. The travel tick lives in the approve dialog. */}
+                    <div className="flex flex-wrap items-start gap-x-2 md:gap-x-5">
+                      {/* The button already says "View signature": no title above it. */}
+                      <RequestSignatureViewer
+                        requestId={req.id}
+                        consentAt={req.signature_consent_at}
+                        labels={labels.requesterSignature}
+                        locale={locale}
+                        hideTitle
+                        buttonClassName={ACTION}
+                      />
+                      <Button variant="outline" size="sm" className={`mt-3 ${ACTION}`} asChild>
+                        <Link href={`/${locale}/print/request/${req.id}`} target="_blank" rel="noopener">
+                          <Printer aria-hidden="true" />
+                          {tHistory('view')}
+                        </Link>
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Decisions: one line on phones, stacked at the end on desktop. */}
@@ -287,14 +297,6 @@ export function ApprovalQueue({ requests, locale, hoursPerDay, travelTicks = nul
                     />}
                   </div>
 
-                  {/* Secondary: the paper form and HR's travel tick (its warning
-                      takes its own line below them). */}
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-border pt-3 md:col-span-2 md:gap-x-5">
-                    <Button variant="outline" size="sm" className="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto" asChild>
-                      <Link href={`/${locale}/print/request/${req.id}`} target="_blank" rel="noopener">{tHistory('view')}</Link>
-                    </Button>
-                    <RequestReviewActions request={{ ...req, status: 'pending' }} locale={locale} travelTicks={travelTicks} viewerId={viewerId} className="contents" buttonClassName="h-11 w-[calc(50%-0.25rem)] md:h-9 md:w-auto" hideCancel />
-                  </div>
                 </CardContent>
               </Card>
             );
