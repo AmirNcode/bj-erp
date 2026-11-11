@@ -1081,7 +1081,7 @@ declare r public.leave_requests%rowtype; s public.approval_steps%rowtype;
   d public.approval_delegations%rowtype; v_auth public.approval_delegations%rowtype;
   v_steps uuid[]; v_step uuid; v_total integer; v_admin boolean:=false; v_override boolean:=false;
   v_kind text; v_principal uuid; v_principal_name text; v_actor_name text; v_evidence jsonb;
-  v_now timestamptz; v_filled_hr boolean:=false; v_note text:=nullif(btrim(p_reason),'');
+  v_now timestamptz; v_filled_hr boolean:=false; v_pd_step uuid; v_note text:=nullif(btrim(p_reason),'');
 begin
   select * into r from public.leave_requests where id=p_id;
   if r.id is null then raise exception 'request not found' using errcode='P0002'; end if;
@@ -1166,6 +1166,7 @@ begin
          'admin_override',true,'stranded',true));
     return;
   end if;
+  v_pd_step:=private.request_per_diem_step(p_id);
   foreach v_step in array v_steps loop
     s:=null;
     if v_step is not null then select * into s from public.approval_steps where id=v_step;
@@ -1196,7 +1197,7 @@ begin
       v_evidence:=jsonb_build_object('admin_override',v_override,'actor_id',p_actor,
         'principal_id',v_principal,'principal_name',v_principal_name,'signer_name',v_actor_name);
     end if;
-    v_filled_hr:=v_filled_hr or coalesce(private.is_hr_step(s.id),false);
+    v_filled_hr:=v_filled_hr or coalesce(s.id=v_pd_step,false);
     insert into public.leave_request_approvals(request_id,step_id,step_role,approver_id,decision,
       signature_data,signature_consent_at,note,evidence_kind,principal_id,principal_name,signer_name_snapshot,authority_id,evidence,created_at)
     values(p_id,v_step,coalesce(s.role,'manager'),p_actor,p_decision,
@@ -2866,13 +2867,14 @@ CREATE FUNCTION private.request_data_app_request_approval_progress(p_id uuid, p_
     AS $$
 declare r public.leave_requests%rowtype; v_result jsonb:='[]'; v_item jsonb;
   v_policy public.approval_request_policy%rowtype; v_done record; s record; v_snapshot jsonb;
-  d public.approval_delegations%rowtype; v_natural boolean; v_allowed boolean; v_can_approve boolean; v_expected text;
+  d public.approval_delegations%rowtype; v_natural boolean; v_allowed boolean; v_can_approve boolean; v_expected text; v_pd_step uuid;
 begin
   if not (private.can_read_approval_request(auth.uid(),p_id) or
     (p_print and private.can_print_finance_request(auth.uid(),p_id))) then
     raise exception 'request not found' using errcode='P0002'; end if;
   select * into r from public.leave_requests where id=p_id;
   select * into v_policy from public.approval_request_policy where request_id=p_id;
+  v_pd_step:=private.request_per_diem_step(p_id);
   for v_done in select a.*,st.step_order,st.manager_scope,st.approver_id as expected_id,
       sp.full_name as live_signer,np.full_name as live_expected
     from public.leave_request_approvals a left join public.approval_steps st on st.id=a.step_id
@@ -2925,8 +2927,8 @@ begin
         'can_reject',r.status='pending' and (v_allowed or private.is_admin(auth.uid())),
         'is_delegated',d.id is not null,'principal_id',d.principal_id,
         'principal_name',d.principal_name,'grant_id',d.id,'authority_id',d.id,
-        'per_diem_allowed',v_allowed and private.is_hr_step(s.id) and r.kind='errand' and r.unit='day','is_mine',v_allowed,
-        'hr_step',private.is_hr_step(s.id));
+        'per_diem_allowed',v_allowed and coalesce(s.id=v_pd_step,false) and r.kind='errand' and r.unit='day','is_mine',v_allowed,
+        'hr_step',coalesce(s.id=v_pd_step,false));
     end if;
     v_result:=v_result||jsonb_build_array(v_item||jsonb_build_object('step_id',s.id,
       'step_role',s.role,'step_order',s.step_order,'manager_scope',s.manager_scope,
@@ -3088,6 +3090,34 @@ CREATE FUNCTION private.request_hr_exempt(p_request uuid, p_step uuid) RETURNS b
       and snapshot-'expected_name'=jsonb_build_object('step_id',s.id,'step_role',s.role,
         'step_order',s.step_order,'manager_scope',s.manager_scope,'approver_id',s.approver_id,'applies_to',s.applies_to));
 $$;
+
+
+--
+-- Name: request_per_diem_step(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.request_per_diem_step(p_request uuid) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select st.id
+    from public.leave_requests r
+    join public.approval_steps st on st.company_id = r.company_id
+   where r.id = p_request
+     and private.is_hr_step(st.id)
+     and (private.request_step_applies(p_request, st.id)
+          or exists (select 1 from public.leave_request_approvals a
+                      where a.request_id = p_request and a.step_id = st.id))
+   order by st.step_order, st.id
+   limit 1;
+$$;
+
+
+--
+-- Name: FUNCTION request_per_diem_step(p_request uuid); Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON FUNCTION private.request_per_diem_step(p_request uuid) IS 'FR-61/FR-70: the one step of a request that takes the per diem and the travel-booking box: its first HR step (private.is_hr_step) by step order, applicable or already signed (2026-11-11).';
 
 
 --
@@ -9043,7 +9073,7 @@ begin
   if v_company is null then raise exception 'request not found' using errcode = 'P0002'; end if;
 
   select array_agg(st.id order by st.step_order, st.id),
-         (array_agg(st.id order by st.step_order, st.id) filter (where private.is_hr_step(st.id)))[1]
+         (array_agg(st.id) filter (where st.id = private.request_per_diem_step(p_id)))[1]
     into v_steps, v_hr
     from public.approval_steps st
    where st.id = any(p_step_ids) and st.company_id = v_company;
@@ -14622,6 +14652,14 @@ GRANT ALL ON FUNCTION private.request_has_hr_exemption(p_request uuid) TO authen
 --
 
 REVOKE ALL ON FUNCTION private.request_hr_exempt(p_request uuid, p_step uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION request_per_diem_step(p_request uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.request_per_diem_step(p_request uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.request_per_diem_step(p_request uuid) TO authenticated;
 
 
 --

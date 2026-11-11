@@ -230,4 +230,41 @@ select pg_temp.expect('role hr step: the per diem is stored on approval',
   (select v from hs_res where k='trip3')||' '||(select status::text||' '||per_diem_rials from public.leave_requests where id=pg_temp.fx('trip3')),
   'ok approved 2000000');
 
+-- ============================================================ (c) one per diem step per request
+-- A named HR step (order 1) and a role 'hr' step (order 2) in one chain: only the first takes
+-- the per diem and the travel box; the second can no longer overwrite it (20261111150000).
+do $$ begin
+  perform pg_temp.login('admin');
+  update public.approval_steps set step_order=2 where id=pg_temp.fx('step_role_hr');
+  update public.approval_steps set active=true where id=pg_temp.fx('step_named_hr');
+end $$;
+insert into hs_fx values('trip4',(pg_temp.daily('emp',current_date+40,current_date+42))::uuid);
+select pg_temp.expect('two HR steps: request_per_diem_step is the first one',
+  (private.request_per_diem_step(pg_temp.fx('trip4'))=pg_temp.fx('step_named_hr'))::text,'true');
+select pg_temp.expect('two HR steps: the first has per_diem_allowed and hr_step, the second neither',
+  pg_temp.progress('named_hr','trip4','step_named_hr','per_diem_allowed')||','||pg_temp.progress('named_hr','trip4','step_named_hr','hr_step')
+  ||','||pg_temp.progress('role_hr','trip4','step_role_hr','per_diem_allowed')||','||pg_temp.progress('role_hr','trip4','step_role_hr','hr_step'),
+  'true,true,false,false');
+insert into hs_res values('trip4a',pg_temp.err(pg_temp.approve('named_hr','trip4','step_named_hr','4500000')));
+select pg_temp.expect('two HR steps: once signed, the first stays the per diem step',
+  (private.request_per_diem_step(pg_temp.fx('trip4'))=pg_temp.fx('step_named_hr'))::text,'true');
+select pg_temp.expect('two HR steps: a per diem on the second HR step is refused and the first one''s stays',
+  pg_temp.msg(pg_temp.approve('role_hr','trip4','step_role_hr','3000000'))||' | '
+  ||(select status::text||' '||per_diem_rials from public.leave_requests where id=pg_temp.fx('trip4')),
+  'per diem can only be set on the hr step of an errand | pending 4500000');
+insert into hs_res values('trip4b',pg_temp.err(pg_temp.approve('role_hr','trip4','step_role_hr',null)));
+select pg_temp.expect('two HR steps: both sign; the first per diem is the one stored',
+  (select v from hs_res where k='trip4a')||' '||(select v from hs_res where k='trip4b')||' '
+  ||(select status::text||' '||per_diem_rials from public.leave_requests where id=pg_temp.fx('trip4')),
+  'ok ok approved 4500000');
+
+-- The admin override: once the per diem step is signed, an override may not set a per diem.
+insert into hs_fx values('trip5',(pg_temp.daily('emp',current_date+50,current_date+52))::uuid);
+insert into hs_res values('trip5a',pg_temp.err(pg_temp.approve('named_hr','trip5','step_named_hr',null)));
+select pg_temp.expect('override: the open second HR step has no hr_step, so no per diem override in the app',
+  (select v from hs_res where k='trip5a')||' '||pg_temp.progress('admin','trip5','step_role_hr','hr_step'),'ok false');
+select pg_temp.expect('override: a per diem through the admin override is refused (22023)',
+  pg_temp.err(pg_temp.as_scalar('admin',format('select public.approve_leave_request_v2(%L,null,%L,true,true,1000)::text',
+    pg_temp.fx('trip5'),pg_temp.sig()))),'22023');
+
 rollback;

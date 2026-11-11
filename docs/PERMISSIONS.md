@@ -816,7 +816,8 @@ through an unsigned browser approval endpoint.
 - `approve_leave_request_steps(id, step_ids[], signature, authorized, per_diem)`: no entitlement of its
   own; calls `private.decide_approval_request` once per step in step order inside one transaction, so
   each step is re-checked (natural or delegated authority, order rule, already signed) and one refused
-  step saves nothing. Every id must be a step of the request's company. Per diem only with an HR step.
+  step saves nothing. Every id must be a step of the request's company. Per diem only with the
+  request's per diem step (`private.request_per_diem_step`: its first HR step, 2026-11-11).
 - `app_request_approval_progress` adds `is_mine` per open step: the caller's own or delegated authority,
   ignoring the order rule (the app groups steps with it; the RPC above still enforces the order).
 - `home_dismissed_requests`: RLS, own rows readable (`employee_id = auth.uid()`), no write privileges.

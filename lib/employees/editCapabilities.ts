@@ -194,7 +194,7 @@ export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boo
       : caps.lockedReason === 'self'
         ? 'lockedSelf'
         : caps.lockedReason === 'above'
-          ? caps.leaveEdit ? 'lockedAboveLeave' : 'lockedAbove'
+          ? caps.leaveEdit || caps.specialLeave ? 'lockedAboveLeave' : 'lockedAbove'
           : null;
   const note: EditFormView['note'] = !showOrg
     ? 'manager'

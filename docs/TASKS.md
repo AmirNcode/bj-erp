@@ -3,6 +3,12 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## PR #24 review leftovers (named HR step, 2026-11-11)
+
+- ☐ `private.is_hr_step` follows the named person's live hr role and active flag: if they lose hr or are deactivated while a trip is pending, the per diem disappears, also for the admin override. Decide whether to test `user_roles` without the active check.
+- ☐ Two definitions of "the HR step": the HR-head exemption list (`approval_executive_settings.hr_step_ids`) and `is_hr_step` can disagree. Document or align.
+- ☐ SQL tests: inactive named approver, role lost mid-request, delegate signing a named HR step.
+
 ## FR-90 / FR-91 replacement on paper only, edit requests (local, not deployed)
 
 - ☐ e2e specs for request edit not yet run against a stack (`request-edit.spec`, `trip-correction.spec`).

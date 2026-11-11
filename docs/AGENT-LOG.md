@@ -78,6 +78,51 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-11 — PR #24 review fixes (one per diem step, stale TS mirror, lockedAboveLeave note); PR merged
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** fix/hr-leave-perdiem-signature @ f1a343e
+**Trigger:** Amir: review PR #24 read-only, then fix findings 1, 4 and 5, update docs and CLAUDE.md, commit and merge.
+
+**What changed**
+- `supabase/migrations/20261111150000_per_diem_first_hr_step.sql` (new) — finding 1: two HR steps in one chain (role hr + a named HR person) both offered the per diem and the later signer overwrote it. New `private.request_per_diem_step(request)` = first `is_hr_step` step by order, applicable or already signed on the request. `decide_approval_request` (`v_filled_hr`), `approve_leave_request_steps` (`v_hr`) and `request_data_app_request_approval_progress` (`per_diem_allowed`, `hr_step`) use it. Bodies copied from 20261111120000 with only those substitutions. `supabase/schema.sql` patched by hand to the clone's dump (bodies byte-identical to the clone; the clone's `pg_dump` diff did not `patch` cleanly because the local dump carries owners).
+- `lib/leave/approvals.ts` — finding 4: removed unused `perDiemApplies` (still `role === 'hr'`) and its tests in `tests/unit/approval-chain.test.ts`.
+- `lib/employees/editCapabilities.ts` `editFormView` — finding 5: `lockedAboveLeave` also when only `specialLeave` is available. Unit test added.
+- `tests/sql/hr-leave-scope-named-hr-step.sql` — section (c): two HR steps, the second refuses a per diem and the first's stays; admin override refuses a per diem once the per diem step is signed.
+- Docs: REQUIREMENTS FR-61, DATA_MODEL per_diem_rials, PERMISSIONS sign-once, CHANGELOG, CLAUDE.md (per diem step line; one unnamed step per role + scope).
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clone `fix_pd` of `postgres`, migration applied there, SQL tests run, clone dropped. Local `postgres` NOT migrated (20261111150000 not frozen locally).
+- Merged PR #24 to main → CI deploys to Liara (production).
+
+**Verification**
+- tsc 0, lint 0, unit 130 files / 1297 tests pass.
+- On `fix_pd`: hr-leave-scope-named-hr-step 30 PASS / 0 FAIL; sign-once 40/0, stranded-request 32/0, request-edit 148/0; fr55 341/14, hr-head-own-per-diem, travel-booking, approval-delegation: only the known local-drift failures listed in the entry below.
+
+**State left behind**
+- Committed and merged (see git). Deploy result: check the GitHub Actions run.
+
+**For the next agent**
+- Review findings 2, 3 and 6 were not fixed: `is_hr_step` follows the named person's live role/active flag; the HR-head exemption (`hr_step_ids`) and `is_hr_step` are separate definitions of "the HR step"; SQL tests lack inactive-approver / role-loss / delegate cases.
+
+## 2026-11-11 — Approvals tile tweak; PR #24 updated; local stack updated
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** fix/hr-leave-perdiem-signature @ 6396820
+**Trigger:** Amir: remove the travel tick from pending Approvals tiles, View form like History's and beside View signature; update PR and local deploy.
+
+**What changed**
+- `app/[locale]/(app)/manage/approvals/ApprovalQueue.tsx` — pending tile: no `RequestReviewActions` row (it only rendered the travel tick there); View form (printer icon, History's classes) beside View signature. `travelTicks`/`viewerId` props removed (and from `page.tsx`). CHANGELOG line. Commit f1a343e, pushed to PR #24.
+
+**Actions outside the repo**
+- Local stack `bj-approvals-finance`: `pg_dump -Fc` of `postgres` to the session scratchpad; `bj_apply_migrations` applied `20261111120000_hr_leave_scope_and_named_hr_step.sql` with its ledger row (**now FROZEN locally**); View-as hook synced; app rebuilt from the working tree; `rest` restarted.
+
+**Verification**
+- tsc, lint clean; unit 130 files / 1298 tests. `/api/health` 200; SMS mode `off`, 0 active cron jobs. No signed-in check by the agent.
+
+**State left behind**
+- PR #24 open, not merged. This entry uncommitted.
+
 ## 2026-11-11 — HR leave access (D4), per diem on a named HR step, saved-signature retry
 
 **Agent:** Claude Opus 5.5 via Claude Code (investigation, SQL, TS, docs); a Sonnet subagent wrote the tests

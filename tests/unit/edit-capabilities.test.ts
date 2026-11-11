@@ -242,6 +242,16 @@ describe('employeeEditCapabilities', () => {
     expect(caps(HELPDESK_CALLER, ['employee']).specialLeave).toBe(false);
   });
 
+  it('a special-leave-only caller on a target above them gets the "you can still change their leave" note', () => {
+    const granter = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read', special_leave: 'edit' } as Perms };
+    const onHelpdesk = caps(granter, ['employee', 'Helpdesk']);
+    expect(onHelpdesk).toMatchObject({ lockedReason: 'above', leaveEdit: false, specialLeave: true });
+    expect(editFormView(onHelpdesk, { showOrg: true }).note).toBe('lockedAboveLeave');
+    // Neither leave power: the plain lockedAbove note.
+    const reader = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read' } as Perms };
+    expect(editFormView(caps(reader, ['employee', 'Helpdesk']), { showOrg: true }).note).toBe('lockedAbove');
+  });
+
   it('FR-74: a manager changes nothing, and reads a direct report\'s balances', () => {
     expect(caps({ roles: ['manager', 'employee'], perms: {} }, ['employee'])).toEqual({
       profile: false,
