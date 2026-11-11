@@ -188,13 +188,51 @@ describe('employeeEditCapabilities', () => {
 
   // ── FR-65 special leave: special_leave edit on a target the caller may act on ──
 
-  it('special leave: hr preset on an employee, never on themself, the admin or a target above them', () => {
+  it('special leave: hr preset on an employee, never on themself or the admin; a target above them no longer blocks it', () => {
     expect(caps(hr(), ['employee']).specialLeave).toBe(true);
     expect(caps(hr(), ['employee'], { targetId: ME }).specialLeave).toBe(false);
     expect(caps(hr(), ['admin']).specialLeave).toBe(false);
-    // D4 'above': the Helpdesk holder carries leave_requests edit, which hr lacks.
+    // D4 'above' still locks the record (the Helpdesk holder carries leave_requests edit, which hr lacks)
+    // but no longer leave administration (2026-11-11).
     expect(caps(hr(), ['employee', 'Helpdesk']).lockedReason).toBe('above');
-    expect(caps(hr(), ['employee', 'Helpdesk']).specialLeave).toBe(false);
+    expect(caps(hr(), ['employee', 'Helpdesk']).specialLeave).toBe(true);
+  });
+
+  it('2026-11-11: hr on a Procurement holder keeps leave administration but not the record', () => {
+    const PROC = role('r-procurement', 'procurement', 'preset', 'Procurement', { travel_booking: 'edit' });
+    const onProc = employeeEditCapabilities({
+      ...base,
+      callerRoles: ['hr', 'employee'],
+      callerPerms: HR,
+      targetRoleIds: [PROC.id, EMP_ROLE.id],
+      allRoles: [...ALL, PROC],
+    });
+    expect(onProc).toMatchObject({
+      lockedReason: 'above',
+      leave: true,
+      leaveEdit: true,
+      specialLeave: true,
+      profile: false,
+      org: false,
+    });
+    expect(editFormView(onProc, { showOrg: true }).note).toBe('lockedAboveLeave');
+    // An hr holder as the target is the same story.
+    expect(caps(hr('employee'), ['hr', 'employee'])).toMatchObject({ leaveEdit: true, specialLeave: true });
+  });
+
+  it('2026-11-11: leave administration is still refused on themself and on the admin', () => {
+    expect(caps(hr('employee'), ['hr', 'employee'], { targetId: ME })).toMatchObject({
+      lockedReason: 'self',
+      leaveEdit: false,
+      specialLeave: false,
+    });
+    expect(caps(hr('employee'), ['admin', 'employee'])).toMatchObject({
+      lockedReason: 'admin',
+      leaveEdit: false,
+      specialLeave: false,
+    });
+    // Without leave_balances edit the target changes nothing.
+    expect(caps(HELPDESK_CALLER, ['employee', 'hr']).leaveEdit).toBe(false);
   });
 
   it('special leave follows the permission, not the hr role', () => {
@@ -202,6 +240,16 @@ describe('employeeEditCapabilities', () => {
     const granter = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read', special_leave: 'edit' } as Perms };
     expect(caps(granter, ['employee']).specialLeave).toBe(true);
     expect(caps(HELPDESK_CALLER, ['employee']).specialLeave).toBe(false);
+  });
+
+  it('a special-leave-only caller on a target above them gets the "you can still change their leave" note', () => {
+    const granter = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read', special_leave: 'edit' } as Perms };
+    const onHelpdesk = caps(granter, ['employee', 'Helpdesk']);
+    expect(onHelpdesk).toMatchObject({ lockedReason: 'above', leaveEdit: false, specialLeave: true });
+    expect(editFormView(onHelpdesk, { showOrg: true }).note).toBe('lockedAboveLeave');
+    // Neither leave power: the plain lockedAbove note.
+    const reader = { roles: ['employee'], perms: { people: 'read', leave_balances: 'read' } as Perms };
+    expect(editFormView(caps(reader, ['employee', 'Helpdesk']), { showOrg: true }).note).toBe('lockedAbove');
   });
 
   it('FR-74: a manager changes nothing, and reads a direct report\'s balances', () => {

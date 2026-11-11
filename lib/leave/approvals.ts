@@ -227,14 +227,6 @@ export function approvalAction(input: FillableInput): ApprovalAction | null {
   return { natural, override };
 }
 
-/**
- * Whether signing these steps on this kind of request takes a per diem
- * (FR-61): only an errand, and only when an `hr` step is among them.
- */
-export function perDiemApplies(kind: RequestKind, steps: (ApprovalStep | null)[]): boolean {
-  return kind === 'errand' && steps.some((s) => s?.role === 'hr');
-}
-
 /** Steps still waiting on someone, for the "who is left" line in the queue. */
 export function outstandingSteps(
   steps: ApprovalStep[],

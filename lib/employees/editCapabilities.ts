@@ -22,7 +22,10 @@ export type EditCapabilities = {
   resetPassword: boolean;
   /** Balances and accrual policy are shown (leave_balances read). */
   leave: boolean;
-  /** …and may be saved (leave_balances edit, on a target the caller may act on). */
+  /**
+   * …and may be saved: leave_balances edit, on anyone but themselves and the
+   * admin. Not blocked by D4 (2026-11-11): a balance gives no access.
+   */
   leaveEdit: boolean;
   /**
    * Why the org fields render read-only: the target is the admin, the caller
@@ -37,7 +40,7 @@ export type EditCapabilities = {
   /**
    * «مرخصی خارج از لیست» (FR-65): grant marriage / bereavement days. Mirrors
    * `private.special_leave_target`: special_leave edit, then for a non-admin not
-   * on themself, not on the admin, and `can_act_on` (D4).
+   * on themself and not on the admin (`can_manage_leave_of`; no D4 since 2026-11-11).
    */
   specialLeave: boolean;
 };
@@ -131,6 +134,8 @@ export function employeeEditCapabilities({
 
   const lockedReason = self ? 'self' : holds('admin') ? 'admin' : above ? 'above' : null;
   const actor = lockedReason === null;
+  // Mirror of private.can_manage_leave_of: leave administration skips D4.
+  const leaveTarget = !self && !holds('admin');
 
   // D5, plus the identity mirror of app_set_user_role_ids: hr signs approval
   // steps and the clearance HR rows, finance signs the clearance finance box.
@@ -151,7 +156,7 @@ export function employeeEditCapabilities({
     // Password resets are the admin's alone (20261013200007, returned above).
     resetPassword: false,
     leave: can(callerPerms, 'leave_balances', 'read') || (callerIsDirectManager && !self),
-    leaveEdit: actor && can(callerPerms, 'leave_balances'),
+    leaveEdit: leaveTarget && can(callerPerms, 'leave_balances'),
     lockedReason,
     // FR-63: your own personal information is view only unless you hold
     // personal_info_own (the admin, returned above, holds it implicitly).
@@ -160,15 +165,15 @@ export function employeeEditCapabilities({
       : (actor && can(callerPerms, 'personal_info')) || (self && canEditOwnPersonalInfo(callerPerms))
         ? 'edit'
         : 'view',
-    // FR-65: special_leave edit on a target the caller may act on (not self,
-    // not the admin, not above them), as private.special_leave_target checks.
-    specialLeave: actor && can(callerPerms, 'special_leave'),
+    // FR-65: special_leave edit on anyone but self and the admin, as
+    // private.special_leave_target checks (no D4 since 2026-11-11).
+    specialLeave: leaveTarget && can(callerPerms, 'special_leave'),
   };
 }
 
 export type EditFormView = {
   /** The scope note above the form; null = none. */
-  note: 'lockedAdmin' | 'lockedSelf' | 'lockedAbove' | 'manager' | 'readOnly' | null;
+  note: 'lockedAdmin' | 'lockedSelf' | 'lockedAbove' | 'lockedAboveLeave' | 'manager' | 'readOnly' | null;
   /** Job title, department and manager (editable with caps.org, else read-only). */
   orgBlock: boolean;
   rolesBlock: boolean;
@@ -189,7 +194,7 @@ export function editFormView(caps: EditCapabilities, { showOrg }: { showOrg: boo
       : caps.lockedReason === 'self'
         ? 'lockedSelf'
         : caps.lockedReason === 'above'
-          ? 'lockedAbove'
+          ? caps.leaveEdit || caps.specialLeave ? 'lockedAboveLeave' : 'lockedAbove'
           : null;
   const note: EditFormView['note'] = !showOrg
     ? 'manager'

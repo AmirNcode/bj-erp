@@ -318,7 +318,12 @@ Validation/release status stays in `docs/TASKS.md`.
   entered when an hr step of an errand is signed. *(2026-10-12.)* Daily work errands only since
   2026-10-22: an hourly errand carries no per diem (no HR field, no own-per-diem field, refused by
   the DB) and never reaches procurement (FR-70 is daily-only). **Amended 2026-11-05 (FR-84):** HR may also
-  set or change it on an approved daily trip by a correction.
+  set or change it on an approved daily trip by a correction. **Amended 2026-11-11 (owner):** "the hr
+  step" is a role hr step **or a named-person step whose person holds the HR role**
+  (`private.is_hr_step`); the per diem field and the FR-70 travel-booking box show on its approve
+  dialog (Home and Approvals). When a chain holds more than one such step, only the **first** (step
+  order) takes the per diem and the travel box (`private.request_per_diem_step`); a later HR signer
+  cannot overwrite it.
 - **FR-62** ☑ **Finance sees completed approvals.** `/finance` for finance and admin: approved
   requests in a Jalali month range, per diem, totals, CSV. Via `finance_approved_requests()`.
   *(2026-10-12.)* **Amended 2026-10-20 (owner review of FR-70):** leave and errands in two sections,

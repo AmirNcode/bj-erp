@@ -78,6 +78,117 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-11 — PR #24 review fixes (one per diem step, stale TS mirror, lockedAboveLeave note); PR merged
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** fix/hr-leave-perdiem-signature @ f1a343e
+**Trigger:** Amir: review PR #24 read-only, then fix findings 1, 4 and 5, update docs and CLAUDE.md, commit and merge.
+
+**What changed**
+- `supabase/migrations/20261111150000_per_diem_first_hr_step.sql` (new) — finding 1: two HR steps in one chain (role hr + a named HR person) both offered the per diem and the later signer overwrote it. New `private.request_per_diem_step(request)` = first `is_hr_step` step by order, applicable or already signed on the request. `decide_approval_request` (`v_filled_hr`), `approve_leave_request_steps` (`v_hr`) and `request_data_app_request_approval_progress` (`per_diem_allowed`, `hr_step`) use it. Bodies copied from 20261111120000 with only those substitutions. `supabase/schema.sql` patched by hand to the clone's dump (bodies byte-identical to the clone; the clone's `pg_dump` diff did not `patch` cleanly because the local dump carries owners).
+- `lib/leave/approvals.ts` — finding 4: removed unused `perDiemApplies` (still `role === 'hr'`) and its tests in `tests/unit/approval-chain.test.ts`.
+- `lib/employees/editCapabilities.ts` `editFormView` — finding 5: `lockedAboveLeave` also when only `specialLeave` is available. Unit test added.
+- `tests/sql/hr-leave-scope-named-hr-step.sql` — section (c): two HR steps, the second refuses a per diem and the first's stays; admin override refuses a per diem once the per diem step is signed.
+- Docs: REQUIREMENTS FR-61, DATA_MODEL per_diem_rials, PERMISSIONS sign-once, CHANGELOG, CLAUDE.md (per diem step line; one unnamed step per role + scope).
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clone `fix_pd` of `postgres`, migration applied there, SQL tests run, clone dropped. Local `postgres` NOT migrated (20261111150000 not frozen locally).
+- Merged PR #24 to main → CI deploys to Liara (production).
+
+**Verification**
+- tsc 0, lint 0, unit 130 files / 1297 tests pass.
+- On `fix_pd`: hr-leave-scope-named-hr-step 30 PASS / 0 FAIL; sign-once 40/0, stranded-request 32/0, request-edit 148/0; fr55 341/14, hr-head-own-per-diem, travel-booking, approval-delegation: only the known local-drift failures listed in the entry below.
+
+**State left behind**
+- Committed and merged (see git). Deploy result: check the GitHub Actions run.
+
+**For the next agent**
+- Review findings 2, 3 and 6 were not fixed: `is_hr_step` follows the named person's live role/active flag; the HR-head exemption (`hr_step_ids`) and `is_hr_step` are separate definitions of "the HR step"; SQL tests lack inactive-approver / role-loss / delegate cases.
+
+## 2026-11-11 — Approvals tile tweak; PR #24 updated; local stack updated
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** fix/hr-leave-perdiem-signature @ 6396820
+**Trigger:** Amir: remove the travel tick from pending Approvals tiles, View form like History's and beside View signature; update PR and local deploy.
+
+**What changed**
+- `app/[locale]/(app)/manage/approvals/ApprovalQueue.tsx` — pending tile: no `RequestReviewActions` row (it only rendered the travel tick there); View form (printer icon, History's classes) beside View signature. `travelTicks`/`viewerId` props removed (and from `page.tsx`). CHANGELOG line. Commit f1a343e, pushed to PR #24.
+
+**Actions outside the repo**
+- Local stack `bj-approvals-finance`: `pg_dump -Fc` of `postgres` to the session scratchpad; `bj_apply_migrations` applied `20261111120000_hr_leave_scope_and_named_hr_step.sql` with its ledger row (**now FROZEN locally**); View-as hook synced; app rebuilt from the working tree; `rest` restarted.
+
+**Verification**
+- tsc, lint clean; unit 130 files / 1298 tests. `/api/health` 200; SMS mode `off`, 0 active cron jobs. No signed-in check by the agent.
+
+**State left behind**
+- PR #24 open, not merged. This entry uncommitted.
+
+## 2026-11-11 — HR leave access (D4), per diem on a named HR step, saved-signature retry
+
+**Agent:** Claude Opus 5.5 via Claude Code (investigation, SQL, TS, docs); a Sonnet subagent wrote the tests
+**Branch / HEAD at start:** feat/form-signature-boxes @ c21c57b → new branch `fix/hr-leave-perdiem-signature` from origin/main
+**Trigger:** Amir: (1) HR could not change employee 184's balance; (2) approving a daily trip from Home showed no per diem / travel booking; (3) on local, the saved signature did not fill the approve dialog.
+
+**Root causes**
+1. 184 holds Procurement (`travel_booking` edit), which HR lacks → `editCapabilities` "above" (D4) lock, and `set_leave_balance` / `app_add_leave_balance` / `allocate_leave` / `set_employee_leave_policy` / `private.special_leave_target` all required `private.can_act_on`.
+2. The client's chain (local copy of live) has no role-`hr` step: HR is a **named step** (role `employee`, approver 124, box «اداری و منابع انسانی»). Per diem / travel box were tied to `step.role='hr'` (progress `per_diem_allowed`, `decide_approval_request.v_filled_hr`, `approve_leave_request_steps`).
+3. Local app log: `Failed to find Server Action "008ce47…"` at 17:53 UTC — the tab was older than the 2026-11-10 20:41 UTC app rebuild. `useSavedSignature` cached the failed fetch as `null` for the page's life (`.catch(() => null)` inside the cached promise), so every later dialog stayed blank. Data in `user_signatures` for 124 is a valid PNG.
+
+**Owner decisions (2026-11-11)**
+- Leave administration (balances, add, policy, special leave) works on anyone but self and the admin, ignoring D4.
+- A named step whose person holds the HR role counts as the HR step (automatic; no new per-step setting).
+
+**What changed**
+- `supabase/migrations/20261111120000_hr_leave_scope_and_named_hr_step.sql` (new): `private.can_manage_leave_of`, `private.is_hr_step`; the 8 functions re-created from `pg_get_functiondef` of a clone with only the `can_act_on` → `can_manage_leave_of` and `role='hr'` → `is_hr_step` substitutions, plus an `hr_step` key on open progress items. `supabase/schema.sql` patched with exactly the clone's base→migrated dump diff.
+- `lib/employees/editCapabilities.ts` — `leaveEdit` / `specialLeave` = perm && not self && target not admin; note `lockedAboveLeave` (`messages/{en,fa}.json`).
+- `lib/leave/approval-context.ts`, `lib/actions/leave/approvals.ts` — `hr_step` on progress rows; admin override per diem uses it.
+- `lib/signature/useSavedSignature.ts` — a failed fetch is not cached; the next box retries.
+- Docs: PERMISSIONS, REQUIREMENTS (FR-61 amendment), DATA_MODEL, CHANGELOG.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `fix_hr_x` (migrated) and `fix_hr_base` (baseline) of `postgres`, both dropped at the end. `postgres` itself only read (pg_dump, selects). Migration NOT applied to local `postgres`; app image not rebuilt.
+
+**Verification**
+- `npx tsc --noEmit` exit 0 · `npm run lint` exit 0 · `npm run test:unit` 130 files / 1298 tests pass (new `use-saved-signature.test.ts`, extended `edit-capabilities.test.ts`).
+- On `fix_hr_x`: new `tests/sql/hr-leave-scope-named-hr-step.sql` 23 PASS / 0 FAIL; `fr55-roles-permissions` 341 PASS / 14 FAIL, the 14 = pre-existing local drift (before the migration the same file gave the same 14 plus the 6 D4 lines now rewritten). balance-add, fr51, client-feedback-2026-10-12, sign-once, stranded-request, replacement-signoff, signature-box-labels, request-edit (148), security-only, manager-read-only: same results as on the baseline clone.
+- New SQL file on the baseline clone errors (helper missing), as expected.
+- Not run: Playwright, `npm run test:deploy`, a signed-in browser check (test-account password stale).
+
+**State left behind**
+- Uncommitted on `fix/hr-leave-perdiem-signature` (includes the earlier uncommitted 2026-11-10 log entry). Migration not applied anywhere persistent.
+
+**For the next agent**
+- On the local `postgres` copy these SQL tests already fail BEFORE this change (live-data/grant drift): balance-add "anon cannot run it", travel-booking, hr-head-own-per-diem, approval-delegation, approval-history, fr55 "seven roles seeded".
+- `.env.test-accounts` password for 124 is stale (login refused on 2026-11-11).
+- A tab older than the running build fails every server action until reloaded (deploy skew); the retry only helps transient failures.
+
+## 2026-11-10 — Local stack updated to main after PR #23
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** feat/form-signature-boxes @ c21c57b (same tree as main's merge commit 18b65f8)
+**Trigger:** Amir: update the local Docker stack after the merge.
+
+**What changed**
+- This entry only.
+
+**Actions outside the repo**
+- PR #23 deploy on Liara finished: run 42894085406 build and deploy success, `https://bjeng.app/api/health` 200.
+- Local stack `bj-approvals-finance` (localhost:3501):
+  - `pg_dump -Fc` of its `postgres` to the session scratchpad before migrating (not in the repo).
+  - Applied `20261110130000_request_edit_fixes.sql` with its ledger row in one transaction (the same statements as `bj_apply_and_record_migration`, release `approvals-finance-local`): **now FROZEN locally**. It was the only file missing from the ledger.
+  - Ran `deploy/lib/sync-view-as-hook.sql`; rebuilt and restarted `app` from the working tree; restarted `rest`.
+
+**Verification**
+- Ledger row present with the file's checksum; `edit_request_impl` holds the new refusal text.
+- `http://localhost:3501/api/health` 200, `/login` 200. SMS mode still `off`, 0 active cron jobs.
+- No signed-in check (real passwords).
+
+**State left behind**
+- This entry is uncommitted on `feat/form-signature-boxes` (the branch is merged).
+
+**For the next agent**
+- In zsh a compose command kept in a variable is not word-split; use a shell function: `dc() { docker compose -p bj-approvals-finance --env-file .bj-deploy/approvals-finance/.env -f deploy/docker-compose.yml -f .bj-deploy/approvals-finance/compose.yml "$@"; }` (run from `deploy/`).
+
 ## 2026-11-10 — PR #23 review fixes (print crash, edit ledger rows, extended trip), merge to main
 
 **Agent:** Claude Fable 5.2 via Claude Code (orchestrator and reviewer); a Sonnet subagent did the three UI fixes, an Opus (medium effort) subagent the SQL fix

@@ -3,7 +3,6 @@ import {
   applicableSteps,
   fillableStep,
   approvalAction,
-  perDiemApplies,
   outstandingSteps,
   filterApprovable,
   departmentStepApplies,
@@ -554,18 +553,5 @@ describe('approvalAction (FR-58)', () => {
       natural: { id: '', role: 'manager', stepOrder: 1, appliesTo: ['leave'], active: true },
       override: [],
     });
-  });
-});
-
-describe('perDiemApplies (FR-61)', () => {
-  it('applies to an errand when an hr step is signed', () => {
-    expect(perDiemApplies('errand', [STEPS[1]])).toBe(true);
-    expect(perDiemApplies('errand', STEPS)).toBe(true);
-  });
-
-  it('not on leave, nor without an hr step', () => {
-    expect(perDiemApplies('leave', [STEPS[1]])).toBe(false);
-    expect(perDiemApplies('errand', [STEPS[0]])).toBe(false);
-    expect(perDiemApplies('errand', [null])).toBe(false);
   });
 });

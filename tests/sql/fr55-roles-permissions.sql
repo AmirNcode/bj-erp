@@ -598,9 +598,9 @@ select pg_temp.expect('admin may appoint themselves',
 select pg_temp.expect('hr sets an employee''s balance (parity)',
   pg_temp.try_as('hr', format('select public.set_leave_balance(%s, %s, 480)', pg_temp.id('emp2'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')))), 'ok:1');
-select pg_temp.expect('hr may not set the helpdesk''s balance (subset)',
+select pg_temp.expect('hr sets the helpdesk''s balance (no D4 for leave, 2026-11-11)',
   pg_temp.try_as('hr', format('select public.set_leave_balance(%s, %s, 480)', pg_temp.id('help'),
-    quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')))), '42501');
+    quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')))), 'ok:1');
 select pg_temp.expect('hr may not set their own balance',
   pg_temp.try_as('hr', format('select public.set_leave_balance(%s, %s, 480)', pg_temp.id('hr'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')))), '42501');
@@ -614,17 +614,17 @@ select pg_temp.expect('hr allocates leave; helpdesk may not',
   || pg_temp.try_as('help', format('select public.allocate_leave(%s, %s, %L, %L, 480)', pg_temp.id('emp2'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')),
     current_date, current_date + 30)), 'ok:1 42501');
-select pg_temp.expect('hr may not allocate to the helpdesk (subset)',
+select pg_temp.expect('hr allocates to the helpdesk (no D4 for leave, 2026-11-11)',
   pg_temp.try_as('hr', format('select public.allocate_leave(%s, %s, %L, %L, 480)', pg_temp.id('help'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')),
-    current_date, current_date + 30)), '42501');
-select pg_temp.expect('hr sets a leave policy; not on the helpdesk',
+    current_date, current_date + 30)), 'ok:1');
+select pg_temp.expect('hr sets a leave policy, on an employee and on the helpdesk (no D4 for leave)',
   pg_temp.try_as('hr', format('select public.set_employee_leave_policy(%s, %s, 120, null, 0, %L)', pg_temp.id('emp2'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')),
     (select max(gregorian_start) from public.jalali_months where gregorian_start <= current_date))) || ' '
   || pg_temp.try_as('hr', format('select public.set_employee_leave_policy(%s, %s, 120, null, 0, %L)', pg_temp.id('help'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')),
-    (select max(gregorian_start) from public.jalali_months where gregorian_start <= current_date))), 'ok:1 42501');
+    (select max(gregorian_start) from public.jalali_months where gregorian_start <= current_date))), 'ok:1 ok:1');
 select pg_temp.expect('Everything sets a policy on the helpdesk',
   pg_temp.try_as('super', format('select public.set_employee_leave_policy(%s, %s, 120, null, 0, %L)', pg_temp.id('help'),
     quote_literal((select id from public.leave_types where company_id = (select id from fx where k='company') and name_en = 'Annual Leave')),
@@ -1350,7 +1350,7 @@ select pg_temp.expect('R5 legacy special_leave.grant: a custom role with the ite
   (select private.has_permission((select id from fx where k='granter'),'special_leave.grant')::text
        || private.has_permission((select id from fx where k='stepsonly'),'special_leave.grant')::text), 'truefalse');
 
--- special leave grants: private.special_leave_target keys on has_perm + D4.
+-- special leave grants: private.special_leave_target keys on has_perm + can_manage_leave_of (no D4).
 select pg_temp.expect('R5 special leave: hr grants bereavement (with a note) to a plain employee',
   pg_temp.try_as('hr', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('plain'), 'bereavement', 'R5 uncle')), 'ok:1');
 select pg_temp.expect('… the grant carries the note and hr as granter',
@@ -1358,9 +1358,9 @@ select pg_temp.expect('… the grant carries the note and hr as granter',
     where employee_id = (select id from fx where k='plain') and granted_by = (select id from fx where k='hr')), 'R5 uncle');
 select pg_temp.expect('R5 special leave: a custom role with special_leave edit grants to a plain employee',
   pg_temp.try_as('granter', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('plain'), 'bereavement', 'R5 aunt')), 'ok:1');
-select pg_temp.expect('R5 special leave: … not to an hr holder (D4)',
-  pg_temp.val_as('granter', format('select public.app_grant_special_leave(%s, %L, %L)::text', pg_temp.id('hr'), 'bereavement', 'x')),
-  '42501: not allowed to grant special leave to this employee');
+select pg_temp.expect('R5 special leave: … to an hr holder too (no D4 for leave, 2026-11-11)',
+  pg_temp.try_as('granter', format('select public.app_grant_special_leave(%s, %L, %L)', pg_temp.id('hr'), 'bereavement', 'x')),
+  'ok:1');
 select pg_temp.expect('R5 special leave: … not to the admin (main''s message)',
   pg_temp.val_as('granter', format('select public.app_grant_special_leave(%s, %L, %L)::text', pg_temp.id('admin'), 'bereavement', 'x')),
   '42501: not allowed to grant special leave to an admin');
@@ -1390,22 +1390,22 @@ begin
   insert into fx values ('g_hr', public.app_grant_special_leave((select id from fx where k='hr'), 'bereavement', 'R5 hr'));
   perform set_config('request.jwt.claims', '', true);
 end $$;
-select pg_temp.expect('R5 special leave revoke: the granter revokes on a plain employee, not on an hr holder; helpdesk never',
+select pg_temp.expect('R5 special leave revoke: the granter revokes on a plain employee and on an hr holder; helpdesk never',
   pg_temp.try_as('help', format('select public.app_revoke_special_leave(%L)',
     (select id from public.special_leave_grants where employee_id = (select id from fx where k='plain') and note = 'R5 uncle'))) || ' '
   || pg_temp.try_as('granter', format('select public.app_revoke_special_leave(%L)',
     (select id from public.special_leave_grants where employee_id = (select id from fx where k='plain') and note = 'R5 uncle'))) || ' '
   || pg_temp.val_as('granter', format('select public.app_revoke_special_leave(%L)::text', (select id from fx where k='g_hr'))),
-  '42501 ok:1 42501: not allowed to grant special leave to this employee');
+  '42501 ok:1 ');
 select pg_temp.expect('R5 special leave grants: special_leave holders read the company''s grants; others only their own',
   pg_temp.val_as('granter', 'select count(*) from public.special_leave_grants where kind = ''bereavement'' and note like ''R5 %''') || ' '
   || pg_temp.val_as('help', 'select count(*) from public.special_leave_grants') || ' '
   || pg_temp.val_as('plain', 'select count(*) from public.special_leave_grants'),
   '5 0 2');
-select pg_temp.expect('R5 special_leave_grants_select keys on has_perm, special_leave_target on has_perm + can_act_on',
+select pg_temp.expect('R5 special_leave_grants_select keys on has_perm, special_leave_target on has_perm + can_manage_leave_of',
   (select (qual ~ 'has_perm\(' and qual !~ 'has_permission')::text from pg_policies
     where schemaname = 'public' and tablename = 'special_leave_grants' and policyname = 'special_leave_grants_select') || ' '
-  || (select (d ~ 'has_perm\(p_actor, ''special_leave'', ''edit''\)' and d ~ 'can_act_on\(p_actor, p_employee\)'
+  || (select (d ~ 'has_perm\(p_actor, ''special_leave'', ''edit''\)' and d ~ 'can_manage_leave_of\(p_actor, p_employee\)'
               and d !~ 'has_permission')::text
         from pg_get_functiondef('private.special_leave_target(uuid, uuid)'::regprocedure) d),
   'true true');
