@@ -281,6 +281,18 @@ export async function getPendingApprovals(includeReview = false): Promise<
       can_reject: row.can_reject === true || rejections.length > 0,
     };
   });
+  // Signature-box titles of the steps on offer, for "Signing as" in the dialogs.
+  const stepIds = [...new Set(requests.flatMap((r) =>
+    [...(r.decision_steps ?? []), ...(r.rejection_steps ?? [])].map((s) => s.stepId).filter((id): id is string => !!id)))];
+  if (stepIds.length) {
+    const { data: boxes } = await c.supabase.from('approval_steps').select('id, box_label').in('id', stepIds);
+    const label = new Map((boxes ?? []).map((b) => [b.id, b.box_label?.trim() || null]));
+    for (const r of requests) {
+      for (const s of [...(r.decision_steps ?? []), ...(r.rejection_steps ?? [])]) {
+        if (s.stepId) s.boxLabel = label.get(s.stepId) ?? null;
+      }
+    }
+  }
   // Like main: only what the caller can act on now. A later step waiting on an earlier one
   // (approval order enforced) stays out of the queue and badge, even though SQL lets it reject.
   const actionable = requests.filter((r) => r.can_override || !!r.decision_steps?.length);

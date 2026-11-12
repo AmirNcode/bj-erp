@@ -114,7 +114,8 @@ function useStepName() {
   const t = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
   return (step: ApprovalChoice) => {
-    const title = step.name ?? tSteps(step.label);
+    // The step's signature-box title (Approval steps) first, then the named person or the role.
+    const title = step.boxLabel ?? step.name ?? tSteps(step.label);
     return step.delegated ? `${title} · ${t('onBehalf', { name: step.principalName ?? '—' })}` : title;
   };
 }

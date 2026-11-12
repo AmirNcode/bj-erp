@@ -129,6 +129,8 @@ export type ApprovalChoice = {
   principalName: string | null;
   delegated: boolean;
   perDiem: boolean;
+  /** The step's signature-box title (Manage › Approval steps); the dialogs show it when set. */
+  boxLabel?: string | null;
 };
 
 export function progressLabel(step: ApprovalProgressRow): StepLabel {
