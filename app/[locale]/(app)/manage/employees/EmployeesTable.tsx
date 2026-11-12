@@ -175,7 +175,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
   const colCount = (canBulkReset ? 1 : 0) + 11;
 
   return (
-    <div className="hidden space-y-3 md:block">
+    <div className="space-y-3">
       {canBulkReset && selected.size > 0 && (
         <div
           className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-secondary px-3 py-2.5"
@@ -219,7 +219,8 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
       <div className="border-b border-border">
         <div className="@container">
           <table className="data-table w-full text-sm">
-            <thead>
+            {/* Phones: only the first column is left, and the toolbar's sort select replaces the headers. */}
+            <thead className="max-md:sr-only">
               <tr>
                 {canBulkReset && (
                   <th className="w-10 px-3 py-2.5">
@@ -308,7 +309,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                   <Fragment key={emp.id}>
                     <tr className={cn(!emp.active && 'opacity-55')}>
                       {canBulkReset && (
-                        <td className="px-3 py-2.5">
+                        <td className="h-14 px-3 py-2.5">
                           {emp.canReset && (
                             <input
                               type="checkbox"
@@ -321,7 +322,7 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                           )}
                         </td>
                       )}
-                      <td className="px-3 py-2.5">
+                      <td className="h-14 px-3 py-2.5">
                         <div className="flex items-center gap-3">
                           <Button
                             type="button"

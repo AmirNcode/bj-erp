@@ -43,7 +43,6 @@ import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
 import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
-import { PersonAvatar } from '@/components/PersonAvatar';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
 type Props = {
@@ -199,35 +198,6 @@ async function EmployeesData({
         base={base}
         query={query}
       />
-
-      {/* Mobile rows: hairlines, no box */}
-      <div className="-mx-4 border-y border-border md:hidden">
-        {rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">{t('noEmployees')}</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {rows.map((emp) => (
-              <li key={emp.id} className={emp.active ? undefined : 'opacity-55'}>
-                <Link
-                  href={`/${locale}/manage/employees/${emp.id}`}
-                  className="flex min-h-[60px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
-                >
-                  <PersonAvatar id={emp.id} name={emp.full_name} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate whitespace-nowrap font-medium">
-                      <bdi>{emp.full_name}</bdi>
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      <bdi dir="ltr">{emp.personnel_no ?? '—'}</bdi> ، {emp.departmentLabel}
-                    </span>
-                  </span>
-                  <Next aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {total > 0 && (
         <nav
