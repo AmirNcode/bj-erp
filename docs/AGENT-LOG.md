@@ -78,6 +78,27 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — "Signing as" shows the step's signature-box title
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ fbe166e
+**Trigger:** Amir (screenshot of a trip's approve dialog): after "Signing as" show the step's "Signature box" title from Approval steps (e.g. «اداری و منابع انسانی»), then update the local deploy.
+
+**What changed** (`2403160`)
+- `lib/leave/approval-context.ts` — `ApprovalChoice.boxLabel`.
+- `lib/actions/leave/approvals.ts › getPendingApprovals` — one `approval_steps` select (`id, box_label`, readable by any active user) for the offered decision/rejection steps; sets `boxLabel` (trimmed, null when empty).
+- `app/[locale]/(app)/manage/approvals/DecisionDialogs.tsx › useStepName` — box title first, then the named person, then the role; the delegated "on behalf of" suffix stays. Applies to approve (Signing as) and reject (step picker), leave and trips.
+- `tests/unit/approval-queue-order.test.ts` — mock gains `from()`; new test for the box title. CHANGELOG line.
+
+**Actions outside the repo**
+- `:3501` (`bj-approvals-finance`): app rebuilt from 2403160 and restarted; DB untouched (steps 1–3 have box titles saved). Nothing on Liara.
+
+**Verification**
+- tsc 0, lint 0, unit 136 files / 1329 tests. `/api/health` 200. No signed-in check by the agent.
+
+**State left behind**
+- Committed and pushed to PR #25; not merged.
+
 ## 2026-11-12 — FR-92 local test moved to the existing :3501 stack
 
 **Agent:** Claude Opus 5.5 via Claude Code
