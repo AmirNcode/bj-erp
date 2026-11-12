@@ -37,6 +37,10 @@ const row = (id: string, code: string, extra: Partial<EmployeeRow>): EmployeeRow
   departmentLabel: '—',
   roleLabels: [],
   upcoming: null,
+  balanceLabel: '—',
+  balanceNegative: false,
+  usedLabel: '—',
+  unpaidLabel: '—',
   isSelf: false,
   canReset: false,
   ...extra,
@@ -155,5 +159,21 @@ describe('lib/employees/passwordReset', () => {
     const none = { rpc: vi.fn() } as unknown as Parameters<typeof passwordResetEligibleIds>[0];
     expect((await passwordResetEligibleIds(none, [])).size).toBe(0);
     expect(none.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('expandable rows (FR-92)', () => {
+  it('toggles a details panel, shows balance in red when negative', () => {
+    renderTable([row('n', '777', { balanceLabel: '-1 day', balanceNegative: true })]);
+    expect(screen.queryByTestId('emp-details-777')).toBeNull();
+    const toggle = screen.getByTestId('emp-expand-777');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('emp-details-777')).toBeTruthy();
+    expect(screen.getByTestId('emp-details-edit-777').getAttribute('href')).toBe('/en/manage/employees/n');
+    expect(screen.getAllByText('-1 day')[0].closest('span')!.className).toContain('text-destructive');
+    fireEvent.click(toggle);
+    expect(screen.queryByTestId('emp-details-777')).toBeNull();
   });
 });

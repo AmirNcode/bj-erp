@@ -36,6 +36,11 @@ import {
 } from '@/lib/employees/list';
 import { Button } from '@/components/ui/button';
 import { ListSkeleton } from '@/components/Skeletons';
+import { getEmployeeLeaveTotals } from '@/lib/actions/leave/totals';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
+import { formatDuration } from '@/lib/leave/duration';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
 import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
 import { PersonAvatar } from '@/components/PersonAvatar';
@@ -63,12 +68,16 @@ async function EmployeesData({
   canBulkReset: boolean;
   showLocks: boolean;
 }) {
-  const [t, tl, tErrand, rolesRes] = await Promise.all([
+  const [t, tl, tErrand, tLeave, rolesRes, ws] = await Promise.all([
     getTranslations('manage.employees'),
     getTranslations('manage.employees.list'),
     getTranslations('errand'),
+    getTranslations('leave'),
     listRoles(),
+    getWorkSettings(),
   ]);
+  const hoursPerDay = ws.ok ? ws.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
+  const durationLabels = durationLabelsFrom(tLeave);
   // Role chips: English role names (D11), in app_list_roles order (system,
   // preset, custom).
   const allRoles = rolesRes.ok ? rolesRes.roles : [];
@@ -114,7 +123,12 @@ async function EmployeesData({
         .order('start_date')
     : { data: [] };
   // Bulk password reset: checkboxes only on rows the database would accept.
-  const resettable = canBulkReset ? await passwordResetEligibleIds(supabase, ids) : new Set<string>();
+  const [resettable, totalsRes] = await Promise.all([
+    canBulkReset ? passwordResetEligibleIds(supabase, ids) : Promise.resolve(new Set<string>()),
+    getEmployeeLeaveTotals(ids),
+  ]);
+  const totals = totalsRes.ok ? totalsRes.totals : {};
+  const dur = (m: number) => formatDuration(m, hoursPerDay, locale, durationLabels);
   const nextByEmployee = new Map<string, NonNullable<typeof upcoming>[number]>();
   for (const u of upcoming ?? []) {
     if (u.employee_id && !nextByEmployee.has(u.employee_id)) nextByEmployee.set(u.employee_id, u);
@@ -127,6 +141,7 @@ async function EmployeesData({
 
   const rows: EmployeeRow[] = (employees ?? []).map((emp) => {
     const next = nextByEmployee.get(emp.id);
+    const tot = totals[emp.id];
     const roleSet = new Set((emp.user_roles as { role_id: string }[]).map((r) => r.role_id));
     return {
       id: emp.id,
@@ -153,6 +168,10 @@ async function EmployeesData({
               status: next.status === 'approved' ? 'approved' : 'pending',
             }
           : null,
+      balanceLabel: tot && tot.balanceMinutes !== null ? dur(tot.balanceMinutes) : '—',
+      balanceNegative: !!tot && tot.balanceMinutes !== null && tot.balanceMinutes < 0,
+      usedLabel: tot ? dur(tot.usedMinutes) : '—',
+      unpaidLabel: tot ? dur(tot.unpaidMinutes) : '—',
       isSelf: emp.id === user?.id,
       canReset: resettable.has(emp.id),
     };
