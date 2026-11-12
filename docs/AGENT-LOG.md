@@ -78,6 +78,25 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — My balances strip on the Request page
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ 557981b
+**Trigger:** Amir: show each person's leave balances in one line under "Request Leave", as wide as the New request section.
+
+**What changed**
+- `app/[locale]/(app)/request/_components/MyBalancesStrip.tsx` (new): server `MyBalancesStrip` (data from `getMyBalanceUsage`, balance types only) + presentational `MyBalancesView`. Card like the section header (`rounded-xl border bg-card`), wallet icon + "My balances", items split by `border-s`; negative in `text-destructive`. `@container`: below `@xl` the label is sr-only and each item stacks the name (xs) under the amount.
+- `request/page.tsx` renders it first in the sections stack; `request.myBalances` in fa/en. CHANGELOG line.
+
+**Actions outside the repo**
+- `:3501` app rebuilt and restarted. Nothing on Liara.
+
+**Verification**
+- tsc 0, lint 0, unit 1329. Temporary `zz-balances` page (fake data) checked in fa and en on desktop and in a 375px container: one row, no overflow. Page deleted, `.next/dev/types` cleaned. No signed-in check.
+
+**State left behind**
+- Committed and pushed to PR #25; not merged.
+
 ## 2026-11-12 — "Signing as" shows the step's signature-box title
 
 **Agent:** Claude Opus 5.5 via Claude Code

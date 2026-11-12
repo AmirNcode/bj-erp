@@ -148,6 +148,7 @@
     "success": "درخواست با موفقیت ارسال شد.",
     "error": "خطا",
     "myRequests": "درخواست‌های من",
+    "myBalances": "مانده مرخصی من",
     "newRequestSection": "ثبت درخواست جدید",
     "showPrevious": "نمایش درخواست‌های قبلی ({count})",
     "noRequests": "هیچ درخواستی ثبت نشده است.",

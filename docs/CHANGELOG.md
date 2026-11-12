@@ -21,6 +21,7 @@ was deployed; semantic versioning starts at the first tag.
 - **Past Manager requests are backfilled:** the unpaid part of every current Manager's annual leave moves onto the ledger (a negative balance) in the release migration. A dry-run list is produced first for HR; if payroll already deducted one, HR converts that amount back to unpaid. The dry run on the 2026-11-12 live backup found nothing to move. The release migration now stops with an error if a company's annual type is not flagged.
 - **CSV exports** (Finance, Reports, Payroll, personnel and others) prefix cells that start with `=`, `+`, `-` or `@` with an apostrophe so a spreadsheet cannot run them as a formula; imports strip it again.
 - **Fresh installs:** the seed flags Annual Leave for manager overdraft (a migration alone left new stacks without it).
+- **My balances on the Request page:** one line under the title, as wide as the New request section, with each leave balance (annual, sick; a negative one in red). On a phone the label hides and each type name sits under its amount.
 - **"Signing as" shows the signature-box title** of the step (Manage › Approval steps, e.g. «اداری و منابع انسانی») in the approve and reject dialogs, for trips and leave alike; steps without a title keep the person's or role's name.
 
 ### HR leave access, per diem on a named HR step, saved signature retry — not deployed
