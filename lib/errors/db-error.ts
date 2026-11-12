@@ -180,6 +180,9 @@ const RULES: Rule[] = [
   { re: /^an extended trip cannot become an hourly errand$/, key: 'requestEditExtended' },
   // FR-92 strict balance for employees on an overdraft-enabled type.
   { re: /^request exceeds available balance$/, key: 'requestExceedsBalance' },
+  // FR-92 convert negative balance to unpaid.
+  { re: /^amount exceeds the negative balance$/, key: 'convertExceedsNegative' },
+  { re: /^balance is not negative$/, key: 'convertNotNegative' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },
