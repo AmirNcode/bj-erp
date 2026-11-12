@@ -278,4 +278,11 @@ select pg_temp.expect('context keys: balance_rule',
 select pg_temp.expect('context keys: unpaid type has a null balance and rule none',
   pg_temp.as_scalar('admin',format('select (public.app_request_approval_context(%L)->''balance_minutes'')::text||''/''||(public.app_request_approval_context(%L)->>''balance_rule'')',
     pg_temp.fx('u1'),pg_temp.fx('u1'))),'null/none');
+-- print path (p_print = true) must not carry balance data (finance-only readers reach it)
+select pg_temp.login('admin');
+select pg_temp.expect('print context: balance keys are null',
+  (select (c->'balance_minutes')::text||'/'||(c->'pending_other_minutes')::text||'/'||(c->'balance_rule')::text
+     from (select private.request_data_app_request_approval_context(pg_temp.fx('cx1'),true) c) x),'null/null/null');
+select pg_temp.expect('non-print context still returns the balance keys',
+  (select (c->>'balance_rule') from (select private.request_data_app_request_approval_context(pg_temp.fx('cx1'),false) c) x),'strict');
 rollback;

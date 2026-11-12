@@ -228,7 +228,17 @@ select pg_temp.setbal('emp1','annual',-960);
 select pg_temp.setbal('emp2','annual',-480);
 select pg_temp.expect('negatives list: hr sees exactly the negative people of the company',
   pg_temp.as_scalar('hr','select string_agg(full_name||'':''||balance_minutes,'','' order by full_name) from public.app_negative_balances()'),
-  'Fixture emp1:-960,Fixture emp2:-480,Fixture hr:-480');
+  'Fixture emp1:-960,Fixture emp2:-480');
+select pg_temp.setbal('admin','annual',-480);
+select pg_temp.expect('negatives list: caller (hr) and the admin profile are not listed',
+  pg_temp.as_scalar('hr','select count(*)::text from public.app_negative_balances() where full_name in (''Fixture hr'',''Fixture admin'')'),'0');
+select pg_temp.expect('negatives list: admin sees everyone except admin profiles',
+  pg_temp.as_scalar('admin','select string_agg(full_name,'','' order by full_name) from public.app_negative_balances()'),
+  'Fixture emp1,Fixture emp2,Fixture hr');
+select pg_temp.expect('negatives list: bulk converting the whole list returned to hr succeeds',
+  pg_temp.as_scalar('hr','select public.app_convert_negatives((select array_agg(employee_id) from public.app_negative_balances()))::text'),'2');
+select pg_temp.setbal('emp1','annual',-960);
+select pg_temp.setbal('emp2','annual',-480);
 select pg_temp.expect('negatives list: department names come through',
   pg_temp.as_scalar('hr','select min(department_name_en) from public.app_negative_balances()'),'Fixture HQ');
 select pg_temp.expect('negatives list: clerk refused',
@@ -249,16 +259,23 @@ select pg_temp.setbal('emp1','annual',-480);
 select pg_temp.expect('totals: setup conversion today',
   pg_temp.as_scalar('hr',format('select public.app_convert_negative(%L,240,null)::text',pg_temp.fx('emp1'))),'240');
 -- balance now -240; used = (2*480 - 0) + (3*480 - 480) = 1920;
--- unpaid = 480 + 240 + 480 (requests) + 960+480+960+240 (four conversions today) = 3840
+-- unpaid = 480 + 240 + 480 (requests) + 960+480+960+240 (five conversions today: 960+480+960+960+240) = 4800
 select pg_temp.expect('totals: clerk (people read) sees balance, used, unpaid',
   pg_temp.rows('clerk',format('select balance_minutes,used_minutes,unpaid_minutes from public.app_employee_leave_totals(array[%L]::uuid[])',pg_temp.fx('emp1'))),
-  '(-240,1920,3840)');
+  '(-240,1920,4800)');
 select pg_temp.expect('totals: other company id is ignored',
   pg_temp.rows('clerk',format('select employee_id from public.app_employee_leave_totals(array[%L]::uuid[])',pg_temp.fx('other'))),'none');
 select pg_temp.expect('totals: person without a ledger row has a null balance',
   pg_temp.as_scalar('clerk',format('select balance_minutes is null and used_minutes=0 and unpaid_minutes=0 from public.app_employee_leave_totals(array[%L]::uuid[])',pg_temp.fx('clerk'))),'true');
 select pg_temp.expect('totals: plain employee refused',
   pg_temp.err(pg_temp.as_scalar('emp3',format('select count(*)::text from public.app_employee_leave_totals(array[%L]::uuid[])',pg_temp.fx('emp1')))),'42501');
+
+-- legacy unpaid-type request with unpaid_minutes 0 counts requested_minutes in both functions
+select pg_temp.hist('emp3','unpaid',pg_temp.ys()+4,1,0,8);
+select pg_temp.expect('legacy unpaid-type request: totals count requested minutes',
+  pg_temp.as_scalar('clerk',format('select unpaid_minutes::text from public.app_employee_leave_totals(array[%L]::uuid[])',pg_temp.fx('emp3'))),'480');
+select pg_temp.expect('legacy unpaid-type request: payroll counts the same',
+  pg_temp.rows('hr',format('select source,unpaid_minutes from public.app_payroll_unpaid(%L,%L) where employee_id=%L',pg_temp.ys(),pg_temp.today(),pg_temp.fx('emp3'))),'(unpaid_type,480)');
 
 -- ============================================================ pending counts
 select pg_temp.hist('emp2','annual',pg_temp.today()+20,1,0,11,'pending');
@@ -278,7 +295,7 @@ select pg_temp.expect('payroll rows: hr sees the three sources for emp1',
 select pg_temp.expect('payroll rows: four conversions with no ref, dated today, annual type name',
   pg_temp.rows('hr',format('select count(*),sum(unpaid_minutes),min(on_date)=max(on_date) and min(on_date)=%L,min(leave_type_name_en),count(ref) from public.app_payroll_unpaid(%L,%L) where employee_id=%L and source=''conversion''',
     pg_temp.today(),pg_temp.ys(),pg_temp.today(),pg_temp.fx('emp1'))),
-  '(4,2640,t,"Fixture annual",0)');
+  '(5,3600,t,"Fixture annual",0)');
 select pg_temp.expect('payroll rows: only the caller''s company',
   pg_temp.as_scalar('hr',format('select count(*)::text from public.app_payroll_unpaid(%L,%L) where employee_id=%L',pg_temp.ys(),pg_temp.today(),pg_temp.fx('other'))),'0');
 select pg_temp.expect('payroll rows: date filter excludes everything before',

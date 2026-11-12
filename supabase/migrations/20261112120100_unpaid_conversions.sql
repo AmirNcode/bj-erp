@@ -149,6 +149,9 @@ begin
          where l.employee_id = p.id and l.leave_type_id = private.annual_type(v_company)
          order by l.seq desc limit 1) b
      where p.company_id = v_company and p.active and b.bal < 0
+       and not private.is_admin(p.id)
+       and (private.is_admin(v_uid)
+            or (p.id <> v_uid and private.can_manage_leave_of(v_uid, p.id)))
      order by p.full_name;
 end $$;
 
@@ -175,7 +178,10 @@ begin
       coalesce((select sum(r.requested_minutes - r.unpaid_minutes) from public.leave_requests r
                  where r.employee_id = p.id and r.status = 'approved' and r.kind = 'leave'
                    and r.leave_type_id = v_type and r.start_date between v_ys and v_today), 0)::integer,
-      (coalesce((select sum(r.unpaid_minutes) from public.leave_requests r
+      (coalesce((select sum(case when lt.affects_balance then r.unpaid_minutes
+                                 when not lt.is_paid then r.requested_minutes else 0 end)
+                   from public.leave_requests r
+                   join public.leave_types lt on lt.id = r.leave_type_id
                   where r.employee_id = p.id and r.status = 'approved' and r.kind = 'leave'
                     and r.start_date between v_ys and v_today), 0)
        + coalesce((select sum(c.minutes) from public.leave_unpaid_conversions c
@@ -219,7 +225,8 @@ begin
         select r.employee_id, case when lt.affects_balance then 'unpaid_part' else 'unpaid_type' end as source,
                r.serial_year::text || '-' || lpad(r.serial_seq::text, 4, '0') as ref,
                r.start_date as on_date, lt.name_fa as tn_fa, lt.name_en as tn_en,
-               case when lt.affects_balance then r.unpaid_minutes else r.requested_minutes end as minutes
+               case when lt.affects_balance then r.unpaid_minutes
+                    when not lt.is_paid then r.requested_minutes else 0 end as minutes
           from public.leave_requests r
           join public.leave_types lt on lt.id = r.leave_type_id
          where r.company_id = v_company and r.status = 'approved' and r.kind = 'leave'
