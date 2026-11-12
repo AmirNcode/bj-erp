@@ -178,6 +178,8 @@ const RULES: Rule[] = [
   { re: /^an edit cannot make leave unpaid$/, key: 'requestEditUnpaid' },
   { re: /^procurement has started booking this trip$/, key: 'requestEditBookingStarted' },
   { re: /^an extended trip cannot become an hourly errand$/, key: 'requestEditExtended' },
+  // FR-92 strict balance for employees on an overdraft-enabled type.
+  { re: /^request exceeds available balance$/, key: 'requestExceedsBalance' },
   // FR-85 quick add.
   { re: /^amount must be more than 0$/, key: 'balanceAddInvalid' },
   { re: /^amount is too large$/, key: 'balanceAddTooLarge' },

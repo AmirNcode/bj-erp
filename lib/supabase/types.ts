@@ -1020,6 +1020,7 @@ export type Database = {
           default_carryover_cap_minutes: number
           id: string
           is_paid: boolean
+          manager_overdraft: boolean
           name_en: string | null
           name_fa: string
         }
@@ -1036,6 +1037,7 @@ export type Database = {
           default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
+          manager_overdraft?: boolean
           name_en?: string | null
           name_fa: string
         }
@@ -1052,6 +1054,7 @@ export type Database = {
           default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
+          manager_overdraft?: boolean
           name_en?: string | null
           name_fa?: string
         }
@@ -2407,6 +2410,8 @@ export type Database = {
       }
       // FR-91: the edit_* permission keys the caller holds (admin: all five).
       app_my_request_edit_types: { Args: never; Returns: string[] }
+      // FR-92: the caller's balance, pending minutes and balance rule for one leave type.
+      app_my_leave_availability: { Args: { p_leave_type_id: string }; Returns: Json }
       app_add_leave_balance: {
         Args: {
           p_employee_id: string
