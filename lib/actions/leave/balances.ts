@@ -62,7 +62,7 @@ export async function getMyBalances(): Promise<
     await Promise.all([
       c.supabase
         .from('leave_types')
-        .select('id, name_fa, name_en')
+        .select('id, name_fa, name_en, manager_overdraft')
         .eq('company_id', c.companyId)
         .eq('active', true)
         .order('name_fa'),
@@ -81,6 +81,7 @@ export async function getMyBalances(): Promise<
     name_fa: t.name_fa,
     name_en: t.name_en,
     balanceMinutes: byType[t.id] ?? 0,
+    managerOverdraft: t.manager_overdraft,
   }));
 
   return { ok: true, balances };
@@ -108,7 +109,7 @@ export async function getEmployeeBalances(
     await Promise.all([
       c.supabase
         .from('leave_types')
-        .select('id, name_fa, name_en')
+        .select('id, name_fa, name_en, manager_overdraft')
         .eq('company_id', c.companyId)
         .eq('active', true)
         .eq('affects_balance', true)
@@ -128,6 +129,7 @@ export async function getEmployeeBalances(
     name_fa: t.name_fa,
     name_en: t.name_en,
     balanceMinutes: byType[t.id] ?? 0,
+    managerOverdraft: t.manager_overdraft,
   }));
 
   return { ok: true, balances };

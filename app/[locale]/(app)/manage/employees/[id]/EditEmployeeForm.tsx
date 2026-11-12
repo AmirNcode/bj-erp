@@ -14,6 +14,8 @@ import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { ChevronDown } from 'lucide-react';
 import { BalanceQuickAdd } from './BalanceQuickAdd';
+import { ConvertNegativeForm } from './ConvertNegativeForm';
+import { PendingBalanceWarning } from './PendingBalanceWarning';
 import { BalanceHistory } from './BalanceHistory';
 import { BalanceBreakdownLines } from './BalanceBreakdownLines';
 import { balanceAdjustments } from '@/lib/leave/allocations';
@@ -136,6 +138,8 @@ type Props = {
   balances: BalanceItem[];
   /** FR-85: quick adds, for the breakdown under each balance. */
   quickAdds: QuickAddRow[];
+  /** Pending requests per leave type id (FR-92 warning on balance edits). */
+  pendingCounts: Record<string, { count: number; minutes: number }>;
   /** Company day length: the inputs below are days + hours, the ledger is minutes. */
   hoursPerDay: number;
   /**
@@ -164,6 +168,7 @@ export function EditEmployeeForm({
   managers,
   balances,
   quickAdds,
+  pendingCounts,
   hoursPerDay,
   policies,
   typeDefaults,
@@ -181,6 +186,8 @@ export function EditEmployeeForm({
   // Shown with leave_balances read; saved only with edit on a target the caller
   // may act on (the database refuses the rest).
   const canSaveLeave = caps.leaveEdit;
+  // FR-92: the annual type, whose negative balance can be converted to unpaid.
+  const annual = balances.find((b) => b.managerOverdraft);
   const [pending, setPending] = useState(false);
   const [managerId, setManagerId] = useState<string | null>(employee.manager_id ?? null);
   const managerOptions = managers.map((m) => ({ id: m.id, name: m.full_name, personnelNo: m.employee_code }));
@@ -546,7 +553,21 @@ export function EditEmployeeForm({
                   >
                     <span className="block text-sm font-semibold">{t('quickAdd.title')}</span>
                     {canSaveLeave && (
-                      <BalanceQuickAdd employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
+                      <BalanceQuickAdd
+                        employeeId={employee.id}
+                        balances={balances}
+                        hoursPerDay={hoursPerDay}
+                        pendingCounts={pendingCounts}
+                      />
+                    )}
+                    {canSaveLeave && annual && annual.balanceMinutes < 0 && (
+                      <ConvertNegativeForm
+                        employeeId={employee.id}
+                        balanceMinutes={annual.balanceMinutes}
+                        hoursPerDay={hoursPerDay}
+                        pendingCount={pendingCounts[annual.leaveTypeId]?.count ?? 0}
+                        typeName={locale === 'fa' ? annual.name_fa : annual.name_en ?? annual.name_fa}
+                      />
                     )}
                     <BalanceHistory employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
                   </div>
@@ -592,6 +613,10 @@ export function EditEmployeeForm({
                         const name = `balance_${balance.leaveTypeId}`;
                         return (
                           <div key={balance.leaveTypeId} className="space-y-1.5">
+                            <PendingBalanceWarning
+                              count={pendingCounts[balance.leaveTypeId]?.count ?? 0}
+                              typeName={label}
+                            />
                             <DaysHoursField
                               // The inputs are uncontrolled: a quick add must remount them,
                               // or the next Save writes the old balance back over it.

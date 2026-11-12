@@ -42,6 +42,7 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
+import { ConvertNegativesDialog } from './ConvertNegativesDialog';
 import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
@@ -282,6 +283,9 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   const readOnly = !can(perms, 'people');
   // Same rule as the Add page's guard (FR-74: managers cannot add).
   const canAdd = can(perms, 'people_create');
+  const canConvert = can(perms, 'leave_balances', 'edit');
+  const wsRes = canConvert ? await getWorkSettings() : null;
+  const hoursPerDay = wsRes?.ok ? wsRes.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
   const query = parseEmployeesQuery(sp, { isManager: hasReports, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
@@ -335,6 +339,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
               </Link>
             </Button>
           )}
+          {/* FR-92: negative annual balances to unpaid (leave_balances edit; admin passes). */}
+          {canConvert && <ConvertNegativesDialog hoursPerDay={hoursPerDay} />}
           {can(perms, 'people_create') && (
             <Button variant="outline" asChild>
               <Link href={`${base}/import`} data-testid="import-link">

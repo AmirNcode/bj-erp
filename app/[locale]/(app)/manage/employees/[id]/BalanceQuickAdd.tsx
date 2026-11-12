@@ -18,11 +18,14 @@ import type { BalanceItem } from '@/lib/leave/balances';
 import { daysHoursToMinutes, formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { nativeSelectClass } from '@/lib/native-select';
+import { PendingBalanceWarning } from './PendingBalanceWarning';
 
-export function BalanceQuickAdd({ employeeId, balances, hoursPerDay }: {
+export function BalanceQuickAdd({ employeeId, balances, hoursPerDay, pendingCounts = {} }: {
   employeeId: string;
   balances: BalanceItem[];
   hoursPerDay: number;
+  /** Pending requests per leave type id (FR-92 warning). */
+  pendingCounts?: Record<string, { count: number; minutes: number }>;
 }) {
   const t = useTranslations('manage.employees.quickAdd');
   const tLeave = useTranslations('leave');
@@ -62,6 +65,9 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay }: {
     });
   };
 
+  const selected = balances.find((b) => b.leaveTypeId === leaveTypeId);
+  const selectedName = selected ? (locale === 'fa' ? selected.name_fa : selected.name_en ?? selected.name_fa) : '';
+
   return (
     <div className="space-y-3" onKeyDown={(e) => {
       if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault();
@@ -79,6 +85,7 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay }: {
           </select>
         </div>
       )}
+      <PendingBalanceWarning count={pendingCounts[leaveTypeId]?.count ?? 0} typeName={selectedName} />
       <fieldset className="space-y-1">
         <legend className="text-sm font-medium">{t('amount')}</legend>
         <div className="flex gap-2">
