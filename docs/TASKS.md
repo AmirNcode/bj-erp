@@ -3,6 +3,19 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-92 manager negative balance (branch `feat/manager-negative-balance`, not deployed)
+
+- ☐ **Before merge (owner/HR): run the backfill dry run** (`scripts/sql/manager-overdraft-backfill-dryrun.sql`) on a restore of the newest live backup and show the list (person, serial, minutes moved) to Amir/HR. The approved-row path is not covered by a committed test (the local DB has none). If payroll already deducted one, HR converts it back with the convert tool.
+- ☐ Import "overwrite balances" (`app_bulk_import_employees`) lacks the pending-request warning that quick add, set balance and convert show (spec 10, final review #12). Idea: the dry-run step counts people with pending annual requests.
+- ☐ Strict (employee) edits ignore pending: `app_edit_request` keeps the old "an edit cannot make leave unpaid" rule and does not check the pending-aware available figure.
+- ☐ Phone details panel on Employees repeats "Last name" although the full name is in the row.
+- ☐ Partial convert on the edit page has no client-side max (the server refuses with a mapped message; the field is prefilled with the full negative).
+- ☐ Payroll is a section under the Reports dashboard, not a tab. Revisit when Reports gets tabs (`lib/ui/tabs.ts`) or a Payroll module appears; `app_payroll_unpaid` and `lib/reports/payroll.ts` are self-contained for that.
+- ☐ HR feedback on the convert-to-unpaid process (spec 15): the owner expects it may change; keep the tool simple until then.
+- ☐ Minor: `ConvertNegativesDialog` shows the department through `localizedLeaveTypeName` (works for any `{name_fa,name_en}`, misnamed); rename to a generic helper.
+- ☐ Local `postgres` lacks `20261111150000_per_diem_first_hr_step` and the three FR-92 migrations; clones must apply the former first.
+- ☐ e2e not run for FR-92 (no spec added); no signed-in browser check of the Employees page and the dialogs.
+
 ## PR #24 review leftovers (named HR step, 2026-11-11)
 
 - ☐ `private.is_hr_step` follows the named person's live hr role and active flag: if they lose hr or are deactivated while a trip is pending, the per diem disappears, also for the admin override. Decide whether to test `user_roles` without the active check.

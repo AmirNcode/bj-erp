@@ -11,7 +11,7 @@ database** spanning every department (HR, quality control, finance, procurement,
 manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
 separate servers** (not one shared DB); focus now is this one company.
 
-**Status (2026-10-06):** HR → leave module live for testing on Liara. Beyond v1: leave v2
+**Status (2026-11-12):** HR → leave module live for testing on Liara; FR-92 (Manager negative balance) built on `feat/manager-negative-balance`, not deployed. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
 Persian-only calendar, `hr` role, approval chain, reports, print, CSV import, org chart, bulk
 personnel import (add / update / replace), department-manager approval step. What shipped:
@@ -188,6 +188,9 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Print signature boxes = approval steps (FR-89):** box title is `approval_steps.box_label`, snapshotted on each decision (`leave_request_approvals.box_label`); `lib/leave/paperForm.ts › stepBoxes` lays them out. Two migrations that both redefine one function must keep each other's changes (FR-88 + FR-89 both redefine `request_data_get_leave_request_signatures`).
 - **Leave admin targets use `private.can_manage_leave_of` (no D4); "the HR step" is `private.is_hr_step` (role hr, or a named person holding hr).** Never test `role='hr'` on a step directly. The per diem and travel box go to ONE step only, `private.request_per_diem_step` (the first HR step); the app reads it as `hr_step` / `per_diem_allowed`.
 - **A company has at most one unnamed approval step per role + scope** (`approval_steps_company_role_scope_uniq`): SQL fixtures needing two HR steps use a named step whose person holds hr.
+- **Annual leave = `leave_types.manager_overdraft` (FR-92).** Seed sets it; migrations run before the seed on a fresh install, so a migration UPDATE alone leaves new stacks without it.
+- **Leave rules per request come from `private.balance_rule(emp,type)`:** Manager (role at action time) → overdraft (balance may go negative); other → strict (balance − pending); non-annual balance types → split. TS mirror: `projectLeaveBalance` rule option.
+- **CSV exports go through `buildCsv`, which guards formula cells with a leading `'`; `parseCsv` strips it.** Pass `{ guard: false }` only for byte-exact generated values (passwords).
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

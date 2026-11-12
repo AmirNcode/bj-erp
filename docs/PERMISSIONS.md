@@ -424,6 +424,28 @@ risk, not a new activation gate. All password resets remain admin-only.
   balance unless admin, `can_manage_leave_of` for non-admins (was `can_act_on` until 2026-11-11). The reason lands in `leave_ledger.note`, which the employee
   can read through RLS.
 
+### Manager negative balance (FR-92, 2026-11-12, not deployed)
+
+All new RPCs are `security definer`, `search_path ''`, revoked from `public`/`anon`, scoped to the caller's company.
+
+| RPC | Gate |
+|---|---|
+| `app_my_leave_availability(type)` | any signed-in user, own balance, own pending and rule only |
+| `app_negative_balances()` | admin or `leave_balances` edit; active people below zero; **never lists the admin** (the admin files no leave; an admin negative needs `set_leave_balance`); non-admin callers see only people they `can_manage_leave_of`, never themselves |
+| `app_convert_negatives(ids[])`, `app_convert_negative(id, minutes, note)` | admin or `leave_balances` edit; each target also needs `can_manage_leave_of` (your own entry is skipped in bulk and refused singly, unless you are the admin). They take `approval_lock(company)` before the employee locks, and `convert_negative_impl` refuses a target of another company, **the admin caller included** |
+| `app_employee_leave_totals(ids[])` | admin or **`people` read** (owner's decision 2026-11-12, wider than `leave_balances` read: whoever opens the Employees page sees balance, used and unpaid totals of that company; nothing else is returned) |
+| `app_pending_leave_counts(employee)` | admin or `leave_balances` read |
+| `app_payroll_unpaid(from, to)` | admin or `reports` read (HR has it) |
+
+- **`leave_unpaid_conversions`**: RLS select only, same company and (own row, admin, `leave_balances` read or
+  `reports` read). No insert/update/delete grant; rows come from the two convert functions.
+- **Approval context balance keys** (`balance_minutes`, `pending_other_minutes`, `balance_rule` in
+  `request_data_get_approval_context`, inherited by `app_approval_queue`): returned only when the call is **not
+  a print** and (the request is **pending**, or the caller is the requester or the admin, or holds
+  `leave_balances` read). Otherwise null, so finance print readers and anyone reading a closed request never
+  receive a colleague's balance.
+- Editing a Manager's request past the balance (FR-91 gates unchanged) and approving it need no new permission.
+
 ### View as (FR-86, unreleased)
 - Admin only and read-only. There is **no catalog item**: HR and custom roles cannot hold it. Every
   `app_view_as_*` RPC refuses a non-admin, and the hook checks `is_admin` (live `user_roles`) on every request.

@@ -78,6 +78,42 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — FR-92 manager negative balance, pending-aware balance, Employees balances (branch complete, docs written)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); Sonnet 5.5 subagents implemented
+**Branch / HEAD at start:** feat/manager-negative-balance from origin/main @ 0ca4c90
+**Trigger:** Amir: managers may go negative on annual leave, employees capped at available (pending counted), full request in the approve dialog, balances/convert tool on Employees, payroll report for HR. Spec `docs/specs/2026-11-12-manager-negative-balance-design.md`, plan `docs/plans/2026-11-12-manager-negative-balance.md`.
+
+**What changed** (commits, oldest first)
+- `16103e5` docs: spec and plan.
+- `680564b` migration `20261112120000_manager_overdraft.sql`: `leave_types.manager_overdraft`, `private.balance_rule`, `private.pending_leave_minutes`, `app_my_leave_availability`; `submit_leave_impl`, `finalize_approval_request`, `edit_request_impl` and the approval context redefined (overdraft / strict / split).
+- `43996c3`, `ebbb7ce` migration `20261112120100_unpaid_conversions.sql`: `leave_unpaid_conversions`, convert RPCs, totals, negatives, pending counts, payroll rows; review fixes (negatives scope, unpaid parity, context privacy on print).
+- `e79bc55` migration `20261112120200_manager_overdraft_backfill.sql`, `scripts/sql/manager-overdraft-backfill-dryrun.sql`, `schema.sql` dump.
+- `f0f8a1f` request forms: pending-aware balance, strict block, Manager confirm (`OverdraftConfirm`). `745227c` context balance keys only while pending or to requester/admin/`leave_balances` read.
+- `5c8d61d` approve dialog `RequestSummary`. `0d8dc42`, `0afb18b` Employees columns, expandable rows on all widths (card list replaced).
+- `c2cad16` convert negatives dialog + edit-page form + pending warning. `c81e95b` Payroll section + CSV.
+- `857b55f` (SQL), `091a5db` (CSV formula guard in `buildCsv`/`parseCsv`), `da05b3b` (UI) final-review fixes: approve dialog scroll on phones, seed sets `manager_overdraft`, Home card real balance-after, null balance as 0 and submit disabled while loading, TS split parity, company lock + same-company check in converts, payroll RPC returns balance and serial parts, `data-table`, `<bdi>`, hourly SQL tests.
+- Docs (this commit): REQUIREMENTS FR-92 (+ FR-13/48/91 notes), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, this entry, CLAUDE.md gotchas.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `mnb` (postgres + 20261111150000 + the 3 FR-92 migrations) and `mnb_base` (before FR-92, for schema diffs). `mnb_base` already dropped; `mnb` to be dropped by lead. Local `postgres` NOT migrated. Nothing run on Liara.
+- Temporary dev pages for screenshots were created and removed; `.next/dev/types` cleaned.
+
+**Verification**
+- SQL on `mnb`: `tests/sql/manager-overdraft.sql` 78 pass / 0 fail; `tests/sql/unpaid-conversions.sql` 57 / 0.
+- `tsc --noEmit` and lint clean; unit tests 136 files / 1328 tests pass; `npm run build` OK.
+- Playwright screenshots (temporary pages, fake data) of the Employees table and the approve dialog at 375x667 and desktop. No e2e run; no signed-in browser check; the approved-row backfill path was only checked in a rolled-back transaction.
+- Whole-branch review by Opus: 0 critical, 3 important, 14 minor; all important and most minor fixed in the fix wave.
+
+**State left behind**
+- Everything committed on `feat/manager-negative-balance`; not pushed. PR to be opened by the lead. Not deployed.
+
+**For the next agent**
+- Local `postgres` lacks `20261111150000_per_diem_first_hr_step`; apply it before the FR-92 migrations on any clone.
+- Before merge: run the backfill dry run on the newest live backup and show the list to Amir/HR (TASKS).
+- Deferred (all in TASKS): import "overwrite balances" has no pending warning; strict edits ignore pending; phone details repeat "Last name"; partial convert has no client max; Payroll is a section, not a tab; HR feedback on the convert process; error log FR-81 still on hold.
+- Rulings: `app_employee_leave_totals` is gated on `people` read (wider than `leave_balances`, Amir's call); the admin is never listed in negatives; a Manager edit moves an old unpaid part onto the ledger (DATA_MODEL).
+
 ## 2026-11-11 — PR #24 review fixes (one per diem step, stale TS mirror, lockedAboveLeave note); PR merged
 
 **Agent:** Claude Opus 5.5 via Claude Code

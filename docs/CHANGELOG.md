@@ -9,6 +9,19 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Manager negative balance and Employees balances (FR-92) — not deployed
+
+- **Managers can borrow annual leave.** A Manager may request annual leave (daily or hourly) past their balance: the whole request is paid and the balance goes negative. The request form first asks them to confirm ("balance will go to −X, monthly accruals will cover it"). A negative carries over at Farvardin 1; nothing is split off as unpaid any more for Managers.
+- **Everyone else is capped at what they have available.** Available = balance minus your own pending requests of that type, shown on the form. Asking for more is refused and the form points to the unpaid leave type. Sick leave is unchanged (paid up to the balance, the rest unpaid).
+- **Approve dialog shows the whole request** to every approver: who, type, dates and times, duration, reason, replacement (trips: destination or description) and the balance figures (balance now, other pending, available, requested, after approval), with the overdraft or unpaid part called out. The Home card's "balance after" now shows the real figure, negative included.
+- **Employees page:** new **Balance**, **Used this year** and **Unpaid** columns (Jalali year to date, days and hours; everyone who can open the page sees them). There is no horizontal scroll: lower-priority columns move into an expandable row, with Edit inside, on every width. The phone card list is replaced by the same compact table.
+- **Convert negatives to unpaid:** a button on the Employees page lists everyone below zero with checkboxes (select all, untick the exceptions); confirming returns each balance to 0 and records the amount as unpaid time with an audit row. On a person's edit page HR can convert only part of a negative.
+- **Warning when changing a balance** (quick add, set balance, convert) for someone with a pending request of that leave type; HR can still save.
+- **Reports › Payroll section** (needs Reports access, so HR has it): per person and period, unpaid leave from unpaid-type requests, unpaid parts of requests and converted negatives, each with date and source, plus the current annual balance, negatives highlighted; CSV for payroll. It is a section under the dashboard for now, not a tab.
+- **Past Manager requests are backfilled:** the unpaid part of every current Manager's annual leave moves onto the ledger (a negative balance) in the release migration. A dry-run list is produced first for HR; if payroll already deducted one, HR converts that amount back to unpaid.
+- **CSV exports** (Finance, Reports, Payroll, personnel and others) prefix cells that start with `=`, `+`, `-` or `@` with an apostrophe so a spreadsheet cannot run them as a formula; imports strip it again.
+- **Fresh installs:** the seed flags Annual Leave for manager overdraft (a migration alone left new stacks without it).
+
 ### HR leave access, per diem on a named HR step, saved signature retry — not deployed
 
 - **HR can change anyone's leave.** Leave balances, Add to balance, the accrual policy and leave outside the list (marriage, bereavement) are no longer locked when the person holds access HR lacks (e.g. Procurement). Still never your own leave and never the admin's. The rest of such a record stays locked; its note now says leave can still be changed (also for someone who can only grant leave outside the list).
