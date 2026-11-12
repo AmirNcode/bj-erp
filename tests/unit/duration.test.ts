@@ -145,6 +145,16 @@ describe('projectLeaveBalance rules', () => {
     });
   });
 
+  it('split takes the unpaid part from the balance, not from what is available (like the database)', () => {
+    // sick balance 3 days, one pending 2-day request, new 2-day request: nothing is unpaid at submit
+    expect(projectLeaveBalance(2 * 480, 3 * 480, { pendingMinutes: 2 * 480, rule: 'split' })).toMatchObject({
+      unpaidMinutes: 0,
+      availableMinutes: 480,
+      overMinutes: 480,
+    });
+    expect(projectLeaveBalance(2 * 480, -480, { rule: 'split' })).toMatchObject({ unpaidMinutes: 960 });
+  });
+
   it('strict with a negative balance blocks everything', () => {
     expect(projectLeaveBalance(480, -480, { rule: 'strict' })).toMatchObject({
       availableMinutes: -480,

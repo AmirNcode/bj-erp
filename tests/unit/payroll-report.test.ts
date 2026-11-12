@@ -7,7 +7,9 @@ const item = (over: Partial<PayrollItem>): PayrollItem => ({
   personnelNo: '101',
   department: 'QC',
   source: 'unpaid_type',
-  ref: 'L-1',
+  serialYear: 1405,
+  serialSeq: 7,
+  balanceMinutes: null,
   onDate: '1405/01/02',
   leaveType: 'Unpaid',
   unpaidMinutes: 480,
@@ -18,11 +20,13 @@ describe('groupPayroll', () => {
   it('merges items of one person and keeps first-seen order', () => {
     const people = groupPayroll(
       [
-        item({ employeeId: 'b', fullName: 'Bita' }),
-        item({ employeeId: 'a', unpaidMinutes: 100 }),
-        item({ employeeId: 'b', fullName: 'Bita', unpaidMinutes: 20, source: 'conversion', ref: null }),
-      ],
-      { a: -60, b: 300 }
+        item({ employeeId: 'b', fullName: 'Bita', balanceMinutes: 300 }),
+        item({ employeeId: 'a', unpaidMinutes: 100, balanceMinutes: -60 }),
+        item({
+          employeeId: 'b', fullName: 'Bita', unpaidMinutes: 20, source: 'conversion',
+          serialYear: null, serialSeq: null, balanceMinutes: 300,
+        }),
+      ]
     );
     expect(people.map((p) => p.employeeId)).toEqual(['b', 'a']);
     expect(people[0].unpaidMinutes).toBe(500);
@@ -32,15 +36,17 @@ describe('groupPayroll', () => {
   });
 
   it('gives null balance when none is known', () => {
-    expect(groupPayroll([item({})], {})[0].balanceMinutes).toBeNull();
+    expect(groupPayroll([item({})])[0].balanceMinutes).toBeNull();
   });
 });
 
 describe('payrollCsv', () => {
   it('writes one row per item with decimal days and the source label', () => {
     const people = groupPayroll(
-      [item({ unpaidMinutes: 720 }), item({ source: 'conversion', ref: null, unpaidMinutes: 480 })],
-      { a: 480 }
+      [
+        item({ unpaidMinutes: 720, balanceMinutes: 480 }),
+        item({ source: 'conversion', serialYear: null, serialSeq: null, unpaidMinutes: 480, balanceMinutes: 480 }),
+      ]
     );
     const t = payrollCsv(
       people,
@@ -52,7 +58,7 @@ describe('payrollCsv', () => {
     );
     expect(t.columns).toEqual(['n', 'p', 'd', 's', 'r', 'dt', 't', 'u', 'b']);
     expect(t.rows).toHaveLength(2);
-    expect(t.rows[0]).toEqual(['Ali', '101', 'QC', 'U', 'L-1', '1405/01/02', 'Unpaid', 1.5, 1]);
+    expect(t.rows[0]).toEqual(['Ali', '101', 'QC', 'U', '1405-0007', '1405/01/02', 'Unpaid', 1.5, 1]);
     expect(t.rows[1][3]).toBe('C');
     expect(t.rows[1][4]).toBe('');
   });

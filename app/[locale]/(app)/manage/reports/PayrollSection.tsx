@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { downloadCsv, fileDateStamp } from '@/lib/csv/download';
 import { tableToCsvRows } from '@/lib/reports/reports';
 import { payrollCsv, type PayrollPerson, type PayrollSource } from '@/lib/reports/payroll';
+import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { cn } from '@/lib/utils';
@@ -154,7 +155,7 @@ export function PayrollSection({ people, hoursPerDay, locale, rangeLabel }: Prop
                     {expanded && (
                       <tr className="bg-muted/30" data-testid={`payroll-items-${p.employeeId}`}>
                         <td colSpan={5} className="px-3 py-3">
-                          <table className="w-full text-sm">
+                          <table className="data-table w-full text-sm">
                             <thead>
                               <tr className="text-muted-foreground">
                                 <th className="px-2 py-1 text-start font-medium">{t('col.date')}</th>
@@ -170,7 +171,11 @@ export function PayrollSection({ people, hoursPerDay, locale, rangeLabel }: Prop
                                   <td className="whitespace-nowrap px-2 py-1">{i.onDate}</td>
                                   <td className="px-2 py-1">{sourceLabel(i.source)}</td>
                                   <td className="px-2 py-1">
-                                    <bdi dir="ltr">{i.ref ?? '—'}</bdi>
+                                    <bdi dir="ltr">
+                                      {i.serialYear !== null && i.serialSeq !== null
+                                        ? formatSerialLocalized(i.serialYear, i.serialSeq, locale)
+                                        : '—'}
+                                    </bdi>
                                   </td>
                                   <td className="px-2 py-1">{i.leaveType}</td>
                                   <td className="whitespace-nowrap px-2 py-1">

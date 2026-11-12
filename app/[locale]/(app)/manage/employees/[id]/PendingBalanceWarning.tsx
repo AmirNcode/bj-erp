@@ -1,6 +1,7 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { formatNumber } from '@/lib/i18n/format';
 
 /**
  * FR-92 (spec 10): editing a balance while the person has pending requests of
@@ -8,6 +9,7 @@ import { useTranslations } from 'next-intl';
  */
 export function PendingBalanceWarning({ count, typeName }: { count: number; typeName: string }) {
   const t = useTranslations('manage.employees');
+  const locale = useLocale();
   if (count === 0) return null;
   return (
     <p
@@ -15,7 +17,7 @@ export function PendingBalanceWarning({ count, typeName }: { count: number; type
       className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700"
       data-testid="pending-balance-warning"
     >
-      {t('pendingWarning', { count, type: typeName })}
+      {t('pendingWarning', { count, countText: formatNumber(count, locale), type: typeName })}
     </p>
   );
 }

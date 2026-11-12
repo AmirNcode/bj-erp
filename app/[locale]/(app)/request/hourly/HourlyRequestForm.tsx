@@ -178,7 +178,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (projection?.blocked) return;
+    if (projection?.blocked || balance.loading) return;
     if (needsConfirm) setConfirmOpen(true);
     else send();
   };
@@ -260,7 +260,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
           <Button
             type="submit"
-            disabled={isPending || overLimit || delegation.blocked || !!projection?.blocked}
+            disabled={isPending || overLimit || delegation.blocked || balance.loading || !!projection?.blocked}
             className="w-full"
             data-testid="hourly-submit"
           >

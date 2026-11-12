@@ -33,7 +33,7 @@ export type PendingRow = {
   /** "{type} ، {dates} ، {duration}" */
   summary: string;
   cover: string | null;
-  balanceAfter: string | null;
+  balanceAfter: React.ReactNode;
   /** Short-staffed warning; replaces the meta line when present. */
   warning: string | null;
   /** FR-58/61: override and per diem choices for the approve dialog. */
@@ -161,7 +161,9 @@ export function PendingApprovalsCard({ rows, total, count, locale, hoursPerDay, 
               ) : (
                 (row.cover || row.balanceAfter) && (
                   <p className="text-xs text-muted-foreground">
-                    {[row.cover, row.balanceAfter].filter(Boolean).join(' - ')}
+                    {row.cover}
+                    {row.cover && row.balanceAfter ? ' - ' : null}
+                    {row.balanceAfter}
                   </p>
                 )
               )}

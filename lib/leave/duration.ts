@@ -81,7 +81,8 @@ export function projectLeaveBalance(
       return {
         ...base,
         remainingMinutes: Math.max(availableMinutes - requestingMinutes, 0),
-        unpaidMinutes: overMinutes,
+        // Like the database: the unpaid part comes from the balance, not from what is available.
+        unpaidMinutes: Math.max(requestingMinutes - Math.max(balance, 0), 0),
         overMinutes,
         blocked: false,
       };

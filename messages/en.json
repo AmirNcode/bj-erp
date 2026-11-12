@@ -93,7 +93,7 @@
     "pendingTitle": "Pending requests",
     "allApprovals": "All approvals",
     "noPending": "No requests are waiting",
-    "balanceAfter": "Balance after approval: {value}",
+    "balanceAfter": "Balance after approval: <bdi>{value}</bdi>",
     "shortStaffed": "{count} others from {department} are absent today",
     "nextHolidayTitle": "Next official holiday",
     "holidayIn": "{weekday}, in {days} days",
@@ -2531,7 +2531,7 @@
   },
   "payroll": {
     "title": "Payroll: unpaid leave",
-    "hint": "For HR to pass to payroll. Covers {range}.",
+    "hint": "For HR to pass to payroll. Covers {range}. Includes converted negative balances.",
     "export": "Export CSV",
     "empty": "No unpaid leave in this period.",
     "showDetails": "Show details",

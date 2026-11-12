@@ -22,7 +22,6 @@ import { getMyTeamDirectory } from '@/lib/actions/team-directory';
 import {
   getMyBalanceUsage,
   getNextHoliday,
-  getRequesterBalances,
   getTodayPulse,
 } from '@/lib/actions/home';
 import { APP_TIME_ZONE, nowInAppTz, todayInAppTz } from '@/lib/appDate';
@@ -30,6 +29,7 @@ import { buildHomeBoard } from '@/lib/home/board';
 import { daysAgo, shortStaffedOthers } from '@/lib/home/pulse';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { formatDuration } from '@/lib/leave/duration';
+import { balanceFigures } from '@/lib/leave/approvalSummary';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
@@ -78,11 +78,12 @@ async function HomeBoardData({
   /** Rendered right after the greeting (owner, 2026-11-02). */
   absences: React.ReactNode;
 }) {
-  const [t, tLeave, tRepl, tErrand, roles, capabilities] = await Promise.all([
+  const [t, tLeave, tRepl, tErrand, tSummary, roles, capabilities] = await Promise.all([
     getTranslations('home'),
     getTranslations('leave'),
     getTranslations('replacement'),
     getTranslations('errand'),
+    getTranslations('approvals.summary'),
     getCachedRoles(userId),
     getApprovalCapabilities(),
   ]);
@@ -196,9 +197,6 @@ async function HomeBoardData({
 
   // ── pending rows ─────────────────────────────────────────────────────────
   const shown = pending.slice(0, PENDING_ROWS);
-  const requesterBalances = canApprove
-    ? await getRequesterBalances(shown.filter((r) => r.affects_balance).map((r) => r.employee_id))
-    : {};
   const pendingRows: PendingRow[] = shown.map((r) => {
     const typeName =
       r.kind === 'errand'
@@ -217,10 +215,8 @@ async function HomeBoardData({
     const others = pulseData
       ? shortStaffedOthers({ departmentId: r.department_id, employeeId: r.employee_id, pulse: pulseData })
       : null;
-    const balance =
-      r.affects_balance && r.leave_type_id
-        ? requesterBalances[`${r.employee_id}:${r.leave_type_id}`]
-        : undefined;
+    // Same figures as the approve dialog (FR-92): the result may be negative.
+    const figures = balanceFigures(r);
     return {
       id: r.id,
       employeeId: r.employee_id,
@@ -228,10 +224,17 @@ async function HomeBoardData({
       departmentName: departmentName ?? null,
       summary: [typeName, dates, duration(r.requested_minutes)].join(' ، '),
       cover: r.replacement_name ? `${tRepl('coverLabel')}: ${r.replacement_name}` : null,
-      balanceAfter:
-        balance === undefined
-          ? null
-          : t('balanceAfter', { value: duration(Math.max(balance - r.requested_minutes, 0)) }),
+      balanceAfter: figures ? (
+        <>
+          {t.rich('balanceAfter', { value: duration(figures.afterMinutes), bdi: (c) => <bdi>{c}</bdi> })}
+          {figures.overdraftMinutes > 0 && (
+            <> - {tSummary('overdraft', { value: duration(figures.overdraftMinutes) })}</>
+          )}
+          {figures.unpaidMinutes > 0 && (
+            <> - {tSummary('unpaid', { value: duration(figures.unpaidMinutes) })}</>
+          )}
+        </>
+      ) : null,
       warning:
         others !== null && departmentName
           ? t('shortStaffed', { count: num(others), department: departmentName })
@@ -260,7 +263,11 @@ async function HomeBoardData({
       name: localizedLeaveTypeName(u, locale),
       remaining: t.rich('balanceRemaining', {
         left: duration(u.leftMinutes),
-        b: (chunks) => <b className="font-bold text-foreground">{chunks}</b>,
+        b: (chunks) => (
+          <b className="font-bold text-foreground">
+            <bdi>{chunks}</bdi>
+          </b>
+        ),
       }),
     }));
 

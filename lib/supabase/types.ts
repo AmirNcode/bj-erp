@@ -2523,11 +2523,13 @@ export type Database = {
           department_name_fa: string | null
           department_name_en: string | null
           source: string
-          ref: string | null
+          serial_year: number | null
+          serial_seq: number | null
           on_date: string
           leave_type_name_fa: string | null
           leave_type_name_en: string | null
           unpaid_minutes: number
+          balance_minutes: number | null
         }[]
       }
       app_add_leave_balance: {

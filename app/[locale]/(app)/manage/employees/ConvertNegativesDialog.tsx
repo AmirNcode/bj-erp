@@ -155,7 +155,7 @@ export function ConvertNegativesDialog({ hoursPerDay }: { hoursPerDay: number })
                         onChange={() => toggle(r.employeeId)}
                       />
                     </td>
-                    <td>{r.fullName}</td>
+                    <td><bdi>{r.fullName}</bdi></td>
                     <td><bdi className="font-mono">{r.personnelNo ?? '—'}</bdi></td>
                     <td>{r.departmentName}</td>
                     <td className="text-destructive"><bdi>{dur(r.balanceMinutes)}</bdi></td>
@@ -186,7 +186,7 @@ export function ConvertNegativesDialog({ hoursPerDay }: { hoursPerDay: number })
               <AlertDialogDescription data-testid="convert-confirm-body">
                 {t('confirm', {
                   count: formatNumber(chosen.length, locale),
-                  total: `⁨${dur(total)}⁩`,
+                  total: `⁨${dur(-total)}⁩`,
                 })}
               </AlertDialogDescription>
             </AlertDialogHeader>

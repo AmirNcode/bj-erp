@@ -216,7 +216,7 @@ export function ApproveDialog({
           {labels.approve}
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent size="default">
+      <AlertDialogContent size="default" className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <AlertDialogHeader>
           <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
           <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>

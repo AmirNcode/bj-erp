@@ -100,12 +100,18 @@ export function useLeaveBalance(leaveTypeId: string, requestedMinutes: number | 
   }, [leaveTypeId]);
 
   const current = fetched && fetched.typeId === leaveTypeId ? fetched : null;
+  // The database reads a missing ledger row as 0 (current_leave_balance), so the strict block and
+  // the manager's confirm must too; only the split rule has nothing to project without a balance.
+  const balanceForProjection =
+    current && current.minutes === null && (current.rule === 'strict' || current.rule === 'overdraft')
+      ? 0
+      : current?.minutes ?? null;
   return {
     loading: !!leaveTypeId && fetched?.typeId !== leaveTypeId,
     pendingMinutes: current?.pendingMinutes ?? 0,
     projection:
-      requestedMinutes !== null && current && current.minutes !== null
-        ? projectLeaveBalance(requestedMinutes, current.minutes, {
+      requestedMinutes !== null && current && balanceForProjection !== null
+        ? projectLeaveBalance(requestedMinutes, balanceForProjection, {
             pendingMinutes: current.pendingMinutes,
             rule: current.rule,
           })

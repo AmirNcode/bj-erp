@@ -4,6 +4,7 @@
  * later without untangling leave code.
  */
 
+import { formatSerial } from '@/lib/leave/serial';
 import { minutesToDecimalDays, type ReportTable } from '@/lib/reports/reports';
 
 export type PayrollSource = 'unpaid_type' | 'unpaid_part' | 'conversion';
@@ -14,7 +15,11 @@ export type PayrollItem = {
   personnelNo: string | null;
   department: string;
   source: PayrollSource;
-  ref: string | null;
+  /** The request's tracking number parts; null for a conversion. */
+  serialYear: number | null;
+  serialSeq: number | null;
+  /** The person's current annual balance (the same on each of their rows). */
+  balanceMinutes: number | null;
   /** Already formatted for display (Jalali). */
   onDate: string;
   leaveType: string;
@@ -32,10 +37,7 @@ export type PayrollPerson = {
 };
 
 /** One entry per employee, in order of first appearance; items keep their input order. */
-export function groupPayroll(
-  items: PayrollItem[],
-  balances: Record<string, number | null>
-): PayrollPerson[] {
+export function groupPayroll(items: PayrollItem[]): PayrollPerson[] {
   const byId = new Map<string, PayrollPerson>();
   for (const item of items) {
     let person = byId.get(item.employeeId);
@@ -46,7 +48,7 @@ export function groupPayroll(
         personnelNo: item.personnelNo,
         department: item.department,
         unpaidMinutes: 0,
-        balanceMinutes: balances[item.employeeId] ?? null,
+        balanceMinutes: item.balanceMinutes,
         items: [],
       };
       byId.set(item.employeeId, person);
@@ -72,7 +74,7 @@ export function payrollCsv(
         i.personnelNo ?? '',
         i.department,
         labels.source[i.source],
-        i.ref ?? '',
+        i.serialYear !== null && i.serialSeq !== null ? formatSerial(i.serialYear, i.serialSeq) : '',
         i.onDate,
         i.leaveType,
         minutesToDecimalDays(i.unpaidMinutes, hoursPerDay),

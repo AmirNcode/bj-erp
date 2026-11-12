@@ -37,19 +37,13 @@ export async function getPayrollReport(
     personnelNo: r.personnel_no,
     department: name(r.department_name_fa, r.department_name_en),
     source: r.source as PayrollSource,
-    ref: r.ref,
+    serialYear: r.serial_year,
+    serialSeq: r.serial_seq,
+    balanceMinutes: r.balance_minutes,
     onDate: formatCalendarDate(r.on_date, locale),
     leaveType: name(r.leave_type_name_fa, r.leave_type_name_en),
     unpaidMinutes: r.unpaid_minutes,
   }));
 
-  const ids = [...new Set(items.map((i) => i.employeeId))];
-  const balances: Record<string, number | null> = {};
-  if (ids.length > 0) {
-    const totals = await c.supabase.rpc('app_employee_leave_totals', { p_ids: ids });
-    if (totals.error) return dbErr(totals.error.message);
-    for (const t of totals.data ?? []) balances[t.employee_id] = t.balance_minutes;
-  }
-
-  return { ok: true, people: groupPayroll(items, balances) };
+  return { ok: true, people: groupPayroll(items) };
 }
