@@ -260,6 +260,9 @@ select pg_temp.expect('availability rpc: balance_minutes null with no ledger row
   pg_temp.as_scalar('hr',format('select (public.app_my_leave_availability(%L)->''balance_minutes'')::text',pg_temp.fx('annual'))),'null');
 select pg_temp.expect('availability rpc: no-balance type is rule none',
   pg_temp.as_scalar('emp',format('select public.app_my_leave_availability(%L)->>''rule''',pg_temp.fx('unpaid'))),'none');
+select pg_temp.expect('availability rpc: a type of another company is refused',
+  pg_temp.err(pg_temp.as_scalar('emp',format('select public.app_my_leave_availability(%L)::text',
+    (select id from public.leave_types where company_id<>pg_temp.fx('company') limit 1)))),'22023');
 do $$ begin
   perform set_config('request.jwt.claims','',true);
   begin perform public.app_my_leave_availability(pg_temp.fx('annual'));

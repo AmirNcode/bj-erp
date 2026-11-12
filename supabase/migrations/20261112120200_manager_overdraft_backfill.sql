@@ -1,13 +1,17 @@
 -- FR-92: past Manager requests that were split into a paid and an unpaid part now follow the
 -- overdraft rule: the whole amount comes off the balance. Move each such request's unpaid part onto
--- the ledger (approved) or drop it (pending: approval recomputes). Data only, no new objects.
+-- the ledger (approved) or drop it (pending: approval recomputes).
+-- The logic lives in private.manager_overdraft_backfill() (returns the number of requests changed)
+-- so tests/sql/manager-overdraft-backfill.sql can call it; the migration runs it once.
 -- Lock order: approval_lock(company) first, then each employee's 'leave:' advisory lock.
-do $$
+create function private.manager_overdraft_backfill() returns integer
+language plpgsql security definer set search_path = '' as $$
 declare
   v_company uuid;
   v_emp uuid;
   r record;
   v_bal integer;
+  v_n integer := 0;
 begin
   for v_company in
     select distinct r2.company_id from public.leave_requests r2
@@ -47,7 +51,12 @@ begin
         values (null, 'leave_request.overdraft_backfill', 'leave_requests', r.id,
                 jsonb_build_object('employee_id', v_emp, 'request_id', r.id,
                                    'moved_minutes', r.unpaid_minutes));
+        v_n := v_n + 1;
       end loop;
     end loop;
   end loop;
+  return v_n;
 end $$;
+revoke all on function private.manager_overdraft_backfill() from public, anon, authenticated;
+
+select private.manager_overdraft_backfill();

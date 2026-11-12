@@ -3,6 +3,18 @@
 alter table public.leave_types add column manager_overdraft boolean not null default false;
 update public.leave_types set manager_overdraft = true where name_en = 'Annual Leave' and affects_balance;
 
+-- Fail loudly (instead of silently leaving managers strict) when a company has balance types but
+-- none of them is overdraft-enabled. Fresh installs have no leave types yet: the seed runs later.
+do $$ begin
+  if exists (select 1 from public.companies c
+              where exists (select 1 from public.leave_types t
+                             where t.company_id = c.id and t.active and t.affects_balance)
+                and not exists (select 1 from public.leave_types t
+                                 where t.company_id = c.id and t.manager_overdraft)) then
+    raise exception 'FR-92: a company has balance leave types but none is flagged manager_overdraft (no "Annual Leave" type?)';
+  end if;
+end $$;
+
 -- 'overdraft' = type allows it and the requester is a Manager now; 'strict' = same type, not a Manager;
 -- 'split' = any other balance type (paid up to the balance, rest unpaid); 'none' = no balance.
 create function private.balance_rule(p_employee uuid, p_leave_type uuid) returns text
@@ -32,6 +44,11 @@ language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid();
 begin
   if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
+  if not exists (select 1 from public.leave_types t
+                   join public.profiles p on p.company_id = t.company_id
+                  where t.id = p_leave_type_id and t.active and p.id = v_uid) then
+    raise exception 'invalid or inactive leave type' using errcode = '22023';
+  end if;
   return jsonb_build_object(
     'balance_minutes', (select l.balance_after_minutes from public.leave_ledger l
                          where l.employee_id = v_uid and l.leave_type_id = p_leave_type_id
