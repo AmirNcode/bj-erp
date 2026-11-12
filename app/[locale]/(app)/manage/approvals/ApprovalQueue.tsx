@@ -19,6 +19,7 @@ import {
   RequestSignatureViewer,
 } from '../../request/_components/RequestSignature';
 import { ApproveDialog, RejectDialog } from './DecisionDialogs';
+import { RequestSummary } from './RequestSummary';
 import Link from 'next/link';
 import { Printer } from 'lucide-react';
 import { PersonAvatar } from '@/components/PersonAvatar';
@@ -266,6 +267,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                       labels={labels}
                       disabled={isPending || (!req.natural_step && !req.can_override)}
                       triggerClassName="h-11 flex-1 md:h-9 md:flex-none"
+                      summary={<RequestSummary request={req} hoursPerDay={hoursPerDay} locale={locale} />}
                       options={{
                         hasNaturalStep: req.natural_step !== null,
                         canOverride: req.can_override,

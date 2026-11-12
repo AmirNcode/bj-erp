@@ -15,6 +15,7 @@ import { approvalBundle, approvalChoices, progressLabel, type ApprovalChoice, ty
 import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import type { TravellerField } from '@/lib/travel/fields';
 import type { DayPart } from './shared';
+import type { BalanceRule } from '@/lib/leave/duration';
 
 /** `warning`: the decision is saved but a follow-up step (FR-70 travel tick) was not. */
 export type DecisionResult = { ok: true; warning?: string } | DbErrorResult;
@@ -131,6 +132,12 @@ export type PendingApproval = {
   start_time: string | null;
   end_time: string | null;
   requested_minutes: number;
+  /** FR-92: the part of the request that will be recorded unpaid. */
+  unpaid_minutes: number;
+  /** FR-92: requester's balance, other pending requests and the rule; null when withheld. */
+  balance_minutes: number | null;
+  pending_other_minutes: number | null;
+  balance_rule: BalanceRule | null;
   reason: string | null;
   replacement_name: string | null;
   /** True when the named cover has leave overlapping this request (spec §2.1). */
@@ -246,6 +253,10 @@ export async function getPendingApprovals(includeReview = false): Promise<
       start_date: row.start_date, end_date: row.end_date, day_part: row.day_part,
       unit: row.unit, start_time: row.start_time, end_time: row.end_time,
       requested_minutes: row.requested_minutes,
+      unpaid_minutes: row.unpaid_minutes ?? 0,
+      balance_minutes: row.balance_minutes ?? null,
+      pending_other_minutes: row.pending_other_minutes ?? null,
+      balance_rule: row.balance_rule ?? null,
       reason: row.reason,
       replacement_name: row.replacement_name,
       replacement_conflict: row.replacement_conflict,

@@ -238,6 +238,7 @@ async function HomeBoardData({
           : null,
       rejectionSteps: r.rejection_steps,
       canReject: r.can_reject,
+      request: r,
       approveOptions: {
         steps: r.decision_steps,
         hasNaturalStep: r.natural_step !== null,

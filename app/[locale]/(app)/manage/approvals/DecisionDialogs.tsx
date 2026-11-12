@@ -165,12 +165,15 @@ export function ApproveDialog({
   options,
   triggerClassName,
   triggerIcon,
+  summary,
 }: {
   id: string;
   labels: ApproveDialogLabels;
   disabled: boolean;
   onApprove: (signatureData: string, signatureAuthorized: boolean, extras: ApproveExtras) => void;
   options?: ApproveOptions;
+  /** Full request summary (RequestSummary), shown above the signing block. */
+  summary?: React.ReactNode;
 } & TriggerProps) {
   const tc = useTranslations('common');
   const t = useTranslations('approvals');
@@ -218,6 +221,7 @@ export function ApproveDialog({
           <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
           <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
         </AlertDialogHeader>
+        {summary}
         {!override && <SigningAs id={id} steps={steps} />}
         {overrideOnly && (
           <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid={`approve-override-only-${id}`}>

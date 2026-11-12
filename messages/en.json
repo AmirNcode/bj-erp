@@ -418,7 +418,24 @@
       "pageOf": "Page {page} of {pages}",
       "reviewHint": "Completed requests you can review."
     },
-    "pendingTitle": "Pending requests"
+    "pendingTitle": "Pending requests",
+    "summary": {
+      "requester": "Requester",
+      "type": "Type",
+      "dates": "Dates",
+      "time": "Time",
+      "duration": "Duration",
+      "location": "Location",
+      "reason": "Reason",
+      "replacement": "Replacement",
+      "balanceNow": "Balance now",
+      "otherPending": "Other pending requests",
+      "available": "Available",
+      "requested": "Requested",
+      "after": "Balance after approval",
+      "overdraft": "⁨{value}⁩ over the balance. The balance will go negative.",
+      "unpaid": "⁨{value}⁩ will be recorded as unpaid."
+    }
   },
   "review": {
     "title": "Request review",

@@ -1,5 +1,6 @@
 import type { StepLabel, StepRole } from './approvals';
 import type { ReplacementSignoffStatus } from './replacementSignoff';
+import type { BalanceRule } from './duration';
 
 /** Request-scoped projections from the database, never complete personnel rows. */
 export type ApprovalEvidenceKind = 'manual' | 'delegated' | 'automatic' | 'hr_exempt' | 'legacy' | 'pending';
@@ -75,6 +76,10 @@ export type ApprovalContextRow = {
   day_part: 'full' | 'am' | 'pm';
   requested_minutes: number;
   unpaid_minutes: number;
+  /** FR-92: null on the print path and after a decision (unless requester/admin/HR). */
+  balance_minutes?: number | null;
+  pending_other_minutes?: number | null;
+  balance_rule?: BalanceRule | null;
   serial_year: number;
   serial_seq: number;
   created_at: string;

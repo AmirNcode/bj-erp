@@ -418,7 +418,24 @@
       "pageOf": "صفحه {page} از {pages}",
       "reviewHint": "درخواست‌های بررسی‌شده در محدوده دسترسی شما."
     },
-    "pendingTitle": "درخواست‌های در انتظار"
+    "pendingTitle": "درخواست‌های در انتظار",
+    "summary": {
+      "requester": "درخواست‌دهنده",
+      "type": "نوع",
+      "dates": "تاریخ",
+      "time": "ساعت",
+      "duration": "مدت",
+      "location": "محل",
+      "reason": "دلیل",
+      "replacement": "جانشین",
+      "balanceNow": "مانده فعلی",
+      "otherPending": "سایر درخواست‌های در انتظار",
+      "available": "قابل استفاده",
+      "requested": "درخواستی",
+      "after": "مانده پس از تأیید",
+      "overdraft": "⁨{value}⁩ بیش از مانده. مانده منفی می‌شود.",
+      "unpaid": "⁨{value}⁩ بدون حقوق ثبت می‌شود."
+    }
   },
   "review": {
     "title": "بررسی درخواست‌ها",
