@@ -2528,5 +2528,29 @@
     "confirmBody": "You are requesting {over} more than your available balance ({available}). Your balance will go to {after}. Monthly accruals will cover it; if it is still negative at year end, HR may convert it to unpaid leave.",
     "confirmSend": "Send request",
     "confirmBack": "Go back"
+  },
+  "payroll": {
+    "title": "Payroll: unpaid leave",
+    "hint": "For HR to pass to payroll. Covers {range}.",
+    "export": "Export CSV",
+    "empty": "No unpaid leave in this period.",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "col": {
+      "name": "Name",
+      "personnelNo": "Personnel no.",
+      "department": "Department",
+      "unpaid": "Unpaid",
+      "balance": "Current balance",
+      "date": "Date",
+      "source": "Source",
+      "ref": "Request no.",
+      "type": "Leave type"
+    },
+    "source": {
+      "unpaid_type": "Unpaid leave request",
+      "unpaid_part": "Unpaid part of a request",
+      "conversion": "Converted from negative balance"
+    }
   }
 }

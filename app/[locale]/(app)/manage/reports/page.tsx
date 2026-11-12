@@ -14,6 +14,8 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedPermissions, getCachedRoles } from '@/lib/auth/context';
 import { can } from '@/lib/permissions/catalog';
 import { getReportData, getReportMonths } from '@/lib/actions/reports';
+import { getPayrollReport } from '@/lib/actions/payroll';
+import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { getTodayPulse } from '@/lib/actions/home';
 import { createClient } from '@/lib/supabase/server';
 import { todayInAppTz } from '@/lib/appDate';
@@ -21,6 +23,7 @@ import { localizedLeaveTypeName } from '@/lib/i18n/format';
 import { buildCapacity } from '@/lib/reports/reports';
 import { ListSkeleton } from '@/components/Skeletons';
 import { ReportsDashboard } from './ReportsDashboard';
+import { PayrollSection } from './PayrollSection';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -74,7 +77,10 @@ async function ReportsData({
   const rangeStart = from && ISO.test(from) ? from : defaultFrom;
   const rangeEnd = to && ISO.test(to) ? to : defaultTo;
 
-  const result = await getReportData(rangeStart, rangeEnd);
+  const [result, payroll] = await Promise.all([
+    getReportData(rangeStart, rangeEnd),
+    getPayrollReport(rangeStart, rangeEnd),
+  ]);
 
   const deptNames = new Map(
     (departments ?? []).map((d) => [d.id, localizedLeaveTypeName(d, locale)])
@@ -97,12 +103,26 @@ async function ReportsData({
   }
 
   return (
-    <ReportsDashboard
-      data={result.data}
-      months={months}
-      capacity={capacity}
-      locale={locale}
-    />
+    <div className="flex flex-col gap-8">
+      <ReportsDashboard
+        data={result.data}
+        months={months}
+        capacity={capacity}
+        locale={locale}
+      />
+      {payroll.ok ? (
+        <PayrollSection
+          people={payroll.people}
+          hoursPerDay={result.data.hoursPerDay}
+          locale={locale}
+          rangeLabel={`${formatCalendarDate(rangeStart, locale)} — ${formatCalendarDate(rangeEnd, locale)}`}
+        />
+      ) : (
+        <p role="alert" className="text-sm text-destructive" data-testid="payroll-error">
+          {payroll.error}
+        </p>
+      )}
+    </div>
   );
 }
 
