@@ -285,4 +285,19 @@ select pg_temp.expect('print context: balance keys are null',
      from (select private.request_data_app_request_approval_context(pg_temp.fx('cx1'),true) c) x),'null/null/null');
 select pg_temp.expect('non-print context still returns the balance keys',
   (select (c->>'balance_rule') from (select private.request_data_app_request_approval_context(pg_temp.fx('cx1'),false) c) x),'strict');
+-- balance figures are for pending requests, the requester, admin and balance readers only (FR-92 security)
+select pg_temp.mk('cx3','emp','annual',74,1);
+select pg_temp.expect('approved request: approve for the visibility checks',pg_temp.approve('cx3'),'ok');
+insert into public.leave_request_approvals(request_id,step_role,approver_id,decision)
+  values(pg_temp.fx('cx3'),'finance',pg_temp.fx('mgr3'),'approved');
+select pg_temp.expect('past approver, request decided: balance keys are null',
+  pg_temp.as_scalar('mgr3',format('select (c->''balance_minutes'')::text||''/''||(c->''pending_other_minutes'')::text||''/''||(c->''balance_rule'')::text from (select public.app_request_approval_context(%L) c) x',pg_temp.fx('cx3'))),'null/null/null');
+select pg_temp.expect('requester, request decided: still gets the balance keys',
+  pg_temp.as_scalar('emp',format('select (c->>''balance_rule'') from (select public.app_request_approval_context(%L) c) x',pg_temp.fx('cx3'))),'strict');
+select pg_temp.assert('requester, request decided: balance_minutes present',
+  pg_temp.as_scalar('emp',format('select (public.app_request_approval_context(%L)->''balance_minutes'')::text',pg_temp.fx('cx3')))<>'null');
+insert into public.leave_request_approvals(request_id,step_role,approver_id,decision)
+  values(pg_temp.fx('cx2'),'finance',pg_temp.fx('mgr3'),'approved'); -- a partial decision; the request stays pending
+select pg_temp.expect('pending request: a non-admin approver still gets the balance keys',
+  pg_temp.as_scalar('mgr3',format('select (c->>''balance_rule'') from (select public.app_request_approval_context(%L) c) x',pg_temp.fx('cx2'))),'strict');
 rollback;

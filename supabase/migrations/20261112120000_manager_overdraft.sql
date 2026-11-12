@@ -606,9 +606,9 @@ begin
       (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_approve')::boolean)),
     'can_reject',r.status='pending' and (private.is_admin(auth.uid()) or exists
       (select 1 from jsonb_array_elements(v_progress) item where (item->>'can_reject')::boolean)),
-    'balance_minutes',case when not p_print and lt.affects_balance then public.current_leave_balance(r.employee_id,r.leave_type_id) end,
-    'pending_other_minutes',case when not p_print then private.pending_leave_minutes(r.employee_id,r.leave_type_id,r.id) end,
-    'balance_rule',case when not p_print then private.balance_rule(r.employee_id,r.leave_type_id) end,
+    'balance_minutes',case when not p_print and (r.status='pending' or r.employee_id=auth.uid() or private.is_admin(auth.uid()) or private.has_perm(auth.uid(),'leave_balances','read')) and lt.affects_balance then public.current_leave_balance(r.employee_id,r.leave_type_id) end,
+    'pending_other_minutes',case when not p_print and (r.status='pending' or r.employee_id=auth.uid() or private.is_admin(auth.uid()) or private.has_perm(auth.uid(),'leave_balances','read')) then private.pending_leave_minutes(r.employee_id,r.leave_type_id,r.id) end,
+    'balance_rule',case when not p_print and (r.status='pending' or r.employee_id=auth.uid() or private.is_admin(auth.uid()) or private.has_perm(auth.uid(),'leave_balances','read')) then private.balance_rule(r.employee_id,r.leave_type_id) end,
     'configuration_changed',coalesce(pol.configuration_changed,false),
     'legacy_reconciliation_required',private.ambiguous_legacy_approval(r.id),
     'progress',v_progress)
