@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — PR #25 (FR-92) review, fixes, backfill dry run, local test stack
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); two Sonnet 5.5 subagents implemented, one at a time
+**Branch / HEAD at start:** feat/manager-negative-balance @ 04e7ee5
+**Trigger:** Amir: review PR #25 against the spec, fix findings, dry-run the backfill on the newest backup, run it locally for his test; no merge without his "approved, merge".
+
+**What changed**
+- Review: 0 critical, 1 important, 8 minor. The four redefined SQL functions differ from main's bodies only in FR-92 lines; lock order OK everywhere; TS mirrors match SQL; fa/en parity OK.
+- `4356816` (important + minor SQL): backfill logic moved into `private.manager_overdraft_backfill()` (same selection/locks/writes), migration calls it once; new `tests/sql/manager-overdraft-backfill.sql` (23 checks: ledger chain, untouched rows, audit, idempotent, not client-executable). `20261112120000` raises if a company has balance types but none flagged `manager_overdraft`; `app_my_leave_availability` refuses another company's / inactive type (22023). `schema.sql` patched to the clone's dump.
+- `65fdc6d` (minor UI): `PendingBalanceWarning` and the form's overdraft note use the `warning` token instead of raw `amber-*`; single bidi isolate for `approvals.summary.overdraft|unpaid` (messages lost the literal isolates; Home now wraps the value).
+- Docs: TASKS (dry-run result, two minor notes), CHANGELOG line, this entry.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `fr92_base_chk`, `fr92_a1` (subagent), `fr92_v1`, `fr92_errchk`, `fr92_dry` (newest live backup) — all dropped. Local `postgres` only read (pg_dump into clones, a leave_types select).
+- New isolated Compose project **`bj-fr92`** (`.bj-deploy/fr92`, untracked; gateway `127.0.0.1:3502`, fresh volume): restored `~/Backups/bj-erp/daily-20261112T020206Z.dump` (sha256 OK) per DEPLOY-LIARA (`supabase_functions_admin` role, list without the graphql ACL, single transaction, `restore-graphql.sql`); SMS `off` + key/username NULL, all 4 cron jobs inactive before the app started; `bj_apply_migrations` applied the 3 FR-92 migrations (release `fr92-local`, frozen in that DB only); View-as hook synced; app image `bj-erp-app:fr92` built from 65fdc6d; rest restarted. Still running for Amir's test.
+- Nothing run on Liara.
+
+**Verification**
+- Fresh clone: manager-overdraft 79/0, unpaid-conversions 57/0, manager-overdraft-backfill 23/0. tsc 0, lint 0, unit 136 files / 1328 tests, `npm run build` OK. `/api/health` 200 on :3502, login 200, auth health 200.
+- Backfill dry run on the newest live backup: 0 requests, 0 people (1 annual request with an unpaid part, owner not a Manager; 2 people already negative from earlier edits).
+- No signed-in check by the agent (Amir signs in himself); no e2e.
+
+**State left behind**
+- Commits pushed to `feat/manager-negative-balance` (PR #25). Not merged, not deployed: waiting for Amir's "approved, merge".
+- Stack `bj-fr92` running; stop with `.bj-deploy/fr92/compose down` (add `-v` to drop its DB volume) once testing is done. Cookies on localhost are shared with :3501 — sign out there first if sessions mix.
+
+**For the next agent**
+- Deferred items unchanged in TASKS (FR-92 section).
+
 ## 2026-11-12 — FR-92 manager negative balance, pending-aware balance, Employees balances (branch complete, docs written)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); Sonnet 5.5 subagents implemented
