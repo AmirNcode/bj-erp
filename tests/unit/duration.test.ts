@@ -90,7 +90,7 @@ describe('daysToMinutes', () => {
 
 describe('projectLeaveBalance', () => {
   it('subtracts a request from the current paid balance', () => {
-    expect(projectLeaveBalance(4 * 480, 20 * 480 + 240)).toEqual({
+    expect(projectLeaveBalance(4 * 480, 20 * 480 + 240)).toMatchObject({
       requestingMinutes: 1920,
       remainingMinutes: 16 * 480 + 240,
       unpaidMinutes: 0,
@@ -99,7 +99,7 @@ describe('projectLeaveBalance', () => {
 
   it('splits an over-balance request at eight hours per day', () => {
     // Requesting 4 days (32h) from 3 days + 4h (28h) leaves 4h unpaid.
-    expect(projectLeaveBalance(4 * 480, 3 * 480 + 240)).toEqual({
+    expect(projectLeaveBalance(4 * 480, 3 * 480 + 240)).toMatchObject({
       requestingMinutes: 1920,
       remainingMinutes: 0,
       unpaidMinutes: 240,
@@ -107,10 +107,58 @@ describe('projectLeaveBalance', () => {
   });
 
   it('never projects a negative paid balance', () => {
-    expect(projectLeaveBalance(60, -120)).toEqual({
+    expect(projectLeaveBalance(60, -120)).toMatchObject({
       requestingMinutes: 60,
       remainingMinutes: 0,
       unpaidMinutes: 60,
+    });
+  });
+});
+
+describe('projectLeaveBalance rules', () => {
+  it('strict blocks a request above balance minus pending', () => {
+    expect(
+      projectLeaveBalance(3 * 480, 5 * 480, { pendingMinutes: 3 * 480, rule: 'strict' })
+    ).toMatchObject({ availableMinutes: 960, overMinutes: 480, blocked: true, unpaidMinutes: 0 });
+    expect(
+      projectLeaveBalance(2 * 480, 5 * 480, { pendingMinutes: 3 * 480, rule: 'strict' })
+    ).toMatchObject({ blocked: false, remainingMinutes: 0, overMinutes: 0 });
+  });
+
+  it('overdraft lets the balance go negative and never blocks', () => {
+    expect(projectLeaveBalance(5 * 480, 2 * 480, { rule: 'overdraft' })).toMatchObject({
+      overMinutes: 1440,
+      remainingMinutes: -1440,
+      unpaidMinutes: 0,
+      blocked: false,
+    });
+    expect(
+      projectLeaveBalance(5 * 480, 2 * 480, { pendingMinutes: 480, rule: 'overdraft' }).remainingMinutes
+    ).toBe(-1920);
+  });
+
+  it('split (default) keeps the old unpaid behaviour', () => {
+    expect(projectLeaveBalance(5 * 480, 2 * 480)).toMatchObject({
+      unpaidMinutes: 1440,
+      remainingMinutes: 0,
+      blocked: false,
+    });
+  });
+
+  it('strict with a negative balance blocks everything', () => {
+    expect(projectLeaveBalance(480, -480, { rule: 'strict' })).toMatchObject({
+      availableMinutes: -480,
+      overMinutes: 480,
+      blocked: true,
+    });
+  });
+
+  it('none ignores balances', () => {
+    expect(projectLeaveBalance(480, 0, { rule: 'none' })).toMatchObject({
+      remainingMinutes: 0,
+      unpaidMinutes: 0,
+      overMinutes: 0,
+      blocked: false,
     });
   });
 });

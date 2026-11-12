@@ -309,7 +309,7 @@ export function LeaveBalancePreview({
   /** Null hides the preview. */
   requestedMinutes: number | null;
   leaveType: LeaveType | undefined;
-  balance: { loading: boolean; projection: LeaveBalanceProjection | null };
+  balance: { loading: boolean; projection: LeaveBalanceProjection | null; pendingMinutes?: number };
   hoursPerDay: number;
   locale: string;
   labels: DurationLabels & {
@@ -318,11 +318,27 @@ export function LeaveBalancePreview({
     noBalance: string;
     unpaidTimeOffLabel: string;
   };
-  testIds: { container: string; requesting: string; balance: string; unpaid: string };
+  testIds: {
+    container: string;
+    requesting: string;
+    balance: string;
+    unpaid: string;
+    available?: string;
+    over?: string;
+  };
 }) {
+  const t = useTranslations('leaveBalance');
   if (requestedMinutes === null) return null;
   const duration = (minutes: number) => formatDuration(minutes, hoursPerDay, locale, labels);
-  const { loading, projection } = balance;
+  const { loading, projection, pendingMinutes = 0 } = balance;
+  // Bidi isolates (the string form of <bdi>) keep a negative value's minus sign in place in RTL.
+  const iso = (minutes: number) => `\u2068${duration(minutes)}\u2069`;
+  const overText = (key: 'strictOver' | 'overdraftNote') =>
+    t(key, {
+      over: iso(projection?.overMinutes ?? 0),
+      available: iso(Math.max(projection?.availableMinutes ?? 0, 0)),
+      after: iso(projection?.remainingMinutes ?? 0),
+    });
 
   return (
     <div className="rounded-lg bg-secondary px-4 py-3 text-sm space-y-1" data-testid={testIds.container}>
@@ -331,13 +347,35 @@ export function LeaveBalancePreview({
       </div>
       {leaveType?.is_paid && leaveType.affects_balance && (
         <>
+          {projection && pendingMinutes > 0 && (
+            <div data-testid={testIds.available}>
+              {t('available')}: <bdi>{duration(projection.availableMinutes)}</bdi>{' '}
+              <span className="text-muted-foreground">
+                {t('pendingNote', { value: iso(pendingMinutes) })}
+              </span>
+            </div>
+          )}
           <div data-testid={testIds.balance}>
-            {loading
-              ? '…'
-              : projection
-                ? `${labels.remainingBalanceLabel}: ${duration(projection.remainingMinutes)}`
-                : labels.noBalance}
+            {loading ? (
+              '…'
+            ) : projection ? (
+              <>
+                {labels.remainingBalanceLabel}: <bdi>{duration(projection.remainingMinutes)}</bdi>
+              </>
+            ) : (
+              labels.noBalance
+            )}
           </div>
+          {projection && projection.rule === 'strict' && projection.blocked && (
+            <div className="font-medium text-destructive" data-testid={testIds.over}>
+              {overText('strictOver')}
+            </div>
+          )}
+          {projection && projection.rule === 'overdraft' && projection.overMinutes > 0 && (
+            <div className="font-medium text-amber-700" data-testid={testIds.over}>
+              {overText('overdraftNote')}
+            </div>
+          )}
           {projection && projection.unpaidMinutes > 0 && (
             <div className="font-medium text-destructive" data-testid={testIds.unpaid}>
               {labels.unpaidTimeOffLabel}: {duration(projection.unpaidMinutes)}

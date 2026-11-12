@@ -2468,5 +2468,15 @@
       "done": "{count, plural, =0 {No open sessions.} one {Signed out of # device.} other {Signed out of # devices.}}",
       "openPagesNote": "Pages that are already open keep working for up to 60 minutes."
     }
+  },
+  "leaveBalance": {
+    "available": "Available",
+    "pendingNote": "{value} in pending requests",
+    "strictOver": "This is {over} more than your available balance. Request at most {available}, and file the rest as unpaid leave.",
+    "overdraftNote": "{over} more than your available balance. Your balance will go to {after}.",
+    "confirmTitle": "Request more than your balance?",
+    "confirmBody": "You are requesting {over} more than your available balance ({available}). Your balance will go to {after}. Monthly accruals will cover it; if it is still negative at year end, HR may convert it to unpaid leave.",
+    "confirmSend": "Send request",
+    "confirmBack": "Go back"
   }
 }

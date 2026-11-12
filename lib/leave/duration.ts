@@ -23,29 +23,69 @@ export type DurationParts = {
   minutes: number;
 };
 
+/** How a paid-leave request is checked against the balance (FR-92). */
+export type BalanceRule = 'overdraft' | 'strict' | 'split' | 'none';
+
 export type LeaveBalanceProjection = {
   requestingMinutes: number;
+  /** Balance minus pending requests; may be negative. */
+  availableMinutes: number;
   remainingMinutes: number;
   unpaidMinutes: number;
+  /** How much of the request exceeds what is available. */
+  overMinutes: number;
+  /** Strict rule only: the request exceeds the available balance. */
+  blocked: boolean;
+  rule: BalanceRule;
 };
 
 /**
- * Projects one paid-leave request against the current balance without allowing
- * paid leave to become negative. The database repeats this calculation under
- * its employee ledger lock when the request is approved.
+ * Projects one paid-leave request against the balance minus pending requests.
+ * `split` (default) turns the excess into unpaid time, `strict` blocks it,
+ * `overdraft` lets the balance go negative, `none` ignores balances. The
+ * database repeats this under its employee ledger lock.
  */
 export function projectLeaveBalance(
   requestedMinutes: number,
-  currentBalanceMinutes: number
+  balanceMinutes: number,
+  opts: { pendingMinutes?: number; rule?: BalanceRule } = {}
 ): LeaveBalanceProjection {
+  const rule = opts.rule ?? 'split';
   const requestingMinutes = Math.max(Math.round(requestedMinutes), 0);
-  const availableMinutes = Math.max(Math.round(currentBalanceMinutes), 0);
+  const balance = Math.round(balanceMinutes);
+  const availableMinutes = balance - Math.max(Math.round(opts.pendingMinutes ?? 0), 0);
+  const usable = Math.max(availableMinutes, 0);
+  const overMinutes = Math.max(requestingMinutes - usable, 0);
+  const base = { requestingMinutes, availableMinutes, rule };
 
-  return {
-    requestingMinutes,
-    remainingMinutes: Math.max(availableMinutes - requestingMinutes, 0),
-    unpaidMinutes: Math.max(requestingMinutes - availableMinutes, 0),
-  };
+  switch (rule) {
+    case 'overdraft':
+      return {
+        ...base,
+        remainingMinutes: availableMinutes - requestingMinutes,
+        unpaidMinutes: 0,
+        overMinutes,
+        blocked: false,
+      };
+    case 'strict':
+      return {
+        ...base,
+        remainingMinutes: Math.max(availableMinutes - requestingMinutes, 0),
+        unpaidMinutes: 0,
+        overMinutes,
+        blocked: overMinutes > 0,
+      };
+    case 'none':
+      return { ...base, remainingMinutes: 0, unpaidMinutes: 0, overMinutes: 0, blocked: false };
+    default:
+      return {
+        ...base,
+        remainingMinutes: Math.max(availableMinutes - requestingMinutes, 0),
+        unpaidMinutes: overMinutes,
+        overMinutes,
+        blocked: false,
+      };
+  }
 }
 
 /**

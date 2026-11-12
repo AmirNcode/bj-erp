@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
+import { formatDuration } from '@/lib/leave/duration';
 import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
 import { submitHourlyRequest } from '@/lib/actions/leave/requests';
 import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
@@ -16,6 +17,7 @@ import {
   ReplacementField,
   TimeRangeFields,
 } from '../_components/FormParts';
+import { OverdraftConfirm } from '../_components/OverdraftConfirm';
 import {
   useLeaveBalance,
   useReplacementCandidates,
@@ -137,8 +139,12 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
   const delegation = useRequestDelegation(isoDate && durationMinutes > 0 ? { start: isoDate, end: isoDate, unit: 'hour', startTime, endTime, replacementId: replacement.replacementId || null } : null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const projection = balance.projection;
+  const needsConfirm = projection?.rule === 'overdraft' && projection.overMinutes > 0;
+  const durationText = (m: number) => formatDuration(m, workSettings.hoursPerDay, locale, labels);
+
+  const send = () => {
     const problem = !selectedTypeId
       ? labels.validationSelectType
       : !isoDate
@@ -168,6 +174,13 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
         signature.reset();
       }
     );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (projection?.blocked) return;
+    if (needsConfirm) setConfirmOpen(true);
+    else send();
   };
 
   return (
@@ -232,6 +245,8 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
               requesting: 'hourly-duration',
               balance: 'hourly-balance',
               unpaid: 'hourly-unpaid',
+              available: 'hourly-available',
+              over: 'hourly-over',
             }}
           />
 
@@ -245,12 +260,26 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
           <Button
             type="submit"
-            disabled={isPending || overLimit || delegation.blocked}
+            disabled={isPending || overLimit || delegation.blocked || !!projection?.blocked}
             className="w-full"
             data-testid="hourly-submit"
           >
             {isPending ? '...' : labels.submit}
           </Button>
+
+          {projection && (
+            <OverdraftConfirm
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              onConfirm={() => {
+                setConfirmOpen(false);
+                send();
+              }}
+              overLabel={durationText(projection.overMinutes)}
+              availableLabel={durationText(Math.max(projection.availableMinutes, 0))}
+              afterLabel={durationText(projection.remainingMinutes)}
+            />
+          )}
         </form>
       </CardContent>
     </Card>
