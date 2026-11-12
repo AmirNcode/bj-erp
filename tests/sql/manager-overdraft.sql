@@ -49,6 +49,12 @@ create function pg_temp.sub(p_emp text,p_type text,p_off int,p_days int) returns
     'select public.submit_leave_request_v2(%L,%L,%L,''full'',%L,true)',
     pg_temp.fx(p_type),pg_temp.d(p_off),pg_temp.d(p_off+p_days-1),pg_temp.sig()));
 $$;
+-- Submit an hourly request of p_hours hours (from 07:00) on day offset p_off; returns the id or 'ERROR …'.
+create function pg_temp.subh(p_emp text,p_type text,p_off int,p_hours int) returns text language sql as $$
+  select pg_temp.as_scalar(p_emp,format(
+    'select public.submit_hourly_leave_request_v2(%L,%L,%L,%L,%L,true)',
+    pg_temp.fx(p_type),pg_temp.d(p_off),'07:00'::time,('07:00'::time+make_interval(hours=>p_hours))::time,pg_temp.sig()));
+$$;
 create function pg_temp.mk(p_key text,p_emp text,p_type text,p_off int,p_days int) returns void language plpgsql as $$
 declare v text:=pg_temp.sub(p_emp,p_type,p_off,p_days);
 begin
@@ -95,7 +101,8 @@ begin
     ('admin','admin','9990092001'),('hr','hr','9990092002'),('mgr','manager','9990092003'),
     ('mgr2','manager','9990092004'),('mgr3','manager','9990092005'),
     ('emp','employee','9990092006'),('emp2','employee','9990092007'),('emp3','employee','9990092008'),
-    ('emp4','employee','9990092009'),('emp5','employee','9990092010'),('ed','employee','9990092011')) t(k,role,code) loop
+    ('emp4','employee','9990092009'),('emp5','employee','9990092010'),('ed','employee','9990092011'),
+    ('emp6','employee','9990092012'),('mgr4','manager','9990092013')) t(k,role,code) loop
     insert into mo_fx values(who.k,gen_random_uuid());
     insert into auth.users(id,email) values(pg_temp.fx(who.k),who.code||'@overdraft-fixture.invalid');
     insert into public.profiles(id,company_id,department_id,employee_code,personnel_no,full_name,must_change_password)
@@ -111,8 +118,8 @@ begin
   insert into public.work_settings(company_id,weekend_days,work_start,work_end,approval_order_enforced)
     values(v_company,'{}','07:00','15:00',false);
   -- Annual (overdraft allowed), sick (balance but no overdraft), unpaid (no balance).
-  insert into public.leave_types(company_id,name_fa,name_en,affects_balance,is_paid,manager_overdraft)
-    values(v_company,'سالانه','Fixture annual',true,true,true) returning id into v_id;
+  insert into public.leave_types(company_id,name_fa,name_en,affects_balance,is_paid,manager_overdraft,allow_hourly)
+    values(v_company,'سالانه','Fixture annual',true,true,true,true) returning id into v_id;
   insert into mo_fx values('annual',v_id);
   insert into public.leave_types(company_id,name_fa,name_en,affects_balance,is_paid,manager_overdraft)
     values(v_company,'استعلاجی','Fixture sick',true,true,false) returning id into v_id;
@@ -300,4 +307,19 @@ insert into public.leave_request_approvals(request_id,step_role,approver_id,deci
   values(pg_temp.fx('cx2'),'finance',pg_temp.fx('mgr3'),'approved'); -- a partial decision; the request stays pending
 select pg_temp.expect('pending request: a non-admin approver still gets the balance keys',
   pg_temp.as_scalar('mgr3',format('select (c->>''balance_rule'') from (select public.app_request_approval_context(%L) c) x',pg_temp.fx('cx2'))),'strict');
+-- ============================================================ hourly requests share the balance
+-- strict: 10h balance, one pending 1-day (8h) request leaves 2h for an hourly request.
+select pg_temp.setbal('emp6','annual',600);
+select pg_temp.mk('h1','emp6','annual',100,1);
+select pg_temp.expect('hourly strict: a 3h request over the 2h remainder is refused',
+  pg_temp.err(pg_temp.subh('emp6','annual',110,3)),'22023');
+select pg_temp.expect('hourly strict: the 2h remainder fits',pg_temp.err(pg_temp.subh('emp6','annual',111,2)),'ok');
+-- manager: 1h balance, a 3h hourly request is allowed and goes negative on approval.
+select pg_temp.setbal('mgr4','annual',60);
+insert into mo_fx values('h2',(pg_temp.subh('mgr4','annual',120,3))::uuid);
+select pg_temp.expect('hourly overdraft: submits 3h on 1h, unpaid 0',pg_temp.unpaid('h2'),'0');
+select pg_temp.expect('hourly overdraft: approval ok',pg_temp.approve('h2'),'ok');
+select pg_temp.expect('hourly overdraft: full 3h on the ledger',pg_temp.ledger('h2'),'consumption:-180');
+select pg_temp.expect('hourly overdraft: balance is -2h',pg_temp.bal('mgr4','annual'),'-120');
+
 rollback;

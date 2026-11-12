@@ -220,6 +220,12 @@ select pg_temp.expect('gates: other company refused',
   pg_temp.err(pg_temp.as_scalar('hr',format('select public.app_convert_negatives(array[%L]::uuid[])::text',pg_temp.fx('other')))),'42501');
 select pg_temp.expect('gates: other company balance untouched',
   public.current_leave_balance(pg_temp.fx('other'),pg_temp.fx('annual2'))::text,'-480');
+select pg_temp.expect('gates: admin of another company refused (bulk)',
+  pg_temp.err(pg_temp.as_scalar('admin',format('select public.app_convert_negatives(array[%L]::uuid[])::text',pg_temp.fx('other')))),'42501');
+select pg_temp.expect('gates: admin of another company refused (single)',
+  pg_temp.err(pg_temp.as_scalar('admin',format('select public.app_convert_negative(%L,null,null)::text',pg_temp.fx('other')))),'42501');
+select pg_temp.expect('gates: other company balance still untouched',
+  public.current_leave_balance(pg_temp.fx('other'),pg_temp.fx('annual2'))::text,'-480');
 select pg_temp.expect('gates: admin may convert',
   pg_temp.as_scalar('admin',format('select public.app_convert_negatives(array[%L,%L]::uuid[])::text',pg_temp.fx('emp2'),pg_temp.fx('emp3'))),'1');
 
@@ -289,13 +295,16 @@ select pg_temp.expect('pending counts: clerk refused',
 
 -- ============================================================ payroll rows
 select pg_temp.expect('payroll rows: hr sees the three sources for emp1',
-  pg_temp.rows('hr',format('select source,ref,unpaid_minutes from public.app_payroll_unpaid(%L,%L) where employee_id=%L and source<>''conversion''',
+  pg_temp.rows('hr',format('select source,serial_year||''-''||lpad(serial_seq::text,4,''0''),unpaid_minutes from public.app_payroll_unpaid(%L,%L) where employee_id=%L and source<>''conversion''',
     pg_temp.ys(),pg_temp.today(),pg_temp.fx('emp1'))),
   '(unpaid_part,9006-0006,240);(unpaid_part,9007-0007,480);(unpaid_type,9005-0005,480)');
 select pg_temp.expect('payroll rows: four conversions with no ref, dated today, annual type name',
-  pg_temp.rows('hr',format('select count(*),sum(unpaid_minutes),min(on_date)=max(on_date) and min(on_date)=%L,min(leave_type_name_en),count(ref) from public.app_payroll_unpaid(%L,%L) where employee_id=%L and source=''conversion''',
+  pg_temp.rows('hr',format('select count(*),sum(unpaid_minutes),min(on_date)=max(on_date) and min(on_date)=%L,min(leave_type_name_en),count(serial_year) from public.app_payroll_unpaid(%L,%L) where employee_id=%L and source=''conversion''',
     pg_temp.today(),pg_temp.ys(),pg_temp.today(),pg_temp.fx('emp1'))),
   '(5,3600,t,"Fixture annual",0)');
+select pg_temp.expect('payroll rows: balance_minutes is the current annual balance on every row',
+  pg_temp.as_scalar('hr',format('select (count(*) filter (where balance_minutes is distinct from %s))::text from public.app_payroll_unpaid(%L,%L) where employee_id=%L',
+    coalesce(public.current_leave_balance(pg_temp.fx('emp1'),pg_temp.fx('annual'))::text,'null'),pg_temp.ys(),pg_temp.today(),pg_temp.fx('emp1'))),'0');
 select pg_temp.expect('payroll rows: only the caller''s company',
   pg_temp.as_scalar('hr',format('select count(*)::text from public.app_payroll_unpaid(%L,%L) where employee_id=%L',pg_temp.ys(),pg_temp.today(),pg_temp.fx('other'))),'0');
 select pg_temp.expect('payroll rows: date filter excludes everything before',

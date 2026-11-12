@@ -1,6 +1,7 @@
 -- FR-92: convert a negative annual balance to unpaid leave; Employees totals, negatives list,
--- pending counts and payroll rows. Writes only leave_ledger, leave_unpaid_conversions and audit_log,
--- so only the per-employee 'leave:' advisory lock is taken (no approval_lock).
+-- pending counts and payroll rows. Writes only leave_ledger, leave_unpaid_conversions and audit_log.
+-- The public entry points take private.approval_lock(company) first, then the per-employee
+-- 'leave:' advisory locks (CLAUDE.md lock order).
 
 create table public.leave_unpaid_conversions (
   id uuid primary key default gen_random_uuid(),
@@ -55,6 +56,9 @@ declare
   v_conv uuid;
 begin
   select company_id into v_company from public.profiles where id = p_employee;
+  if v_company is distinct from (select company_id from public.profiles where id = p_actor) then
+    raise exception 'not allowed to change this employee''s leave' using errcode = '42501';
+  end if;
   v_type := private.annual_type(v_company);
   if v_type is null then return 0; end if;
   perform pg_advisory_xact_lock(hashtextextended('leave:' || p_employee::text, 0));
@@ -93,6 +97,7 @@ begin
   if not (private.is_admin(v_uid) or private.has_perm(v_uid, 'leave_balances', 'edit')) then
     raise exception 'only admins or hr can set leave balance' using errcode = '42501';
   end if;
+  perform private.approval_lock((select company_id from public.profiles where id = v_uid));
   for v_id in select distinct x from unnest(coalesce(p_employee_ids, '{}')) as u(x) where x is not null order by x loop
     if v_id = v_uid and not private.is_admin(v_uid) then continue; end if;
     if not (private.is_admin(v_uid) or private.can_manage_leave_of(v_uid, v_id)) then
@@ -113,6 +118,7 @@ begin
   if not (private.is_admin(v_uid) or private.has_perm(v_uid, 'leave_balances', 'edit')) then
     raise exception 'only admins or hr can set leave balance' using errcode = '42501';
   end if;
+  perform private.approval_lock((select company_id from public.profiles where id = v_uid));
   if not private.is_admin(v_uid) and p_employee_id = v_uid then
     raise exception 'you cannot change your own leave balance' using errcode = '42501';
   end if;
@@ -209,8 +215,9 @@ end $$;
 
 create function public.app_payroll_unpaid(p_from date, p_to date)
 returns table(employee_id uuid, full_name text, personnel_no text, department_name_fa text,
-              department_name_en text, source text, ref text, on_date date,
-              leave_type_name_fa text, leave_type_name_en text, unpaid_minutes integer)
+              department_name_en text, source text, serial_year integer, serial_seq integer,
+              on_date date, leave_type_name_fa text, leave_type_name_en text,
+              unpaid_minutes integer, balance_minutes integer)
 language plpgsql stable security definer set search_path = '' as $$
 declare v_uid uuid := auth.uid(); v_company uuid;
 begin
@@ -219,11 +226,14 @@ begin
   end if;
   select company_id into v_company from public.profiles where id = v_uid;
   return query
-    select u.employee_id, p.full_name, p.personnel_no, d.name_fa, d.name_en, u.source, u.ref,
-           u.on_date, u.tn_fa, u.tn_en, u.minutes
+    select u.employee_id, p.full_name, p.personnel_no, d.name_fa, d.name_en, u.source, u.serial_year, u.serial_seq,
+           u.on_date, u.tn_fa, u.tn_en, u.minutes,
+           (select l.balance_after_minutes from public.leave_ledger l
+             where l.employee_id = u.employee_id and l.leave_type_id = private.annual_type(v_company)
+             order by l.seq desc limit 1)
       from (
         select r.employee_id, case when lt.affects_balance then 'unpaid_part' else 'unpaid_type' end as source,
-               r.serial_year::text || '-' || lpad(r.serial_seq::text, 4, '0') as ref,
+               r.serial_year, r.serial_seq,
                r.start_date as on_date, lt.name_fa as tn_fa, lt.name_en as tn_en,
                case when lt.affects_balance then r.unpaid_minutes
                     when not lt.is_paid then r.requested_minutes else 0 end as minutes
@@ -234,7 +244,7 @@ begin
            and ((not lt.affects_balance and not lt.is_paid)
                 or (lt.affects_balance and r.unpaid_minutes > 0))
         union all
-        select c.employee_id, 'conversion', null::text,
+        select c.employee_id, 'conversion', null::integer, null::integer,
                (c.converted_at at time zone 'Asia/Tehran')::date, lt.name_fa, lt.name_en, c.minutes
           from public.leave_unpaid_conversions c
           join public.leave_types lt on lt.id = c.leave_type_id
