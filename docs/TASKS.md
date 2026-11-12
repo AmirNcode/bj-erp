@@ -3,7 +3,7 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
-## FR-92 manager negative balance (branch `feat/manager-negative-balance`, not deployed)
+## FR-92 manager negative balance (deployed 2026-11-12, PR #25)
 
 - ☐ **Before merge (owner/HR):** owner tests on the local stack `bj-approvals-finance` (http://localhost:3501, FR-92 migrations applied 2026-11-12). Backfill dry run on `daily-20261112T020206Z` (2026-11-12): **0 requests, 0 people** move (the only annual request with an unpaid part belongs to a non-Manager). 2 people already have a negative annual balance from earlier edits: they appear in "Convert negatives" after deploy.
 - ☐ Import "overwrite balances" (`app_bulk_import_employees`) lacks the pending-request warning that quick add, set balance and convert show (spec 10, final review #12). Idea: the dry-run step counts people with pending annual requests.

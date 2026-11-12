@@ -78,6 +78,22 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — PR #25 (FR-92) merged and deployed; branch deleted
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ 7720ad0
+**Trigger:** Amir: "approved, merge", then delete the branch.
+
+**Actions outside the repo**
+- `gh pr merge 25 --merge` (head pinned to 7720ad0) → main `0299833`. CI "Deploy Liara" run 43329854365: build + deploy success, so the 3 FR-92 migrations (incl. the backfill, dry run: 0 requests) ran on Liara. `https://bjeng.app/api/health` → ok.
+- `feat/manager-negative-balance` deleted on origin and locally.
+
+**Verification**
+- Deploy run success; prod health ok. No signed-in check on production.
+
+**For the next agent**
+- FR-92 deferred items stay in TASKS. Local :3501 runs the same code.
+
 ## 2026-11-12 — My balances strip on the Request page
 
 **Agent:** Claude Opus 5.5 via Claude Code

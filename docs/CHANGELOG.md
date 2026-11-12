@@ -9,7 +9,7 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
-### Manager negative balance and Employees balances (FR-92) — not deployed
+### Manager negative balance and Employees balances (FR-92) — deployed 2026-11-12
 
 - **Managers can borrow annual leave.** A Manager may request annual leave (daily or hourly) past their balance: the whole request is paid and the balance goes negative. The request form first asks them to confirm ("balance will go to −X, monthly accruals will cover it"). A negative carries over at Farvardin 1; nothing is split off as unpaid any more for Managers.
 - **Everyone else is capped at what they have available.** Available = balance minus your own pending requests of that type, shown on the form. Asking for more is refused and the form points to the unpaid leave type. Sick leave is unchanged (paid up to the balance, the rest unpaid).
