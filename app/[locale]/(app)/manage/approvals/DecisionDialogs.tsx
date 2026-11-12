@@ -114,7 +114,8 @@ function useStepName() {
   const t = useTranslations('approvalEvidence');
   const tSteps = useTranslations('approvals.steps');
   return (step: ApprovalChoice) => {
-    const title = step.name ?? tSteps(step.label);
+    // The step's signature-box title (Approval steps) first, then the named person or the role.
+    const title = step.boxLabel ?? step.name ?? tSteps(step.label);
     return step.delegated ? `${title} · ${t('onBehalf', { name: step.principalName ?? '—' })}` : title;
   };
 }
@@ -165,12 +166,15 @@ export function ApproveDialog({
   options,
   triggerClassName,
   triggerIcon,
+  summary,
 }: {
   id: string;
   labels: ApproveDialogLabels;
   disabled: boolean;
   onApprove: (signatureData: string, signatureAuthorized: boolean, extras: ApproveExtras) => void;
   options?: ApproveOptions;
+  /** Full request summary (RequestSummary), shown above the signing block. */
+  summary?: React.ReactNode;
 } & TriggerProps) {
   const tc = useTranslations('common');
   const t = useTranslations('approvals');
@@ -213,11 +217,12 @@ export function ApproveDialog({
           {labels.approve}
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent size="default">
+      <AlertDialogContent size="default" className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <AlertDialogHeader>
           <AlertDialogTitle>{labels.approve}</AlertDialogTitle>
           <AlertDialogDescription>{labels.approveConfirm}</AlertDialogDescription>
         </AlertDialogHeader>
+        {summary}
         {!override && <SigningAs id={id} steps={steps} />}
         {overrideOnly && (
           <p className="rounded-md bg-muted px-3 py-2 text-sm" data-testid={`approve-override-only-${id}`}>

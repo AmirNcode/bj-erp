@@ -48,8 +48,8 @@ where not exists (
 -- a fresh install those UPDATE statements match zero rows and these types would
 -- otherwise land with allow_hourly = false and null accrual defaults — hourly
 -- silently unavailable and nobody accruing. (Found 2026-07-29.)
-insert into public.leave_types (company_id, name_fa, name_en, is_paid, affects_balance, default_annual_quota_days, allow_half_day, allow_hourly, default_accrual_minutes_per_month, default_annual_cap_minutes, default_carryover_cap_minutes)
-select '00000000-0000-0000-0000-0000000000c0', 'مرخصی استحقاقی', 'Annual Leave', true, true, 26, true, true, 480, 5760, 4320
+insert into public.leave_types (company_id, name_fa, name_en, is_paid, affects_balance, default_annual_quota_days, allow_half_day, allow_hourly, default_accrual_minutes_per_month, default_annual_cap_minutes, default_carryover_cap_minutes, manager_overdraft)
+select '00000000-0000-0000-0000-0000000000c0', 'مرخصی استحقاقی', 'Annual Leave', true, true, 26, true, true, 480, 5760, 4320, true
 where not exists (
   select 1 from public.leave_types
   where company_id = '00000000-0000-0000-0000-0000000000c0' and name_en = 'Annual Leave'
@@ -70,3 +70,9 @@ where not exists (
   select 1 from public.leave_types
   where company_id = '00000000-0000-0000-0000-0000000000c0' and name_en = 'Unpaid Leave'
 );
+
+-- FR-92: Annual Leave is the overdraft-capable type. The migration flags it with an UPDATE that
+-- matches zero rows on a fresh install (migrations run before this seed), so set it here too.
+update public.leave_types set manager_overdraft = true
+where company_id = '00000000-0000-0000-0000-0000000000c0' and name_en = 'Annual Leave'
+  and affects_balance and not manager_overdraft;

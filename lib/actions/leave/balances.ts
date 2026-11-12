@@ -17,35 +17,37 @@ import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { latestBalances, type BalanceItem } from '@/lib/leave/balances';
 import type { QuickAddRow } from '@/lib/leave/balanceBreakdown';
 import { todayInAppTz } from '@/lib/appDate';
+import type { BalanceRule } from '@/lib/leave/duration';
 import { accrueBeforeRead } from './shared';
 
 /**
- * Returns the caller's current balance for a given leave_type.
- * Reads the latest leave_ledger row for (employee_id, leave_type_id).
- * Returns null if no ledger entry exists (e.g. no allocation yet).
+ * The caller's balance for a leave type, the minutes held by their pending
+ * requests, and the rule that applies to them (FR-92). Balance is null when no
+ * ledger entry exists yet.
  */
-export async function getMyBalance(
-  leaveTypeId: string
-): Promise<{ ok: true; balanceMinutes: number | null } | DbErrorResult> {
+export async function getMyBalance(leaveTypeId: string): Promise<
+  | { ok: true; balanceMinutes: number | null; pendingMinutes: number; rule: BalanceRule }
+  | DbErrorResult
+> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
   await accrueBeforeRead(c.supabase);
 
-  const { data, error } = await c.supabase
-    .from('leave_ledger')
-    .select('balance_after_minutes')
-    .eq('employee_id', c.user.id)
-    .eq('leave_type_id', leaveTypeId)
-    // seq, not created_at: accrual writes several rows per transaction and
-    // created_at ties (migration 20260729130007).
-    .order('seq', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
+  const { data, error } = await c.supabase.rpc('app_my_leave_availability', {
+    p_leave_type_id: leaveTypeId,
+  });
   if (error) return dbErr(error.message);
 
-  return { ok: true, balanceMinutes: data?.balance_after_minutes ?? null };
+  const row = (data ?? {}) as Record<string, unknown>;
+  const rules: BalanceRule[] = ['overdraft', 'strict', 'split', 'none'];
+  const rule = rules.find((r) => r === row.rule) ?? 'split';
+  return {
+    ok: true,
+    balanceMinutes: typeof row.balance_minutes === 'number' ? row.balance_minutes : null,
+    pendingMinutes: typeof row.pending_minutes === 'number' ? row.pending_minutes : 0,
+    rule,
+  };
 }
 
 export async function getMyBalances(): Promise<
@@ -60,7 +62,7 @@ export async function getMyBalances(): Promise<
     await Promise.all([
       c.supabase
         .from('leave_types')
-        .select('id, name_fa, name_en')
+        .select('id, name_fa, name_en, manager_overdraft')
         .eq('company_id', c.companyId)
         .eq('active', true)
         .order('name_fa'),
@@ -79,6 +81,7 @@ export async function getMyBalances(): Promise<
     name_fa: t.name_fa,
     name_en: t.name_en,
     balanceMinutes: byType[t.id] ?? 0,
+    managerOverdraft: t.manager_overdraft,
   }));
 
   return { ok: true, balances };
@@ -106,7 +109,7 @@ export async function getEmployeeBalances(
     await Promise.all([
       c.supabase
         .from('leave_types')
-        .select('id, name_fa, name_en')
+        .select('id, name_fa, name_en, manager_overdraft')
         .eq('company_id', c.companyId)
         .eq('active', true)
         .eq('affects_balance', true)
@@ -126,6 +129,7 @@ export async function getEmployeeBalances(
     name_fa: t.name_fa,
     name_en: t.name_en,
     balanceMinutes: byType[t.id] ?? 0,
+    managerOverdraft: t.manager_overdraft,
   }));
 
   return { ok: true, balances };

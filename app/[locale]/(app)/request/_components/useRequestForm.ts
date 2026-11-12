@@ -6,7 +6,7 @@ import type { Json } from '@/lib/supabase/types';
 import { useRouter } from 'next/navigation';
 import { getMyBalance } from '@/lib/actions/leave/balances';
 import { getReplacementCandidates } from '@/lib/actions/leave/requests';
-import { projectLeaveBalance } from '@/lib/leave/duration';
+import { projectLeaveBalance, type BalanceRule } from '@/lib/leave/duration';
 import type { ReplacementCandidate } from '@/lib/leave/replacement';
 import type { SignatureLabels } from './RequestSignature';
 import type { DbErrorResult } from '@/lib/errors/db-error';
@@ -74,27 +74,47 @@ export function useSignature() {
   };
 }
 
-/** The caller's balance for the chosen leave type, and what this request leaves of it. */
+/** The caller's availability for the chosen leave type, and what this request leaves of it. */
 export function useLeaveBalance(leaveTypeId: string, requestedMinutes: number | null) {
-  const [fetched, setFetched] = useState<{ typeId: string; minutes: number | null } | null>(null);
+  const [fetched, setFetched] = useState<{
+    typeId: string;
+    minutes: number | null;
+    pendingMinutes: number;
+    rule: BalanceRule;
+  } | null>(null);
 
   useEffect(() => {
     if (!leaveTypeId) return;
     let cancelled = false;
     getMyBalance(leaveTypeId).then((res) => {
-      if (!cancelled) setFetched({ typeId: leaveTypeId, minutes: res.ok ? res.balanceMinutes : null });
+      if (cancelled) return;
+      setFetched(
+        res.ok
+          ? { typeId: leaveTypeId, minutes: res.balanceMinutes, pendingMinutes: res.pendingMinutes, rule: res.rule }
+          : { typeId: leaveTypeId, minutes: null, pendingMinutes: 0, rule: 'split' }
+      );
     });
     return () => {
       cancelled = true;
     };
   }, [leaveTypeId]);
 
-  const current = fetched && fetched.typeId === leaveTypeId ? fetched.minutes : null;
+  const current = fetched && fetched.typeId === leaveTypeId ? fetched : null;
+  // The database reads a missing ledger row as 0 (current_leave_balance), so the strict block and
+  // the manager's confirm must too; only the split rule has nothing to project without a balance.
+  const balanceForProjection =
+    current && current.minutes === null && (current.rule === 'strict' || current.rule === 'overdraft')
+      ? 0
+      : current?.minutes ?? null;
   return {
     loading: !!leaveTypeId && fetched?.typeId !== leaveTypeId,
+    pendingMinutes: current?.pendingMinutes ?? 0,
     projection:
-      requestedMinutes !== null && current !== null
-        ? projectLeaveBalance(requestedMinutes, current)
+      requestedMinutes !== null && current && balanceForProjection !== null
+        ? projectLeaveBalance(requestedMinutes, balanceForProjection, {
+            pendingMinutes: current.pendingMinutes,
+            rule: current.rule,
+          })
         : null,
   };
 }

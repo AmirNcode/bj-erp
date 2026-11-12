@@ -568,6 +568,78 @@ export type Database = {
           },
         ]
       }
+      leave_unpaid_conversions: {
+        Row: {
+          company_id: string
+          converted_at: string
+          converted_by: string | null
+          employee_id: string
+          id: string
+          leave_type_id: string
+          ledger_id: string
+          minutes: number
+          note: string | null
+        }
+        Insert: {
+          company_id: string
+          converted_at?: string
+          converted_by?: string | null
+          employee_id: string
+          id?: string
+          leave_type_id: string
+          ledger_id: string
+          minutes: number
+          note?: string | null
+        }
+        Update: {
+          company_id?: string
+          converted_at?: string
+          converted_by?: string | null
+          employee_id?: string
+          id?: string
+          leave_type_id?: string
+          ledger_id?: string
+          minutes?: number
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_unpaid_conversions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_unpaid_conversions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_unpaid_conversions_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_unpaid_conversions_ledger_id_fkey"
+            columns: ["ledger_id"]
+            isOneToOne: false
+            referencedRelation: "leave_ledger"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leave_unpaid_conversions_converted_by_fkey"
+            columns: ["converted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_ledger: {
         Row: {
           balance_after_minutes: number
@@ -1020,6 +1092,7 @@ export type Database = {
           default_carryover_cap_minutes: number
           id: string
           is_paid: boolean
+          manager_overdraft: boolean
           name_en: string | null
           name_fa: string
         }
@@ -1036,6 +1109,7 @@ export type Database = {
           default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
+          manager_overdraft?: boolean
           name_en?: string | null
           name_fa: string
         }
@@ -1052,6 +1126,7 @@ export type Database = {
           default_carryover_cap_minutes?: number
           id?: string
           is_paid?: boolean
+          manager_overdraft?: boolean
           name_en?: string | null
           name_fa?: string
         }
@@ -2407,6 +2482,56 @@ export type Database = {
       }
       // FR-91: the edit_* permission keys the caller holds (admin: all five).
       app_my_request_edit_types: { Args: never; Returns: string[] }
+      // FR-92: the caller's balance, pending minutes and balance rule for one leave type.
+      app_my_leave_availability: { Args: { p_leave_type_id: string }; Returns: Json }
+      // FR-92: convert negative annual balances to unpaid leave; Employees totals; payroll rows.
+      app_convert_negatives: { Args: { p_employee_ids: string[] }; Returns: number }
+      app_convert_negative: {
+        Args: { p_employee_id: string; p_minutes: number | null; p_note: string | null }
+        Returns: number
+      }
+      app_negative_balances: {
+        Args: never
+        Returns: {
+          employee_id: string
+          full_name: string
+          personnel_no: string | null
+          department_name_fa: string | null
+          department_name_en: string | null
+          balance_minutes: number
+        }[]
+      }
+      app_employee_leave_totals: {
+        Args: { p_ids: string[] }
+        Returns: {
+          employee_id: string
+          balance_minutes: number | null
+          used_minutes: number
+          unpaid_minutes: number
+        }[]
+      }
+      app_pending_leave_counts: {
+        Args: { p_employee_id: string }
+        Returns: { leave_type_id: string; pending_count: number; pending_minutes: number }[]
+      }
+      app_payroll_unpaid: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          employee_id: string
+          full_name: string
+          personnel_no: string | null
+          department_name_fa: string | null
+          department_name_en: string | null
+          source: string
+          serial_year: number | null
+          serial_seq: number | null
+          on_date: string
+          leave_type_name_fa: string | null
+          leave_type_name_en: string | null
+          unpaid_minutes: number
+          balance_minutes: number | null
+        }[]
+      }
       app_add_leave_balance: {
         Args: {
           p_employee_id: string

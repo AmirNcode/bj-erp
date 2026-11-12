@@ -13,12 +13,14 @@ import { STATUS_BADGE_STYLES } from '@/components/StatusBadge';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import type { PendingApproval } from '@/lib/actions/leave/approvals';
 import type { ApprovalChoice } from '@/lib/leave/approval-context';
 import {
   ApproveDialog,
   RejectDialog,
   type ApproveOptions,
 } from '../manage/approvals/DecisionDialogs';
+import { RequestSummary } from '../manage/approvals/RequestSummary';
 import { ExtensionDecisionCard } from '../manage/approvals/ExtensionDecisionCard';
 import { PersonAvatar } from '@/components/PersonAvatar';
 
@@ -31,13 +33,15 @@ export type PendingRow = {
   /** "{type} ، {dates} ، {duration}" */
   summary: string;
   cover: string | null;
-  balanceAfter: string | null;
+  balanceAfter: React.ReactNode;
   /** Short-staffed warning; replaces the meta line when present. */
   warning: string | null;
   /** FR-58/61: override and per diem choices for the approve dialog. */
   approveOptions: ApproveOptions;
   rejectionSteps?: ApprovalChoice[];
   canReject?: boolean;
+  /** The full request, for the approve dialog's summary. */
+  request: PendingApproval;
 };
 
 type Props = {
@@ -46,6 +50,8 @@ type Props = {
   total: string;
   count: number;
   locale: string;
+  /** Company day length, for the summary's durations. */
+  hoursPerDay: number;
   /** FR-70: trip extensions waiting for HR, decided in place. */
   extensions?: PendingExtension[];
 };
@@ -75,7 +81,7 @@ function useLabels() {
   };
 }
 
-export function PendingApprovalsCard({ rows, total, count, locale, extensions = [] }: Props) {
+export function PendingApprovalsCard({ rows, total, count, locale, hoursPerDay, extensions = [] }: Props) {
   const labels = useLabels();
   const tExt = useTranslations('travel.extension');
   const router = useRouter();
@@ -155,7 +161,9 @@ export function PendingApprovalsCard({ rows, total, count, locale, extensions = 
               ) : (
                 (row.cover || row.balanceAfter) && (
                   <p className="text-xs text-muted-foreground">
-                    {[row.cover, row.balanceAfter].filter(Boolean).join(' - ')}
+                    {row.cover}
+                    {row.cover && row.balanceAfter ? ' - ' : null}
+                    {row.balanceAfter}
                   </p>
                 )
               )}
@@ -178,6 +186,7 @@ export function PendingApprovalsCard({ rows, total, count, locale, extensions = 
                 labels={labels}
                 disabled={isPending || (!row.approveOptions.hasNaturalStep && !row.approveOptions.canOverride)}
                 options={row.approveOptions}
+                summary={<RequestSummary request={row.request} hoursPerDay={hoursPerDay} locale={locale} />}
                 onApprove={(signatureData, signatureAuthorized, extras) =>
                   decide(row.id, labels.approveSuccess, () =>
                     approveRequest(row.id, { signatureData, signatureAuthorized, ...extras })

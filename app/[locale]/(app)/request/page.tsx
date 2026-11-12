@@ -18,6 +18,7 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { LeaveRequestForm } from './LeaveRequestForm';
 import { MyRequestsList } from './MyRequestsList';
 import { RequestTypeTabs } from './_components/RequestTypeTabs';
+import { MyBalancesStrip } from './_components/MyBalancesStrip';
 import { ListSkeleton } from '@/components/Skeletons';
 import { CollapsibleSection } from '@/components/CollapsibleSection';
 
@@ -68,6 +69,7 @@ async function RequestPageData({
 
   return (
     <div className="space-y-4">
+      <MyBalancesStrip locale={locale} hoursPerDay={workSettings.hoursPerDay} />
       {/* Both sections start closed (My Requests opens itself when something is
           pending). The tabs live inside: the other request types are pages. */}
       <CollapsibleSection title={t('newRequestSection')} defaultOpen={openForm} testId="new-request">

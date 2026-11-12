@@ -78,6 +78,131 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — My balances strip on the Request page
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ 557981b
+**Trigger:** Amir: show each person's leave balances in one line under "Request Leave", as wide as the New request section.
+
+**What changed**
+- `app/[locale]/(app)/request/_components/MyBalancesStrip.tsx` (new): server `MyBalancesStrip` (data from `getMyBalanceUsage`, balance types only) + presentational `MyBalancesView`. Card like the section header (`rounded-xl border bg-card`), wallet icon + "My balances", items split by `border-s`; negative in `text-destructive`. `@container`: below `@xl` the label is sr-only and each item stacks the name (xs) under the amount.
+- `request/page.tsx` renders it first in the sections stack; `request.myBalances` in fa/en. CHANGELOG line.
+
+**Actions outside the repo**
+- `:3501` app rebuilt and restarted. Nothing on Liara.
+
+**Verification**
+- tsc 0, lint 0, unit 1329. Temporary `zz-balances` page (fake data) checked in fa and en on desktop and in a 375px container: one row, no overflow. Page deleted, `.next/dev/types` cleaned. No signed-in check.
+
+**State left behind**
+- Committed and pushed to PR #25; not merged.
+
+## 2026-11-12 — "Signing as" shows the step's signature-box title
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ fbe166e
+**Trigger:** Amir (screenshot of a trip's approve dialog): after "Signing as" show the step's "Signature box" title from Approval steps (e.g. «اداری و منابع انسانی»), then update the local deploy.
+
+**What changed** (`2403160`)
+- `lib/leave/approval-context.ts` — `ApprovalChoice.boxLabel`.
+- `lib/actions/leave/approvals.ts › getPendingApprovals` — one `approval_steps` select (`id, box_label`, readable by any active user) for the offered decision/rejection steps; sets `boxLabel` (trimmed, null when empty).
+- `app/[locale]/(app)/manage/approvals/DecisionDialogs.tsx › useStepName` — box title first, then the named person, then the role; the delegated "on behalf of" suffix stays. Applies to approve (Signing as) and reject (step picker), leave and trips.
+- `tests/unit/approval-queue-order.test.ts` — mock gains `from()`; new test for the box title. CHANGELOG line.
+
+**Actions outside the repo**
+- `:3501` (`bj-approvals-finance`): app rebuilt from 2403160 and restarted; DB untouched (steps 1–3 have box titles saved). Nothing on Liara.
+
+**Verification**
+- tsc 0, lint 0, unit 136 files / 1329 tests. `/api/health` 200. No signed-in check by the agent.
+
+**State left behind**
+- Committed and pushed to PR #25; not merged.
+
+## 2026-11-12 — FR-92 local test moved to the existing :3501 stack
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ d24d7f8
+**Trigger:** Amir: close the new :3502 stack, update the running :3501 deploy instead; remember to reuse a running local deploy.
+
+**What changed**
+- Nothing in code. This entry corrects "State left behind" of the entry below: `bj-fr92` no longer exists.
+
+**Actions outside the repo**
+- `bj-fr92` (:3502): `compose down -v` (its throwaway DB volume removed), image `bj-erp-app:fr92` removed, `.bj-deploy/fr92` deleted.
+- `bj-approvals-finance` (:3501): `pg_dump -Fc` of `postgres` to the session scratchpad (`approvals-finance-pre-fr92.dump`, not in the repo); `bj_apply_migrations` applied `20261111150000` + the 3 FR-92 migrations (release `approvals-finance-local`; **now FROZEN locally** — later SQL fixes need new migration files); View-as hook synced; app rebuilt from d24d7f8; rest restarted. SMS was already `off`, 0/4 cron active. Its data is the earlier local live restore (43 requests), not the 2026-11-12 backup.
+- Auto-memory: "reuse running local deploy" rule. Nothing run on Liara.
+
+**Verification**
+- `/api/health` 200 and `/login` 200 on :3501; no errors in app/rest logs. No signed-in check by the agent.
+
+**State left behind**
+- PR #25 open, not merged. :3501 serves the branch for Amir's test.
+
+## 2026-11-12 — PR #25 (FR-92) review, fixes, backfill dry run, local test stack
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); two Sonnet 5.5 subagents implemented, one at a time
+**Branch / HEAD at start:** feat/manager-negative-balance @ 04e7ee5
+**Trigger:** Amir: review PR #25 against the spec, fix findings, dry-run the backfill on the newest backup, run it locally for his test; no merge without his "approved, merge".
+
+**What changed**
+- Review: 0 critical, 1 important, 8 minor. The four redefined SQL functions differ from main's bodies only in FR-92 lines; lock order OK everywhere; TS mirrors match SQL; fa/en parity OK.
+- `4356816` (important + minor SQL): backfill logic moved into `private.manager_overdraft_backfill()` (same selection/locks/writes), migration calls it once; new `tests/sql/manager-overdraft-backfill.sql` (23 checks: ledger chain, untouched rows, audit, idempotent, not client-executable). `20261112120000` raises if a company has balance types but none flagged `manager_overdraft`; `app_my_leave_availability` refuses another company's / inactive type (22023). `schema.sql` patched to the clone's dump.
+- `65fdc6d` (minor UI): `PendingBalanceWarning` and the form's overdraft note use the `warning` token instead of raw `amber-*`; single bidi isolate for `approvals.summary.overdraft|unpaid` (messages lost the literal isolates; Home now wraps the value).
+- Docs: TASKS (dry-run result, two minor notes), CHANGELOG line, this entry.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `fr92_base_chk`, `fr92_a1` (subagent), `fr92_v1`, `fr92_errchk`, `fr92_dry` (newest live backup) — all dropped. Local `postgres` only read (pg_dump into clones, a leave_types select).
+- New isolated Compose project **`bj-fr92`** (`.bj-deploy/fr92`, untracked; gateway `127.0.0.1:3502`, fresh volume): restored `~/Backups/bj-erp/daily-20261112T020206Z.dump` (sha256 OK) per DEPLOY-LIARA (`supabase_functions_admin` role, list without the graphql ACL, single transaction, `restore-graphql.sql`); SMS `off` + key/username NULL, all 4 cron jobs inactive before the app started; `bj_apply_migrations` applied the 3 FR-92 migrations (release `fr92-local`, frozen in that DB only); View-as hook synced; app image `bj-erp-app:fr92` built from 65fdc6d; rest restarted. Still running for Amir's test.
+- Nothing run on Liara.
+
+**Verification**
+- Fresh clone: manager-overdraft 79/0, unpaid-conversions 57/0, manager-overdraft-backfill 23/0. tsc 0, lint 0, unit 136 files / 1328 tests, `npm run build` OK. `/api/health` 200 on :3502, login 200, auth health 200.
+- Backfill dry run on the newest live backup: 0 requests, 0 people (1 annual request with an unpaid part, owner not a Manager; 2 people already negative from earlier edits).
+- No signed-in check by the agent (Amir signs in himself); no e2e.
+
+**State left behind**
+- Commits pushed to `feat/manager-negative-balance` (PR #25). Not merged, not deployed: waiting for Amir's "approved, merge".
+- Stack `bj-fr92` running; stop with `.bj-deploy/fr92/compose down` (add `-v` to drop its DB volume) once testing is done. Cookies on localhost are shared with :3501 — sign out there first if sessions mix.
+
+**For the next agent**
+- Deferred items unchanged in TASKS (FR-92 section).
+
+## 2026-11-12 — FR-92 manager negative balance, pending-aware balance, Employees balances (branch complete, docs written)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); Sonnet 5.5 subagents implemented
+**Branch / HEAD at start:** feat/manager-negative-balance from origin/main @ 0ca4c90
+**Trigger:** Amir: managers may go negative on annual leave, employees capped at available (pending counted), full request in the approve dialog, balances/convert tool on Employees, payroll report for HR. Spec `docs/specs/2026-11-12-manager-negative-balance-design.md`, plan `docs/plans/2026-11-12-manager-negative-balance.md`.
+
+**What changed** (commits, oldest first)
+- `16103e5` docs: spec and plan.
+- `680564b` migration `20261112120000_manager_overdraft.sql`: `leave_types.manager_overdraft`, `private.balance_rule`, `private.pending_leave_minutes`, `app_my_leave_availability`; `submit_leave_impl`, `finalize_approval_request`, `edit_request_impl` and the approval context redefined (overdraft / strict / split).
+- `43996c3`, `ebbb7ce` migration `20261112120100_unpaid_conversions.sql`: `leave_unpaid_conversions`, convert RPCs, totals, negatives, pending counts, payroll rows; review fixes (negatives scope, unpaid parity, context privacy on print).
+- `e79bc55` migration `20261112120200_manager_overdraft_backfill.sql`, `scripts/sql/manager-overdraft-backfill-dryrun.sql`, `schema.sql` dump.
+- `f0f8a1f` request forms: pending-aware balance, strict block, Manager confirm (`OverdraftConfirm`). `745227c` context balance keys only while pending or to requester/admin/`leave_balances` read.
+- `5c8d61d` approve dialog `RequestSummary`. `0d8dc42`, `0afb18b` Employees columns, expandable rows on all widths (card list replaced).
+- `c2cad16` convert negatives dialog + edit-page form + pending warning. `c81e95b` Payroll section + CSV.
+- `857b55f` (SQL), `091a5db` (CSV formula guard in `buildCsv`/`parseCsv`), `da05b3b` (UI) final-review fixes: approve dialog scroll on phones, seed sets `manager_overdraft`, Home card real balance-after, null balance as 0 and submit disabled while loading, TS split parity, company lock + same-company check in converts, payroll RPC returns balance and serial parts, `data-table`, `<bdi>`, hourly SQL tests.
+- Docs (this commit): REQUIREMENTS FR-92 (+ FR-13/48/91 notes), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, this entry, CLAUDE.md gotchas.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `mnb` (postgres + 20261111150000 + the 3 FR-92 migrations) and `mnb_base` (before FR-92, for schema diffs). Both dropped at the end of the session. Local `postgres` NOT migrated. Nothing run on Liara.
+- Temporary dev pages for screenshots were created and removed; `.next/dev/types` cleaned.
+
+**Verification**
+- SQL on `mnb`: `tests/sql/manager-overdraft.sql` 78 pass / 0 fail; `tests/sql/unpaid-conversions.sql` 57 / 0.
+- `tsc --noEmit` and lint clean; unit tests 136 files / 1328 tests pass; `npm run build` OK.
+- Playwright screenshots (temporary pages, fake data) of the Employees table and the approve dialog at 375x667 and desktop. No e2e run; no signed-in browser check; the approved-row backfill path was only checked in a rolled-back transaction.
+- Whole-branch review by Opus: 0 critical, 3 important, 14 minor; all important and most minor fixed in the fix wave.
+
+**State left behind**
+- Everything committed on `feat/manager-negative-balance`; not pushed. PR to be opened by the lead. Not deployed.
+
+**For the next agent**
+- Local `postgres` lacks `20261111150000_per_diem_first_hr_step`; apply it before the FR-92 migrations on any clone.
+- Before merge: run the backfill dry run on the newest live backup and show the list to Amir/HR (TASKS).
+- Deferred (all in TASKS): import "overwrite balances" has no pending warning; strict edits ignore pending; phone details repeat "Last name"; partial convert has no client max; Payroll is a section, not a tab; HR feedback on the convert process; error log FR-81 still on hold.
+- Rulings: `app_employee_leave_totals` is gated on `people` read (wider than `leave_balances`, Amir's call); the admin is never listed in negatives; a Manager edit moves an old unpaid part onto the ledger (DATA_MODEL).
+
 ## 2026-11-11 — PR #24 review fixes (one per diem step, stale TS mirror, lockedAboveLeave note); PR merged
 
 **Agent:** Claude Opus 5.5 via Claude Code

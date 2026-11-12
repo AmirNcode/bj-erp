@@ -15,6 +15,7 @@ import { approvalBundle, approvalChoices, progressLabel, type ApprovalChoice, ty
 import { perDiemProblem, signatureProblem } from '@/lib/leave/signature';
 import type { TravellerField } from '@/lib/travel/fields';
 import type { DayPart } from './shared';
+import type { BalanceRule } from '@/lib/leave/duration';
 
 /** `warning`: the decision is saved but a follow-up step (FR-70 travel tick) was not. */
 export type DecisionResult = { ok: true; warning?: string } | DbErrorResult;
@@ -131,6 +132,12 @@ export type PendingApproval = {
   start_time: string | null;
   end_time: string | null;
   requested_minutes: number;
+  /** FR-92: the part of the request that will be recorded unpaid. */
+  unpaid_minutes: number;
+  /** FR-92: requester's balance, other pending requests and the rule; null when withheld. */
+  balance_minutes: number | null;
+  pending_other_minutes: number | null;
+  balance_rule: BalanceRule | null;
   reason: string | null;
   replacement_name: string | null;
   /** True when the named cover has leave overlapping this request (spec §2.1). */
@@ -246,6 +253,10 @@ export async function getPendingApprovals(includeReview = false): Promise<
       start_date: row.start_date, end_date: row.end_date, day_part: row.day_part,
       unit: row.unit, start_time: row.start_time, end_time: row.end_time,
       requested_minutes: row.requested_minutes,
+      unpaid_minutes: row.unpaid_minutes ?? 0,
+      balance_minutes: row.balance_minutes ?? null,
+      pending_other_minutes: row.pending_other_minutes ?? null,
+      balance_rule: row.balance_rule ?? null,
       reason: row.reason,
       replacement_name: row.replacement_name,
       replacement_conflict: row.replacement_conflict,
@@ -270,6 +281,18 @@ export async function getPendingApprovals(includeReview = false): Promise<
       can_reject: row.can_reject === true || rejections.length > 0,
     };
   });
+  // Signature-box titles of the steps on offer, for "Signing as" in the dialogs.
+  const stepIds = [...new Set(requests.flatMap((r) =>
+    [...(r.decision_steps ?? []), ...(r.rejection_steps ?? [])].map((s) => s.stepId).filter((id): id is string => !!id)))];
+  if (stepIds.length) {
+    const { data: boxes } = await c.supabase.from('approval_steps').select('id, box_label').in('id', stepIds);
+    const label = new Map((boxes ?? []).map((b) => [b.id, b.box_label?.trim() || null]));
+    for (const r of requests) {
+      for (const s of [...(r.decision_steps ?? []), ...(r.rejection_steps ?? [])]) {
+        if (s.stepId) s.boxLabel = label.get(s.stepId) ?? null;
+      }
+    }
+  }
   // Like main: only what the caller can act on now. A later step waiting on an earlier one
   // (approval order enforced) stays out of the queue and badge, even though SQL lets it reject.
   const actionable = requests.filter((r) => r.can_override || !!r.decision_steps?.length);

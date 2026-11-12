@@ -17,6 +17,8 @@ export type BalanceItem = {
   name_fa: string;
   name_en: string | null;
   balanceMinutes: number;
+  /** The annual type (FR-92): negative balances can be converted to unpaid. */
+  managerOverdraft: boolean;
 };
 
 /** Latest `balance_after_minutes` per leave type, by `seq`, from unsorted rows. */

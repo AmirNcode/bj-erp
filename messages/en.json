@@ -93,7 +93,7 @@
     "pendingTitle": "Pending requests",
     "allApprovals": "All approvals",
     "noPending": "No requests are waiting",
-    "balanceAfter": "Balance after approval: {value}",
+    "balanceAfter": "Balance after approval: <bdi>{value}</bdi>",
     "shortStaffed": "{count} others from {department} are absent today",
     "nextHolidayTitle": "Next official holiday",
     "holidayIn": "{weekday}, in {days} days",
@@ -148,6 +148,7 @@
     "success": "Request submitted successfully.",
     "error": "Error",
     "myRequests": "My Requests",
+    "myBalances": "My balances",
     "newRequestSection": "New request",
     "showPrevious": "{count, plural, one {Show # previous request} other {Show # previous requests}}",
     "noRequests": "No requests found.",
@@ -418,7 +419,24 @@
       "pageOf": "Page {page} of {pages}",
       "reviewHint": "Completed requests you can review."
     },
-    "pendingTitle": "Pending requests"
+    "pendingTitle": "Pending requests",
+    "summary": {
+      "requester": "Requester",
+      "type": "Type",
+      "dates": "Dates",
+      "time": "Time",
+      "duration": "Duration",
+      "location": "Location",
+      "reason": "Reason",
+      "replacement": "Replacement",
+      "balanceNow": "Balance now",
+      "otherPending": "Other pending requests",
+      "available": "Available",
+      "requested": "Requested",
+      "after": "Balance after approval",
+      "overdraft": "{value} over the balance. The balance will go negative.",
+      "unpaid": "{value} will be recorded as unpaid."
+    }
   },
   "review": {
     "title": "Request review",
@@ -578,6 +596,11 @@
       "manager": "Direct Manager",
       "roles": "Roles",
       "hireDate": "Hire Date",
+      "balance": "Balance",
+      "usedThisYear": "Used this year",
+      "unpaid": "Unpaid",
+      "showDetails": "Show details",
+      "hideDetails": "Hide details",
       "status": "Status",
       "actions": "Actions",
       "active": "Active",
@@ -612,6 +635,34 @@
       "policyCarryCap": "Carryover cap",
       "policyCarryCapHint": "The most that survives into the next Jalali year. At Nowruz anything above this is forfeited. 0 means unused leave is lost each year.",
       "policyWarn": "Employee created, but saving the accrual policy failed:",
+      "convert": {
+        "open": "Convert negatives to unpaid",
+        "title": "Convert negatives to unpaid",
+        "hint": "Turns the selected people's negative annual balance into unpaid leave and sets their balance to 0.",
+        "empty": "No one has a negative balance.",
+        "selectAll": "Select all",
+        "selectRow": "Select {name}",
+        "name": "Name",
+        "personnelNo": "Personnel no.",
+        "department": "Department",
+        "balance": "Balance",
+        "loading": "Loading…",
+        "convert": "Convert",
+        "converting": "Converting…",
+        "cancel": "Cancel",
+        "confirm": "Convert {count} people, {total} in total, to unpaid leave? Their balances go back to 0.",
+        "done": "{count} people converted."
+      },
+      "convertOne": {
+        "title": "Convert negative balance to unpaid",
+        "amount": "Amount",
+        "note": "Note (optional)",
+        "submit": "Convert",
+        "converting": "Converting…",
+        "done": "Converted to unpaid.",
+        "invalidAmount": "Enter whole days and hours, more than zero."
+      },
+      "pendingWarning": "This person has {count, plural, one {# pending {type} request} other {# pending {type} requests}}. Approval will use the balance you set here.",
       "quickAdd": {
         "title": "Add to balance",
         "leaveType": "Leave type",
@@ -1289,6 +1340,9 @@
     "requestEditNotApproved": "Only an approved request can be edited.",
     "requestEditNothing": "Nothing was changed.",
     "requestEditUnpaid": "This change needs more leave than the balance holds. An edit cannot make leave unpaid.",
+    "requestExceedsBalance": "This request is more than your available balance. File the rest as unpaid leave.",
+    "convertExceedsNegative": "The amount is more than the negative balance.",
+    "convertNotNegative": "The balance is not negative.",
     "requestEditBookingStarted": "Procurement has already started booking this trip, so it cannot become an hourly errand.",
     "requestEditExtended": "This trip has been extended, so it cannot become an hourly errand."
   },
@@ -2464,6 +2518,40 @@
       "cancel": "Cancel",
       "done": "{count, plural, =0 {No open sessions.} one {Signed out of # device.} other {Signed out of # devices.}}",
       "openPagesNote": "Pages that are already open keep working for up to 60 minutes."
+    }
+  },
+  "leaveBalance": {
+    "available": "Available",
+    "pendingNote": "{value} in pending requests",
+    "strictOver": "This is {over} more than your available balance. Request at most {available}, and file the rest as unpaid leave.",
+    "overdraftNote": "{over} more than your available balance. Your balance will go to {after}.",
+    "confirmTitle": "Request more than your balance?",
+    "confirmBody": "You are requesting {over} more than your available balance ({available}). Your balance will go to {after}. Monthly accruals will cover it; if it is still negative at year end, HR may convert it to unpaid leave.",
+    "confirmSend": "Send request",
+    "confirmBack": "Go back"
+  },
+  "payroll": {
+    "title": "Payroll: unpaid leave",
+    "hint": "For HR to pass to payroll. Covers {range}. Includes converted negative balances.",
+    "export": "Export CSV",
+    "empty": "No unpaid leave in this period.",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "col": {
+      "name": "Name",
+      "personnelNo": "Personnel no.",
+      "department": "Department",
+      "unpaid": "Unpaid",
+      "balance": "Current balance",
+      "date": "Date",
+      "source": "Source",
+      "ref": "Request no.",
+      "type": "Leave type"
+    },
+    "source": {
+      "unpaid_type": "Unpaid leave request",
+      "unpaid_part": "Unpaid part of a request",
+      "conversion": "Converted from negative balance"
     }
   }
 }

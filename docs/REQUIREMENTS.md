@@ -46,7 +46,10 @@ Validation/release status stays in `docs/TASKS.md`.
   balance**, and any **unpaid excess** before submit. A request may exceed the available paid
   balance: approval atomically consumes only the available paid minutes, leaves that balance at
   zero, and records the rest as unpaid time. Durations use the configured workday, default 8 hours.
-  *(Extended 2026-08-05.)*
+  *(Extended 2026-08-05.)* **Amended 2026-11-12 (FR-92):** the split now follows a per-person rule —
+  Managers' annual leave is paid in full (balance may go negative), other employees cannot exceed
+  available (balance minus their own pending requests, shown on the form), and only other balance types
+  (sick) still split; the form shows available, not just balance.
 - **FR-14** ☑ **Approval**: the employee's **direct manager** approves/rejects; **admin can
   override** any decision. Manual approval requires the actual deciding approver to supply a digital
   signature and explicitly authorize its use; rejection requires neither. The signature, consent
@@ -227,7 +230,8 @@ Validation/release status stays in `docs/TASKS.md`.
   direct manager or the requester. *(2026-10-05; extends FR-36.)*
 - **FR-48** ☑ **Negative leave balances.** An opening balance or an HR/admin balance correction may
   be below zero (bounded at one year of workdays); requests against a balance at or below zero are
-  recorded as unpaid, as overage already was. *(2026-10-05.)*
+  recorded as unpaid, as overage already was. *(2026-10-05.)* **Amended 2026-11-12 (FR-92):** a
+  request by a **Manager** for annual leave may also drive the balance below zero (any amount).
 
 - **FR-49** ☑ **Bulk import modes.** The uploader picks **Add new only** (default; HR gets only
   this), **Add & update** (people already in the app are updated, the file overwrites the names and
@@ -409,6 +413,25 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
+  A **Manager** (built-in role, checked at action time) may request annual leave (daily and hourly)
+  past the available balance: the whole amount is paid and the balance goes negative (no limit), after
+  a confirm dialog on the request form; monthly accruals pay it back and a negative carries over at
+  Farvardin 1. Everyone else (HR and the admin included) is **capped at available** = balance minus the
+  person's own pending requests of that type; over it the request is refused and the form points to the
+  unpaid leave type. Sick leave keeps the paid/unpaid split. The approve dialog shows the full request
+  and balance figures (balance now, other pending, available, requested, after) to every approver. If an
+  employee's balance dropped since submission, approval still splits paid/unpaid. HR gets a warning
+  when changing a balance that has a pending request of that type. Employees page: **Balance**, **Used
+  this year**, **Unpaid** columns (Jalali year to date; visible to `people` read), no horizontal scroll
+  (low-priority columns move into an expandable row on every width, Edit inside). **Convert negatives
+  to unpaid** (`leave_balances` edit): a dialog for everyone below zero (bulk, with "except" by
+  unticking) and a partial amount on the edit page; the balance returns to 0 by an adjustment row and a
+  `leave_unpaid_conversions` row. **Payroll** section in Reports (`reports` read, CSV): unpaid-type
+  requests, unpaid parts and conversions per person plus the annual balance. CSV exports guard cells
+  that start with `= + - @`. Past Managers' unpaid annual parts are backfilled onto the ledger
+  (migration `20261112120200`). Amends FR-13, FR-48, FR-91. *(2026-11-12; spec
+  `2026-11-12-manager-negative-balance-design.md`; branch `feat/manager-negative-balance`, not deployed.)*
 - **FR-91** ☐ **Edit approved requests, per request type.** Five role-editor toggles in a new section
   "Edit requests": edit daily leave, edit hourly leave, edit daily work trip, edit hourly work errand
   (`edit_leave_daily|edit_leave_hourly|edit_errand_daily|edit_errand_hourly`) and edit own requests
@@ -420,7 +443,7 @@ Validation/release status stays in `docs/TASKS.md`.
   location, description or replacement. Reason (1-1000 characters) and the editor's signature are
   required (`app_edit_request`). Same limits as a new request (overlap, hourly daily limit, working
   hours), except an edit may not create or grow an unpaid part of a balance leave (a leave of an unpaid
-  type may be lengthened). The leave ledger gets a `consumption` (longer) or `reversal` (shorter) row
+  type may be lengthened; **FR-92:** a Manager's edit of annual leave may push the balance further negative). The leave ledger gets a `consumption` (longer) or `reversal` (shorter) row
   for the difference. Trip -> hourly errand clears the per diem and is refused after procurement started
   booking, while an extension is pending, or once an extension was approved; hourly errand -> trip enters
   procurement. The admin's requests are editable like anyone's. All signatures stay

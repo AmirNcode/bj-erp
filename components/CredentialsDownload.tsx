@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { downloadCsv, fileDateStamp } from '@/lib/csv/download';
+import { guardCsvCell } from '@/lib/csv/parse';
 import type { IssuedCredential } from '@/lib/actions/employees';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -38,9 +39,10 @@ export function CredentialsDownload({ credentials }: Props) {
   const download = () => {
     const rows = [
       [t('name'), t('code'), t('password')],
-      ...credentials.map((c) => [c.fullName, c.employeeCode, c.password]),
+      // The generated password must stay byte-exact (it may start with @), so only the typed name is guarded.
+      ...credentials.map((c) => [guardCsvCell(c.fullName), c.employeeCode, c.password]),
     ];
-    downloadCsv(rows, `bj-credentials-${fileDateStamp()}.csv`);
+    downloadCsv(rows, `bj-credentials-${fileDateStamp()}.csv`, { guard: false });
     setSaved(true);
   };
 

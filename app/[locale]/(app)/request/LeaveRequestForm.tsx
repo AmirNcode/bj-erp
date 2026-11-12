@@ -2,10 +2,11 @@
 
 import { useRequestLabels } from './_components/useRequestLabels';
 import { useState } from 'react';
+import { OverdraftConfirm } from './_components/OverdraftConfirm';
 import { RequestDelegationFields } from './_components/RequestDelegationFields';
 import { countWorkingDays } from '@/lib/leave/workingDays';
 import { dateObjectToGregorian, isHalfDayAllowed, type PickerDate } from '@/lib/leave/dateConvert';
-import { daysToMinutes } from '@/lib/leave/duration';
+import { daysToMinutes, formatDuration } from '@/lib/leave/duration';
 import { submitRequest } from '@/lib/actions/leave/requests';
 import { RequestSignatureFields } from './_components/RequestSignature';
 import {
@@ -74,8 +75,12 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
   const delegation = useRequestDelegation(start && end ? { start, end, unit: 'day', dayPart: effectiveDayPart, replacementId: replacement.replacementId || null } : null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const projection = balance.projection;
+  const needsConfirm = projection?.rule === 'overdraft' && projection.overMinutes > 0;
+  const durationText = (m: number) => formatDuration(m, workSettings.hoursPerDay, locale, labels);
+
+  const send = () => {
     const problem = !selectedTypeId
       ? labels.validationSelectType
       : !start || !end
@@ -105,6 +110,13 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
         setDayPart('full');
       }
     );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (projection?.blocked || balance.loading) return;
+    if (needsConfirm) setConfirmOpen(true);
+    else send();
   };
 
   return (
@@ -177,6 +189,8 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
               requesting: 'working-days-count',
               balance: 'balance-display',
               unpaid: 'unpaid-display',
+              available: 'leave-available',
+              over: 'leave-over',
             }}
           />
 
@@ -188,9 +202,27 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
             errorTestId="error-msg"
           />
 
-          <Button type="submit" disabled={isPending || delegation.blocked} className="w-full">
+          <Button
+            type="submit"
+            disabled={isPending || delegation.blocked || balance.loading || !!projection?.blocked}
+            className="w-full"
+          >
             {isPending ? '...' : labels.submit}
           </Button>
+
+          {projection && (
+            <OverdraftConfirm
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              onConfirm={() => {
+                setConfirmOpen(false);
+                send();
+              }}
+              overLabel={durationText(projection.overMinutes)}
+              availableLabel={durationText(Math.max(projection.availableMinutes, 0))}
+              afterLabel={durationText(projection.remainingMinutes)}
+            />
+          )}
         </form>
       </CardContent>
     </Card>

@@ -136,34 +136,3 @@ export async function getNextHoliday(): Promise<NextHoliday | null> {
     .maybeSingle();
   return data ? { date: data.holiday_date, name_fa: data.name_fa, name_en: data.name_en } : null;
 }
-
-/**
- * Current balance per `${employeeId}:${leaveTypeId}` for the given requesters —
- * the "balance after approval" hint on the home approval rows. Read through
- * leave_ledger's own policy (self, manager-of, can_read_all); rows the caller
- * may not read simply come back missing and the hint is left out.
- */
-export async function getRequesterBalances(
-  employeeIds: string[]
-): Promise<Record<string, number>> {
-  if (employeeIds.length === 0) return {};
-  const c = await requireCaller();
-  if (!c.ok) return {};
-  const { data } = await c.supabase
-    .from('leave_ledger')
-    .select('employee_id, leave_type_id, balance_after_minutes, seq')
-    .in('employee_id', [...new Set(employeeIds)]);
-  const out: Record<string, number> = {};
-  const byEmployee = new Map<string, NonNullable<typeof data>>();
-  for (const r of data ?? []) {
-    const list = byEmployee.get(r.employee_id) ?? [];
-    list.push(r);
-    byEmployee.set(r.employee_id, list);
-  }
-  for (const [emp, rows] of byEmployee) {
-    for (const [type, minutes] of Object.entries(latestBalances(rows))) {
-      out[`${emp}:${type}`] = minutes;
-    }
-  }
-  return out;
-}

@@ -10,6 +10,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
 import { getEmployeeBalances, getEmployeePolicies, getCurrentJalaliMonthStart, getQuickAdds } from '@/lib/actions/leave/balances';
+import { getPendingLeaveCounts } from '@/lib/actions/leave/unpaidConversions';
 import { getWorkSettings } from '@/lib/actions/leave/reference';
 import { listRoles } from '@/lib/actions/roles';
 import { notFound } from 'next/navigation';
@@ -146,6 +147,9 @@ export default async function EditEmployeePage({ params }: Props) {
   const balances = balancesRes?.ok ? balancesRes.balances : [];
   const quickAddsRes = canManageLeave ? await getQuickAdds(id) : null;
   const quickAdds = quickAddsRes?.ok ? quickAddsRes.rows : [];
+  // FR-92: pending requests per type, for the warning on balance edits.
+  const pendingRes = canManageLeave ? await getPendingLeaveCounts(id) : null;
+  const pendingCounts = pendingRes?.ok ? pendingRes.counts : {};
   // Balances are stored in minutes; the editor renders and accepts days, so it
   // needs the company's day length to convert at the boundary.
   const workSettingsRes = canManageLeave ? await getWorkSettings() : null;
@@ -211,6 +215,7 @@ export default async function EditEmployeePage({ params }: Props) {
         managers={managers ?? []}
         balances={balances}
         quickAdds={quickAdds}
+        pendingCounts={pendingCounts}
         hoursPerDay={hoursPerDay}
         policies={policies}
         typeDefaults={typeDefaults ?? []}

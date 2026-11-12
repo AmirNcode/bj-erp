@@ -216,6 +216,7 @@ export function HomeBoard({
               count={pending.count}
               extensions={pending.extensions}
               locale={locale}
+              hoursPerDay={hoursPerDay}
             />
           )}
 

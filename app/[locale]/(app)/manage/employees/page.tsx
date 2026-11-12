@@ -36,9 +36,14 @@ import {
 } from '@/lib/employees/list';
 import { Button } from '@/components/ui/button';
 import { ListSkeleton } from '@/components/Skeletons';
+import { getEmployeeLeaveTotals } from '@/lib/actions/leave/totals';
+import { getWorkSettings } from '@/lib/actions/leave/reference';
+import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
+import { formatDuration } from '@/lib/leave/duration';
+import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
+import { ConvertNegativesDialog } from './ConvertNegativesDialog';
 import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
-import { PersonAvatar } from '@/components/PersonAvatar';
 import { EmployeesToolbar } from './EmployeesToolbar';
 
 type Props = {
@@ -63,12 +68,16 @@ async function EmployeesData({
   canBulkReset: boolean;
   showLocks: boolean;
 }) {
-  const [t, tl, tErrand, rolesRes] = await Promise.all([
+  const [t, tl, tErrand, tLeave, rolesRes, ws] = await Promise.all([
     getTranslations('manage.employees'),
     getTranslations('manage.employees.list'),
     getTranslations('errand'),
+    getTranslations('leave'),
     listRoles(),
+    getWorkSettings(),
   ]);
+  const hoursPerDay = ws.ok ? ws.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
+  const durationLabels = durationLabelsFrom(tLeave);
   // Role chips: English role names (D11), in app_list_roles order (system,
   // preset, custom).
   const allRoles = rolesRes.ok ? rolesRes.roles : [];
@@ -114,7 +123,12 @@ async function EmployeesData({
         .order('start_date')
     : { data: [] };
   // Bulk password reset: checkboxes only on rows the database would accept.
-  const resettable = canBulkReset ? await passwordResetEligibleIds(supabase, ids) : new Set<string>();
+  const [resettable, totalsRes] = await Promise.all([
+    canBulkReset ? passwordResetEligibleIds(supabase, ids) : Promise.resolve(new Set<string>()),
+    getEmployeeLeaveTotals(ids),
+  ]);
+  const totals = totalsRes.ok ? totalsRes.totals : {};
+  const dur = (m: number) => formatDuration(m, hoursPerDay, locale, durationLabels);
   const nextByEmployee = new Map<string, NonNullable<typeof upcoming>[number]>();
   for (const u of upcoming ?? []) {
     if (u.employee_id && !nextByEmployee.has(u.employee_id)) nextByEmployee.set(u.employee_id, u);
@@ -127,6 +141,7 @@ async function EmployeesData({
 
   const rows: EmployeeRow[] = (employees ?? []).map((emp) => {
     const next = nextByEmployee.get(emp.id);
+    const tot = totals[emp.id];
     const roleSet = new Set((emp.user_roles as { role_id: string }[]).map((r) => r.role_id));
     return {
       id: emp.id,
@@ -153,6 +168,10 @@ async function EmployeesData({
               status: next.status === 'approved' ? 'approved' : 'pending',
             }
           : null,
+      balanceLabel: tot && tot.balanceMinutes !== null ? dur(tot.balanceMinutes) : '—',
+      balanceNegative: !!tot && tot.balanceMinutes !== null && tot.balanceMinutes < 0,
+      usedLabel: tot ? dur(tot.usedMinutes) : '—',
+      unpaidLabel: tot ? dur(tot.unpaidMinutes) : '—',
       isSelf: emp.id === user?.id,
       canReset: resettable.has(emp.id),
     };
@@ -180,35 +199,6 @@ async function EmployeesData({
         base={base}
         query={query}
       />
-
-      {/* Mobile rows: hairlines, no box */}
-      <div className="-mx-4 border-y border-border md:hidden">
-        {rows.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">{t('noEmployees')}</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {rows.map((emp) => (
-              <li key={emp.id} className={emp.active ? undefined : 'opacity-55'}>
-                <Link
-                  href={`/${locale}/manage/employees/${emp.id}`}
-                  className="flex min-h-[60px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40"
-                >
-                  <PersonAvatar id={emp.id} name={emp.full_name} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate whitespace-nowrap font-medium">
-                      <bdi>{emp.full_name}</bdi>
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      <bdi dir="ltr">{emp.personnel_no ?? '—'}</bdi> ، {emp.departmentLabel}
-                    </span>
-                  </span>
-                  <Next aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {total > 0 && (
         <nav
@@ -293,6 +283,9 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
   const readOnly = !can(perms, 'people');
   // Same rule as the Add page's guard (FR-74: managers cannot add).
   const canAdd = can(perms, 'people_create');
+  const canConvert = can(perms, 'leave_balances', 'edit');
+  const wsRes = canConvert ? await getWorkSettings() : null;
+  const hoursPerDay = wsRes?.ok ? wsRes.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
   const query = parseEmployeesQuery(sp, { isManager: hasReports, canSeePersonalInfo });
   const base = `/${locale}/manage/employees`;
 
@@ -346,6 +339,8 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
               </Link>
             </Button>
           )}
+          {/* FR-92: negative annual balances to unpaid (leave_balances edit; admin passes). */}
+          {canConvert && <ConvertNegativesDialog hoursPerDay={hoursPerDay} />}
           {can(perms, 'people_create') && (
             <Button variant="outline" asChild>
               <Link href={`${base}/import`} data-testid="import-link">
