@@ -433,8 +433,8 @@
       "available": "Available",
       "requested": "Requested",
       "after": "Balance after approval",
-      "overdraft": "⁨{value}⁩ over the balance. The balance will go negative.",
-      "unpaid": "⁨{value}⁩ will be recorded as unpaid."
+      "overdraft": "{value} over the balance. The balance will go negative.",
+      "unpaid": "{value} will be recorded as unpaid."
     }
   },
   "review": {

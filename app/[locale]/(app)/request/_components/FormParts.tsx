@@ -372,7 +372,7 @@ export function LeaveBalancePreview({
             </div>
           )}
           {projection && projection.rule === 'overdraft' && projection.overMinutes > 0 && (
-            <div className="font-medium text-amber-700" data-testid={testIds.over}>
+            <div className="font-medium text-warning" data-testid={testIds.over}>
               {overText('overdraftNote')}
             </div>
           )}

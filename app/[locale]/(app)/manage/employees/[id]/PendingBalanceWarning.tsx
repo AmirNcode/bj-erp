@@ -14,7 +14,7 @@ export function PendingBalanceWarning({ count, typeName }: { count: number; type
   return (
     <p
       role="note"
-      className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+      className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
       data-testid="pending-balance-warning"
     >
       {t('pendingWarning', { count, countText: formatNumber(count, locale), type: typeName })}

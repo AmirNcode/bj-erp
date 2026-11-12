@@ -228,10 +228,10 @@ async function HomeBoardData({
         <>
           {t.rich('balanceAfter', { value: duration(figures.afterMinutes), bdi: (c) => <bdi>{c}</bdi> })}
           {figures.overdraftMinutes > 0 && (
-            <> - {tSummary('overdraft', { value: duration(figures.overdraftMinutes) })}</>
+            <> - {tSummary('overdraft', { value: `⁨${duration(figures.overdraftMinutes)}⁩` })}</>
           )}
           {figures.unpaidMinutes > 0 && (
-            <> - {tSummary('unpaid', { value: duration(figures.unpaidMinutes) })}</>
+            <> - {tSummary('unpaid', { value: `⁨${duration(figures.unpaidMinutes)}⁩` })}</>
           )}
         </>
       ) : null,
