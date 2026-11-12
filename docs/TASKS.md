@@ -5,7 +5,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## FR-92 manager negative balance (branch `feat/manager-negative-balance`, not deployed)
 
-- ☐ **Before merge (owner/HR):** owner tests on the local live-backup stack (`bj-fr92`, http://localhost:3502). Backfill dry run on `daily-20261112T020206Z` (2026-11-12): **0 requests, 0 people** move (the only annual request with an unpaid part belongs to a non-Manager). 2 people already have a negative annual balance from earlier edits: they appear in "Convert negatives" after deploy.
+- ☐ **Before merge (owner/HR):** owner tests on the local stack `bj-approvals-finance` (http://localhost:3501, FR-92 migrations applied 2026-11-12). Backfill dry run on `daily-20261112T020206Z` (2026-11-12): **0 requests, 0 people** move (the only annual request with an unpaid part belongs to a non-Manager). 2 people already have a negative annual balance from earlier edits: they appear in "Convert negatives" after deploy.
 - ☐ Import "overwrite balances" (`app_bulk_import_employees`) lacks the pending-request warning that quick add, set balance and convert show (spec 10, final review #12). Idea: the dry-run step counts people with pending annual requests.
 - ☐ Strict (employee) edits ignore pending: `app_edit_request` keeps the old "an edit cannot make leave unpaid" rule and does not check the pending-aware available figure.
 - ☐ Phone details panel on Employees repeats "Last name" although the full name is in the row.
@@ -13,7 +13,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - ☐ Payroll is a section under the Reports dashboard, not a tab. Revisit when Reports gets tabs (`lib/ui/tabs.ts`) or a Payroll module appears; `app_payroll_unpaid` and `lib/reports/payroll.ts` are self-contained for that.
 - ☐ HR feedback on the convert-to-unpaid process (spec 15): the owner expects it may change; keep the tool simple until then.
 - ☐ Minor: `ConvertNegativesDialog` shows the department through `localizedLeaveTypeName` (works for any `{name_fa,name_en}`, misnamed); rename to a generic helper.
-- ☐ Local `postgres` (stack `bj-approvals-finance`) lacks `20261111150000_per_diem_first_hr_step` and the three FR-92 migrations; clones must apply the former first.
+- ☐ Local `postgres` (stack `bj-approvals-finance`) now has the FR-92 migrations applied (frozen locally): SQL fixes need new migration files.
 - ☐ Minor: Payroll books a request on its start date, so a request spanning two Jalali months shows whole in the first month.
 - ☐ Minor: approve-dialog balance figures reach every reader of a pending request, `leave_requests` read holders included (not only approvers).
 - ☐ e2e not run for FR-92 (no spec added); no signed-in browser check of the Employees page and the dialogs.

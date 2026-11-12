@@ -78,6 +78,26 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-12 — FR-92 local test moved to the existing :3501 stack
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/manager-negative-balance @ d24d7f8
+**Trigger:** Amir: close the new :3502 stack, update the running :3501 deploy instead; remember to reuse a running local deploy.
+
+**What changed**
+- Nothing in code. This entry corrects "State left behind" of the entry below: `bj-fr92` no longer exists.
+
+**Actions outside the repo**
+- `bj-fr92` (:3502): `compose down -v` (its throwaway DB volume removed), image `bj-erp-app:fr92` removed, `.bj-deploy/fr92` deleted.
+- `bj-approvals-finance` (:3501): `pg_dump -Fc` of `postgres` to the session scratchpad (`approvals-finance-pre-fr92.dump`, not in the repo); `bj_apply_migrations` applied `20261111150000` + the 3 FR-92 migrations (release `approvals-finance-local`; **now FROZEN locally** — later SQL fixes need new migration files); View-as hook synced; app rebuilt from d24d7f8; rest restarted. SMS was already `off`, 0/4 cron active. Its data is the earlier local live restore (43 requests), not the 2026-11-12 backup.
+- Auto-memory: "reuse running local deploy" rule. Nothing run on Liara.
+
+**Verification**
+- `/api/health` 200 and `/login` 200 on :3501; no errors in app/rest logs. No signed-in check by the agent.
+
+**State left behind**
+- PR #25 open, not merged. :3501 serves the branch for Amir's test.
+
 ## 2026-11-12 — PR #25 (FR-92) review, fixes, backfill dry run, local test stack
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead/reviewer); two Sonnet 5.5 subagents implemented, one at a time
