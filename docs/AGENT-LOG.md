@@ -96,7 +96,7 @@ Copy this block verbatim and fill it in.
 - Docs (this commit): REQUIREMENTS FR-92 (+ FR-13/48/91 notes), DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, this entry, CLAUDE.md gotchas.
 
 **Actions outside the repo**
-- `bj-approvals-finance-db-1`: throwaway clones `mnb` (postgres + 20261111150000 + the 3 FR-92 migrations) and `mnb_base` (before FR-92, for schema diffs). `mnb_base` already dropped; `mnb` to be dropped by lead. Local `postgres` NOT migrated. Nothing run on Liara.
+- `bj-approvals-finance-db-1`: throwaway clones `mnb` (postgres + 20261111150000 + the 3 FR-92 migrations) and `mnb_base` (before FR-92, for schema diffs). Both dropped at the end of the session. Local `postgres` NOT migrated. Nothing run on Liara.
 - Temporary dev pages for screenshots were created and removed; `.next/dev/types` cleaned.
 
 **Verification**
