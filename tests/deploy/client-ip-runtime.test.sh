@@ -35,7 +35,7 @@ function get(path,internal=false){return new Promise((resolve,reject)=>{
 JS
 docker network create "$PREFIX" >/dev/null
 docker run -d --name "$PREFIX-backend" --network "$PREFIX" --network-alias auth --network-alias app --network-alias rest \
- -v "$CASE_DIR/backend.js:/backend.js:ro" node:22-alpine node /backend.js >/dev/null
+ -v "$CASE_DIR/backend.js:/backend.js:ro" node:24-alpine node /backend.js >/dev/null
 for target in client liara; do
   if [ "$target" = client ]; then
     cp "$ROOT/deploy/caddy/Caddyfile" "$CASE_DIR/Caddyfile"
@@ -51,7 +51,7 @@ JS
   fi
   docker run -d --name "$PREFIX-gateway" --network "$PREFIX" --network-alias gateway.test \
     -e APP_HOST=gateway.test -v "$CASE_DIR/Caddyfile:/etc/caddy/Caddyfile:ro" "$CADDY_IMAGE" >/dev/null
-  docker run --rm --network "$PREFIX" -v "$CASE_DIR/client.js:/client.js:ro" node:22-alpine node /client.js
+  docker run --rm --network "$PREFIX" -v "$CASE_DIR/client.js:/client.js:ro" node:24-alpine node /client.js
   docker rm -fv "$PREFIX-gateway" >/dev/null
   echo "ok - $target ($CADDY_IMAGE)"
 done

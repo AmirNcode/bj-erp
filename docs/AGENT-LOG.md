@@ -78,6 +78,32 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — Node 24 for the app; CI actions moved off Node 20
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 751d565
+**Trigger:** Deploy run #46 warned "Node.js 20 is deprecated" for three actions; Amir asked to bump both the actions and the app to Node 24.
+
+**What changed**
+- `.github/workflows/deploy-liara.yml` — `actions/setup-node` v4 → v7.1.0 (`949feb24…`), `actions/upload-artifact` v4 → v7.0.2 (`cf430e03…`), `actions/download-artifact` v4 → v8.0.2 (`9000827c…`); all declare `runs.using: node24`. CI `node-version` 22 → 24. Release notes checked: no breaking change for our inputs (download v8 now fails on a digest mismatch instead of warning — wanted).
+- `deploy/Dockerfile` — both stages `node:22-alpine` → `node:24-alpine`.
+- `tests/deploy/client-ip-runtime.test.sh` — helper containers `node:22-alpine` → `node:24-alpine`.
+- `package.json` / lock — `@types/node` `^20` → `^24`.
+
+**Actions outside the repo**
+- `docker builder prune -f` on the Mac: Docker Desktop disk was full (`ENOSPC` in `npm ci`); freed 6.2 GB of unused build cache only.
+- Pushed with `[skip ci]` at Amir's request, so **no CI run or deploy** for this commit.
+
+**Verification**
+- Local Node 24.13: `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 137 files / 1353 tests passed, `npm audit --omit=dev` 0 vulnerabilities.
+- `docker build -f deploy/Dockerfile` (linux/amd64) succeeded; container reports Node v24.22.3; `/api/health` returned `{"status":"ok"}`. `tests/deploy/client-ip-runtime.test.sh` passed. Full `npm run test:deploy` not run.
+
+**State left behind**
+- Committed and pushed to main with `[skip ci]`. Live server still runs the Node 22 image.
+
+**For the next agent**
+- The next push to main without `[skip ci]` is the first CI run on the new actions + Node 24 and deploys the Node 24 image. Watch that run.
+
 ## 2026-11-16 — Settings: lunch fields on their own row; phone layout of working hours fixed
 
 **Agent:** Claude Opus 5.5 via Claude Code
