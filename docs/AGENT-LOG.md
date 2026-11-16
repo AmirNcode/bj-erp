@@ -100,7 +100,7 @@ Copy this block verbatim and fill it in.
 - tsc clean, lint clean, unit 138 files / 1358 tests, `npm audit --omit=dev` 0, `npm run build` ok. `npm run test:deploy` not run locally (CI runs it).
 
 **State left behind**
-- Committed and pushed. Deploy result: see the next entry or CI.
+- Committed 53f86a7 and pushed. CI run 43912385426 passed (build ✓, deploy ✓). `https://bjeng.app/api/health` returned 200 afterwards. Nobody has checked a real send yet.
 
 **For the next agent**
 - On Liara the existing `sms_settings` row becomes `connection = 'webservice'`. Amir follows the TASKS "SMS live setup" steps.
