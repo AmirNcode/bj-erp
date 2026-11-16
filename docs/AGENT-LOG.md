@@ -105,7 +105,7 @@ Copy this block verbatim and fill it in.
 - `tests/sql/sms.sql`: all passed (118 PASS). tsc, lint, unit 138 files / 1359 tests, build ok. Form not checked in a browser.
 
 **State left behind**
-- Committed and pushed on Amir's OK ("Push and deploy"); CI deploys `20261116180000`.
+- Committed af99c07 and pushed on Amir's OK ("Push and deploy"). CI run 43932472394 passed (build ✓, deploy ✓). bjeng.app health 200.
 
 ## 2026-11-16 — SMS live: lockout recovery, link refusal, plain-English Melipayamak codes
 
