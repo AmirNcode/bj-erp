@@ -15,6 +15,7 @@ import type {
   AuditPage,
   ServiceCheck,
   SmsLog,
+  SmsConnection,
   SmsMode,
   SmsSendMethod,
   SmsSettings,
@@ -170,6 +171,7 @@ export async function getSmsSettings(): Promise<{ ok: true; settings: SmsSetting
 
 export type SmsSettingsInput = {
   mode: SmsMode;
+  connection: SmsConnection;
   username: string;
   senderLine: string;
   sendMethod: SmsSendMethod;
@@ -207,6 +209,7 @@ export async function saveSmsSettings(input: SmsSettingsInput): Promise<{ ok: tr
     p_site_label: input.siteLabel.trim() || 'bjeng.app',
     p_api_key: input.apiKey.trim() || null,
     p_clear_api_key: input.clearApiKey,
+    p_connection: input.connection,
   });
   if (error) return adminErr(error.message);
   invalidateAppCache();

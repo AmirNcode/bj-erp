@@ -70,11 +70,13 @@ create function pg_temp.texts(p_req text,p_event text) returns text language sql
     from public.sms_outbox o left join sm_fx k on k.id=o.recipient_id and k.k not in ('company')
    where o.request_id=pg_temp.fx(p_req) and o.event=p_event;
 $$;
+-- Connection defaults to console here so the older URL assertions stay as written; the web-service
+-- block below passes 'webservice'.
 create function pg_temp.settings(p_mode text,p_method text default 'line',p_key text default null,
-    p_clear boolean default false) returns text language sql as $$
+    p_clear boolean default false,p_conn text default 'console') returns text language sql as $$
   select pg_temp.err(pg_temp.as_scalar('admin',format(
-    'select public.app_set_sms_settings(%L,''9221000000'',''50002710000000'',%L,111,222,null,true,true,true,''bjeng.app'',%L,%L)::text',
-    p_mode,p_method,p_key,p_clear)));
+    'select public.app_set_sms_settings(%L,''9221000000'',''50002710000000'',%L,111,222,null,true,true,true,''bjeng.app'',%L,%L,%L)::text',
+    p_mode,p_method,p_key,p_clear,p_conn)));
 $$;
 
 do $$
@@ -254,17 +256,17 @@ select pg_temp.expect('reply: recId → sent',(select status||'/'||provider_ref 
   'sent/4501234567890');
 select pg_temp.expect('reply: provider error → failed, no retry',(select status||'/'||error from public.sms_outbox where id=pg_temp.fx('t2')),
   'failed/شماره گیرنده نامعتبر است');
-select pg_temp.expect('reply: 5xx → queued again, later',(select status||'/'||(next_attempt_at>now())::text from public.sms_outbox
-  where id=pg_temp.fx('t3')),'queued/true');
+select pg_temp.expect('reply: 5xx → failed, not resent (F4)',(select status||'/'||error from public.sms_outbox
+  where id=pg_temp.fx('t3')),'failed/HTTP 502; not resent (it may have been delivered)');
 select pg_temp.expect('history: sent',pg_temp.hist(pg_temp.fx('t1')),
   'status:queued,request,status:sending,reply:200,status:sent');
 select pg_temp.expect('history: provider refusal',pg_temp.hist(pg_temp.fx('t2')),
   'status:queued,request,status:sending,reply:200,status:failed');
-select pg_temp.expect('history: 5xx keeps the reply and schedules a retry',
-  pg_temp.hist(pg_temp.fx('t3'))||'/'||(select (retry_at>now())::text||'/'||attempt||'/'||error
+select pg_temp.expect('history: 5xx keeps the reply, no retry',
+  pg_temp.hist(pg_temp.fx('t3'))||'/'||(select coalesce(retry_at::text,'no retry')||'/'||attempt
     from private.sms_outbox_events where outbox_id=pg_temp.fx('t3') order by id desc limit 1)
   ||'/'||(select response from private.sms_outbox_events where outbox_id=pg_temp.fx('t3') and kind='reply'),
-  'status:queued,request,status:sending,reply:502,status:queued/true/1/HTTP 502/bad gateway');
+  'status:queued,request,status:sending,reply:502,status:failed/no retry/1/bad gateway');
 select pg_temp.expect('history: request names the endpoint, never the URL',
   (select endpoint||'/'||attempt from private.sms_outbox_events where outbox_id=pg_temp.fx('t1') and kind='request'),
   'send/simple/1');
@@ -310,6 +312,164 @@ insert into net._http_response(id,status_code,content,timed_out)
 select private.sms_dispatch();
 select pg_temp.expect('credit stored',pg_temp.as_scalar('admin',
   $q$select (s->>'credit_amount')||'/'||(s->>'credit_pending') from public.app_sms_settings() s$q$),'125000.5/false');
+
+-- ── web service: username + panel API key (owner 2026-11-16) ──
+select pg_temp.expect('ws: new rows default to the web service',
+  (select column_default from information_schema.columns
+    where table_schema='private' and table_name='sms_settings' and column_name='connection'),'''webservice''::text');
+select pg_temp.expect('ws: live without a username is refused',pg_temp.err(pg_temp.as_scalar('admin',
+  'select public.app_set_sms_settings(''live'',null,''50002710000000'',''line'',null,null,null,true,true,true,''bjeng.app'',''KeyAbc-9876'',false,''webservice'')::text')),
+  '22023');
+select pg_temp.expect('ws: refused save changed nothing',pg_temp.as_scalar('admin',
+  $q$select (s->>'connection')||'/'||(s->>'username') from public.app_sms_settings() s$q$),'console/9221000000');
+select pg_temp.expect('ws: live with username',pg_temp.settings('live','line','KeyAbc-9876',false,'webservice'),'ok');
+select pg_temp.expect('ws: null connection keeps the saved one',pg_temp.err(pg_temp.as_scalar('admin',
+  'select public.app_set_sms_settings(''live'',''9221000000'',''50002710000000'',''line'',111,222,null,true,true,true,''bjeng.app'')::text'))
+  ||'/'||pg_temp.as_scalar('admin',$q$select s->>'connection' from public.app_sms_settings() s$q$),'ok/webservice');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('w1',(select public.app_sms_test('09121110011')));
+  insert into sm_fx values('w2',(select public.app_sms_test('09121110012')));
+  insert into sm_fx values('w3',(select public.app_sms_test('09121110013')));
+end $$;
+select private.sms_dispatch();
+select pg_temp.expect('ws: SendSMS URL and JSON body with username + key',
+  (select q.url||'/'||(b->>'username')||'/'||(b->>'password')||'/'||(b->>'from')||'/'||(b->>'to')||'/'||(b->>'isFlash')
+     from net.http_request_queue q join public.sms_outbox o on o.net_request_id=q.id,
+          lateral (select convert_from(q.body,'utf8')::jsonb b) x where o.id=pg_temp.fx('w1')),
+  'https://rest.payamak-panel.com/api/SendSMS/SendSMS/9221000000/KeyAbc-9876/50002710000000/09121110011/false');
+select pg_temp.expect('ws: history names the endpoint',
+  (select endpoint from private.sms_outbox_events where outbox_id=pg_temp.fx('w1') and kind='request'),'SendSMS/SendSMS');
+insert into net._http_response(id,status_code,content,timed_out)
+select o.net_request_id,200,v.content,false
+  from public.sms_outbox o join (values
+    ('w1','{"Value":"4501234567891","RetStatus":1,"StrRetStatus":"Ok"}'),
+    ('w2','{"Value":"11","RetStatus":1,"StrRetStatus":"Ok"}'),
+    ('w3','{"Value":"","RetStatus":0,"StrRetStatus":"UserNameAndPasswordFailed"}')) v(k,content)
+    on o.id=pg_temp.fx(v.k);
+select private.sms_dispatch();
+select pg_temp.expect('ws: Value recId → sent',(select status||'/'||provider_ref from public.sms_outbox where id=pg_temp.fx('w1')),
+  'sent/4501234567891');
+select pg_temp.expect('ws: error code → failed, no retry',(select status||'/'||error from public.sms_outbox where id=pg_temp.fx('w2')),
+  'failed/Melipayamak code 11');
+select pg_temp.expect('ws: wrong user/key → failed, sending paused',
+  (select status||'/'||error from public.sms_outbox where id=pg_temp.fx('w3'))
+  ||'/'||pg_temp.as_scalar('admin',$q$select (s->>'auth_error')||'/'||(s->>'auth_error_at' is not null)::text from public.app_sms_settings() s$q$),
+  'failed/Wrong username or API key (UserNameAndPasswordFailed)/Wrong username or API key (UserNameAndPasswordFailed)/true');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('w4',(select public.app_sms_test('09121110014'))); end $$;
+select private.sms_dispatch();
+select pg_temp.expect('ws: paused text stays queued, nothing posted',
+  (select status||'/'||attempts||'/'||(net_request_id is null)::text from public.sms_outbox where id=pg_temp.fx('w4')),'queued/0/true');
+select pg_temp.expect('ws: saving again resumes',pg_temp.settings('live','line',null,false,'webservice'),'ok');
+select private.sms_dispatch();
+select pg_temp.expect('ws: resumed text is posted',
+  (select status||'/'||attempts from public.sms_outbox where id=pg_temp.fx('w4'))
+  ||'/'||pg_temp.as_scalar('admin',$q$select coalesce(s->>'auth_error','none') from public.app_sms_settings() s$q$),'sending/1/none');
+insert into net._http_response(id,status_code,content,timed_out)
+  select net_request_id,200,'{"Value":"-109","RetStatus":1,"StrRetStatus":"Ok"}',false from public.sms_outbox where id=pg_temp.fx('w4');
+select private.sms_dispatch();
+select pg_temp.expect('ws: IP not allowed (-109) explains and pauses',
+  (select error from public.sms_outbox where id=pg_temp.fx('w4'))
+  ||'/'||pg_temp.as_scalar('admin',$q$select (s->>'auth_error' like '%-109%')::text from public.app_sms_settings() s$q$),
+  'This server''s IP is not on the allowed list in the Melipayamak panel (-109)/true');
+select pg_temp.expect('ws: pattern settings',pg_temp.settings('live','pattern','KeyAbc-9876',false,'webservice'),'ok');
+select pg_temp.expect('ws: approver_new under pattern',pg_temp.file('r6','emp',19),'ok');
+select private.sms_dispatch();
+select pg_temp.expect('ws: pattern → BaseServiceNumber, bodyId, args as one ;-text',
+  (select string_agg(q.url||'/'||(b->>'bodyId')||'/'||(b->>'username')||'/'
+          ||(array_length(string_to_array(b->>'text',';'),1))::text||'/'||(b ? 'from')::text,',')
+     from net.http_request_queue q join public.sms_outbox o on o.net_request_id=q.id,
+          lateral (select convert_from(q.body,'utf8')::jsonb b) x where o.request_id=pg_temp.fx('r6')),
+  'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/111/9221000000/3/false,https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/111/9221000000/3/false');
+select pg_temp.expect('ws: credit asks pg_net',pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok');
+select pg_temp.expect('ws: credit posts GetCredit with username + key',
+  (select q.url||'/'||(convert_from(q.body,'utf8')::jsonb->>'username')||'/'||(convert_from(q.body,'utf8')::jsonb->>'password')
+     from net.http_request_queue q join private.sms_settings s on s.credit_request_id=q.id
+    where s.company_id=pg_temp.fx('company')),
+  'https://rest.payamak-panel.com/api/SendSMS/GetCredit/9221000000/KeyAbc-9876');
+insert into net._http_response(id,status_code,content,timed_out)
+  select credit_request_id,200,'{"Value":"-110","RetStatus":1,"StrRetStatus":"Ok"}',false
+    from private.sms_settings where company_id=pg_temp.fx('company');
+select private.sms_dispatch();
+select pg_temp.expect('ws: credit refusal keeps the old amount, explains, pauses',pg_temp.as_scalar('admin',
+  $q$select (s->>'credit_amount')||'/'||(s->>'credit_error')||'/'||(s->>'auth_error' like '%-110%')::text from public.app_sms_settings() s$q$),
+  '125000.5/Melipayamak wants the API key, not the panel password (-110)/true');
+select pg_temp.expect('ws: credit again',pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok');
+insert into net._http_response(id,status_code,content,timed_out)
+  select credit_request_id,200,'{"Value":"98000.25","RetStatus":1,"StrRetStatus":"Ok"}',false
+    from private.sms_settings where company_id=pg_temp.fx('company');
+select private.sms_dispatch();
+select pg_temp.expect('ws: credit stored and the pause lifted',pg_temp.as_scalar('admin',
+  $q$select (s->>'credit_amount')||'/'||coalesce(s->>'credit_error','none')||'/'||coalesce(s->>'auth_error','none') from public.app_sms_settings() s$q$),
+  '98000.25/none/none');
+select pg_temp.expect('ws: credit without username is refused',
+  pg_temp.settings('dry_run','line',null,false,'webservice')||'/'||pg_temp.err(pg_temp.as_scalar('admin',
+  $q$select public.app_set_sms_settings('dry_run',null,null,'line',null,null,null,true,true,true,'bjeng.app')::text$q$))
+  ||'/'||pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok/ok/22023');
+select pg_temp.expect('ws: settings JSON never carries the key',pg_temp.as_scalar('admin',
+  $q$select (position('KeyAbc-9876' in s::text)=0)::text from public.app_sms_settings() s$q$),'true');
+
+-- ── F4: only a request that never reached Melipayamak is retried ──
+select pg_temp.expect('F4: console live',pg_temp.settings('live','line','KeyAbc-9876'),'ok');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('f1',(select public.app_sms_test('09121110021')));
+  insert into sm_fx values('f2',(select public.app_sms_test('09121110022')));
+  insert into sm_fx values('f3',(select public.app_sms_test('09121110023')));
+end $$;
+select private.sms_dispatch();
+insert into net._http_response(id,status_code,content,timed_out,error_msg)
+select o.net_request_id,null,null,v.timed_out,v.msg
+  from public.sms_outbox o join (values
+    ('f1',true,'Timeout was reached'),
+    ('f2',false,'Couldn''t connect to server')) v(k,timed_out,msg) on o.id=pg_temp.fx(v.k);
+update public.sms_outbox set sending_since=now()-interval '11 minutes' where id=pg_temp.fx('f3');
+select private.sms_dispatch();
+select pg_temp.expect('F4: timeout → failed, not resent',(select status||'/'||error from public.sms_outbox where id=pg_temp.fx('f1')),
+  'failed/timeout; not resent (it may have been delivered)');
+select pg_temp.expect('F4: could not connect → retried later',
+  (select status||'/'||(next_attempt_at>now())::text||'/'||error from public.sms_outbox where id=pg_temp.fx('f2')),
+  'queued/true/could not reach Melipayamak: Couldn''t connect to server');
+select pg_temp.expect('F4: no reply in 10 minutes → failed, not resent',
+  (select status||'/'||(error like 'no reply from Melipayamak within 10 minutes; not resent%')::text from public.sms_outbox where id=pg_temp.fx('f3')),
+  'failed/true');
+
+-- ── F5: one bad row never stops the run ──
+create temp table sm_poison(id uuid primary key);
+create function pg_temp.poison() returns trigger language plpgsql as $$
+begin
+  if new.outbox_id in (select id from sm_poison) and new.kind in ('request','reply') then
+    raise exception 'boom KeyAbc-9876'; end if;
+  return new;
+end; $$;
+create trigger sm_poison before insert on private.sms_outbox_events for each row execute function pg_temp.poison();
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('p1',(select public.app_sms_test('09121110031')));
+  insert into sm_fx values('p2',(select public.app_sms_test('09121110032')));
+end $$;
+insert into sm_poison values (pg_temp.fx('p1'));
+select pg_temp.expect('F5: credit asks pg_net',pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok');
+insert into net._http_response(id,status_code,content,timed_out)
+  select credit_request_id,200,'{"amount":"lots","status":""}',false from private.sms_settings where company_id=pg_temp.fx('company');
+select private.sms_dispatch();
+select pg_temp.expect('F5: send error → that row failed, nothing posted, key scrubbed',
+  (select status||'/'||error||'/'||attempts||'/'||(net_request_id is null)::text from public.sms_outbox where id=pg_temp.fx('p1')),
+  'failed/could not send: boom ***/0/true');
+select pg_temp.expect('F5: the next row still goes out',
+  (select status||'/'||attempts from public.sms_outbox where id=pg_temp.fx('p2')),'sending/1');
+select pg_temp.expect('F5: bad balance reply cleared with an error, old amount kept',pg_temp.as_scalar('admin',
+  $q$select (s->>'credit_pending')||'/'||(s->>'credit_error' like 'could not read the balance reply:%')::text||'/'||(s->>'credit_amount') from public.app_sms_settings() s$q$),
+  'false/true/98000.25');
+delete from sm_poison; insert into sm_poison values (pg_temp.fx('p2'));
+insert into net._http_response(id,status_code,content,timed_out)
+  select net_request_id,200,'{"recId":"4501234567899","status":""}',false from public.sms_outbox where id=pg_temp.fx('p2');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('p3',(select public.app_sms_test('09121110033'))); end $$;
+select private.sms_dispatch();
+select pg_temp.expect('F5: unreadable reply → failed without retry; later rows still sent',
+  (select status||'/'||error from public.sms_outbox where id=pg_temp.fx('p2'))
+  ||'/'||(select status from public.sms_outbox where id=pg_temp.fx('p3')),
+  'failed/could not read the reply: boom ***/sending');
+drop trigger sm_poison on private.sms_outbox_events;
 
 -- ── errors never carry the key (PR #17 review F1) ──
 -- Message and DETAIL of a refused save, as an admin through PostgREST would see them.

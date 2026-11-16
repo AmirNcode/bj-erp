@@ -413,6 +413,15 @@ function the owner can read every column, so nothing is masked. Any write to a t
 (`private.sms_settings.api_key`) must catch `check_violation` / `not_null_violation` and re-raise with
 the constraint name only (PR #17 review F1, `20261104120000`).
 
+### Melipayamak has two keys; only one fits each endpoint
+The panel's **API key** (panel › Developers › Web service settings) signs
+`rest.payamak-panel.com/api/SendSMS/<Method>` together with the username, in the `password` field. The
+**console key** is a different token from registering at console.melipayamak.com, and only
+`console.melipayamak.com/api/…/<key>` takes it. A panel key sent to the console is refused with «کلید کنسول
+معتبر نیست». The REST host binds JSON bodies (415 for XML/text), so pg_net's JSON-only `http_post` works.
+Replies are `{Value, RetStatus, StrRetStatus}`. Repeated failed sign-ins block the server IP (-108), and the
+IP must also be on the panel's allowed list (-109). Fixed 2026-11-16 (`20261116150000`).
+
 ### pg_net opens schema `net` to anon and authenticated
 The Supabase image's event trigger grants `anon` and `authenticated` USAGE on `net`, all privileges on
 `net.http_request_queue` / `net._http_response` and EXECUTE on `net.http_get` / `net.http_post`. Safe

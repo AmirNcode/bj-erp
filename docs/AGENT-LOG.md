@@ -78,6 +78,81 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — SMS F4 + F5 fixed; pushed to main with the web-service connection (deploy)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 911b1b8 (Node 24 commit, pushed earlier with `[skip ci]`)
+**Trigger:** Amir: "Fix the two known bugs from PR #17 review. Update CLAUDE.md and push to main to trigger deploy."
+
+**What changed**
+- `supabase/migrations/20261116160000_sms_dispatch_f4_f5.sql` (new) re-creates `private.sms_dispatch` with the same signature.
+  - **F4:** a retry happens only when pg_net reports a connect, DNS or TLS-handshake error with no status and no timeout. A timeout, a 5xx or no reply within 10 minutes now fails with "…; not resent (it may have been delivered)".
+  - **F5:** each row of steps 1–3 runs in its own `begin … exception` block. An error fails only that row (step 1: no retry; step 3: the block's `net.http_post` rolls back too, so nothing is sent), or clears that balance request with an error (step 2). Error texts are scrubbed of the key.
+- `tests/sql/sms.sql`: the 502 assertions now expect failed with no retry. Added F4 assertions (timeout, connect error → retry, no reply in 10 min) and F5 assertions (a poison trigger on `sms_outbox_events` checks that a send error and a reply error fail only that row and later rows still go out; a non-numeric balance reply clears with an error).
+- `CLAUDE.md` gets 2 gotchas (Melipayamak keys; `sms_dispatch` per-row blocks + retry rule) and a status line. Also updated: `docs/reviews/pr-17-review.md` (F4/F5 → Fixed), CHANGELOG, TASKS, and spec §3.6.
+
+**Actions outside the repo**
+- Local `bj-approvals-finance-db-1`: clone DB `smsws` → applied `20261116150000` + `20261116160000` → ran the tests → dropped it. Local `postgres` DB was **not** migrated.
+- Pushed to `origin/main` (CI → Liara deploy). This is the first CI run since 911b1b8, so the deploy also ships Node 24.
+
+**Verification**
+- `tests/sql/sms.sql` on the clone: all passed (110 PASS). `replacement-signoff.sql` and `replacement-paper-only.sql` ran clean to ROLLBACK.
+- tsc clean, lint clean, unit 138 files / 1358 tests, `npm audit --omit=dev` 0, `npm run build` ok. `npm run test:deploy` not run locally (CI runs it).
+
+**State left behind**
+- Committed and pushed. Deploy result: see the next entry or CI.
+
+**For the next agent**
+- On Liara the existing `sms_settings` row becomes `connection = 'webservice'`. Amir follows the TASKS "SMS live setup" steps.
+
+## 2026-11-16 — SMS: Melipayamak web service with username + API key (FR-78 addendum)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 751d565 (Node 24 commit landed meanwhile; not touched)
+**Trigger:** Amir: "Yes, add it". Follows the diagnosis entry below.
+
+**What changed**
+- `supabase/migrations/20261116150000_sms_webservice_connection.sql` (new). Adds `private.sms_settings.connection` (`webservice` default | `console`), `auth_error`, `auth_error_at`, and the helpers `private.sms_ws_error(jsonb)` / `sms_ws_auth_refused(jsonb)`. Re-creates `private.sms_dispatch` (web service → `rest.payamak-panel.com/api/SendSMS/SendSMS` or `/BaseServiceNumber`, JSON `{username, password: key, …}`; parses `{Value, RetStatus, StrRetStatus}`; a sign-in refusal sets `auth_error` and live posting pauses) and `app_sms_check_credit` (`GetCredit` POST). Drops and re-creates `app_set_sms_settings` with a trailing `p_connection default null` (null keeps it, so the old app's call still works). The function clears `auth_error` on save and raises `username required` (22023) for live + web service without a username.
+- `supabase/schema.sql` — patched from before/after dumps of a clone. The grant hunk was done by hand: the local DB has an extra `anon` grant (ACL drift) that `schema.sql` never had.
+- `tests/sql/sms.sql` — the `pg_temp.settings` helper gains `p_conn` (default `console`, so the old URL asserts stand), plus a 24-assertion web-service block (URL/body, sent/failed, pause/resume, -109, pattern, credit ok/-110, no username).
+- UI: `app/[locale]/(app)/admin/sms/SmsSettingsForm.tsx` (Connection radio, per-connection hints, client check for a username on Live), `page.tsx` (red "paused" note from `auth_error`), `lib/admin/types.ts`, `lib/actions/admin.ts` (`p_connection`), `lib/supabase/types.ts`, `lib/errors/db-error.ts` + `messages/{fa,en}.json` `errors.smsNoUsername`, `messages/en.json` `admin.sms.*` (admin panel English only).
+- `tests/unit/sms-settings-connection.test.tsx` (new, 5 tests).
+- Docs: spec §3.4a, REQUIREMENTS FR-78, CHANGELOG, TASKS (owner live-setup steps), MEMORY ("Melipayamak has two keys").
+
+**Actions outside the repo**
+- Sent `curl` probes with a made-up user (`probe_user_x`) to `rest.payamak-panel.com/api/SendSMS/{GetCredit,SendSMS}`. JSON and form both reach the handler; XML/text get 415, so JSON binds. No real credentials were used.
+- Local `bj-approvals-finance-db-1`: created clone DB `smsws` from `postgres`, applied the migration there only, ran `tests/sql/sms.sql`, then dropped `smsws`. The `postgres` DB was **not** migrated, so the migration is not frozen locally.
+
+**Verification**
+- `tests/sql/sms.sql` on the migrated clone: all assertions passed (101 PASS).
+- `tsc --noEmit` clean, `npm run lint` clean, `npm run test:unit` 138 files / 1358 tests passed, `npm run build` ok.
+- Temp page `app/[locale]/zz-smsconn` (deleted, `.next/dev/types` cleared) rendered the form at desktop and 375 px: it looked right and the console showed no errors.
+- **Not verified:** a real Melipayamak send or balance (needs the client's username + key and the VM IP on the allowed list); a signed-in Admin › SMS page.
+
+**State left behind**
+- Uncommitted on `main` working tree. Not deployed.
+
+**For the next agent**
+- After deploy, Amir does the TASKS "SMS live setup" steps. F4/F5 (double send after timeout, one bad row stops the dispatcher) are still open before Live.
+- A pause can leave many rows queued; `approver_new` rows for decided requests skip themselves when sending resumes.
+
+## 2026-11-16 — SMS "wrong API key": cause found (console key vs panel API key), no code change
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 751d565
+**Trigger:** Amir: SMS keeps saying the API key is wrong; IT says "no templates, username + API key (token), Melipayamak/Kavenegar, OTP". Asked to read `Melipayamak/melipayamak-node`.
+
+**Findings**
+- Our sender (`private.sms_dispatch`, `supabase/schema.sql:3813`/`3828`, credit at `:9091`) calls `https://console.melipayamak.com/api/{send/simple|send/shared|receive/credit}/<key>`. That key is the **console token**, a separate key you get by registering at console.melipayamak.com with the panel's API key. The panel key (panel › توسعه‌دهندگان › تنظیمات وب‌سرویس) pasted there gives «کلید کنسول معتبر نیست» (seen 2026-11-04).
+- The official `melipayamak-node` (v2.0.2, `src/sms/rest.js`) and IT's "username + API key" method use `https://rest.payamak-panel.com/api/SendSMS/<Method>` (SendSMS, GetCredit, BaseServiceNumber, SendOTP) with form fields `username` + `password` = the panel API key. Our app has no such mode.
+- Melipayamak codes: 0 wrong user/key, -110 API key required instead of password, -109 server IP not on the panel's allowed list (Liara VM `62.60.191.132` must be added), -108 IP blocked after repeated failures. SendSms docs say a line text must include «لغو11».
+- Amir's screenshot: all 3 pattern templates (589006–589008) are «نیاز به ویرایش» (rejected, "file a ticket"), so pattern mode cannot work now; IT says use the line instead.
+
+**What changed** — none (this entry only).
+**Actions outside the repo** — none. Read GitHub `Melipayamak/melipayamak-node` + melipayamak.com docs pages.
+**Verification** — not run; no request sent to Melipayamak.
+**State left behind** — proposal to Amir: (a) no-code try: console token; (b) add a `rest.payamak-panel.com` username + API key sender. F4/F5 still open before Live.
+
 ## 2026-11-16 — Node 24 for the app; CI actions moved off Node 20
 
 **Agent:** Claude Opus 5.5 via Claude Code

@@ -8,12 +8,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { saveSmsSettings, type SmsSettingsInput } from '@/lib/actions/admin';
-import type { SmsMode, SmsSettings } from '@/lib/admin/types';
+import type { SmsConnection, SmsMode, SmsSettings } from '@/lib/admin/types';
 import { cn } from '@/lib/utils';
 
 const MODES: SmsMode[] = ['off', 'dry_run', 'live'];
 const MODE_KEYS = { off: 'modeOff', dry_run: 'modeDry', live: 'modeLive' } as const;
 const MODE_HINTS = { off: 'modeOffHint', dry_run: 'modeDryHint', live: 'modeLiveHint' } as const;
+const CONNECTIONS: { value: SmsConnection; label: 'connWebservice' | 'connConsole'; hint: 'connWebserviceHint' | 'connConsoleHint' }[] = [
+  { value: 'webservice', label: 'connWebservice', hint: 'connWebserviceHint' },
+  { value: 'console', label: 'connConsole', hint: 'connConsoleHint' },
+];
 
 type EventKey = 'ApproverNew' | 'EmployeeDecision' | 'PasswordReset';
 const EVENTS: { key: EventKey; label: 'approverNew' | 'employeeDecision' | 'passwordReset' }[] = [
@@ -33,6 +37,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [form, setForm] = useState<SmsSettingsInput>({
     mode: initial.mode,
+    connection: initial.connection ?? 'webservice',
     username: initial.username ?? '',
     senderLine: initial.sender_line ?? '',
     sendMethod: initial.send_method,
@@ -49,12 +54,17 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
   const set = <K extends keyof SmsSettingsInput>(key: K, value: SmsSettingsInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
   const keyAfterSave = !form.clearApiKey && (initial.has_api_key || form.apiKey.trim() !== '');
+  const webservice = form.connection === 'webservice';
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setMessage(null);
     if (form.mode === 'live' && !keyAfterSave) {
       setMessage({ ok: false, text: t('liveNeedsKey') });
+      return;
+    }
+    if (form.mode === 'live' && webservice && form.username.trim() === '') {
+      setMessage({ ok: false, text: t('liveNeedsUsername') });
       return;
     }
     startTransition(async () => {
@@ -92,6 +102,19 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
         <p className="text-xs text-muted-foreground">{t(MODE_HINTS[form.mode])}</p>
       </fieldset>
 
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">{t('connection')}</legend>
+        {CONNECTIONS.map((c) => (
+          <label key={c.value} className="flex items-center gap-2 text-sm">
+            <input type="radio" name="sms-connection" checked={form.connection === c.value}
+              onChange={() => set('connection', c.value)} className="size-4 accent-primary"
+              data-testid={`sms-connection-${c.value}`} />
+            {t(c.label)}
+          </label>
+        ))}
+        <p className="text-xs text-muted-foreground">{t(webservice ? 'connWebserviceHint' : 'connConsoleHint')}</p>
+      </fieldset>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5 sm:col-span-2">
           <Label htmlFor="sms-api-key">{t('apiKey')}</Label>
@@ -107,7 +130,8 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
             </button>
           </div>
           <p className="text-xs text-muted-foreground">
-            {initial.has_api_key ? t('apiKeySaved', { hint: initial.api_key_hint ?? '' }) : t('apiKeyNone')} {t('apiKeyHint')}
+            {initial.has_api_key ? t('apiKeySaved', { hint: initial.api_key_hint ?? '' }) : t('apiKeyNone')}{' '}
+            {t(webservice ? 'apiKeyHintWebservice' : 'apiKeyHint')}
           </p>
           {initial.has_api_key && (
             <label className="flex items-center gap-2 text-xs">
@@ -119,8 +143,9 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="sms-username">{t('username')}</Label>
-          <Input id="sms-username" dir="ltr" value={form.username} onChange={(e) => set('username', e.target.value)} />
-          <p className="text-xs text-muted-foreground">{t('usernameHint')}</p>
+          <Input id="sms-username" dir="ltr" autoComplete="off" value={form.username}
+            onChange={(e) => set('username', e.target.value)} data-testid="sms-username" />
+          <p className="text-xs text-muted-foreground">{t(webservice ? 'usernameHintWebservice' : 'usernameHint')}</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="sms-line">{t('senderLine')}</Label>

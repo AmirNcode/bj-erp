@@ -9,6 +9,20 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### SMS: sign in to Melipayamak with the panel username + API key (FR-78) — not deployed
+
+- **Admin › SMS › Connection** has two choices. **Username + API key (web service)** is the new default and the usual setup: the panel username plus the API key from the Melipayamak panel › Developers › Web service settings. **Console key** is the old way and needs the separate key from console.melipayamak.com. The old way caused the “key is wrong” error: the panel API key does not work as a console key.
+- **Live needs a username** with the web service. Line sending and pattern (template) sending both work over it.
+- **Melipayamak's refusals are written out:** wrong username or key, server IP not on the allowed list (-109), IP blocked (-108), API key required (-110), or “Melipayamak code N”.
+- **Sending pauses itself after a refused sign-in.** A red note on the SMS tab says so, and texts wait in the queue. Saving the settings again, or a successful **Check balance**, resumes sending. Melipayamak blocks a server's IP after repeated failed sign-ins, and the pause keeps that from happening.
+- Migration `20261116150000_sms_webservice_connection`.
+
+### SMS: no double texts, no stalled sender (PR #17 review F4, F5) — not deployed
+
+- **No more double texts (F4).** A text is retried only when the request never reached Melipayamak: it could not connect, could not find the server, or the secure connection failed. A timeout, a server error or no reply within 10 minutes now marks the text failed with "not resent (it may have been delivered)", because Melipayamak may already have sent it.
+- **One bad text no longer stops all texts (F5).** Each text and each balance check is handled on its own. If one fails unexpectedly, only that row is marked failed (or the balance check shows an error) and the others still go out. A failed row is never sent. The API key is removed from error messages.
+- Migration `20261116160000_sms_dispatch_f4_f5`.
+
 ### Lunch break not deducted from hourly leave (FR-93) — deployed 2026-11-16 (PR #26)
 
 - **Settings › Working hours and hourly leave** has two new fields: **Lunch starts** (default 13:00) and **Lunch duration (minutes)** (default 60; 0 = no lunch break). It must fall inside the working hours. Same permission as the rest of the card (`work_settings`), so HR can edit it.

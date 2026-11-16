@@ -11,7 +11,7 @@ database** spanning every department (HR, quality control, finance, procurement,
 manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
 separate servers** (not one shared DB); focus now is this one company.
 
-**Status (2026-11-16):** HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed. Beyond v1: leave v2
+**Status (2026-11-16):** HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed; SMS username + API key connection and PR #17 F4/F5 pushed 2026-11-16. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
 Persian-only calendar, `hr` role, approval chain, reports, print, CSV import, org chart, bulk
 personnel import (add / update / replace), department-manager approval step. What shipped:
@@ -191,6 +191,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Annual leave = `leave_types.manager_overdraft` (FR-92).** Seed sets it; migrations run before the seed on a fresh install, so a migration UPDATE alone leaves new stacks without it.
 - **Leave rules per request come from `private.balance_rule(emp,type)`:** Manager (role at action time) → overdraft (balance may go negative); other → strict (balance − pending); non-annual balance types → split. TS mirror: `projectLeaveBalance` rule option.
 - **CSV exports go through `buildCsv`, which guards formula cells with a leading `'`; `parseCsv` strips it.** Pass `{ guard: false }` only for byte-exact generated values (passwords).
+- **Melipayamak has two keys (FR-78):** connection `webservice` = panel username + panel API key → `rest.payamak-panel.com` (JSON); `console` = a separate console token in the URL. A refused sign-in sets `sms_settings.auth_error` and pauses live sending until the settings are saved.
+- **`sms_dispatch` handles each row in its own `begin … exception` block (F5) and retries only connect/DNS/TLS errors (F4).** Keep new per-row work inside the block; never re-queue a timeout or 5xx (it may already be delivered).
 - **Hourly leave minutes = span − lunch overlap (FR-93):** `private.lunch_overlap_minutes` (TS `lunchOverlapMinutes`), cap uses net; a lunch-only leave on a working day (`private.is_working_day`) is valid at 0 and skips the one-per-day slot. Errands never subtract lunch.
 - **`work_settings` time checks compare minutes (`extract(epoch …)/60`), not `time + interval`** — the latter wraps at midnight.
 - **Local `postgres` has anon/ACL drift:** a raw `pg_dump` adds anon grants and 15 `tests/sql` files fail on any clone. Update `schema.sql` by diffing schema dumps of the clone before/after the migration and patching only those hunks.

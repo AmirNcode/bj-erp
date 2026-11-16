@@ -233,6 +233,7 @@ const RULES: Rule[] = [
   { re: /^invalid mobile$/, key: 'smsInvalidMobile' },
   { re: /^sms is off$/, key: 'smsOff' },
   { re: /^no api key$|sms_settings_live_needs_key/, key: 'smsNoApiKey' },
+  { re: /^username required$/, key: 'smsNoUsername' },
   { re: /sms_settings_api_key/, key: 'smsBadApiKey' },
   { re: /sms_settings_sender_line/, key: 'smsBadSenderLine' },
   { re: /sms_settings_site_label/, key: 'smsBadSiteLabel' },

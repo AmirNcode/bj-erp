@@ -96,12 +96,15 @@ export type AuditPage = { total: number; rows: AuditRow[]; entities: string[]; a
 
 export type SmsMode = 'off' | 'dry_run' | 'live';
 export type SmsSendMethod = 'line' | 'pattern';
+/** webservice = panel username + API key (rest.payamak-panel.com); console = console.melipayamak.com token. */
+export type SmsConnection = 'webservice' | 'console';
 export type SmsEvent = 'approver_new' | 'employee_decision' | 'password_reset' | 'test';
 export type SmsStatus = 'queued' | 'sending' | 'sent' | 'dry_run' | 'failed' | 'skipped';
 
 export type SmsSettings = {
   mode: SmsMode;
   provider: 'melipayamak';
+  connection: SmsConnection;
   username: string | null;
   sender_line: string | null;
   send_method: SmsSendMethod;
@@ -118,6 +121,9 @@ export type SmsSettings = {
   credit_checked_at: string | null;
   credit_error: string | null;
   credit_pending: boolean;
+  /** Melipayamak refused the sign-in; live sending waits until the settings are saved again. */
+  auth_error: string | null;
+  auth_error_at: string | null;
   updated_at: string;
 };
 

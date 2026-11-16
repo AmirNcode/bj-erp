@@ -101,6 +101,26 @@ text, shown in the log. Endpoint shapes come from the community client `HRashidi
 If the key IT sends turns out to be a panel password instead, a second sender (`rest.payamak-panel.com`
 with username + password) is a small addition to `private.sms_dispatch`.
 
+### 3.4a Addendum 2026-11-16: username + API key (owner: "Yes, add it")
+
+The console URLs above want the **console key**, a separate token from registering at
+console.melipayamak.com. The client's IT and the official `melipayamak-node` client
+(`src/sms/rest.js`) use the panel's **API key** with the **username** instead. The panel key pasted as a
+console key gave «کلید کنسول معتبر نیست», which is the "wrong key" Amir kept seeing.
+
+- New setting `connection`: `webservice` (default, also for the existing row) or `console`.
+- Web service calls `POST https://rest.payamak-panel.com/api/SendSMS/<Method>` with JSON
+  `{username, password: <API key>, …}`: `SendSMS` `{from, to, text, isFlash: false}`, `BaseServiceNumber`
+  `{to, bodyId, text: args joined by ';'}`, `GetCredit` `{}`. The reply is `{Value, RetStatus,
+  StrRetStatus}`, and a text counts as sent when `RetStatus = 1` and `Value` is a recId (6+ digits).
+  Checked 2026-11-16 with a made-up user: JSON bodies bind (XML and text/plain get 415).
+- Live over the web service needs a username (`username required`, 22023).
+- Melipayamak blocks an IP after repeated failed sign-ins (-108). A reply meaning wrong user/key
+  (RetStatus 0) or -108/-109/-110 is stored in `auth_error`, and live sending stops (rows stay queued) until
+  the settings are saved again or a balance check succeeds. The SMS tab shows it in red.
+- The owner adds the server IP to the panel's allowed list (-109 otherwise). The pattern templates
+  were rejected in the panel, so line sending is the plan for now.
+
 ### 3.5 Storage
 
 - `private.sms_settings` (one row per company): mode, provider, API key, username, sender line, send
@@ -130,8 +150,11 @@ to 20 due rows with `net.http_post` to
 the app needs no secret and no new environment variable. A balance check posts
 `GET …/receive/credit/<key>`; the next run stores `amount`.
 
-A reply with a `recId` of 6+ digits is sent. 5xx, timeouts and no reply within 10 minutes retry after
-1 and 5 minutes (3 attempts); any other error fails at once with the provider's `status` text.
+A reply with a `recId` of 6+ digits is sent. ~~5xx, timeouts and no reply within 10 minutes retry after
+1 and 5 minutes (3 attempts)~~ **Changed 2026-11-16 (PR #17 F4):** only a request that never reached the
+provider (connect / DNS / TLS error) is retried after 1 and 5 minutes (3 attempts). A 5xx, a timeout or no reply
+within 10 minutes fails with "not resent (it may have been delivered)". Any other error fails at once with
+the provider's text. **F5:** each row runs in its own block, so an error fails only that row.
 
 **Password texts:** the first dispatch replaces the password in the body with «••••» and clears the
 pattern variables; a row skipped for no mobile is stored masked from the start.

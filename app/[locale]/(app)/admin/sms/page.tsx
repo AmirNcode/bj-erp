@@ -61,6 +61,12 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
+      {s.auth_error && (
+        <p role="alert" data-testid="admin-sms-paused"
+          className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {t('sms.authPaused', { error: s.auth_error })}
+        </p>
+      )}
       <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <Section title={t('sms.settings')} testId="admin-sms-settings">
           <SmsSettingsForm initial={s} />

@@ -570,6 +570,8 @@ Validation/release status stays in `docs/TASKS.md`.
   (normalised to `09…`; none → logged as skipped). Modes Off / Dry run (default: logged, never sent) /
   Live. Credentials are typed in the SMS tab and never shown again. Provider adapter: Melipayamak
   (line or approved-pattern sending); the database queues and sends (pg_cron + pg_net). *(Owner, 2026-11-03; same spec; unreleased.)*
+  Connection: panel username + API key over the web service (default) or a console key; a refused
+  sign-in pauses live sending until the settings are saved again. *(Owner, 2026-11-16; spec §3.4a.)*
 - **FR-76** ☐ **Security staff without Employee have no time off.** Security staff are a subcontractor:
   someone with the Security role and without Employee sees no Request tab (every `/request` page sends
   them Home), no **My Recent Requests** or **My Balances** on Home, cannot file a request (refused by the
