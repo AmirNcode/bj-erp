@@ -100,7 +100,7 @@ Copy this block verbatim and fill it in.
 - `tests/sql/sms.sql` on the clone: all passed (111 PASS). tsc/lint/unit/build: see the commit run.
 
 **State left behind**
-- Committed and pushed; CI deploys `20261116170000`.
+- Committed 90a16d0 and pushed. CI run 43920611571 passed (build ✓, deploy ✓). `https://bjeng.app/api/health` returned 200 afterwards.
 
 ## 2026-11-16 — SMS F4 + F5 fixed; pushed to main with the web-service connection (deploy)
 
