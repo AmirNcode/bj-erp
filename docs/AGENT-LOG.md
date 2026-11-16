@@ -78,6 +78,27 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — Settings: lunch fields on their own row; phone layout of working hours fixed
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 957a246
+**Trigger:** Amir: move Lunch starts / Lunch duration to their own line; on iPhone the working-hours fields overlapped.
+
+**What changed**
+- `app/[locale]/(app)/settings/WorkSettingsForm.tsx` — hours section split into two rows (`work-hours-row`: start, end, cap; `lunch-row`: lunch start, lunch minutes). Phone: `grid grid-cols-2` (cap spans both columns); sm+: unchanged wrapping row of 180px fields. Time inputs get `min-w-0 appearance-none` — iOS Safari gives `<input type=time>` an intrinsic width that ignored `w-full` in the old `flex-wrap`, so fields overlapped.
+
+**Actions outside the repo**
+- Push to `main` → CI deploy to Liara (Amir asked).
+
+**Verification**
+- Temp `app/[locale]/zz-ws` page (deleted) in the browser pane: at 375px no input rects overlap, two columns per row; at 1100px hours row + separate lunch row. `tsc --noEmit` and eslint on the file clean. Not checked on a real iPhone.
+
+**State left behind**
+- Committed and pushed to main.
+
+**For the next agent**
+- none
+
 ## 2026-11-16 — FR-93 lunch break not deducted from hourly leave (spec → PR #26 → merged)
 
 **Agent:** Claude Opus 5.5 via Claude Code

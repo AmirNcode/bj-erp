@@ -236,6 +236,12 @@ export function WorkSettingsForm({
 
   const inputClass =
     'h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-[180px]';
+  // iOS Safari gives time inputs an intrinsic width that ignores w-full, so
+  // they overflow their cell; min-w-0 + appearance-none let them shrink.
+  const timeInputClass = cn(inputClass, 'min-w-0 appearance-none');
+  // Phone: two equal columns; sm+: a wrapping row of fixed-width fields.
+  const rowClass = 'grid grid-cols-2 gap-3 sm:flex sm:flex-wrap';
+  const fieldClass = 'min-w-0 space-y-1 text-sm';
 
   // Save covers this card only (weekly days off + working hours).
   return (
@@ -297,8 +303,8 @@ export function WorkSettingsForm({
           <h3 className="text-sm font-semibold">{labels.hoursTitle}</h3>
           <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.hoursHint}</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <label className="space-y-1 text-sm">
+        <div className={rowClass} data-testid="work-hours-row">
+          <label className={fieldClass}>
             <span className="block text-xs text-muted-foreground">{labels.workStart}</span>
             <input
               type="time"
@@ -307,10 +313,10 @@ export function WorkSettingsForm({
               disabled={locked}
               dir="ltr"
               data-testid="work-start"
-              className={inputClass}
+              className={timeInputClass}
             />
           </label>
-          <label className="space-y-1 text-sm">
+          <label className={fieldClass}>
             <span className="block text-xs text-muted-foreground">{labels.workEnd}</span>
             <input
               type="time"
@@ -319,10 +325,10 @@ export function WorkSettingsForm({
               disabled={locked}
               dir="ltr"
               data-testid="work-end"
-              className={inputClass}
+              className={timeInputClass}
             />
           </label>
-          <label className="space-y-1 text-sm">
+          <label className={cn(fieldClass, 'col-span-2')}>
             <span className="block text-xs text-muted-foreground">{labels.hourlyCap}</span>
             <input
               type="number"
@@ -336,7 +342,10 @@ export function WorkSettingsForm({
               className={inputClass}
             />
           </label>
-          <label className="space-y-1 text-sm">
+        </div>
+        {/* Lunch break (FR-93) on its own row. */}
+        <div className={rowClass} data-testid="lunch-row">
+          <label className={fieldClass}>
             <span className="block text-xs text-muted-foreground">{labels.lunchStart}</span>
             <input
               type="time"
@@ -345,10 +354,10 @@ export function WorkSettingsForm({
               disabled={locked}
               dir="ltr"
               data-testid="lunch-start"
-              className={inputClass}
+              className={timeInputClass}
             />
           </label>
-          <label className="space-y-1 text-sm">
+          <label className={fieldClass}>
             <span className="block text-xs text-muted-foreground">{labels.lunchMinutes}</span>
             <input
               type="number"
