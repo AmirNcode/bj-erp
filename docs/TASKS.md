@@ -3,6 +3,15 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-93 lunch break (deployed 2026-11-16, PR #26)
+
+- ☐ No signed-in browser check by the agent (UI checked on a temporary no-login page, en + fa). Owner/HR: try Settings lunch fields and a 12:00–15:00 / 13:00–14:00 hourly leave on http://localhost:3501.
+- ☐ Minor (PR review): clearing *Lunch duration* saves 0 (no lunch break) without a warning; a fractional value is rounded.
+- ☐ Minor: outside the request form a lunch-only request shows its duration as "0 days" (approval queue, lists, print).
+- ☐ Minor: `private.lunch_overlap_minutes` / `private.is_working_day` take any company id (reveal only another company's lunch time / working days).
+- ☐ `tests/sql/lunch-break.sql` lacks overdraft / split / unpaid-type lunch-only cases (the PR reviewer checked them ad hoc).
+- ☐ Local `postgres` has anon/ACL drift (anon holds grants on many app functions and tables): 15 `tests/sql` files fail on any clone of it, FR-93 or not. Check whether Liara has the same drift.
+
 ## FR-92 manager negative balance (deployed 2026-11-12, PR #25)
 
 - ☐ **Before merge (owner/HR):** owner tests on the local stack `bj-approvals-finance` (http://localhost:3501, FR-92 migrations applied 2026-11-12). Backfill dry run on `daily-20261112T020206Z` (2026-11-12): **0 requests, 0 people** move (the only annual request with an unpaid part belongs to a non-Manager). 2 people already have a negative annual balance from earlier edits: they appear in "Convert negatives" after deploy.

@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Lunch break not deducted from hourly leave (FR-93) — deployed 2026-11-16 (PR #26)
+
+- **Settings › Working hours and hourly leave** has two new fields: **Lunch starts** (default 13:00) and **Lunch duration (minutes)** (default 60; 0 = no lunch break). It must fall inside the working hours. Same permission as the rest of the card (`work_settings`), so HR can edit it.
+- **Hourly leave no longer counts the lunch break.** 12:00–15:00 deducts 2 hours; 13:30–15:00 deducts 1 hour. The 4-hour daily limit counts the same net time (11:00–16:00 is allowed). The request form says "Lunch break (1 hour) is not deducted."
+- **Leave wholly inside lunch** (e.g. 13:00–14:00) is still filed and approved, so security sees who leaves the building, but it deducts nothing and does not use up the one-hourly-leave-a-day slot.
+- Errands and daily leave are unchanged (a day is still 8 hours). Requests filed before this release keep their amounts; editing one recounts it with the lunch break.
+
 ### Manager negative balance and Employees balances (FR-92) — deployed 2026-11-12
 
 - **Managers can borrow annual leave.** A Manager may request annual leave (daily or hourly) past their balance: the whole request is paid and the balance goes negative. The request form first asks them to confirm ("balance will go to −X, monthly accruals will cover it"). A negative carries over at Farvardin 1; nothing is split off as unpaid any more for Managers.

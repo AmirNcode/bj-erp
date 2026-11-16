@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — FR-93 lunch break not deducted from hourly leave (spec → PR #26 → merged)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 0d6421f
+**Trigger:** HR feedback via Amir: hourly leave must not count the 13:00–14:00 lunch hour; lunch start + duration configurable like the weekend, under the existing work settings permission (HR).
+
+**Decisions (Amir):** in `work_settings` (no new permission item); cap on net minutes; errands unchanged; going forward only; a day stays 8 h (08:00–17:00 incl. lunch); a request wholly inside lunch is still filed/approved for security but deducts 0. Agent calls (in spec): duration in minutes 0–180, lunch-only leave does not take the FR-57 slot and skips the strict balance check.
+
+**What changed**
+- Spec `docs/specs/2026-11-16-lunch-break-design.md`, plan `docs/plans/2026-11-16-lunch-break.md`; Opus subagent reviewed both (3 major: form span vs net for delegation preview, strict balance at 0, one-per-day slot) — all folded in.
+- `7d50e14`: migration `20261116120000_lunch_break.sql` (columns + `work_settings_lunch_sane` CHECK, `private.is_working_day`, `private.lunch_overlap_minutes`; redefined `compute_requested_minutes`, `submit_leave_impl`, `edit_request_impl` from schema.sql bodies via scripted exact replacements); `tests/sql/lunch-break.sql` (37 checks); `lib/leave/hourly.ts` helpers, `validateLunchBreak`, settings actions/types, `WorkSettingsForm` fields, `HourlyRequestForm` (span for validation/replacement/delegation, net for cap/balance, lunch note), `db-error` mapping, fa/en strings, REQUIREMENTS FR-93, DATA_MODEL.
+- PR #26 reviewed by an Opus subagent (`aab53d8`, its own log entry below): no major issues. Merged as `d2e026b`.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clones `lunch` / `lunchbase` (pg_dump -Fc | pg_restore, ~20 cron/graphql errors) for tests; both dropped.
+- Local stack `:3501`: `pg_dump -Fc` of `postgres` to the session scratchpad (`approvals-finance-pre-fr93.dump`); `bj_apply_migrations` applied `20261116120000_lunch_break.sql` (release `approvals-finance-local`, **now FROZEN locally**); View-as hook synced; app rebuilt from main `d2e026b`; rest restarted; `/api/health` 200. Local row: lunch 13:00 / 60.
+- Liara: deployed by CI on the merge push (run 43899520300: build + deploy success; migration applied by the pipeline). `https://bjeng.app/api/health` 200.
+
+**Verification**
+- SQL: `lunch-break.sql` all PASS on the clone; full `tests/sql` — the 15 failing files fail identically on an unmigrated clone (local ACL drift, see CLAUDE.md).
+- tsc 0, lint 0, unit 138 files / 1353+ tests pass, `npm run build` OK.
+- UI: temporary no-login page (deleted) in en + fa — settings fields render; 12:00–15:00 shows "Lunch break (1 hour) is not deducted."; 13:00–14:00 keeps submit enabled. No signed-in check.
+- Dead end: a raw schema dump of the clone carried ~200 lines of anon-grant drift; replaced with a before/after dump patch.
+
+**State left behind**
+- Open minors in `docs/TASKS.md` (FR-93 section).
+
 ## 2026-11-16 — Review of PR #26 (FR-93 lunch break): no major issues
 
 **Agent:** Claude Opus 5.5 via Claude Code (review subagent)
