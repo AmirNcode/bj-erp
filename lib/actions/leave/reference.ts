@@ -61,6 +61,9 @@ export type WorkSettings = {
   workEnd: string;
   /** Per-day cap on hourly leave, in minutes (D7). */
   maxHourlyMinutesPerDay: number;
+  /** FR-93: daily lunch break ('HH:MM', minutes; 0 = none). Not deducted from hourly leave. */
+  lunchStart: string;
+  lunchMinutes: number;
 };
 
 export async function getWorkSettings(): Promise<{
@@ -74,7 +77,7 @@ export async function getWorkSettings(): Promise<{
     c.supabase
       .from('work_settings')
       .select(
-        'weekend_days, biweekly_weekend_days, biweekly_anchor, hours_per_day, work_start, work_end, max_hourly_minutes_per_day'
+        'weekend_days, biweekly_weekend_days, biweekly_anchor, hours_per_day, work_start, work_end, max_hourly_minutes_per_day, lunch_start, lunch_minutes'
       )
       .eq('company_id', c.companyId)
       .maybeSingle(),
@@ -100,6 +103,8 @@ export async function getWorkSettings(): Promise<{
       workStart: ws?.work_start ?? d.workStart,
       workEnd: ws?.work_end ?? d.workEnd,
       maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? d.maxHourlyMinutesPerDay,
+      lunchStart: ws?.lunch_start ?? d.lunchStart,
+      lunchMinutes: ws?.lunch_minutes ?? d.lunchMinutes,
     },
   };
 }

@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { RequestDelegationFields } from '../_components/RequestDelegationFields';
 import { dateObjectToGregorian, type PickerDate } from '@/lib/leave/dateConvert';
 import { formatDuration } from '@/lib/leave/duration';
-import { timeSlots, rangeMinutes } from '@/lib/leave/hourly';
+import { timeSlots, rangeMinutes, lunchOverlapMinutes } from '@/lib/leave/hourly';
 import { submitHourlyRequest } from '@/lib/actions/leave/requests';
 import { RequestSignatureFields, type SignatureLabels } from '../_components/RequestSignature';
 import {
@@ -49,6 +49,8 @@ type Labels = {
   validationSelectDate: string;
   validationTimes: string;
   dailyLimitHint: string;
+  /** FR-93: "Lunch break ({duration}) not deducted" — substituted here. */
+  lunchNotDeducted: string;
   replacementTitle: string;
   replacementHint: string;
   replacementSelect: string;
@@ -88,6 +90,7 @@ function useLabels(maxHourlyMinutesPerDay: number): Labels {
     validationSelectDate: t('validationSelectDate'),
     validationTimes: tHourly('validationTimes'),
     dailyLimitHint: tHourly('dailyLimitHint', { hours: maxHours }),
+    lunchNotDeducted: tHourly.raw('lunchNotDeducted'),
     replacementTitle: tRepl('title'),
     replacementHint: tRepl('hint'),
     replacementSelect: tRepl('select'),
@@ -126,10 +129,21 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
   const selectedType = leaveTypes.find((t) => t.id === selectedTypeId);
   const isoDate = date ? dateObjectToGregorian(date) : '';
+  // FR-93: the span drives validation and the replacement/delegation queries; the
+  // balance and the daily cap see the net minutes (lunch break not deducted). A
+  // request wholly inside lunch is valid at 0 minutes (security still sees the exit).
   const durationMinutes = rangeMinutes({ start: startTime, end: endTime });
-  const overLimit = durationMinutes > workSettings.maxHourlyMinutesPerDay;
+  const lunchMinutes =
+    durationMinutes > 0
+      ? lunchOverlapMinutes(
+          { start: startTime, end: endTime },
+          { start: workSettings.lunchStart, minutes: workSettings.lunchMinutes }
+        )
+      : 0;
+  const netMinutes = durationMinutes - lunchMinutes;
+  const overLimit = netMinutes > workSettings.maxHourlyMinutesPerDay;
 
-  const balance = useLeaveBalance(selectedTypeId, durationMinutes > 0 ? durationMinutes : null);
+  const balance = useLeaveBalance(selectedTypeId, durationMinutes > 0 ? netMinutes : null);
   // Availability is time-aware for hourly leave: it depends on the date AND the hours.
   const replacement = useReplacementCandidates(
     isoDate && durationMinutes > 0
@@ -215,6 +229,11 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
           />
 
           <p className="text-sm text-muted-foreground">{labels.dailyLimitHint}</p>
+          {lunchMinutes > 0 && (
+            <p className="text-sm text-muted-foreground" data-testid="hourly-lunch-note">
+              {labels.lunchNotDeducted.replace('{duration}', durationText(lunchMinutes))}
+            </p>
+          )}
 
           <ReplacementField replacement={replacement} labels={labels} delegationEnabled={delegation.preview?.can_delegate} />
           <RequestDelegationFields idPrefix="hourly" delegation={delegation} workSettings={workSettings} locale={locale} />
@@ -234,7 +253,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
           <RequestSignatureFields idPrefix="hourly" {...signature.fieldProps} labels={labels.signature} />
 
           <LeaveBalancePreview
-            requestedMinutes={durationMinutes > 0 ? durationMinutes : null}
+            requestedMinutes={durationMinutes > 0 ? netMinutes : null}
             leaveType={selectedType}
             balance={balance}
             hoursPerDay={workSettings.hoursPerDay}

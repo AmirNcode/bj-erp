@@ -189,7 +189,8 @@
     "durationLabel": "Duration",
     "validationTimes": "The end time must be after the start time.",
     "dailyLimitHint": "Up to {hours} hours per day, and one hourly leave per day.",
-    "unavailable": "No leave type is currently available hourly. Ask an administrator."
+    "unavailable": "No leave type is currently available hourly. Ask an administrator.",
+    "lunchNotDeducted": "Lunch break ({duration}) is not deducted."
   },
   "errand": {
     "title": "Hourly Work Errand Request",
@@ -805,10 +806,12 @@
       "anchorLabel": "Starting date",
       "anchorHint": "Pick any date that IS a day off. The app alternates from it, so the following week is worked and the one after is off again.",
       "hoursTitle": "Working hours and hourly leave",
-      "hoursHint": "Hourly leave requests must fall inside this window, and are capped per day.",
+      "hoursHint": "Hourly leave requests must fall inside this window, and are capped per day. The lunch break is not deducted from hourly leave.",
       "workStart": "Day starts",
       "workEnd": "Day ends",
       "hourlyCap": "Max hours per day (up to 4)",
+      "lunchStart": "Lunch starts",
+      "lunchMinutes": "Lunch duration (minutes)",
       "save": "Save",
       "saved": "Saved.",
       "holidaysTitle": "Official holidays",
@@ -1134,6 +1137,7 @@
     "employeeNotFound": "Employee not found.",
     "employeeSelectionLimit": "Select between 1 and 100 employees.",
     "invalidHourlySettings": "Enter valid work hours and an hourly-leave limit within that workday.",
+    "invalidLunchBreak": "The lunch break must fall within working hours and last at most 180 minutes.",
     "holidayNotFound": "Holiday not found.",
     "overlap": "You already have a pending or approved request overlapping these dates.",
     "overlapApproved": "Another approved leave overlaps these dates.",

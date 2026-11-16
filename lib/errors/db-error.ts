@@ -62,6 +62,7 @@ const RULES: Rule[] = [
   { re: /employee not found/i, key: 'employeeNotFound' },
   { re: /select between 1 and 100 employees/i, key: 'employeeSelectionLimit' },
   { re: /invalid work hours or hourly leave cap/i, key: 'invalidHourlySettings' },
+  { re: /lunch break must fall within working hours|work_settings_lunch_sane/i, key: 'invalidLunchBreak' },
   { re: /holiday not found/i, key: 'holidayNotFound' },
   { re: /overlapping approved leave exists/, key: 'overlapApproved' },
   { re: /overlapping leave request exists/, key: 'overlap' },

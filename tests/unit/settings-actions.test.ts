@@ -48,6 +48,8 @@ const WORK = {
   workStart: '07:00',
   workEnd: '15:00',
   maxHourlyMinutesPerDay: 240,
+  lunchStart: '13:00',
+  lunchMinutes: 60,
 };
 
 beforeEach(() => {
@@ -82,6 +84,17 @@ describe('updateWorkSettings', () => {
     expect(calls[0]).toMatchObject({ kind: 'upsert', table: 'work_settings' });
     expect(payload).not.toHaveProperty('approval_order_enforced');
     expect(payload).not.toHaveProperty('hours_per_day');
+  });
+  it('saves the lunch break (FR-93)', async () => {
+    callerPerms = { work_settings: 'edit' };
+    expect(await updateWorkSettings(WORK)).toEqual({ ok: true });
+    expect(calls[0].payload).toMatchObject({ lunch_start: '13:00', lunch_minutes: 60 });
+  });
+  it('refuses a lunch break outside working hours without calling the database', async () => {
+    callerPerms = { work_settings: 'edit' };
+    const res = await updateWorkSettings({ ...WORK, lunchStart: '14:30' });
+    expect(res.ok).toBe(false);
+    expect(calls).toEqual([]);
   });
   it('work_settings read is refused', async () => {
     callerPerms = { work_settings: 'read', approval_steps: 'edit' };
