@@ -222,6 +222,15 @@ until every lower-ordered active step has been; false means any order, whoever i
 hourly requests, and `max_hourly_minutes_per_day int` (default 240 = 4h) caps them **per day**, summed
 across that day's own pending + approved hourly requests.
 
+**Lunch break (2026-11-16, FR-93):** `lunch_start time` (default 13:00) · `lunch_minutes int` (default
+60, 0–180; 0 = no break). CHECK `work_settings_lunch_sane`: inside `work_start`–`work_end` unless 0
+(compared in minutes, since `time + interval` wraps at midnight). An hourly **leave** stores
+`requested_minutes = (end − start) − overlap with the lunch break` (`private.lunch_overlap_minutes`,
+TS mirror `lunchOverlapMinutes`); the daily cap uses the same net minutes. Errands are not reduced. A
+leave wholly inside lunch on a working day (`private.is_working_day`) is valid at **0 minutes** (no
+ledger row; security still sees the exit) and does not take the FR-57 one-per-day slot. Stored minutes
+of earlier requests were never recomputed; an edit recounts.
+
 **Weekend frequency (2026-08-18, FR-41):** `biweekly_weekend_days int[]` (default `{}`) ·
 `biweekly_anchor date` (nullable). A date is a weekend when its ISO weekday is in `weekend_days`
 **OR** it is in `biweekly_weekend_days` **AND** its week has the same parity as the anchor's week.

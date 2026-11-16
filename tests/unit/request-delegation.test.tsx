@@ -115,7 +115,7 @@ describe('request delegation preview and consent', () => {
 
 const workSettings = {
   weekendDays: [5], biweeklyWeekendDays: [], biweeklyAnchor: null, holidays: ['2026-10-21'],
-  hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240,
+  hoursPerDay: 8, workStart: '07:00', workEnd: '15:00', maxHourlyMinutesPerDay: 240, lunchStart: '13:00', lunchMinutes: 60,
 };
 
 function fields(view: RequestDelegationPreview, props: { showCover?: boolean } = {}, absence: DelegationPreviewQuery = query) {

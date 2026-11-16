@@ -32,6 +32,27 @@ export function rangeMinutes(r: TimeRange): number {
   return span > 0 ? span : 0;
 }
 
+/** FR-93: the company lunch break; `minutes` 0 = no break. */
+export type LunchBreak = { start: string; minutes: number };
+
+/**
+ * Minutes of the range that fall inside the lunch break (0 when none).
+ * MIRRORS private.lunch_overlap_minutes (migration 20261116120000_lunch_break.sql).
+ */
+export function lunchOverlapMinutes(r: TimeRange, lunch: LunchBreak): number {
+  if (lunch.minutes <= 0) return 0;
+  const ls = timeToMinutes(lunch.start);
+  const overlap =
+    Math.min(timeToMinutes(r.end), ls + lunch.minutes) - Math.max(timeToMinutes(r.start), ls);
+  return overlap > 0 ? overlap : 0;
+}
+
+/** FR-93: what an hourly LEAVE deducts — the span minus the lunch break inside it. */
+export function netHourlyMinutes(r: TimeRange, lunch: LunchBreak): number {
+  const span = rangeMinutes(r);
+  return span > 0 ? span - lunchOverlapMinutes(r, lunch) : 0;
+}
+
 /** True when the range sits inside the window, endpoints inclusive. */
 export function isWithinWindow(r: TimeRange, window: TimeRange): boolean {
   return (

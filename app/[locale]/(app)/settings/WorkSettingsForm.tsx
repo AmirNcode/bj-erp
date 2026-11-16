@@ -24,6 +24,8 @@ type Labels = {
   workStart: string;
   workEnd: string;
   hourlyCap: string;
+  lunchStart: string;
+  lunchMinutes: string;
   save: string;
   /** "Last saved: {date}" — substituted here. */
   lastSaved: string;
@@ -52,6 +54,8 @@ function useLabels(): Labels {
     workStart: t('workStart'),
     workEnd: t('workEnd'),
     hourlyCap: t('hourlyCap'),
+    lunchStart: t('lunchStart'),
+    lunchMinutes: t('lunchMinutes'),
     save: t('save'),
     // .raw(): the form substitutes {date} itself after each save.
     lastSaved: t.raw('lastSaved'),
@@ -93,6 +97,8 @@ export function WorkSettingsForm({
   initialWorkStart,
   initialWorkEnd,
   initialHourlyCapMinutes,
+  initialLunchStart,
+  initialLunchMinutes,
   readOnly = false,
   locale,
 }: {
@@ -104,6 +110,9 @@ export function WorkSettingsForm({
   initialWorkStart: string;
   initialWorkEnd: string;
   initialHourlyCapMinutes: number;
+  /** FR-93: lunch break start ('HH:MM[:SS]') and length in minutes. */
+  initialLunchStart: string;
+  initialLunchMinutes: number;
   /** FR-55: a read-only viewer sees the values with every control disabled and no Save. */
   readOnly?: boolean;
   locale: string;
@@ -123,6 +132,8 @@ export function WorkSettingsForm({
   // The cap is stored in minutes and edited in hours — hours is what the client
   // says ("up to 4 hours"), minutes is what the ledger needs.
   const [capHours, setCapHours] = useState(initialHourlyCapMinutes / 60);
+  const [lunchStart, setLunchStart] = useState(initialLunchStart.slice(0, 5));
+  const [lunchMinutes, setLunchMinutes] = useState(initialLunchMinutes);
   const [savedAt, setSavedAt] = useState<string | null>(initialUpdatedAt);
   const [okMsg, setOkMsg] = useState('');
   const [errMsg, setErrMsg] = useState('');
@@ -209,6 +220,8 @@ export function WorkSettingsForm({
         workStart,
         workEnd,
         maxHourlyMinutesPerDay: Math.round(capHours * 60),
+        lunchStart,
+        lunchMinutes: Math.round(lunchMinutes),
       });
       if (res.ok) {
         setSavedAt(new Date().toISOString());
@@ -320,6 +333,32 @@ export function WorkSettingsForm({
               onChange={(e) => setCapHours(Number(e.target.value))}
               disabled={locked}
               data-testid="hourly-cap-hours"
+              className={inputClass}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs text-muted-foreground">{labels.lunchStart}</span>
+            <input
+              type="time"
+              value={lunchStart}
+              onChange={(e) => setLunchStart(e.target.value)}
+              disabled={locked}
+              dir="ltr"
+              data-testid="lunch-start"
+              className={inputClass}
+            />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="block text-xs text-muted-foreground">{labels.lunchMinutes}</span>
+            <input
+              type="number"
+              min={0}
+              max={180}
+              step={5}
+              value={lunchMinutes}
+              onChange={(e) => setLunchMinutes(Number(e.target.value))}
+              disabled={locked}
+              data-testid="lunch-minutes"
               className={inputClass}
             />
           </label>

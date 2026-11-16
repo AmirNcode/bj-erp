@@ -2,7 +2,7 @@
 
 import { requireCaller } from '@/lib/auth/context';
 import { validateWeekendDays } from '@/lib/leave/weekend';
-import { isValidIsoDate, validateHourlySettings } from '@/lib/leave/settings-validation';
+import { isValidIsoDate, validateHourlySettings, validateLunchBreak } from '@/lib/leave/settings-validation';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
@@ -34,6 +34,8 @@ export async function getCompanyHolidays(): Promise<
       workStart: string;
       workEnd: string;
       maxHourlyMinutesPerDay: number;
+      lunchStart: string;
+      lunchMinutes: number;
       /** When work settings were last saved (null before the first save). */
       updatedAt: string | null;
     }
@@ -50,7 +52,7 @@ export async function getCompanyHolidays(): Promise<
     c.supabase
       .from('work_settings')
       .select(
-        'weekend_days, biweekly_weekend_days, biweekly_anchor, work_start, work_end, max_hourly_minutes_per_day, updated_at'
+        'weekend_days, biweekly_weekend_days, biweekly_anchor, work_start, work_end, max_hourly_minutes_per_day, lunch_start, lunch_minutes, updated_at'
       )
       .eq('company_id', c.companyId)
       .maybeSingle(),
@@ -67,6 +69,8 @@ export async function getCompanyHolidays(): Promise<
     workStart: ws?.work_start ?? d.workStart,
     workEnd: ws?.work_end ?? d.workEnd,
     maxHourlyMinutesPerDay: ws?.max_hourly_minutes_per_day ?? d.maxHourlyMinutesPerDay,
+    lunchStart: ws?.lunch_start ?? d.lunchStart,
+    lunchMinutes: ws?.lunch_minutes ?? d.lunchMinutes,
     updatedAt: ws?.updated_at ?? null,
   };
 }
@@ -82,6 +86,9 @@ export type WorkSettingsInput = {
   workEnd: string;
   /** Per-day cap on hourly leave, in MINUTES (the form edits hours). */
   maxHourlyMinutesPerDay: number;
+  /** FR-93: lunch break start 'HH:MM' and length in minutes (0 = none). */
+  lunchStart: string;
+  lunchMinutes: number;
 };
 
 export async function updateWorkSettings(
@@ -111,6 +118,8 @@ export async function updateWorkSettings(
     input.maxHourlyMinutesPerDay
   );
   if (!hourly.ok) return dbErr('invalid work hours or hourly leave cap');
+  const lunch = validateLunchBreak(hourly.workStart, hourly.workEnd, input.lunchStart, input.lunchMinutes);
+  if (!lunch.ok) return dbErr('lunch break must fall within working hours');
 
   // Upsert on the company_id unique key so a missing row is created instead of
   // a silent 0-row update (the old code reported success without saving).
@@ -130,6 +139,8 @@ export async function updateWorkSettings(
         work_start: hourly.workStart,
         work_end: hourly.workEnd,
         max_hourly_minutes_per_day: hourly.capMinutes,
+        lunch_start: lunch.lunchStart,
+        lunch_minutes: lunch.lunchMinutes,
         updated_by: c.user.id,
       },
       { onConflict: 'company_id' }

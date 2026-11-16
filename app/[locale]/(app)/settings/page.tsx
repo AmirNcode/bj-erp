@@ -41,7 +41,7 @@ export default async function SettingsPage({ params }: Props) {
 
   const tNav = await getTranslations('nav');
   const data = await getCompanyHolidays();
-  const { weekendDays, biweeklyWeekendDays, biweeklyAnchor, workStart, workEnd, maxHourlyMinutesPerDay: hourlyCapMinutes } =
+  const { weekendDays, biweeklyWeekendDays, biweeklyAnchor, workStart, workEnd, maxHourlyMinutesPerDay: hourlyCapMinutes, lunchStart, lunchMinutes } =
     data.ok ? data : WORK_SETTINGS_FALLBACK;
   const holidays = data.ok ? data.holidays : [];
   const updatedAt = data.ok ? data.updatedAt : null;
@@ -61,6 +61,8 @@ export default async function SettingsPage({ params }: Props) {
         initialWorkStart={workStart}
         initialWorkEnd={workEnd}
         initialHourlyCapMinutes={hourlyCapMinutes}
+        initialLunchStart={lunchStart}
+        initialLunchMinutes={lunchMinutes}
         readOnly={!canEditWork}
       />
 

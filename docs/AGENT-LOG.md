@@ -78,6 +78,34 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — Review of PR #26 (FR-93 lunch break): no major issues
+
+**Agent:** Claude Opus 5.5 via Claude Code (review subagent)
+**Branch / HEAD at start:** feat/lunch-break @ 7d50e14
+**Trigger:** Review PR #26 and fix any major issue on the branch.
+
+**What changed**
+- Only this log entry. No code change: no major issue found.
+
+**Findings (all minor, not fixed)**
+- `WorkSettingsForm.tsx` lunch-minutes field: clearing it saves 0 (no lunch break) without a warning; 7.5 is rounded to 8; the 5-minute step is not enforced on the server.
+- `HourlyRequestForm.tsx`: a 0-minute (lunch-only) request shows the lunch note and a 0 balance preview, not the spec's "0 — lunch break, not deducted" text. `netHourlyMinutes` is exported but unused in the app.
+- `private.lunch_overlap_minutes` / `private.is_working_day` take any company id (SECURITY DEFINER, granted to authenticated): only reveals lunch time / working days of another company.
+- Old app during the migration window: its settings save can hit `work_settings_lunch_sane` (work window shrunk below 14:00) and gets a generic error. Very narrow.
+- Not yet in `docs/CHANGELOG.md` / `docs/TASKS.md`; the author's session has no AGENT-LOG entry.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: created a `lunchbase` clone of `postgres` (no FR-93) for a baseline run of 3 failing SQL files, then dropped it. `lunch` clone used read/rollback only. Nothing applied to `postgres`; nothing on Liara.
+
+**Verification**
+- Migration bodies of `compute_requested_minutes`, `submit_leave_impl`, `edit_request_impl` diffed against `main:supabase/schema.sql`: only FR-93 lines differ; headers identical. Schema-only dump diff `postgres`→`lunch` equals the committed `schema.sql` hunks line for line.
+- `tests/sql/lunch-break.sql` on `lunch`: all PASS. Full `tests/sql/*` on `lunch`: 22 ok, 13 fail; all 13 are anon/ACL or real-data fixture failures, and the 3 non-ACL ones (client-feedback-2026-10-12, approval-delegation, admin-free-personnel-no) fail identically on the no-FR-93 baseline clone.
+- Extra rolled-back checks on `lunch`: manager overdraft with negative balance files/approves a lunch-only request (0 unpaid, no ledger), split and unpaid types at 0 → 0/0, unpaid 12–15 → 120/120, cancel writes no ledger, edit of a lunch-only request into real hours is refused when the day's slot is taken, hourly errand 13–14 still 60.
+- `npx tsc --noEmit` ok, `npm run lint` ok, `npm run test:unit` 137 files / 1353 tests pass. `npm run build` not run (no app code touched).
+
+**State left behind**
+- This entry committed and pushed on `feat/lunch-break`. PR not merged.
+
 ## 2026-11-12 — PR #25 (FR-92) merged and deployed; branch deleted
 
 **Agent:** Claude Opus 5.5 via Claude Code

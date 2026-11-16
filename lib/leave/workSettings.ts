@@ -23,4 +23,6 @@ export const WORK_SETTINGS_FALLBACK: WorkSettings = {
   workStart: '07:00',
   workEnd: '15:00',
   maxHourlyMinutesPerDay: 240,
+  lunchStart: '13:00',
+  lunchMinutes: 60,
 };

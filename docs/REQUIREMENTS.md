@@ -310,6 +310,8 @@ Validation/release status stays in `docs/TASKS.md`.
 - **FR-57** ☑ **One hourly leave a day, at most 4 hours.** A second pending/approved hourly leave on
   the same day is refused; `max_hourly_minutes_per_day` is capped at 240. Hourly errands unaffected.
   *(2026-10-12.)*
+  **Amended 2026-11-16 (FR-93):** the cap counts net minutes (lunch break excluded), and a 0-minute
+  (lunch-only) hourly leave neither takes nor is blocked by the one-per-day slot.
 - **FR-58** ☑ **Admin override.** Admin is not a step. An admin's approval signs every outstanding
   step (named-person steps included, amending FR-42) and completes the request; an admin holding
   a step of their own signs only that unless they choose the override. Admin may reject any
@@ -432,6 +434,14 @@ Validation/release status stays in `docs/TASKS.md`.
   that start with `= + - @`. Past Managers' unpaid annual parts are backfilled onto the ledger
   (migration `20261112120200`). Amends FR-13, FR-48, FR-91. *(2026-11-12; spec
   `2026-11-12-manager-negative-balance-design.md`; branch `feat/manager-negative-balance`, not deployed.)*
+- **FR-93** ☑ **Lunch break not deducted from hourly leave.** Settings › Working hours and hourly leave
+  has *Lunch starts* (default 13:00) and *Lunch duration (minutes)* (default 60; 0 = none), inside the
+  working hours, under the existing `work_settings` permission (HR has it). Hourly leave deducts
+  `(end − start) − the lunch break inside it`; the daily cap uses that net amount. Errands and daily
+  leave are unchanged (a day stays `hours_per_day`). A leave wholly inside lunch on a working day is
+  filed and approved as usual (security tracks who leaves) but deducts 0 and does not use the
+  one-hourly-leave-a-day slot. Going forward only: existing requests keep their minutes. *(2026-11-16,
+  spec `docs/specs/2026-11-16-lunch-break-design.md`.)*
 - **FR-91** ☐ **Edit approved requests, per request type.** Five role-editor toggles in a new section
   "Edit requests": edit daily leave, edit hourly leave, edit daily work trip, edit hourly work errand
   (`edit_leave_daily|edit_leave_hourly|edit_errand_daily|edit_errand_hourly`) and edit own requests

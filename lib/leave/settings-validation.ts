@@ -44,3 +44,34 @@ export function validateHourlySettings(
   }
   return { ok: true, workStart, workEnd, capMinutes };
 }
+
+/** FR-93: a lunch break may last at most 3 hours (CHECK work_settings_lunch_sane too). */
+export const MAX_LUNCH_MINUTES = 180;
+
+export type LunchBreakValidation =
+  | { ok: true; lunchStart: string; lunchMinutes: number }
+  | { ok: false };
+
+/**
+ * FR-93: the lunch break must sit inside the work window, unless it is 0 minutes
+ * (no lunch break). Mirrors CHECK work_settings_lunch_sane.
+ */
+export function validateLunchBreak(
+  workStart: string,
+  workEnd: string,
+  lunchStart: string,
+  lunchMinutes: number
+): LunchBreakValidation {
+  if (!TIME_RE.test(lunchStart)) return { ok: false };
+  if (!Number.isInteger(lunchMinutes) || lunchMinutes < 0 || lunchMinutes > MAX_LUNCH_MINUTES) {
+    return { ok: false };
+  }
+  if (
+    lunchMinutes > 0 &&
+    (timeToMinutes(lunchStart) < timeToMinutes(workStart) ||
+      timeToMinutes(lunchStart) + lunchMinutes > timeToMinutes(workEnd))
+  ) {
+    return { ok: false };
+  }
+  return { ok: true, lunchStart, lunchMinutes };
+}

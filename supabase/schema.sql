@@ -1391,6 +1391,7 @@ declare
   v_win_end time;
   v_cap integer;
   v_day_used integer;
+  v_net integer;
   v_now timestamptz;
   v_id uuid;
 begin
@@ -1498,14 +1499,19 @@ begin
       if p_start_time < v_win_start or p_end_time > v_win_end then
         raise exception 'times must fall within working hours' using errcode = '22023';
       end if;
-      if (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+      -- FR-93: the cap counts net minutes (lunch break excluded).
+      v_net := (extract(epoch from (p_end_time - p_start_time)) / 60)::int
+               - private.lunch_overlap_minutes(r.company_id, p_start_time, p_end_time);
+      if v_net > v_cap then
         raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
       end if;
-      if exists (
+      -- FR-93: a lunch-only (0-minute) request neither takes nor is blocked by the slot.
+      if v_net > 0 and exists (
         select 1 from public.leave_requests x
          where x.employee_id = r.employee_id and x.id <> r.id
            and x.kind = 'leave' and x.unit = 'hour' and x.start_date = p_start
            and x.status in ('pending', 'approved')
+           and x.requested_minutes > 0
       ) then
         raise exception 'only one hourly leave per day' using errcode = '22023';
       end if;
@@ -1514,7 +1520,7 @@ begin
        where x.employee_id = r.employee_id and x.id <> r.id
          and x.kind = 'leave' and x.unit = 'hour' and x.start_date = p_start
          and x.status in ('pending', 'approved');
-      if v_day_used + (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+      if v_day_used + v_net > v_cap then
         raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
       end if;
     end if;
@@ -1534,7 +1540,11 @@ begin
 
     v_minutes := public.compute_requested_minutes(
       r.company_id, p_start, p_end, v_part, p_unit, p_start_time, p_end_time, r.kind);
-    if v_minutes <= 0 then
+    if v_minutes <= 0
+       -- FR-93: a lunch-only hourly leave on a working day deducts 0 and stays valid.
+       and not (r.kind = 'leave' and p_unit = 'hour'
+                and p_end_time > p_start_time
+                and private.is_working_day(r.company_id, p_start)) then
       raise exception 'requested days must be greater than 0 (all days fall on weekend/holiday or dates invalid)'
         using errcode = '22023';
     end if;
@@ -2337,6 +2347,20 @@ end; $_$;
 
 
 --
+-- Name: is_working_day(uuid, date); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_working_day(p_company_id uuid, p_date date) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select not private.is_company_weekend(p_company_id, p_date)
+     and not exists (select 1 from public.holidays h
+                      where h.company_id = p_company_id and h.holiday_date = p_date);
+$$;
+
+
+--
 -- Name: jalali_text(date, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2400,6 +2424,26 @@ begin
   end if;
   return new;
 end $$;
+
+
+--
+-- Name: lunch_overlap_minutes(uuid, time without time zone, time without time zone); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.lunch_overlap_minutes(p_company_id uuid, p_start time without time zone, p_end time without time zone) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce((
+    select greatest(0,
+             least(extract(epoch from p_end) / 60,
+                   extract(epoch from w.lunch_start) / 60 + w.lunch_minutes)
+             - greatest(extract(epoch from p_start) / 60,
+                        extract(epoch from w.lunch_start) / 60))::int
+      from public.work_settings w
+     where w.company_id = p_company_id and w.lunch_minutes > 0
+     limit 1), 0);
+$$;
 
 
 --
@@ -4157,6 +4201,7 @@ declare
   v_seq int;
   v_location text := nullif(btrim(p_location), '');
   v_replacement uuid;
+  v_net int;
 begin
   if v_uid is null then raise exception 'not authenticated' using errcode = '42501'; end if;
   select company_id, department_id into v_company, v_dept
@@ -4238,7 +4283,10 @@ begin
     if p_start_time < v_win_start or p_end_time > v_win_end then
       raise exception 'times must fall within working hours' using errcode = '22023';
     end if;
-    if (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+    -- FR-93: the cap counts net minutes (lunch break excluded).
+    v_net := (extract(epoch from (p_end_time - p_start_time)) / 60)::int
+             - private.lunch_overlap_minutes(v_company, p_start_time, p_end_time);
+    if v_net > v_cap then
       raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
     end if;
   end if;
@@ -4262,14 +4310,16 @@ begin
 
   if p_kind = 'leave' and p_unit = 'hour' then
     -- FR-57: one hourly leave per person per day. Rejected and cancelled
-    -- requests free the day again.
-    if exists (
+    -- requests free the day again. FR-93: a lunch-only (0-minute) request only
+    -- logs the exit for security; it neither takes nor is blocked by the slot.
+    if v_net > 0 and exists (
       select 1 from public.leave_requests r
        where r.employee_id = v_uid
          and r.kind = 'leave'
          and r.unit = 'hour'
          and r.start_date = p_start
          and r.status in ('pending', 'approved')
+         and r.requested_minutes > 0
     ) then
       raise exception 'only one hourly leave per day' using errcode = '22023';
     end if;
@@ -4282,7 +4332,7 @@ begin
        and r.start_date = p_start
        and r.status in ('pending', 'approved');
 
-    if v_day_used + (extract(epoch from (p_end_time - p_start_time)) / 60)::int > v_cap then
+    if v_day_used + v_net > v_cap then
       raise exception 'hourly leave exceeds the daily limit' using errcode = '22023';
     end if;
   end if;
@@ -4312,7 +4362,12 @@ begin
   v_minutes := public.compute_requested_minutes(
     v_company, p_start, p_end, p_day_part, p_unit, p_start_time, p_end_time, p_kind
   );
-  if v_minutes <= 0 then
+  if v_minutes <= 0
+     -- FR-93: an hourly leave wholly inside the lunch break on a working day is
+     -- valid (security tracks who leaves the building); it deducts 0 minutes.
+     and not (p_kind = 'leave' and p_unit = 'hour'
+              and p_end_time > p_start_time
+              and private.is_working_day(v_company, p_start)) then
     raise exception 'requested days must be greater than 0 (all days fall on weekend/holiday or dates invalid)'
       using errcode = '22023';
   end if;
@@ -4323,7 +4378,8 @@ begin
     if v_rule = 'overdraft' then
       v_unpaid := 0;
     elsif v_rule = 'strict' then
-      if v_minutes > coalesce(v_balance, 0) - private.pending_leave_minutes(v_uid, p_leave_type_id) then
+      if v_minutes > 0
+         and v_minutes > coalesce(v_balance, 0) - private.pending_leave_minutes(v_uid, p_leave_type_id) then
         raise exception 'request exceeds available balance' using errcode = '22023';
       end if;
       v_unpaid := 0;
@@ -9681,13 +9737,10 @@ begin
       return (extract(epoch from (p_end_time - p_start_time)) / 60)::int;
     end if;
 
-    v_working := (not private.is_company_weekend(p_company_id, p_start))
-                 and not exists (
-                   select 1 from public.holidays h
-                    where h.company_id = p_company_id and h.holiday_date = p_start
-                 );
-    if not v_working then return 0; end if;
-    return (extract(epoch from (p_end_time - p_start_time)) / 60)::int;
+    if not private.is_working_day(p_company_id, p_start) then return 0; end if;
+    -- FR-93: the lunch break inside the range is not leave.
+    return (extract(epoch from (p_end_time - p_start_time)) / 60)::int
+           - private.lunch_overlap_minutes(p_company_id, p_start_time, p_end_time);
   end if;
 
   if p_kind = 'errand' then
@@ -11807,10 +11860,13 @@ CREATE TABLE public.work_settings (
     approval_order_enforced boolean DEFAULT false NOT NULL,
     biweekly_weekend_days integer[] DEFAULT '{}'::integer[] NOT NULL,
     biweekly_anchor date,
+    lunch_start time without time zone DEFAULT '13:00:00'::time without time zone NOT NULL,
+    lunch_minutes integer DEFAULT 60 NOT NULL,
     CONSTRAINT work_settings_biweekly_anchor_required CHECK (((cardinality(COALESCE(biweekly_weekend_days, '{}'::integer[])) = 0) OR (biweekly_anchor IS NOT NULL))),
     CONSTRAINT work_settings_biweekly_days_valid CHECK (((biweekly_weekend_days <@ ARRAY[1, 2, 3, 4, 5, 6, 7]) AND (NOT (ARRAY[1, 2, 3, 4, 5, 6, 7] <@ (COALESCE(weekend_days, '{}'::integer[]) || COALESCE(biweekly_weekend_days, '{}'::integer[])))))),
     CONSTRAINT work_settings_hourly_cap_sane CHECK (((max_hourly_minutes_per_day > 0) AND (max_hourly_minutes_per_day <= 240))),
     CONSTRAINT work_settings_hours_per_day_sane CHECK (((hours_per_day > (0)::numeric) AND (hours_per_day <= (24)::numeric))),
+    CONSTRAINT work_settings_lunch_sane CHECK ((((lunch_minutes >= 0) AND (lunch_minutes <= 180)) AND ((lunch_minutes = 0) OR ((lunch_start >= work_start) AND (((EXTRACT(epoch FROM lunch_start) / (60)::numeric) + (lunch_minutes)::numeric) <= (EXTRACT(epoch FROM work_end) / (60)::numeric)))))),
     CONSTRAINT work_settings_window_sane CHECK ((work_end > work_start))
 );
 
@@ -11834,6 +11890,20 @@ COMMENT ON COLUMN public.work_settings.biweekly_weekend_days IS 'FR-41: ISO week
 --
 
 COMMENT ON COLUMN public.work_settings.biweekly_anchor IS 'FR-41: any date whose week is an off week. Required whenever biweekly_weekend_days is non-empty.';
+
+
+--
+-- Name: COLUMN work_settings.lunch_start; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.work_settings.lunch_start IS 'FR-93: start of the daily lunch break, company-local. Not deducted from hourly leave.';
+
+
+--
+-- Name: COLUMN work_settings.lunch_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.work_settings.lunch_minutes IS 'FR-93: lunch break length in minutes (0-180). 0 = no lunch break.';
 
 
 --
@@ -14976,6 +15046,14 @@ GRANT ALL ON FUNCTION private.is_valid_sheba(p text) TO authenticated;
 
 
 --
+-- Name: FUNCTION is_working_day(p_company_id uuid, p_date date); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_working_day(p_company_id uuid, p_date date) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_working_day(p_company_id uuid, p_date date) TO authenticated;
+
+
+--
 -- Name: FUNCTION jalali_year_start(p_day date); Type: ACL; Schema: private; Owner: -
 --
 
@@ -14987,6 +15065,14 @@ REVOKE ALL ON FUNCTION private.jalali_year_start(p_day date) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.leave_request_requester_has_time_off() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION lunch_overlap_minutes(p_company_id uuid, p_start time without time zone, p_end time without time zone); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.lunch_overlap_minutes(p_company_id uuid, p_start time without time zone, p_end time without time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.lunch_overlap_minutes(p_company_id uuid, p_start time without time zone, p_end time without time zone) TO authenticated;
 
 
 --

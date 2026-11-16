@@ -1579,6 +1579,8 @@ export type Database = {
           company_id: string
           hours_per_day: number
           id: string
+          lunch_minutes: number
+          lunch_start: string
           max_hourly_minutes_per_day: number
           approval_order_enforced: boolean
           updated_at: string
@@ -1593,6 +1595,8 @@ export type Database = {
           company_id: string
           hours_per_day?: number
           id?: string
+          lunch_minutes?: number
+          lunch_start?: string
           max_hourly_minutes_per_day?: number
           approval_order_enforced?: boolean
           updated_at?: string
@@ -1607,6 +1611,8 @@ export type Database = {
           company_id?: string
           hours_per_day?: number
           id?: string
+          lunch_minutes?: number
+          lunch_start?: string
           max_hourly_minutes_per_day?: number
           approval_order_enforced?: boolean
           updated_at?: string
