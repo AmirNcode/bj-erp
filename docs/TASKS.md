@@ -3,6 +3,11 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## Sales / RFP module (blueprint 2026-11-16, not approved)
+
+- [ ] Owner approves `docs/specs/2026-11-16-sales-rfp-module-design.md`, then write the plan.
+- [ ] Client answers spec §13: register Excel columns, record number format, who decides bid / no-bid, bond kinds, document template, admin visibility, reminder channel.
+
 ## FR-93 lunch break (deployed 2026-11-16, PR #26)
 
 - ☐ No signed-in browser check by the agent (UI checked on a temporary no-login page, en + fa). Owner/HR: try Settings lunch fields and a 12:00–15:00 / 13:00–14:00 hourly leave on http://localhost:3501.
@@ -103,10 +108,13 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   `bash deploy/liara/pull-backups-to-mac.sh install` once on the Mac so the installed copy reports to
   the System tab; check System › Backups shows "Off-server copy" green the next day. Not checked in a
   signed-in browser yet (no local admin login): open Sign-ins and sign out a test person.
-- ◐ **SMS is live (2026-11-16):** web service, username + API key, from the line; first test text sent. Allowed-IP
-  list in the Melipayamak panel is **empty** (with only the server IP on it, panel login was blocked).
-  Texts end with «لغو11» because the account may not send links (code 14). Owner, optional: ask Melipayamak
-  support to allow links if `bjeng.app` should come back. Watch the first real approver/decision texts in the log.
+- ⏸ **SMS: on hold until Melipayamak approves the pattern templates (owner, 2026-11-16).** Live mode,
+  web service (username + API key), "From the line" on the promotional `5000…` line. Free-text texts
+  reach Melipayamak, but none of the first tests reached the phones: advertising texts are held at night
+  (~21:00–08:00), and 09163066264 got code 11 (likely blocks ads). Plan: resubmit the 3 templates **without
+  `bjeng.app`** (links are refused, code 14), then switch Admin › SMS › How to send to **Pattern** and enter
+  the body IDs. Ask support whether service-line patterns are delivered at night and to ad-blocking numbers.
+  Handoff: `docs/plans/2026-11-16-sms-templates-handoff.md`.
 - ☐ **PR #17 review leftovers** (`docs/reviews/pr-17-review.md`; F1 fixed before merge). Owner
   decision first: **F2** GoTrue's `PUT /auth/v1/user` lets a signed-in user set a password with only
   GoTrue's 6-character rule (FR-80 bypass); fix with `GOTRUE_PASSWORD_MIN_LENGTH` +

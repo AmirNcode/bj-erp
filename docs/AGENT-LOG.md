@@ -78,6 +78,61 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — Sales / RFP module blueprint (design only)
+
+**Agent:** Claude Fable 5.2 via Claude Code
+**Branch / HEAD at start:** main @ 3f498f6
+**Trigger:** Amir: plan the next module (RFP → bid decision → sales engineering → proposal → bond), as a blueprint; details come from client feedback.
+
+**What changed**
+- `docs/specs/2026-11-16-sales-rfp-module-design.md` — new blueprint draft, **not yet approved**.
+- `docs/TASKS.md` — new "Sales / RFP module" section pointing at the spec and its open questions.
+
+**Owner decisions in chat**
+- Quote line items are structured data (header + items), not files only.
+- v1 holds new RFPs only; active and past projects are imported after v1.
+- Workflow must be configurable (stages, extra columns, who sees what): "configurable core" chosen over fixed or a full workflow builder.
+- Deadlines and expirations (proposal, bond, offer validity) are first-class.
+- Module hidden behind a role-editor permission; first given to a CEO role.
+- No file storage in v1 (object storage was proposed, declined). Management's PDF / Excel reports become a Reports page. My reading of his last note: no uploads at all in v1 — confirm.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- Not run: documentation only. Read `erp-module/files/*.xlsx` with openpyxl (two BJ11511 financial offers, one customer commercial form; the register Excel is not there).
+
+**State left behind**
+- Uncommitted. `erp-module/` is untracked and may hold client data: do not commit without asking.
+- No builder-check subagent was run; the author read the spec as the builder.
+
+**For the next agent**
+- Wait for Amir's approval of the spec, then write the plan (`docs/plans/`). Spec §13 lists what the client must answer (register columns, record number format `BJ11511M/0`, who decides bid / no-bid, bond kinds, admin visibility).
+- Live VM disk is 20 GB: if attachments come back, use S3-style object storage, not the VM disk.
+
+## 2026-11-16 — SMS put on hold until the templates are approved
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 3f498f6
+**Trigger:** Amir: the test texts never reached the phones. IT says advertising texts are not delivered at night. Amir put SMS on hold and asked for a handoff.
+
+**Findings**
+- Melipayamak shows the tests as sent (handed to the operator), but nobody received them. Likely causes:
+  - The `5000…` line is promotional, and advertising texts are held overnight (tests went out 20:57–21:26 Tehran).
+  - 09163066264 also got code 11 (probably blocks ads).
+- Pattern sending (service line) should avoid both problems. Not confirmed with Melipayamak yet.
+- Tunnel: `ssh -q -D 1080 -N liara-bj-vm` works. The `channel … open failed` lines are Chrome's background calls to foreign sites; through it, melipayamak.com and console.melipayamak.com return 200. Melipayamak sees `62.60.191.132`; a foreign echo service showed `31.171.101.139`. Amir plans to put `62.60.191.132` back on the allowed list and log in only through the tunnel.
+
+**What changed**
+- `docs/TASKS.md` (SMS item now ⏸ on hold).
+- New `docs/plans/2026-11-16-sms-templates-handoff.md` (handoff prompt).
+
+**Actions outside the repo**
+- Opened a SOCKS tunnel to `liara-bj-vm` on :1081 to test it (curl only), then closed it.
+
+**State left behind**
+- These doc changes are uncommitted (Amir did not ask for a commit). Live SMS settings: Live, webservice, line, first line «سامانه پرسنلی بهسازان جنوب», last line «لغو11».
+
 ## 2026-11-16 — SMS: company-name first line; optional last line (FR-78)
 
 **Agent:** Claude Opus 5.5 via Claude Code
