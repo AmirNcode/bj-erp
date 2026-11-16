@@ -357,8 +357,8 @@ select pg_temp.expect('ws: codes in plain English plus the raw reply; unknown ra
   private.sms_ws_error('{"Value":"2","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
   private.sms_ws_error('{"Value":"99","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
   private.sms_ws_error('{"Value":"99","RetStatus":1,"StrRetStatus":"Ok"}'),
-  'The text contains a link; remove it from "Link at the end of each text" or ask Melipayamak support to allow links — InvalidData (RetStatus 35, Value 14) | '
-  ||'The text must end with «لغو11»; put it in "Link at the end of each text" — InvalidData (RetStatus 35, Value 15) | '
+  'The text contains a link; remove it from "Last line of each text" or ask Melipayamak support to allow links — InvalidData (RetStatus 35, Value 14) | '
+  ||'The text must end with «لغو11»; put it in "Last line of each text" — InvalidData (RetStatus 35, Value 15) | '
   ||'Not enough credit in the Melipayamak panel — InvalidData (RetStatus 35, Value 2) | InvalidData (RetStatus 35, Value 99) | Ok (RetStatus 1, Value 99)');
 select pg_temp.expect('ws: wrong user/key → failed, sending paused',
   (select status||'/'||error from public.sms_outbox where id=pg_temp.fx('w3'))
@@ -417,6 +417,31 @@ select pg_temp.expect('ws: credit without username is refused',
   ||'/'||pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok/ok/22023');
 select pg_temp.expect('ws: settings JSON never carries the key',pg_temp.as_scalar('admin',
   $q$select (position('KeyAbc-9876' in s::text)=0)::text from public.app_sms_settings() s$q$),'true');
+
+-- ── first line (company name) and an optional last line (owner 2026-11-16) ──
+select pg_temp.expect('frame: header saved, empty footer allowed',pg_temp.err(pg_temp.as_scalar('admin',
+  $q$select public.app_set_sms_settings('dry_run','9221000000','50002710000000','line',null,null,null,true,true,true,'',null,false,'webservice','سامانه پرسنلی بهسازان جنوب')::text$q$)),'ok');
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('h1',(select public.app_sms_test('09121110041'))); end $$;
+select pg_temp.expect('frame: test text starts with the header, no trailing footer line',
+  (select body from public.sms_outbox where id=pg_temp.fx('h1')),'سامانه پرسنلی بهسازان جنوب'||chr(10)||'پیام آزمایشی سامانه');
+select pg_temp.expect('frame: footer «لغو11» kept as the last line; null header keeps it',pg_temp.err(pg_temp.as_scalar('admin',
+  $q$select public.app_set_sms_settings('dry_run','9221000000','50002710000000','line',null,null,null,true,true,true,'لغو11')::text$q$))
+  ||'/'||pg_temp.as_scalar('admin',$q$select (s->>'header_label')||'/'||(s->>'site_label') from public.app_sms_settings() s$q$),
+  'ok/سامانه پرسنلی بهسازان جنوب/لغو11');
+select pg_temp.expect('frame: decision text = header, sentence, footer',pg_temp.file('h2','emp',21),'ok');
+do $$ begin perform pg_temp.login('admin'); end $$;
+select pg_temp.expect('frame: approver text framed',
+  (select (body like 'سامانه پرسنلی بهسازان جنوب'||chr(10)||'درخواست %'||chr(10)||'لغو11')::text
+     from public.sms_outbox where request_id=pg_temp.fx('h2') and event='approver_new' limit 1),'true');
+select pg_temp.expect('frame: header over 60 characters is refused',pg_temp.err(pg_temp.as_scalar('admin',
+  'select public.app_set_sms_settings(''dry_run'',null,null,''line'',null,null,null,true,true,true,''x'',null,false,null,'''||repeat('x',61)||''')::text')),
+  '23514');
+do $$ begin perform pg_temp.login('admin');
+  perform public.app_enqueue_password_sms(pg_temp.fx('nomobile'),'Frame777x'); end $$;
+select pg_temp.expect('frame: password text framed and masked when no mobile',
+  (select bool_or(body like 'سامانه پرسنلی بهسازان جنوب'||chr(10)||'%••••%')::text||'/'||bool_and(position('Frame777x' in body)=0)::text
+     from public.sms_outbox where event='password_reset' and recipient_id=pg_temp.fx('nomobile')),'true/true');
 
 -- ── F4: only a request that never reached Melipayamak is retried ──
 select pg_temp.expect('F4: console live',pg_temp.settings('live','line','KeyAbc-9876'),'ok');
@@ -501,7 +526,7 @@ select pg_temp.expect('F1: bad sender line names the constraint, never the key',
 select pg_temp.expect('F1: bad site label hides the key',
   (select (position('sms_settings_site_label' in t)>0)::text||'/'||(position('KeyLeakProbe12345' in t)=0)::text
      from pg_temp.err_text('admin',
-       'select public.app_set_sms_settings(''dry_run'',null,null,''line'',null,null,null,true,true,true,''   '')') t),
+       'select public.app_set_sms_settings(''dry_run'',null,null,''line'',null,null,null,true,true,true,'''||repeat('x',61)||''')') t),
   'true/true');
 select pg_temp.expect('F1: a malformed new key is not echoed',
   (select (position('sms_settings_api_key' in t)>0)::text||'/'||(position('Bad Key 99' in t)=0)::text

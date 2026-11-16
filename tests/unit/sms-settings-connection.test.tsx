@@ -23,7 +23,8 @@ const base: SmsSettings = {
   notify_approver_new: true,
   notify_employee_decision: true,
   notify_password_reset: true,
-  site_label: 'bjeng.app',
+  site_label: 'لغو11',
+  header_label: 'سامانه پرسنلی بهسازان جنوب',
   has_api_key: true,
   api_key_hint: '…abcd',
   credit_amount: null,
@@ -77,6 +78,15 @@ describe('SMS settings: connection', () => {
     fireEvent.click(screen.getByTestId('sms-save'));
     await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
     expect(mocks.save.mock.calls[0][0]).toMatchObject({ mode: 'live', connection: 'console' });
+  });
+
+  it('sends the first and last line; both may be empty', async () => {
+    renderForm();
+    expect((screen.getByTestId('sms-header-label') as HTMLInputElement).value).toBe('سامانه پرسنلی بهسازان جنوب');
+    fireEvent.change(screen.getByTestId('sms-site-label'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('sms-save'));
+    await waitFor(() => expect(mocks.save).toHaveBeenCalledTimes(1));
+    expect(mocks.save.mock.calls[0][0]).toMatchObject({ headerLabel: 'سامانه پرسنلی بهسازان جنوب', siteLabel: '' });
   });
 
   it('sends the chosen connection and username', async () => {

@@ -48,6 +48,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
     notifyEmployeeDecision: initial.notify_employee_decision,
     notifyPasswordReset: initial.notify_password_reset,
     siteLabel: initial.site_label,
+    headerLabel: initial.header_label ?? '',
     apiKey: '',
     clearApiKey: false,
   });
@@ -187,9 +188,19 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
         ))}
       </fieldset>
 
-      <div className="flex flex-col gap-1.5 sm:max-w-xs">
-        <Label htmlFor="sms-site">{t('siteLabel')}</Label>
-        <Input id="sms-site" dir="ltr" value={form.siteLabel} onChange={(e) => set('siteLabel', e.target.value)} />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sms-header">{t('headerLabel')}</Label>
+          <Input id="sms-header" dir="auto" value={form.headerLabel} maxLength={60}
+            onChange={(e) => set('headerLabel', e.target.value)} data-testid="sms-header-label" />
+          <p className="text-xs text-muted-foreground">{t('headerLabelHint')}</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sms-site">{t('siteLabel')}</Label>
+          <Input id="sms-site" dir="auto" value={form.siteLabel} maxLength={60}
+            onChange={(e) => set('siteLabel', e.target.value)} data-testid="sms-site-label" />
+          <p className="text-xs text-muted-foreground">{t('siteLabelHint')}</p>
+        </div>
       </div>
 
       {message && (

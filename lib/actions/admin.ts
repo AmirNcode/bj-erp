@@ -182,6 +182,7 @@ export type SmsSettingsInput = {
   notifyEmployeeDecision: boolean;
   notifyPasswordReset: boolean;
   siteLabel: string;
+  headerLabel: string;
   /** Empty keeps the saved key. */
   apiKey: string;
   clearApiKey: boolean;
@@ -206,7 +207,8 @@ export async function saveSmsSettings(input: SmsSettingsInput): Promise<{ ok: tr
     p_notify_approver_new: input.notifyApproverNew,
     p_notify_employee_decision: input.notifyEmployeeDecision,
     p_notify_password_reset: input.notifyPasswordReset,
-    p_site_label: input.siteLabel.trim() || 'bjeng.app',
+    p_site_label: input.siteLabel.trim(),
+    p_header_label: input.headerLabel.trim(),
     p_api_key: input.apiKey.trim() || null,
     p_clear_api_key: input.clearApiKey,
     p_connection: input.connection,

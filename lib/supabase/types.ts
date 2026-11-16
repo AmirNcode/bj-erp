@@ -1967,7 +1967,7 @@ export type Database = {
           p_body_approver_new: number | null; p_body_employee_decision: number | null
           p_body_password_reset: number | null; p_notify_approver_new: boolean
           p_notify_employee_decision: boolean; p_notify_password_reset: boolean; p_site_label: string
-          p_api_key?: string | null; p_clear_api_key?: boolean; p_connection?: string | null
+          p_api_key?: string | null; p_clear_api_key?: boolean; p_connection?: string | null; p_header_label?: string | null
         }
         Returns: undefined
       }

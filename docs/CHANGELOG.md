@@ -17,6 +17,13 @@ was deployed; semantic versioning starts at the first tag.
 - **Sending pauses itself after a refused sign-in.** A red note on the SMS tab says so, and texts wait in the queue. Saving the settings again, or a successful **Check balance**, resumes sending. Melipayamak blocks a server's IP after repeated failed sign-ins, and the pause keeps that from happening.
 - Migration `20261116150000_sms_webservice_connection`.
 
+### SMS: company name on the first line; last line optional (FR-78) — 2026-11-16
+
+- **Admin › SMS › First line of each text** (new) sits above every free-text SMS: request waiting, decision, temporary password and the test text. It is set to «سامانه پرسنلی بهسازان جنوب»; empty adds nothing.
+- **"Link at the end of each text" is now "Last line of each text"** and may be empty. It stays «لغو11», because Melipayamak's docs require it at the end of texts sent from a line (error 15 without it).
+- Example: «سامانه پرسنلی بهسازان جنوب / درخواست مرخصی روزانه شما (۱۴۰۵/۰۸/۲۵) تأیید شد. / لغو11», one line each.
+- Migration `20261116180000_sms_header_line`.
+
 ### SMS: Melipayamak's refusal codes in plain English (FR-78) — 2026-11-16
 
 - The SMS log now explains Melipayamak's refusal codes in plain English and keeps the raw reply after it for troubleshooting, e.g. *The text contains a link; … — InvalidData (RetStatus 35, Value 14)*. Covered: wrong user/key, low credit, limits, invalid sender line, panel inactive or documents incomplete, filtered word, link in the text (14), «لغو11» missing (15), invalid mobile (18). Unknown codes still show raw.

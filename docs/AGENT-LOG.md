@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — SMS: company-name first line; optional last line (FR-78)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ 5dd7d81
+**Trigger:** Amir: "add the company name line to the free-text messages, and remove «لغو11» from the end if its not needed by melipayamak (if needed keep it)".
+
+**Decision**
+- «لغو11» is kept. melipayamak.com/api/sendsms lists error 15 («لغو11» missing from the end) and says line texts must include it. Not tried live without it. The last line may now be empty, so Amir can test that himself.
+
+**What changed**
+- `supabase/migrations/20261116180000_sms_header_line.sql` (new):
+  - Adds `private.sms_settings.header_label` (default '', ≤60). The existing row is set to «سامانه پرسنلی بهسازان جنوب».
+  - `sms_settings_site_label` is now ≤60 (empty allowed).
+  - New `private.sms_frame(company, body)`: header on the first line, trailing line breaks dropped. Used in `sms_queue` and `app_sms_test`.
+  - `app_set_sms_settings` is dropped and re-created with a trailing `p_header_label`. A null `p_site_label` now keeps the saved value.
+  - `sms_ws_error` is re-created so the code 14/15 hints say "Last line of each text".
+- UI: First line + Last line fields with hints (`SmsSettingsForm.tsx`). Also `lib/actions/admin.ts` (sends empty as empty), `lib/admin/types.ts`, `lib/supabase/types.ts`, `db-error.ts` `smsBadHeaderLabel`, fa/en error strings, en admin strings.
+- Tests: `tests/sql/sms.sql` frame block (test/approver/password framed, empty footer, >60 refused). The F1 site-label case now uses 61 chars. Unit test +1.
+- CHANGELOG.
+
+**Actions outside the repo**
+- Clone DB `smsws` on `bj-approvals-finance-db-1`: applied 150000–180000, ran tests, then dropped it. Local `postgres` untouched.
+
+**Verification**
+- `tests/sql/sms.sql`: all passed (118 PASS). tsc, lint, unit 138 files / 1359 tests, build ok. Form not checked in a browser.
+
+**State left behind**
+- Committed and pushed on Amir's OK ("Push and deploy"); CI deploys `20261116180000`.
+
 ## 2026-11-16 — SMS live: lockout recovery, link refusal, plain-English Melipayamak codes
 
 **Agent:** Claude Opus 5.5 via Claude Code

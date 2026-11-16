@@ -237,6 +237,7 @@ const RULES: Rule[] = [
   { re: /sms_settings_api_key/, key: 'smsBadApiKey' },
   { re: /sms_settings_sender_line/, key: 'smsBadSenderLine' },
   { re: /sms_settings_site_label/, key: 'smsBadSiteLabel' },
+  { re: /sms_settings_header_label/, key: 'smsBadHeaderLabel' },
   { re: /marriage leave was already granted/, key: 'marriageAlreadyGranted' },
   { re: /marriage leave needs marital status single/, key: 'marriageNeedsSingle' },
   { re: /annual leave type not found/, key: 'annualTypeMissing' },

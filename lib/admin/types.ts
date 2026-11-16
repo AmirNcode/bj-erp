@@ -115,6 +115,8 @@ export type SmsSettings = {
   notify_employee_decision: boolean;
   notify_password_reset: boolean;
   site_label: string;
+  /** First line of every free-text SMS; empty = none. */
+  header_label: string;
   has_api_key: boolean;
   api_key_hint: string | null;
   credit_amount: number | null;

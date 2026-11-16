@@ -4035,6 +4035,20 @@ end $$;
 
 
 --
+-- Name: sms_frame(uuid, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sms_frame(p_company uuid, p_body text) RETURNS text
+    LANGUAGE sql STABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce((select nullif(btrim(s.header_label), '') || chr(10)
+                     from private.sms_settings s where s.company_id = p_company), '')
+         || rtrim(p_body, chr(10) || ' ');
+$$;
+
+
+--
 -- Name: sms_kind_label(public.request_kind, public.leave_unit, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4137,7 +4151,7 @@ CREATE FUNCTION private.sms_queue(p_company uuid, p_event text, p_recipient uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_mobile text; v_id uuid;
+declare v_mobile text; v_id uuid; v_body text := private.sms_frame(p_company, p_body);
 begin
   if p_event = 'approver_new' and exists (select 1 from public.sms_outbox o
       where o.event = 'approver_new' and o.request_id = p_request and o.recipient_id = p_recipient
@@ -4150,7 +4164,7 @@ begin
   insert into public.sms_outbox (company_id, event, recipient_id, request_id, step_id, to_mobile,
                                  body, args, status, skip_reason, created_by)
   values (p_company, p_event, p_recipient, p_request, p_step, v_mobile,
-          case when v_mobile is null then private.sms_mask(p_event, p_body, p_args) else p_body end,
+          case when v_mobile is null then private.sms_mask(p_event, v_body, p_args) else v_body end,
           case when v_mobile is null and p_event = 'password_reset' then '{}' else coalesce(p_args, '{}') end,
           case when v_mobile is null then 'skipped' else 'queued' end,
           case when v_mobile is null then 'no_mobile' end, p_actor)
@@ -4212,8 +4226,8 @@ CREATE FUNCTION private.sms_ws_error(p_reply jsonb) RETURNS text
              when v = '10' then 'The Melipayamak panel is inactive'
              when v = '11' then 'Not sent; the number may block advertising texts, which a service line avoids'
              when v = '12' then 'The Melipayamak panel''s identity documents are incomplete'
-             when v = '14' then 'The text contains a link; remove it from "Link at the end of each text" or ask Melipayamak support to allow links'
-             when v = '15' then 'The text must end with «لغو11»; put it in "Link at the end of each text"'
+             when v = '14' then 'The text contains a link; remove it from "Last line of each text" or ask Melipayamak support to allow links'
+             when v = '15' then 'The text must end with «لغو11»; put it in "Last line of each text"'
              when v = '18' then 'The mobile number is not valid'
            end as plain
     from (select nullif(p_reply->>'Value', '') as v, p_reply->>'RetStatus' as r) x
@@ -8861,10 +8875,10 @@ end; $$;
 
 
 --
--- Name: app_set_sms_settings(text, text, text, text, integer, integer, integer, boolean, boolean, boolean, text, text, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_set_sms_settings(text, text, text, text, integer, integer, integer, boolean, boolean, boolean, text, text, boolean, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text DEFAULT NULL::text, p_clear_api_key boolean DEFAULT false, p_connection text DEFAULT NULL::text) RETURNS void
+CREATE FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text DEFAULT NULL::text, p_clear_api_key boolean DEFAULT false, p_connection text DEFAULT NULL::text, p_header_label text DEFAULT NULL::text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -8891,7 +8905,8 @@ begin
         notify_approver_new = coalesce(p_notify_approver_new, true),
         notify_employee_decision = coalesce(p_notify_employee_decision, true),
         notify_password_reset = coalesce(p_notify_password_reset, true),
-        site_label = btrim(coalesce(p_site_label, 'bjeng.app')),
+        site_label = btrim(coalesce(p_site_label, site_label)),
+        header_label = btrim(coalesce(p_header_label, header_label)),
         api_key = case when p_clear_api_key then null
                        when nullif(btrim(coalesce(p_api_key, '')), '') is not null then btrim(p_api_key)
                        else api_key end,
@@ -9322,7 +9337,8 @@ begin
   select * into s from private.sms_settings where company_id = v_company;
   if s.mode is null or s.mode = 'off' then raise exception 'sms is off' using errcode = '22023'; end if;
   insert into public.sms_outbox (company_id, event, to_mobile, body, created_by)
-  values (v_company, 'test', v_mobile, 'پیام آزمایشی سامانه' || chr(10) || s.site_label, auth.uid())
+  values (v_company, 'test', v_mobile,
+          private.sms_frame(v_company, 'پیام آزمایشی سامانه' || chr(10) || s.site_label), auth.uid())
   returning id into v_id;
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
   values (auth.uid(), 'sms_test', 'sms_outbox', v_id, jsonb_build_object('mode', s.mode));
@@ -11135,14 +11151,16 @@ CREATE TABLE private.sms_settings (
     connection text DEFAULT 'webservice'::text NOT NULL,
     auth_error text,
     auth_error_at timestamp with time zone,
+    header_label text DEFAULT ''::text NOT NULL,
     CONSTRAINT sms_settings_api_key CHECK (((api_key IS NULL) OR (api_key ~ '^[A-Za-z0-9._~-]{8,200}$'::text))),
     CONSTRAINT sms_settings_connection CHECK ((connection = ANY (ARRAY['webservice'::text, 'console'::text]))),
+    CONSTRAINT sms_settings_header_label CHECK ((char_length(btrim(header_label)) <= 60)),
     CONSTRAINT sms_settings_live_needs_key CHECK (((mode <> 'live'::text) OR (api_key IS NOT NULL))),
     CONSTRAINT sms_settings_mode CHECK ((mode = ANY (ARRAY['off'::text, 'dry_run'::text, 'live'::text]))),
     CONSTRAINT sms_settings_provider CHECK ((provider = 'melipayamak'::text)),
     CONSTRAINT sms_settings_send_method CHECK ((send_method = ANY (ARRAY['line'::text, 'pattern'::text]))),
     CONSTRAINT sms_settings_sender_line CHECK (((sender_line IS NULL) OR (sender_line ~ '^[0-9]{4,20}$'::text))),
-    CONSTRAINT sms_settings_site_label CHECK (((char_length(btrim(site_label)) >= 1) AND (char_length(btrim(site_label)) <= 60)))
+    CONSTRAINT sms_settings_site_label CHECK ((char_length(btrim(site_label)) <= 60))
 );
 
 
@@ -11165,6 +11183,13 @@ COMMENT ON COLUMN private.sms_settings.connection IS 'FR-78: webservice = rest.p
 --
 
 COMMENT ON COLUMN private.sms_settings.auth_error IS 'FR-78: last sign-in refusal from the web service; while set, the dispatcher posts no new texts.';
+
+
+--
+-- Name: COLUMN sms_settings.header_label; Type: COMMENT; Schema: private; Owner: -
+--
+
+COMMENT ON COLUMN private.sms_settings.header_label IS 'FR-78: first line of every free-text SMS (empty = none).';
 
 
 --
@@ -15599,6 +15624,13 @@ REVOKE ALL ON FUNCTION private.sms_fail(p_id uuid, p_error text, p_retry boolean
 
 
 --
+-- Name: FUNCTION sms_frame(p_company uuid, p_body text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sms_frame(p_company uuid, p_body text) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sms_on_approval(); Type: ACL; Schema: private; Owner: -
 --
 
@@ -16573,13 +16605,13 @@ GRANT ALL ON FUNCTION public.app_set_separation_signoffs(p_id uuid, p_rows jsonb
 
 
 --
--- Name: FUNCTION app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text, p_header_label text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text) TO postgres;
-GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text, p_header_label text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text, p_header_label text) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text, p_header_label text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_sms_settings(p_mode text, p_username text, p_sender_line text, p_send_method text, p_body_approver_new integer, p_body_employee_decision integer, p_body_password_reset integer, p_notify_approver_new boolean, p_notify_employee_decision boolean, p_notify_password_reset boolean, p_site_label text, p_api_key text, p_clear_api_key boolean, p_connection text, p_header_label text) TO service_role;
 
 
 --
