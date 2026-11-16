@@ -350,11 +350,20 @@ select private.sms_dispatch();
 select pg_temp.expect('ws: Value recId → sent',(select status||'/'||provider_ref from public.sms_outbox where id=pg_temp.fx('w1')),
   'sent/4501234567891');
 select pg_temp.expect('ws: error code → failed, no retry',(select status||'/'||error from public.sms_outbox where id=pg_temp.fx('w2')),
-  'failed/Melipayamak code 11');
+  'failed/Not sent; the number may block advertising texts, which a service line avoids — Ok (RetStatus 1, Value 11)');
+select pg_temp.expect('ws: codes in plain English plus the raw reply; unknown raw only',
+  private.sms_ws_error('{"Value":"14","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
+  private.sms_ws_error('{"Value":"15","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
+  private.sms_ws_error('{"Value":"2","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
+  private.sms_ws_error('{"Value":"99","RetStatus":35,"StrRetStatus":"InvalidData"}')||' | '||
+  private.sms_ws_error('{"Value":"99","RetStatus":1,"StrRetStatus":"Ok"}'),
+  'The text contains a link; remove it from "Link at the end of each text" or ask Melipayamak support to allow links — InvalidData (RetStatus 35, Value 14) | '
+  ||'The text must end with «لغو11»; put it in "Link at the end of each text" — InvalidData (RetStatus 35, Value 15) | '
+  ||'Not enough credit in the Melipayamak panel — InvalidData (RetStatus 35, Value 2) | InvalidData (RetStatus 35, Value 99) | Ok (RetStatus 1, Value 99)');
 select pg_temp.expect('ws: wrong user/key → failed, sending paused',
   (select status||'/'||error from public.sms_outbox where id=pg_temp.fx('w3'))
   ||'/'||pg_temp.as_scalar('admin',$q$select (s->>'auth_error')||'/'||(s->>'auth_error_at' is not null)::text from public.app_sms_settings() s$q$),
-  'failed/Wrong username or API key (UserNameAndPasswordFailed)/Wrong username or API key (UserNameAndPasswordFailed)/true');
+  'failed/Wrong username or API key — UserNameAndPasswordFailed (RetStatus 0, Value ?)/Wrong username or API key — UserNameAndPasswordFailed (RetStatus 0, Value ?)/true');
 do $$ begin perform pg_temp.login('admin');
   insert into sm_fx values('w4',(select public.app_sms_test('09121110014'))); end $$;
 select private.sms_dispatch();
@@ -371,7 +380,7 @@ select private.sms_dispatch();
 select pg_temp.expect('ws: IP not allowed (-109) explains and pauses',
   (select error from public.sms_outbox where id=pg_temp.fx('w4'))
   ||'/'||pg_temp.as_scalar('admin',$q$select (s->>'auth_error' like '%-109%')::text from public.app_sms_settings() s$q$),
-  'This server''s IP is not on the allowed list in the Melipayamak panel (-109)/true');
+  'This server''s IP is not on the allowed list in the Melipayamak panel — Ok (RetStatus 1, Value -109)/true');
 select pg_temp.expect('ws: pattern settings',pg_temp.settings('live','pattern','KeyAbc-9876',false,'webservice'),'ok');
 select pg_temp.expect('ws: approver_new under pattern',pg_temp.file('r6','emp',19),'ok');
 select private.sms_dispatch();
@@ -393,7 +402,7 @@ insert into net._http_response(id,status_code,content,timed_out)
 select private.sms_dispatch();
 select pg_temp.expect('ws: credit refusal keeps the old amount, explains, pauses',pg_temp.as_scalar('admin',
   $q$select (s->>'credit_amount')||'/'||(s->>'credit_error')||'/'||(s->>'auth_error' like '%-110%')::text from public.app_sms_settings() s$q$),
-  '125000.5/Melipayamak wants the API key, not the panel password (-110)/true');
+  '125000.5/Melipayamak wants the API key, not the panel password — Ok (RetStatus 1, Value -110)/true');
 select pg_temp.expect('ws: credit again',pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok');
 insert into net._http_response(id,status_code,content,timed_out)
   select credit_request_id,200,'{"Value":"98000.25","RetStatus":1,"StrRetStatus":"Ok"}',false

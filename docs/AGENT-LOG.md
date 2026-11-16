@@ -78,6 +78,30 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — SMS live: lockout recovery, link refusal, plain-English Melipayamak codes
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** main @ d4e101f
+**Trigger:** Amir added the Liara IP to Melipayamak's allowed IPs and could no longer log in to the panel; the test SMS did not send. Then: "Yes, add them" (error codes in plain English).
+
+**Findings**
+- Melipayamak's allowed-IP list also limits **panel login**. Amir got back in through `ssh -D 1080 -N liara-bj-vm` + Chrome with `--proxy-server=socks5://127.0.0.1:1080` (I checked that the tunnel's outgoing IP is `62.60.191.132`), then **cleared** the list.
+- The first tests were Dry run (mode). In Live, the reply was `{"Value":"14","RetStatus":35,"StrRetStatus":"InvalidData"}` = the text contains a link. Amir set "Link at the end of each text" to «لغو11» and the next test was **Sent** (ref 5382386492922037421).
+
+**What changed**
+- `supabase/migrations/20261116170000_sms_ws_error_codes.sql` re-creates `private.sms_ws_error` with codes 0, 2–7, 9–12, 14, 15, 18 from melipayamak.com/api/sendsms. Format: `<plain reason> — <StrRetStatus> (RetStatus r, Value v)` (Amir asked for both); unknown codes show the raw part only.
+- `tests/sql/sms.sql`: the code-11 assertion now expects the new wording, plus one assertion for the mapping.
+- `supabase/schema.sql` (one hunk), CHANGELOG, TASKS (SMS live item), MEMORY.
+
+**Actions outside the repo**
+- `curl` through Amir's SOCKS tunnel to api.ipify.org and melipayamak.com (to check it). Clone DB `smsws` on `bj-approvals-finance-db-1`: created, migrated, tested, dropped. Pushed to main (deploys).
+
+**Verification**
+- `tests/sql/sms.sql` on the clone: all passed (111 PASS). tsc/lint/unit/build: see the commit run.
+
+**State left behind**
+- Committed and pushed; CI deploys `20261116170000`.
+
 ## 2026-11-16 — SMS F4 + F5 fixed; pushed to main with the web-service connection (deploy)
 
 **Agent:** Claude Opus 5.5 via Claude Code

@@ -421,6 +421,10 @@ The panel's **API key** (panel › Developers › Web service settings) signs
 معتبر نیست». The REST host binds JSON bodies (415 for XML/text), so pg_net's JSON-only `http_post` works.
 Replies are `{Value, RetStatus, StrRetStatus}`. Repeated failed sign-ins block the server IP (-108), and the
 IP must also be on the panel's allowed list (-109). Fixed 2026-11-16 (`20261116150000`).
+The panel's allowed-IP list also limits **panel login**: with only the server IP on it, the owner was locked out
+(«آیپی شما جهت ورود به سامانه معتبر نمی باشد») and got back in through `ssh -D 1080 -N liara-bj-vm` + a SOCKS
+Chrome. A refused send is `RetStatus 35` with the reason code in `Value`; this account may not send links (14),
+so texts end with «لغو11» instead of `bjeng.app`.
 
 ### pg_net opens schema `net` to anon and authenticated
 The Supabase image's event trigger grants `anon` and `authenticated` USAGE on `net`, all privileges on

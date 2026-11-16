@@ -103,12 +103,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   `bash deploy/liara/pull-backups-to-mac.sh install` once on the Mac so the installed copy reports to
   the System tab; check System › Backups shows "Off-server copy" green the next day. Not checked in a
   signed-in browser yet (no local admin login): open Sign-ins and sign out a test person.
-- ☐ **SMS live setup (owner), after `20261116150000` deploys:** Admin › SMS › Connection
-  **Username + API key**. Enter the panel username and the API key from panel › Developers › Web service
-  settings. On that same panel page, add the Liara VM IP `62.60.191.132` to the allowed IPs. Then
-  **Check balance**, send a test to your own number in **Live**, and look at the log. Use **From the line**: the 3 pattern
-  templates (589006–8) were rejected («نیاز به ویرایش»). Ask Melipayamak whether texts on this line need
-  «لغو11» (their docs say line texts must include it) and whether the line is service or promotional.
+- ◐ **SMS is live (2026-11-16):** web service, username + API key, from the line; first test text sent. Allowed-IP
+  list in the Melipayamak panel is **empty** (with only the server IP on it, panel login was blocked).
+  Texts end with «لغو11» because the account may not send links (code 14). Owner, optional: ask Melipayamak
+  support to allow links if `bjeng.app` should come back. Watch the first real approver/decision texts in the log.
 - ☐ **PR #17 review leftovers** (`docs/reviews/pr-17-review.md`; F1 fixed before merge). Owner
   decision first: **F2** GoTrue's `PUT /auth/v1/user` lets a signed-in user set a password with only
   GoTrue's 6-character rule (FR-80 bypass); fix with `GOTRUE_PASSWORD_MIN_LENGTH` +

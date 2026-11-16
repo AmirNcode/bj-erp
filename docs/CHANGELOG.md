@@ -9,7 +9,7 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
-### SMS: sign in to Melipayamak with the panel username + API key (FR-78) — not deployed
+### SMS: sign in to Melipayamak with the panel username + API key (FR-78) — deployed 2026-11-16
 
 - **Admin › SMS › Connection** has two choices. **Username + API key (web service)** is the new default and the usual setup: the panel username plus the API key from the Melipayamak panel › Developers › Web service settings. **Console key** is the old way and needs the separate key from console.melipayamak.com. The old way caused the “key is wrong” error: the panel API key does not work as a console key.
 - **Live needs a username** with the web service. Line sending and pattern (template) sending both work over it.
@@ -17,7 +17,13 @@ was deployed; semantic versioning starts at the first tag.
 - **Sending pauses itself after a refused sign-in.** A red note on the SMS tab says so, and texts wait in the queue. Saving the settings again, or a successful **Check balance**, resumes sending. Melipayamak blocks a server's IP after repeated failed sign-ins, and the pause keeps that from happening.
 - Migration `20261116150000_sms_webservice_connection`.
 
-### SMS: no double texts, no stalled sender (PR #17 review F4, F5) — not deployed
+### SMS: Melipayamak's refusal codes in plain English (FR-78) — 2026-11-16
+
+- The SMS log now explains Melipayamak's refusal codes in plain English and keeps the raw reply after it for troubleshooting, e.g. *The text contains a link; … — InvalidData (RetStatus 35, Value 14)*. Covered: wrong user/key, low credit, limits, invalid sender line, panel inactive or documents incomplete, filtered word, link in the text (14), «لغو11» missing (15), invalid mobile (18). Unknown codes still show raw.
+- **First live text sent 2026-11-16** once the link was removed: the owner set "Link at the end of each text" to «لغو11», since the account may not send links (code 14).
+- Migration `20261116170000_sms_ws_error_codes`.
+
+### SMS: no double texts, no stalled sender (PR #17 review F4, F5) — deployed 2026-11-16
 
 - **No more double texts (F4).** A text is retried only when the request never reached Melipayamak: it could not connect, could not find the server, or the secure connection failed. A timeout, a server error or no reply within 10 minutes now marks the text failed with "not resent (it may have been delivered)", because Melipayamak may already have sent it.
 - **One bad text no longer stops all texts (F5).** Each text and each balance check is handled on its own. If one fails unexpectedly, only that row is marked failed (or the balance check shows an error) and the others still go out. A failed row is never sent. The API key is removed from error messages.
