@@ -132,8 +132,10 @@ const BOND_STATUS: BondStatus[] = ['needed', 'requested', 'issued', 'delivered',
 const BOND_FORMS: BondForm[] = ['bank', 'safteh', 'cheque'];
 const bondTone = (s: BondStatus) => (s === 'needed' || s === 'requested' ? 'warn' : s === 'void' || s === 'expired' ? 'bad' : 'good');
 
-export function FinancePanel({ boot, record, bonds, payments }: {
+export function FinancePanel({ boot, record, bonds, payments, show = 'both' }: {
   boot: Bootstrap; record: RecordRow; bonds: Bond[]; payments: Payment[] | undefined;
+  /** Stage pages show guarantees, payments or both. */
+  show?: 'bonds' | 'payments' | 'both';
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
@@ -165,7 +167,7 @@ export function FinancePanel({ boot, record, bonds, payments }: {
   const paid = (payments ?? []).reduce((n, p) => n + (p.amount ?? 0), 0);
   return (
     <div className="flex flex-col gap-8" data-testid="sales-finance">
-      <section className="flex flex-col gap-3">
+      {show !== 'payments' ? <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold">{t('bond.title')}</h3>
           {boot.caps.bonds_edit ? <Button size="sm" variant="outline" onClick={() => setEditing('new')} data-testid="sales-bond-add"><Plus aria-hidden="true" /> {t('bond.add')}</Button> : null}
@@ -215,9 +217,9 @@ export function FinancePanel({ boot, record, bonds, payments }: {
             </table>
           </div>
         )}
-      </section>
+      </section> : null}
 
-      <section className="flex flex-col gap-3">
+      {show !== 'bonds' ? <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold">{t('payment.title')}</h3>
           {boot.caps.bonds_edit ? <Button size="sm" variant="outline" onClick={() => setPaying('new')} data-testid="sales-payment-add"><Plus aria-hidden="true" /> {t('payment.add')}</Button> : null}
@@ -256,7 +258,7 @@ export function FinancePanel({ boot, record, bonds, payments }: {
           </div>
         )}
         {(payments ?? []).length > 0 ? <p className="text-sm">{t('payment.total')}: <span className="font-semibold tabular-nums">{f.money(paid, record.currency)}</span></p> : null}
-      </section>
+      </section> : null}
 
       {editing ? <BondDialog record={record} bond={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
       {paying ? <PaymentDialog record={record} payment={paying === 'new' ? null : paying} onClose={() => setPaying(null)} /> : null}

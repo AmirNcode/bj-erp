@@ -78,6 +78,36 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-17 — ERP › Sales: stage pages (clickable stages, Submit with old → new ledger, Next stage)
+
+**Agent:** Claude Opus 5.5 via Claude Code (Sonnet builder-check subagent, Opus final-review subagent)
+**Branch / HEAD at start:** `feat/erp-sales-module` @ ffa020d
+**Trigger:** Amir: replace Move stage / Bid decision / Record result / Edit with clickable stages, a page per stage, Submit that records who changed what, and Next stage. Bug report: "Record result" showed on a record still in Received.
+
+**What changed**
+- Spec `docs/specs/2026-11-17-sales-stage-pages-design.md` (approved; owner calls: past stages editable, hybrid save = fields wait for Submit and lists save per row, list-row old → new later). Plan `docs/plans/2026-11-17-sales-stage-pages.md`.
+- DB: `supabase/migrations/20261117100000_sales_stage_pages.sql` — `app_sales_save_record(p_id, p, p_stage default null)` (2-arg dropped and regranted), `edit` events carry `stage`, `changes` old → new (price keys only `hidden`, customers by name, custom per key) and `side`; `decision_reason` / `result_reason` writable with `sales_decide`. `20261117110000_sales_custom_merge.sql` — custom values merge per key (review fix; the first file was already frozen locally). `supabase/schema.sql` patched from clone dump diffs only. `lib/supabase/types.ts` arg added.
+- App: `lib/sales/stagePages.ts` (pageKind, pageFields, pageMode, draftFrom, draftPatch, rebaseDraft, canEditKey, nextGate, withBuyer); `_components/RecordView.tsx` rewritten as the shell (per-stage drafts, `?stage=`, link guard, beforeunload); new `StageNav`, `StageBody`, `StageFields`, `StageActions`, `ActivityLog`; `ItemsTab` `showPrices`, `FinancePanel` `show`; `saveSalesStagePage` action; `[id]/page.tsx` keys RecordView by record; strings `sales.stagePage.*` + 3 field labels (fa + en).
+- Docs: CHANGELOG, DATA_MODEL (`sales_events` body), TASKS (owner test, list-row values, closing a bid before Submitted), CLAUDE.md one Gotcha line.
+
+**Actions outside the repo**
+- Local stack `:3501` (`bj-approvals-finance`): `pg_dump -Fc` of `postgres` to the session scratchpad twice (`approvals-finance-pre-stage-pages.dump`, `approvals-finance-pre-custom-merge.dump`); SMS `off`, no key, 0 active cron before; `bj_apply_migrations` (release `approvals-finance-local`) applied `20261117100000` and `20261117110000` (**both FROZEN locally**); View-as hook synced; app rebuilt from the working tree twice; rest restarted; `/api/health` 200.
+- Throwaway clone `ssp` in `bj-approvals-finance-db-1` (created / dropped twice) for the dry runs.
+- Nothing on Liara. Nothing committed or pushed.
+
+**Verification**
+- `tests/sql/sales-stage-pages.sql` (new): 21 PASS on the clone; `tests/sql/sales.sql`: 97 PASS after both migrations.
+- `npm run test:unit` 142 files / 1406 tests pass (new `tests/unit/sales-stage-pages.test.ts`, 18); `tsc --noEmit` 0; `npm run lint` 0; `npm run build` 0 (first run of the day stops on the known Next advisory notice, second builds).
+- Browser: temporary `app/[locale]/zz-stage-pages` page with fake data (deleted): stage clicks, Received has no Record result and Next → Bid decision, Next blocked by a required field, Submitted shows Record result, Lost shows Reopen, Activity old → new lines, fa at 375 px, unsaved-draft kept across stage switch + Back, dot marker, link guard, company type locked once set. **No signed-in test and no Playwright spec** (local login needs a real roster account).
+- Final review (Opus): 0 critical, 5 important — all fixed with failing tests first; 8 minors deferred (listed in TASKS / below).
+
+**State left behind**
+- All work uncommitted on `feat/erp-sales-module`.
+
+**For the next agent**
+- Deferred minors: Next gate vs server when a stage requires a price field and the caller lacks `sales_prices`; ledger old-owner fallback to the current owner's name; ledger durations use today's unit; removed custom field defs log as raw key; side-effect-only edit shows "0 fields changed"; long text stored twice per event; reasons writable before the outcome (DB); phone stage bar doesn't scroll the selected stage into view.
+- Open product question in TASKS: a bid can only be closed (Won / Lost / Cancelled) from the Submitted page now.
+
 ## 2026-11-16 — ERP › Sales module (FR-94): plan, two reviews, build, local deploy
 
 **Agent:** Claude Fable 5.2 via Claude Code (two Opus 5.5 subagents for the reviews)

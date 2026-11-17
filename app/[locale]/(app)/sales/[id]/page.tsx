@@ -16,5 +16,5 @@ export default async function SalesRecordPage({ params }: Props) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const [boot, detail] = await Promise.all([loadSalesBootstrap(), getSalesRecord(id)]);
   if (!detail.ok) notFound();
-  return <RecordView boot={boot} detail={detail.data} />;
+  return <RecordView key={detail.data.record.id} boot={boot} detail={detail.data} />;
 }

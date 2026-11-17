@@ -81,6 +81,16 @@ export async function saveSalesRecord(id: string | null, patch: Patch): Promise<
   return { ok: true, id: data as string };
 }
 
+/** Submit one stage page: only the changed fields, logged with the stage they were made on. */
+export async function saveSalesStagePage(id: string, stageId: string, patch: Patch): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_save_record', { p_id: id, p: json(patch), p_stage: stageId });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, id };
+}
+
 export async function moveSalesStage(
   id: string, stageId: string, ownerId: string | null, note: string, submit: Patch | null
 ): Promise<Write> {

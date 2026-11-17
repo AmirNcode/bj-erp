@@ -6,6 +6,9 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
 - [ ] **Owner tests on the local stack (:3501)**: create a CEO role with the seven ERP · Sales permissions, import `B1.xlsx`, try a new RFP end to end. Then PR → merge (a push to `main` deploys).
+- [ ] **Owner tests the stage pages** (2026-11-17) on :3501: click through each stage, Submit, Next, the activity log's old → new lines. Checked only with fake data on a temporary page; no signed-in or e2e test yet.
+- [ ] **Old → new on list rows** (owner: later): items, documents and deadlines log who + which row only; add their changed values to the event (non-price fields only).
+- [ ] **Closing a bid before Submitted**: the result (Won / Lost / Cancelled) is now only on the Submitted page; an RFP the client cancels during Technical proposal has to be moved to Submitted first. Ask the owner whether Cancelled should be reachable from every stage.
 - [ ] **Before any push to `main`: upgrade Next.js to 16.4.6.** `npm audit --omit=dev` (a CI step) now reports GHSA-mfr8-8qww-v76h (moderate) against 16.4.3, so the next deploy fails at the audit step whatever it contains.
 - [ ] No signed-in browser test and no e2e spec yet (agents do not type real passwords). Screens were checked with fake data only.
 - [ ] Client answers spec §13: is there a separate inquiry register; record number format (`BJ11511M/0`); who decides bid / no-bid; guarantee fields finance needs; document list per customer type; should the admin see the module.

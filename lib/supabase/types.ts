@@ -1966,7 +1966,7 @@ export type Database = {
       app_sales_deadlines: { Args: { p_include_done?: boolean }; Returns: Json }
       app_sales_find_node: { Args: { p_code: string }; Returns: Json }
       app_sales_price_history: { Args: { p_q: string }; Returns: Json }
-      app_sales_save_record: { Args: { p_id: string | null; p: Json }; Returns: string }
+      app_sales_save_record: { Args: { p_id: string | null; p: Json; p_stage?: string | null }; Returns: string }
       app_sales_move_stage: {
         Args: { p_id: string; p_stage: string; p_owner?: string | null; p_note?: string | null; p_submit?: Json | null }
         Returns: undefined

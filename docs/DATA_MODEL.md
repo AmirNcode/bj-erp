@@ -922,7 +922,7 @@ Module-owned tables; all have RLS on and **no client policy or grant** (function
 | `sales_payments` | Payments received: `seq`, `amount`, `paid_on`, `imported`. |
 | `sales_deadlines` | `kind` (`proposal_due, quote_due, bond_due, offer_valid_until, bond_expires, delivery_due, other`), `due_on`, responsible, `done_at`; `auto` rows are kept in step by `private.sales_sync_deadlines`. |
 | `sales_documents` | Proposal package checklist: name, assignee, status, where it lives. |
-| `sales_events` | Append-only activity. Never holds a price or guarantee value. |
+| `sales_events` | Append-only activity. Never holds a price or guarantee value. An `edit` event (since 2026-11-17) is `{stage, fields, changes: [{field, from, to} \| {field, hidden: true}], side?}`: `stage` = the stage page it was submitted on (null from old callers), price fields (`our_price`, `winning_bid`, `winner_name`, `total_value`) only as `hidden`, customers by name (`buyer` / `client`), custom values per key (`custom.<key>`), `side` e.g. `bid_bond_opened`. |
 | `sales_import_batches` | One row per ledger import (counts). |
 
 Rules: dates Gregorian; money `numeric(18,2)` + ISO currency on the record; `our_price` is the sum

@@ -9646,10 +9646,10 @@ end $$;
 
 
 --
--- Name: app_sales_save_record(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_sales_save_record(uuid, jsonb, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_sales_save_record(p_id uuid, p jsonb) RETURNS uuid
+CREATE FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid DEFAULT NULL::uuid) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $_$
@@ -9663,6 +9663,7 @@ declare
     'prepayment_date','addendum','custom'];
   v_patch jsonb; v_created boolean := p_id is null; v_no integer; v_flow uuid; v_stage uuid;
   v_set public.sales_settings; v_changed text[]; v_flow_kind text;
+  v_after public.sales_rfps; v_changes jsonb; v_side text[];
 begin
   if p is null or jsonb_typeof(p) <> 'object' then
     raise exception 'sales: invalid input' using errcode = '22023';
@@ -9675,16 +9676,21 @@ begin
       v_keys := v_keys || array['our_price'];
     end if;
   end if;
+  -- The reasons may be corrected later on their stage page; the decision and the
+  -- result themselves change only through app_sales_decide / app_sales_result.
+  if private.sales_can('sales_decide') then
+    v_keys := v_keys || array['decision_reason','result_reason'];
+  end if;
   select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) into v_patch
     from jsonb_each(p) where key = any (v_keys);
   if v_patch ? 'custom' then
     if jsonb_typeof(v_patch->'custom') <> 'object' then
       raise exception 'sales: invalid input' using errcode = '22023';
     end if;
+    -- Only the keys the caller changed; null or "" removes a key (merged below).
     v_patch := jsonb_set(v_patch, '{custom}', coalesce((
       select jsonb_object_agg(key, value) from jsonb_each(v_patch->'custom')
-       where key ~ '^x_[a-z0-9_]{1,38}$' and jsonb_typeof(value) <> 'null'
-         and value <> '""'::jsonb), '{}'::jsonb));
+       where key ~ '^x_[a-z0-9_]{1,38}$'), '{}'::jsonb));
   end if;
 
   if v_created then
@@ -9730,6 +9736,19 @@ begin
     end if;
   end if;
 
+  -- The stage page the edit was made on: any stage of the record's flow.
+  if p_stage is not null and not exists (
+       select 1 from public.sales_stages where id = p_stage and flow_id = v_old.flow_id) then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+
+  -- Custom values merge per key, so a colleague's edit to another key survives.
+  if v_patch ? 'custom' then
+    v_patch := jsonb_set(v_patch, '{custom}', coalesce((
+      select jsonb_object_agg(key, value) from jsonb_each(coalesce(v_old.custom, '{}'::jsonb) || (v_patch->'custom'))
+       where jsonb_typeof(value) <> 'null' and value <> '""'::jsonb), '{}'::jsonb));
+  end if;
+
   begin
     v_new := jsonb_populate_record(v_old, v_patch);
   exception when others then
@@ -9764,6 +9783,7 @@ begin
       delivery_unit = v_new.delivery_unit, delivery_text = v_new.delivery_text,
       delivery_date = v_new.delivery_date, prepayment = v_new.prepayment,
       prepayment_date = v_new.prepayment_date, addendum = v_new.addendum,
+      decision_reason = v_new.decision_reason, result_reason = v_new.result_reason,
       custom = coalesce(v_new.custom, '{}'::jsonb)
     where id = v_old.id;
   exception when check_violation or string_data_right_truncation or not_null_violation
@@ -9776,21 +9796,46 @@ begin
        select 1 from public.sales_bonds where rfp_id = v_old.id and kind = 'bid') then
     insert into public.sales_bonds (company_id, rfp_id, kind, seq, status, currency)
       values (v_company, v_old.id, 'bid', 1, 'needed', v_new.currency);
+    v_side := array['bid_bond_opened'];
   end if;
 
-  -- Field names only, never values: every Sales reader sees the log.
-  select array_agg(key order by key) into v_changed from jsonb_each(to_jsonb(v_new))
+  -- Old -> new per field, read back from the stored row. Price values never enter the
+  -- log (every Sales reader sees it); customers are logged by name; custom per key.
+  select * into v_after from public.sales_rfps where id = v_old.id;
+  select array_agg(key order by key) into v_changed from jsonb_each(to_jsonb(v_after))
    where value is distinct from (to_jsonb(v_old)->key)
      and key not in ('updated_at','updated_by','edited_after_import');
+  select coalesce(jsonb_agg(c order by c->>'field'), '[]'::jsonb) into v_changes from (
+    select case
+             when d.key in ('our_price','winning_bid','winner_name','total_value')
+               then jsonb_build_object('field', d.key, 'hidden', true)
+             when d.key in ('buyer_id','client_id')
+               then jsonb_build_object('field', replace(d.key, '_id', ''),
+                      'from', (select name from public.sales_customers where id = (to_jsonb(v_old)->>d.key)::uuid),
+                      'to', (select name from public.sales_customers where id = (d.value #>> '{}')::uuid))
+             else jsonb_build_object('field', d.key, 'from', to_jsonb(v_old)->d.key, 'to', d.value)
+           end as c
+      from jsonb_each(to_jsonb(v_after)) d
+     where d.value is distinct from (to_jsonb(v_old)->d.key)
+       and d.key not in ('updated_at','updated_by','edited_after_import','custom')
+    union all
+    select jsonb_build_object('field', 'custom.' || k.k, 'from', v_old.custom->k.k, 'to', v_after.custom->k.k)
+      from (select jsonb_object_keys(v_old.custom) as k union select jsonb_object_keys(v_after.custom)) k
+     where v_old.custom->k.k is distinct from v_after.custom->k.k
+  ) x;
   if v_created then
     perform private.sales_touch(v_old.id, 'created', jsonb_build_object('record_no', v_old.record_no));
     update public.sales_rfps set edited_after_import = false where id = v_old.id;
-  elsif v_changed is not null then
-    perform private.sales_touch(v_old.id, 'edit', jsonb_build_object('fields', to_jsonb(v_changed)));
+  elsif v_changed is not null or v_side is not null then
+    perform private.sales_touch(v_old.id, 'edit', jsonb_build_object(
+      'stage', p_stage, 'fields', coalesce(to_jsonb(v_changed), '[]'::jsonb), 'changes', v_changes)
+      || case when v_side is null then '{}'::jsonb else jsonb_build_object('side', to_jsonb(v_side)) end);
   end if;
   return v_old.id;
 end $_$;
 
+
+ALTER FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid) OWNER TO supabase_admin;
 
 --
 -- Name: app_sales_save_settings(jsonb); Type: FUNCTION; Schema: public; Owner: -
@@ -19682,13 +19727,13 @@ GRANT ALL ON FUNCTION public.app_sales_save_payment(p_rfp uuid, p_id uuid, p jso
 
 
 --
--- Name: FUNCTION app_sales_save_record(p_id uuid, p jsonb); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_sales_save_record(p_id uuid, p jsonb, p_stage uuid); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb) TO postgres;
-GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb) TO authenticated;
-GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_save_record(p_id uuid, p jsonb, p_stage uuid) TO service_role;
 
 
 --

@@ -37,8 +37,10 @@ function countUnder(node: TreeNode): number {
   return node.children.reduce((n, c) => n + 1 + countUnder(c), 0);
 }
 
-export function ItemsTab({ boot, record, nodes, focusNode }: {
+export function ItemsTab({ boot, record, nodes, focusNode, showPrices = true }: {
   boot: Bootstrap; record: RecordRow; nodes: NodeRow[]; focusNode: string | null;
+  /** Stage pages: Technical proposal hides the price columns, Pricing shows them. */
+  showPrices?: boolean;
 }) {
   const t = useTranslations('sales');
   const tree = useMemo(() => buildTree(nodes), [nodes]);
@@ -54,22 +56,22 @@ export function ItemsTab({ boot, record, nodes, focusNode }: {
     <div className="flex flex-col gap-3" data-testid="sales-items">
       <p className="text-xs text-muted-foreground">{t('items.hint')}</p>
       <Level
-        boot={boot} record={record} fields={itemFields} depth={1} parent={null} rows={tree}
+        boot={boot} record={record} fields={itemFields} depth={1} parent={null} rows={tree} showPrices={showPrices}
         open={open} toggle={toggle} focusNode={focusNode} expandParent={(id) => setOpen((prev) => new Set(prev).add(id))}
       />
     </div>
   );
 }
 
-function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusNode, expandParent }: {
-  boot: Bootstrap; record: RecordRow; fields: FieldDef[]; depth: number; parent: TreeNode | null; rows: TreeNode[];
+function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusNode, expandParent, showPrices }: {
+  boot: Bootstrap; record: RecordRow; fields: FieldDef[]; depth: number; parent: TreeNode | null; rows: TreeNode[]; showPrices: boolean;
   open: Set<string>; toggle: (id: string) => void; focusNode: string | null; expandParent: (id: string) => void;
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
   const { run, pending } = useRun();
   const canEdit = boot.caps.items_edit;
-  const prices = boot.caps.prices && depth === 1;
+  const prices = showPrices && boot.caps.prices && depth === 1;
   const columns = columnsForDepth(record.item_columns, depth).filter((k) => isBuiltinColumn(k) || fields.some((d) => d.key === k));
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(draftOf(null));
@@ -207,7 +209,7 @@ function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusN
                     {isOpen ? (
                       <tr className="hover:!bg-transparent">
                         <td colSpan={columns.length + (prices ? 5 : 3)} className="!py-3">
-                          <Level boot={boot} record={record} fields={fields} depth={depth + 1} parent={n} rows={n.children}
+                          <Level boot={boot} record={record} fields={fields} depth={depth + 1} parent={n} rows={n.children} showPrices={showPrices}
                             open={open} toggle={toggle} focusNode={focusNode} expandParent={expandParent} />
                         </td>
                       </tr>

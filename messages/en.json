@@ -2733,7 +2733,10 @@
       "prepayment": "Prepayment",
       "prepayment_date": "Prepayment date",
       "addendum": "Addendum",
-      "client_id": "Client"
+      "client_id": "Client",
+      "decision_reason": "Decision reason",
+      "result_reason": "Result note",
+      "in_charge_text": "In charge (ledger name)"
     },
     "list": {
       "newRfp": "New RFP",
@@ -3103,6 +3106,44 @@
       "removeBody": "{count, plural, one {# record} other {# records}} created by this import will be deleted for good, with their items, guarantees and deadlines. {kept, plural, =0 {} one {# record changed here is kept.} other {# records changed here are kept.}}",
       "removeConfirm": "{count, plural, one {Delete # record} other {Delete # records}}",
       "removed": "{deleted} deleted, {kept} kept."
+    },
+    "stagePage": {
+      "label": "Stages",
+      "submit": "Submit",
+      "next": "Next stage",
+      "nextTo": "Next: {stage}",
+      "nextIntro": "Move the record to {stage} and choose who takes it.",
+      "discard": "You have changes that are not submitted. Discard them?",
+      "viewOnly": "This stage has not been reached yet. You can look, but not change it.",
+      "closedOnly": "This record is closed. Only someone who decides bids can change it.",
+      "readOnly": "You can read this record but not change it.",
+      "listsSaveAsYouGo": "Rows below are saved as you go; the fields above wait for Submit.",
+      "saved": "Changes submitted.",
+      "nothingChanged": "Nothing to submit.",
+      "blocked": {
+        "dirty": "Submit your changes first.",
+        "required": "Fill in first: {fields}",
+        "right": "You cannot move this record.",
+        "end": ""
+      },
+      "decideOnly": "Only someone who decides bids can make this decision.",
+      "resultOnly": "Only someone who decides bids can record the result.",
+      "reopen": "Reopen",
+      "reopenIntro": "Choose the stage the record goes back to.",
+      "finish": "Finish contract",
+      "hold": "Put on hold",
+      "resume": "Resume",
+      "cancelContract": "Cancel contract",
+      "confirmMove": "Move the record to {stage}?",
+      "noPage": "This stage has no page of its own. Its required fields are below.",
+      "noFields": "Nothing to fill in on this stage.",
+      "bidSummary": "From the bid",
+      "pricedByItems": "Our price is the sum of the item prices (Pricing items).",
+      "on": "on {stage}",
+      "changedHidden": "changed",
+      "bidBondOpened": "Bid bond opened for finance",
+      "decided": "Decision made: {decision}",
+      "unsaved": "Not submitted yet"
     }
   }
 }
