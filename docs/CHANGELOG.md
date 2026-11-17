@@ -9,6 +9,20 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP · Sales module (FR-94) — built 2026-11-16, not deployed (branch `feat/erp-sales-module`)
+
+- **A second module, hidden until switched on.** Seven permissions in a new **ERP · Sales** section of Settings › Roles; no role has them at first. Holders get an **ERP** entry in the menu; for everyone else the pages do not exist.
+- **Records**: one per RFP or contract, with a record number, company and client, a stage, a person in charge, and an activity log. RFPs move through Received → Bid decision → Technical proposal → Pricing → Ready to send → Submitted and end as won, lost, no bid or cancelled; a won RFP continues as a contract (New → Current → Hold → Finish / Cancel).
+- **Items**: engineering lists each item of a record and its parts; numbers like `8997-1-3` are given on save and never reused. Columns can be added per level. Any number can be typed in the search box.
+- **Prices** (their own permission): unit prices, our price, contract value, winning bid. What was quoted is frozen when the proposal is submitted and can be searched later.
+- **Guarantees and payments** (their own permission): bid, performance and advance-payment guarantees; payments received.
+- **Deadlines**: proposal, quote, bond, offer validity, guarantee expiry and delivery dates are tracked automatically; a Deadlines page and a line on Home show what is overdue or close.
+- **Reports**: where records stand, bid results, price history, how deadlines are met; each table downloads as CSV.
+- **Settings**: stages, extra fields, numbering, the document list of a new RFP.
+- **Ledger import**: the contract Excel file is read in the browser (not uploaded), previewed, and imported; importing again updates the same records; an import can be removed to clear test data. A template with the right column names can be downloaded.
+- Not included: file uploads, SMS reminders.
+- Migrations `20261116200000_sales_tables`, `20261116200100_sales_functions`.
+
 ### SMS: sign in to Melipayamak with the panel username + API key (FR-78) — deployed 2026-11-16
 
 - **Admin › SMS › Connection** has two choices. **Username + API key (web service)** is the new default and the usual setup: the panel username plus the API key from the Melipayamak panel › Developers › Web service settings. **Console key** is the old way and needs the separate key from console.melipayamak.com. The old way caused the “key is wrong” error: the panel API key does not work as a console key.

@@ -3,10 +3,14 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
-## Sales / RFP module (blueprint 2026-11-16, not approved)
+## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
-- [ ] Owner approves `docs/specs/2026-11-16-sales-rfp-module-design.md`, then write the plan.
-- [ ] Client answers spec §13: register Excel columns, record number format, who decides bid / no-bid, bond kinds, document template, admin visibility, reminder channel.
+- [ ] **Owner tests on the local stack (:3501)**: create a CEO role with the seven ERP · Sales permissions, import `B1.xlsx`, try a new RFP end to end. Then PR → merge (a push to `main` deploys).
+- [ ] **Before any push to `main`: upgrade Next.js to 16.4.6.** `npm audit --omit=dev` (a CI step) now reports GHSA-mfr8-8qww-v76h (moderate) against 16.4.3, so the next deploy fails at the audit step whatever it contains.
+- [ ] No signed-in browser test and no e2e spec yet (agents do not type real passwords). Screens were checked with fake data only.
+- [ ] Client answers spec §13: is there a separate inquiry register; record number format (`BJ11511M/0`); who decides bid / no-bid; guarantee fields finance needs; document list per customer type; should the admin see the module.
+- [ ] Deferred by design (spec §15): SMS deadline reminders (SMS is on hold), file attachments, customers screen, "create N units / copy parts", offer print, import of past bids.
+- [ ] Import only reads the first sheet that has a `Rec` header; numeric Excel dates in date columns are reported as "not a date".
 
 ## FR-93 lunch break (deployed 2026-11-16, PR #26)
 

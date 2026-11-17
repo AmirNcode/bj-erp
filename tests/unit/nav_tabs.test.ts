@@ -136,6 +136,7 @@ describe('manageItemsForRoles', () => {
       'absences',
       'finance',
       'procurement',
+      'erp',
     ]);
   });
   it('hr preset gets Finance in Manage; Manage › Absences only as a watcher (FR-75)', () => {
@@ -239,6 +240,27 @@ describe('live approval and delegation capabilities', () => {
 
 it('keeps Finance reachable when self-service delegation creates the Manage tab', () => {
   expect(manageItemsForRoles(['employee'], { finance: 'read' }, false, true).map((i) => i.key)).toEqual(['finance']);
+});
+
+describe('ERP module (FR-94)', () => {
+  it('a role with only sales read gets an ERP tab to /sales and no Manage', () => {
+    const tabs = tabsForRoles(['employee'], { sales: 'read' });
+    expect(tabs.map((t) => t.key)).toEqual(['home', 'request', 'calendar', 'organization', 'erp']);
+    expect(tabs.find((t) => t.key === 'erp')).toMatchObject({ href: '/sales' });
+    expect(manageItemsForRoles(['employee'], { sales: 'read' })).toEqual([]);
+  });
+  it('someone with a Manage group finds it there instead', () => {
+    const perms = { people: 'read', sales: 'edit' } as const;
+    expect(tabsForRoles(['employee'], perms).map((t) => t.key)).not.toContain('erp');
+    expect(manageItemsForRoles(['employee'], perms).find((i) => i.key === 'erp')).toMatchObject({ href: '/sales', testId: 'nav-erp' });
+  });
+  it('without the sales permission it appears nowhere, whatever else is held', () => {
+    const rest = fullPerms();
+    delete rest.sales;
+    expect(tabsForRoles(['employee', 'hr'], rest).map((t) => t.key)).not.toContain('erp');
+    expect(manageItemsForRoles(['employee', 'hr'], rest).map((i) => i.key)).not.toContain('erp');
+    expect(tabsForRoles(['employee'], {}).map((t) => t.key)).not.toContain('erp');
+  });
 });
 
 describe('procurement (FR-70)', () => {

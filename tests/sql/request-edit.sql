@@ -211,7 +211,7 @@ end; $$;
 select pg_temp.assert('the four type keys and the own key are in the catalog',
   (select count(*)=5 from private.permission_keys() k where k in
     ('edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly','edit_requests_own')));
-select pg_temp.expect('26 keys',(select count(*)::text from private.permission_keys()),'26');
+select pg_temp.expect('33 keys (FR-94 added seven)',(select count(*)::text from private.permission_keys()),'33');
 select pg_temp.expect('each is an action: edit only',
   (select string_agg(private.permission_allows(k,'edit')::text||private.permission_allows(k,'read')::text,',' order by k)
      from unnest(array['edit_errand_daily','edit_errand_hourly','edit_leave_daily','edit_leave_hourly','edit_requests_own']) k),

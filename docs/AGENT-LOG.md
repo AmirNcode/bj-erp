@@ -78,6 +78,38 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-16 — ERP › Sales module (FR-94): plan, two reviews, build, local deploy
+
+**Agent:** Claude Fable 5.2 via Claude Code (two Opus 5.5 subagents for the reviews)
+**Branch / HEAD at start:** main @ ae7c9c6 → new branch `feat/erp-sales-module`
+**Trigger:** Amir approved the blueprint (entry below) and asked for: plan → subagent review → spec review → inline build → docs → commit → update the running local deploy; a sidebar "ERP" button; an import template.
+
+**What changed**
+- Spec `docs/specs/2026-11-16-sales-rfp-module-design.md`: approved; §15 build decisions (function-only access, flows, stage `action`, deadlines derived, no SMS reminders in v1) and §15.14–27 after the reviews. Plan `docs/plans/2026-11-16-sales-rfp-module.md` (+ "After review").
+- Reviews (Opus, high): spec review found the buyer/tenant naming clash, double storage of lost/cancelled, price history lost on later edits, import gaps (`-`/`?`, ranges, formula amounts, name matching, deadline flood). Plan review found: read paths that write/lock (View as), CHECK errors echoing prices, three tests hard-coding 26 keys, numbering race, import overwriting app records, lock-order deadlock, error-rule shape. All folded in; `can_act_on` (D4) consequence accepted and documented.
+- DB: `supabase/migrations/20261116200000_sales_tables.sql` (15 tables, 7 catalog keys, seed + company trigger), `20261116200100_sales_functions.sql` (30 public functions + helpers); `supabase/schema.sql` patched from the clone's before/after diff (only the 5 old catalog lines removed); `tests/sql/sales.sql` (93 checks); `fr55-roles-permissions.sql` / `request-edit.sql` expect 33 keys.
+- App: `lib/sales/*` (types, xlsx reader/writer on fflate, ledger parser + template, tree, stages, deadlines, reports), `lib/actions/sales.ts`, `app/[locale]/(app)/sales/**` (layout guard with 404, list, record with Items / Documents / Guarantees & payments / Deadlines / Activity, deadlines, reports, settings + import), `home/SalesDeadlinesCard.tsx`, nav `erp` (tabs, icons, mobile top bar, manage hub), catalog + role editor, `db-error` rules, `types.ts` functions, `messages/*` (`sales` namespace, ~410 keys each), root layout strips `sales` strings, `next.config.ts` action body 4 MB, `fflate` direct dependency, `.gitignore` `erp-module/`.
+- Docs: REQUIREMENTS FR-94, DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, PLAN, CLAUDE.md.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: throwaway clone `erp` (pg_dump | pg_restore, 19 cron/graphql errors), both migrations applied, SQL tests run. See the end of this entry for the clone's fate and the :3501 update.
+- Nothing on Liara. Nothing pushed.
+
+**Verification**
+- `tests/sql/sales.sql`: 93 PASS on the clone. `request-edit.sql` 148 PASS, `manager-overdraft.sql` 79 PASS. `fr55-roles-permissions.sql` and `travel-booking.sql` fail on local data / ACL drift (8 roles, anon grants), as on any clone.
+- `npm run lint` clean; `npm run test:unit` 141 files / 1388 tests pass; `tsc --noEmit` clean; `npm run build` passes (first run stopped on Next's security-advisory notice; second run built).
+- Real `erp-module/files/B1.xlsx` through the reader + parser: 135 rows, 0 unknown / missing columns, 8 warnings (2 text percents ×2, 2 `#VALUE!`, 2 "NO" in a date cell), 60 rows with guarantees, 79 KB payload.
+- Screens rendered with fake data on a temporary `zz-sales` page (deleted): list, record, items tree, deadlines, reports, settings, import — fa and en, no console errors. **No signed-in test** (agents do not type real passwords); no e2e spec.
+
+**State left behind**
+- Branch `feat/erp-sales-module`, committed, not pushed, no PR.
+- `erp-module/` (client samples) is git-ignored and untracked.
+
+**For the next agent**
+- `npm audit --omit=dev` fails on `next` 16.4.3 (GHSA-mfr8-8qww-v76h, moderate): the CI audit step will stop the next deploy. Upgrade to 16.4.6 first (owner's call; `next` is pinned).
+- The local DB also lacked the four SMS migrations of 2026-11-16 (150000–180000).
+- Spec §13 questions are still open with the client.
+
 ## 2026-11-16 — Sales / RFP module blueprint (design only)
 
 **Agent:** Claude Fable 5.2 via Claude Code
@@ -107,6 +139,8 @@ Copy this block verbatim and fill it in.
 - No builder-check subagent was run; the author read the spec as the builder.
 
 **For the next agent**
+- Later the same session Amir added `erp-module/files/B1.xlsx` (contract ledger, 135 rows, Rec = record ID) and described the ID tree (record → line → unit → part, e.g. `8997-1-3-5`, for later QC traceability). Spec gained §5a (`project_nodes`, register findings) and new §13 questions.
+- Amir then widened v1: contract phase + import of the client's real `B1.xlsx` (sample has altered data) + an engineering items table (rows per item, their own columns, expandable parts; engineering assigns the dash numbers). Spec §6a–§6c, new permission `project_items`, build order reshuffled (import early).
 - Wait for Amir's approval of the spec, then write the plan (`docs/plans/`). Spec §13 lists what the client must answer (register columns, record number format `BJ11511M/0`, who decides bid / no-bid, bond kinds, admin visibility).
 - Live VM disk is 20 GB: if attachments come back, use S3-style object storage, not the VM disk.
 

@@ -901,3 +901,30 @@ feeds the HR warning. Gates: PERMISSIONS.md.
 ## FR-87 request-list and print projections (2026-11-08, not deployed)
 
 Migration `20261108200021_approvals_finance_usability.sql` adds the catalog permission `finance_forms` (read, depends on finance), defaulting off for non-admin roles. No stored financial columns change. `finance_requests_v2(from,to)` preserves the original rows/calculations and adds stored first/last names, department ID, and request-scoped `can_print`. `app_approval_history_v2(limit,offset,query,status,kind)` filters before pagination and includes authorized archive readers. `app_request_print(id)` aggregates guarded context, signature evidence, extensions and corrections; reusable private projection functions keep the original public RPCs compatible. The original finance/history RPCs remain available through the deployment window. Dates stay Gregorian ISO in URLs/storage and Persian in the calendar UI.
+
+## FR-94 ERP › Sales module (2026-11-16, not deployed)
+
+Module-owned tables; all have RLS on and **no client policy or grant** (function-only, like
+`travel_bookings`). Current SQL: `supabase/schema.sql`; design: `docs/specs/2026-11-16-sales-rfp-module-design.md`.
+
+| Table | What it holds |
+|---|---|
+| `sales_settings` | Per company: `next_record_no`, `warn_days`, `validity_days`, `doc_template`. |
+| `sales_customers` | Buyers and clients; matched by `name_key` (lower-case, single-spaced, Arabic ي/ك folded). `kind` government / contractor. |
+| `sales_flows` | Two per company: `kind` `bid`, `contract`. |
+| `sales_stages` | Stages of a flow: names, `position`, `kind` (`open, lost, no_bid, cancelled, done`), `action` (`decide, quote, submit`), stable `code`, `owner_role_id`, `required` keys, `active`. Never deleted. |
+| `sales_field_defs` | Extra fields for records (`entity` `rfp`) and item rows (`item`); `key` always `x_…`; values live in `custom jsonb`. |
+| `sales_rfps` | The record: `record_no` (integer, unique per company, immutable), buyer / client, flow + stage, owner, bid decision and result, bid dates, submission, **prices** (`our_price`, `winning_bid`, `winner_name`, `total_value`), contract columns, `custom`, `item_columns`, `node_seq`, import batch + `edited_after_import`. |
+| `project_nodes` | The ID tree under a record (module-neutral name): `parent_id`, `seq`, `code` (`8997-1-3`, unique per company), `depth`, `child_seq`, descriptive columns, `custom`. Numbers are never reused (`node_seq` / `child_seq` only grow). |
+| `sales_item_prices` | Unit price of a node. |
+| `sales_quote_lines` | Snapshot of the priced nodes when a record entered a `submit` stage, per `revision`; price history reads it. |
+| `sales_bonds` | Guarantees: `kind` (`bid, performance, advance_payment`), `seq`, `percent` (a fraction), `form` (`bank, safteh, cheque`), amount, bank, number, issue / expiry dates, `status` (… `void`), `imported`. |
+| `sales_payments` | Payments received: `seq`, `amount`, `paid_on`, `imported`. |
+| `sales_deadlines` | `kind` (`proposal_due, quote_due, bond_due, offer_valid_until, bond_expires, delivery_due, other`), `due_on`, responsible, `done_at`; `auto` rows are kept in step by `private.sales_sync_deadlines`. |
+| `sales_documents` | Proposal package checklist: name, assignee, status, where it lives. |
+| `sales_events` | Append-only activity. Never holds a price or guarantee value. |
+| `sales_import_batches` | One row per ledger import (counts). |
+
+Rules: dates Gregorian; money `numeric(18,2)` + ISO currency on the record; `our_price` is the sum
+of `qty × unit_price` once any item has a price, typed before that; every write locks the record
+row first.

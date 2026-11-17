@@ -42,6 +42,7 @@ export default async function ManageIndexPage({ params }: Props) {
     absences: t('absences'),
     finance: t('finance'),
     procurement: t('procurement'),
+    erp: t('erp'),
     settings: t('settings'),
     admin: t('admin'),
   };

@@ -56,7 +56,9 @@ export default async function LocaleLayout({ children, params }: Props) {
   // Enable static rendering
   setRequestLocale(locale);
 
-  const messages = await getMessages();
+  // FR-94: the hidden ERP › Sales module's strings stay out of everyone's page; its own
+  // layout (sales/layout.tsx, behind the permission) provides them.
+  const messages = Object.fromEntries(Object.entries(await getMessages()).filter(([namespace]) => namespace !== 'sales'));
   const dir = locale === 'fa' ? 'rtl' : 'ltr';
 
   return (

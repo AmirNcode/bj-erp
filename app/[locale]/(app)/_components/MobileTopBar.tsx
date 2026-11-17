@@ -16,6 +16,7 @@ const SECTIONS = [
   ['/absences', 'absences'],
   ['/finance', 'finance'],
   ['/procurement', 'procurement'],
+  ['/sales', 'erp'],
   ['/settings', 'settings'],
   ['/admin', 'admin'],
   ['/help', 'help'],

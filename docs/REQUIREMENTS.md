@@ -415,6 +415,25 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-94** ☐ **ERP › Sales module (RFP register, contracts, items, deadlines).** A second module,
+  hidden behind seven role-editor permissions in a new **ERP · Sales** section (`sales`,
+  `sales_prices`, `sales_bonds`, `sales_decide`, `sales_reports`, `sales_settings`, `project_items`;
+  no preset holds them). Nav entry **ERP** → `/sales` for `sales` holders; everyone else gets a 404.
+  One record per RFP / contract with a record number, buyer and client, configurable stages in two
+  flows (RFP: Received → Bid decision → Technical proposal → Pricing → Ready to send → Submitted,
+  closed by No bid / Lost / Cancelled; Contract: New → Current → Hold → Finish / Cancel), a named
+  owner, extra fields defined in Settings, an activity log. **Items**: engineering's table of items
+  and parts with permanent dash numbers (`8997-1-3`), custom columns per level, number search.
+  **Prices**: unit prices per item, our price, contract value, winning bid; what was quoted is
+  frozen at submission and searchable (price history). **Guarantees and payments** (bid /
+  performance / advance payment; bank / Safteh / cheque). **Deadlines** derived from the record
+  (proposal, quote, bond, offer validity, guarantee expiry, delivery) plus typed ones; a Deadlines
+  page and a Home line. **Documents** as a checklist (no file is stored). **Reports**: pipeline, bid
+  results, price history, deadline performance, CSV. **Ledger import**: the client's contract Excel
+  (`.xlsx`, read in the browser), with a downloadable template, a preview, name mapping, re-import
+  by record number, and removable batches. Not in v1: file uploads, SMS reminders. *(2026-11-16;
+  spec `docs/specs/2026-11-16-sales-rfp-module-design.md`; built on `feat/erp-sales-module`, not
+  deployed.)*
 - **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
   A **Manager** (built-in role, checked at action time) may request annual leave (daily and hourly)
   past the available balance: the whole amount is paid and the balance goes negative (no limit), after

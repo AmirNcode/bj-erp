@@ -35,6 +35,11 @@ const nextConfig: NextConfig = {
     staleTimes: {
       dynamic: 300,
     },
+    // FR-94: the ledger import sends its parsed rows (not the file) in one server
+    // action call; ~600 bytes a row, capped at 3000 rows.
+    serverActions: {
+      bodySizeLimit: '4mb',
+    },
   },
 
   async headers() {

@@ -1959,6 +1959,40 @@ export type Database = {
       app_admin_sign_ins: { Args: { p_limit?: number }; Returns: Json }
       app_revoke_sessions: { Args: { p_user: string }; Returns: number }
       app_revoke_all_sessions: { Args: Record<PropertyKey, never>; Returns: number }
+      // FR-94 ERP › Sales. Function-only access; payloads are JSON (lib/sales/types.ts).
+      app_sales_bootstrap: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_list: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_record: { Args: { p_id: string }; Returns: Json }
+      app_sales_deadlines: { Args: { p_include_done?: boolean }; Returns: Json }
+      app_sales_find_node: { Args: { p_code: string }; Returns: Json }
+      app_sales_price_history: { Args: { p_q: string }; Returns: Json }
+      app_sales_save_record: { Args: { p_id: string | null; p: Json }; Returns: string }
+      app_sales_move_stage: {
+        Args: { p_id: string; p_stage: string; p_owner?: string | null; p_note?: string | null; p_submit?: Json | null }
+        Returns: undefined
+      }
+      app_sales_decide: { Args: { p_id: string; p_bid: boolean; p_reason?: string | null }; Returns: undefined }
+      app_sales_result: { Args: { p_id: string; p_result: string; p?: Json }; Returns: undefined }
+      app_sales_comment: { Args: { p_id: string; p_text: string }; Returns: undefined }
+      app_sales_save_bond: { Args: { p_rfp: string; p_id: string | null; p: Json }; Returns: string }
+      app_sales_delete_bond: { Args: { p_id: string }; Returns: undefined }
+      app_sales_save_payment: { Args: { p_rfp: string; p_id: string | null; p: Json }; Returns: string }
+      app_sales_delete_payment: { Args: { p_id: string }; Returns: undefined }
+      app_sales_save_deadline: { Args: { p_rfp: string; p_id: string | null; p: Json }; Returns: string }
+      app_sales_set_deadline_done: { Args: { p_id: string; p_done: boolean }; Returns: undefined }
+      app_sales_delete_deadline: { Args: { p_id: string }; Returns: undefined }
+      app_sales_save_document: { Args: { p_rfp: string; p_id: string | null; p: Json }; Returns: string }
+      app_sales_delete_document: { Args: { p_id: string }; Returns: undefined }
+      app_project_save_node: { Args: { p_rfp: string; p_id: string | null; p_parent: string | null; p: Json }; Returns: Json }
+      app_project_delete_node: { Args: { p_id: string }; Returns: undefined }
+      app_project_set_columns: { Args: { p_rfp: string; p_columns: Json }; Returns: undefined }
+      app_sales_set_item_price: { Args: { p_node: string; p_price: number | null }; Returns: undefined }
+      app_sales_save_field: { Args: { p_id: string | null; p: Json }; Returns: string }
+      app_sales_save_stage: { Args: { p_id: string | null; p_flow: string | null; p: Json }; Returns: string }
+      app_sales_order_stages: { Args: { p_flow: string; p_ids: string[] }; Returns: undefined }
+      app_sales_save_settings: { Args: { p: Json }; Returns: undefined }
+      app_sales_import: { Args: { p_file: string; p_rows: Json; p_fields?: Json; p_people?: Json }; Returns: Json }
+      app_sales_remove_batch: { Args: { p_batch: string }; Returns: Json }
       // FR-78 SMS. The API key is write-only: app_sms_settings never returns it.
       app_sms_settings: { Args: Record<PropertyKey, never>; Returns: Json }
       app_set_sms_settings: {

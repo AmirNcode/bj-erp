@@ -32,7 +32,8 @@ export type TabKey =
   | 'manage'
   | 'absences'
   | 'finance'
-  | 'procurement';
+  | 'procurement'
+  | 'erp';
 export type Tab = { key: TabKey; href: string; labelKey: string; desktopOnly?: boolean };
 
 export type ManageKey =
@@ -44,7 +45,8 @@ export type ManageKey =
   | 'reports'
   | 'absences'
   | 'finance'
-  | 'procurement';
+  | 'procurement'
+  | 'erp';
 export type NavItemKey = ManageKey | 'settings' | 'admin';
 export type NavItem = { key: NavItemKey; href: string; labelKey: string; testId: string };
 
@@ -73,7 +75,9 @@ const isAdmin = (roles: string[]) => roles.includes('admin');
 const FINANCE_TAB: Tab = { key: 'finance', href: '/finance', labelKey: 'finance' };
 // FR-70: procurement's booking list follows the same rule as Finance.
 const PROCUREMENT_TAB: Tab = { key: 'procurement', href: '/procurement', labelKey: 'procurement' };
-const FOLLOWS_GROUP: NavItemKey[] = ['finance', 'procurement'];
+// FR-94: the ERP module (Sales today) follows the same rule; shown only with `sales` read.
+const ERP_TAB: Tab = { key: 'erp', href: '/sales', labelKey: 'erp' };
+const FOLLOWS_GROUP: NavItemKey[] = ['finance', 'procurement', 'erp'];
 
 // Order is the side panel's order. Test ids are the ones the old Manage header
 // links carried (nav-requests, nav-reports), so existing tests keep finding them.
@@ -96,6 +100,7 @@ const MANAGE: ManageEntry[] = [
   // FR-62: inside Manage only for someone who has a Manage group anyway.
   { key: 'finance', href: '/finance', labelKey: 'finance', testId: 'nav-finance', allowed: (roles, perms, canApprove, hasReports, absencesPage) => can(perms, 'finance', 'read') && hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) },
   { key: 'procurement', href: '/procurement', labelKey: 'procurement', testId: 'nav-procurement', allowed: (roles, perms, canApprove, hasReports, absencesPage) => can(perms, 'travel_booking', 'edit') && hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) },
+  { key: 'erp', href: '/sales', labelKey: 'erp', testId: 'nav-erp', allowed: (roles, perms, canApprove, hasReports, absencesPage) => can(perms, 'sales', 'read') && hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) },
 ];
 
 /** True when the caller reaches a Manage page other than Finance/Procurement (which follow the group). */
@@ -114,6 +119,7 @@ export function tabsForRoles(
   const manage = hasManageGroup(roles, perms, canApprove, hasReports, absencesPage) || canDelegate === true;
   if (can(perms, 'finance', 'read') && !manage) tabs.push(FINANCE_TAB);
   if (can(perms, 'travel_booking', 'edit') && !manage) tabs.push(PROCUREMENT_TAB);
+  if (can(perms, 'sales', 'read') && !manage) tabs.push(ERP_TAB);
   if (manage) tabs.push({ key: 'manage', href: '/manage', labelKey: 'manage' });
   return tabs;
 }
@@ -126,6 +132,8 @@ export function manageItemsForRoles(
     ? can(perms, 'finance', 'read')
     : item.key === 'procurement' && canDelegate === true
       ? can(perms, 'travel_booking', 'edit')
+      : item.key === 'erp' && canDelegate === true
+        ? can(perms, 'sales', 'read')
       : item.allowed(roles, perms, canApprove, hasReports, absencesPage)).map(({ key, href, labelKey, testId }) => ({
     key,
     href,

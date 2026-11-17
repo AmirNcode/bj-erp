@@ -17,11 +17,13 @@ export type PermKey =
   | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'reports'
   | 'finance' | 'finance_forms' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
   | 'travel_booking'
-  | 'edit_leave_daily' | 'edit_leave_hourly' | 'edit_errand_daily' | 'edit_errand_hourly' | 'edit_requests_own';
+  | 'edit_leave_daily' | 'edit_leave_hourly' | 'edit_errand_daily' | 'edit_errand_hourly' | 'edit_requests_own'
+  // FR-94 ERP › Sales (hidden module: no preset holds these).
+  | 'sales' | 'sales_prices' | 'sales_bonds' | 'sales_decide' | 'sales_reports' | 'sales_settings' | 'project_items';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
-export type SectionKey = 'employees' | 'departments' | 'leave' | 'requestEdits' | 'finance' | 'finance_forms' | 'procurement' | 'approvalChain' | 'settings';
+export type SectionKey = 'employees' | 'departments' | 'leave' | 'requestEdits' | 'finance' | 'finance_forms' | 'procurement' | 'sales' | 'approvalChain' | 'settings';
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
@@ -33,6 +35,8 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   { key: 'finance', items: ['finance', 'finance_forms'] },
   // FR-70: procurement books approved out-of-town trips.
   { key: 'procurement', items: ['travel_booking'] },
+  // FR-94: the ERP › Sales module. `sales` is the door; the rest need it.
+  { key: 'sales', items: ['sales', 'sales_prices', 'sales_bonds', 'sales_decide', 'sales_reports', 'sales_settings', 'project_items'] },
   { key: 'approvalChain', items: ['approval_steps', 'approval_delegate'] },
   { key: 'settings', items: ['work_settings', 'holidays'] },
 ];
@@ -45,6 +49,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
   travel_booking: 'E',
   edit_leave_daily: 'E', edit_leave_hourly: 'E', edit_errand_daily: 'E', edit_errand_hourly: 'E', edit_requests_own: 'E',
+  sales: 'RE', sales_prices: 'RE', sales_bonds: 'RE', sales_decide: 'E', sales_reports: 'R', sales_settings: 'E', project_items: 'RE',
 };
 
 export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);
@@ -78,6 +83,12 @@ export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] =
   { key: 'edit_errand_daily', keyLevel: 'read', needs: 'leave_requests' },
   { key: 'edit_errand_hourly', keyLevel: 'read', needs: 'leave_requests' },
   { key: 'edit_requests_own', keyLevel: 'read', needs: 'leave_requests' },
+  { key: 'sales_prices', keyLevel: 'read', needs: 'sales' },
+  { key: 'sales_bonds', keyLevel: 'read', needs: 'sales' },
+  { key: 'sales_decide', keyLevel: 'read', needs: 'sales' },
+  { key: 'sales_reports', keyLevel: 'read', needs: 'sales' },
+  { key: 'sales_settings', keyLevel: 'read', needs: 'sales' },
+  { key: 'project_items', keyLevel: 'read', needs: 'sales' },
 ];
 
 export function levelValue(l: Level | undefined): 0 | 1 | 2 {

@@ -76,6 +76,13 @@ to `main`, plus a full frontend overhaul (shadcn/ui + brand tokens + Rubik with 
 | **5 — Seed & demo** | Seed 3 teams + Security dept w/ Iranian names/roles; seed 1404–1405 holidays; deploy demo | Client can log in as each role and see realistic data |
 | **6 — Settings, password, cancel** | Admin work/holiday editor (FR-24); self-service password change (FR-7); cancel an approved-future request w/ ledger reversal (FR-15) | Admin edits weekend/holidays; user changes own password; approved-future leave is cancellable |
 
+## 5a. Module #2: ERP › Sales (FR-94, built 2026-11-16, not deployed)
+
+RFP register → bid decision → proposal → result → contract ledger, with an engineering items tree
+(permanent dash numbers that a later QC module will hang test records on), deadlines, guarantees,
+reports and an import of the client's contract Excel. Hidden behind its own permissions; module
+tables are function-only. Spec: `docs/specs/2026-11-16-sales-rfp-module-design.md`.
+
 ## 6. Future modules / features (roadmap, not v1)
 
 Prioritized for a manufacturer: **attendance / check-in-out** (PIN or geo) → **shift scheduling /

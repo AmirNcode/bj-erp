@@ -31,6 +31,16 @@ type Rule = {
 };
 
 const RULES: Rule[] = [
+  // FR-94 ERP › Sales: every app_sales_* / app_project_* function raises 'sales: …'.
+  { re: /^sales: not allowed$/, key: 'notAllowed' },
+  { re: /^sales: not found$/, key: 'salesNotFound' },
+  { re: /^sales: record number taken$|sales_rfps_company_id_record_no_key/, key: 'salesRecordNumberTaken' },
+  { re: /^sales: title required$/, key: 'salesTitleRequired' },
+  { re: /^sales: required fields missing$/, key: 'salesRequiredMissing' },
+  { re: /^sales: decision required$/, key: 'salesDecisionRequired' },
+  { re: /^sales: stage not available$/, key: 'salesStageNotAvailable' },
+  { re: /^sales: flow needs an open stage$/, key: 'salesFlowNeedsOpenStage' },
+  { re: /^sales: invalid input$/, key: 'salesInvalidInput' },
   // View as (FR-86). The pre-request hook makes every viewed transaction read-only,
   // so any save fails with Postgres's "cannot execute … in a read-only transaction";
   // a dead or foreign view is refused before it runs.

@@ -889,3 +889,35 @@ Not a catalog item; reuses `people` edit. `private.profile_photos` is unreachabl
 `leave_requests` keeps its existing key and levels; its role-editor label is now **Approvals — request review** in Leave. `/manage/approvals` admits either an approver or a request-review reader. Pending review rows may include non-actionable and own requests for review readers; Home counts and badges still use the actionable queue. `app_approval_history_v2` adds authorized archive history, search/status/type filters before pagination, and employee IDs for avatars. Approvers without review permission retain their own-decision history. HR travel/correction/cancellation controls keep their existing guards. `/manage/requests` redirects.
 
 Finance's `finance_forms` is read-only, shown as Yes/No and dependent on `finance` read. It defaults off for existing non-admin roles; admin access is implicit. `app_request_print` additionally admits same-company pending/approved work errands and settled cancelled travel requests when both permissions are present. It includes the complete form's reason, signatures, extensions and corrections. It does not grant leave reads, approval authority, profile browsing or general `leave_requests` RLS access. Existing independent print rights remain valid. Shared `private.request_data_*` implementations are not executable by clients; existing public context/signature/progress RPCs retain their original guards.
+
+## ERP › Sales (FR-94, 2026-11-16, not deployed)
+
+Seven catalog items in a new section **ERP · Sales**; **no preset role holds any** (the admin
+holds every key, as always). The owner switches them on per role in Settings › Roles.
+
+| Key | Shape | Gives |
+|---|---|---|
+| `sales` | Read / Edit | The module. Read: records, items, documents, deadlines, activity — never prices or guarantee details. Edit: create and change records, move stages, documents, deadlines, notes. |
+| `sales_prices` | Read / Edit | Unit prices, our price, contract value, winning bid, quote history. Edit: type them. |
+| `sales_bonds` | Read / Edit | Guarantee details and payments. Edit: record them (finance). |
+| `sales_decide` | Yes / No | Bid / no-bid, won / lost / cancelled, closing and reopening records, editing closed ones. |
+| `sales_reports` | Read | The Reports page (price history also needs `sales_prices`). |
+| `sales_settings` | Yes / No | Stages, extra fields, numbering, document template, ledger import and batch removal. |
+| `project_items` | Read / Edit | The items table. Edit: rows, parts, columns (engineering). |
+
+All six others depend on `sales` (read).
+
+**Enforcement.** The tables have no client access. Every `app_sales_*` / `app_project_*` function
+starts with `private.sales_company(key, level)`: the caller must hold `sales` read **and** the
+named key, else `sales: not allowed`. A reader without `sales_prices` receives JSON **without**
+the price keys (`our_price`, `winning_bid`, `winner_name`, `total_value`, `unit_price`,
+`quote_revisions`); without `sales_bonds`, guarantees arrive as kind + status only and payments
+not at all. Failed CHECKs are re-raised as `sales: invalid input`, so a row is never echoed.
+Records are scoped to the caller's company (`sales: not found` otherwise).
+
+**Hidden.** No nav entry, Home line or page without `sales`: `/sales/*` answers 404, and the
+module's strings are sent to the browser only from its own layout.
+
+**D4 applies.** Because the keys count in `private.can_act_on`, someone holding Sales permissions
+can be edited (or have a password reset) only by a caller holding at least the same — in practice
+the admin. Intended: nobody weaker may sign in as a Sales holder.

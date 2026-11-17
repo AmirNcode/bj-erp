@@ -54,6 +54,9 @@ backups/
 # Real personnel data (client HR exports) — never commit
 docs/files/
 
+# Client sales / contract samples for the ERP module — never commit
+erp-module/
+
 # Local test accounts (never commit)
 .env.test-accounts
 

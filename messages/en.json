@@ -23,7 +23,8 @@
     "finance": "Finance",
     "procurement": "Procurement",
     "help": "Help",
-    "admin": "Admin panel"
+    "admin": "Admin panel",
+    "erp": "ERP"
   },
   "refresh": {
     "updated": "Updated {time}",
@@ -1350,7 +1351,15 @@
     "convertExceedsNegative": "The amount is more than the negative balance.",
     "convertNotNegative": "The balance is not negative.",
     "requestEditBookingStarted": "Procurement has already started booking this trip, so it cannot become an hourly errand.",
-    "requestEditExtended": "This trip has been extended, so it cannot become an hourly errand."
+    "requestEditExtended": "This trip has been extended, so it cannot become an hourly errand.",
+    "salesNotFound": "This record or row no longer exists.",
+    "salesRecordNumberTaken": "This record number is already used.",
+    "salesTitleRequired": "Enter a title.",
+    "salesRequiredMissing": "Fill the fields this stage requires before moving on.",
+    "salesDecisionRequired": "The bid decision must be recorded first.",
+    "salesStageNotAvailable": "This stage cannot be chosen for this record.",
+    "salesFlowNeedsOpenStage": "At least one in-progress stage must stay in use.",
+    "salesInvalidInput": "A value is not valid. Check the form and try again."
   },
   "roles": {
     "admin": "Admin",
@@ -1777,7 +1786,8 @@
       "requestEdits": "Edit requests",
       "approvalChain": "Approval chain",
       "settings": "Company settings",
-      "procurement": "Procurement"
+      "procurement": "Procurement",
+      "sales": "ERP · Sales"
     },
     "items": {
       "personal_info_own": {
@@ -1883,6 +1893,34 @@
       "edit_requests_own": {
         "label": "Edit own requests",
         "description": "Lets the holder edit their own approved requests, for the types they may edit."
+      },
+      "sales": {
+        "label": "Sales module",
+        "description": "Open the hidden ERP · Sales module. Read: records, items, deadlines and activity (no prices or guarantee details). Edit: create and change records, move stages, documents and deadlines."
+      },
+      "sales_prices": {
+        "label": "Sales prices",
+        "description": "Read: unit prices, our price, contract value, winning bid and past quotes. Edit: type them. Without this, prices never reach the person."
+      },
+      "sales_bonds": {
+        "label": "Guarantees and payments",
+        "description": "Read: guarantee details (amount, bank, number, dates) and payments received. Edit: record and update them (finance). Guarantee amounts reveal the contract value."
+      },
+      "sales_decide": {
+        "label": "Bid decision and result",
+        "description": "Decide bid / no bid, record won / lost / cancelled, close and reopen records."
+      },
+      "sales_reports": {
+        "label": "Sales reports",
+        "description": "The Reports page of the Sales module. Price history also needs Sales prices."
+      },
+      "sales_settings": {
+        "label": "Sales settings and import",
+        "description": "Change stages, extra fields and numbering; import the contract ledger and remove imports."
+      },
+      "project_items": {
+        "label": "Items and parts",
+        "description": "Read: the items table of a record. Edit: add items and parts (which get permanent numbers), and create columns (engineering)."
       }
     },
     "levels": {
@@ -2570,6 +2608,501 @@
       "unpaid_type": "Unpaid leave request",
       "unpaid_part": "Unpaid part of a request",
       "conversion": "Converted from negative balance"
+    }
+  },
+  "sales": {
+    "title": "ERP · Sales",
+    "yes": "Yes",
+    "no": "No",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "remove": "Remove",
+    "removeTitle": "Remove this row?",
+    "daysCount": "{days, plural, one {# day} other {# days}}",
+    "tabs": {
+      "label": "Sales sections",
+      "records": "Records",
+      "deadlines": "Deadlines",
+      "reports": "Reports",
+      "settings": "Settings"
+    },
+    "search": {
+      "label": "Find by record or item number",
+      "placeholder": "Number, e.g. 8997-1-3",
+      "go": "Find",
+      "none": "No record or item has this number."
+    },
+    "flow": {
+      "label": "Type",
+      "bid": "RFP",
+      "contract": "Contract"
+    },
+    "customerKind": {
+      "government": "Government",
+      "contractor": "Contractor"
+    },
+    "source": {
+      "website": "Tender website",
+      "email": "Email",
+      "other": "Other"
+    },
+    "delivery": {
+      "hand": "By hand",
+      "courier": "Courier"
+    },
+    "unit": {
+      "day": "days",
+      "week": "weeks",
+      "month": "months"
+    },
+    "currency": {
+      "IRR": "Rial (IRR)",
+      "EUR": "Euro (EUR)",
+      "USD": "US dollar (USD)",
+      "AED": "Dirham (AED)",
+      "CNY": "Yuan (CNY)"
+    },
+    "decision": {
+      "pending": "Not decided",
+      "bid": "Bid",
+      "no_bid": "No bid"
+    },
+    "result": {
+      "won": "Won",
+      "lost": "Lost",
+      "cancelled": "Cancelled"
+    },
+    "stageKind": {
+      "open": "In progress",
+      "done": "Finished",
+      "lost": "Lost",
+      "no_bid": "No bid",
+      "cancelled": "Cancelled"
+    },
+    "stageAction": {
+      "none": "Nothing special",
+      "decide": "Bid decision is made here",
+      "quote": "Pricing (skipped when no quote is needed)",
+      "submit": "Proposal is delivered here"
+    },
+    "fieldType": {
+      "text": "Text",
+      "number": "Number",
+      "date": "Date",
+      "select": "Choice from a list",
+      "yes_no": "Yes / No"
+    },
+    "field": {
+      "record_no": "Record no.",
+      "revision": "Revision",
+      "title": "Title",
+      "buyer": "Company",
+      "buyer_kind": "Company type",
+      "client": "Client",
+      "customer_ref": "Request no.",
+      "project_site": "Project site",
+      "source": "Received through",
+      "description": "Description",
+      "received_on": "Received on",
+      "owner": "In charge",
+      "currency": "Currency",
+      "stage": "Stage",
+      "next_deadline": "Next deadline",
+      "value": "Value",
+      "needs_quote": "Financial quote needed",
+      "needs_bond": "Bid bond needed",
+      "proposal_due": "Proposal deadline",
+      "quote_due": "Quote deadline",
+      "bond_due": "Bond deadline",
+      "our_price": "Our price",
+      "total_value": "Contract value",
+      "winning_bid": "Winning bid",
+      "winner_name": "Winner",
+      "bid_decision": "Bid decision",
+      "bid_result": "Result",
+      "submitted_on": "Submitted on",
+      "delivery_method": "Delivered by",
+      "received_by": "Received by",
+      "validity_days": "Offer validity",
+      "order_date": "Order issued on",
+      "contract_start": "Contract start / LOI",
+      "delivery_duration": "Delivery time",
+      "delivery_unit": "Unit",
+      "delivery_date": "Delivery date",
+      "prepayment": "Prepayment",
+      "prepayment_date": "Prepayment date",
+      "addendum": "Addendum",
+      "client_id": "Client"
+    },
+    "list": {
+      "newRfp": "New RFP",
+      "newContract": "New contract",
+      "search": "Search number, company, title…",
+      "state": "Open or closed",
+      "stateOpen": "Open",
+      "stateClosed": "Closed",
+      "stateAll": "Open and closed",
+      "flow": "Type",
+      "flowAll": "RFPs and contracts",
+      "stage": "Stage",
+      "stageAll": "Every stage",
+      "owner": "In charge",
+      "ownerAll": "Everyone",
+      "count": "{shown} of {total} records",
+      "empty": "No records yet.",
+      "noMatch": "Nothing matches these filters."
+    },
+    "form": {
+      "create": "Create record",
+      "recordNoHint": "Next free number. Change it if this record already has a number.",
+      "titlePlaceholder": "e.g. 12 wellheads, 6 gate valves",
+      "clientHint": "The end user, if different from the company.",
+      "rfpIntro": "A new request to bid on. Details can be added later.",
+      "contractIntro": "An order that did not go through an RFP here.",
+      "editIntro": "Change the details of this record.",
+      "bidBlock": "Bid details",
+      "contractBlock": "Contract details",
+      "extraBlock": "Extra fields",
+      "pricedByItems": "Sum of the item prices.",
+      "deliveryText": "Ledger says: {text}"
+    },
+    "action": {
+      "move": "Move stage",
+      "decide": "Bid decision",
+      "result": "Record result",
+      "edit": "Edit"
+    },
+    "recordTabs": {
+      "label": "Record sections",
+      "overview": "Overview",
+      "items": "Items",
+      "documents": "Documents",
+      "finance": "Guarantees & payments",
+      "deadlines": "Deadlines",
+      "activity": "Activity"
+    },
+    "move": {
+      "intro": "Choose the next stage and who takes the record.",
+      "to": "Move to",
+      "owner": "In charge from now",
+      "ownerHint": "Leave as is to keep the current person.",
+      "note": "Note (optional)",
+      "confirm": "Move",
+      "validityHint": "Days the offer stays valid; its end becomes a deadline."
+    },
+    "decide": {
+      "intro": "Does the company bid on this RFP?",
+      "reason": "Reason (optional)",
+      "bid": "Bid",
+      "noBid": "No bid"
+    },
+    "resultDialog": {
+      "intro": "Record how this bid ended.",
+      "reason": "Note (optional)",
+      "confirm": "Record result",
+      "wonHint": "A won record continues as a contract.",
+      "pricesHidden": "You do not see prices; the winning bid you type is still saved."
+    },
+    "activity": {
+      "placeholder": "Write a note…",
+      "add": "Add note"
+    },
+    "event": {
+      "created": "Record created",
+      "import": "Updated by a ledger import",
+      "stage": "Stage: {from} → {to}",
+      "decisionBid": "Decision: bid",
+      "decisionNoBid": "Decision: no bid",
+      "result": "Result: {result}",
+      "edit": "{count, plural, one {# field changed} other {# fields changed}}",
+      "itemColumns": "Item columns changed",
+      "item_added": "Item {code} added",
+      "item_changed": "Item {code} changed",
+      "item_removed": "Item {code} removed",
+      "finance_guarantee_added": "Guarantee added",
+      "finance_guarantee_changed": "Guarantee changed",
+      "finance_guarantee_removed": "Guarantee removed",
+      "finance_payment_added": "Payment added",
+      "finance_payment_changed": "Payment changed",
+      "finance_payment_removed": "Payment removed"
+    },
+    "items": {
+      "hint": "One row per item of this record. Open a row to add its parts. Numbers are given on save and never reused.",
+      "col": {
+        "no": "No.",
+        "description": "Description",
+        "product_type": "Type",
+        "size": "Size",
+        "rating": "Rating",
+        "qty": "Qty",
+        "unit": "Unit"
+      },
+      "unitPrice": "Unit price",
+      "lineTotal": "Total",
+      "newNumber": "new",
+      "addRow": "Add item",
+      "addPart": "Add part to {code}",
+      "addColumn": "Add column",
+      "empty": "No items yet.",
+      "emptyParts": "No parts yet.",
+      "toggle": "Show or hide the parts of {code}",
+      "hideColumn": "Hide column {name}",
+      "removeTitle": "Remove {code}?",
+      "removeBody": "Its number will not be used again.",
+      "removeBodyChildren": "{count, plural, one {# row under it is removed too.} other {# rows under it are removed too.}} Their numbers will not be used again.",
+      "columnIntro": "Show a column at this level, or make a new one.",
+      "existingColumn": "Existing column",
+      "showColumn": "Show",
+      "newColumn": "New column",
+      "newColumnHint": "A new column can be used on other records too. Do not put prices in it: everyone who sees items sees it.",
+      "createColumn": "Create and show"
+    },
+    "documents": {
+      "hint": "The proposal package. No file is kept here: record who prepares each document and where it is.",
+      "progress": "{ready} of {total} ready",
+      "empty": "No documents listed.",
+      "name": "Document",
+      "assignee": "Prepared by",
+      "status": "Status",
+      "where": "Where it is",
+      "whereHint": "e.g. whose laptop, or a shared folder.",
+      "state": {
+        "todo": "To do",
+        "in_progress": "In progress",
+        "ready": "Ready"
+      },
+      "add": "Add",
+      "addPlaceholder": "Document name",
+      "editTitle": "Edit document",
+      "removeTitle": "Remove this document?"
+    },
+    "bond": {
+      "title": "Guarantees",
+      "add": "Add guarantee",
+      "editTitle": "Edit guarantee",
+      "empty": "No guarantee recorded.",
+      "summaryHint": "Guarantee details are for finance. You see where each one stands.",
+      "dialogHint": "An expiry date becomes a deadline for this record.",
+      "kindLabel": "Guarantee",
+      "kind": {
+        "bid": "Bid bond",
+        "performance": "Performance (PBG)",
+        "advance_payment": "Advance payment (APG)"
+      },
+      "seq": "Stage no.",
+      "statusLabel": "Status",
+      "status": {
+        "needed": "Needed",
+        "requested": "Requested",
+        "issued": "Issued",
+        "delivered": "Delivered",
+        "released": "Released",
+        "expired": "Expired",
+        "void": "Void"
+      },
+      "form": "Form",
+      "formKind": {
+        "bank": "Bank guarantee",
+        "safteh": "Promissory note (Safteh)",
+        "cheque": "Cheque"
+      },
+      "percent": "Percent",
+      "percentHint": "Of the contract value, e.g. 10.",
+      "amount": "Amount",
+      "bank": "Bank",
+      "number": "Number",
+      "issuedOn": "Issued on",
+      "expiresOn": "Expires on",
+      "expiresHint": "Needed to be warned before it runs out.",
+      "noExpiry": "No expiry date",
+      "note": "Note"
+    },
+    "payment": {
+      "title": "Payments received",
+      "add": "Add payment",
+      "editTitle": "Edit payment",
+      "empty": "No payment recorded.",
+      "dialogHint": "Money received from the customer for this contract.",
+      "no": "No.",
+      "amount": "Amount",
+      "paidOn": "Date",
+      "note": "Note",
+      "total": "Total received"
+    },
+    "deadline": {
+      "kind": {
+        "proposal_due": "Technical proposal",
+        "quote_due": "Financial quote",
+        "bond_due": "Bid bond",
+        "offer_valid_until": "Offer validity ends",
+        "bond_expires": "Guarantee expires",
+        "delivery_due": "Contract delivery",
+        "other": "Other"
+      },
+      "kindAll": "Every kind",
+      "today": "today",
+      "inDays": "{days, plural, one {in # day} other {in # days}}",
+      "overdueBy": "{days, plural, one {# day late} other {# days late}}",
+      "what": "Deadline",
+      "dueOn": "Date",
+      "left": "Time left",
+      "responsible": "Responsible",
+      "done": "Done",
+      "markDone": "Mark done",
+      "reopen": "Reopen",
+      "add": "Add deadline",
+      "editTitle": "Edit deadline",
+      "dialogHint": "A date someone must not miss on this record.",
+      "empty": "No deadlines on this record.",
+      "emptyAll": "No open deadlines.",
+      "recordHint": "Proposal, bond, validity, guarantee and delivery dates appear here by themselves; other dates can be added.",
+      "overdue": "Overdue",
+      "soon": "{days, plural, one {Within # day} other {Within # days}}",
+      "allOpen": "All open",
+      "everyone": "Everyone",
+      "mine": "Mine",
+      "window": "Which deadlines",
+      "windowAll": "All open deadlines",
+      "windowAttention": "Overdue or close only"
+    },
+    "home": {
+      "waiting": "{count, plural, one {# sales deadline needs attention} other {# sales deadlines need attention}}",
+      "open": "Open"
+    },
+    "reports": {
+      "csv": "Download CSV",
+      "pipeline": "Where the records stand",
+      "count": "Records",
+      "results": "Bid results",
+      "byCustomer": "By company",
+      "byYear": "By year",
+      "year": "Year",
+      "decided": "Decided",
+      "winRate": "Win rate",
+      "resultsHint": "Bids decided in this system. Contracts imported from the ledger are not counted: they have no lost bids beside them.",
+      "noResults": "No bid has a result yet.",
+      "priceHistory": "What we quoted before",
+      "priceHistoryHint": "Prices as they stood when each proposal was submitted. Search by type, size, rating or description.",
+      "priceSearch": "e.g. gate 3-1/16 10000",
+      "search": "Search",
+      "quotedOn": "Quoted on",
+      "noQuotes": "No submitted quote matches.",
+      "pending": "No result yet",
+      "deadlines": "How deadlines are met",
+      "deadlinesHint": "Old dates that came in with the ledger import are left out.",
+      "onTime": "Met on time",
+      "late": "Met late"
+    },
+    "settings": {
+      "label": "Settings sections",
+      "section": {
+        "stages": "Stages",
+        "fields": "Extra fields",
+        "general": "General",
+        "import": "Ledger import"
+      },
+      "stagesIntro": "Each kind of record moves through its own stages. Rename, add, reorder or retire them here; a stage that has records is retired, never deleted.",
+      "addStage": "Add stage",
+      "editStage": "Edit stage",
+      "order": "Order",
+      "stageName": "Stage",
+      "stageKind": "Meaning",
+      "stageKindHint": "Reports group stages by this, whatever they are named.",
+      "stageAction": "Behaviour",
+      "stageActionHint": "What the system does at this stage.",
+      "ownerRole": "Usual owner role",
+      "ownerRoleHint": "Suggested as the next person in charge.",
+      "required": "Must be filled",
+      "requiredHint": "Fields that must have a value before a record moves forward out of this stage.",
+      "stageActive": "In use",
+      "retired": "Retired",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "stageDialogHint": "Names are shown in the language of the reader.",
+      "labelFa": "Name (Farsi)",
+      "labelEn": "Name (English)",
+      "fieldsIntro": "Extra columns for records and for item rows. Values are kept when a field is retired.",
+      "fieldsOf": {
+        "rfp": "Record fields",
+        "item": "Item columns"
+      },
+      "addField": "Add field",
+      "editField": "Edit field",
+      "noFields": "None yet.",
+      "fieldName": "Field",
+      "fieldType": "Type",
+      "typeFixed": "The type cannot change after creation.",
+      "options": "Choices",
+      "optionsHint": "One per line.",
+      "showInList": "Show in the records list",
+      "fieldActive": "In use",
+      "fieldDialogHint": "An extra column the company wants to keep.",
+      "fieldPriceWarning": "Everyone who can open Sales sees extra fields. Do not use them for prices.",
+      "nextRecordNo": "Next record number",
+      "nextRecordNoHint": "Must be above every existing number.",
+      "warnDays": "Warning window (days)",
+      "warnDaysHint": "A deadline this close is marked amber.",
+      "validityDays": "Default offer validity (days)",
+      "validityDaysHint": "Suggested when a proposal is submitted.",
+      "docTemplate": "Documents of a new RFP",
+      "docTemplateHint": "One document per line. Added to every new RFP."
+    },
+    "import": {
+      "intro": "Bring the contract ledger (the Excel file with one row per record) into the system. The file is read on this computer and is not stored anywhere.",
+      "step1": "Download the template: it has the exact column names.",
+      "step2": "Paste your rows under the headers and save the file.",
+      "step3": "Choose the file, check the preview, then import. Importing again updates the same records.",
+      "template": "Download template",
+      "choose": "Choose Excel file",
+      "notXlsx": "This is not an Excel (.xlsx) file.",
+      "noHeader": "No sheet has a header row starting with \"Rec\". Use the template.",
+      "tooLarge": "The file is larger than 20 MB.",
+      "tooManyRows": "More than {max} rows. Split the file.",
+      "previewTitle": "Preview of {file}",
+      "rows": "Rows to import",
+      "willUpdate": "Already here (updated)",
+      "leftOut": "Rows left out",
+      "emptied": "Cells left empty",
+      "missing": "Columns not found in the file",
+      "unknownTitle": "Columns the system does not know",
+      "unknownHint": "Tick a column to keep it as an extra record field; the rest are ignored.",
+      "peopleTitle": "In-charge people",
+      "peopleHint": "Match each name in the ledger to an employee. A name left unmatched is kept as text.",
+      "issuesTitle": "What needs a look",
+      "row": "Row",
+      "column": "Column",
+      "value": "Value",
+      "problem": "Problem",
+      "issue": {
+        "rec_missing": "No record number: row left out",
+        "rec_duplicate": "Repeated record number: row left out",
+        "bad_date": "Not a date: left empty",
+        "bad_number": "Not a number: left empty",
+        "bad_value": "Unknown value: left empty"
+      },
+      "clean": "Every row reads cleanly.",
+      "confirm": "{count, plural, one {Import # row} other {Import # rows}}",
+      "done": "Imported: {created} new, {updated} updated, {skipped} skipped.",
+      "skip": {
+        "bad_rec": "no usable record number",
+        "exists_in_app": "a record with this number was created here; not overwritten",
+        "unreadable": "could not be read"
+      },
+      "batchesTitle": "Earlier imports",
+      "batchesHint": "Removing an import deletes the records it created that nobody has changed since. Use it to clear test data before importing the real file.",
+      "noBatches": "Nothing imported yet.",
+      "when": "Date",
+      "file": "File",
+      "created": "New",
+      "updated": "Updated",
+      "skipped": "Skipped",
+      "untouched": "Unchanged / records",
+      "remove": "Remove",
+      "removeTitle": "Remove this import?",
+      "removeBody": "{count, plural, one {# record} other {# records}} created by this import will be deleted for good, with their items, guarantees and deadlines. {kept, plural, =0 {} one {# record changed here is kept.} other {# records changed here are kept.}}",
+      "removeConfirm": "{count, plural, one {Delete # record} other {Delete # records}}",
+      "removed": "{deleted} deleted, {kept} kept."
     }
   }
 }

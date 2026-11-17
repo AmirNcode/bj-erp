@@ -11,7 +11,7 @@ database** spanning every department (HR, quality control, finance, procurement,
 manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
 separate servers** (not one shared DB); focus now is this one company.
 
-**Status (2026-11-16):** HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed; SMS username + API key connection and PR #17 F4/F5 pushed 2026-11-16. Beyond v1: leave v2
+**Status (2026-11-16):** Module #2 **ERP › Sales (FR-94)** built on branch `feat/erp-sales-module`, local only (spec `docs/specs/2026-11-16-sales-rfp-module-design.md`). HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed; SMS username + API key connection and PR #17 F4/F5 pushed 2026-11-16. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
 Persian-only calendar, `hr` role, approval chain, reports, print, CSV import, org chart, bulk
 personnel import (add / update / replace), department-manager approval step. What shipped:
@@ -53,12 +53,14 @@ Context7 before using them** — no training-data API details.
 CLAUDE.md                  ← you are here
 app/[locale]/              Next.js App Router — (auth)/login + (app)/* authed screens
   (app)/                   home · request · calendar · profile · settings (admin) · manage/* (RBAC layout guard)
+    sales/                 ERP › Sales module (FR-94): records, [id], deadlines, reports, settings (+ ledger import)
     _components/           AppShell, MainNav, PageHeader, nav-icons
     request/_components/   FormParts + useRequestForm: shared pieces of the four request forms
   (print)/print/request    printable paper form of a request
 app/api/health             health endpoint (deploy checks)
 components/                shared UI — ui/* (shadcn primitives), PersianDateField, StatusBadge, Skeletons
-lib/                       actions/* (server actions; leave/* split by concern) · supabase/* (clients, types)
+lib/                       actions/* (server actions; leave/* split by concern; sales.ts = ERP) · sales/* (ERP pure helpers, xlsx)
+                           supabase/* (clients, types)
                            leave/* (pure day-count, balances, approvals) · auth/* (requireCaller) · home/* · nav/*
 i18n/                      next-intl routing / navigation / request config
 messages/                  fa.json (default, RTL) + en.json
@@ -196,6 +198,15 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Hourly leave minutes = span − lunch overlap (FR-93):** `private.lunch_overlap_minutes` (TS `lunchOverlapMinutes`), cap uses net; a lunch-only leave on a working day (`private.is_working_day`) is valid at 0 and skips the one-per-day slot. Errands never subtract lunch.
 - **`work_settings` time checks compare minutes (`extract(epoch …)/60`), not `time + interval`** — the latter wraps at midnight.
 - **Local `postgres` has anon/ACL drift:** a raw `pg_dump` adds anon grants and 15 `tests/sql` files fail on any clone. Update `schema.sql` by diffing schema dumps of the clone before/after the migration and patching only those hunks.
+- **ERP › Sales (FR-94) is function-only and hidden:** `sales_*` tables + `project_nodes` have no client grants; go through `app_sales_*` / `app_project_*` (JSON in, JSON out; types in `lib/sales/types.ts`). Caps come from `app_sales_bootstrap()`, not the token.
+- **Sales price / guarantee values must never leave for a caller without `sales_prices` / `sales_bonds`:** strip keys in the SQL function, keep them out of `sales_events` bodies and deadline labels, and re-raise CHECK failures as `sales: invalid input`.
+- **Sales read functions are `stable` and must not write or lock** (View as + PostgREST run them read-only); every Sales write locks the `sales_rfps` row first (`private.sales_rfp`), then children.
+- **The `sales` message namespace reaches the browser only from `sales/layout.tsx`** (root layout strips it); a client component outside `/sales` cannot use `useTranslations('sales')`. No `sales` permission → `notFound()`, never a redirect.
+- **Item numbers (`project_nodes.code`) are permanent:** never decrement `node_seq` / `child_seq`, never renumber, never change `record_no`.
+- **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql` (33 since FR-94).
+- **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
+- **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
+- **`npm audit --omit=dev` is a CI gate:** a new advisory against the pinned `next` fails every deploy until it is upgraded (2026-11-16: 16.4.3 → needs 16.4.6).
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

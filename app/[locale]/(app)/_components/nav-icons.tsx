@@ -5,6 +5,7 @@ import {
   CircleCheck,
   CircleHelp,
   DoorOpen,
+  Factory,
   Network,
   Plane,
   Settings,
@@ -87,6 +88,13 @@ export const NAV_ICONS: Record<TabKey, React.ReactNode> = {
       <path d="M2.5 13.5l7-2.5 5.5-6.5a1.6 1.6 0 0 1 2.3 2.3L10.8 12.3l-2.5 7-1.8-1.8.9-4.1-4.1.9z" />
     </Svg>
   ),
+  // FR-94: a factory — the ERP module.
+  erp: (
+    <Svg>
+      <path d="M3 20V10l6 4v-4l6 4V5h4v15z" />
+      <path d="M7 17h2M12 17h2" />
+    </Svg>
+  ),
   manage: (
     <Svg>
       <rect x="4" y="4" width="7" height="7" rx="1" />
@@ -110,6 +118,7 @@ export const NAV_ITEM_ICONS: Record<NavItemKey, React.ReactNode> = {
   absences: <DoorOpen {...itemIcon} />,
   finance: <Banknote {...itemIcon} />,
   procurement: <Plane {...itemIcon} />,
+  erp: <Factory {...itemIcon} />,
   settings: <Settings {...itemIcon} />,
   admin: <ShieldCheck {...itemIcon} />,
 };
