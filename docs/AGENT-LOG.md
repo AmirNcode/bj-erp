@@ -93,10 +93,14 @@ Copy this block verbatim and fill it in.
 
 **Actions outside the repo**
 - `bj-approvals-finance-db-1`: throwaway clone `erp` (pg_dump | pg_restore, 19 cron/graphql errors), both migrations applied, SQL tests run. See the end of this entry for the clone's fate and the :3501 update.
+- Local stack `:3501` (`bj-approvals-finance`): `pg_dump -Fc` of `postgres` to the session scratchpad (`approvals-finance-pre-fr94.dump`); SMS was `off` with no key and 0/4 cron jobs active before and after; `bj_apply_migrations` (release `approvals-finance-local`) applied the four pending SMS migrations `20261116150000`–`180000` and the three Sales migrations (**all FROZEN locally**); View-as hook synced by hand (`bj_sync_view_as_hook` needs the cwd to be `deploy/lib`); app rebuilt from the branch; rest restarted. Clone `erp` dropped.
 - Nothing on Liara. Nothing pushed.
 
+**Security review after the first commit** (automated, two medium findings, both real): item rows went to every `sales` reader, and notes / documents / deadlines stayed writable on closed records. Fixed in `20261116210000_sales_access_fixes.sql` (`private.sales_writable`; nodes and item-number lookup need `project_items` read) + UI. Items and guarantees / payments stay writable on closed records on purpose (finished imported contracts still get their items; late payments).
+
 **Verification**
-- `tests/sql/sales.sql`: 93 PASS on the clone. `request-edit.sql` 148 PASS, `manager-overdraft.sql` 79 PASS. `fr55-roles-permissions.sql` and `travel-booking.sql` fail on local data / ACL drift (8 roles, anon grants), as on any clone.
+- `:3501`: `/api/health` 200, `/login` 200, `/sales` 307 to login when signed out; as the admin JWT in SQL (rolled back) `app_sales_bootstrap()` gives all caps and 14 stages, `app_sales_list()` is empty; anon RPC 401; 0 roles hold a Sales key.
+- `tests/sql/sales.sql`: 97 PASS on the clone (93 before the access fix). `request-edit.sql` 148 PASS, `manager-overdraft.sql` 79 PASS. `fr55-roles-permissions.sql` and `travel-booking.sql` fail on local data / ACL drift (8 roles, anon grants), as on any clone.
 - `npm run lint` clean; `npm run test:unit` 141 files / 1388 tests pass; `tsc --noEmit` clean; `npm run build` passes (first run stopped on Next's security-advisory notice; second run built).
 - Real `erp-module/files/B1.xlsx` through the reader + parser: 135 rows, 0 unknown / missing columns, 8 warnings (2 text percents ×2, 2 `#VALUE!`, 2 "NO" in a date cell), 60 rows with guarantees, 79 KB payload.
 - Screens rendered with fake data on a temporary `zz-sales` page (deleted): list, record, items tree, deadlines, reports, settings, import — fa and en, no console errors. **No signed-in test** (agents do not type real passwords); no e2e spec.

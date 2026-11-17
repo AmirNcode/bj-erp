@@ -913,7 +913,7 @@ named key, else `sales: not allowed`. A reader without `sales_prices` receives J
 the price keys (`our_price`, `winning_bid`, `winner_name`, `total_value`, `unit_price`,
 `quote_revisions`); without `sales_bonds`, guarantees arrive as kind + status only and payments
 not at all. Failed CHECKs are re-raised as `sales: invalid input`, so a row is never echoed.
-Records are scoped to the caller's company (`sales: not found` otherwise).
+Records are scoped to the caller's company (`sales: not found` otherwise). Item rows (and item-number search) need `project_items` read. A closed record takes notes, documents, deadlines and field edits only from a `sales_decide` holder (`private.sales_writable`); items and guarantees / payments stay open to their own holders.
 
 **Hidden.** No nav entry, Home line or page without `sales`: `/sales/*` answers 404, and the
 module's strings are sent to the browser only from its own layout.

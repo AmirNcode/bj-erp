@@ -363,6 +363,8 @@ export function DeadlinesPanel({ boot, record, deadlines }: { boot: Bootstrap; r
   const f = useSalesFormat();
   const { run, pending } = useRun();
   const today = todayInAppTz();
+  // A closed record is read-only except for the decider (the database enforces it).
+  const canEdit = boot.caps.edit && (record.stage_kind === 'open' || boot.caps.decide);
   const [adding, setAdding] = useState<Deadline | 'new' | null>(null);
   const [removing, setRemoving] = useState<Deadline | null>(null);
   const name = (d: Deadline) => (d.kind === 'other' ? d.label ?? t('deadline.kind.other') : t(`deadline.kind.${d.kind}`));
@@ -393,7 +395,7 @@ export function DeadlinesPanel({ boot, record, deadlines }: { boot: Bootstrap; r
                   </td>
                   <td>{d.responsible_name ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="text-end">
-                    {boot.caps.edit ? (
+                    {canEdit ? (
                       <>
                         <Button size="xs" variant="ghost" disabled={pending} onClick={() => void run(() => setSalesDeadlineDone(d.id, !d.done_at))}>
                           {d.done_at ? t('deadline.reopen') : t('deadline.markDone')}
@@ -413,7 +415,7 @@ export function DeadlinesPanel({ boot, record, deadlines }: { boot: Bootstrap; r
           </table>
         </div>
       )}
-      {boot.caps.edit ? (
+      {canEdit ? (
         <div><Button size="sm" variant="outline" onClick={() => setAdding('new')} data-testid="sales-deadline-add"><Plus aria-hidden="true" /> {t('deadline.add')}</Button></div>
       ) : null}
       {adding ? <DeadlineDialog boot={boot} record={record} deadline={adding === 'new' ? null : adding} onClose={() => setAdding(null)} /> : null}

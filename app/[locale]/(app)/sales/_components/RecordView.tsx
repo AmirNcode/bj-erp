@@ -273,7 +273,7 @@ function Activity({ boot, record, events }: { boot: Bootstrap; record: RecordRow
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
-      {boot.caps.edit ? (
+      {boot.caps.edit && (record.stage_kind === 'open' || boot.caps.decide) ? (
         <form
           className="flex flex-col gap-2 sm:flex-row"
           onSubmit={(e) => { e.preventDefault(); void run(() => addSalesComment(record.id, text), () => setText('')); }}

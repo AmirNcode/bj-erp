@@ -195,7 +195,7 @@ select pg_temp.expect('ceo prices the wellhead','ok',pg_temp.msg(pg_temp.as_scal
 select pg_temp.expect('our price becomes qty × unit price',(select our_price::text from public.sales_rfps where id=pg_temp.fx('bid')),'800.00');
 select pg_temp.assert('viewer record: no unit price, no price keys, guarantees reduced, no payments',
   (select not (j->'record' ?| array['our_price','winning_bid','total_value'])
-      and not exists (select 1 from jsonb_array_elements(j->'nodes') n where n ? 'unit_price')
+      and jsonb_array_length(j->'nodes')=0
       and not exists (select 1 from jsonb_array_elements(j->'bonds') b where b ?| array['amount','percent','bank','number','note'])
       and jsonb_array_length(j->'bonds')=1 and not j ? 'payments' and not j ? 'quote_revisions'
      from (select pg_temp.as_json('viewer',format('select public.app_sales_record(%L)',pg_temp.fx('bid'))) j) t));
@@ -205,9 +205,15 @@ select pg_temp.assert('ceo record: unit price and payments present',
 select pg_temp.assert('the activity log holds no price or guarantee value',
   not exists (select 1 from public.sales_events where rfp_id=pg_temp.fx('bid') and body::text ~ '(400|800|1000)'));
 select pg_temp.expect('find by number: padded, with BJ',
-  pg_temp.as_json('viewer',$q$select public.app_sales_find_node(' bj 9001-01-001 ')$q$)->>'node_id',pg_temp.fx('n11')::text);
+  pg_temp.as_json('eng',$q$select public.app_sales_find_node(' bj 9001-01-001 ')$q$)->>'node_id',pg_temp.fx('n11')::text);
 select pg_temp.assert('find a bare record number',
   (pg_temp.as_json('viewer',$q$select public.app_sales_find_node('9001')$q$)->>'rfp_id')::uuid=pg_temp.fx('bid'));
+select pg_temp.assert('item rows are for project_items readers: viewer gets none, eng gets them',
+  jsonb_array_length(pg_temp.as_json('viewer',format('select public.app_sales_record(%L)',pg_temp.fx('bid')))->'nodes')=0
+  and jsonb_array_length(pg_temp.as_json('eng',format('select public.app_sales_record(%L)',pg_temp.fx('bid')))->'nodes')=3);
+select pg_temp.assert('… and an item number resolves only for them',
+  pg_temp.as_json('viewer',$q$select public.app_sales_find_node('9001-1')$q$) is null
+  and pg_temp.as_json('eng',$q$select public.app_sales_find_node('9001-1')$q$)->>'node_id' is not null);
 select pg_temp.expect('eng adds an item column','ok',
   pg_temp.msg(pg_temp.as_scalar('eng',$q$select public.app_sales_save_field(null,'{"entity":"item","label_en":"Body material","label_fa":"جنس بدنه"}')::text$q$)));
 select pg_temp.expect('… its key is made from the label',
@@ -272,6 +278,20 @@ select pg_temp.expect('finishing a contract needs sales_decide',
 select pg_temp.expect('a closed record is read-only for a seller',
   (select pg_temp.msg(pg_temp.as_scalar('ceo',format('select public.app_sales_move_stage(%L,%L)::text',pg_temp.fx('bid'),pg_temp.stage('contract','finish'))))
      ||'/'||pg_temp.msg(pg_temp.as_scalar('seller',format($q$select public.app_sales_save_record(%L,'{"customer_ref":"z"}')::text$q$,pg_temp.fx('bid'))))),'ok/sales: not allowed');
+select pg_temp.expect('closed: no notes, documents or deadlines from a seller',
+  (select pg_temp.msg(pg_temp.as_scalar('seller',format($q$select public.app_sales_comment(%L,'late note')::text$q$,pg_temp.fx('bid'))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('seller',format($q$select public.app_sales_save_document(%L,null,'{"name":"extra"}')::text$q$,pg_temp.fx('bid'))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('seller',format($q$select public.app_sales_save_deadline(%L,null,'{"label":"x","due_on":"2027-01-01"}')::text$q$,pg_temp.fx('bid'))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('seller',format('select public.app_sales_set_deadline_done(%L,true)::text',
+            (select id from public.sales_deadlines where rfp_id=pg_temp.fx('bid') limit 1))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('seller',format('select public.app_sales_delete_document(%L)::text',
+            (select id from public.sales_documents where rfp_id=pg_temp.fx('bid') limit 1))))),
+  'sales: not allowed/sales: not allowed/sales: not allowed/sales: not allowed/sales: not allowed');
+select pg_temp.expect('closed: the decider still can; items and guarantees stay open to their holders',
+  (select pg_temp.msg(pg_temp.as_scalar('ceo',format($q$select public.app_sales_comment(%L,'closing note')::text$q$,pg_temp.fx('bid'))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('eng',format($q$select public.app_project_save_node(%L,null,null,'{"description":"as built"}')::text$q$,pg_temp.fx('bid'))))
+   ||'/'||pg_temp.msg(pg_temp.as_scalar('fin',format($q$select public.app_sales_save_payment(%L,null,'{"amount":10}')::text$q$,pg_temp.fx('bid'))))),
+  'ok/ok/ok');
 -- A lost bid, then reopened.
 insert into sl_fx select 'lost',(select id from public.sales_rfps where company_id=pg_temp.fx('company') and record_no=9002);
 select pg_temp.expect('ceo decides not to bid',

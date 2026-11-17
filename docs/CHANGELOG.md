@@ -21,7 +21,7 @@ was deployed; semantic versioning starts at the first tag.
 - **Settings**: stages, extra fields, numbering, the document list of a new RFP.
 - **Ledger import**: the contract Excel file is read in the browser (not uploaded), previewed, and imported; importing again updates the same records; an import can be removed to clear test data. A template with the right column names can be downloaded.
 - Not included: file uploads, SMS reminders.
-- Migrations `20261116200000_sales_tables`, `20261116200100_sales_functions`.
+- Migrations `20261116200000_sales_tables`, `20261116200100_sales_functions`, `20261116210000_sales_access_fixes`.
 
 ### SMS: sign in to Melipayamak with the panel username + API key (FR-78) — deployed 2026-11-16
 

@@ -3916,6 +3916,22 @@ end $$;
 
 
 --
+-- Name: sales_writable(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_writable(p_rfp uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if (select s.kind from public.sales_rfps r join public.sales_stages s on s.id = r.stage_id
+       where r.id = p_rfp) <> 'open' and not private.sales_can('sales_decide') then
+    raise exception 'sales: not allowed' using errcode = '42501';
+  end if;
+end $$;
+
+
+--
 -- Name: same_team(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -8751,6 +8767,7 @@ CREATE FUNCTION public.app_sales_comment(p_id uuid, p_text text) RETURNS void
 declare v_company uuid := private.sales_company('sales', 'edit');
   r public.sales_rfps := private.sales_rfp(p_id, v_company);
 begin
+  perform private.sales_writable(r.id);
   if char_length(btrim(coalesce(p_text, ''))) not between 1 and 2000 then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
@@ -8855,6 +8872,7 @@ begin
   select rfp_id into v_rfp from public.sales_deadlines where id = p_id and company_id = v_company and not auto;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   perform private.sales_rfp(v_rfp, v_company);
+  perform private.sales_writable(v_rfp);
   delete from public.sales_deadlines where id = p_id;
   perform private.sales_touch(v_rfp, 'edit', jsonb_build_object('fields', jsonb_build_array('deadline')));
 end $$;
@@ -8873,6 +8891,7 @@ begin
   select rfp_id into v_rfp from public.sales_documents where id = p_id and company_id = v_company;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   perform private.sales_rfp(v_rfp, v_company);
+  perform private.sales_writable(v_rfp);
   delete from public.sales_documents where id = p_id;
   perform private.sales_touch(v_rfp, 'edit', jsonb_build_object('fields', jsonb_build_array('documents')));
 end $$;
@@ -8912,7 +8931,8 @@ begin
   select string_agg((seg::bigint)::text, '-' order by ord) into v_code
     from unnest(string_to_array(v_code, '-')) with ordinality as t(seg, ord);
   select jsonb_build_object('rfp_id', n.rfp_id, 'node_id', n.id) into v_out
-    from public.project_nodes n where n.company_id = v_company and n.code = v_code;
+    from public.project_nodes n
+   where n.company_id = v_company and n.code = v_code and private.sales_can('project_items', 'read');
   if v_out is null and v_code ~ '^\d+$' then
     select jsonb_build_object('rfp_id', r.id, 'node_id', null) into v_out
       from public.sales_rfps r where r.company_id = v_company and r.record_no = v_code::bigint;
@@ -9293,6 +9313,7 @@ declare v_company uuid := private.sales_company();
   r public.sales_rfps := private.sales_rfp(p_id, v_company, false);
   v_prices boolean := private.sales_can('sales_prices', 'read');
   v_bonds boolean := private.sales_can('sales_bonds', 'read');
+  v_items boolean := private.sales_can('project_items', 'read');
 begin
   return jsonb_build_object(
     'record', private.sales_rfp_json(r, v_prices),
@@ -9302,7 +9323,7 @@ begin
                      (select ip.unit_price from public.sales_item_prices ip where ip.node_id = n.id))
                    else '{}'::jsonb end
                 order by n.depth, n.seq), '[]'::jsonb)
-                from public.project_nodes n where n.rfp_id = p_id),
+                from public.project_nodes n where n.rfp_id = p_id and v_items),
     'bonds', (select coalesce(jsonb_agg(
                 case when v_bonds then to_jsonb(b) - array['company_id','rfp_id']
                      else jsonb_build_object('id', b.id, 'kind', b.kind, 'seq', b.seq, 'status', b.status) end
@@ -9458,6 +9479,7 @@ declare v_company uuid := private.sales_company('sales', 'edit');
   v_label text := nullif(left(btrim(coalesce(p->>'label', '')), 200), '');
   v_who uuid := private.sales_uuid(p->>'responsible_id'); v_id uuid := p_id;
 begin
+  perform private.sales_writable(r.id);
   if v_due is null or v_label is null or not private.sales_in_company(v_who, v_company) then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
@@ -9486,6 +9508,7 @@ declare v_company uuid := private.sales_company('sales', 'edit');
   r public.sales_rfps := private.sales_rfp(p_rfp, v_company);
   d public.sales_documents; v_id uuid := p_id; v_who uuid;
 begin
+  perform private.sales_writable(r.id);
   if p_id is null then
     d.status := 'todo';
     select coalesce(max(position), 0) + 1 into d.position from public.sales_documents where rfp_id = r.id;
@@ -9882,6 +9905,7 @@ begin
   select rfp_id into v_rfp from public.sales_deadlines where id = p_id and company_id = v_company;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   perform private.sales_rfp(v_rfp, v_company);
+  perform private.sales_writable(v_rfp);
   update public.sales_deadlines set
     done_at = case when p_done then coalesce(done_at, now()) end,
     done_by = case when p_done then coalesce(done_by, auth.uid()) end
@@ -18482,6 +18506,13 @@ REVOKE ALL ON FUNCTION private.sales_touch(p_rfp uuid, p_kind text, p_body jsonb
 --
 
 REVOKE ALL ON FUNCTION private.sales_uuid(p text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_writable(p_rfp uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_writable(p_rfp uuid) FROM PUBLIC;
 
 
 --
