@@ -102,7 +102,8 @@ Copy this block verbatim and fill it in.
 - Final review (Opus): 0 critical, 5 important — all fixed with failing tests first; 8 minors deferred (listed in TASKS / below).
 
 **State left behind**
-- All work uncommitted on `feat/erp-sales-module`.
+- Committed `ff4cee8` (stage pages + "page follows the record after a move" fix), then `c632c19` (next / eslint-config-next 16.4.3 → 16.4.6, clears GHSA-mfr8-8qww-v76h; audit 0). `main` fast-forwarded to `c632c19` and pushed on Amir's word → CI run 44133384216 green (audit, lint, unit, deploy tests, release, apply) → **live on bjeng.app** (health 200). This first deploy of FR-94 ran all 5 Sales migrations on Liara; no role holds a Sales permission yet.
+- Local `:3501` now listens on the LAN: `.bj-deploy/approvals-finance/compose.yml` gateway `0.0.0.0:3501`, `.env` `APP_ORIGIN=http://192.168.2.85:3501`, `APP_HOST=192.168.2.85` (backups `*.bak-lan` beside them); app/auth/rest/gateway recreated, DB untouched.
 
 **For the next agent**
 - Deferred minors: Next gate vs server when a stage requires a price field and the caller lacks `sales_prices`; ledger old-owner fallback to the current owner's name; ledger durations use today's unit; removed custom field defs log as raw key; side-effect-only edit shows "0 fields changed"; long text stored twice per event; reasons writable before the outcome (DB); phone stage bar doesn't scroll the selected stage into view.
