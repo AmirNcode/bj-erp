@@ -17,13 +17,19 @@ type Props = {
   testId?: string;
   /** Read-only: the input is disabled and the calendar does not open. */
   disabled?: boolean;
+  /**
+   * Draw the calendar on the page body instead of beside the input. For a field inside a
+   * scrolling dialog, where the calendar would otherwise be cut off at the dialog's edge.
+   * The dialog must then ignore outside presses on `.rmdp-portal` (see sales parts `ModalContent`).
+   */
+  portal?: boolean;
 };
 
 /**
  * The app's date input: a Persian (Jalali) picker, right-to-left in Farsi.
  * Enter commits the date inside the picker and must not also submit the form.
  */
-export function PersianDateField({ locale, value, onChange, id, minDate, testId, disabled }: Props) {
+export function PersianDateField({ locale, value, onChange, id, minDate, testId, disabled, portal }: Props) {
   const { isRtl, calendar, calLocale, calendarPosition } = calendarPickerConfig(locale);
 
   return (
@@ -47,6 +53,9 @@ export function PersianDateField({ locale, value, onChange, id, minDate, testId,
         inputClass={INPUT_CLASS}
         containerClassName="rmdp-container w-full"
         format="YYYY/MM/DD"
+        portal={portal}
+        className={portal ? 'rmdp-portal' : undefined}
+        zIndex={portal ? 200 : undefined}
       />
     </div>
   );

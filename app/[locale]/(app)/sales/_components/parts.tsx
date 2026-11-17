@@ -71,6 +71,7 @@ export function DateInput({ value, onChange, testId, disabled }: {
   const locale = useLocale();
   return (
     <PersianDateField
+      portal
       locale={locale}
       value={value ? gregorianToPersianDateObject(value, locale) : null}
       onChange={(d) => onChange(d ? dateObjectToGregorian(d) : null)}
@@ -241,5 +242,28 @@ export function ConfirmDialog({ title, body, confirmLabel, cancelLabel, pending,
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const inCalendar = (target: EventTarget | null) => target instanceof Element && target.closest('.rmdp-portal') !== null;
+
+/**
+ * DialogContent for the Sales dialogs. Their date fields draw the calendar on the page body
+ * (so a scrolling dialog cannot cut it off); a press or focus there must not count as
+ * "outside the dialog" and close it.
+ */
+export function ModalContent({ onPointerDownOutside, onInteractOutside, ...props }: React.ComponentProps<typeof DialogContent>) {
+  return (
+    <DialogContent
+      {...props}
+      onPointerDownOutside={(e) => {
+        if (inCalendar(e.target)) e.preventDefault();
+        else onPointerDownOutside?.(e);
+      }}
+      onInteractOutside={(e) => {
+        if (inCalendar(e.target)) e.preventDefault();
+        else onInteractOutside?.(e);
+      }}
+    />
   );
 }

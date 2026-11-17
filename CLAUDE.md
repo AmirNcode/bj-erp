@@ -203,6 +203,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Sales read functions are `stable` and must not write or lock** (View as + PostgREST run them read-only); every Sales write locks the `sales_rfps` row first (`private.sales_rfp`), then children.
 - **The `sales` message namespace reaches the browser only from `sales/layout.tsx`** (root layout strips it); a client component outside `/sales` cannot use `useTranslations('sales')`. No `sales` permission → `notFound()`, never a redirect.
 - **A new Sales write function calls `private.sales_writable(rfp)`** (closed record = `sales_decide` only) unless it is items or finance, which stay open on purpose.
+- **Date field inside a scrolling dialog:** `<PersianDateField portal>` + a dialog content that ignores outside presses on `.rmdp-portal` (Sales: `ModalContent`); otherwise the calendar is clipped.
 - **Item numbers (`project_nodes.code`) are permanent:** never decrement `node_seq` / `child_seq`, never renumber, never change `record_no`.
 - **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql` (33 since FR-94).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).

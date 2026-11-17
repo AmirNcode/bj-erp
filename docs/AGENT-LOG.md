@@ -105,6 +105,8 @@ Copy this block verbatim and fill it in.
 - Real `erp-module/files/B1.xlsx` through the reader + parser: 135 rows, 0 unknown / missing columns, 8 warnings (2 text percents ×2, 2 `#VALUE!`, 2 "NO" in a date cell), 60 rows with guarantees, 79 KB payload.
 - Screens rendered with fake data on a temporary `zz-sales` page (deleted): list, record, items tree, deadlines, reports, settings, import — fa and en, no console errors. **No signed-in test** (agents do not type real passwords); no e2e spec.
 
+**Owner test, first finding (same day):** in the New / Edit record dialog the date calendar was cut off at the dialog's bottom edge (the dialog scrolls). Fix: `PersianDateField` gained `portal` (calendar drawn on the body, `.rmdp-portal { pointer-events: auto }` in `globals.css`); Sales dialogs use `ModalContent` (parts.tsx), which ignores outside presses on the calendar. Checked on a temporary page: calendar fully visible, picking a day keeps the dialog open. `:3501` app rebuilt.
+
 **State left behind**
 - Branch `feat/erp-sales-module`, committed, not pushed, no PR.
 - `erp-module/` (client samples) is git-ignored and untracked.

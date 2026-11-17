@@ -313,3 +313,9 @@ select:not([multiple]):not([size]) {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* A date picker calendar drawn on the body (PersianDateField `portal`): an open Radix dialog
+   switches pointer events off for everything outside it, so switch them back on here. */
+.rmdp-portal {
+  pointer-events: auto;
+}
