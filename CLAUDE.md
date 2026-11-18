@@ -210,6 +210,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
 - **`npm audit --omit=dev` is a CI gate:** a new advisory against the pinned `next` fails every deploy until it is upgraded (2026-11-16: 16.4.3 → needs 16.4.6).
+- **Test roles (FR-95): any `app_role` starting with `test-` (today `test-emp`) = `private.is_test_account`, which beats every other role** — own data only, no requests. A new function that lists colleagues or files on someone's behalf must check it.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

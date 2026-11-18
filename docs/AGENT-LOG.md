@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-18 — Built-in test role `test-emp` (FR-95), pushed to main
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 53c849c (dirty Sales work, untouched); work done in worktree `../bj-orgchart-perm`, branch `feat/org-chart-permission` from `origin/main` @ 53c849c
+**Trigger:** Melipayamak asked for a temporary login to review the site before approving the SMS templates. Amir first asked for an org-chart permission, then chose a fixed built-in `test-emp` role instead: Employee UI, nothing past the caller's own data, no requests; profile / personal info / signature / photo saves allowed; empty lists fine (no sample data).
+
+**What changed**
+- `supabase/migrations/20261118100000_test_emp_role_enum.sql` (enum value only), `20261118100100_test_emp_role.sql`: `private.is_test_account` (`role::text like 'test-%'`), role row for every company (no ON CONFLICT: a custom role named `test-emp` stops the deploy) + `seed_company_roles`, and redefined `same_team`, `get_my_team_directory`, `get_org_chart` (recursive chain up active managers, depth cap 64), `get_replacement_candidates`, both `*_requester_has_time_off` triggers. `supabase/schema.sql` patched from a clone dump diff (CHECK re-parenthesis hunk dropped).
+- App: `lib/auth/timeOff.ts` `isTestAccount`; `lib/auth/context.ts` `getCachedTestAccount` (live `user_roles`); `request/layout.tsx` + new `request/_components/TestAccount.tsx` (provider + notice); the four request forms add `|| testAccount` to Submit `disabled`; `organization/page.tsx` + `OrgChart.tsx` `limited` (Top disabled, `?p=top` ignored); `lib/errors/db-error.ts` `testAccount`; messages `request.testAccountNotice`, `errors.testAccount`, `roles.test-emp` (fa + en); `lib/supabase/types.ts` enum.
+- Tests: `tests/sql/test-emp.sql` (new, all assertions), `tests/unit/time-off.test.ts` (+2).
+- Docs: REQUIREMENTS FR-95, PERMISSIONS role row, CHANGELOG, CLAUDE.md gotcha.
+
+**Actions outside the repo**
+- Local `bj-approvals-finance-db-1`: throwaway clone `te_clone` of `postgres` created, both migrations applied, all `tests/sql` run before/after, clone dropped. `postgres` itself untouched (migrations NOT applied locally).
+- Liara: push to `main` deploys (see State).
+
+**Verification**
+- Clone: `tests/sql` 22 pass / 14 fail before; 23 pass / 14 fail after — the 14 are the known anon/ACL drift + the clone carrying the uncommitted Sales migrations (same failures before and after); `test-emp.sql` all PASS.
+- `npm run test:unit` 141 files / 1401 tests pass (+2 new); `npm run lint` clean; `tsc --noEmit` 0; `npm run build` 0 (with placeholder public env vars: the worktree has no `.env.local`).
+- **Not checked in a browser or signed in**: the notice, disabled Submit and disabled Top button were not seen rendered.
+
+**State left behind**
+- Committed on `feat/org-chart-permission`, fast-forwarded into `main` and pushed (CI deploy). Worktree `../bj-orgchart-perm` can be removed.
+- Amir's test account `test1`: tick test-emp on it (Employee may stay: test-emp wins either way).
+
+**For the next agent**
+- `feat/erp-sales-module` must rebase/merge main: its migrations `20261117120000…150000` sort before these two but apply fine (the runner applies any unrecorded file). The local `postgres` DB has those Sales migrations but not these two.
+- A later `test-mgr` needs its own enum migration + role row; the gates already match `test-%`, but manager-only screens/approvals would need their own decisions.
+
 ## 2026-11-17 — ERP › Sales: stage pages (clickable stages, Submit with old → new ledger, Next stage)
 
 **Agent:** Claude Opus 5.5 via Claude Code (Sonnet builder-check subagent, Opus final-review subagent)

@@ -121,6 +121,7 @@
     "managerNote": "شما می‌توانید اطلاعات زیرمجموعه‌تان را ببینید. فقط ادمین و منابع انسانی اطلاعات کارکنان را تغییر می‌دهند."
   },
   "request": {
+    "testAccountNotice": "این یک حساب آزمایشی است: می‌توانید صفحه‌ها را ببینید، اما امکان ارسال درخواست وجود ندارد.",
     "title": "درخواست مرخصی",
     "navLink": "درخواست مرخصی",
     "tabs": {
@@ -1160,6 +1161,7 @@
     "approvalStepNeedsPerson": "برای این مرحله باید یک شخص مشخص انتخاب شود.",
     "approvalStepNotSaved": "مرحله تأیید ذخیره نشد. دوباره تلاش کنید.",
     "duplicateApprovalStep": "این مرحله تأیید از قبل وجود دارد.",
+    "testAccount": "حساب‌های آزمایشی امکان ارسال درخواست ندارند.",
     "noTimeOff": "کارکنان حراست بدون نقش «کارمند» مرخصی و مأموریت ندارند: نه درخواست ثبت می‌کنند و نه درخواستشان تأیید می‌شود.",
     "absenceWatcherIncomplete": "دست‌کم یک نوع درخواست و یک نمایش را روشن کنید.",
     "absenceWatcherNotSaved": "این شخص ذخیره نشد. دوباره تلاش کنید.",
@@ -1368,7 +1370,8 @@
     "employee": "Employee",
     "security": "Security",
     "finance": "Finance",
-    "procurement": "Procurement"
+    "procurement": "Procurement",
+    "test-emp": "test-emp"
   },
   "org": {
     "searchPlaceholder": "جستجوی نام همکار…",

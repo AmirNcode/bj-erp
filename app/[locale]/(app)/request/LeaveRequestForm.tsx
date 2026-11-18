@@ -1,5 +1,6 @@
 'use client';
 
+import { useTestAccount } from './_components/TestAccount';
 import { useRequestLabels } from './_components/useRequestLabels';
 import { useState } from 'react';
 import { OverdraftConfirm } from './_components/OverdraftConfirm';
@@ -50,6 +51,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
   const [reason, setReason] = useState('');
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
+  const testAccount = useTestAccount();
 
   const selectedType = leaveTypes.find((t) => t.id === selectedTypeId);
   const start = startDate ? dateObjectToGregorian(startDate) : '';
@@ -204,7 +206,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
           <Button
             type="submit"
-            disabled={isPending || delegation.blocked || balance.loading || !!projection?.blocked}
+            disabled={isPending || delegation.blocked || balance.loading || !!projection?.blocked || testAccount}
             className="w-full"
           >
             {isPending ? '...' : labels.submit}

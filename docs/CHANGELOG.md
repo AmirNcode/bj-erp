@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Built-in test role `test-emp` (FR-95) — 2026-11-18
+
+- **For outside reviewers.** A new fixed role, **test-emp**, shows the Employee screens without anyone else's data: the org chart shows only the person's own managers, themselves and their direct reports ("Top of the organization" is disabled); the calendar and Team page show no teammates (the Team page keeps their manager); the replacement list is empty, and nobody can choose a test account as their replacement.
+- **No requests.** Request pages open as usual with a "test account" notice and the Submit button disabled; the server refuses any request too, so no approval step or SMS is ever triggered. Profile, personal information, signature and photo still save as for an employee.
+- Applies even if the person also has other roles. Later test roles named `test-…` (e.g. `test-mgr`) get the same limits.
+- Migrations `20261118100000_test_emp_role_enum`, `20261118100100_test_emp_role`.
+
 ### ERP · Sales module (FR-94) — built 2026-11-16, not deployed (branch `feat/erp-sales-module`)
 
 - **A second module, hidden until switched on.** Seven permissions in a new **ERP · Sales** section of Settings › Roles; no role has them at first. Holders get an **ERP** entry in the menu; for everyone else the pages do not exist.

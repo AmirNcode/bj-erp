@@ -1,5 +1,6 @@
 'use client';
 
+import { useTestAccount } from '../_components/TestAccount';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { useTranslations } from 'next-intl';
@@ -112,6 +113,7 @@ export function ErrandRequestForm({ workSettings, locale }: Props) {
   const [description, setDescription] = useState('');
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
+  const testAccount = useTestAccount();
 
   const isoDate = date ? dateObjectToGregorian(date) : '';
   const durationMinutes = errandMinutes(startTime, endTime);
@@ -216,7 +218,7 @@ export function ErrandRequestForm({ workSettings, locale }: Props) {
             errorTestId="errand-error"
           />
 
-          <Button type="submit" disabled={isPending || delegation.blocked} className="w-full" data-testid="errand-submit">
+          <Button type="submit" disabled={isPending || delegation.blocked || testAccount} className="w-full" data-testid="errand-submit">
             {isPending ? '...' : labels.submit}
           </Button>
         </form>

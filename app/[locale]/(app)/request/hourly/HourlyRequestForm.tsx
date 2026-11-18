@@ -1,5 +1,6 @@
 'use client';
 
+import { useTestAccount } from '../_components/TestAccount';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { useTranslations } from 'next-intl';
@@ -126,6 +127,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
   const [reason, setReason] = useState('');
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
+  const testAccount = useTestAccount();
 
   const selectedType = leaveTypes.find((t) => t.id === selectedTypeId);
   const isoDate = date ? dateObjectToGregorian(date) : '';
@@ -279,7 +281,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
 
           <Button
             type="submit"
-            disabled={isPending || overLimit || delegation.blocked || balance.loading || !!projection?.blocked}
+            disabled={isPending || overLimit || delegation.blocked || balance.loading || !!projection?.blocked || testAccount}
             className="w-full"
             data-testid="hourly-submit"
           >

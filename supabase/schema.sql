@@ -51,7 +51,8 @@ CREATE TYPE public.app_role AS ENUM (
     'security',
     'hr',
     'finance',
-    'procurement'
+    'procurement',
+    'test-emp'
 );
 
 
@@ -1911,9 +1912,13 @@ CREATE FUNCTION private.errand_extension_requester_has_time_off() RETURNS trigge
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
+declare v_employee uuid := (select employee_id from public.leave_requests where id = new.request_id);
 begin
+  if tg_op = 'INSERT' and private.is_test_account(v_employee) then
+    raise exception 'test accounts cannot send requests' using errcode = '42501';
+  end if;
   if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
-     and private.is_security_only((select employee_id from public.leave_requests where id = new.request_id)) then
+     and private.is_security_only(v_employee) then
     raise exception 'no time off for this account' using errcode = '42501';
   end if;
   return new;
@@ -2276,6 +2281,18 @@ $$;
 
 
 --
+-- Name: is_test_account(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_test_account(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.user_roles where user_id = uid and role::text like 'test-%');
+$$;
+
+
+--
 -- Name: is_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2432,6 +2449,9 @@ CREATE FUNCTION private.leave_request_requester_has_time_off() RETURNS trigger
     SET search_path TO ''
     AS $$
 begin
+  if tg_op = 'INSERT' and private.is_test_account(new.employee_id) then
+    raise exception 'test accounts cannot send requests' using errcode = '42501';
+  end if;
   if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
      and private.is_security_only(new.employee_id) then
     raise exception 'no time off for this account' using errcode = '42501';
@@ -3940,6 +3960,7 @@ CREATE FUNCTION private.same_team(uid uuid, target uuid) RETURNS boolean
     SET search_path TO ''
     AS $$
   select private.is_active(uid)
+     and not private.is_test_account(uid)
      and exists (
        select 1
          from public.profiles caller
@@ -3966,7 +3987,7 @@ begin
     (p_company, 'admin', 'system', 'Admin'), (p_company, 'manager', 'system', 'Manager'),
     (p_company, 'employee', 'system', 'Employee'), (p_company, 'hr', 'preset', 'HR'),
     (p_company, 'security', 'preset', 'Security'), (p_company, 'finance', 'preset', 'Finance'),
-    (p_company, 'procurement', 'preset', 'Procurement')
+    (p_company, 'procurement', 'preset', 'Procurement'), (p_company, 'test-emp', 'system', 'test-emp')
   on conflict do nothing;
 
   insert into public.role_permissions (role_id, permission, level)
@@ -12110,7 +12131,7 @@ CREATE FUNCTION public.get_my_team_directory() RETURNS TABLE(profile_id uuid, fu
     SET search_path TO ''
     AS $$
   with me as (
-    select id, company_id, department_id, manager_id
+    select id, company_id, department_id, manager_id, private.is_test_account(id) as limited
       from public.profiles
      where id = auth.uid()
        and active
@@ -12134,7 +12155,7 @@ CREATE FUNCTION public.get_my_team_directory() RETURNS TABLE(profile_id uuid, fu
    and p.id <> me.id
    and (
      p.id = me.manager_id
-     or (me.department_id is not null and p.department_id = me.department_id)
+     or (not me.limited and me.department_id is not null and p.department_id = me.department_id)
    )
   left join public.user_roles ur on ur.user_id = p.id
   left join public.departments d on d.id = p.department_id
@@ -12153,11 +12174,27 @@ CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name 
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  with me as (
-    select company_id
+  with recursive me as (
+    select id, company_id, private.is_test_account(id) as limited
       from public.profiles
      where id = auth.uid()
        and active
+  ),
+  -- Walks up active managers only (the chart drops an inactive manager's link too).
+  -- The depth cap stops a manager_id cycle.
+  up(id, depth) as (
+    select me.id, 0 from me where me.limited
+    union
+    select m.id, up.depth + 1
+      from up
+      join public.profiles p on p.id = up.id
+      join public.profiles m on m.id = p.manager_id and m.active
+     where up.depth < 64
+  ),
+  visible as (
+    select up.id from up
+    union
+    select r.id from me join public.profiles r on r.manager_id = me.id where me.limited
   )
   select
     p.id,
@@ -12178,6 +12215,7 @@ CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name 
    and p.active
   left join public.departments d on d.id = p.department_id
   left join public.profiles m on m.id = p.manager_id
+  where not me.limited or p.id in (select visible.id from visible)
   order by p.full_name;
 $$;
 
@@ -12195,6 +12233,7 @@ CREATE FUNCTION public.get_replacement_candidates(p_start date, p_end date, p_un
       from public.profiles
      where id = auth.uid()
        and active
+       and not private.is_test_account(id)
   )
   select
     p.id,
@@ -12214,6 +12253,7 @@ CREATE FUNCTION public.get_replacement_candidates(p_start date, p_end date, p_un
     on p.company_id = me.company_id
    and p.active
    and p.id <> me.id
+   and not private.is_test_account(p.id)
    and ((me.department_id is not null and p.department_id = me.department_id)
         or private.delegate_eligible(me.id,p.id))
   order by p.full_name;
@@ -18104,6 +18144,14 @@ GRANT ALL ON FUNCTION private.is_procurement(p_uid uuid, p_request uuid) TO auth
 
 REVOKE ALL ON FUNCTION private.is_security_only(uid uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.is_security_only(uid uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION is_test_account(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_test_account(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_test_account(uid uuid) TO authenticated;
 
 
 --

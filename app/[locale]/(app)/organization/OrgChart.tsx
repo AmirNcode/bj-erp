@@ -28,11 +28,13 @@ type Props = {
   people: OrgPerson[];
   myId: string;
   locale: string;
+  /** FR-95 test account: the server sent only the caller's chain and reports; no Top view. */
+  limited?: boolean;
 };
 
 const TOP = 'top';
 
-export function OrgChart({ people, myId, locale }: Props) {
+export function OrgChart({ people, myId, locale, limited = false }: Props) {
   const t = useTranslations('org');
   const index = useMemo(() => buildOrgIndex(people), [people]);
   const searchParams = useSearchParams();
@@ -40,7 +42,7 @@ export function OrgChart({ people, myId, locale }: Props) {
 
   const requested = searchParams.get('p');
   const focusId =
-    requested === TOP ? TOP : requested && index.byId.has(requested) ? requested : index.byId.has(myId) ? myId : TOP;
+    requested === TOP && !limited ? TOP : requested && index.byId.has(requested) ? requested : index.byId.has(myId) ? myId : TOP;
 
   const go = (id: string) => {
     setQuery('');
@@ -153,9 +155,10 @@ export function OrgChart({ people, myId, locale }: Props) {
           <button
             type="button"
             onClick={() => go(TOP)}
+            disabled={limited}
             data-testid="org-top"
             className={cn(
-              'rounded-sm border px-3 py-1 text-xs transition-colors',
+              'rounded-sm border px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50',
               focusId === TOP
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border text-muted-foreground hover:border-primary/40 hover:text-primary'
