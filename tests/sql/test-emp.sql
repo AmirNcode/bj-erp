@@ -52,6 +52,16 @@ create function pg_temp.errand(p_actor text,p_day int) returns text language sql
     'select public.submit_daily_errand_request_v2(%L,%L,''Fixture site'',%L,true)::text',
     current_date+p_day,current_date+p_day,pg_temp.sig())));
 $$;
+-- Runs p_sql as the superuser (triggers still fire): 'ok' or the SQLSTATE.
+create function pg_temp.try(p_sql text) returns text language plpgsql as $$
+begin execute p_sql; return 'ok';
+exception when others then return sqlstate; end;
+$$;
+create function pg_temp.leave_with(p_actor text,p_day int,p_repl text) returns text language sql as $$
+  select pg_temp.err(pg_temp.as_scalar(p_actor,format(
+    'select public.submit_leave_request_v2(%L,%L,%L,''full'',%L,true,null,%L)::text',
+    pg_temp.fx('annual'),current_date+p_day,current_date+p_day,pg_temp.sig(),pg_temp.fx(p_repl))));
+$$;
 -- Sorted fixture keys of the profile ids a query returns, as the caller.
 create function pg_temp.keys(p_actor text,p_sql text) returns text language sql as $$
   select pg_temp.as_scalar(p_actor,format(
@@ -141,6 +151,31 @@ select pg_temp.expect('replacement picker: empty for test-emp',
   pg_temp.as_scalar('tester',format('select count(*)::text from public.get_replacement_candidates(%L,%L)',current_date+20,current_date+20)),'0');
 select pg_temp.expect('replacement picker: never offers a test account',
   pg_temp.keys('emp',format('select profile_id from public.get_replacement_candidates(%L,%L)',current_date+20,current_date+20)),'boss');
+
+-- Replacement write paths (security review): a test account can never be named, however called.
+select pg_temp.expect('submit: naming a test account as replacement is refused',
+  pg_temp.err(pg_temp.as_scalar('emp',format(
+    'select public.submit_leave_request_v2(%L,%L,%L,''full'',%L,true,null,%L)::text',
+    pg_temp.fx('annual'),current_date+30,current_date+30,pg_temp.sig(),pg_temp.fx('tester')))),'42501');
+select pg_temp.expect('direct insert with a test-account replacement is refused (trigger)',
+  pg_temp.err(pg_temp.as_scalar('admin',format($q$insert into public.leave_requests(employee_id,company_id,kind,leave_type_id,
+    start_date,end_date,requested_minutes,status,serial_year,serial_seq,replacement_id)
+    values(%L,%L,'leave',%L,current_date+31,current_date+31,480,'pending',1,995002,%L) returning 'x'$q$,
+    pg_temp.fx('emp'),pg_temp.fx('company'),pg_temp.fx('annual'),pg_temp.fx('both')))),'42501');
+select pg_temp.expect('… with its own message',
+  split_part(pg_temp.as_scalar('admin',format($q$insert into public.leave_requests(employee_id,company_id,kind,leave_type_id,
+    start_date,end_date,requested_minutes,status,serial_year,serial_seq,replacement_id)
+    values(%L,%L,'leave',%L,current_date+32,current_date+32,480,'pending',1,995003,%L) returning 'x'$q$,
+    pg_temp.fx('emp'),pg_temp.fx('company'),pg_temp.fx('annual'),pg_temp.fx('tester'))),' ',3),'a');
+select pg_temp.expect('changing the replacement to a test account is refused',
+  pg_temp.try(format('update public.leave_requests set replacement_id=%L where employee_id=%L',
+    pg_temp.fx('tester'),pg_temp.fx('emp'))),'42501');
+select pg_temp.expect('a direct sign-off row for a test account is refused',
+  pg_temp.try(format($q$insert into public.leave_request_replacement_signoffs(request_id,replacement_id)
+    select id,%L from public.leave_requests where employee_id=%L limit 1$q$,
+    pg_temp.fx('tester'),pg_temp.fx('emp'))),'42501');
+select pg_temp.expect('a real colleague can still be named',
+  pg_temp.leave_with('emp',33,'boss'),'ok');
 
 \o
 select 'test-emp: all assertions passed' as result;

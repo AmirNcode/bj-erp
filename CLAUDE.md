@@ -209,7 +209,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql` (33 since FR-94).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
-- **`npm audit --omit=dev` is a CI gate:** a new advisory against the pinned `next` fails every deploy until it is upgraded (2026-11-16: 16.4.3 → needs 16.4.6).
+- **`npm audit --omit=dev` is a CI gate** (`scripts/audit-gate.mjs`): a new advisory fails every deploy until upgraded (2026-11-16: next 16.4.3 → 16.4.6). Only an advisory with no fixed version may go on its `IGNORED` list, with a reason + a TASKS line (2026-11-18: picomatch GHSA-fc5q-39xc-vjpf).
 - **Test roles (FR-95): any `app_role` starting with `test-` (today `test-emp`) = `private.is_test_account`, which beats every other role** — own data only, no requests. A new function that lists colleagues or files on someone's behalf must check it.
 - More: `docs/MEMORY.md`.
 

@@ -103,6 +103,10 @@ Copy this block verbatim and fill it in.
 - Committed on `feat/org-chart-permission`, fast-forwarded into `main` and pushed (CI deploy). Worktree `../bj-orgchart-perm` can be removed.
 - Amir's test account `test1`: tick test-emp on it (Employee may stay: test-emp wins either way).
 
+**Follow-up in the same session (after the first push)**
+- First deploy (run 44336230152) stopped at `npm audit --omit=dev`: new high advisory GHSA-fc5q-39xc-vjpf (picomatch ReDoS, every version ≤ 4.0.7, no patch; via next-intl → @parcel/watcher). `npm audit fix` rewrote 800 lockfile lines and did not clear it — reverted. Amir chose a narrow exception: `scripts/audit-gate.mjs` (fails on any advisory not in `IGNORED`, exit 2 if audit breaks) replaces the CI step; negative run with the id removed exits 1. TASKS line to drop it.
+- Security review (automated) found the replacement guard was picker-only: `submit_leave_impl` / `app_change_replacement` / direct inserts could still name a test account. Fixed by `20261118100200_test_emp_no_replacement.sql` (trigger on both tables); `tests/sql/test-emp.sql` +6 assertions, all PASS on a fresh clone; full `tests/sql` result unchanged (same 14 known failures). `schema.sql` patched from the clone diff.
+
 **For the next agent**
 - `feat/erp-sales-module` must rebase/merge main: its migrations `20261117120000…150000` sort before these two but apply fine (the runner applies any unrecorded file). The local `postgres` DB has those Sales migrations but not these two.
 - A later `test-mgr` needs its own enum migration + role row; the gates already match `test-%`, but manager-only screens/approvals would need their own decisions.

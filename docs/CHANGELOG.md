@@ -14,7 +14,9 @@ was deployed; semantic versioning starts at the first tag.
 - **For outside reviewers.** A new fixed role, **test-emp**, shows the Employee screens without anyone else's data: the org chart shows only the person's own managers, themselves and their direct reports ("Top of the organization" is disabled); the calendar and Team page show no teammates (the Team page keeps their manager); the replacement list is empty, and nobody can choose a test account as their replacement.
 - **No requests.** Request pages open as usual with a "test account" notice and the Submit button disabled; the server refuses any request too, so no approval step or SMS is ever triggered. Profile, personal information, signature and photo still save as for an employee.
 - Applies even if the person also has other roles. Later test roles named `test-…` (e.g. `test-mgr`) get the same limits.
-- Migrations `20261118100000_test_emp_role_enum`, `20261118100100_test_emp_role`.
+- A test account can never be named as someone's replacement, even through a direct call (security review follow-up).
+- CI's audit gate now runs `scripts/audit-gate.mjs`: it still fails on any advisory, except a listed one with no fixed version yet (today only picomatch GHSA-fc5q-39xc-vjpf, reached through next-intl's file watcher).
+- Migrations `20261118100000_test_emp_role_enum`, `20261118100100_test_emp_role`, `20261118100200_test_emp_no_replacement`.
 
 ### ERP · Sales module (FR-94) — built 2026-11-16, not deployed (branch `feat/erp-sales-module`)
 

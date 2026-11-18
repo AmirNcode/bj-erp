@@ -2915,6 +2915,24 @@ $$;
 
 
 --
+-- Name: replacement_not_test_account(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.replacement_not_test_account() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if new.replacement_id is not null
+     and (tg_op = 'INSERT' or new.replacement_id is distinct from old.replacement_id)
+     and private.is_test_account(new.replacement_id) then
+    raise exception 'a test account cannot be a replacement' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+
+--
 -- Name: leave_requests; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15643,6 +15661,13 @@ CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per
 
 
 --
+-- Name: leave_requests leave_requests_replacement_not_test; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER leave_requests_replacement_not_test BEFORE INSERT OR UPDATE OF replacement_id ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.replacement_not_test_account();
+
+
+--
 -- Name: leave_requests leave_requests_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -15703,6 +15728,13 @@ CREATE TRIGGER profiles_sync_names BEFORE INSERT OR UPDATE ON public.profiles FO
 --
 
 CREATE TRIGGER replacement_signoff_sync AFTER INSERT OR UPDATE OF replacement_id ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.replacement_signoff_sync();
+
+
+--
+-- Name: leave_request_replacement_signoffs replacement_signoffs_not_test; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER replacement_signoffs_not_test BEFORE INSERT OR UPDATE OF replacement_id ON public.leave_request_replacement_signoffs FOR EACH ROW EXECUTE FUNCTION private.replacement_not_test_account();
 
 
 --
@@ -18347,6 +18379,13 @@ REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date, p_end date, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION replacement_not_test_account(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.replacement_not_test_account() FROM PUBLIC;
 
 
 --

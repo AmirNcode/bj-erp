@@ -3,6 +3,11 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-95 test-emp role (2026-11-18)
+
+- [ ] **Audit-gate exception:** remove `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, via next-intl → @parcel/watcher) from `IGNORED` in `scripts/audit-gate.mjs` once picomatch ships a fix (the gate prints "no longer reported" when it can go).
+- [ ] Give the Melipayamak reviewer account `test1` the test-emp role; deactivate it after the templates are approved.
+
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
 - [ ] **Owner tests on the local stack (:3501)**: create a CEO role with the seven ERP · Sales permissions, import `B1.xlsx`, try a new RFP end to end. Then PR → merge (a push to `main` deploys).
