@@ -78,6 +78,103 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-17 — ERP › Sales: tables collapse columns into expandable rows (no sideways scroll)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/review); Sonnet subagent built it
+**Trigger:** Amir (screenshot): Customers table scrolled sideways with blank space on the right; wants Employees-style collapsing columns + expandable rows.
+
+**What changed**
+- `lib/sales/columns.ts` (new): container-query show / detail / expand classes per column, breakpoints from cumulative widths in 40px steps (full class strings listed for Tailwind). Priority — Customers: company · records · sales/currency · won · win rate · open · lost · last inquiry · in charge · quoted/currency · no bid · archived · first inquiry · next deadline · type; Records: no + title · company · stage · in charge · next deadline · received · value · client.
+- `_components/ExpandParts.tsx` (new: chevron cell + detail row), `CustomersList.tsx`, `RecordsTable.tsx` (wrapper `@container`, no `overflow-x-auto`, truncating name/title). Type is now its own column. Labels `sales.list.showDetails` / `hideDetails` (fa + en).
+
+**Verification**
+- Subagent measured wrapper scrollWidth = clientWidth at 1024/1280/1440/1920 (en + fa) and swept 440–2600px: no overflow. Records show every column from ~1340px container.
+- tsc 0, lint 0, unit 145 files / 1489 pass. :3501 app image rebuilt.
+
+**State**: uncommitted on `feat/erp-sales-module`.
+
+## 2026-11-17 — ERP › Sales: name matching, table format, metrics + filters (§16.8–16.9)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead/review); Sonnet subagents for SQL, tables/metrics UI, Name matching UI
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 53c849c, Phase A uncommitted
+**Trigger:** Amir (after importing the register on :3501, CEO role has Sales): fix import names after the fact (asked for a better way than reopening the import), Customers/Records tables in Employees format + sortable, summary metrics; mid-build: filters (dates, result, person in charge) on the Customers tab and customer pages.
+
+**What changed**
+- Owner answers: Name matching page (not reopen); Sales = won contract value else won price, per currency; YTD = since 1 Farvardin by order → result → offer → received date; metrics on both pages. Spec §16.8, §16.9.
+- DB: `20261117140000_sales_name_matching_metrics.sql` (`sales_name_aliases`; alias-aware `sales_customer` + person lookup in both imports; imports keep `in_charge_text`; merge/rename save aliases; `app_sales_people_to_match`, `app_sales_match_person`, `app_sales_aliases`, `app_sales_remove_alias`; list sort/dir + from/to/result; customer rows `sales`; `app_sales_customers(p)`, `app_sales_metrics(…, p)`, customer `owners`). `20261117150000_sales_import_result_dates.sql` (lead-written: imported results dated by the file, re-dates earlier ones where `result_by` is null). `schema.sql` patched from clone diffs; `lib/supabase/types.ts`.
+- App: `SortTh`, `RecordsTable`, `MetricsStrip`, `FilterBar`, `NameMatching` + `/sales/settings/names`, `lib/sales/recordSort.ts`, `lib/sales/customers.ts` (persianYearStarts, per-currency sort, filters), Records/Customers/customer page rewritten to Employees format; ImportPanel "Fix names" link; parser: EURO cell > 20M → IRR + `euro_as_rial` warning. Types/actions/messages (fa + en) written by the lead first as contracts.
+- Tests: `tests/sql/sales-name-matching.sql` (121); `sales-inquiry-import.sql` / `sales.sql` adjusted (kept in-charge text; company filter for a real record on clones); unit tests extended.
+- Docs: spec, CHANGELOG, DATA_MODEL, TASKS, CLAUDE.md (2 lines).
+
+**Actions outside the repo**
+- :3501 `postgres`: dumps `approvals-finance-pre-name-matching.dump`, `approvals-finance-pre-result-dates.dump` (scratchpad); SMS off, 0 cron active; `bj_apply_migrations` applied `20261117140000` and `20261117150000` (**FROZEN locally**); View-as hook synced; app image rebuilt twice; rest restarted. The second migration re-dated 1,398 imported results.
+- Clones `erp_names` (subagent), `erp_dates` (lead) created and dropped. Docker disk 52 % (6.8 GB free) after the earlier prune.
+- Nothing on Liara; nothing committed. Amir says the earlier Sales module is on main; this Phase A + §16.8 work is NOT committed or pushed.
+
+**Verification**
+- SQL on clones: sales 98, stage-pages 21, inquiry-import 104, customers 50, name-matching 121 — PASS. Real data (11,360 records): metrics 52–177 ms, people-to-match 18–49 ms (673 names), customers 216 ms / 61 ms filtered, list sort 70–95 ms.
+- lint 0, tsc 0, unit 145 files / 1487 + new parser tests pass.
+- Found on real data and fixed: sales YTD = all time (import stamped `result_at = now()`); €207 bn for one customer (Rial in EURO column, 6 records — fixed on the next re-import).
+- UI only checked with fake data (zz pages, deleted); Save/Merge/Forget, filters and sort not clicked signed in.
+
+**For the next agent**
+- Amir should re-import the register once (fixes the 6 EUR rows). Phase B still open. Commit/PR only on Amir's word (push to main deploys; 5 new migrations).
+
+## 2026-11-17 — ERP › Sales: inquiry import Phase A built (import, list at scale, customer lookup, Customers tab)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead + review); Sonnet subagents for A1, A2, A4, A5/A7, A8 SQL, A8 UI
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 53c849c (uncommitted spec/plan from the entry below)
+**Trigger:** Amir: start Phase A; plus company/client as a lookup field (pick or "Create …") and a Customers tab with per-customer figures.
+
+**What changed**
+- Spec §16.7 (lookup + Customers tab), §16 status line; plan A7/A8 added.
+- DB: `supabase/migrations/20261117120000_sales_inquiry_import.sql` (archived stage kind + seed, `import_batches`, batch `kind`/`closed`, `app_sales_import_inquiries`, `app_sales_record_numbers`, `app_sales_list_page`, `app_sales_add_customer`, `app_sales_similar_customers`, ledger import appends its batch, new removal rules, bootstrap batches kind/closed). `20261117130000_sales_customers_reports.sql` (`app_sales_customers`, `app_sales_customer`, rename, merge, `app_sales_report`). Field keys are `x_inq_*` (the key CHECK needs `x_`). `schema.sql` patched from clone diffs; `lib/supabase/types.ts`.
+- Tests: `tests/sql/sales-inquiry-import.sql` (104), `tests/sql/sales-customers.sql` (50), `tests/sql/sales.sql` adjusted (stage count, removal); unit `sales-inquiry`, `sales-customer-combo`, `sales-customers`, `sales-helpers` updated.
+- App: `lib/sales/inquiry.ts` (parser, classify, similarity), `lib/sales/customers.ts`, `lib/actions/sales.ts` (list page, record numbers, inquiry import, add/similar/rename/merge customer, customers, report; `listSalesRecords` removed), `ImportPanel` (tabs + shared batch list), `InquiryImport`, `RecordsList` + `/sales/page.tsx` (server filters via URL), `CustomerCombo` (+ `allowCreate`), `RecordForm`, `StageFields`, `SalesTabs`, `/sales/customers` + `[id]`, `CustomersList`, `CustomerView`, Reports via `getSalesReport`. Messages fa + en.
+- Docs: CHANGELOG, DATA_MODEL, TASKS, REQUIREMENTS, CLAUDE.md (4 gotchas).
+
+**Actions outside the repo**
+- Local stack `:3501`: `pg_dump -Fc` of `postgres` → scratchpad `approvals-finance-pre-inquiry-import.dump`; SMS `off`, key null, 0/4 cron active; `bj_apply_migrations` (release `approvals-finance-local`) applied `20261117120000` and `20261117130000` (**both FROZEN locally**); View-as hook synced; app image rebuilt from the working tree; app up; rest restarted; health 200. No import was run on local `postgres` (left for Amir's UI test).
+- **Docker VM disk was 100% full** (15 GB) — clone creation failed. `docker image prune -f` (0 B), then `docker builder prune -f` freed 7.9 GB (build cache only; no volumes/containers touched).
+- Clone `erp_real` of local `postgres`: real register imported through `app_sales_import_inquiries` as the admin (12 parts, 11,359 created, 1 skipped = app-made 10090, ~11 s), then `app_sales_import` with `B1.xlsx` rows (134 updated, 1 skipped), then inquiry batch removed (11,225 deleted, 134 kept, customers 1,530 → 56). Timings: customers 0.58 s, list open 44 ms, search all 93 ms, report 14 ms. Dropped. Clones `erp_inq`, `erp_cust` (subagents) dropped.
+- Nothing on Liara; nothing committed.
+
+**Verification**
+- SQL on clones: sales 98, stage-pages 21, inquiry-import 104, customers 50 — all PASS.
+- `npm run lint` 0, `tsc --noEmit` 0, `npm run test:unit` 145 files / 1484 pass; image build (`next build`) OK.
+- UI: subagents checked with temporary zz pages + fake data (fa 375 px, en desktop). **Not checked signed in**: the import button / progress / Stop, `.xlsx` upload, template download, Create-customer dialog's similar list, Customers pages with real data.
+
+**State left behind**
+- All uncommitted on `feat/erp-sales-module`. Local `postgres` has the two migrations but no inquiry data.
+
+**For the next agent**
+- WINNER / LOSER meaning still open with the client. Phase B (predefined-input lists) not started. CLAUDE.md status line still says FR-94 "local only" though the 2026-11-17 stage-pages entry says it is live.
+- Customers function is 0.58 s on 1.5k customers / 11.5k records; fine now, index if it grows.
+
+## 2026-11-17 — ERP › Sales: inquiry register check, import design (§16), plan
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 53c849c
+**Trigger:** Amir: bulk-import the client's inquiry register (`erp-module/files/Inquiries 09 June 2025 - Inquiry.csv`) into ERP Sales, re-importable later; list every data issue for the client; new owner rule "predefined inputs, no free typing of known values"; approved the design and asked for the plan.
+
+**What changed**
+- Spec `docs/specs/2026-11-16-sales-rfp-module-design.md` §16 (16.1 column map, 16.2 result / stage rules incl. new closed **Archived** stage, 16.3 merge with ledger + `import_batches` for removal, 16.4 chunked import + server-side records list, 16.5 predefined inputs, 16.6 open client question). Owner answers: no-result rows → Archived (6-month cut-off); Y/N in In-charge kept as text; Status column = note + known phrases.
+- Plan `docs/plans/2026-11-17-sales-inquiry-import.md` (Phase A import, Phase B predefined inputs). Builder's additions to check with Amir: phrase باطل/کنسل → cancelled; old wins → contract Finish.
+- Memory: `erp-predefined-inputs` (owner rule).
+
+**Actions outside the repo**
+- `erp-module/reports/` (git-ignored, client data): `Inquiry register - data issues.md` (client questions + issue table + how the ERP prevents them), `… .xlsx` (Summary, Issues by row = 22,782 issues on 11,354 rows, Company spellings 191 groups, In charge values), `check_inquiry_register.py` (re-runnable: `python3 check_inquiry_register.py <csv> <B1.xlsx> <out.xlsx>`, needs openpyxl).
+- No DB, no server, nothing committed.
+
+**Verification**
+- Analysis only (python over the CSV + `B1.xlsx`). Key facts: file is current (newest row 1405-08) despite its name; same numbering as the ledger (all 135 contracts present); 7 duplicate record numbers; 2,366 spellings for ~1,770 companies; 36 contracts have their price under LOSER and 89 have no WINNER price (→ §16.6 open).
+
+**State left behind**
+- Spec + plan + journal edits uncommitted on `feat/erp-sales-module`. No code written. Note: the previous entry says FR-94 is already live on Liara (CLAUDE.md status line still says "local only").
+
+**For the next agent**
+- Execute the plan Phase A with the subagent flow; wait for the client's answer on WINNER / LOSER before trusting `lost` counts. Never commit `erp-module/` or fixtures from the real file.
+
 ## 2026-11-17 — ERP › Sales: stage pages (clickable stages, Submit with old → new ledger, Next stage)
 
 **Agent:** Claude Opus 5.5 via Claude Code (Sonnet builder-check subagent, Opus final-review subagent)

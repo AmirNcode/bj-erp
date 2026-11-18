@@ -111,10 +111,10 @@ select pg_temp.expect('six keys depend on sales',
 select pg_temp.expect('no preset or system role holds a new key',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id=rp.role_id
     where r.kind<>'custom' and (rp.permission like 'sales%' or rp.permission='project_items')),'0');
-select pg_temp.expect('a new company is seeded on insert: 2 flows, 14 stages, settings',
+select pg_temp.expect('a new company is seeded on insert: 2 flows, 15 stages (incl. Archived), settings',
   (select (select count(*) from public.sales_flows where company_id=pg_temp.fx('company'))||':'||
           (select count(*) from public.sales_stages where company_id=pg_temp.fx('company'))||':'||
-          (select count(*) from public.sales_settings where company_id=pg_temp.fx('company'))),'2:14:1');
+          (select count(*) from public.sales_settings where company_id=pg_temp.fx('company'))),'2:15:1');
 select pg_temp.assert('every table has RLS on and no client grant',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and (c.relname like 'sales\_%' or c.relname='project_nodes') and c.relkind='r'
@@ -338,7 +338,7 @@ select pg_temp.expect('created 2, skipped 2 (no Rec; a record made in the app)',
 select pg_temp.expect('the app record is untouched',(select title from public.sales_rfps where id=pg_temp.fx('bid')),'12 wellheads');
 select pg_temp.expect('status maps to the stage; owner by the preview choice and by name; extra field kept',
   (select string_agg(r.record_no||'='||s.code||'/'||coalesce((select k from sl_fx where id=r.owner_id),'-')||'/'||coalesce(r.custom->>'x_region','-'),',' order by r.record_no)
-     from public.sales_rfps r join public.sales_stages s on s.id=r.stage_id where r.record_no in (8030,8049)),
+     from public.sales_rfps r join public.sales_stages s on s.id=r.stage_id where r.company_id=pg_temp.fx('company') and r.record_no in (8030,8049)),
   '8030=finish/fin/South,8049=current/seller/-');
 select pg_temp.expect('guarantee and payment rows; imported contracts count as won',
   (select (select count(*) from public.sales_bonds b where b.rfp_id=r.id and b.imported and b.status='issued')||':'||
@@ -367,8 +367,11 @@ select pg_temp.expect('new values land; empty cells keep what was there; the sta
   '600000.00:Hafari Shomal:finish:0.12/bank/55185.80');
 select pg_temp.expect('a record worked on here keeps its stage, takes the new site',
   (select pg_temp.stage_of('r8049')||':'||project_site from public.sales_rfps where id=pg_temp.fx('r8049')),'hold:Kerman');
-select pg_temp.expect('removing the first batch deletes the untouched record only',
+select pg_temp.expect('removing the first batch keeps both: the re-import wrote them too',
   pg_temp.as_json('ceo',format('select public.app_sales_remove_batch(%L)',(select j->>'batch_id' from sl_imp where k='first')))::text,
+  '{"kept": 2, "deleted": 0}');
+select pg_temp.expect('removing the second deletes the untouched record only',
+  pg_temp.as_json('ceo',format('select public.app_sales_remove_batch(%L)',(select j->>'batch_id' from sl_imp where k='second')))::text,
   '{"kept": 1, "deleted": 1}');
 select pg_temp.expect('… and customers nobody uses',
   (select count(*)::text from public.sales_customers where company_id=pg_temp.fx('company') and name='Hafari Shomal'),'0');

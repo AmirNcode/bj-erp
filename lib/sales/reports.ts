@@ -2,34 +2,28 @@
 
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { daysLeft } from './deadlines';
-import type { DeadlineRow, RecordRow, Stage } from './types';
+import type { DeadlineRow, SalesReport, Stage } from './types';
 
 export type PipelineRow = { stageId: string; count: number; value: Record<string, number> };
 
-/** Records per stage, with the value per currency (contract value, else our price). */
-export function pipeline(rows: RecordRow[], stages: Stage[]): PipelineRow[] {
-  const out = new Map<string, PipelineRow>(stages.map((s) => [s.id, { stageId: s.id, count: 0, value: {} }]));
-  for (const r of rows) {
-    const row = out.get(r.stage_id);
-    if (!row) continue;
-    row.count += 1;
-    const amount = r.total_value ?? r.our_price;
-    if (typeof amount === 'number' && r.currency) row.value[r.currency] = (row.value[r.currency] ?? 0) + amount;
-  }
-  return stages.map((s) => out.get(s.id)!).filter((r) => r.count > 0);
+/** Records per stage, with the value per currency (contract value, else our price); empty stages left out. */
+export function pipeline(rows: SalesReport['pipeline'], stages: Stage[]): PipelineRow[] {
+  const byStage = new Map(rows.map((r) => [r.stage_id, r]));
+  return stages
+    .map((s) => ({ stageId: s.id, count: byStage.get(s.id)?.count ?? 0, value: { ...(byStage.get(s.id)?.value ?? {}) } }))
+    .filter((r) => r.count > 0);
 }
 
 export type ResultRow = { key: string; decided: number; won: number; lost: number; cancelled: number; winRate: number | null };
 
 /**
- * Bid results by buyer or by Persian year of the result. Only bids decided in the
- * app count (bid_decision = bid): an imported contract is a win with no lost bids
- * beside it, and would make every rate 100%.
+ * Bid results by buyer or by Persian year of the result. The report already holds only
+ * bids decided in the app (an imported contract is a win with no lost bids beside it
+ * and would make every rate 100%).
  */
-export function results(rows: RecordRow[], by: 'customer' | 'year'): ResultRow[] {
+export function results(rows: SalesReport['decided'], by: 'customer' | 'year'): ResultRow[] {
   const out = new Map<string, ResultRow>();
   for (const r of rows) {
-    if (r.bid_decision !== 'bid' || !r.bid_result || r.imported) continue;
     const key = by === 'customer' ? r.buyer_name ?? '—' : r.result_at ? formatCalendarDate(r.result_at.slice(0, 10), 'en', 'YYYY') : '—';
     const row = out.get(key) ?? { key, decided: 0, won: 0, lost: 0, cancelled: 0, winRate: null };
     row.decided += 1;

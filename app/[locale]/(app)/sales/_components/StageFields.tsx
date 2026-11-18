@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { canEditKey } from '@/lib/sales/stagePages';
 import { CURRENCIES, type Bootstrap, type CustomValues, type RecordRow } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
+import { CustomerCombo } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useSalesFormat } from './parts';
 
 export type Draft = Record<string, unknown>;
@@ -107,7 +108,12 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
     case 'owner_id':
       return <PersonPick people={boot.people} value={(v as string | null) ?? null} onChange={(id) => set(key, id)} testId={testId} />;
     case 'buyer': case 'client':
-      return <Input list="sales-customers" maxLength={200} value={str(v)} onChange={(e) => set(key, e.target.value)} data-testid={testId} />;
+      return <CustomerCombo
+        customers={boot.customers}
+        value={str(v) ? (boot.customers.find((c) => c.name === str(v)) ?? { id: '', name: str(v), kind: null }) : null}
+        onChange={(c) => set(key, c?.name ?? '')}
+        testId={testId}
+      />;
     case 'buyer_kind':
       return (
         <Select value={str(v)} onChange={(x) => set(key, orNull(x))} testId={testId}>

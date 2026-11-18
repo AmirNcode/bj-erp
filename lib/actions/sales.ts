@@ -11,9 +11,11 @@ import { requireCaller } from '@/lib/auth/context';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import type { Json } from '@/lib/supabase/types';
+import type { InquiryRow } from '@/lib/sales/inquiry';
 import type { LedgerRow } from '@/lib/sales/ledger';
 import type {
-  Bootstrap, DeadlineRow, ImportResult, PriceHistoryRow, RecordDetail, RecordRow,
+  AddedCustomer, Bootstrap, CustomerDetail, CustomerFilters, CustomerSummary, NameAlias, PersonToMatch, SalesMetrics, SalesReport, DeadlineRow, ImportResult, InquiryImportResult, PriceHistoryRow, RecordDetail,
+  RecordFilters, RecordNumbers, RecordPage, SimilarCustomer,
 } from '@/lib/sales/types';
 
 type Read<T> = { ok: true; data: T } | DbErrorResult;
@@ -30,12 +32,141 @@ export async function getSalesBootstrap(): Promise<Read<Bootstrap>> {
   return { ok: true, data: data as unknown as Bootstrap };
 }
 
-export async function listSalesRecords(): Promise<Read<RecordRow[]>> {
+/** One page of the records list, filtered in the database (§16.4: the list can hold 10k+ records). */
+export async function listSalesRecordsPage(filters: RecordFilters = {}): Promise<Read<RecordPage>> {
   const c = await requireCaller();
   if (!c.ok) return c;
-  const { data, error } = await c.supabase.rpc('app_sales_list');
+  const p = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''));
+  const { data, error } = await c.supabase.rpc('app_sales_list_page', { p: json(p) });
   if (error) return dbErr(error.message);
-  return { ok: true, data: (data ?? []) as unknown as RecordRow[] };
+  return { ok: true, data: data as unknown as RecordPage };
+}
+
+/** The Customers tab: one row per customer with its figures (§16.7). */
+export async function listSalesCustomers(filters: CustomerFilters = {}): Promise<Read<CustomerSummary[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const p = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''));
+  const { data, error } = await c.supabase.rpc('app_sales_customers', { p: json(p) });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as CustomerSummary[] };
+}
+
+export async function getSalesCustomer(id: string): Promise<Read<CustomerDetail>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer', { p_id: id });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as CustomerDetail };
+}
+
+export async function renameSalesCustomer(id: string, name: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_rename_customer', { p_id: id, p_name: name });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, id };
+}
+
+/** Moves every record of `fromId` to `intoId` and removes `fromId`. */
+export async function mergeSalesCustomers(fromId: string, intoId: string): Promise<Read<{ moved: number }>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_merge_customers', { p_from: fromId, p_into: intoId });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as { moved: number } };
+}
+
+/**
+ * Figure strip (§16.8): all customers, or one when `customerId` is set. Year starts are
+ * Gregorian ISO dates of 1 Farvardin this year and last year, computed by the caller.
+ */
+export async function getSalesMetrics(
+  customerId: string | null, yearStart: string, prevYearStart: string, filters: CustomerFilters = {}
+): Promise<Read<SalesMetrics>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const p = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''));
+  const { data, error } = await c.supabase.rpc('app_sales_metrics', {
+    p_customer: customerId, p_year_start: yearStart, p_prev_year_start: prevYearStart, p: json(p),
+  });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as SalesMetrics };
+}
+
+/** In-charge names kept as text (optionally only on records `batchId` wrote), with any saved match. */
+export async function listSalesPeopleToMatch(batchId: string | null): Promise<Read<PersonToMatch[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_people_to_match', { p_batch: batchId });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as PersonToMatch[] };
+}
+
+/** Matches an in-charge name to an employee on every record (null: removes the match). */
+export async function matchSalesPerson(name: string, profileId: string | null): Promise<Read<{ updated: number }>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_match_person', { p_name: name, p_profile: profileId });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as { updated: number } };
+}
+
+export async function listSalesAliases(): Promise<Read<NameAlias[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_aliases');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as NameAlias[] };
+}
+
+/** Forgets a saved spelling → customer or name → employee match (records keep their values). */
+export async function removeSalesAlias(id: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_remove_alias', { p_id: id });
+  if (error) return dbErr(error.message);
+  return { ok: true, id };
+}
+
+/** Reports page figures, aggregated in the database (§16.4). */
+export async function getSalesReport(): Promise<Read<SalesReport>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_report');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as SalesReport };
+}
+
+/** Record numbers by origin, for the import previews (sales_settings holders). */
+export async function listSalesRecordNumbers(): Promise<Read<RecordNumbers>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_record_numbers');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as RecordNumbers };
+}
+
+/** Adds a customer picked as "Create …" in the lookup; an existing name key returns that one. */
+export async function addSalesCustomer(name: string, kind: 'government' | 'contractor' | null): Promise<Read<AddedCustomer>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_add_customer', { p: json({ name, kind }) });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as AddedCustomer };
+}
+
+/** Existing customers that are probably the same company as `name` (top 5). */
+export async function findSimilarSalesCustomers(name: string): Promise<Read<SimilarCustomer[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_similar_customers', { p_name: name });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as SimilarCustomer[] };
 }
 
 export async function getSalesRecord(id: string): Promise<Read<RecordDetail>> {
@@ -312,6 +443,29 @@ export async function importSalesLedger(
   if (error) return dbErr(error.message);
   invalidateAppCache();
   return { ok: true, data: data as unknown as ImportResult };
+}
+
+const INQUIRY_CHUNK_MAX = 2000;
+
+/**
+ * One part of an inquiry-register import (spec §16): the browser sends the file in
+ * parts under one batch. `batchId` null starts the batch; `last` closes it.
+ */
+export async function importSalesInquiries(
+  batchId: string | null, fileName: string, rows: InquiryRow[], people: Record<string, string>,
+  cutoff: string, last: boolean
+): Promise<Read<InquiryImportResult>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  if (!Array.isArray(rows) || rows.length > INQUIRY_CHUNK_MAX || !/^\d{4}-\d{2}-\d{2}$/.test(cutoff)) {
+    return dbErr('sales: invalid input');
+  }
+  const { data, error } = await c.supabase.rpc('app_sales_import_inquiries', {
+    p_batch: batchId, p_file: fileName, p_rows: json(rows), p_people: json(people), p_cutoff: cutoff, p_last: last,
+  });
+  if (error) return dbErr(error.message);
+  if (last) invalidateAppCache();
+  return { ok: true, data: data as unknown as InquiryImportResult };
 }
 
 export async function removeSalesBatch(batchId: string): Promise<Read<{ deleted: number; kept: number }>> {

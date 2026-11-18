@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
-import { listSalesDeadlines, listSalesRecords } from '@/lib/actions/sales';
+import { getSalesReport, listSalesDeadlines } from '@/lib/actions/sales';
 import { loadSalesBootstrap } from '../_components/load';
 import { ReportsView } from '../_components/ReportsView';
 
@@ -15,7 +15,7 @@ export default async function SalesReportsPage({ params }: Props) {
   setRequestLocale(locale);
   const boot = await loadSalesBootstrap();
   if (!boot.caps.reports) notFound();
-  const [rows, deadlines] = await Promise.all([listSalesRecords(), listSalesDeadlines(true)]);
-  if (!rows.ok) return <p role="alert" className="text-sm text-destructive">{rows.error}</p>;
-  return <ReportsView boot={boot} rows={rows.data} deadlines={deadlines.ok ? deadlines.data : []} />;
+  const [report, deadlines] = await Promise.all([getSalesReport(), listSalesDeadlines(true)]);
+  if (!report.ok) return <p role="alert" className="text-sm text-destructive">{report.error}</p>;
+  return <ReportsView boot={boot} report={report.data} deadlines={deadlines.ok ? deadlines.data : []} />;
 }

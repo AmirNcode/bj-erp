@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { saveSalesRecord } from '@/lib/actions/sales';
 import { CURRENCIES, type Bootstrap, type CustomValues, type FlowKind, type RecordRow } from '@/lib/sales/types';
+import { CustomerCombo } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useRun, useSalesFormat } from './parts';
 
 type Draft = {
@@ -102,7 +103,8 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
   const [d, setD] = useState<Draft>(() => initial(boot, record, flowKind));
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   const fields = boot.fields.filter((x) => x.entity === 'rfp' && (x.active || d.custom[x.key] !== undefined));
-  const knownBuyer = boot.customers.some((c) => c.name.trim().toLowerCase() === d.buyer.trim().toLowerCase());
+  const customerByName = (name: string) => boot.customers.find((c) => c.name === name) ?? (name ? { id: '', name, kind: null } : null);
+  const buyerRef = customerByName(d.buyer);
   const bid = flowKind === 'bid';
 
   async function save(e: React.FormEvent) {
@@ -157,9 +159,14 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
           <Input required maxLength={300} value={d.title} onChange={(e) => set('title', e.target.value)} placeholder={t('form.titlePlaceholder')} data-testid="sales-form-title" />
         </Field>
         <Field label={t('field.buyer')}>
-          <Input list="sales-customers" maxLength={200} value={d.buyer} onChange={(e) => set('buyer', e.target.value)} data-testid="sales-form-buyer" />
+          <CustomerCombo
+            customers={boot.customers}
+            value={buyerRef}
+            onChange={(c) => setD((prev) => ({ ...prev, buyer: c?.name ?? '', buyer_kind: c?.kind ?? '' }))}
+            testId="sales-form-buyer"
+          />
         </Field>
-        {d.buyer.trim() && (!knownBuyer || !record?.buyer_kind) ? (
+        {d.buyer.trim() && !buyerRef?.kind ? (
           <Field label={t('field.buyer_kind')}>
             <Select value={d.buyer_kind} onChange={(v) => set('buyer_kind', v)}>
               <option value="">—</option>
@@ -169,11 +176,8 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
           </Field>
         ) : null}
         <Field label={t('field.client')} hint={t('form.clientHint')}>
-          <Input list="sales-customers" maxLength={200} value={d.client} onChange={(e) => set('client', e.target.value)} />
+          <CustomerCombo customers={boot.customers} value={customerByName(d.client)} onChange={(c) => set('client', c?.name ?? '')} testId="sales-form-client" />
         </Field>
-        <datalist id="sales-customers">
-          {boot.customers.map((c) => <option key={c.id} value={c.name} />)}
-        </datalist>
         <Field label={t('field.customer_ref')}>
           <Input dir="ltr" maxLength={200} value={d.customer_ref} onChange={(e) => set('customer_ref', e.target.value)} />
         </Field>

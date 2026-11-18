@@ -209,6 +209,12 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql` (33 since FR-94).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
+- **Sales stage kind `archived`** (imported inquiry, no result): closed, bid flow, entered only by the inquiry import or `sales_decide`; any check listing closed kinds must include it.
+- **Sales import removal follows `sales_rfps.import_batches`** (every batch that wrote the row), not `import_batch_id`; a new import function must `array_append` its batch.
+- **Sales customers are picked (`CustomerCombo`), never created by typing** (owner rule §16.5); `app_sales_add_customer` / `similar_customers` behind "Create …". Merge logs events without `sales_touch` (keeps batches removable).
+- **Sales imports resolve `sales_name_aliases` first** (customer spelling → customer, person name → employee); merges / renames / Name matching write them. Imports keep `in_charge_text` even when an owner is set (Name matching needs it).
+- **Imported results are dated by the file** (`result_at` = offer, else received date), never `now()`: metrics date a sale by order → result → offer → received.
+- **Docker VM disk (15 GB) fills with build cache** after repeated `compose build app`: `docker builder prune -f` frees it; a full disk makes Postgres refuse writes.
 - **`npm audit --omit=dev` is a CI gate:** a new advisory against the pinned `next` fails every deploy until it is upgraded (2026-11-16: 16.4.3 → needs 16.4.6).
 - More: `docs/MEMORY.md`.
 

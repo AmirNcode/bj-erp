@@ -434,6 +434,7 @@ Validation/release status stays in `docs/TASKS.md`.
   by record number, and removable batches. Not in v1: file uploads, SMS reminders. *(2026-11-16;
   spec `docs/specs/2026-11-16-sales-rfp-module-design.md`; built on `feat/erp-sales-module`, not
   deployed.)*
+  **Inquiry register (2026-11-17, spec §16):** bulk import of the client's inquiry register (`.csv` / `.xlsx`), re-importable, merged with ledger records by number; Archived stage for old no-result inquiries; company / client picked through a lookup (new ones via "Create …" with a similar-name check); Customers tab and customer page with per-customer figures, rename and merge. Known-value inputs are picked, never free-typed (§16.5, Phase B).
 - **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
   A **Manager** (built-in role, checked at action time) may request annual leave (daily and hourly)
   past the available balance: the whole amount is paid and the balance goes negative (no limit), after

@@ -71,6 +71,9 @@ export type ImportBatch = {
   skipped_count: number;
   records: number;
   untouched: number;
+  kind: 'ledger' | 'inquiry';
+  /** false while an inquiry import is still sending its parts (or was stopped). */
+  closed: boolean;
 };
 
 export type Bootstrap = {
@@ -262,7 +265,116 @@ export type ImportResult = {
   created: number;
   updated: number;
   skipped: number;
-  skipped_rows: { rec: string | number | null; reason: 'bad_rec' | 'exists_in_app' | 'unreadable' }[];
+  skipped_rows: { rec: string | number | null; reason: 'bad_rec' | 'exists_in_app' | 'unreadable' | 'duplicate' }[];
 };
 
+export type InquiryResultKey = 'won' | 'lost' | 'no_bid' | 'cancelled' | 'open' | 'archived';
+export type InquiryImportResult = ImportResult & { by_result: Record<InquiryResultKey, number> };
+
+/** Record numbers by origin (app_sales_record_numbers): what an import would do to each. */
+export type RecordNumbers = { app: number[]; ledger: number[]; inquiry: number[] };
+
+export type RecordFilters = {
+  state?: 'open' | 'closed' | 'all';
+  flow?: FlowKind | '';
+  stage?: string;
+  owner?: string;
+  buyer?: string;
+  q?: string;
+  limit?: number;
+  sort?: RecordSort;
+  dir?: 'asc' | 'desc';
+  /** received_on range, ISO dates (§16.9). */
+  from?: string;
+  to?: string;
+  result?: ResultFilter;
+};
+/** Result filter of lists and figures: by bid_result / bid_decision / stage kind (§16.9). */
+export type ResultFilter = 'won' | 'lost' | 'no_bid' | 'cancelled' | 'open' | 'archived';
+/** Filters of the Customers tab and a customer page: records counted in figures and metrics. */
+export type CustomerFilters = {
+  from?: string;
+  to?: string;
+  result?: ResultFilter;
+  owner?: string;
+  kind?: 'government' | 'contractor';
+};
+export type RecordSort = 'record_no' | 'received_on' | 'buyer' | 'title' | 'stage' | 'owner' | 'deadline' | 'value';
+export type RecordPage = { rows: RecordRow[]; total: number; truncated: boolean };
+
+export type CustomerRef = { id: string; name: string; kind: 'government' | 'contractor' | null };
+export type AddedCustomer = CustomerRef & { existed: boolean };
+export type SimilarCustomer = CustomerRef & { distance: number };
+
 export const CURRENCIES = ['IRR', 'EUR', 'USD', 'AED', 'CNY'] as const;
+
+/** One row of the Customers tab (app_sales_customers); value keys only for sales_prices holders. */
+export type CustomerSummary = {
+  id: string;
+  name: string;
+  kind: 'government' | 'contractor' | null;
+  records: number;
+  as_client: number;
+  open: number;
+  won: number;
+  lost: number;
+  no_bid: number;
+  archived: number;
+  cancelled: number;
+  decided: number;
+  win_rate: number | null;
+  first_inquiry: string | null;
+  last_inquiry: string | null;
+  next_deadline: string | null;
+  main_owner_name: string | null;
+  contract_value?: Record<string, number>;
+  quoted?: Record<string, number>;
+  /** Won records: contract value, else our won price, per currency (§16.8). */
+  sales?: Record<string, number>;
+};
+
+export type CustomerDetail = {
+  customer: CustomerSummary;
+  /** Gregorian year of received_on; the page shows it as a Persian year range. */
+  per_year: { year: number; total: number; won: number; lost: number }[];
+  client_of: { id: string; name: string; count: number }[];
+  top_words: { word: string; count: number }[];
+  /** People in charge on this customer's records (owner set), for the page's filter. */
+  owners: { id: string; name: string; count: number }[];
+};
+
+export type SalesReport = {
+  pipeline: { stage_id: string; count: number; value?: Record<string, number> }[];
+  decided: { buyer_name: string | null; result_at: string; bid_result: 'won' | 'lost' | 'cancelled' }[];
+};
+
+/** Figure strip of the Customers tab (all) or one customer page (§16.8). Money keys only with sales_prices. */
+export type SalesMetrics = {
+  projects: number;
+  active: number;
+  won: number;
+  lost: number;
+  decided: number;
+  win_rate: number | null;
+  /** All-customers view only. */
+  customers?: number;
+  new_customers?: number;
+  sales_all?: Record<string, number>;
+  sales_ytd?: Record<string, number>;
+  sales_prev_year?: Record<string, number>;
+  pipeline?: Record<string, number>;
+  /** One-customer view only: this customer's fraction of all sales, per currency. */
+  share?: Record<string, number>;
+  last_sale_on?: string | null;
+};
+
+/** An in-charge name kept as text, for the Name matching page. */
+export type PersonToMatch = { name: string; count: number; matched_id: string | null; matched_name: string | null };
+export type NameAlias = {
+  id: string;
+  kind: 'customer' | 'person';
+  alias: string;
+  target_id: string;
+  target_name: string | null;
+  created_at: string;
+};

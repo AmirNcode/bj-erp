@@ -472,3 +472,198 @@ has what file" without storing it.
     them for prices); someone holding Sales permissions can be edited or have a password reset
     only by a caller who holds at least the same (the existing D4 rule: in practice the admin),
     so nobody weaker can sign in as them.
+
+## 16. Importing the inquiry register (added 2026-11-17)
+
+Status: §16.1–16.4, 16.7 **built 2026-11-17** (Phase A of `docs/plans/2026-11-17-sales-inquiry-import.md`); §16.5 is Phase B, not built.
+
+Owner request 2026-11-17: load the client's **inquiry register** (`Inquiries … - Inquiry.csv`, a
+Google Sheets export of the live file; this answers §13.1) through bulk import now, and let the
+client re-import the latest file when the module goes live. Supersedes "Import of past bids" in
+§12 and the "past bids are not typed in" non-goal in §2.
+
+**The file** (snapshot of 2026-11-17, newest row dated 1405-08): 11,374 rows, 14 columns, record
+numbers 1–11,659. Same numbering as the contract ledger: all 135 `B1.xlsx` contracts are in it
+under the same number, so an inquiry row and a ledger row are **one record**.
+
+### 16.1 Columns
+
+| Register column | Goes to |
+|---|---|
+| Record No. | `record_no` (the match key, like the ledger's `Rec`) |
+| Company | buyer (`sales_customers`, matched by name like §6b) |
+| Date | `received_on`. Jalali full date, `YYYY-MM` / `YYYY/MM` (→ 1st of month), two-digit years (`99/03/13` → 1399, `01/…` → 1401), English dates (`12 May 2019`). Anything else (`Urgent`) → field "Inquiry date (text)". |
+| Inquiry No. | custom field **Inquiry No.** |
+| Tender/Project | custom field **Tender / Project** (`tender`, `project` normalised; other text kept) |
+| Request No./ Project Name | `customer_ref` |
+| Description | `title` + `description` |
+| DATE OF COMMERCIAL OFFER | `submitted_on` when a full date; otherwise field "Offer date (text)" |
+| WINNER (RIAL) / (EURO) | our price on a bid **we won** → `bid_result = won`, `our_price`, currency IRR / EUR |
+| LOSER (RIAL) / (EURO) | our price on a bid **we lost** → `bid_result = lost`, `our_price`, currency |
+| In Charge Person in BJ | owner, by the preview's name → employee mapping (§15.19; names sorted by row count). `Y` / `N` (old rows, meaning unknown) are not names: kept as text in field **In charge (Y/N)**. |
+| Result, Status, Last Action, Contract person | kept whole in field **Status note**; known phrases also set the result (16.2) |
+
+Prices follow §15.18: written only for a `sales_prices` holder. `blank`, `-`, `?` are empty.
+
+### 16.2 Result and stage, first rule that matches
+
+1. Record is already in the **contract** flow (ledger import or made in the app as a contract):
+   only fill empty bid-phase fields; flow and stage untouched.
+2. A WINNER price, or the phrase برنده شدیم → **won** → contract flow, first stage (New); if
+   received before the cut-off (rule 6) → contract Finish instead, so old wins do not crowd the
+   open list. A later ledger import sets the real contract stage.
+3. A LOSER price, or برنده نشدیم → **lost** → bid flow Lost stage.
+4. شرکت نمی کنیم / قیمت ندادیم (in Status or In-charge) → **no bid** decision → No bid stage.
+5. Received on or after the cut-off → open, first bid stage (Received).
+6. Otherwise → new closed stage **Archived** (`kind = archived`, bid flow, seeded; entered only by
+   the import or by `sales_decide`). Cut-off = import day − **6 months** (shown in the preview,
+   changeable there). Rows with no readable date are archived.
+
+Archived and imported-closed bids are left out of win-rate reports (§15.20) and create no
+deadlines.
+
+### 16.3 Merge and re-import rules
+
+- Same record number as a record **made in the app** → skipped ("exists in app"), as §15.18.
+- Records the **inquiry import created**: a re-import updates them from the file (latest file
+  wins, empty never overwrites). Stage follows the file until someone edits the record here.
+- Records the **ledger import created**: the inquiry import only fills fields that are empty.
+  The ledger import, run after, may still set its own fields on records the inquiry import made.
+- A repeated record number inside the file: the first row imports, the rest are listed as errors
+  (7 in the snapshot).
+- **Batch removal** deletes only records that no other batch has touched and nobody edited here
+  (`sales_rfps.import_batches uuid[]` records every batch that wrote the row).
+
+### 16.4 Screen and scale
+
+- Settings › Sales › Import gains a choice: **Contract ledger** (as now) or **Inquiry register**.
+  The register import accepts `.csv` and `.xlsx`, has its own template, and the same preview
+  (counts by result, errors / warnings, unknown columns, name mapping).
+- 11k+ rows: the browser sends rows in chunks of 1,000 under **one** batch
+  (`app_sales_import_inquiries(p_batch, …)` continues an open batch); the preview shows progress.
+- The records list no longer loads every record: the server returns open records plus a
+  search / filter result (limit 500); Settings gets record numbers only; Reports aggregate in SQL.
+
+### 16.5 Predefined inputs (owner rule, 2026-11-17)
+
+Owner: one aim of the ERP is **no free typing into a field that has a known set of values**.
+Dates, companies, people, statuses, currencies and similar are **picked**; free text is only for
+what is text by nature (description, notes, reasons' detail, identifiers the customer gives).
+The register check (`erp-module/reports/`, 22k issues in 11k rows) shows what free typing costs.
+
+| Input today | Becomes |
+|---|---|
+| Buyer / client (free text + suggestion list; typing a new name creates a customer) | **Customer picker**. "Add customer" is a separate small dialog (name fa/en, G/C) that warns on a similar existing name (case, spaces, ی/ک, 1–2 letter typos) before saving. |
+| Project site | Picker over a **sites list per customer** (added the same way) |
+| Winner name (result) | Picker over **competitors** (a customer kind `competitor`; added the same way) |
+| Decision / result reason | **Reason list** (Settings, per decision kind) + optional note |
+| Source | Already a fixed list; gains Settings-editable values (ستاد, estelam, website, email…) |
+| Tender / Project, Inquiry type | Settings list (custom field type `select`) |
+| Currency | Fixed list (IRR, EUR, USD, AED, CNY) — check every form uses it |
+| Bond bank | **Bank list** (Settings) |
+| Deadline "what" (other) | Deadline-type list (Settings) + optional note |
+| Package document name | From the template list; "other" + text only as a fallback |
+| Item type | Item-type list (Settings); size / rating stay text for now (engineering data, revisit with engineering) |
+| Dates | Already `PersianDateField` everywhere — keep |
+| People | Already staff pickers — keep |
+
+Kept as text: title / description, customer ref (their number), bond number, notes, comments,
+reasons' detail, stage and field labels in Settings.
+
+Import (§6b, §16): imported values are matched to these lists (customers merged by name key,
+probable misspellings confirmed in the preview); a value that matches nothing is created as a new
+list entry only after the preview shows it, never silently.
+
+### 16.6 Open with the client (from the register check)
+
+The full list is in `erp-module/reports/Inquiry register - data issues.md` (git-ignored: client
+data). The one that changes §16.2: **36 signed contracts carry their price under LOSER and 89
+have no WINNER price**, so "LOSER = we lost" may be wrong. Until answered, the import does not
+derive *lost* from the LOSER column alone for a record that is in the contract ledger, and the
+preview shows the LOSER-derived count separately.
+
+### 16.7 Customer lookup and the Customers tab (owner, 2026-11-17)
+
+**Lookup field.** Company (buyer) and client on a new record / RFP (and on stage pages) are one
+combobox: typing filters existing customers (match on the name key: case, spaces, ی/ک); picking
+one selects it. When nothing matches exactly, the list ends with **"Create "<typed>""**; choosing
+it opens a small confirm (name, G / C) that first lists **similar existing names** (same key or
+1–2 letter typo) with "use this one". A customer is never created by just typing and saving.
+Replaces the B2 `CustomerPick` + `AddCustomerDialog` of the plan (done in Phase A).
+
+**Customers tab** (`/sales/customers`, beside Records · Deadlines · Reports · Settings; any
+`sales` reader). Table, one row per customer (`data-table`, `data-wide`, sortable, search):
+
+| Column | Value |
+|---|---|
+| Customer · type | name, G / C |
+| Records | all records as buyer (and as client, separately) |
+| Open | records in an open stage |
+| Won · Lost · No bid · Archived | counts by result / stage kind |
+| Win rate | won ÷ (won + lost), bids decided in the app **and** imported (shown with its basis n) |
+| Contract value* | sum of `total_value` of contract-flow records, **per currency** |
+| Quoted* | sum of `our_price` of submitted / decided bids, per currency |
+| First / last inquiry | min / max `received_on` |
+| Next deadline | earliest open deadline over its records |
+| Main contact in BJ | the in-charge person on most of its records |
+
+\* only for `sales_prices` holders (keys absent otherwise).
+
+**Customer page** (`/sales/customers/[id]`): the same figures as tiles; inquiries per year (small
+bar list, last 10 years) with won / lost split; its records (paged list, same component as
+Records, filtered by buyer); where it is the end user (client) for other buyers; top item
+descriptions quoted (most frequent words from titles, top 10). `sales_settings` holders also get
+**Rename** and **Merge into…** (moves every record, keeps the target's name and kind, logs an
+event on each moved record; the import's similar-name groups make duplicates expected).
+
+### 16.8 Name matching, table format, metrics (owner, 2026-11-17)
+
+Owner choices: fix import names on a **Name matching** page (not by reopening the file);
+**Sales** = won records' contract value, else our won price, per currency; **YTD** = since
+1 Farvardin, dated by order date → result date → offer date → received date; metrics on the
+Customers tab (all customers) **and** each customer page.
+
+**Name matching** (`/sales/settings/names`, `sales_settings` edit; link from each Earlier
+imports row as `?batch=<id>`):
+- *People*: every in-charge name kept as text (`in_charge_text`), grouped by name key, with its
+  record count and an employee picker (pre-filled when a saved match exists). Saving a match sets
+  `owner_id` on every record with that name whose owner is empty or came from the previous match,
+  keeps the original name in `in_charge_text`, and saves a **person alias** (name key → employee).
+  Clearing the picker removes the alias and the owners it set. `?batch=` limits the list to
+  records that batch wrote. `Y` / `N` are not names (already in the Y/N field).
+- *Companies*: likely duplicates (same grouping as the import preview, over existing customers
+  with their record counts), each with "merge into …"; and the list of saved **company aliases**
+  (spelling → customer) with remove.
+- **Aliases** (`sales_name_aliases`: company, kind `customer|person`, alias key, target id,
+  unique per company + kind + key). Merging customers saves the source name (and the source's
+  own aliases) as aliases of the target; renaming saves the old name. `private.sales_customer`
+  resolves an alias before creating; both imports resolve person aliases before the exact-name
+  match. So **re-importing the newer file keeps every merge and match**.
+
+**Tables** (Records, Customers, customer page records): the Employees / Finance format —
+`data-table w-full text-sm`, header cells `px-3 py-2.5 text-start` (numbers `text-end`),
+body cells `whitespace-nowrap px-3 py-2.5`, numbers `tabular-nums` on header and cells,
+wrapper `overflow-x-auto border-b border-border`, sortable headers with the up / down / both
+icons and `aria-sort`, stacked rows on phones (`md:hidden` list + `hidden md:block` table).
+Money is one **column per currency** present (e.g. Sales EUR, Sales IRR), so each sorts as a
+number. Records sort in the database (`sort`, `dir` in the URL like Employees); Customers sort
+in the browser (all rows are loaded).
+
+**Metrics** (figure strips, `border-s-[3px] border-primary ps-3`):
+- Customers tab (all): Sales all time · Sales YTD · Sales last year · Projects · Active
+  projects (open stage) · Win rate (with n) · Open pipeline (our price of open bids) ·
+  Customers (with ≥ 1 record) · New customers this year (first inquiry ≥ 1 Farvardin).
+- Customer page: the same for that customer (no customer counts) plus its **share of all
+  sales** per currency and **last sale** date.
+- Money figures only for `sales_prices` holders; each money figure lists one line per currency.
+
+### 16.9 Filters on the Customers tab and customer page (owner, 2026-11-17)
+
+Both pages get a filter bar (values in the URL): **received from / to** (Persian date fields),
+**result** (won · lost · no bid · cancelled · open · archived), **person in charge** (owner;
+on a customer page only when its records have more than one), and on the Customers tab
+**company type** (G / C). Filters choose which records count: the table figures, the metrics
+strip and the customer page's records all follow them; on the Customers tab, customers with no
+matching record are hidden while any filter is set. SQL: `app_sales_customers(p jsonb)`,
+`app_sales_metrics(…, p jsonb)`, `app_sales_list_page` gains `from`, `to`, `result`;
+`app_sales_customer` returns `owners`.

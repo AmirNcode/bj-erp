@@ -41,6 +41,8 @@ const RULES: Rule[] = [
   { re: /^sales: stage not available$/, key: 'salesStageNotAvailable' },
   { re: /^sales: flow needs an open stage$/, key: 'salesFlowNeedsOpenStage' },
   { re: /^sales: invalid input$/, key: 'salesInvalidInput' },
+  { re: /^sales: batch closed$/, key: 'salesBatchClosed' },
+  { re: /^sales: customer exists$/, key: 'salesCustomerExists' },
   // View as (FR-86). The pre-request hook makes every viewed transaction read-only,
   // so any save fails with Postgres's "cannot execute … in a read-only transaction";
   // a dead or foreign view is refused before it runs.

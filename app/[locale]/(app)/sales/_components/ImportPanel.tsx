@@ -7,13 +7,16 @@
  * generated here too.
  */
 
-import { useRef, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useLocale, useTranslations } from 'next-intl';
 import { Download, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { importSalesLedger, removeSalesBatch } from '@/lib/actions/sales';
 import { inChargeNames, parseLedger, templateRows, type LedgerIssue, type LedgerRow } from '@/lib/sales/ledger';
-import type { Bootstrap, ImportBatch, ImportResult } from '@/lib/sales/types';
+import type { Bootstrap, ImportBatch, ImportResult, RecordNumbers } from '@/lib/sales/types';
+import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { InquiryImport } from './InquiryImport';
 import { readXlsx, writeXlsx } from '@/lib/sales/xlsx';
 import { ConfirmDialog, PersonPick, Tag, useRun, useSalesFormat } from './parts';
 
@@ -28,7 +31,7 @@ type Parsed = {
 
 const norm = (s: string) => s.replace(/[يك‌]/g, (c) => (c === 'ي' ? 'ی' : c === 'ك' ? 'ک' : '')).replace(/\s+/g, ' ').trim().toLowerCase();
 
-export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existingNumbers: number[] }) {
+function LedgerImport({ boot, existingNumbers }: { boot: Bootstrap; existingNumbers: Set<number> }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
   const { run, pending } = useRun();
@@ -38,8 +41,6 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
   const [keep, setKeep] = useState<string[]>([]);
   const [people, setPeople] = useState<Record<string, string | null>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [removing, setRemoving] = useState<ImportBatch | null>(null);
-  const [removed, setRemoved] = useState<{ deleted: number; kept: number } | null>(null);
 
   function downloadTemplate() {
     const bytes = writeXlsx('BJ Contract', templateRows());
@@ -93,7 +94,7 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
     }, reset);
   }
 
-  const existing = new Set(existingNumbers);
+  const existing = existingNumbers;
   const errors = parsed?.issues.filter((i) => i.level === 'error') ?? [];
   const warnings = parsed?.issues.filter((i) => i.level === 'warning') ?? [];
   const updates = parsed?.rows.filter((r) => existing.has(r.rec)).length ?? 0;
@@ -212,7 +213,18 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
 
+function BatchList({ boot }: { boot: Bootstrap }) {
+  const t = useTranslations('sales');
+  const f = useSalesFormat();
+  const { run, pending } = useRun();
+  const [removing, setRemoving] = useState<ImportBatch | null>(null);
+  const [removed, setRemoved] = useState<{ deleted: number; kept: number } | null>(null);
+  return (
+    <>
       <section className="flex flex-col gap-3 border-t border-border pt-5">
         <h3 className="text-sm font-semibold">{t('import.batchesTitle')}</h3>
         <p className="max-w-3xl text-xs text-muted-foreground">{t('import.batchesHint')}</p>
@@ -224,6 +236,7 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
                 <tr>
                   <th className="text-start">{t('import.when')}</th>
                   <th className="text-start">{t('import.file')}</th>
+                  <th className="text-start">{t('import.kind')}</th>
                   <th className="text-end tabular-nums">{t('import.created')}</th>
                   <th className="text-end tabular-nums">{t('import.updated')}</th>
                   <th className="text-end tabular-nums">{t('import.skipped')}</th>
@@ -236,11 +249,16 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
                   <tr key={b.id} className="whitespace-nowrap">
                     <td>{f.date(b.created_at)}</td>
                     <td className="max-w-60 truncate"><bdi dir="ltr">{b.file_name ?? '—'}</bdi></td>
+                    <td>
+                      {t(b.kind === 'inquiry' ? 'import.kindInquiry' : 'import.kindLedger')}
+                      {!b.closed ? <> <Tag tone="warn">{t('import.incomplete')}</Tag></> : null}
+                    </td>
                     <td className="text-end tabular-nums">{f.number(b.created_count)}</td>
                     <td className="text-end tabular-nums">{f.number(b.updated_count)}</td>
                     <td className="text-end tabular-nums">{f.number(b.skipped_count)}</td>
                     <td className="text-end tabular-nums">{f.number(b.untouched)} / {f.number(b.records)}</td>
-                    <td className="text-end">
+                    <td className="whitespace-nowrap text-end">
+                      <Link href={`/${f.locale}/sales/settings/names?batch=${b.id}`} className="inline-flex h-7 items-center px-2 text-xs text-primary hover:underline" data-testid="sales-import-fix-names">{t('names.fixNames')}</Link>
                       {b.untouched > 0 ? (
                         <Button size="xs" variant="ghost" className="text-destructive" onClick={() => { setRemoved(null); setRemoving(b); }} data-testid="sales-import-remove">{t('import.remove')}</Button>
                       ) : null}
@@ -266,6 +284,30 @@ export function ImportPanel({ boot, existingNumbers }: { boot: Bootstrap; existi
           }, () => setRemoving(null))}
         />
       ) : null}
+    </>
+  );
+}
+
+export function ImportPanel({ boot, numbers }: { boot: Bootstrap; numbers: RecordNumbers }) {
+  const t = useTranslations('sales');
+  const locale = useLocale();
+  const [tab, setTab] = useState<'ledger' | 'inquiry'>('ledger');
+  const existing = useMemo(() => new Set([...numbers.app, ...numbers.ledger, ...numbers.inquiry]), [numbers]);
+  return (
+    <div className="flex flex-col gap-6" data-testid="sales-import-panel">
+      <div role="tablist" aria-label={t('import.kind')} className={tabListClass}>
+        {(['ledger', 'inquiry'] as const).map((k) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} className={tabClass(tab === k)}
+            onClick={() => setTab(k)} data-testid={`sales-import-tab-${k}`}>
+            {t(k === 'ledger' ? 'import.kindLedger' : 'import.kindInquiry')}
+          </button>
+        ))}
+      </div>
+      {tab === 'ledger' ? <LedgerImport boot={boot} existingNumbers={existing} /> : <InquiryImport boot={boot} numbers={numbers} />}
+      <p className="text-sm">
+        <Link href={`/${locale}/sales/settings/names`} className="text-primary underline underline-offset-2" data-testid="sales-import-names">{t('names.title')}</Link>
+      </p>
+      <BatchList boot={boot} />
     </div>
   );
 }

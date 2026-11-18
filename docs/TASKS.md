@@ -5,6 +5,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
+- [ ] **Owner re-imports the register once on :3501** (fixes the 6 Rial-in-EURO rows: 8894, 8902, 9098, 9958, 9965, 10384), then tests Name matching, sorting, metrics and filters.
+- [ ] **Owner tests the inquiry import (local :3501, migrations applied)**: Settings › Sales › Import › Inquiry register with the real `.csv`, then the ledger; Customers tab; merge a duplicate company.
+- [ ] **Client questions from the register check** (`erp-module/reports/Inquiry register - data issues.md`): what WINNER / LOSER mean (36 contracts have a LOSER price), Y / N in In-charge, Date = arrival?, two companies in one cell, Request No. vs project name, Inquiry No. channel values, Tender/Project values, "در ادامه رکورد …" links, Rial units, contact phone numbers.
+- [ ] **Phase B — predefined inputs** (plan `docs/plans/2026-11-17-sales-inquiry-import.md`): lists table, competitor / site / reason / bank / deadline-type / item-type pickers, Settings › Lists.
+
 - [ ] **Owner tests on the local stack (:3501)**: create a CEO role with the seven ERP · Sales permissions, import `B1.xlsx`, try a new RFP end to end. Then PR → merge (a push to `main` deploys).
 - [ ] **Owner tests the stage pages** (2026-11-17) on :3501: click through each stage, Submit, Next, the activity log's old → new lines. Checked only with fake data on a temporary page; no signed-in or e2e test yet.
 - [ ] **Old → new on list rows** (owner: later): items, documents and deadlines log who + which row only; add their changed values to the event (non-price fields only).

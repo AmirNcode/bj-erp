@@ -17,7 +17,7 @@ import { getPriceHistory } from '@/lib/actions/sales';
 import { todayInAppTz } from '@/lib/appDate';
 import { downloadCsv, fileDateStamp } from '@/lib/csv/download';
 import { deadlinePerformance, pipeline, results } from '@/lib/sales/reports';
-import type { Bootstrap, DeadlineRow, PriceHistoryRow, RecordRow } from '@/lib/sales/types';
+import type { Bootstrap, DeadlineRow, PriceHistoryRow, SalesReport } from '@/lib/sales/types';
 import { subTabClass, subTabListClass } from '@/lib/ui/tabs';
 import { Tag, useSalesFormat } from './parts';
 
@@ -29,7 +29,7 @@ function Csv({ rows, name, label }: { rows: () => string[][]; name: string; labe
   );
 }
 
-export function ReportsView({ boot, rows, deadlines }: { boot: Bootstrap; rows: RecordRow[]; deadlines: DeadlineRow[] }) {
+export function ReportsView({ boot, report, deadlines }: { boot: Bootstrap; report: SalesReport; deadlines: DeadlineRow[] }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
   const today = todayInAppTz();
@@ -41,8 +41,8 @@ export function ReportsView({ boot, rows, deadlines }: { boot: Bootstrap; rows: 
 
   const stages = useMemo(() => [...boot.stages].sort((a, b) => a.flow_id.localeCompare(b.flow_id) || a.position - b.position), [boot.stages]);
   const flowKind = (flowId: string) => boot.flows.find((x) => x.id === flowId)?.kind ?? 'bid';
-  const pipe = useMemo(() => pipeline(rows, stages), [rows, stages]);
-  const res = useMemo(() => results(rows, by), [rows, by]);
+  const pipe = useMemo(() => pipeline(report.pipeline, stages), [report.pipeline, stages]);
+  const res = useMemo(() => results(report.decided, by), [report.decided, by]);
   const perf = useMemo(() => deadlinePerformance(deadlines, today), [deadlines, today]);
   const stageOf = (id: string) => stages.find((s) => s.id === id);
   const values = (value: Record<string, number>) =>

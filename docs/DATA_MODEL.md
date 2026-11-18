@@ -912,7 +912,7 @@ Module-owned tables; all have RLS on and **no client policy or grant** (function
 | `sales_settings` | Per company: `next_record_no`, `warn_days`, `validity_days`, `doc_template`. |
 | `sales_customers` | Buyers and clients; matched by `name_key` (lower-case, single-spaced, Arabic ي/ك folded). `kind` government / contractor. |
 | `sales_flows` | Two per company: `kind` `bid`, `contract`. |
-| `sales_stages` | Stages of a flow: names, `position`, `kind` (`open, lost, no_bid, cancelled, done`), `action` (`decide, quote, submit`), stable `code`, `owner_role_id`, `required` keys, `active`. Never deleted. |
+| `sales_stages` | Stages of a flow: names, `position`, `kind` (`open, lost, no_bid, cancelled, done, archived` — archived: imported inquiry with no result, §16.2), `action` (`decide, quote, submit`), stable `code`, `owner_role_id`, `required` keys, `active`. Never deleted. |
 | `sales_field_defs` | Extra fields for records (`entity` `rfp`) and item rows (`item`); `key` always `x_…`; values live in `custom jsonb`. |
 | `sales_rfps` | The record: `record_no` (integer, unique per company, immutable), buyer / client, flow + stage, owner, bid decision and result, bid dates, submission, **prices** (`our_price`, `winning_bid`, `winner_name`, `total_value`), contract columns, `custom`, `item_columns`, `node_seq`, import batch + `edited_after_import`. |
 | `project_nodes` | The ID tree under a record (module-neutral name): `parent_id`, `seq`, `code` (`8997-1-3`, unique per company), `depth`, `child_seq`, descriptive columns, `custom`. Numbers are never reused (`node_seq` / `child_seq` only grow). |
@@ -923,7 +923,8 @@ Module-owned tables; all have RLS on and **no client policy or grant** (function
 | `sales_deadlines` | `kind` (`proposal_due, quote_due, bond_due, offer_valid_until, bond_expires, delivery_due, other`), `due_on`, responsible, `done_at`; `auto` rows are kept in step by `private.sales_sync_deadlines`. |
 | `sales_documents` | Proposal package checklist: name, assignee, status, where it lives. |
 | `sales_events` | Append-only activity. Never holds a price or guarantee value. An `edit` event (since 2026-11-17) is `{stage, fields, changes: [{field, from, to} \| {field, hidden: true}], side?}`: `stage` = the stage page it was submitted on (null from old callers), price fields (`our_price`, `winning_bid`, `winner_name`, `total_value`) only as `hidden`, customers by name (`buyer` / `client`), custom values per key (`custom.<key>`), `side` e.g. `bid_bond_opened`. |
-| `sales_import_batches` | One row per ledger import (counts). |
+| `sales_name_aliases` | Saved matches (§16.8): `kind` `customer` (spelling → customer, from merges and renames) or `person` (in-charge name → employee, from Name matching); `alias_key` = name key, unique per company + kind. Read by both imports. |
+| `sales_import_batches` | One row per import: `kind` (`ledger`, `inquiry`), `closed` (false while an inquiry import is still sending parts), counts. `sales_rfps.import_batches uuid[]` lists every batch that wrote a record; removing a batch deletes only records it alone wrote and nobody edited. |
 
 Rules: dates Gregorian; money `numeric(18,2)` + ISO currency on the record; `our_price` is the sum
 of `qty × unit_price` once any item has a price, typed before that; every write locks the record

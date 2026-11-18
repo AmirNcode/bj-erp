@@ -1993,6 +1993,24 @@ export type Database = {
       app_sales_save_settings: { Args: { p: Json }; Returns: undefined }
       app_sales_import: { Args: { p_file: string; p_rows: Json; p_fields?: Json; p_people?: Json }; Returns: Json }
       app_sales_remove_batch: { Args: { p_batch: string }; Returns: Json }
+      app_sales_import_inquiries: {
+        Args: { p_batch: string | null; p_file: string; p_rows: Json; p_people?: Json; p_cutoff?: string | null; p_last?: boolean }
+        Returns: Json
+      }
+      app_sales_record_numbers: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_list_page: { Args: { p?: Json }; Returns: Json }
+      app_sales_add_customer: { Args: { p: Json }; Returns: Json }
+      app_sales_similar_customers: { Args: { p_name: string }; Returns: Json }
+      app_sales_metrics: { Args: { p_customer: string | null; p_year_start: string; p_prev_year_start: string; p?: Json }; Returns: Json }
+      app_sales_people_to_match: { Args: { p_batch: string | null }; Returns: Json }
+      app_sales_match_person: { Args: { p_name: string; p_profile: string | null }; Returns: Json }
+      app_sales_aliases: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_remove_alias: { Args: { p_id: string }; Returns: undefined }
+      app_sales_customers: { Args: { p?: Json }; Returns: Json }
+      app_sales_customer: { Args: { p_id: string }; Returns: Json }
+      app_sales_rename_customer: { Args: { p_id: string; p_name: string }; Returns: undefined }
+      app_sales_merge_customers: { Args: { p_from: string; p_into: string }; Returns: Json }
+      app_sales_report: { Args: Record<PropertyKey, never>; Returns: Json }
       // FR-78 SMS. The API key is write-only: app_sms_settings never returns it.
       app_sms_settings: { Args: Record<PropertyKey, never>; Returns: Json }
       app_set_sms_settings: {

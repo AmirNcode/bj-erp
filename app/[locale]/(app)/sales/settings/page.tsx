@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
-import { listSalesRecords } from '@/lib/actions/sales';
+import { listSalesRecordNumbers } from '@/lib/actions/sales';
 import { loadSalesBootstrap } from '../_components/load';
 import { SettingsView } from '../_components/SettingsView';
 
@@ -16,6 +16,6 @@ export default async function SalesSettingsPage({ params }: Props) {
   const boot = await loadSalesBootstrap();
   if (!boot.caps.settings) notFound();
   // The import preview says how many ledger rows already exist here.
-  const list = await listSalesRecords();
-  return <SettingsView boot={boot} existingNumbers={list.ok ? list.data.map((r) => r.record_no) : []} />;
+  const list = await listSalesRecordNumbers();
+  return <SettingsView boot={boot} numbers={list.ok ? list.data : { app: [], ledger: [], inquiry: [] }} />;
 }

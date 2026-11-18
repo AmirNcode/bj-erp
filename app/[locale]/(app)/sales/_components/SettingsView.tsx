@@ -15,13 +15,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { orderSalesStages, saveSalesField, saveSalesSettings, saveSalesStage } from '@/lib/actions/sales';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
-import type { Bootstrap, FieldDef, FieldType, Flow, Stage, StageKind } from '@/lib/sales/types';
+import type { Bootstrap, RecordNumbers, FieldDef, FieldType, Flow, Stage, StageKind } from '@/lib/sales/types';
 import { Field, NumberInput, Select, Tag, useRun, useSalesFormat } from './parts';
 import { ImportPanel } from './ImportPanel';
 
 type Section = 'stages' | 'fields' | 'general' | 'import';
 
-export function SettingsView({ boot, existingNumbers }: { boot: Bootstrap; existingNumbers: number[] }) {
+export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: RecordNumbers }) {
   const t = useTranslations('sales.settings');
   const [section, setSection] = useState<Section>('stages');
   return (
@@ -37,7 +37,7 @@ export function SettingsView({ boot, existingNumbers }: { boot: Bootstrap; exist
       {section === 'stages' ? <StagesEditor boot={boot} /> : null}
       {section === 'fields' ? <FieldsEditor boot={boot} /> : null}
       {section === 'general' ? <GeneralSettings boot={boot} /> : null}
-      {section === 'import' ? <ImportPanel boot={boot} existingNumbers={existingNumbers} /> : null}
+      {section === 'import' ? <ImportPanel boot={boot} numbers={numbers} /> : null}
     </div>
   );
 }

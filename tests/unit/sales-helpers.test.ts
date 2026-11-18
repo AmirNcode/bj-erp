@@ -3,7 +3,7 @@ import { daysLeft, deadlineState } from '@/lib/sales/deadlines';
 import { buildTree, columnsForDepth, pathTo } from '@/lib/sales/tree';
 import { defaultNextStage, defaultOwner } from '@/lib/sales/stages';
 import { deadlinePerformance, pipeline, results } from '@/lib/sales/reports';
-import type { DeadlineRow, NodeRow, RecordRow, Stage } from '@/lib/sales/types';
+import type { DeadlineRow, NodeRow, Stage } from '@/lib/sales/types';
 
 const node = (id: string, parent: string | null, seq: number, code: string): NodeRow => ({
   id, parent_id: parent, seq, code, depth: code.split('-').length - 1, description: null, product_type: null,
@@ -13,11 +13,6 @@ const stage = (id: string, position: number, extra: Partial<Stage> = {}): Stage 
   id, flow_id: 'f', position, name_fa: id, name_en: id, kind: 'open', action: null, code: id,
   owner_role_id: null, required: [], active: true, ...extra,
 });
-const rec = (extra: Partial<RecordRow>): RecordRow => ({
-  stage_id: 'a', bid_decision: 'bid', bid_result: null, imported: false, currency: 'EUR', buyer_name: 'NISOC',
-  result_at: null, ...extra,
-} as RecordRow);
-
 describe('deadlines', () => {
   it('counts whole days; today is 0, yesterday is overdue', () => {
     expect(daysLeft('2026-11-20', '2026-11-16')).toBe(4);
@@ -70,25 +65,24 @@ describe('stages', () => {
 });
 
 describe('reports', () => {
-  it('pipeline: count and value per currency, contract value before our price', () => {
-    const rows = [rec({ total_value: 100, our_price: 5 }), rec({ our_price: 50 }), rec({ currency: 'IRR', total_value: 7 }),
-      rec({ stage_id: 'b' }), rec({ stage_id: 'unknown' })];
+  it('pipeline: keeps stage order, drops empty and unknown stages', () => {
+    const rows = [{ stage_id: 'b', count: 1 }, { stage_id: 'a', count: 3, value: { EUR: 150, IRR: 7 } }, { stage_id: 'unknown', count: 2 }];
     expect(pipeline(rows, [stage('a', 1), stage('b', 2), stage('c', 3)])).toEqual([
       { stageId: 'a', count: 3, value: { EUR: 150, IRR: 7 } },
       { stageId: 'b', count: 1, value: {} },
     ]);
   });
-  it('results: win rate over won + lost; imported contracts and undecided bids are left out', () => {
-    const rows = [rec({ bid_result: 'won' }), rec({ bid_result: 'lost' }), rec({ bid_result: 'lost' }),
-      rec({ bid_result: 'cancelled' }), rec({ bid_result: 'won', imported: true, bid_decision: 'pending' }),
-      rec({ bid_result: 'cancelled', buyer_name: 'PEDEC' })];
+  it('results: win rate over won + lost', () => {
+    const d = (bid_result: 'won' | 'lost' | 'cancelled', buyer_name: string | null = 'NISOC', result_at = '2026-11-16T10:00:00Z') => ({ buyer_name, bid_result, result_at });
+    const rows = [d('won'), d('lost'), d('lost'), d('cancelled'), d('cancelled', 'PEDEC'), d('won', null)];
     expect(results(rows, 'customer')).toEqual([
       { key: 'NISOC', decided: 4, won: 1, lost: 2, cancelled: 1, winRate: 1 / 3 },
+      { key: '—', decided: 1, won: 1, lost: 0, cancelled: 0, winRate: 1 },
       { key: 'PEDEC', decided: 1, won: 0, lost: 0, cancelled: 1, winRate: null },
     ]);
   });
   it('results by Persian year', () => {
-    const rows = [rec({ bid_result: 'won', result_at: '2026-11-16T10:00:00Z' }), rec({ bid_result: 'lost', result_at: '2025-06-01T10:00:00Z' })];
+    const rows = [{ buyer_name: 'A', bid_result: 'won' as const, result_at: '2026-11-16T10:00:00Z' }, { buyer_name: 'A', bid_result: 'lost' as const, result_at: '2025-06-01T10:00:00Z' }];
     expect(results(rows, 'year').map((r) => r.key)).toEqual(['1405', '1404']);
   });
   it('deadline performance ignores rows that arrived already done', () => {
