@@ -385,7 +385,14 @@
       "saved": "Saved.",
       "cleared": "Number removed.",
       "invalid": "Enter an Iranian mobile number (09…).",
-      "readOnly": "Read-only while viewing as someone else."
+      "readOnly": "Read-only while viewing as someone else.",
+      "confirmTitle": "Use this number for SMS?",
+      "confirmBody": "Notifications and any password sent by SMS will go to this number. Check it is yours and correct.",
+      "confirmRemoveTitle": "Remove your mobile number?",
+      "confirmRemoveBody": "You won't get SMS notifications until you add a number again.",
+      "confirm": "Yes, save",
+      "confirmRemove": "Yes, remove",
+      "cancel": "Cancel"
     },
     "tabs": {
       "profile": "Profile",

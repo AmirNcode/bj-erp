@@ -12,7 +12,7 @@ was deployed; semantic versioning starts at the first tag.
 ### Profile tabs + self-service SMS mobile (FR-95) — built 2026-11-19, not deployed (branch `feat/profile-tabs`)
 
 - **Profile is now three tabs**: Profile (name, code, photo, mobile for SMS, saved signature — two columns on a computer), Personal information, Account (language, password).
-- **Everyone can add or change their own mobile number** on the Profile tab; SMS notifications go to it. It is the same number Personal information shows. Persian digits and `+98` are accepted; leaving it blank removes it.
+- **Everyone can add or change their own mobile number** on the Profile tab; SMS notifications go to it. It is the same number Personal information shows. Persian digits and `+98` are accepted; leaving it blank removes it. Save asks for confirmation and shows the exact number first.
 - **Phones**: Organization, Help, Settings and Log out are one row above the tabs; the repeated "Profile" title is gone.
 - Migration `20261119120000_self_service_mobile`.
 

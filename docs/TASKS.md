@@ -5,7 +5,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## FR-95 profile tabs + self-service mobile (built 2026-11-19 on `feat/profile-tabs`, local only)
 
-- [ ] **Owner decision — security:** changing the mobile needs no password. A stolen, signed-in session could set its own number, then an HR password reset texts the new password there. Options: ask for the current password, text the old number on change, or block reset-by-SMS for N days after a change.
 - [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `view-as` specs were edited for the new tabs but not run): screens checked on a temporary no-login page only.
 
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)

@@ -3,7 +3,9 @@
 /**
  * Profile › Mobile for SMS (FR-95). Everyone sets their own number here; it is
  * employee_personal_info.mobile, the number SMS notifications go to. Blank
- * removes it. Read-only while an admin is viewing as this person.
+ * removes it. Save asks for confirmation, showing the exact number (owner
+ * 2026-11-19: no password, but an explicit confirm). Read-only while an admin
+ * is viewing as this person.
  */
 
 import { useState, useTransition } from 'react';
@@ -14,6 +16,16 @@ import { normalizeIrMobile } from '@/lib/admin/format';
 import { useViewAs } from '@/app/[locale]/(app)/_components/ViewAsContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export function SmsMobileCard({ initial }: { initial: string | null }) {
   const t = useTranslations('profile.mobile');
@@ -23,18 +35,26 @@ export function SmsMobileCard({ initial }: { initial: string | null }) {
   const [value, setValue] = useState(initial ?? '');
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+  // The number awaiting confirmation: a normalized 09… value, or '' to remove it; null = no dialog.
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   const trimmed = value.trim();
   const unchanged = (normalizeIrMobile(trimmed) ?? trimmed) === (current ?? '');
 
-  function save() {
-    if (trimmed !== '' && !normalizeIrMobile(trimmed)) {
+  function askToSave() {
+    const normalized = normalizeIrMobile(trimmed);
+    if (trimmed !== '' && !normalized) {
       setMessage({ kind: 'error', text: t('invalid') });
       return;
     }
     setMessage(null);
+    setConfirming(normalized ?? '');
+  }
+
+  function save(next: string) {
+    setConfirming(null);
     startTransition(async () => {
-      const res = await setMyMobile(trimmed);
+      const res = await setMyMobile(next);
       if (!res.ok) {
         setMessage({ kind: 'error', text: res.error });
         return;
@@ -65,7 +85,7 @@ export function SmsMobileCard({ initial }: { initial: string | null }) {
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          save();
+          askToSave();
         }}
       >
         <label className="min-w-0 flex-1 space-y-1.5">
@@ -88,6 +108,25 @@ export function SmsMobileCard({ initial }: { initial: string | null }) {
           {t('save')}
         </Button>
       </form>
+      <AlertDialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
+        <AlertDialogContent data-testid="sms-mobile-confirm-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirming ? t('confirmTitle') : t('confirmRemoveTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>{confirming ? t('confirmBody') : t('confirmRemoveBody')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {confirming && (
+            <p dir="ltr" className="text-center font-mono text-lg font-semibold" data-testid="sms-mobile-confirm-number">
+              {confirming}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="sms-mobile-confirm-cancel">{t('cancel')}</AlertDialogCancel>
+            <AlertDialogAction data-testid="sms-mobile-confirm" onClick={() => confirming !== null && save(confirming)}>
+              {confirming ? t('confirm') : t('confirmRemove')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {viewing && <p className="text-xs text-muted-foreground">{t('readOnly')}</p>}
       {message && (
         <p

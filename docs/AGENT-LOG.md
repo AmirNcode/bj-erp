@@ -106,7 +106,7 @@ Copy this block verbatim and fill it in.
 - Committed on `feat/profile-tabs` (local only, not pushed). `feat/erp-sales-module` untouched.
 
 **For the next agent**
-- Open security decision for Amir (TASKS): mobile change without re-auth + HR password reset by SMS.
+- Security tradeoff decided by Amir (2026-11-19): no password re-check for a mobile change; instead Save opens a confirmation dialog showing the exact number (remove has its own wording). A stolen signed-in session could still redirect HR password-reset SMS — accepted.
 
 ## 2026-11-17 — ERP › Sales: stage pages (clickable stages, Submit with old → new ledger, Next stage)
 
