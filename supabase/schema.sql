@@ -51,7 +51,8 @@ CREATE TYPE public.app_role AS ENUM (
     'security',
     'hr',
     'finance',
-    'procurement'
+    'procurement',
+    'test-emp'
 );
 
 
@@ -1911,9 +1912,13 @@ CREATE FUNCTION private.errand_extension_requester_has_time_off() RETURNS trigge
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
+declare v_employee uuid := (select employee_id from public.leave_requests where id = new.request_id);
 begin
+  if tg_op = 'INSERT' and private.is_test_account(v_employee) then
+    raise exception 'test accounts cannot send requests' using errcode = '42501';
+  end if;
   if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
-     and private.is_security_only((select employee_id from public.leave_requests where id = new.request_id)) then
+     and private.is_security_only(v_employee) then
     raise exception 'no time off for this account' using errcode = '42501';
   end if;
   return new;
@@ -2276,6 +2281,18 @@ $$;
 
 
 --
+-- Name: is_test_account(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.is_test_account(uid uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select exists (select 1 from public.user_roles where user_id = uid and role::text like 'test-%');
+$$;
+
+
+--
 -- Name: is_travel_hr(uuid, uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -2432,6 +2449,9 @@ CREATE FUNCTION private.leave_request_requester_has_time_off() RETURNS trigger
     SET search_path TO ''
     AS $$
 begin
+  if tg_op = 'INSERT' and private.is_test_account(new.employee_id) then
+    raise exception 'test accounts cannot send requests' using errcode = '42501';
+  end if;
   if (tg_op = 'INSERT' or (new.status = 'approved' and old.status <> 'approved'))
      and private.is_security_only(new.employee_id) then
     raise exception 'no time off for this account' using errcode = '42501';
@@ -2892,6 +2912,24 @@ CREATE FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date,
        )
   );
 $$;
+
+
+--
+-- Name: replacement_not_test_account(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.replacement_not_test_account() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if new.replacement_id is not null
+     and (tg_op = 'INSERT' or new.replacement_id is distinct from old.replacement_id)
+     and private.is_test_account(new.replacement_id) then
+    raise exception 'a test account cannot be a replacement' using errcode = '42501';
+  end if;
+  return new;
+end $$;
 
 
 --
@@ -3940,6 +3978,7 @@ CREATE FUNCTION private.same_team(uid uuid, target uuid) RETURNS boolean
     SET search_path TO ''
     AS $$
   select private.is_active(uid)
+     and not private.is_test_account(uid)
      and exists (
        select 1
          from public.profiles caller
@@ -3966,7 +4005,7 @@ begin
     (p_company, 'admin', 'system', 'Admin'), (p_company, 'manager', 'system', 'Manager'),
     (p_company, 'employee', 'system', 'Employee'), (p_company, 'hr', 'preset', 'HR'),
     (p_company, 'security', 'preset', 'Security'), (p_company, 'finance', 'preset', 'Finance'),
-    (p_company, 'procurement', 'preset', 'Procurement')
+    (p_company, 'procurement', 'preset', 'Procurement'), (p_company, 'test-emp', 'system', 'test-emp')
   on conflict do nothing;
 
   insert into public.role_permissions (role_id, permission, level)
@@ -4339,13 +4378,13 @@ begin
        where id = o.id and event = 'password_reset';
       continue;
     end if;
-    if s.send_method = 'pattern' and o.event <> 'test' then
+    if s.send_method = 'pattern' and (o.event <> 'test' or o.test_template is not null) then
       v_body := jsonb_build_object(
-        'bodyId', case o.event when 'approver_new' then s.body_approver_new
+        'bodyId', case coalesce(o.test_template, o.event) when 'approver_new' then s.body_approver_new
                                when 'employee_decision' then s.body_employee_decision
                                when 'password_reset' then s.body_password_reset end);
       if v_body->'bodyId' = 'null'::jsonb then
-        perform private.sms_fail(o.id, 'no pattern body id for ' || o.event, false);
+        perform private.sms_fail(o.id, 'no pattern body id for ' || coalesce(o.test_template, o.event), false);
         update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
          where id = o.id and event = 'password_reset';
         continue;
@@ -11225,10 +11264,10 @@ end $$;
 
 
 --
--- Name: app_sms_test(text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_sms_test(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_sms_test(p_mobile text) RETURNS uuid
+CREATE FUNCTION public.app_sms_test(p_mobile text, p_template text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -11236,17 +11275,52 @@ declare
   v_company uuid := private.require_admin();
   s private.sms_settings%rowtype;
   v_mobile text := private.normalize_ir_mobile(p_mobile);
+  v_template text;
+  v_kind text := private.sms_kind_label('leave', 'day', 'fa');
+  v_date text := private.jalali_text(current_date, 'fa');
+  v_name text;
+  v_body text;
+  v_args text[] := '{}';
   v_id uuid;
 begin
   if v_mobile is null then raise exception 'invalid mobile' using errcode = '22023'; end if;
   select * into s from private.sms_settings where company_id = v_company;
   if s.mode is null or s.mode = 'off' then raise exception 'sms is off' using errcode = '22023'; end if;
-  insert into public.sms_outbox (company_id, event, to_mobile, body, created_by)
-  values (v_company, 'test', v_mobile,
-          private.sms_frame(v_company, 'پیام آزمایشی سامانه' || chr(10) || s.site_label), auth.uid())
+  if p_template is not null and p_template not in ('approver_new', 'employee_decision', 'password_reset') then
+    raise exception 'sms: invalid input' using errcode = '22023';
+  end if;
+  if s.send_method = 'pattern' then
+    v_template := coalesce(p_template, 'approver_new');
+    if (case v_template when 'approver_new' then s.body_approver_new
+                        when 'employee_decision' then s.body_employee_decision
+                        else s.body_password_reset end) is null then
+      raise exception 'no pattern body id for %', v_template using errcode = '22023';
+    end if;
+    select p.full_name into v_name from public.profiles p where p.id = auth.uid();
+    v_name := coalesce(nullif(btrim(v_name), ''), 'آزمایش');
+    if v_template = 'approver_new' then
+      v_args := array[v_name, v_kind, v_date];
+      v_body := format('درخواست %s %s (%s) منتظر تأیید شماست.', v_kind, v_name, v_date);
+    elsif v_template = 'employee_decision' then
+      v_args := array[v_kind, v_date, 'تأیید شد'];
+      v_body := format('درخواست %s شما (%s) %s.', v_kind, v_date, 'تأیید شد');
+    else
+      -- Sample values only: no real password is ever sent by a test.
+      v_args := array['Test1234', '0000'];
+      v_body := format('رمز موقت شما: %s%sکد ورود: %s', 'Test1234', chr(10), '0000');
+    end if;
+    v_body := 'پیام آزمایشی سامانه (الگو)' || chr(10) || v_body;
+  elsif p_template is not null then
+    raise exception 'sms: invalid input' using errcode = '22023';
+  else
+    v_body := 'پیام آزمایشی سامانه' || chr(10) || s.site_label;
+  end if;
+  insert into public.sms_outbox (company_id, event, to_mobile, body, args, test_template, created_by)
+  values (v_company, 'test', v_mobile, private.sms_frame(v_company, v_body), v_args, v_template, auth.uid())
   returning id into v_id;
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
-  values (auth.uid(), 'sms_test', 'sms_outbox', v_id, jsonb_build_object('mode', s.mode));
+  values (auth.uid(), 'sms_test', 'sms_outbox', v_id,
+          jsonb_build_object('mode', s.mode, 'send_method', s.send_method, 'template', v_template));
   return v_id;
 end $$;
 
@@ -12143,7 +12217,7 @@ CREATE FUNCTION public.get_my_team_directory() RETURNS TABLE(profile_id uuid, fu
     SET search_path TO ''
     AS $$
   with me as (
-    select id, company_id, department_id, manager_id
+    select id, company_id, department_id, manager_id, private.is_test_account(id) as limited
       from public.profiles
      where id = auth.uid()
        and active
@@ -12167,7 +12241,7 @@ CREATE FUNCTION public.get_my_team_directory() RETURNS TABLE(profile_id uuid, fu
    and p.id <> me.id
    and (
      p.id = me.manager_id
-     or (me.department_id is not null and p.department_id = me.department_id)
+     or (not me.limited and me.department_id is not null and p.department_id = me.department_id)
    )
   left join public.user_roles ur on ur.user_id = p.id
   left join public.departments d on d.id = p.department_id
@@ -12186,11 +12260,27 @@ CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name 
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  with me as (
-    select company_id
+  with recursive me as (
+    select id, company_id, private.is_test_account(id) as limited
       from public.profiles
      where id = auth.uid()
        and active
+  ),
+  -- Walks up active managers only (the chart drops an inactive manager's link too).
+  -- The depth cap stops a manager_id cycle.
+  up(id, depth) as (
+    select me.id, 0 from me where me.limited
+    union
+    select m.id, up.depth + 1
+      from up
+      join public.profiles p on p.id = up.id
+      join public.profiles m on m.id = p.manager_id and m.active
+     where up.depth < 64
+  ),
+  visible as (
+    select up.id from up
+    union
+    select r.id from me join public.profiles r on r.manager_id = me.id where me.limited
   )
   select
     p.id,
@@ -12211,6 +12301,7 @@ CREATE FUNCTION public.get_org_chart() RETURNS TABLE(profile_id uuid, full_name 
    and p.active
   left join public.departments d on d.id = p.department_id
   left join public.profiles m on m.id = p.manager_id
+  where not me.limited or p.id in (select visible.id from visible)
   order by p.full_name;
 $$;
 
@@ -12228,6 +12319,7 @@ CREATE FUNCTION public.get_replacement_candidates(p_start date, p_end date, p_un
       from public.profiles
      where id = auth.uid()
        and active
+       and not private.is_test_account(id)
   )
   select
     p.id,
@@ -12247,6 +12339,7 @@ CREATE FUNCTION public.get_replacement_candidates(p_start date, p_end date, p_un
     on p.company_id = me.company_id
    and p.active
    and p.id <> me.id
+   and not private.is_test_account(p.id)
    and ((me.department_id is not null and p.department_id = me.department_id)
         or private.delegate_eligible(me.id,p.id))
   order by p.full_name;
@@ -14155,10 +14248,12 @@ CREATE TABLE public.sms_outbox (
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     sent_at timestamp with time zone,
+    test_template text,
     CONSTRAINT sms_outbox_event CHECK ((event = ANY (ARRAY['approver_new'::text, 'employee_decision'::text, 'password_reset'::text, 'test'::text]))),
     CONSTRAINT sms_outbox_mobile CHECK (((to_mobile IS NULL) OR (to_mobile ~ '^09[0-9]{9}$'::text))),
     CONSTRAINT sms_outbox_skipped_reason CHECK (((status = 'skipped'::text) = (skip_reason IS NOT NULL))),
-    CONSTRAINT sms_outbox_status CHECK ((status = ANY (ARRAY['queued'::text, 'sending'::text, 'sent'::text, 'dry_run'::text, 'failed'::text, 'skipped'::text])))
+    CONSTRAINT sms_outbox_status CHECK ((status = ANY (ARRAY['queued'::text, 'sending'::text, 'sent'::text, 'dry_run'::text, 'failed'::text, 'skipped'::text]))),
+    CONSTRAINT sms_outbox_test_template CHECK (((test_template IS NULL) OR ((event = 'test'::text) AND (test_template = ANY (ARRAY['approver_new'::text, 'employee_decision'::text, 'password_reset'::text])))))
 );
 
 
@@ -14167,6 +14262,13 @@ CREATE TABLE public.sms_outbox (
 --
 
 COMMENT ON TABLE public.sms_outbox IS 'FR-78: one row per text. Written only by security-definer functions; the admin reads it in the SMS tab.';
+
+
+--
+-- Name: COLUMN sms_outbox.test_template; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.sms_outbox.test_template IS 'FR-78: on a test row sent by pattern, the event whose template it uses; null otherwise.';
 
 
 --
@@ -15636,6 +15738,13 @@ CREATE TRIGGER leave_requests_per_diem_daily_only BEFORE INSERT OR UPDATE OF per
 
 
 --
+-- Name: leave_requests leave_requests_replacement_not_test; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER leave_requests_replacement_not_test BEFORE INSERT OR UPDATE OF replacement_id ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.replacement_not_test_account();
+
+
+--
 -- Name: leave_requests leave_requests_requester_has_time_off; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -15696,6 +15805,13 @@ CREATE TRIGGER profiles_sync_names BEFORE INSERT OR UPDATE ON public.profiles FO
 --
 
 CREATE TRIGGER replacement_signoff_sync AFTER INSERT OR UPDATE OF replacement_id ON public.leave_requests FOR EACH ROW EXECUTE FUNCTION private.replacement_signoff_sync();
+
+
+--
+-- Name: leave_request_replacement_signoffs replacement_signoffs_not_test; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER replacement_signoffs_not_test BEFORE INSERT OR UPDATE OF replacement_id ON public.leave_request_replacement_signoffs FOR EACH ROW EXECUTE FUNCTION private.replacement_not_test_account();
 
 
 --
@@ -18140,6 +18256,14 @@ GRANT ALL ON FUNCTION private.is_security_only(uid uuid) TO authenticated;
 
 
 --
+-- Name: FUNCTION is_test_account(uid uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.is_test_account(uid uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION private.is_test_account(uid uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION is_travel_hr(p_uid uuid, p_request uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -18332,6 +18456,13 @@ REVOKE ALL ON FUNCTION private.refresh_separation_status(p_id uuid) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.replacement_is_away(p_replacement_id uuid, p_start date, p_end date, p_unit public.leave_unit, p_start_time time without time zone, p_end_time time without time zone) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION replacement_not_test_account(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.replacement_not_test_account() FROM PUBLIC;
 
 
 --
@@ -20070,13 +20201,13 @@ GRANT ALL ON FUNCTION public.app_sms_settings() TO service_role;
 
 
 --
--- Name: FUNCTION app_sms_test(p_mobile text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_sms_test(p_mobile text, p_template text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_sms_test(p_mobile text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO postgres;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO service_role;
 
 
 --

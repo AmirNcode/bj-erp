@@ -1,4 +1,4 @@
-# Profile Tabs + Self-Service SMS Mobile (FR-95) Implementation Plan
+# Profile Tabs + Self-Service SMS Mobile (FR-96) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -54,7 +54,7 @@
 - [ ] **Step 3: Write the migration:** `security definer`, `set search_path to ''`, `volatile`; require `private.is_active(auth.uid())` else `raise ... using errcode='42501'`; `v := private.normalize_ir_mobile(p_mobile)`; if `nullif(btrim(p_mobile),'') is not null and v is null` raise `'invalid mobile'` errcode `22023`; `insert ... on conflict (employee_id) do update set mobile = excluded.mobile` (company from `public.profiles`); audit row; `revoke all ... from public, anon; grant execute ... to authenticated`.
 - [ ] **Step 4: Apply to the clone, run the new test + `tests/sql/sms.sql` + `tests/sql/fr52-53-signature-personal-info.sql`** → all pass. Drop the clone.
 - [ ] **Step 5: Apply to local `postgres`, restart `bj-erp-rest-1`, patch `schema.sql` (diff schema dumps before/after, only new hunks), edit `types.ts`, `npx tsc --noEmit`.**
-- [ ] **Step 6: Commit** `feat(profile): app_set_my_mobile — everyone sets their own SMS mobile (FR-95)`
+- [ ] **Step 6: Commit** `feat(profile): app_set_my_mobile — everyone sets their own SMS mobile (FR-96)`
 
 ### Task 2: Server action + SMS mobile card
 
@@ -89,11 +89,11 @@
 - [ ] **Step 4: Account page:** `grid gap-4 md:grid-cols-2` — Preferences (language) card, Change password card; `LogoutButton` at the end, `hidden md:flex`.
 - [ ] **Step 5: Verify in browser** (dev server against local stack, live-backup DB, Ayasi test account): desktop 1280 and mobile 375 for each tab; tab underline correct in fa (no locale prefix) and en; save a number with Persian digits, reload, see it in Personal information too; View as → field disabled. Screenshots.
 - [ ] **Step 6: `npm run lint`, `npx tsc --noEmit`, `npm run build`, e2e `signature-personal-info.spec.ts` + `password.spec.ts` + `settings.spec.ts` (`--workers=1`)** → pass.
-- [ ] **Step 7: Commit** `feat(profile): tabs — Profile, Personal information, Account (FR-95)`
+- [ ] **Step 7: Commit** `feat(profile): tabs — Profile, Personal information, Account (FR-96)`
 
 ### Task 4: Docs
 
-**Files:** `docs/REQUIREMENTS.md` (FR-95), `docs/PERMISSIONS.md` (`employee_personal_info` section: own mobile via `app_set_my_mobile`, any active user), `docs/DATA_MODEL.md` (mobile note), `docs/CHANGELOG.md`, `docs/TASKS.md`, `docs/AGENT-LOG.md`, `CLAUDE.md` (one gotcha line: own mobile = `app_set_my_mobile`, not the RLS update).
+**Files:** `docs/REQUIREMENTS.md` (FR-96), `docs/PERMISSIONS.md` (`employee_personal_info` section: own mobile via `app_set_my_mobile`, any active user), `docs/DATA_MODEL.md` (mobile note), `docs/CHANGELOG.md`, `docs/TASKS.md`, `docs/AGENT-LOG.md`, `CLAUDE.md` (one gotcha line: own mobile = `app_set_my_mobile`, not the RLS update).
 
 - [ ] **Step 1: Write the entries.**
-- [ ] **Step 2: Commit** `docs: FR-95 profile tabs + self-service mobile [skip ci]` — never push with this as the newest commit on top of code.
+- [ ] **Step 2: Commit** `docs: FR-96 profile tabs + self-service mobile [skip ci]` — never push with this as the newest commit on top of code.

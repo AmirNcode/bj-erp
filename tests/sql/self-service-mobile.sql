@@ -1,4 +1,4 @@
--- FR-95 self-service SMS mobile: any active user sets only their own employee_personal_info.mobile
+-- FR-96 self-service SMS mobile: any active user sets only their own employee_personal_info.mobile
 -- through app_set_my_mobile (normalizing, clearing, refusing bad input, audit field names only).
 -- Run ONLY in a disposable test database, as the image superuser (supabase_admin):
 --   ( export PGPASSWORD="$(grep '^POSTGRES_PASSWORD=' deploy/.env | cut -d= -f2-)"

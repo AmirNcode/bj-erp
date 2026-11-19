@@ -125,7 +125,7 @@ export async function importPersonalInfo(
 }
 
 /**
- * FR-95: the caller's own SMS mobile (employee_personal_info.mobile), open to
+ * FR-96: the caller's own SMS mobile (employee_personal_info.mobile), open to
  * every active user — unlike savePersonalInfo, it does not need
  * personal_info_own. Blank clears the number.
  */

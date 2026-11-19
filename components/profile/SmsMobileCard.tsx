@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Profile › Mobile for SMS (FR-95). Everyone sets their own number here; it is
+ * Profile › Mobile for SMS (FR-96). Everyone sets their own number here; it is
  * employee_personal_info.mobile, the number SMS notifications go to. Blank
  * removes it. Save asks for confirmation, showing the exact number (owner
  * 2026-11-19: no password, but an explicit confirm). Read-only while an admin

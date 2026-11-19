@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser } from '@/lib/auth/context';
+import { getCachedUser, getCachedTestAccount } from '@/lib/auth/context';
 import { getOrgChart } from '@/lib/actions/org';
 import { PageHeader } from '../_components/PageHeader';
 import { OrgChart } from './OrgChart';
@@ -23,7 +23,7 @@ export default async function OrganizationPage({ params }: Props) {
   if (!user) redirect(`/${locale}/login`);
 
   const [tNav, t] = await Promise.all([getTranslations('nav'), getTranslations('org')]);
-  const chart = await getOrgChart();
+  const [chart, limited] = await Promise.all([getOrgChart(), getCachedTestAccount(user.id)]);
 
   return (
     <main className="mx-auto w-full max-w-4xl p-6">
@@ -35,6 +35,7 @@ export default async function OrganizationPage({ params }: Props) {
             people={chart.people}
             myId={chart.myId}
             locale={locale}
+            limited={limited}
           />
         </Suspense>
       ) : (

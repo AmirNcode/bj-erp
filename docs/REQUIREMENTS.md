@@ -415,13 +415,21 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
-- **FR-95** ☐ **Profile tabs + self-service SMS mobile.** Profile is three tabs — **Profile** (name,
+- **FR-96** ☐ **Profile tabs + self-service SMS mobile.** Profile is three tabs — **Profile** (name,
   code, photo, SMS mobile, saved signature; two columns on desktop), **Personal information** (the
   FR-53 form), **Account** (language, password; desktop Logout). On phones the Organization / Help /
   Settings links and Logout sit above the tabs and the page title is left to the top bar. Every active
   user sets or clears their own `employee_personal_info.mobile` (the SMS number) through
   `app_set_my_mobile`, without `personal_info_own`; format check only (`09…`, Persian digits and `+98`
   accepted) plus a confirmation dialog showing the number (owner: no password re-check). *(2026-11-19; spec `2026-11-19-profile-tabs-design.md`; unreleased.)*
+- **FR-95** ☑ **Built-in test roles (`test-emp`).** A fixed built-in role for outside reviewers
+  (first use: the SMS provider checking the link in our templates, 2026-11-18). A holder sees every
+  Employee screen with their own data only: the org chart shows their management chain, themselves and
+  their direct reports ("Top of the organization" disabled); no teammates (calendar, profiles, Team page
+  except their own manager); nobody in the replacement picker, and nobody can pick them. Request pages
+  stay visible with a notice and Submit disabled; the database refuses every request. Profile, personal
+  info, signature and photo saves stay as for Employee. Wins over any other role the user holds. Any
+  role whose key starts with `test-` counts, so a later `test-mgr` reuses the gates.
 - **FR-94** ☐ **ERP › Sales module (RFP register, contracts, items, deadlines).** A second module,
   hidden behind seven role-editor permissions in a new **ERP · Sales** section (`sales`,
   `sales_prices`, `sales_bonds`, `sales_decide`, `sales_reports`, `sales_settings`, `project_items`;

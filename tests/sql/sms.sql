@@ -289,6 +289,10 @@ select pg_temp.expect('history: not readable directly',pg_temp.err(pg_temp.as_sc
   'select count(*)::text from private.sms_outbox_events')),'42501');
 delete from public.sms_outbox where id=pg_temp.fx('t1');
 select pg_temp.expect('history: deleted with its text',pg_temp.hist(pg_temp.fx('t1')),'none');
+select pg_temp.expect('line test: a template is refused',
+  pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_test(''09121110007'',''approver_new'')::text')),'22023');
+select pg_temp.expect('line test: no template on the row',
+  (select coalesce(test_template,'none') from public.sms_outbox where id=pg_temp.fx('t2')),'none');
 select pg_temp.expect('pattern without a body id fails clearly',pg_temp.settings('live','pattern'),'ok');
 select pg_temp.expect('approver_new under pattern uses its body id (111)',pg_temp.file('r5','emp',18),'ok');
 select private.sms_dispatch();
@@ -390,6 +394,31 @@ select pg_temp.expect('ws: pattern → BaseServiceNumber, bodyId, args as one ;-
      from net.http_request_queue q join public.sms_outbox o on o.net_request_id=q.id,
           lateral (select convert_from(q.body,'utf8')::jsonb b) x where o.request_id=pg_temp.fx('r6')),
   'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/111/9221000000/3/false,https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/111/9221000000/3/false');
+-- Send test follows How to send (owner 2026-11-19): pattern mode picks a template, sample values.
+do $$ begin perform pg_temp.login('admin');
+  insert into sm_fx values('pt1',(select public.app_sms_test('09121110011','approver_new')));
+  insert into sm_fx values('pt2',(select public.app_sms_test('09121110012','employee_decision')));
+  insert into sm_fx values('pt3',(select public.app_sms_test('09121110013')));
+end $$;
+select pg_temp.expect('pattern test: row keeps the template, sample args',
+  (select string_agg(test_template||'/'||array_length(args,1)::text,',' order by to_mobile) from public.sms_outbox
+    where id in (pg_temp.fx('pt1'),pg_temp.fx('pt2'),pg_temp.fx('pt3'))),
+  'approver_new/3,employee_decision/3,approver_new/3');
+select private.sms_dispatch();
+select pg_temp.expect('pattern test: BaseServiceNumber with the template body id',
+  (select string_agg(q.url||'/'||(b->>'bodyId')||'/'||(array_length(string_to_array(b->>'text',';'),1))::text
+          ||'/'||(b ? 'from')::text,',' order by o.to_mobile)
+     from net.http_request_queue q join public.sms_outbox o on o.net_request_id=q.id,
+          lateral (select convert_from(q.body,'utf8')::jsonb b) x
+    where o.id in (pg_temp.fx('pt1'),pg_temp.fx('pt2'))),
+  'https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/111/3/false,https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber/222/3/false');
+select pg_temp.expect('pattern test: decision args end with the decision word',
+  (select args[3] from public.sms_outbox where id=pg_temp.fx('pt2')),'تأیید شد');
+select pg_temp.expect('pattern test: template without a body id is refused',
+  pg_temp.as_scalar('admin','select public.app_sms_test(''09121110014'',''password_reset'')::text'),
+  'ERROR 22023 no pattern body id for password_reset');
+select pg_temp.expect('pattern test: unknown template refused',
+  pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_test(''09121110014'',''nope'')::text')),'22023');
 select pg_temp.expect('ws: credit asks pg_net',pg_temp.err(pg_temp.as_scalar('admin','select public.app_sms_check_credit()::text')),'ok');
 select pg_temp.expect('ws: credit posts GetCredit with username + key',
   (select q.url||'/'||(convert_from(q.body,'utf8')::jsonb->>'username')||'/'||(convert_from(q.body,'utf8')::jsonb->>'password')

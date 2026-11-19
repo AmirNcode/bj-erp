@@ -1,5 +1,5 @@
 /**
- * Profile › Profile tab (FR-23, FR-95): name and code, photo (FR-82), the SMS
+ * Profile › Profile tab (FR-23, FR-96): name and code, photo (FR-82), the SMS
  * mobile everyone sets themselves, and the saved signature (FR-52).
  * Desktop: two columns; phones: one, in that order.
  */
@@ -68,7 +68,7 @@ export default async function ProfilePage({ params }: Props) {
       </div>
 
       <div className="space-y-4">
-        {/* FR-95: everyone sets the number SMS notifications go to. */}
+        {/* FR-96: everyone sets the number SMS notifications go to. */}
         <Card data-testid="sms-mobile-card">
           <CardHeader className="border-b pb-4">
             <CardTitle>{tMobile('title')}</CardTitle>

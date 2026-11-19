@@ -1,5 +1,5 @@
 /**
- * Profile › Account tab (FR-23, FR-95): language and password. Desktop Logout
+ * Profile › Account tab (FR-23, FR-96): language and password. Desktop Logout
  * sits here; phones have it above the tabs (profile/layout.tsx).
  */
 

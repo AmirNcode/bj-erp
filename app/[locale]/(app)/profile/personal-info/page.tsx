@@ -3,7 +3,7 @@
  * contact and employment details. Read-only since FR-63 (2026-10-12) unless the
  * caller holds personal_info_own (the admin implicitly; on no preset); people
  * with personal_info edit change other people's from Manage › Employees › Edit.
- * Since FR-95 it is the second Profile tab (profile/layout.tsx); the mobile here
+ * Since FR-96 it is the second Profile tab (profile/layout.tsx); the mobile here
  * is the same number the Profile tab sets.
  */
 

@@ -22,7 +22,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm audit --omit=dev
+      - run: node scripts/audit-gate.mjs
       - run: npm run lint
       - run: npm run test:unit
       - run: npm run test:deploy

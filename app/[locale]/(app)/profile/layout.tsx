@@ -1,5 +1,5 @@
 /**
- * Profile (FR-23, FR-95): three tabs — Profile, Personal information, Account.
+ * Profile (FR-23, FR-96): three tabs — Profile, Personal information, Account.
  * On phones the page title is left to the top bar (MobileTopBar), and the links
  * the side panel carries on desktop (Organization, Help, Settings) sit above the
  * tabs with Logout.

@@ -3,9 +3,13 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
-## FR-95 profile tabs + self-service mobile (built 2026-11-19 on `feat/profile-tabs`, local only)
+## FR-96 profile tabs + self-service mobile (built 2026-11-19 on `feat/profile-tabs`, local only)
 
 - [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `view-as` specs were edited for the new tabs but not run): screens checked on a temporary no-login page only.
+## FR-95 test-emp role (2026-11-18)
+
+- [ ] **Audit-gate exception:** remove `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, via next-intl → @parcel/watcher) from `IGNORED` in `scripts/audit-gate.mjs` once picomatch ships a fix (the gate prints "no longer reported" when it can go).
+- [ ] Give the Melipayamak reviewer account `test1` the test-emp role; deactivate it after the templates are approved.
 
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
@@ -119,7 +123,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
   `bash deploy/liara/pull-backups-to-mac.sh install` once on the Mac so the installed copy reports to
   the System tab; check System › Backups shows "Off-server copy" green the next day. Not checked in a
   signed-in browser yet (no local admin login): open Sign-ins and sign out a test person.
-- ⏸ **SMS: on hold until Melipayamak approves the pattern templates (owner, 2026-11-16).** Live mode,
+- ◐ **SMS: pattern templates approved and live (2026-11-19).** Owner set Pattern with 589006 / 589007 / 589008; a manager received a real approver SMS. Send test now uses the chosen template. Still to check: the decision and password texts, delivery at night and to 09163066264. Earlier notes: Live mode,
   web service (username + API key), "From the line" on the promotional `5000…` line. Free-text texts
   reach Melipayamak, but none of the first tests reached the phones: advertising texts are held at night
   (~21:00–08:00), and 09163066264 got code 11 (likely blocks ads). Plan: resubmit the 3 templates **without

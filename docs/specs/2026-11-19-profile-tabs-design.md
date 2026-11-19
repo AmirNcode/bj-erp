@@ -1,4 +1,4 @@
-# Profile page tabs + self-service SMS mobile (FR-95) — design
+# Profile page tabs + self-service SMS mobile (FR-96) — design
 
 Status: approved by owner 2026-11-19. Small change.
 
