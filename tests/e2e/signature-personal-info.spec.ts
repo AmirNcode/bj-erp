@@ -126,7 +126,7 @@ test('saved signature pre-fills requests; personal info view-only for self, edit
   await expect(page.locator('[data-testid="saved-signature-image"]')).toBeVisible({ timeout: 30_000 });
 
   // ── personal information: view only for the worker (FR-63) ──────────────
-  await page.click('[data-testid="profile-personal-info-link"]');
+  await page.click('[data-testid="profile-tab-personalInfo"]');
   await expect(page.locator('[data-testid="personal-info-form"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="personal-info-read-only"]')).toBeVisible();
   await expect(page.locator('[data-testid="pi-national_id"]')).toBeDisabled();

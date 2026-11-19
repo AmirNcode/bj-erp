@@ -2021,6 +2021,8 @@ export type Database = {
       }
       app_set_profile_photo_lock: { Args: { p_employee: string; p_locked: boolean }; Returns: undefined }
       app_remove_profile_photo: { Args: { p_employee: string }; Returns: undefined }
+      // FR-96: the caller's own SMS mobile; returns the stored value (normalized) or null.
+      app_set_my_mobile: { Args: { p_mobile: string | null }; Returns: string | null }
       app_sms_log: {
         Args: { p_status?: string | null; p_event?: string | null; p_limit?: number; p_offset?: number }
         Returns: Json

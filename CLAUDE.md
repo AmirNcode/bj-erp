@@ -211,6 +211,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
 - **`npm audit --omit=dev` is a CI gate** (`scripts/audit-gate.mjs`): a new advisory fails every deploy until upgraded (2026-11-16: next 16.4.3 → 16.4.6). Only an advisory with no fixed version may go on its `IGNORED` list, with a reason + a TASKS line (2026-11-18: picomatch GHSA-fc5q-39xc-vjpf).
 - **Test roles (FR-95): any `app_role` starting with `test-` (today `test-emp`) = `private.is_test_account`, which beats every other role** — own data only, no requests. A new function that lists colleagues or files on someone's behalf must check it.
+- **Own SMS mobile = `app_set_my_mobile` (FR-96), never the RLS update** (that needs `personal_info_own`). Profile is route tabs (`profile/layout.tsx`); language + password live on `/profile/account`, so e2e goes there.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

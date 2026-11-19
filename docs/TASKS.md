@@ -3,6 +3,9 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-96 profile tabs + self-service mobile (merged 2026-11-19)
+
+- [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `password`, `view-as` specs were edited for the new tabs but never run; the local test account's password does not match the local DB): screens checked on a temporary no-login page only. Owner: on bjeng.app, set a mobile on Profile and confirm an SMS arrives.
 ## FR-95 test-emp role (2026-11-18)
 
 - [ ] **Audit-gate exception:** remove `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, via next-intl → @parcel/watcher) from `IGNORED` in `scripts/audit-gate.mjs` once picomatch ships a fix (the gate prints "no longer reported" when it can go).

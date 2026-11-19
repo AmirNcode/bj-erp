@@ -9,6 +9,12 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Profile tabs + self-service SMS mobile (FR-96) — 2026-11-19
+
+- **Profile is now three tabs**: Profile (name, code, photo, mobile for SMS, saved signature — two columns on a computer), Personal information, Account (language, password).
+- **Everyone can add or change their own mobile number** on the Profile tab; SMS notifications go to it. It is the same number Personal information shows. Persian digits and `+98` are accepted; leaving it blank removes it. Save asks for confirmation and shows the exact number first.
+- **Phones**: Organization, Help, Settings and Log out are one row above the tabs; the repeated "Profile" title is gone.
+- Migrations `20261119120000_self_service_mobile` and `20261119140000_self_service_mobile_blank_no_row` (clearing a number you never had no longer creates an empty personal-information row).
 ### SMS: Send test follows How to send (FR-78) — 2026-11-19
 
 - With **How to send = Pattern**, Admin › SMS › Send test now goes through an approved template you pick (Request filed, Request result, Temporary password), filled with sample values: your name, daily leave, today's date, «تأیید شد», and a fake password `Test1234` / code `0000`. From the line it still sends the free-text test.

@@ -130,7 +130,8 @@ existing profiles), deleted by FK cascade; users only UPDATE. `employee_id` PK �
 `address` · `emergency_name` · `emergency_phone` · `insurance_no` (6–12 digits) · `education`
 (`below_diploma|diploma|associate|bachelor|master|doctorate`) · `military_status`
 (`completed|exempt|educational_exempt|eligible|not_applicable`) · `children_count` (0–20) ·
-`complete` (generated: national ID, father's name, birth date, Sheba and mobile all present) ·
+**`mobile`** is also the SMS number (`private.sms_queue`); every user sets their own through
+`app_set_my_mobile` (FR-96). `complete` (generated: national ID, father's name, birth date, Sheba and mobile all present) ·
 `updated_at` · `updated_by → profiles`. Every field nullable; digits stored ASCII. The UI mirror of
 every rule is `lib/personal-info/fields.ts`. An update writes `audit_log`
 `personal_info.update` with `after = {"fields": [...]}` (names only, never values).

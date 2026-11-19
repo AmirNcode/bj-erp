@@ -375,7 +375,30 @@
       "errorTooLarge": "This image cannot be made small enough. Try a closer, simpler photo of the signature.",
       "errorUnsupported": "This file could not be read as an image."
     },
-    "settingsHint": "Work week, holidays and other company settings"
+    "mobile": {
+      "title": "Mobile for SMS",
+      "hint": "Request and approval notifications are texted to this number.",
+      "label": "Mobile number",
+      "current": "Current number",
+      "none": "No number yet — you won't get SMS notifications.",
+      "save": "Save",
+      "saved": "Saved.",
+      "cleared": "Number removed.",
+      "invalid": "Enter an Iranian mobile number (09…).",
+      "readOnly": "Read-only while viewing as someone else.",
+      "confirmTitle": "Use this number for SMS?",
+      "confirmBody": "Notifications and any password sent by SMS will go to this number. Check it is yours and correct.",
+      "confirmRemoveTitle": "Remove your mobile number?",
+      "confirmRemoveBody": "You won't get SMS notifications until you add a number again.",
+      "confirm": "Yes, save",
+      "confirmRemove": "Yes, remove",
+      "cancel": "Cancel"
+    },
+    "tabs": {
+      "profile": "Profile",
+      "personalInfo": "Personal information",
+      "account": "Account"
+    }
   },
   "approvals": {
     "title": "Approvals",
@@ -1387,16 +1410,11 @@
     "people": "{count} people",
     "backToMe": "Back to me",
     "empty": "Nobody has been added yet.",
-    "error": "Error",
-    "openFromProfile": "Org chart",
-    "openFromProfileHint": "See who you report to and who is on your team."
+    "error": "Error"
   },
   "personalInfo": {
     "title": "Personal information",
-    "back": "← Back to profile",
     "intro": "Everything here is optional. Only you, HR and administrators can see it.",
-    "completeHint": "Complete",
-    "incompleteHint": "Not complete yet: national ID, father’s name, birth date, Sheba and mobile",
     "choose": "Choose…",
     "readOnly": "Only an administrator can change an administrator’s personal information.",
     "fixProblems": "Some fields need fixing. See the messages below them.",
@@ -1490,8 +1508,7 @@
         "empty": "the file has no rows"
       }
     },
-    "readOnlySelf": "Your personal information is view only. Only HR or an administrator can change it — if something is wrong, contact HR.",
-    "viewHint": "View only — kept up to date by HR"
+    "readOnlySelf": "Your personal information is view only. Only HR or an administrator can change it — if something is wrong, contact HR."
   },
   "clearance": {
     "title": "Clearance forms",
@@ -2290,8 +2307,6 @@
   "help": {
     "title": "Help & guides",
     "intro": "Guides, instructions and how-tos for using the system.",
-    "openFromProfile": "Help & guides",
-    "openFromProfileHint": "How to request leave, approve requests and more.",
     "persianOnly": "In Persian",
     "contents": "Contents",
     "downloadPdf": "Download PDF",
