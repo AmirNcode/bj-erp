@@ -99,6 +99,7 @@ Copy this block verbatim and fill it in.
 - SQL on clone: `self-service-mobile.sql` 22 PASS (RED first: function missing); `sms.sql` all pass; `fr52-53-signature-personal-info.sql` 2 FAIL (hr own edit / import) **with and without** the migration — local role drift, not this change.
 - `tsc` 0, `lint` 0, `test:unit` 142 files / 1406 pass, `npm run build` 0 (routes `/profile`, `/profile/account`, `/profile/personal-info`).
 - Browser: temporary `app/[locale]/zz-profile-tabs` page with fake data (deleted) — desktop two columns fa, mobile 375 fa + en (link row fits one line after a fix, no horizontal scroll), Account tab, client checks (bad number message, Save disabled for an unchanged / same-normalized number).
+- Final review (Opus subagent): 0 critical, 1 important (`password.spec.ts` still opened `/profile`) — fixed `f38b161`; 5 minors deferred (stale `mobile_self` audit name in spec, dead i18n keys, tight en phone link row, blank save inserting an empty row via direct RPC, `updated_at` bump on same-number save).
 - NOT run: signed-in browser check and e2e (the test account's password did not match the local DB; did not guess; :3501 runs the Sales build).
 
 **State left behind**
