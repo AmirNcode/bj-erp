@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — PR #27 review, fixes and merge (FR-96)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/profile-tabs` @ 2563f25 (origin/main @ 953d2f8 already merged in)
+**Trigger:** Owner: review, fix and merge PR #27 (profile tabs + self-service SMS mobile).
+
+**Review result:** 0 critical, 0 important. `app_set_my_mobile` writes only the caller's row and only `mobile` (SECURITY DEFINER, `auth.uid()`), refuses inactive callers (42501) and anon; View as cannot write (the pre-request hook sets `transaction_read_only`; `tests/sql/view-as.sql` hook-write checks pass on the clone). Audit stays field names only. i18n fa + en complete; tabs use `lib/ui/tabs.ts`; no `shadow-*` / `rounded-[Npx]`. E2E edits read correct: `settings-logout` exists only on `/profile/account` at desktop width (the phone row uses `profile-mobile-logout`), so no strict-mode duplicates.
+
+**What changed**
+- `supabase/migrations/20261119140000_self_service_mobile_blank_no_row.sql` (new): insert the missing personal-info row (and its audit row) only when `v_mobile is not null`; a blank save with no row no longer creates an empty row. `supabase/schema.sql:10632` patched (one line). `types.ts` unchanged (same signature).
+- `tests/sql/self-service-mobile.sql:104-107`: 3 new assertions (blank with no row → null, no row, no audit). RED first on a clone ("expected no row, got null"), GREEN after.
+- `app/[locale]/(app)/profile/layout.tsx:167,197`: phone link row `flex-1` → `flex-auto` + `flex-wrap`, so "Organization" no longer truncates at 375px (en and fa checked: one row, nothing clipped, no horizontal scroll).
+- `messages/{en,fa}.json`: removed dead keys `profile.settingsHint`, `org.openFromProfile(+Hint)`, `help.openFromProfile(+Hint)`, `personalInfo.back/viewHint/completeHint/incompleteHint`.
+- CHANGELOG / TASKS updated.
+
+**Actions outside the repo**
+- Clone `pt_mobile2` of `bj-approvals-finance-db-1` db `postgres` (dropped at end). Applied the new migration there and, for `sms.sql`, main's `20261119100000` (the local DB lags it). The new migration is NOT applied to the local `postgres` DB.
+- Merge to `main` → CI deploys to Liara (result below / next entry).
+
+**Verification**
+- Clone: `self-service-mobile.sql` all pass; `sms.sql` all pass (after applying main's SMS migration); `view-as.sql` hook writes refused 25006; `fr52-53-signature-personal-info.sql` the same 2 known role-drift failures as before.
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 142 files / 1408 pass · `npm run build` 0.
+- Browser: temporary `app/[locale]/zz-profile-check` page (deleted, `.next/dev/types` cleared before tsc) at 375px en + fa.
+- NOT run: signed-in browser check and the four edited e2e specs. The test account in `.env.test-accounts` is refused by local GoTrue (400); reading the local admin-password file was denied by the permission classifier, so no sign-in was attempted further.
+
+**For the next agent**
+- Same-number saves still bump `updated_at` / `updated_by` (no audit row, since the trigger skips unchanged fields) — harmless, left.
+- The FR-96 TASKS item stays open until someone signs in and runs the specs.
+
 ## 2026-11-19 — Profile tabs + self-service SMS mobile (FR-96)
 
 **Agent:** Claude Opus 5.5 via Claude Code (one Opus review subagent at the end)

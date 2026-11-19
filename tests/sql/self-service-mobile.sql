@@ -101,6 +101,10 @@ select pg_temp.expect('null clears too', coalesce(pg_temp.set('emp', null), 'nul
 
 -- ── missing row ──
 select pg_temp.expect('fixture: emp2 has no row', pg_temp.mobile('emp2'), 'no row');
+select pg_temp.expect('blank with no row returns null', coalesce(pg_temp.set('emp2', ' '), 'null'), 'null');
+select pg_temp.expect('blank with no row creates no row', pg_temp.mobile('emp2'), 'no row');
+select pg_temp.expect('blank with no row writes no audit',
+  (select count(*)::text from public.audit_log where entity_id = pg_temp.fx('emp2')), '0');
 select pg_temp.expect('missing row created', pg_temp.set('emp2', '09351234567'), '09351234567');
 select pg_temp.expect('created row company',
   (select (company_id = pg_temp.fx('company'))::text from public.employee_personal_info

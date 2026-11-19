@@ -19,7 +19,7 @@ import { ProfileTabs } from './_components/ProfileTabs';
 type Props = { children: React.ReactNode; params: Promise<{ locale: string }> };
 
 const linkClass =
-  'inline-flex h-9 min-w-0 flex-1 items-center justify-center truncate rounded-md border border-border bg-card px-2 text-[13px] font-medium transition-colors hover:border-primary/40 hover:bg-primary/5';
+  'inline-flex h-9 min-w-0 flex-auto items-center justify-center truncate rounded-md border border-border bg-card px-2 text-[13px] font-medium transition-colors hover:border-primary/40 hover:bg-primary/5';
 
 export default async function ProfileLayout({ children, params }: Props) {
   const { locale } = await params;
@@ -49,7 +49,7 @@ export default async function ProfileLayout({ children, params }: Props) {
       />
 
       {/* Phones have no side panel: its links (FR-44 org chart, Help, FR-55 Settings) and Logout live here. */}
-      <div className="flex items-center gap-2 md:hidden" data-testid="profile-mobile-links">
+      <div className="flex flex-wrap items-center gap-2 md:hidden" data-testid="profile-mobile-links">
         <Link href={`/${locale}/organization`} data-testid="profile-org-link" className={linkClass}>
           {tNav('organization')}
         </Link>

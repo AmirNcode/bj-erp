@@ -10629,7 +10629,7 @@ begin
   end if;
 
   update public.employee_personal_info set mobile = v_mobile where employee_id = v_uid;
-  if not found then
+  if not found and v_mobile is not null then
     select company_id into v_company from public.profiles where id = v_uid;
     insert into public.employee_personal_info (employee_id, company_id, mobile, updated_by)
     values (v_uid, v_company, v_mobile, v_uid);
