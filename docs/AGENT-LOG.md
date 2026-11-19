@@ -98,7 +98,7 @@ Copy this block verbatim and fill it in.
 - NOT checked signed in in a browser.
 
 **State left behind**
-- Uncommitted on `main` together with the round-2 layout; owner will ask for the push. CHANGELOG not yet updated.
+- Committed `ada4e07` (with the round-2 layout + CHANGELOG) and pushed to `main` on the owner's request. Run 44601354410: build ✓, deploy ✓ (migration `20261119160000` applied by the release); `bjeng.app/api/health` → 200.
 
 ## 2026-11-19 — Profile layout round 2: half-width tiles, hints under titles, no phone Settings
 
@@ -122,7 +122,7 @@ Copy this block verbatim and fill it in.
 **Follow-up (same session, owner picked "option 1"):** signature + SMS tiles now equal height — row grid lost `items-start` (stretch), SMS `CardContent` is `flex flex-1 flex-col`, and `SmsMobileCard` wraps form + messages in `mt-auto` so Save sits level with the signature buttons. tsc / lint / unit (1408) pass; `:3501` rebuilt again, health 200.
 
 **State left behind**
-- Uncommitted on `main`; owner will ask for the push.
+- Shipped in `ada4e07` (see the entry above).
 
 ## 2026-11-19 — Profile layout: stacked full-width cards, phone link row, Logout on Account
 
