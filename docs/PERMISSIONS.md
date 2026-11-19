@@ -482,6 +482,9 @@ All new RPCs are `security definer`, `search_path ''`, revoked from `public`/`an
   `personal_info` edit in the caller's company **and** `can_act_on` (admin skips it; never an admin
   row, nothing above the caller's levels).
   Everyone still READS their own row (Profile › Personal information, read-only).
+- **Own mobile (FR-95):** `public.app_set_my_mobile(text)` — SECURITY DEFINER, any active caller, the
+  caller's own row and the `mobile` column only (creates the row if missing); no `personal_info_own`
+  needed. Audited by the same field-names-only trigger.
 - **INSERT / DELETE**: no client grant. The profile trigger inserts; the FK cascade deletes.
 - A before-update trigger pins `employee_id` / `company_id`; an after-update trigger audits field
   names only.

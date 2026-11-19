@@ -210,6 +210,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
 - **`npm audit --omit=dev` is a CI gate:** a new advisory against the pinned `next` fails every deploy until it is upgraded (2026-11-16: 16.4.3 → needs 16.4.6).
+- **Own SMS mobile = `app_set_my_mobile` (FR-95), never the RLS update** (that needs `personal_info_own`). Profile is route tabs (`profile/layout.tsx`); language + password live on `/profile/account`, so e2e goes there.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

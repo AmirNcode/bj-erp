@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Profile tabs + self-service SMS mobile (FR-95) — built 2026-11-19, not deployed (branch `feat/profile-tabs`)
+
+- **Profile is now three tabs**: Profile (name, code, photo, mobile for SMS, saved signature — two columns on a computer), Personal information, Account (language, password).
+- **Everyone can add or change their own mobile number** on the Profile tab; SMS notifications go to it. It is the same number Personal information shows. Persian digits and `+98` are accepted; leaving it blank removes it.
+- **Phones**: Organization, Help, Settings and Log out are one row above the tabs; the repeated "Profile" title is gone.
+- Migration `20261119120000_self_service_mobile`.
+
 ### ERP · Sales module (FR-94) — built 2026-11-16, not deployed (branch `feat/erp-sales-module`)
 
 - **A second module, hidden until switched on.** Seven permissions in a new **ERP · Sales** section of Settings › Roles; no role has them at first. Holders get an **ERP** entry in the menu; for everyone else the pages do not exist.

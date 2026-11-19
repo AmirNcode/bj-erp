@@ -78,6 +78,35 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — Profile tabs + self-service SMS mobile (FR-95)
+
+**Agent:** Claude Opus 5.5 via Claude Code (one Opus review subagent at the end)
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 4f61405 → new branch `feat/profile-tabs` from `main` @ 53c849c
+**Trigger:** Amir: Profile is too narrow and stacked; make it tabs (Profile / Personal info / Account) like Admin/ERP, add a phone number everyone can set for SMS, update the phone view.
+
+**What changed**
+- Spec `docs/specs/2026-11-19-profile-tabs-design.md` (owner calls: same `employee_personal_info.mobile`, format check only, phone links + Logout above the tabs, two desktop columns). Plan `docs/plans/2026-11-19-profile-tabs.md`.
+- DB: `supabase/migrations/20261119120000_self_service_mobile.sql` — `app_set_my_mobile(text)` (SECURITY DEFINER, own row, mobile only, blank clears, `invalid mobile` 22023). `schema.sql` patched by hand (function + ACL hunks only); `types.ts`.
+- App: `profile/layout.tsx` (header, phone link row, `ProfileTabs`), `profile/page.tsx` (Profile tab, 2 columns), `profile/account/page.tsx` (new), `personal-info/page.tsx` (no header / back link), `components/profile/SmsMobileCard.tsx`, `setMyMobile` in `lib/actions/personal-info.ts`, `LogoutButton` `className` / `testId` props. Strings `profile.mobile.*`, `profile.tabs.*`.
+- Tests: `tests/sql/self-service-mobile.sql` (new, 22); e2e `settings` / `view-as` → `/profile/account`, `signature-personal-info` → `profile-tab-personalInfo`.
+- Docs: REQUIREMENTS FR-95, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS, CLAUDE.md one gotcha.
+
+**Actions outside the repo**
+- Local stack `bj-approvals-finance`: `pg_dump -Fc` backup to session scratchpad (`approvals-finance-pre-mobile.dump`); applied `20261119120000` through `bj_apply_and_record_migration` (release `approvals-finance-local`) — **FROZEN locally**; restarted `bj-approvals-finance-rest-1`. Clone `pt_mobile` for the dry run (dropped at end).
+- Nothing on Liara. Nothing pushed.
+
+**Verification**
+- SQL on clone: `self-service-mobile.sql` 22 PASS (RED first: function missing); `sms.sql` all pass; `fr52-53-signature-personal-info.sql` 2 FAIL (hr own edit / import) **with and without** the migration — local role drift, not this change.
+- `tsc` 0, `lint` 0, `test:unit` 142 files / 1406 pass, `npm run build` 0 (routes `/profile`, `/profile/account`, `/profile/personal-info`).
+- Browser: temporary `app/[locale]/zz-profile-tabs` page with fake data (deleted) — desktop two columns fa, mobile 375 fa + en (link row fits one line after a fix, no horizontal scroll), Account tab, client checks (bad number message, Save disabled for an unchanged / same-normalized number).
+- NOT run: signed-in browser check and e2e (the test account's password did not match the local DB; did not guess; :3501 runs the Sales build).
+
+**State left behind**
+- Committed on `feat/profile-tabs` (local only, not pushed). `feat/erp-sales-module` untouched.
+
+**For the next agent**
+- Open security decision for Amir (TASKS): mobile change without re-auth + HR password reset by SMS.
+
 ## 2026-11-17 — ERP › Sales: stage pages (clickable stages, Submit with old → new ledger, Next stage)
 
 **Agent:** Claude Opus 5.5 via Claude Code (Sonnet builder-check subagent, Opus final-review subagent)

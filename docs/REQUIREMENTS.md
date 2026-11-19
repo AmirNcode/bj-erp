@@ -415,6 +415,13 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-95** ☐ **Profile tabs + self-service SMS mobile.** Profile is three tabs — **Profile** (name,
+  code, photo, SMS mobile, saved signature; two columns on desktop), **Personal information** (the
+  FR-53 form), **Account** (language, password; desktop Logout). On phones the Organization / Help /
+  Settings links and Logout sit above the tabs and the page title is left to the top bar. Every active
+  user sets or clears their own `employee_personal_info.mobile` (the SMS number) through
+  `app_set_my_mobile`, without `personal_info_own`; format check only (`09…`, Persian digits and `+98`
+  accepted). *(2026-11-19; spec `2026-11-19-profile-tabs-design.md`; unreleased.)*
 - **FR-94** ☐ **ERP › Sales module (RFP register, contracts, items, deadlines).** A second module,
   hidden behind seven role-editor permissions in a new **ERP · Sales** section (`sales`,
   `sales_prices`, `sales_bonds`, `sales_decide`, `sales_reports`, `sales_settings`, `project_items`;
