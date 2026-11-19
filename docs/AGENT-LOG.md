@@ -99,7 +99,7 @@ Copy this block verbatim and fill it in.
 - NOT run: signed-in check, e2e. The isolated stack (:3501) refuses the demo creds (`admin`/`Admin!2026`, `2001`/`Demo!2026`) — password changed since seeding.
 
 **State left behind**
-- Uncommitted on `main`.
+- Committed `eac9a1b` and pushed to `main` on the owner's request. GitHub Actions run 44579358923 (Deploy Liara): build ✓, deploy ✓; `https://bjeng.app/api/health` → 200 afterwards. Live UI not checked signed in.
 
 ## 2026-11-19 — PR #27 review, fixes and merge (FR-96)
 
