@@ -2005,7 +2005,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      app_sms_test: { Args: { p_mobile: string }; Returns: string }
+      app_sms_test: { Args: { p_mobile: string; p_template?: string | null }; Returns: string }
       app_sms_check_credit: { Args: Record<PropertyKey, never>; Returns: undefined }
       app_profile_photo: {
         Args: { p_employee: string }

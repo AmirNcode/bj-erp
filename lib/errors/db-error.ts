@@ -244,6 +244,7 @@ const RULES: Rule[] = [
   { re: /^admin only$/, key: 'notAllowed' },
   { re: /^invalid mobile$/, key: 'smsInvalidMobile' },
   { re: /^sms is off$/, key: 'smsOff' },
+  { re: /^no pattern body id for /, key: 'smsNoPatternBody' },
   { re: /^no api key$|sms_settings_live_needs_key/, key: 'smsNoApiKey' },
   { re: /^username required$/, key: 'smsNoUsername' },
   { re: /sms_settings_api_key/, key: 'smsBadApiKey' },

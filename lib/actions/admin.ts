@@ -218,12 +218,15 @@ export async function saveSmsSettings(input: SmsSettingsInput): Promise<{ ok: tr
   return { ok: true };
 }
 
-export async function sendSmsTest(mobile: string): Promise<{ ok: true } | DbErrorResult> {
+export type SmsTestTemplate = 'approver_new' | 'employee_decision' | 'password_reset';
+
+/** A test text through the saved method: free text from the line, or (Pattern) the chosen template. */
+export async function sendSmsTest(mobile: string, template: SmsTestTemplate | null = null): Promise<{ ok: true } | DbErrorResult> {
   const c = await requireAdmin();
   if (!c.ok) return c;
   const normalized = normalizeIrMobile(mobile);
   if (!normalized) return adminErr('invalid mobile');
-  const { error } = await c.supabase.rpc('app_sms_test', { p_mobile: normalized });
+  const { error } = await c.supabase.rpc('app_sms_test', { p_mobile: normalized, p_template: template });
   if (error) return adminErr(error.message);
   invalidateAppCache();
   return { ok: true };

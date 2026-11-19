@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — SMS: Send test uses the selected method (pattern templates)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/sms-pattern-test` (worktree `../bj-smstest`) from origin/main @ e29d0c3
+**Trigger:** Owner: the Melipayamak templates 589006–589008 were approved; "make the test text use the selected method instead of testing it with a real request".
+
+**What changed**
+- `supabase/migrations/20261119100000_sms_pattern_test.sql`: `sms_outbox.test_template` (test rows only). `app_sms_test(p_mobile, p_template default null)`: in pattern mode it builds sample args in each template's order and refuses a template without a body ID (`no pattern body id for …`). In line mode a template is refused. `sms_dispatch` picks the body ID by `coalesce(test_template, event)`.
+- `app/[locale]/(app)/admin/sms/SmsActions.tsx` + `page.tsx`: a Template select appears when the **saved** method is Pattern. `lib/actions/admin.ts` `sendSmsTest(mobile, template)`. Error key `smsNoPatternBody` (fa + en). Strings in `en.json` only (admin panel).
+- `tests/sql/sms.sql`: 7 new assertions (pattern test → BaseServiceNumber with 111/222, sample args, missing body ID, bad template, line refuses a template). `supabase/schema.sql` patched from clone dumps taken before and after the migration.
+
+**Actions outside the repo**
+- Owner (on bjeng.app, not me): set How to send = Pattern, entered 589006 / 589007 / 589008, and set the last line to `bjeng.app`. Pattern sends ignore that line; line sends with a link are refused (code 14).
+- Local only: clone DB `smsx` in `bj-approvals-finance-db-1` (applied 20261118100000–200 + the new migration, then ran `sms.sql` and `replacement-signoff.sql`, then dropped it).
+
+**Verification**
+- `sms.sql`: all assertions passed. `replacement-signoff.sql`: passed. `tsc --noEmit`, lint, `test:unit` (1403 passed), `next build`: all OK.
+- The UI was not viewed in a browser. The real Melipayamak pattern send is still unverified until the owner presses Send test after the deploy.
+
+**State left behind**
+- Committed on `feat/sms-pattern-test` and pushed to `main` (owner's OK), so CI deploys it to Liara.
+- Owner confirmed a **real pattern send works**: a manager received the approver SMS from a real request (2026-11-19).
+
+**For the next agent**
+- The template select follows the saved setting, not unsaved form edits: save first.
+- If a pattern test fails, read the raw reply in the SMS log (`sms_ws_error`).
+
 ## 2026-11-18 — Built-in test role `test-emp` (FR-95), pushed to main
 
 **Agent:** Claude Opus 5.5 via Claude Code

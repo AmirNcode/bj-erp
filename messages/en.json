@@ -1326,6 +1326,7 @@
     "invalidPersonnelNoAdmin": "Personnel number: 1–64 characters.",
     "smsInvalidMobile": "Enter an Iranian mobile number (09…).",
     "smsOff": "SMS is off. Switch it to Dry run or Live first.",
+    "smsNoPatternBody": "That template has no body ID. Enter it and save the settings first.",
     "smsNoApiKey": "Save a Melipayamak API key first.",
     "smsNoUsername": "Enter the Melipayamak panel username first.",
     "smsBadApiKey": "The API key contains characters it cannot have.",
@@ -2429,6 +2430,14 @@
       "saved": "Settings saved.",
       "test": "Send a test text",
       "testHint": "Uses the current mode: in Dry run it only appears in the log.",
+      "testHintLine": "Sent from the sender line as free text.",
+      "testHintPattern": "Sent through the chosen approved template with sample values (today's date, your name, a fake password).",
+      "testTemplate": "Template",
+      "testTemplates": {
+        "approver_new": "Request filed (approvers)",
+        "employee_decision": "Request result (employee)",
+        "password_reset": "Temporary password"
+      },
       "mobile": "Mobile number",
       "send": "Send test",
       "testQueued": "Queued. It shows in the log within 30 seconds.",

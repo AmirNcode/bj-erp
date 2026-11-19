@@ -9,6 +9,12 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### SMS: Send test follows How to send (FR-78) — 2026-11-19
+
+- With **How to send = Pattern**, Admin › SMS › Send test now goes through an approved template you pick (Request filed, Request result, Temporary password), filled with sample values: your name, daily leave, today's date, «تأیید شد», and a fake password `Test1234` / code `0000`. From the line it still sends the free-text test.
+- A template without a body ID is refused with a clear message. The log shows the test with its body ID.
+- Migration `20261119100000_sms_pattern_test` (`sms_outbox.test_template`, `app_sms_test(p_mobile, p_template)`, `sms_dispatch`).
+
 ### Built-in test role `test-emp` (FR-95) — 2026-11-18
 
 - **For outside reviewers.** A new fixed role, **test-emp**, shows the Employee screens without anyone else's data: the org chart shows only the person's own managers, themselves and their direct reports ("Top of the organization" is disabled); the calendar and Team page show no teammates (the Team page keeps their manager); the replacement list is empty, and nobody can choose a test account as their replacement.

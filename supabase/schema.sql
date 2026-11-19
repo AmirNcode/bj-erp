@@ -4378,13 +4378,13 @@ begin
        where id = o.id and event = 'password_reset';
       continue;
     end if;
-    if s.send_method = 'pattern' and o.event <> 'test' then
+    if s.send_method = 'pattern' and (o.event <> 'test' or o.test_template is not null) then
       v_body := jsonb_build_object(
-        'bodyId', case o.event when 'approver_new' then s.body_approver_new
+        'bodyId', case coalesce(o.test_template, o.event) when 'approver_new' then s.body_approver_new
                                when 'employee_decision' then s.body_employee_decision
                                when 'password_reset' then s.body_password_reset end);
       if v_body->'bodyId' = 'null'::jsonb then
-        perform private.sms_fail(o.id, 'no pattern body id for ' || o.event, false);
+        perform private.sms_fail(o.id, 'no pattern body id for ' || coalesce(o.test_template, o.event), false);
         update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
          where id = o.id and event = 'password_reset';
         continue;
@@ -11231,10 +11231,10 @@ end $$;
 
 
 --
--- Name: app_sms_test(text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: app_sms_test(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.app_sms_test(p_mobile text) RETURNS uuid
+CREATE FUNCTION public.app_sms_test(p_mobile text, p_template text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -11242,17 +11242,52 @@ declare
   v_company uuid := private.require_admin();
   s private.sms_settings%rowtype;
   v_mobile text := private.normalize_ir_mobile(p_mobile);
+  v_template text;
+  v_kind text := private.sms_kind_label('leave', 'day', 'fa');
+  v_date text := private.jalali_text(current_date, 'fa');
+  v_name text;
+  v_body text;
+  v_args text[] := '{}';
   v_id uuid;
 begin
   if v_mobile is null then raise exception 'invalid mobile' using errcode = '22023'; end if;
   select * into s from private.sms_settings where company_id = v_company;
   if s.mode is null or s.mode = 'off' then raise exception 'sms is off' using errcode = '22023'; end if;
-  insert into public.sms_outbox (company_id, event, to_mobile, body, created_by)
-  values (v_company, 'test', v_mobile,
-          private.sms_frame(v_company, 'پیام آزمایشی سامانه' || chr(10) || s.site_label), auth.uid())
+  if p_template is not null and p_template not in ('approver_new', 'employee_decision', 'password_reset') then
+    raise exception 'sms: invalid input' using errcode = '22023';
+  end if;
+  if s.send_method = 'pattern' then
+    v_template := coalesce(p_template, 'approver_new');
+    if (case v_template when 'approver_new' then s.body_approver_new
+                        when 'employee_decision' then s.body_employee_decision
+                        else s.body_password_reset end) is null then
+      raise exception 'no pattern body id for %', v_template using errcode = '22023';
+    end if;
+    select p.full_name into v_name from public.profiles p where p.id = auth.uid();
+    v_name := coalesce(nullif(btrim(v_name), ''), 'آزمایش');
+    if v_template = 'approver_new' then
+      v_args := array[v_name, v_kind, v_date];
+      v_body := format('درخواست %s %s (%s) منتظر تأیید شماست.', v_kind, v_name, v_date);
+    elsif v_template = 'employee_decision' then
+      v_args := array[v_kind, v_date, 'تأیید شد'];
+      v_body := format('درخواست %s شما (%s) %s.', v_kind, v_date, 'تأیید شد');
+    else
+      -- Sample values only: no real password is ever sent by a test.
+      v_args := array['Test1234', '0000'];
+      v_body := format('رمز موقت شما: %s%sکد ورود: %s', 'Test1234', chr(10), '0000');
+    end if;
+    v_body := 'پیام آزمایشی سامانه (الگو)' || chr(10) || v_body;
+  elsif p_template is not null then
+    raise exception 'sms: invalid input' using errcode = '22023';
+  else
+    v_body := 'پیام آزمایشی سامانه' || chr(10) || s.site_label;
+  end if;
+  insert into public.sms_outbox (company_id, event, to_mobile, body, args, test_template, created_by)
+  values (v_company, 'test', v_mobile, private.sms_frame(v_company, v_body), v_args, v_template, auth.uid())
   returning id into v_id;
   insert into public.audit_log (actor_id, action, entity, entity_id, after)
-  values (auth.uid(), 'sms_test', 'sms_outbox', v_id, jsonb_build_object('mode', s.mode));
+  values (auth.uid(), 'sms_test', 'sms_outbox', v_id,
+          jsonb_build_object('mode', s.mode, 'send_method', s.send_method, 'template', v_template));
   return v_id;
 end $$;
 
@@ -14180,10 +14215,12 @@ CREATE TABLE public.sms_outbox (
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     sent_at timestamp with time zone,
+    test_template text,
     CONSTRAINT sms_outbox_event CHECK ((event = ANY (ARRAY['approver_new'::text, 'employee_decision'::text, 'password_reset'::text, 'test'::text]))),
     CONSTRAINT sms_outbox_mobile CHECK (((to_mobile IS NULL) OR (to_mobile ~ '^09[0-9]{9}$'::text))),
     CONSTRAINT sms_outbox_skipped_reason CHECK (((status = 'skipped'::text) = (skip_reason IS NOT NULL))),
-    CONSTRAINT sms_outbox_status CHECK ((status = ANY (ARRAY['queued'::text, 'sending'::text, 'sent'::text, 'dry_run'::text, 'failed'::text, 'skipped'::text])))
+    CONSTRAINT sms_outbox_status CHECK ((status = ANY (ARRAY['queued'::text, 'sending'::text, 'sent'::text, 'dry_run'::text, 'failed'::text, 'skipped'::text]))),
+    CONSTRAINT sms_outbox_test_template CHECK (((test_template IS NULL) OR ((event = 'test'::text) AND (test_template = ANY (ARRAY['approver_new'::text, 'employee_decision'::text, 'password_reset'::text])))))
 );
 
 
@@ -14192,6 +14229,13 @@ CREATE TABLE public.sms_outbox (
 --
 
 COMMENT ON TABLE public.sms_outbox IS 'FR-78: one row per text. Written only by security-definer functions; the admin reads it in the SMS tab.';
+
+
+--
+-- Name: COLUMN sms_outbox.test_template; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.sms_outbox.test_template IS 'FR-78: on a test row sent by pattern, the event whose template it uses; null otherwise.';
 
 
 --
@@ -20114,13 +20158,13 @@ GRANT ALL ON FUNCTION public.app_sms_settings() TO service_role;
 
 
 --
--- Name: FUNCTION app_sms_test(p_mobile text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION app_sms_test(p_mobile text, p_template text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.app_sms_test(p_mobile text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO postgres;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO authenticated;
-GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text) TO service_role;
+REVOKE ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO service_role;
 
 
 --
