@@ -14,7 +14,7 @@ test('self-service password change', async ({ page }) => {
   // `login` also clears the first-login screen (FR-50) with firstLoginPassword(tempPw).
   await login(page, code, tempPw);
   const currentPw = firstLoginPassword(tempPw);
-  await page.goto('/profile');
+  await page.goto('/profile/account');
 
   // Wrong current password → error.
   await page.fill('#pwd-current', 'definitely-wrong');
