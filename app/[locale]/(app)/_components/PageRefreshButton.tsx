@@ -23,9 +23,10 @@ type Props = {
   initialUpdatedAt?: string;
   /** On the blue side panel. */
   onDark?: boolean;
+  className?: string;
 };
 
-export function PageRefreshButton({ initialUpdatedAt, onDark }: Props) {
+export function PageRefreshButton({ initialUpdatedAt, onDark, className }: Props) {
   const t = useTranslations('refresh');
   const locale = useLocale();
   const pathname = usePathname();
@@ -64,7 +65,8 @@ export function PageRefreshButton({ initialUpdatedAt, onDark }: Props) {
         'h-[30px] self-start whitespace-nowrap rounded-sm px-3 text-[12.5px] font-semibold',
         onDark
           ? 'border-white/30 bg-transparent text-white/85 hover:bg-white/10 hover:text-white'
-          : 'bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary'
+          : 'bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary',
+        className
       )}
     >
       <RefreshCw

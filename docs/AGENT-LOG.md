@@ -78,6 +78,29 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — Profile layout: stacked full-width cards, phone link row, Logout on Account
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ 3c3be82
+**Trigger:** Owner: Profile + Account cards in one full-width column; on phones Updated / Organization / Help in one equal row; Logout at the bottom of Account.
+
+**What changed**
+- `app/[locale]/(app)/profile/page.tsx`, `account/page.tsx`: dropped the `md:grid-cols-2` grids; cards stack in one `space-y-4` column as wide as the tabs nav (layout `max-w-5xl`).
+- `account/page.tsx`: Logout (`settings-logout`) now shows on every width (was `hidden md:block`), full width on phones, `md:max-w-xs` on desktop.
+- `profile/layout.tsx`: refresh button moved out of `PageHeader.action` into the phone row; row is `grid auto-cols-fr grid-flow-col` (equal width), all `h-9`. Phone Logout (`profile-mobile-logout`) removed from the row — no test used that testid. Admins still get a 4th Settings cell.
+- `_components/PageRefreshButton.tsx`: new optional `className` prop (merged last via `cn`).
+
+**Actions outside the repo**
+- none.
+
+**Verification**
+- `npx tsc --noEmit` 0 · eslint on touched files 0 · `tests/unit/view-as-bar.test.tsx` 12 pass.
+- Browser: temporary `app/[locale]/zz-profile-check` page (deleted, `.next/dev/types` cleared) on `bj-dev-isolated` at 375px + desktop: three equal buttons in one row, stacked cards, Logout under Change password.
+- NOT run: signed-in check, e2e. The isolated stack (:3501) refuses the demo creds (`admin`/`Admin!2026`, `2001`/`Demo!2026`) — password changed since seeding.
+
+**State left behind**
+- Uncommitted on `main`.
+
 ## 2026-11-19 — PR #27 review, fixes and merge (FR-96)
 
 **Agent:** Claude Opus 5.5 via Claude Code
