@@ -10570,6 +10570,39 @@ $$;
 
 
 --
+-- Name: app_set_my_mobile(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_set_my_mobile(p_mobile text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_company uuid;
+  v_mobile text := private.normalize_ir_mobile(p_mobile);
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not permitted' using errcode = '42501';
+  end if;
+  if nullif(btrim(coalesce(p_mobile, '')), '') is not null and v_mobile is null then
+    raise exception 'invalid mobile' using errcode = '22023';
+  end if;
+
+  update public.employee_personal_info set mobile = v_mobile where employee_id = v_uid;
+  if not found then
+    select company_id into v_company from public.profiles where id = v_uid;
+    insert into public.employee_personal_info (employee_id, company_id, mobile, updated_by)
+    values (v_uid, v_company, v_mobile, v_uid);
+    insert into public.audit_log (actor_id, action, entity, entity_id, after)
+    values (v_uid, 'personal_info.update', 'employee_personal_info', v_uid,
+            jsonb_build_object('fields', jsonb_build_array('mobile')));
+  end if;
+  return v_mobile;
+end $$;
+
+
+--
 -- Name: app_set_profile_photo(uuid, text, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -19894,6 +19927,16 @@ REVOKE ALL ON FUNCTION public.app_set_initial_password(p_new text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO postgres;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO authenticated;
 GRANT ALL ON FUNCTION public.app_set_initial_password(p_new text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_set_my_mobile(p_mobile text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_set_my_mobile(p_mobile text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_set_my_mobile(p_mobile text) TO postgres;
+GRANT ALL ON FUNCTION public.app_set_my_mobile(p_mobile text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_set_my_mobile(p_mobile text) TO service_role;
 
 
 --
