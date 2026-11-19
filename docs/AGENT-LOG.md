@@ -95,7 +95,7 @@ Copy this block verbatim and fill it in.
 
 **Actions outside the repo**
 - Clone `pt_mobile2` of `bj-approvals-finance-db-1` db `postgres` (dropped at end). Applied the new migration there and, for `sms.sql`, main's `20261119100000` (the local DB lags it). The new migration is NOT applied to the local `postgres` DB.
-- Merge to `main` → CI deploys to Liara (result below / next entry).
+- Merged PR #27 → `main` @ a4a0bcb. GitHub Actions run 44571821977 (Deploy Liara): build ✓ (audit gate, lint, unit, deploy tests) and deploy ✓ (migrations `20261119120000` + `20261119140000` applied by the release). `https://bjeng.app/api/health` → 200 afterwards.
 
 **Verification**
 - Clone: `self-service-mobile.sql` all pass; `sms.sql` all pass (after applying main's SMS migration); `view-as.sql` hook writes refused 25006; `fr52-53-signature-personal-info.sql` the same 2 known role-drift failures as before.
