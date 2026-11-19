@@ -1,26 +1,19 @@
 /**
- * Profile / Settings (FR-23) — language, saved signature (FR-52), link to
- * personal information (FR-53), password, logout.
+ * Profile › Profile tab (FR-23, FR-95): name and code, photo (FR-82), the SMS
+ * mobile everyone sets themselves, and the saved signature (FR-52).
+ * Desktop: two columns; phones: one, in that order.
  */
 
 export const dynamic = 'force-dynamic';
 
-import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { getCachedUser, getCachedProfile, getCachedPermissions, getCachedRoles } from '@/lib/auth/context';
-import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
-import { settingsItemForRoles } from '@/lib/nav/tabs';
-import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
-import { PageHeader } from '../_components/PageHeader';
-import { PageRefreshButton } from '../_components/PageRefreshButton';
+import { getCachedUser, getCachedProfile } from '@/lib/auth/context';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LanguageSwitch } from '../_components/LanguageSwitch';
-import { ChangePasswordForm } from './ChangePasswordForm';
-import { LogoutButton } from './LogoutButton';
 import { SavedSignatureCard } from './SavedSignatureCard';
 import { getMySavedSignature } from '@/lib/actions/signature';
 import { getPhotoInfo } from '@/lib/actions/photo';
 import { ProfilePhotoCard } from '@/components/profile-photo/ProfilePhotoCard';
+import { SmsMobileCard } from '@/components/profile/SmsMobileCard';
 import { createClient } from '@/lib/supabase/server';
 
 type Props = {
@@ -31,175 +24,70 @@ export default async function ProfilePage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
 
-  const t = await getTranslations('profile');
-  const tOrg = await getTranslations('org');
-  const tHelp = await getTranslations('help');
   const user = await getCachedUser();
   if (!user) return null;
 
   const supabase = await createClient();
-  const [profile, savedRes, { data: personalInfo }, perms, roles, photoRes] = await Promise.all([
+  const [t, tSig, tMobile, profile, savedRes, photoRes, { data: personalInfo }] = await Promise.all([
+    getTranslations('profile'),
+    getTranslations('profile.signature'),
+    getTranslations('profile.mobile'),
     getCachedProfile(user.id),
     getMySavedSignature(),
-    supabase.from('employee_personal_info').select('complete').eq('employee_id', user.id).maybeSingle(),
-    getCachedPermissions(user.id),
-    getCachedRoles(user.id),
     getPhotoInfo(user.id),
+    supabase.from('employee_personal_info').select('mobile').eq('employee_id', user.id).maybeSingle(),
   ]);
-  const capabilities = await getApprovalCapabilities();
-  const settingsItem = settingsItemForRoles(roles, perms, capabilities.canDelegate);
-  const tNav = await getTranslations('nav');
-  const tSig = await getTranslations('profile.signature');
-  const tPi = await getTranslations('personalInfo');
 
-  const tp = await getTranslations('profile.password');
   return (
-    <main className="p-4 max-w-lg mx-auto space-y-4">
-      {/* Mobile has no side panel, so its refresh control lives here. */}
-      <PageHeader
-        title={t('title')}
-        action={
-          <div className="md:hidden">
-            <PageRefreshButton />
-          </div>
-        }
-      />
+    <div className="grid items-start gap-4 md:grid-cols-2">
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="pt-2 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t('name')}</span>
+              <span className="font-medium">{profile?.full_name ?? '—'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{t('code')}</span>
+              <span className="font-mono">{profile?.employee_code ?? '—'}</span>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Employee info */}
-      <Card>
-        <CardContent className="pt-2 text-sm space-y-1">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t('name')}</span>
-            <span className="font-medium">{profile?.full_name ?? '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">{t('code')}</span>
-            <span className="font-mono">{profile?.employee_code ?? '—'}</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* FR-82: the only place people change their own photo (HR uses Edit employee). */}
-      <Card>
-        <CardContent className="pt-2">
-          <ProfilePhotoCard
-            employeeId={user.id}
-            name={profile?.full_name ?? ''}
-            initial={photoRes.ok ? photoRes.photo : null}
-            mode="self"
-          />
-        </CardContent>
-      </Card>
-
-      {/* FR-44: on mobile the org chart is reached from here — the bottom bar
-          stays at 4/5 tabs. Desktop has it in the side panel. */}
-      <Link
-        href={`/${locale}/organization`}
-        data-testid="profile-org-link"
-        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
-      >
-        <span>
-          <span className="block text-sm font-semibold">{tOrg('openFromProfile')}</span>
-          <span className="block text-xs text-muted-foreground">{tOrg('openFromProfileHint')}</span>
-        </span>
-        <span aria-hidden className="text-muted-foreground rtl:rotate-180">
-          ›
-        </span>
-      </Link>
-
-      {/* Help & guides: desktop has it in the side panel. */}
-      <Link
-        href={`/${locale}/help`}
-        data-testid="profile-help-link"
-        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
-      >
-        <span>
-          <span className="block text-sm font-semibold">{tHelp('openFromProfile')}</span>
-          <span className="block text-xs text-muted-foreground">{tHelp('openFromProfileHint')}</span>
-        </span>
-        <span aria-hidden className="text-muted-foreground rtl:rotate-180">
-          ›
-        </span>
-      </Link>
-
-      {/* FR-55: Settings is in the side panel (desktop) and in Manage (mobile) — but a
-          role holding only settings items has no Manage tab, so mobile reaches it here. */}
-      {settingsItem && (
-        <Link
-          href={`/${locale}${settingsItem.href}`}
-          data-testid="profile-settings-link"
-          className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:hidden"
-        >
-          <span>
-            <span className="block text-sm font-semibold">{tNav('settings')}</span>
-            <span className="block text-xs text-muted-foreground">{t('settingsHint')}</span>
-          </span>
-          <span aria-hidden className="text-muted-foreground rtl:rotate-180">
-            ›
-          </span>
-        </Link>
-      )}
-
-      {/* FR-53: personal information lives on its own page; it is a long form. */}
-      <Link
-        href={`/${locale}/profile/personal-info`}
-        data-testid="profile-personal-info-link"
-        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
-      >
-        <span>
-          <span className="block text-sm font-semibold">{tPi('title')}</span>
-          <span className="block text-xs text-muted-foreground">
-            {!canEditOwnPersonalInfo(perms)
-              ? tPi('viewHint')
-              : personalInfo?.complete
-                ? tPi('completeHint')
-                : tPi('incompleteHint')}
-          </span>
-        </span>
-        <span aria-hidden className="text-muted-foreground rtl:rotate-180">
-          ›
-        </span>
-      </Link>
-
-      {/* FR-52: saved signature */}
-      <Card>
-        <CardHeader className="border-b pb-4">
-          <CardTitle>{tSig('title')}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <SavedSignatureCard initial={savedRes.ok ? savedRes.signature : null} />
-        </CardContent>
-      </Card>
-
-      {/* Preferences */}
-      <Card>
-        <CardHeader className="border-b pb-4">
-          <CardTitle>{t('preferences')}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <div className="space-y-1.5">
-            <p className="text-sm font-medium">{t('language')}</p>
-            <LanguageSwitch
-              locale={locale}
-              testIdPrefix="settings-language"
-              className="max-w-xs"
+        {/* FR-82: the only place people change their own photo (HR uses Edit employee). */}
+        <Card>
+          <CardContent className="pt-2">
+            <ProfilePhotoCard
+              employeeId={user.id}
+              name={profile?.full_name ?? ''}
+              initial={photoRes.ok ? photoRes.photo : null}
+              mode="self"
             />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Change password */}
-      <Card>
-        <CardHeader className="border-b pb-4">
-          <CardTitle>{tp('title')}</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <ChangePasswordForm />
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        {/* FR-95: everyone sets the number SMS notifications go to. */}
+        <Card data-testid="sms-mobile-card">
+          <CardHeader className="border-b pb-4">
+            <CardTitle>{tMobile('title')}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <SmsMobileCard initial={personalInfo?.mobile ?? null} />
+          </CardContent>
+        </Card>
 
-      {/* Logout — deliberately outside any card, at the very bottom */}
-      <LogoutButton locale={locale} />
-    </main>
+        {/* FR-52: saved signature */}
+        <Card>
+          <CardHeader className="border-b pb-4">
+            <CardTitle>{tSig('title')}</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <SavedSignatureCard initial={savedRes.ok ? savedRes.signature : null} />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
   );
 }
