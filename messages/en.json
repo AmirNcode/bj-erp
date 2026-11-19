@@ -374,7 +374,24 @@
       "errorTooLarge": "This image cannot be made small enough. Try a closer, simpler photo of the signature.",
       "errorUnsupported": "This file could not be read as an image."
     },
-    "settingsHint": "Work week, holidays and other company settings"
+    "settingsHint": "Work week, holidays and other company settings",
+    "mobile": {
+      "title": "Mobile for SMS",
+      "hint": "Request and approval notifications are texted to this number.",
+      "label": "Mobile number",
+      "current": "Current number",
+      "none": "No number yet — you won't get SMS notifications.",
+      "save": "Save",
+      "saved": "Saved.",
+      "cleared": "Number removed.",
+      "invalid": "Enter an Iranian mobile number (09…).",
+      "readOnly": "Read-only while viewing as someone else."
+    },
+    "tabs": {
+      "profile": "Profile",
+      "personalInfo": "Personal information",
+      "account": "Account"
+    }
   },
   "approvals": {
     "title": "Approvals",
