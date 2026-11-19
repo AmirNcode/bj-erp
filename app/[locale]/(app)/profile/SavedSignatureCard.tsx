@@ -95,8 +95,6 @@ export function SavedSignatureCard({ initial }: { initial: SavedSignature | null
 
   return (
     <div className="space-y-3" data-testid="saved-signature-card">
-      <p className="text-sm text-muted-foreground">{t('hint')}</p>
-
       {mode.kind === 'view' && (
         <>
           {initial ? (

@@ -9,6 +9,13 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Profile layout + SMS history (FR-96) — 2026-11-19
+
+- **Profile tab**: photo and name/code share one tile; Saved signature and Mobile for SMS are half-width tiles of equal height side by side (signature left). Card hints sit under the titles. Account tab is half width with Log out under Change password.
+- **Mobile for SMS**: the number shows as text with Edit; editing gives Save (enabled only after a change) and Discard. Below it, your latest three texts with date and status (password texts masked).
+- **Phones**: Updated, Organization and Help share one row of equal buttons; Settings (under Manage) and Log out (Account tab) left that row.
+- Migration `20261119160000_my_recent_sms` (`app_my_recent_sms`).
+
 ### Profile tabs + self-service SMS mobile (FR-96) — 2026-11-19
 
 - **Profile is now three tabs**: Profile (name, code, photo, mobile for SMS, saved signature — two columns on a computer), Personal information, Account (language, password).

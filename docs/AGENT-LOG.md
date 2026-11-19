@@ -78,6 +78,52 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — Profile › Mobile for SMS: edit-in-place number + recent texts
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ bf7b99d (round-2 layout still uncommitted)
+**Trigger:** Owner: replace the always-on input with text + Edit (Save disabled until a change, Discard), and use the free space for the latest texts sent to the person.
+
+**What changed**
+- `supabase/migrations/20261119160000_my_recent_sms.sql` (new): `app_my_recent_sms(p_limit default 3, clamped 1–10)` — SECURITY DEFINER, stable; own rows only, statuses queued/sending/sent/failed (no skipped/dry_run), body through `private.sms_mask`; inactive → 42501, anon no execute. Index `sms_outbox_recipient_created_idx`. `schema.sql` patched (function, index, ACL hunks only); `types.ts` + `getMyRecentSms` / `MySms` in `lib/actions/personal-info.ts`.
+- `components/profile/SmsMobileCard.tsx`: view mode = number + Edit (Add number when none); edit = input + Save (disabled while unchanged after normalizing) + Discard (Esc too); confirm dialog unchanged; history section (date, status badge, 2-line body) fills the card. New keys `profile.mobile.{edit,add,discard,historyTitle,historyEmpty,historyStatus.*}` fa + en.
+- `tests/sql/my-recent-sms.sql` (new), `tests/unit/sms-mobile-card.test.tsx` (new, 7 tests). `docs/DATA_MODEL.md` sms_outbox read paths.
+
+**Actions outside the repo**
+- `:3501` stack (`bj-approvals-finance`): `pg_dump -Fc` → `.bj-deploy/approvals-finance/pre-20261119-193955.dump`; `bj_apply_migrations` applied `20261118100000/100100/100200` (test-emp, already live), `20261119100000`, `20261119140000`, `20261119160000`; View-as hook synced; `seed.sql`; rest restarted; app rebuilt. Health 200. Its SMS mode is `off`; the admin has no texts (empty state) — codes 124 / 103 / 229 have failed rows to see via View as.
+
+**Verification**
+- SQL test on a clone (`rs_clone`, dropped): RED before the migration ("cannot extract elements from a scalar" — function missing), all pass after.
+- tsc 0 · lint 0 · unit 143 files / 1415 pass.
+- NOT checked signed in in a browser.
+
+**State left behind**
+- Uncommitted on `main` together with the round-2 layout; owner will ask for the push. CHANGELOG not yet updated.
+
+## 2026-11-19 — Profile layout round 2: half-width tiles, hints under titles, no phone Settings
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ bf7b99d
+**Trigger:** Owner: desktop too wide after round 1 — photo + name/code in one tile (half each), SMS + signature half-width in one row (signature left, SMS right), card hints under the titles; phone row drops Settings so Updated fits.
+
+**What changed**
+- `profile/page.tsx`: one tile = `ProfilePhotoCard` | name/code (`md:grid-cols-2`, divider `md:border-s`; phones: name first). Then `md:grid-cols-2` row: signature card with `md:rtl:order-last` so it is physically left in fa too; SMS `max-md:order-first` (phones keep SMS first). Hints moved to `CardDescription` in the headers.
+- `SmsMobileCard.tsx`, `SavedSignatureCard.tsx`: removed their in-body hint `<p>`.
+- `profile/account/page.tsx`: column is half width on desktop (`md:grid-cols-2`, one child); Logout same width as the cards.
+- `profile/layout.tsx`: Settings link + its role/permission lookups removed (Settings is under Manage). Refresh button `gap-1 px-1.5`, and below 400px `px-1` + icon hidden — at 375px "Updated 10:37 PM" overflowed its 107px cell by 10px (measured).
+
+**Actions outside the repo**
+- Rebuilt the local `bj-approvals-finance` app container (`.bj-deploy/approvals-finance/compose up -d --build app`); no DB change, no migrations. `:3501/api/health` → 200.
+
+**Verification**
+- tsc 0 · lint 0 · unit 142 files / 1408 pass. Phone row measured on a temporary `zz-row` page (deleted) at 375 / 500px, en + fa: no overflow.
+- NOT checked signed in: owner checks on :3501 before push.
+
+**Follow-up (same session, owner picked "option 1"):** signature + SMS tiles now equal height — row grid lost `items-start` (stretch), SMS `CardContent` is `flex flex-1 flex-col`, and `SmsMobileCard` wraps form + messages in `mt-auto` so Save sits level with the signature buttons. tsc / lint / unit (1408) pass; `:3501` rebuilt again, health 200.
+
+**State left behind**
+- Uncommitted on `main`; owner will ask for the push.
+
 ## 2026-11-19 — Profile layout: stacked full-width cards, phone link row, Logout on Account
 
 **Agent:** Claude Opus 5.5 via Claude Code

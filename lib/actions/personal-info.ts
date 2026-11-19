@@ -140,3 +140,23 @@ export async function setMyMobile(
   if (error) return dbErr(error.message);
   return { ok: true, mobile: data ?? null };
 }
+
+/** One text sent to the caller (FR-96 follow-up); a password_reset body is always masked. */
+export type MySms = {
+  id: string;
+  event: 'approver_new' | 'employee_decision' | 'password_reset' | 'test';
+  to_mobile: string | null;
+  body: string;
+  status: 'queued' | 'sending' | 'sent' | 'failed';
+  created_at: string;
+  sent_at: string | null;
+};
+
+/** The caller's latest texts, newest first (never skipped / dry-run ones). */
+export async function getMyRecentSms(limit = 3): Promise<{ ok: true; rows: MySms[] } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_my_recent_sms', { p_limit: limit });
+  if (error) return dbErr(error.message);
+  return { ok: true, rows: (data as unknown as MySms[] | null) ?? [] };
+}

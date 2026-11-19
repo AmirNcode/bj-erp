@@ -2090,6 +2090,7 @@ export type Database = {
       app_get_separation: { Args: { p_id: string }; Returns: Json }
       // FR-55: { permission key: 'read' | 'edit' } for the caller.
       app_my_permissions: { Args: never; Returns: Json }
+      app_my_recent_sms: { Args: { p_limit?: number }; Returns: Json }
       app_view_as_session: {
         Args: { p_id: string }
         Returns: {

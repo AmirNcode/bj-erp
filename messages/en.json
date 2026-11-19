@@ -392,7 +392,18 @@
       "confirmRemoveBody": "You won't get SMS notifications until you add a number again.",
       "confirm": "Yes, save",
       "confirmRemove": "Yes, remove",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "add": "Add number",
+      "discard": "Discard",
+      "historyTitle": "Recent texts",
+      "historyEmpty": "No texts sent to you yet.",
+      "historyStatus": {
+        "sent": "Sent",
+        "queued": "Sending",
+        "sending": "Sending",
+        "failed": "Not delivered"
+      }
     },
     "tabs": {
       "profile": "Profile",

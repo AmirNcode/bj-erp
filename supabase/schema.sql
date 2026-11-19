@@ -8086,6 +8086,37 @@ $$;
 
 
 --
+-- Name: app_my_recent_sms(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_my_recent_sms(p_limit integer DEFAULT 3) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  v_uid uuid := auth.uid();
+  v_limit integer := least(greatest(coalesce(p_limit, 3), 1), 10);
+begin
+  if v_uid is null or not private.is_active(v_uid) then
+    raise exception 'not permitted' using errcode = '42501';
+  end if;
+  return (
+    select coalesce(jsonb_agg(jsonb_build_object(
+             'id', x.id, 'event', x.event, 'to_mobile', x.to_mobile,
+             'body', private.sms_mask(x.event, x.body, x.args),
+             'status', x.status, 'created_at', x.created_at, 'sent_at', x.sent_at)
+           order by x.created_at desc, x.id), '[]'::jsonb)
+      from (select o.* from public.sms_outbox o
+             where o.recipient_id = v_uid
+               and o.status in ('queued', 'sending', 'sent', 'failed')
+             order by o.created_at desc, o.id
+             limit v_limit) x);
+end $$;
+
+
+ALTER FUNCTION public.app_my_recent_sms(p_limit integer) OWNER TO supabase_admin;
+
+--
 -- Name: app_my_request_edit_types(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -15507,6 +15538,13 @@ CREATE INDEX sms_outbox_due_idx ON public.sms_outbox USING btree (next_attempt_a
 
 
 --
+-- Name: sms_outbox_recipient_created_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sms_outbox_recipient_created_idx ON public.sms_outbox USING btree (recipient_id, created_at DESC);
+
+
+--
 -- Name: sms_outbox_sending_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -19438,6 +19476,16 @@ REVOKE ALL ON FUNCTION public.app_my_permissions() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO postgres;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO authenticated;
 GRANT ALL ON FUNCTION public.app_my_permissions() TO service_role;
+
+
+--
+-- Name: FUNCTION app_my_recent_sms(p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_my_recent_sms(p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_my_recent_sms(p_limit integer) TO postgres;
+GRANT ALL ON FUNCTION public.app_my_recent_sms(p_limit integer) TO authenticated;
+GRANT ALL ON FUNCTION public.app_my_recent_sms(p_limit integer) TO service_role;
 
 
 --

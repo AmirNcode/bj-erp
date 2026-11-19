@@ -690,6 +690,8 @@ the retired `absences` permission item (migration `20261102150000`).
   `next_attempt_at`, `net_request_id` (pg_net), `provider_ref` (recId), `error`. Unique: one approver text
   per (request, step, person); one decision text per request. Password rows are masked at the first
   dispatch, or at once when skipped. Purged after 180 days.
+  Admins read it through `app_sms_log`; everyone else only through `app_my_recent_sms(p_limit)` (own
+  rows, `recipient_id = auth.uid()`, no skipped / dry_run, password body masked; Profile › Mobile for SMS).
 - `private.sms_outbox_events` — history of each text, shown when a log row is expanded: `kind`
   status (written by trigger `sms_outbox_log_status` on any `status`/`attempts` change) | request
   (`endpoint` send/simple or send/shared, `body_id`, `attempt`) | reply (`http_status`, `timed_out`,
