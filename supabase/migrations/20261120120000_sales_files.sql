@@ -62,6 +62,7 @@ begin
   if f.uploaded_by is distinct from auth.uid() then
     raise exception 'sales: not allowed' using errcode = '42501';
   end if;
+  perform private.sales_writable(f.rfp_id);
   if f.status <> 'pending' or p_size is distinct from f.size_bytes
      or (p_sha256 is not null and p_sha256 !~ '^[0-9a-f]{64}$') then
     raise exception 'sales: invalid input' using errcode = '22023';
