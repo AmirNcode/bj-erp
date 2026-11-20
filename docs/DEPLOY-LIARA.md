@@ -134,6 +134,19 @@ This exact procedure passed the isolated restore rehearsal. Revalidate it before
 changing the Postgres image. A live database restore requires a separate recovery
 plan and explicit authorization; never point a rehearsal at `bj-erp-db-1`.
 
+**Sales files (FR-94).** Uploaded files live on the Docker volume `<project>_sales-files`
+(mounted at `/data/files` in `app`), not in Postgres. After the dump, `liara/backup.sh` runs
+`lib/files-gc.sh` (removes stale uploads, `tmp/` leftovers and orphan files; it does nothing when the
+database returns no ids) and `liara/backup-files.sh`, which `rsync`s the volume into one mirror,
+`/var/backups/bj-erp/files/`. A file deleted from the volume stays 30 days in
+`/var/backups/bj-erp/files-deleted/<date>/`, then is pruned. `rsync` must be installed on the VM
+(`apt install rsync`; checking it is a live-server action for the owner). Watch the VM disk: the volume
+plus its mirror hold every file twice. `pull-backups-to-mac.sh` copies the mirror to `~/Backups/bj-erp/files/`.
+**Restore:** after restoring the database, copy the mirror back into the volume as owner `node`
+(uid 1000), e.g. `rsync -a /var/backups/bj-erp/files/ "$(docker volume inspect -f '{{ .Mountpoint }}' bj-erp_sales-files)/"`
+then `chown -R 1000:1000` on it. A database restored without its files shows rows whose download
+fails with "file missing" (handled, not a crash).
+
 After any restore (and after a restore rehearsal you intend to serve), run `deploy/lib/sync-view-as-hook.sql`
 as `supabase_admin` against `postgres`, e.g. `exec -T db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 < lib/sync-view-as-hook.sql`
 from the release directory. The PostgREST setting `pgrst.db_pre_request` that switches on View as (FR-86) is a role

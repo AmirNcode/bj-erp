@@ -146,6 +146,10 @@ over a database you were not asked to replace:
 5. Apply the branch's migrations with `bj_apply_migrations` (ledger) — the backup may predate the latest
    deploy — then start auth/rest/app and check `/api/health`.
 
+6. **Sales files:** copy `~/Backups/bj-erp/files/` into the local `sales-files` volume (owner `node`, uid 1000;
+   or into `.files/` for `npm run dev`). Skipping it is fine: downloads then show "file missing". The mirror
+   is real client data; keep it local like the dump.
+
 People sign in with their **real** passwords (admin: `.bj-deploy/liara/admin-password`); agents do not
 type them. The local copy is real personnel data: keep it local, never commit or upload a dump, and
 remember nothing done locally reaches production (backups are read-only; deploys ship code, not data).

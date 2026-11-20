@@ -120,6 +120,15 @@ pull() {
     fi
   fi
 
+  # Sales files (FR-94): incremental copy of the VM's files mirror. No --delete: the Mac keeps
+  # whatever it has ever received. A failure here is logged, never fatal for the dump pull.
+  if remote "test -d $REMOTE_DIR/files"; then
+    mkdir -p "$DEST/files"
+    chmod 700 "$DEST/files"
+    rsync -a -e "ssh ${SSH_OPTS[*]}" "$HOST:$REMOTE_DIR/files/" "$DEST/files/" \
+      || log "files mirror pull failed (dump pull unaffected)"
+  fi
+
   disk="$(remote "df -P $REMOTE_DIR | awk 'NR==2 {print \$5}'" | tr -d '%')"
   if [ "$disk" -ge "$DISK_WARN_PERCENT" ]; then
     log "VM disk ${disk}% full"

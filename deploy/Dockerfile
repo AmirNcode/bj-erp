@@ -42,6 +42,9 @@ COPY deploy/gen-keys.mjs /gen-keys.mjs
 RUN chmod +x /docker-entrypoint.sh \
     && chown -R node:node /app
 
+# Sales files volume mount point; Docker copies this owner into an empty named volume.
+RUN mkdir -p /data/files && chown node:node /data/files
+
 EXPOSE 3000
 ENV HOSTNAME=0.0.0.0 PORT=3000
 USER node

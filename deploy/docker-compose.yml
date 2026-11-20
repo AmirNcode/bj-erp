@@ -133,6 +133,10 @@ services:
       # Internal URL for the app's own server-side calls (plain HTTP — the
       # public cert is a private CA this container doesn't trust).
       SUPABASE_URL: http://gateway:8080
+      # Sales files (FR-94): bytes live on the sales-files volume, never in the database.
+      FILES_DIR: /data/files
+    volumes:
+      - sales-files:/data/files
 
   gateway:
     image: caddy:2.8.4-alpine
@@ -159,5 +163,6 @@ services:
 
 volumes:
   db-data:
+  sales-files:
   caddy-data:
   caddy-config:

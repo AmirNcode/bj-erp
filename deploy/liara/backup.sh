@@ -20,4 +20,11 @@ bj_compose_with_db_password db psql -U supabase_admin -d postgres -qAt -c \
   "select private.record_backup('$(basename "$BACKUP")', $(stat -c %s "$BACKUP"), '$(cut -d' ' -f1 "$BACKUP.sha256")')" \
   >/dev/null 2>&1 || true
 find /var/backups/bj-erp -maxdepth 1 -type f -name 'daily-*.dump*' -mtime +14 -delete
+# Sales files (FR-94): clean up stale uploads, then mirror the volume (rsync, deleted files kept 30 days).
+# Best effort: a files problem must never fail the database backup, which already succeeded.
+bash ./lib/files-gc.sh || echo "files-gc failed (ignored)" >&2
+bash ./liara/backup-files.sh \
+  "$(docker volume inspect -f '{{ .Mountpoint }}' "${BJ_PROJECT_NAME}_sales-files")" \
+  /var/backups/bj-erp/files /var/backups/bj-erp/files-deleted \
+  || echo "files backup failed (ignored)" >&2
 printf '%s\n' "$BACKUP"

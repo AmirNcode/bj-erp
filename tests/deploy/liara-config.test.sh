@@ -31,4 +31,4 @@ assert.ok(g.volumes.some(v => v.type === 'volume' && v.target === '/data'));
 assert.equal(c.services.auth.environment.GOTRUE_RATE_LIMIT_TOKEN_REFRESH, '300');
 console.log('ok - Liara merge publishes only 80/443, retains private services and certificate storage');
 JS
-bash -n "$ROOT/deploy/liara/package-release.sh" "$ROOT/deploy/liara/apply-release.sh" "$ROOT/deploy/liara/backup.sh"
+bash -n "$ROOT/deploy/liara/package-release.sh" "$ROOT/deploy/liara/apply-release.sh" "$ROOT/deploy/liara/backup.sh" "$ROOT/deploy/liara/backup-files.sh" "$ROOT/deploy/lib/files-gc.sh"
