@@ -20,6 +20,8 @@ import {
 
 type Props = {
   locale: string;
+  className?: string;
+  testId?: string;
 };
 
 /**
@@ -27,7 +29,7 @@ type Props = {
  * Keeps the `settings-logout` testid contract; the confirm action is
  * `logout-confirm`.
  */
-export function LogoutButton({ locale }: Props) {
+export function LogoutButton({ locale, className = 'w-full', testId = 'settings-logout' }: Props) {
   const t = useTranslations('profile.logoutConfirm');
   const tv = useTranslations('viewAs');
   const viewing = useViewAs() !== null;
@@ -39,9 +41,9 @@ export function LogoutButton({ locale }: Props) {
         <Button
           type="button"
           variant="outline"
-          data-testid="settings-logout"
+          data-testid={testId}
           disabled={isPending}
-          className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className={`${className} border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive`}
         >
           {t('trigger')}
         </Button>

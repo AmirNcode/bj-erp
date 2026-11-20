@@ -2023,7 +2023,7 @@ export type Database = {
         }
         Returns: undefined
       }
-      app_sms_test: { Args: { p_mobile: string }; Returns: string }
+      app_sms_test: { Args: { p_mobile: string; p_template?: string | null }; Returns: string }
       app_sms_check_credit: { Args: Record<PropertyKey, never>; Returns: undefined }
       app_profile_photo: {
         Args: { p_employee: string }
@@ -2039,6 +2039,8 @@ export type Database = {
       }
       app_set_profile_photo_lock: { Args: { p_employee: string; p_locked: boolean }; Returns: undefined }
       app_remove_profile_photo: { Args: { p_employee: string }; Returns: undefined }
+      // FR-96: the caller's own SMS mobile; returns the stored value (normalized) or null.
+      app_set_my_mobile: { Args: { p_mobile: string | null }; Returns: string | null }
       app_sms_log: {
         Args: { p_status?: string | null; p_event?: string | null; p_limit?: number; p_offset?: number }
         Returns: Json
@@ -2106,6 +2108,7 @@ export type Database = {
       app_get_separation: { Args: { p_id: string }; Returns: Json }
       // FR-55: { permission key: 'read' | 'edit' } for the caller.
       app_my_permissions: { Args: never; Returns: Json }
+      app_my_recent_sms: { Args: { p_limit?: number }; Returns: Json }
       app_view_as_session: {
         Args: { p_id: string }
         Returns: {
@@ -2622,7 +2625,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "manager" | "employee" | "security" | "hr" | "finance" | "procurement"
+      app_role: "admin" | "manager" | "employee" | "security" | "hr" | "finance" | "procurement" | "test-emp"
       day_part: "full" | "am" | "pm"
       department_kind: "team" | "security" | "office"
       leave_unit: "day" | "hour"
@@ -2761,7 +2764,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "manager", "employee", "security", "hr", "finance", "procurement"],
+      app_role: ["admin", "manager", "employee", "security", "hr", "finance", "procurement", "test-emp"],
       day_part: ["full", "am", "pm"],
       department_kind: ["team", "security", "office"],
       leave_unit: ["day", "hour"],

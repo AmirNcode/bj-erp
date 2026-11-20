@@ -78,6 +78,193 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-19 — Profile › Mobile for SMS: edit-in-place number + recent texts
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ bf7b99d (round-2 layout still uncommitted)
+**Trigger:** Owner: replace the always-on input with text + Edit (Save disabled until a change, Discard), and use the free space for the latest texts sent to the person.
+
+**What changed**
+- `supabase/migrations/20261119160000_my_recent_sms.sql` (new): `app_my_recent_sms(p_limit default 3, clamped 1–10)` — SECURITY DEFINER, stable; own rows only, statuses queued/sending/sent/failed (no skipped/dry_run), body through `private.sms_mask`; inactive → 42501, anon no execute. Index `sms_outbox_recipient_created_idx`. `schema.sql` patched (function, index, ACL hunks only); `types.ts` + `getMyRecentSms` / `MySms` in `lib/actions/personal-info.ts`.
+- `components/profile/SmsMobileCard.tsx`: view mode = number + Edit (Add number when none); edit = input + Save (disabled while unchanged after normalizing) + Discard (Esc too); confirm dialog unchanged; history section (date, status badge, 2-line body) fills the card. New keys `profile.mobile.{edit,add,discard,historyTitle,historyEmpty,historyStatus.*}` fa + en.
+- `tests/sql/my-recent-sms.sql` (new), `tests/unit/sms-mobile-card.test.tsx` (new, 7 tests). `docs/DATA_MODEL.md` sms_outbox read paths.
+
+**Actions outside the repo**
+- `:3501` stack (`bj-approvals-finance`): `pg_dump -Fc` → `.bj-deploy/approvals-finance/pre-20261119-193955.dump`; `bj_apply_migrations` applied `20261118100000/100100/100200` (test-emp, already live), `20261119100000`, `20261119140000`, `20261119160000`; View-as hook synced; `seed.sql`; rest restarted; app rebuilt. Health 200. Its SMS mode is `off`; the admin has no texts (empty state) — codes 124 / 103 / 229 have failed rows to see via View as.
+
+**Verification**
+- SQL test on a clone (`rs_clone`, dropped): RED before the migration ("cannot extract elements from a scalar" — function missing), all pass after.
+- tsc 0 · lint 0 · unit 143 files / 1415 pass.
+- NOT checked signed in in a browser.
+
+**State left behind**
+- Committed `ada4e07` (with the round-2 layout + CHANGELOG) and pushed to `main` on the owner's request. Run 44601354410: build ✓, deploy ✓ (migration `20261119160000` applied by the release); `bjeng.app/api/health` → 200.
+
+## 2026-11-19 — Profile layout round 2: half-width tiles, hints under titles, no phone Settings
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ bf7b99d
+**Trigger:** Owner: desktop too wide after round 1 — photo + name/code in one tile (half each), SMS + signature half-width in one row (signature left, SMS right), card hints under the titles; phone row drops Settings so Updated fits.
+
+**What changed**
+- `profile/page.tsx`: one tile = `ProfilePhotoCard` | name/code (`md:grid-cols-2`, divider `md:border-s`; phones: name first). Then `md:grid-cols-2` row: signature card with `md:rtl:order-last` so it is physically left in fa too; SMS `max-md:order-first` (phones keep SMS first). Hints moved to `CardDescription` in the headers.
+- `SmsMobileCard.tsx`, `SavedSignatureCard.tsx`: removed their in-body hint `<p>`.
+- `profile/account/page.tsx`: column is half width on desktop (`md:grid-cols-2`, one child); Logout same width as the cards.
+- `profile/layout.tsx`: Settings link + its role/permission lookups removed (Settings is under Manage). Refresh button `gap-1 px-1.5`, and below 400px `px-1` + icon hidden — at 375px "Updated 10:37 PM" overflowed its 107px cell by 10px (measured).
+
+**Actions outside the repo**
+- Rebuilt the local `bj-approvals-finance` app container (`.bj-deploy/approvals-finance/compose up -d --build app`); no DB change, no migrations. `:3501/api/health` → 200.
+
+**Verification**
+- tsc 0 · lint 0 · unit 142 files / 1408 pass. Phone row measured on a temporary `zz-row` page (deleted) at 375 / 500px, en + fa: no overflow.
+- NOT checked signed in: owner checks on :3501 before push.
+
+**Follow-up (same session, owner picked "option 1"):** signature + SMS tiles now equal height — row grid lost `items-start` (stretch), SMS `CardContent` is `flex flex-1 flex-col`, and `SmsMobileCard` wraps form + messages in `mt-auto` so Save sits level with the signature buttons. tsc / lint / unit (1408) pass; `:3501` rebuilt again, health 200.
+
+**State left behind**
+- Shipped in `ada4e07` (see the entry above).
+
+## 2026-11-19 — Profile layout: stacked full-width cards, phone link row, Logout on Account
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `main` @ 3c3be82
+**Trigger:** Owner: Profile + Account cards in one full-width column; on phones Updated / Organization / Help in one equal row; Logout at the bottom of Account.
+
+**What changed**
+- `app/[locale]/(app)/profile/page.tsx`, `account/page.tsx`: dropped the `md:grid-cols-2` grids; cards stack in one `space-y-4` column as wide as the tabs nav (layout `max-w-5xl`).
+- `account/page.tsx`: Logout (`settings-logout`) now shows on every width (was `hidden md:block`), full width on phones, `md:max-w-xs` on desktop.
+- `profile/layout.tsx`: refresh button moved out of `PageHeader.action` into the phone row; row is `grid auto-cols-fr grid-flow-col` (equal width), all `h-9`. Phone Logout (`profile-mobile-logout`) removed from the row — no test used that testid. Admins still get a 4th Settings cell.
+- `_components/PageRefreshButton.tsx`: new optional `className` prop (merged last via `cn`).
+
+**Actions outside the repo**
+- none.
+
+**Verification**
+- `npx tsc --noEmit` 0 · eslint on touched files 0 · `tests/unit/view-as-bar.test.tsx` 12 pass.
+- Browser: temporary `app/[locale]/zz-profile-check` page (deleted, `.next/dev/types` cleared) on `bj-dev-isolated` at 375px + desktop: three equal buttons in one row, stacked cards, Logout under Change password.
+- NOT run: signed-in check, e2e. The isolated stack (:3501) refuses the demo creds (`admin`/`Admin!2026`, `2001`/`Demo!2026`) — password changed since seeding.
+
+**State left behind**
+- Committed `eac9a1b` and pushed to `main` on the owner's request. GitHub Actions run 44579358923 (Deploy Liara): build ✓, deploy ✓; `https://bjeng.app/api/health` → 200 afterwards. Live UI not checked signed in.
+
+## 2026-11-19 — PR #27 review, fixes and merge (FR-96)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/profile-tabs` @ 2563f25 (origin/main @ 953d2f8 already merged in)
+**Trigger:** Owner: review, fix and merge PR #27 (profile tabs + self-service SMS mobile).
+
+**Review result:** 0 critical, 0 important. `app_set_my_mobile` writes only the caller's row and only `mobile` (SECURITY DEFINER, `auth.uid()`), refuses inactive callers (42501) and anon; View as cannot write (the pre-request hook sets `transaction_read_only`; `tests/sql/view-as.sql` hook-write checks pass on the clone). Audit stays field names only. i18n fa + en complete; tabs use `lib/ui/tabs.ts`; no `shadow-*` / `rounded-[Npx]`. E2E edits read correct: `settings-logout` exists only on `/profile/account` at desktop width (the phone row uses `profile-mobile-logout`), so no strict-mode duplicates.
+
+**What changed**
+- `supabase/migrations/20261119140000_self_service_mobile_blank_no_row.sql` (new): insert the missing personal-info row (and its audit row) only when `v_mobile is not null`; a blank save with no row no longer creates an empty row. `supabase/schema.sql:10632` patched (one line). `types.ts` unchanged (same signature).
+- `tests/sql/self-service-mobile.sql:104-107`: 3 new assertions (blank with no row → null, no row, no audit). RED first on a clone ("expected no row, got null"), GREEN after.
+- `app/[locale]/(app)/profile/layout.tsx:167,197`: phone link row `flex-1` → `flex-auto` + `flex-wrap`, so "Organization" no longer truncates at 375px (en and fa checked: one row, nothing clipped, no horizontal scroll).
+- `messages/{en,fa}.json`: removed dead keys `profile.settingsHint`, `org.openFromProfile(+Hint)`, `help.openFromProfile(+Hint)`, `personalInfo.back/viewHint/completeHint/incompleteHint`.
+- CHANGELOG / TASKS updated.
+
+**Actions outside the repo**
+- Clone `pt_mobile2` of `bj-approvals-finance-db-1` db `postgres` (dropped at end). Applied the new migration there and, for `sms.sql`, main's `20261119100000` (the local DB lags it). The new migration is NOT applied to the local `postgres` DB.
+- Merged PR #27 → `main` @ a4a0bcb. GitHub Actions run 44571821977 (Deploy Liara): build ✓ (audit gate, lint, unit, deploy tests) and deploy ✓ (migrations `20261119120000` + `20261119140000` applied by the release). `https://bjeng.app/api/health` → 200 afterwards.
+
+**Verification**
+- Clone: `self-service-mobile.sql` all pass; `sms.sql` all pass (after applying main's SMS migration); `view-as.sql` hook writes refused 25006; `fr52-53-signature-personal-info.sql` the same 2 known role-drift failures as before.
+- `npx tsc --noEmit` 0 · `npm run lint` 0 · `npm run test:unit` 142 files / 1408 pass · `npm run build` 0.
+- Browser: temporary `app/[locale]/zz-profile-check` page (deleted, `.next/dev/types` cleared before tsc) at 375px en + fa.
+- NOT run: signed-in browser check and the four edited e2e specs. The test account in `.env.test-accounts` is refused by local GoTrue (400); reading the local admin-password file was denied by the permission classifier, so no sign-in was attempted further.
+
+**For the next agent**
+- Same-number saves still bump `updated_at` / `updated_by` (no audit row, since the trigger skips unchanged fields) — harmless, left.
+- The FR-96 TASKS item stays open until someone signs in and runs the specs.
+
+## 2026-11-19 — Profile tabs + self-service SMS mobile (FR-96)
+
+**Agent:** Claude Opus 5.5 via Claude Code (one Opus review subagent at the end)
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 4f61405 → new branch `feat/profile-tabs` from `main` @ 53c849c
+**Trigger:** Amir: Profile is too narrow and stacked; make it tabs (Profile / Personal info / Account) like Admin/ERP, add a phone number everyone can set for SMS, update the phone view.
+
+**What changed**
+- Spec `docs/specs/2026-11-19-profile-tabs-design.md` (owner calls: same `employee_personal_info.mobile`, format check only, phone links + Logout above the tabs, two desktop columns). Plan `docs/plans/2026-11-19-profile-tabs.md`.
+- DB: `supabase/migrations/20261119120000_self_service_mobile.sql` — `app_set_my_mobile(text)` (SECURITY DEFINER, own row, mobile only, blank clears, `invalid mobile` 22023). `schema.sql` patched by hand (function + ACL hunks only); `types.ts`.
+- App: `profile/layout.tsx` (header, phone link row, `ProfileTabs`), `profile/page.tsx` (Profile tab, 2 columns), `profile/account/page.tsx` (new), `personal-info/page.tsx` (no header / back link), `components/profile/SmsMobileCard.tsx`, `setMyMobile` in `lib/actions/personal-info.ts`, `LogoutButton` `className` / `testId` props. Strings `profile.mobile.*`, `profile.tabs.*`.
+- Tests: `tests/sql/self-service-mobile.sql` (new, 22); e2e `settings` / `view-as` → `/profile/account`, `signature-personal-info` → `profile-tab-personalInfo`.
+- Docs: REQUIREMENTS FR-96, PERMISSIONS, DATA_MODEL, CHANGELOG, TASKS, CLAUDE.md one gotcha.
+
+**Actions outside the repo**
+- Local stack `bj-approvals-finance`: `pg_dump -Fc` backup to session scratchpad (`approvals-finance-pre-mobile.dump`); applied `20261119120000` through `bj_apply_and_record_migration` (release `approvals-finance-local`) — **FROZEN locally**; restarted `bj-approvals-finance-rest-1`. Clone `pt_mobile` for the dry run (dropped at end).
+- Nothing on Liara. Nothing pushed.
+
+**Verification**
+- SQL on clone: `self-service-mobile.sql` 22 PASS (RED first: function missing); `sms.sql` all pass; `fr52-53-signature-personal-info.sql` 2 FAIL (hr own edit / import) **with and without** the migration — local role drift, not this change.
+- `tsc` 0, `lint` 0, `test:unit` 142 files / 1406 pass, `npm run build` 0 (routes `/profile`, `/profile/account`, `/profile/personal-info`).
+- Browser: temporary `app/[locale]/zz-profile-tabs` page with fake data (deleted) — desktop two columns fa, mobile 375 fa + en (link row fits one line after a fix, no horizontal scroll), Account tab, client checks (bad number message, Save disabled for an unchanged / same-normalized number).
+- Final review (Opus subagent): 0 critical, 1 important (`password.spec.ts` still opened `/profile`) — fixed `f38b161`; 5 minors deferred (stale `mobile_self` audit name in spec, dead i18n keys, tight en phone link row, blank save inserting an empty row via direct RPC, `updated_at` bump on same-number save).
+- NOT run: signed-in browser check and e2e (the test account's password did not match the local DB; did not guess; :3501 runs the Sales build).
+
+**State left behind**
+- Committed on `feat/profile-tabs` (local only, not pushed). `feat/erp-sales-module` untouched.
+
+**For the next agent**
+- Renumbered FR-95 → **FR-96** at PR time (main had taken FR-95 for the test-emp role, merged here). The migration's header comment still says FR-95 on purpose: the file is frozen locally, and editing it changes the checksum.
+- Security tradeoff decided by Amir (2026-11-19): no password re-check for a mobile change; instead Save opens a confirmation dialog showing the exact number (remove has its own wording). A stolen signed-in session could still redirect HR password-reset SMS — accepted.
+## 2026-11-19 — SMS: Send test uses the selected method (pattern templates)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/sms-pattern-test` (worktree `../bj-smstest`) from origin/main @ e29d0c3
+**Trigger:** Owner: the Melipayamak templates 589006–589008 were approved; "make the test text use the selected method instead of testing it with a real request".
+
+**What changed**
+- `supabase/migrations/20261119100000_sms_pattern_test.sql`: `sms_outbox.test_template` (test rows only). `app_sms_test(p_mobile, p_template default null)`: in pattern mode it builds sample args in each template's order and refuses a template without a body ID (`no pattern body id for …`). In line mode a template is refused. `sms_dispatch` picks the body ID by `coalesce(test_template, event)`.
+- `app/[locale]/(app)/admin/sms/SmsActions.tsx` + `page.tsx`: a Template select appears when the **saved** method is Pattern. `lib/actions/admin.ts` `sendSmsTest(mobile, template)`. Error key `smsNoPatternBody` (fa + en). Strings in `en.json` only (admin panel).
+- `tests/sql/sms.sql`: 7 new assertions (pattern test → BaseServiceNumber with 111/222, sample args, missing body ID, bad template, line refuses a template). `supabase/schema.sql` patched from clone dumps taken before and after the migration.
+
+**Actions outside the repo**
+- Owner (on bjeng.app, not me): set How to send = Pattern, entered 589006 / 589007 / 589008, and set the last line to `bjeng.app`. Pattern sends ignore that line; line sends with a link are refused (code 14).
+- Local only: clone DB `smsx` in `bj-approvals-finance-db-1` (applied 20261118100000–200 + the new migration, then ran `sms.sql` and `replacement-signoff.sql`, then dropped it).
+
+**Verification**
+- `sms.sql`: all assertions passed. `replacement-signoff.sql`: passed. `tsc --noEmit`, lint, `test:unit` (1403 passed), `next build`: all OK.
+- The UI was not viewed in a browser. The real Melipayamak pattern send is still unverified until the owner presses Send test after the deploy.
+
+**State left behind**
+- Committed on `feat/sms-pattern-test` and pushed to `main` (owner's OK), so CI deploys it to Liara.
+- Owner confirmed a **real pattern send works**: a manager received the approver SMS from a real request (2026-11-19).
+
+**For the next agent**
+- The template select follows the saved setting, not unsaved form edits: save first.
+- If a pattern test fails, read the raw reply in the SMS log (`sms_ws_error`).
+
+## 2026-11-18 — Built-in test role `test-emp` (FR-95), pushed to main
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 53c849c (dirty Sales work, untouched); work done in worktree `../bj-orgchart-perm`, branch `feat/org-chart-permission` from `origin/main` @ 53c849c
+**Trigger:** Melipayamak asked for a temporary login to review the site before approving the SMS templates. Amir first asked for an org-chart permission, then chose a fixed built-in `test-emp` role instead: Employee UI, nothing past the caller's own data, no requests; profile / personal info / signature / photo saves allowed; empty lists fine (no sample data).
+
+**What changed**
+- `supabase/migrations/20261118100000_test_emp_role_enum.sql` (enum value only), `20261118100100_test_emp_role.sql`: `private.is_test_account` (`role::text like 'test-%'`), role row for every company (no ON CONFLICT: a custom role named `test-emp` stops the deploy) + `seed_company_roles`, and redefined `same_team`, `get_my_team_directory`, `get_org_chart` (recursive chain up active managers, depth cap 64), `get_replacement_candidates`, both `*_requester_has_time_off` triggers. `supabase/schema.sql` patched from a clone dump diff (CHECK re-parenthesis hunk dropped).
+- App: `lib/auth/timeOff.ts` `isTestAccount`; `lib/auth/context.ts` `getCachedTestAccount` (live `user_roles`); `request/layout.tsx` + new `request/_components/TestAccount.tsx` (provider + notice); the four request forms add `|| testAccount` to Submit `disabled`; `organization/page.tsx` + `OrgChart.tsx` `limited` (Top disabled, `?p=top` ignored); `lib/errors/db-error.ts` `testAccount`; messages `request.testAccountNotice`, `errors.testAccount`, `roles.test-emp` (fa + en); `lib/supabase/types.ts` enum.
+- Tests: `tests/sql/test-emp.sql` (new, all assertions), `tests/unit/time-off.test.ts` (+2).
+- Docs: REQUIREMENTS FR-95, PERMISSIONS role row, CHANGELOG, CLAUDE.md gotcha.
+
+**Actions outside the repo**
+- Local `bj-approvals-finance-db-1`: throwaway clone `te_clone` of `postgres` created, both migrations applied, all `tests/sql` run before/after, clone dropped. `postgres` itself untouched (migrations NOT applied locally).
+- Liara: push to `main` deploys (see State).
+
+**Verification**
+- Clone: `tests/sql` 22 pass / 14 fail before; 23 pass / 14 fail after — the 14 are the known anon/ACL drift + the clone carrying the uncommitted Sales migrations (same failures before and after); `test-emp.sql` all PASS.
+- `npm run test:unit` 141 files / 1401 tests pass (+2 new); `npm run lint` clean; `tsc --noEmit` 0; `npm run build` 0 (with placeholder public env vars: the worktree has no `.env.local`).
+- **Not checked in a browser or signed in**: the notice, disabled Submit and disabled Top button were not seen rendered.
+
+**State left behind**
+- Committed on `feat/org-chart-permission`, fast-forwarded into `main` and pushed (CI deploy). Worktree `../bj-orgchart-perm` can be removed.
+- Amir's test account `test1`: tick test-emp on it (Employee may stay: test-emp wins either way).
+
+**Follow-up in the same session (after the first push)**
+- First deploy (run 44336230152) stopped at `npm audit --omit=dev`: new high advisory GHSA-fc5q-39xc-vjpf (picomatch ReDoS, every version ≤ 4.0.7, no patch; via next-intl → @parcel/watcher). `npm audit fix` rewrote 800 lockfile lines and did not clear it — reverted. Amir chose a narrow exception: `scripts/audit-gate.mjs` (fails on any advisory not in `IGNORED`, exit 2 if audit breaks) replaces the CI step; negative run with the id removed exits 1. TASKS line to drop it.
+- Security review (automated) found the replacement guard was picker-only: `submit_leave_impl` / `app_change_replacement` / direct inserts could still name a test account. Fixed by `20261118100200_test_emp_no_replacement.sql` (trigger on both tables); `tests/sql/test-emp.sql` +6 assertions, all PASS on a fresh clone; full `tests/sql` result unchanged (same 14 known failures). `schema.sql` patched from the clone diff.
+
+**For the next agent**
+- `feat/erp-sales-module` must rebase/merge main: its migrations `20261117120000…150000` sort before these two but apply fine (the runner applies any unrecorded file). The local `postgres` DB has those Sales migrations but not these two.
+- A later `test-mgr` needs its own enum migration + role row; the gates already match `test-%`, but manager-only screens/approvals would need their own decisions.
 ## 2026-11-17 — ERP › Sales: tables collapse columns into expandable rows (no sideways scroll)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead/review); Sonnet subagent built it

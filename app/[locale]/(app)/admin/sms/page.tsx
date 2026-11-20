@@ -73,7 +73,7 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
         </Section>
         <div className="flex flex-col gap-5">
           <Section title={t('sms.test')}>
-            <SmsTestForm disabled={s.mode === 'off'} />
+            <SmsTestForm disabled={s.mode === 'off'} pattern={s.send_method === 'pattern'} />
           </Section>
           <Section title={t('sms.credit')} testId="admin-sms-credit">
             <div className="flex flex-col gap-2 text-sm">

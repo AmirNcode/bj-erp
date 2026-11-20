@@ -277,7 +277,7 @@ test('while viewing: /en/admin goes Home, Profile save and Logout are refused, a
     await expect(page.getByTestId('saved-signature-error')).toContainText('Read-only while viewing', { timeout: 20_000 });
     expect(signatureOf(people.emp.id)).toBe(before);
 
-    await page.reload();
+    await page.goto('/en/profile/account');
     await page.getByTestId('settings-logout').click();
     await page.getByTestId('logout-confirm').click();
     await expect(page.getByText('Read-only while viewing. Nothing was saved.')).toBeVisible({ timeout: 10_000 });

@@ -11,14 +11,14 @@ test('profile settings persist, language switches locale, logout clears session'
   await logout(page);
   await login(page, code, password);
 
-  await page.goto('/profile');
+  await page.goto('/profile/account');
   // Persian is the only calendar; the old preference selector is gone.
   await expect(page.locator('[data-testid="settings-calendar"]')).toHaveCount(0);
   await expect(page.getByText(/Gregorian|میلادی/)).toHaveCount(0);
 
   // Language -> English: URL gains the /en prefix; <html> flips to en/ltr.
   await page.locator('[data-testid="settings-language-en"]').click();
-  await expect(page).toHaveURL(/\/en\/profile$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/en\/profile\/account$/, { timeout: 10_000 });
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
 
@@ -48,9 +48,9 @@ test('profile settings persist, language switches locale, logout clears session'
 
   // Switching back must be equally sticky, and must NOT leave the user stranded
   // on the /en prefix.
-  await page.goto('/en/profile');
+  await page.goto('/en/profile/account');
   await page.locator('[data-testid="settings-language-fa"]').click();
-  await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/profile\/account$/, { timeout: 10_000 });
   await expect(page.locator('html')).toHaveAttribute('lang', 'fa');
   await page.goto('/');
   await expect(page).toHaveURL(/\/home$/, { timeout: 10_000 });
@@ -59,9 +59,9 @@ test('profile settings persist, language switches locale, logout clears session'
 
   // Switching to English and back again, so the round trip is covered in both
   // directions.
-  await page.goto('/profile');
+  await page.goto('/profile/account');
   await page.locator('[data-testid="settings-language-en"]').click();
-  await expect(page).toHaveURL(/\/en\/profile$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/en\/profile\/account$/, { timeout: 10_000 });
 
   // ── Restore the shared account to Farsi before finishing ──────────────────
   //
@@ -74,16 +74,16 @@ test('profile settings persist, language switches locale, logout clears session'
   // at fault. A `/fa/...` prefix is NOT an escape hatch either: next-intl
   // normalises it away before the app sees it, so the preference still wins.
   await page.locator('[data-testid="settings-language-fa"]').click();
-  await expect(page).toHaveURL(/\/profile$/, { timeout: 10_000 });
+  await expect(page).toHaveURL(/\/profile\/account$/, { timeout: 10_000 });
   await expect(page).not.toHaveURL(/\/en\//);
 
   // Logout asks for confirmation first; cancelling keeps the session.
-  await page.goto('/profile');
+  await page.goto('/profile/account');
   await page.locator('[data-testid="settings-logout"]').click();
   await expect(page.locator('[data-testid="logout-confirm"]')).toBeVisible({ timeout: 10_000 });
   await page.locator('[data-testid="logout-cancel"]').click();
   await expect(page.locator('[data-testid="logout-confirm"]')).toBeHidden();
-  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page).toHaveURL(/\/profile\/account$/);
 
   // Confirming logs out and returns to the login page.
   await page.locator('[data-testid="settings-logout"]').click();

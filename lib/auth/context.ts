@@ -27,7 +27,7 @@ import { createClient } from '@/lib/supabase/server';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { can, parsePermsClaim, type Level, type PermKey, type Perms } from '@/lib/permissions/catalog';
 import { watchFromRow, type AbsenceWatch } from '@/lib/absences/watch';
-import { hasTimeOff } from '@/lib/auth/timeOff';
+import { hasTimeOff, isTestAccount } from '@/lib/auth/timeOff';
 import { getViewAs } from '@/lib/auth/viewAs';
 
 export type AuthUser = { id: string; email?: string };
@@ -111,6 +111,20 @@ export const getCachedTimeOff = cache(async (userId: string): Promise<boolean> =
   const { data, error } = await supabase.from('user_roles').select('role').eq('user_id', userId);
   if (error || !data) return hasTimeOff(await getCachedRoles(userId));
   return hasTimeOff(data.map((r) => r.role).filter((r): r is NonNullable<typeof r> => r != null));
+});
+
+/**
+ * FR-95: whether the user holds a built-in test role (`test-emp`, …). Live `user_roles`, like
+ * getCachedTimeOff, so a role change shows on the next page load. The database enforces the
+ * limits (`private.is_test_account`); this only shapes the UI.
+ */
+export const getCachedTestAccount = cache(async (userId: string): Promise<boolean> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from('user_roles').select('role').eq('user_id', userId);
+  const roles = error || !data
+    ? await getCachedRoles(userId)
+    : data.map((r) => r.role).filter((r): r is NonNullable<typeof r> => r != null);
+  return isTestAccount(roles);
 });
 
 /** The caller's own profile row (all columns), fetched at most once per request. */

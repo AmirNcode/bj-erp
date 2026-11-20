@@ -121,6 +121,7 @@
     "managerNote": "You can view your direct report. Only admins and HR can change employee details."
   },
   "request": {
+    "testAccountNotice": "This is a test account: you can look around, but requests cannot be sent.",
     "title": "Request Leave",
     "navLink": "Request Leave",
     "tabs": {
@@ -374,7 +375,41 @@
       "errorTooLarge": "This image cannot be made small enough. Try a closer, simpler photo of the signature.",
       "errorUnsupported": "This file could not be read as an image."
     },
-    "settingsHint": "Work week, holidays and other company settings"
+    "mobile": {
+      "title": "Mobile for SMS",
+      "hint": "Request and approval notifications are texted to this number.",
+      "label": "Mobile number",
+      "current": "Current number",
+      "none": "No number yet — you won't get SMS notifications.",
+      "save": "Save",
+      "saved": "Saved.",
+      "cleared": "Number removed.",
+      "invalid": "Enter an Iranian mobile number (09…).",
+      "readOnly": "Read-only while viewing as someone else.",
+      "confirmTitle": "Use this number for SMS?",
+      "confirmBody": "Notifications and any password sent by SMS will go to this number. Check it is yours and correct.",
+      "confirmRemoveTitle": "Remove your mobile number?",
+      "confirmRemoveBody": "You won't get SMS notifications until you add a number again.",
+      "confirm": "Yes, save",
+      "confirmRemove": "Yes, remove",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "add": "Add number",
+      "discard": "Discard",
+      "historyTitle": "Recent texts",
+      "historyEmpty": "No texts sent to you yet.",
+      "historyStatus": {
+        "sent": "Sent",
+        "queued": "Sending",
+        "sending": "Sending",
+        "failed": "Not delivered"
+      }
+    },
+    "tabs": {
+      "profile": "Profile",
+      "personalInfo": "Personal information",
+      "account": "Account"
+    }
   },
   "approvals": {
     "title": "Approvals",
@@ -1160,6 +1195,7 @@
     "approvalStepNeedsPerson": "This step must name a specific person.",
     "approvalStepNotSaved": "The approval step was not saved. Try again.",
     "duplicateApprovalStep": "That approval step already exists.",
+    "testAccount": "Test accounts cannot send requests.",
     "noTimeOff": "Security staff without the Employee role have no time off: they cannot send requests, and their requests cannot be approved.",
     "absenceWatcherIncomplete": "Turn on at least one request type and one view.",
     "absenceWatcherNotSaved": "The person was not saved. Try again.",
@@ -1324,6 +1360,7 @@
     "invalidPersonnelNoAdmin": "Personnel number: 1–64 characters.",
     "smsInvalidMobile": "Enter an Iranian mobile number (09…).",
     "smsOff": "SMS is off. Switch it to Dry run or Live first.",
+    "smsNoPatternBody": "That template has no body ID. Enter it and save the settings first.",
     "smsNoApiKey": "Save a Melipayamak API key first.",
     "smsNoUsername": "Enter the Melipayamak panel username first.",
     "smsBadApiKey": "The API key contains characters it cannot have.",
@@ -1370,7 +1407,8 @@
     "employee": "Employee",
     "security": "Security",
     "finance": "Finance",
-    "procurement": "Procurement"
+    "procurement": "Procurement",
+    "test-emp": "test-emp"
   },
   "org": {
     "searchPlaceholder": "Search a colleague…",
@@ -1385,16 +1423,11 @@
     "people": "{count} people",
     "backToMe": "Back to me",
     "empty": "Nobody has been added yet.",
-    "error": "Error",
-    "openFromProfile": "Org chart",
-    "openFromProfileHint": "See who you report to and who is on your team."
+    "error": "Error"
   },
   "personalInfo": {
     "title": "Personal information",
-    "back": "← Back to profile",
     "intro": "Everything here is optional. Only you, HR and administrators can see it.",
-    "completeHint": "Complete",
-    "incompleteHint": "Not complete yet: national ID, father’s name, birth date, Sheba and mobile",
     "choose": "Choose…",
     "readOnly": "Only an administrator can change an administrator’s personal information.",
     "fixProblems": "Some fields need fixing. See the messages below them.",
@@ -1488,8 +1521,7 @@
         "empty": "the file has no rows"
       }
     },
-    "readOnlySelf": "Your personal information is view only. Only HR or an administrator can change it — if something is wrong, contact HR.",
-    "viewHint": "View only — kept up to date by HR"
+    "readOnlySelf": "Your personal information is view only. Only HR or an administrator can change it — if something is wrong, contact HR."
   },
   "clearance": {
     "title": "Clearance forms",
@@ -2288,8 +2320,6 @@
   "help": {
     "title": "Help & guides",
     "intro": "Guides, instructions and how-tos for using the system.",
-    "openFromProfile": "Help & guides",
-    "openFromProfileHint": "How to request leave, approve requests and more.",
     "persianOnly": "In Persian",
     "contents": "Contents",
     "downloadPdf": "Download PDF",
@@ -2428,6 +2458,14 @@
       "saved": "Settings saved.",
       "test": "Send a test text",
       "testHint": "Uses the current mode: in Dry run it only appears in the log.",
+      "testHintLine": "Sent from the sender line as free text.",
+      "testHintPattern": "Sent through the chosen approved template with sample values (today's date, your name, a fake password).",
+      "testTemplate": "Template",
+      "testTemplates": {
+        "approver_new": "Request filed (approvers)",
+        "employee_decision": "Request result (employee)",
+        "password_reset": "Temporary password"
+      },
       "mobile": "Mobile number",
       "send": "Send test",
       "testQueued": "Queued. It shows in the log within 30 seconds.",

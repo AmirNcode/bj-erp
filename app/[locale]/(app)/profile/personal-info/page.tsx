@@ -3,16 +3,16 @@
  * contact and employment details. Read-only since FR-63 (2026-10-12) unless the
  * caller holds personal_info_own (the admin implicitly; on no preset); people
  * with personal_info edit change other people's from Manage › Employees › Edit.
+ * Since FR-96 it is the second Profile tab (profile/layout.tsx); the mobile here
+ * is the same number the Profile tab sets.
  */
 
 export const dynamic = 'force-dynamic';
 
-import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
-import { PageHeader } from '../../_components/PageHeader';
 import { Card, CardContent } from '@/components/ui/card';
 import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
 
@@ -32,11 +32,7 @@ export default async function PersonalInfoPage({ params }: Props) {
   const readOnly = !canEditOwnPersonalInfo(perms);
 
   return (
-    <main className="p-4 max-w-2xl mx-auto space-y-4">
-      <PageHeader title={t('title')} />
-      <Link href={`/${locale}/profile`} className="block text-sm text-primary hover:underline" data-testid="personal-info-back">
-        {t('back')}
-      </Link>
+    <div className="max-w-3xl space-y-4">
       <p className="text-sm text-muted-foreground">{t('intro')}</p>
       <Card>
         <CardContent className="pt-6">
@@ -54,6 +50,6 @@ export default async function PersonalInfoPage({ params }: Props) {
           )}
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

@@ -109,6 +109,8 @@ const RULES: Rule[] = [
   { re: /signature box name is required/i, key: 'approvalStepBoxLabelRequired' },
   { re: /signature box name must be at most|approval_steps_box_label_len/i, key: 'approvalStepBoxLabelTooLong' },
   { re: /duplicate key value.*approval_steps_company_(role|person)_uniq/, key: 'duplicateApprovalStep' },
+  // FR-95: built-in test roles (test-emp, …).
+  { re: /test accounts cannot send requests/i, key: 'testAccount' },
   // FR-76: security staff without the Employee role.
   { re: /no time off for this account/i, key: 'noTimeOff' },
   // FR-75 absence watchers.
@@ -244,6 +246,7 @@ const RULES: Rule[] = [
   { re: /^admin only$/, key: 'notAllowed' },
   { re: /^invalid mobile$/, key: 'smsInvalidMobile' },
   { re: /^sms is off$/, key: 'smsOff' },
+  { re: /^no pattern body id for /, key: 'smsNoPatternBody' },
   { re: /^no api key$|sms_settings_live_needs_key/, key: 'smsNoApiKey' },
   { re: /^username required$/, key: 'smsNoUsername' },
   { re: /sms_settings_api_key/, key: 'smsBadApiKey' },

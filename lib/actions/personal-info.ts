@@ -8,6 +8,7 @@
  */
 
 import { requireCaller } from '@/lib/auth/context';
+import { normalizeIrMobile } from '@/lib/admin/format';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import {
   PERSONAL_INFO_FIELDS,
@@ -121,4 +122,41 @@ export async function importPersonalInfo(
   });
   if (error) return dbErr(error.message);
   return { ok: true, updated: Number((data as { updated?: number } | null)?.updated ?? 0) };
+}
+
+/**
+ * FR-96: the caller's own SMS mobile (employee_personal_info.mobile), open to
+ * every active user — unlike savePersonalInfo, it does not need
+ * personal_info_own. Blank clears the number.
+ */
+export async function setMyMobile(
+  mobile: string
+): Promise<{ ok: true; mobile: string | null } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+
+  if (mobile.trim() !== '' && !normalizeIrMobile(mobile)) return dbErr('invalid mobile');
+  const { data, error } = await c.supabase.rpc('app_set_my_mobile', { p_mobile: mobile });
+  if (error) return dbErr(error.message);
+  return { ok: true, mobile: data ?? null };
+}
+
+/** One text sent to the caller (FR-96 follow-up); a password_reset body is always masked. */
+export type MySms = {
+  id: string;
+  event: 'approver_new' | 'employee_decision' | 'password_reset' | 'test';
+  to_mobile: string | null;
+  body: string;
+  status: 'queued' | 'sending' | 'sent' | 'failed';
+  created_at: string;
+  sent_at: string | null;
+};
+
+/** The caller's latest texts, newest first (never skipped / dry-run ones). */
+export async function getMyRecentSms(limit = 3): Promise<{ ok: true; rows: MySms[] } | DbErrorResult> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_my_recent_sms', { p_limit: limit });
+  if (error) return dbErr(error.message);
+  return { ok: true, rows: (data as unknown as MySms[] | null) ?? [] };
 }

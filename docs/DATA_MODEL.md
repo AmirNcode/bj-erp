@@ -130,7 +130,8 @@ existing profiles), deleted by FK cascade; users only UPDATE. `employee_id` PK �
 `address` · `emergency_name` · `emergency_phone` · `insurance_no` (6–12 digits) · `education`
 (`below_diploma|diploma|associate|bachelor|master|doctorate`) · `military_status`
 (`completed|exempt|educational_exempt|eligible|not_applicable`) · `children_count` (0–20) ·
-`complete` (generated: national ID, father's name, birth date, Sheba and mobile all present) ·
+**`mobile`** is also the SMS number (`private.sms_queue`); every user sets their own through
+`app_set_my_mobile` (FR-96). `complete` (generated: national ID, father's name, birth date, Sheba and mobile all present) ·
 `updated_at` · `updated_by → profiles`. Every field nullable; digits stored ASCII. The UI mirror of
 every rule is `lib/personal-info/fields.ts`. An update writes `audit_log`
 `personal_info.update` with `after = {"fields": [...]}` (names only, never values).
@@ -689,6 +690,8 @@ the retired `absences` permission item (migration `20261102150000`).
   `next_attempt_at`, `net_request_id` (pg_net), `provider_ref` (recId), `error`. Unique: one approver text
   per (request, step, person); one decision text per request. Password rows are masked at the first
   dispatch, or at once when skipped. Purged after 180 days.
+  Admins read it through `app_sms_log`; everyone else only through `app_my_recent_sms(p_limit)` (own
+  rows, `recipient_id = auth.uid()`, no skipped / dry_run, password body masked; Profile › Mobile for SMS).
 - `private.sms_outbox_events` — history of each text, shown when a log row is expanded: `kind`
   status (written by trigger `sms_outbox_log_status` on any `status`/`attempts` change) | request
   (`endpoint` send/simple or send/shared, `body_id`, `attempt`) | reply (`http_status`, `timed_out`,

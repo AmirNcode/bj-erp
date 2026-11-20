@@ -6,8 +6,9 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { checkSmsCredit, sendSmsTest } from '@/lib/actions/admin';
+import { checkSmsCredit, sendSmsTest, type SmsTestTemplate } from '@/lib/actions/admin';
 import { normalizeIrMobile } from '@/lib/admin/format';
+import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 
 function Note({ message }: { message: { ok: boolean; text: string } | null }) {
@@ -19,12 +20,15 @@ function Note({ message }: { message: { ok: boolean; text: string } | null }) {
   );
 }
 
-/** One test text to a typed mobile, through the current mode. */
-export function SmsTestForm({ disabled }: { disabled: boolean }) {
+const TEST_TEMPLATES: SmsTestTemplate[] = ['approver_new', 'employee_decision', 'password_reset'];
+
+/** One test text to a typed mobile, through the current mode and the saved How to send. */
+export function SmsTestForm({ disabled, pattern }: { disabled: boolean; pattern: boolean }) {
   const t = useTranslations('admin.sms');
   const tErr = useTranslations('dbErrors');
   const router = useRouter();
   const [mobile, setMobile] = useState('');
+  const [template, setTemplate] = useState<SmsTestTemplate>('approver_new');
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -36,7 +40,7 @@ export function SmsTestForm({ disabled }: { disabled: boolean }) {
       return;
     }
     startTransition(async () => {
-      const result = await sendSmsTest(mobile);
+      const result = await sendSmsTest(mobile, pattern ? template : null);
       setMessage(result.ok ? { ok: true, text: t('testQueued') } : { ok: false, text: result.error });
       if (result.ok) router.refresh();
     });
@@ -44,13 +48,24 @@ export function SmsTestForm({ disabled }: { disabled: boolean }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-2" data-testid="sms-test-form">
+      {pattern && (
+        <>
+          <Label htmlFor="sms-test-template">{t('testTemplate')}</Label>
+          <select id="sms-test-template" data-testid="sms-test-template" value={template}
+            onChange={(e) => setTemplate(e.target.value as SmsTestTemplate)} className={cn(nativeSelectClass, 'max-w-72')}>
+            {TEST_TEMPLATES.map((k) => <option key={k} value={k}>{t(`testTemplates.${k}`)}</option>)}
+          </select>
+        </>
+      )}
       <Label htmlFor="sms-test-mobile">{t('mobile')}</Label>
       <div className="flex gap-2">
         <Input id="sms-test-mobile" dir="ltr" inputMode="tel" placeholder="09…" value={mobile}
           onChange={(e) => setMobile(e.target.value)} className="max-w-56" />
         <Button type="submit" variant="outline" disabled={pending || disabled}>{t('send')}</Button>
       </div>
-      <p className="text-xs text-muted-foreground">{t('testHint')}</p>
+      <p className="text-xs text-muted-foreground">
+        {t('testHint')} {t(pattern ? 'testHintPattern' : 'testHintLine')}
+      </p>
       <Note message={message} />
     </form>
   );

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTestAccount } from '../_components/TestAccount';
 import { signatureLabelsFrom } from '@/lib/leave/signatureLabels';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { useTranslations } from 'next-intl';
@@ -94,6 +95,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
   const [travelBooking, setTravelBooking] = useState(false);
   const signature = useSignature();
   const { success, error, isPending, submit } = useRequestSubmit(labels.success);
+  const testAccount = useTestAccount();
 
   const startIso = startDate ? dateObjectToGregorian(startDate) : '';
   const endIso = endDate ? dateObjectToGregorian(endDate) : '';
@@ -227,7 +229,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
 
           <Button
             type="submit"
-            disabled={isPending || delegation.blocked}
+            disabled={isPending || delegation.blocked || testAccount}
             className="w-full"
             data-testid="daily-errand-submit"
           >

@@ -9,6 +9,34 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Profile layout + SMS history (FR-96) — 2026-11-19
+
+- **Profile tab**: photo and name/code share one tile; Saved signature and Mobile for SMS are half-width tiles of equal height side by side (signature left). Card hints sit under the titles. Account tab is half width with Log out under Change password.
+- **Mobile for SMS**: the number shows as text with Edit; editing gives Save (enabled only after a change) and Discard. Below it, your latest three texts with date and status (password texts masked).
+- **Phones**: Updated, Organization and Help share one row of equal buttons; Settings (under Manage) and Log out (Account tab) left that row.
+- Migration `20261119160000_my_recent_sms` (`app_my_recent_sms`).
+
+### Profile tabs + self-service SMS mobile (FR-96) — 2026-11-19
+
+- **Profile is now three tabs**: Profile (name, code, photo, mobile for SMS, saved signature — two columns on a computer), Personal information, Account (language, password).
+- **Everyone can add or change their own mobile number** on the Profile tab; SMS notifications go to it. It is the same number Personal information shows. Persian digits and `+98` are accepted; leaving it blank removes it. Save asks for confirmation and shows the exact number first.
+- **Phones**: Organization, Help, Settings and Log out are one row above the tabs; the repeated "Profile" title is gone.
+- Migrations `20261119120000_self_service_mobile` and `20261119140000_self_service_mobile_blank_no_row` (clearing a number you never had no longer creates an empty personal-information row).
+### SMS: Send test follows How to send (FR-78) — 2026-11-19
+
+- With **How to send = Pattern**, Admin › SMS › Send test now goes through an approved template you pick (Request filed, Request result, Temporary password), filled with sample values: your name, daily leave, today's date, «تأیید شد», and a fake password `Test1234` / code `0000`. From the line it still sends the free-text test.
+- A template without a body ID is refused with a clear message. The log shows the test with its body ID.
+- Migration `20261119100000_sms_pattern_test` (`sms_outbox.test_template`, `app_sms_test(p_mobile, p_template)`, `sms_dispatch`).
+
+### Built-in test role `test-emp` (FR-95) — 2026-11-18
+
+- **For outside reviewers.** A new fixed role, **test-emp**, shows the Employee screens without anyone else's data: the org chart shows only the person's own managers, themselves and their direct reports ("Top of the organization" is disabled); the calendar and Team page show no teammates (the Team page keeps their manager); the replacement list is empty, and nobody can choose a test account as their replacement.
+- **No requests.** Request pages open as usual with a "test account" notice and the Submit button disabled; the server refuses any request too, so no approval step or SMS is ever triggered. Profile, personal information, signature and photo still save as for an employee.
+- Applies even if the person also has other roles. Later test roles named `test-…` (e.g. `test-mgr`) get the same limits.
+- A test account can never be named as someone's replacement, even through a direct call (security review follow-up).
+- CI's audit gate now runs `scripts/audit-gate.mjs`: it still fails on any advisory, except a listed one with no fixed version yet (today only picomatch GHSA-fc5q-39xc-vjpf, reached through next-intl's file watcher).
+- Migrations `20261118100000_test_emp_role_enum`, `20261118100100_test_emp_role`, `20261118100200_test_emp_no_replacement`.
+
 ### ERP · Sales module (FR-94) — built 2026-11-16, not deployed (branch `feat/erp-sales-module`)
 
 - **A second module, hidden until switched on.** Seven permissions in a new **ERP · Sales** section of Settings › Roles; no role has them at first. Holders get an **ERP** entry in the menu; for everyone else the pages do not exist.
