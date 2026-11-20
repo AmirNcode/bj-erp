@@ -70,3 +70,4 @@ build/ts/
 
 # Local-only user SOP (PDF, screenshots, capture tools)
 /sop/
+/.files/
