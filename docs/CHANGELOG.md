@@ -9,6 +9,16 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP › Sales: CEO feedback round 1 (FR-94) — 2026-11-20, branch `feat/erp-sales-module`
+
+- **Section title is a button** (phones, every section): tapping it goes to that section's main page (ERP on a record → the records list).
+- **Currencies in Settings › Sales**: add, rename (fa + en), symbol, decimals (display only), hide; codes are free (e.g. Toman) and permanent once used. Seeded IRR, EUR, USD, AED, CNY.
+- **"Our total price"** replaces "Our price" everywhere (fa «قیمت کل ما»).
+- **Products** tab: product families with their item columns and default values. Picking a product on an item row fills its empty cells and adds its columns; values are copied, so later product edits never change existing offers.
+- **Files** tab on every record: uploads per stage (the RFP pack on Received, …), up to 50 MB each, any type; every Sales reader of the record sees and downloads them; the uploader or a Sales-settings holder deletes. Closed records take no new files. Bytes on a server volume, backed up to a mirror (deleted files kept 30 days).
+- FR-95: test accounts (`test-…` roles) never reach Sales.
+- Migrations `20261120100000_sales_currencies`, `20261120110000_sales_products`, `20261120120000_sales_files`. Spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`.
+
 ### Profile layout + SMS history (FR-96) — 2026-11-19
 
 - **Profile tab**: photo and name/code share one tile; Saved signature and Mobile for SMS are half-width tiles of equal height side by side (signature left). Card hints sit under the titles. Account tab is half width with Log out under Change password.

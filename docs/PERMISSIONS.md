@@ -902,7 +902,7 @@ holds every key, as always). The owner switches them on per role in Settings ›
 | Key | Shape | Gives |
 |---|---|---|
 | `sales` | Read / Edit | The module. Read: records, items, documents, deadlines, activity — never prices or guarantee details. Edit: create and change records, move stages, documents, deadlines, notes. |
-| `sales_prices` | Read / Edit | Unit prices, our price, contract value, winning bid, quote history. Edit: type them. |
+| `sales_prices` | Read / Edit | Unit prices, our total price, contract value, winning bid, quote history. Edit: type them. |
 | `sales_bonds` | Read / Edit | Guarantee details and payments. Edit: record them (finance). |
 | `sales_decide` | Yes / No | Bid / no-bid, won / lost / cancelled, closing and reopening records, editing closed ones. |
 | `sales_reports` | Read | The Reports page (price history also needs `sales_prices`). |
@@ -918,6 +918,7 @@ the price keys (`our_price`, `winning_bid`, `winner_name`, `total_value`, `unit_
 `quote_revisions`); without `sales_bonds`, guarantees arrive as kind + status only and payments
 not at all. Failed CHECKs are re-raised as `sales: invalid input`, so a row is never echoed.
 Records are scoped to the caller's company (`sales: not found` otherwise). Item rows (and item-number search) need `project_items` read. A closed record takes notes, documents, deadlines and field edits only from a `sales_decide` holder (`private.sales_writable`); items and guarantees / payments stay open to their own holders.
+**Files, products, currencies (2026-11-20).** Files: list / download = `sales` read on the record (no price or bond restriction — owner decision); upload = `sales` edit + `sales_writable`; delete = uploader or `sales_settings`, + `sales_writable`; View as cannot upload or delete. The bytes are served only by `/api/sales/files/<id>` after `app_sales_file_get`, always as an attachment. Products and currencies: read with `sales`, edit with `sales_settings`. `private.sales_can` is false for FR-95 test accounts.
 
 **Hidden.** No nav entry, Home line or page without `sales`: `/sales/*` answers 404, and the
 module's strings are sent to the browser only from its own layout.

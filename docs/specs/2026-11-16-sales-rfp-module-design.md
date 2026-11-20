@@ -280,6 +280,9 @@ On a record, the **Items** tab is a table engineering fills in (`project_items` 
 
 ## 7. Documents without files
 
+> **2026-11-20:** file uploads now exist (Files tab per record, by stage) — see
+> `2026-11-20-sales-ceo-feedback-design.md` §6. This checklist is unchanged.
+
 The technical proposal package is a list of named documents (catalogs, drawings, certificates,
 technical offer, financial offer…). Per record, each row has: name, assignee, status
 (`to do | in progress | ready`), note (where it lives: "Sajad's laptop", a share path). The

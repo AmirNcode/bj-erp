@@ -78,32 +78,43 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-11-20 — ERP › Sales: CEO feedback round 1 (in progress)
+## 2026-11-20 — ERP › Sales: CEO feedback round 1 (built; owner testing on :3501)
 
-**Agent:** Claude Opus 5.5 via Claude Code (lead) + Sonnet 5.5 subagents per task, Opus reviewer for the plan
+**Agent:** Claude Opus 5.5 via Claude Code (lead, reviewed every diff) + Sonnet 5.5 subagents per task; Opus subagents for the spec builder-check and the plan review
 **Branch / HEAD at start:** `feat/erp-sales-module` @ 4f61405 (18 behind main), worktree `/Users/amir/Workspace/bj-sales`
 **Trigger:** CEO feedback: clickable page title, currencies in Settings, "Our total price", per-record Files by stage, Products page with column templates for items.
 
-**Decisions (owner, in chat)** — recorded in the spec §10: files on Liara VM disk (Docker volume; S3 later maybe), separate Files tab grouped by stage, 50 MB / any type / uploader or Sales-settings holder deletes, **no price restriction on files**, products = columns + defaults copied on pick, currencies free codes (add/rename/hide), title link in every section styled as a button, "Our total price" everywhere.
-Lead calls (spec §11 + plan): files grouped across every flow the record was in; stage with files can't be deleted; currency decimals 0–2 display only; file backup = one rsync mirror, deleted kept 30 days; raw-body upload (not multipart); FR-95 test accounts blocked in `private.sales_can` (Task 5 migration).
+**Decisions (owner, in chat)** — spec §10: files on Liara VM disk (Docker volume; S3 later maybe), separate Files tab grouped by stage, 50 MB / any type / uploader or Sales-settings holder deletes, **no price restriction on files**, products = columns + defaults copied on pick, currencies free codes, title link in every section styled as a button, "Our total price" everywhere.
+Lead calls (spec §11 + plan): files grouped across every flow the record was in; stage with files can't be deleted; currency decimals 0–2 display only; file backup = one rsync mirror, deleted kept 30 days; raw-body upload + `X-File-Name` (not multipart — `formData()` buffers); FR-95 test accounts blocked in `private.sales_can`.
 
-**What changed so far**
-- Spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md` (builder-checked by a subagent) + plan `docs/plans/2026-11-20-sales-ceo-feedback.md` (reviewed and edited by an Opus subagent: View as = read-only tx, real cap names, `sales_events_kind_check`, `sales_ensure` seeding, raw-body upload, deploy-test harness) — commit 4cf20ff.
-- Task 0: merged `main` (1d8eb0e); conflicts only in CLAUDE.md gotchas + this log (kept both). Migration order check: `deploy/lib/migrations.sh` applies unrecorded files by name and accepts older names; main's 11-18/19 migrations touch no Sales function → no renames.
-- Task 1 (6816a0f): `lib/nav/sectionFor.ts`, `MobileTopBar` title = bordered link with chevron. Task 2 (91687d0): "Our total price" / «قیمت کل ما» in messages.
-- Task 3 currencies: running (see the next entry/commits).
+**What changed (commits on the branch)**
+- 4cf20ff spec + plan · 1d8eb0e merge `main` (conflicts only CLAUDE.md gotchas + this log; no migration renames needed: `deploy/lib/migrations.sh` applies unrecorded files by name, main's 11-18/19 migrations touch no Sales function).
+- 6816a0f title link (`lib/nav/sectionFor.ts`, `MobileTopBar`) · 91687d0 "Our total price".
+- f9869b6 currencies: `20261120100000_sales_currencies.sql` (table, `sales_currency_ok`, seed via `sales_ensure` for all companies, CHECKs relaxed, save_record/save_bond/import/bootstrap redefined, save/delete currency), `lib/sales/money.ts`, Settings › Currencies, pickers + money display from `boot.currencies`.
+- fdcf6e7 products: `20261120110000_sales_products.sql` (`sales_products`, `sales_product_fields`, `project_nodes.product_id`, `app_project_save_node` copy-on-pick), Products tab + editor + `ProductPicker` in Items.
+- 7d0ac40 + e2bff9c files DB: `20261120120000_sales_files.sql` (`sales_files`, `app_sales_file_begin/commit/abort/get/delete`, `sales_files_gc`, `sales_file_ids`, `sales_events` kind `file`, `app_sales_record.files`, `sales_can` FR-95). e2bff9c = security-review fix: commit also checks `sales_writable`.
+- e8eb9f9 routes: `lib/files/*` (disk store, limits, content-disposition), `POST /api/sales/files`, `GET|DELETE /api/sales/files/[id]`, route unit tests with mocks.
+- 519ab75 Files tab UI (`FilesTab`, `FileUpload` with XHR progress, Received-page hint, ActivityLog `file` events).
+- 6060fe3 deploy: `sales-files` volume + `FILES_DIR`, Dockerfile `/data/files` owned by node, `backup-files.sh` (rsync mirror), `deploy/lib/files-gc.sh` (stale/tmp/orphan clean-up; orphan sweep skips when the DB returns no ids), pull-to-Mac rsync, runbooks, 3 deploy tests.
+- 368d3eb e2e specs `sales-files.spec.ts`, `sales-products.spec.ts`, `_sales.ts` — **written, never run**.
+- Docs: CHANGELOG, DATA_MODEL, PERMISSIONS, REQUIREMENTS, base spec §7 pointer, TASKS, CLAUDE.md gotchas.
+
+**Findings**
+- Next 16: `request.body` streams in Node route handlers (no body limit; proxy skips `/api`). Node's `requestTimeout` default 300 s caps uploads (50 MB needs ≥ ~170 KB/s); standalone `server.js` exposes only `KEEP_ALIVE_TIMEOUT`. Not patched.
+- e2e cannot run on `:3501` without the local admin password (`.bj-deploy/liara/admin-password` is rejected there; `.env.test-accounts` has only 124). One login attempt made, no lockout, nothing created.
 
 **Actions outside the repo**
-- `git worktree add ../bj-sales feat/erp-sales-module`; node_modules copied (`cp -Rc`).
-- SQL tests run only on throwaway clones of the `:3501` DB (`bj-approvals-finance-db-1`, db `postgres`), helper `sqltest.sh` in the session scratchpad (clone → apply migrations → run tests → drop). No migration applied to any real DB yet.
+- `git worktree add ../bj-sales feat/erp-sales-module`; node_modules copied.
+- SQL tests only on throwaway clones of the `:3501` DB (scratchpad `sqltest.sh`: clone → migrations → tests → drop).
+- `:3501` (`bj-approvals-finance`): `pg_dump -Fc` → `.bj-deploy/approvals-finance/pre-sales-ceo-20261120-162906.dump`; `bj_apply_migrations` (release `sales-ceo-1-local`) applied `20261120100000/110000/120000`; View-as hook synced. New wrapper `.bj-deploy/approvals-finance/compose-sales` + `compose-sales.yml` (build context `../bj-sales`); app rebuilt + recreated (new `sales-files` volume), rest restarted. `/api/health` 200; `/data/files` owned by node.
 
 **Verification**
-- After merge: tsc 0 · lint 0 · unit 145 files / 1493 pass · `tests/sql/sales*.sql` 5/5 PASS on a clone. After Tasks 1–2: unit 1498 pass (subagent report; lead reviewed the diff).
+- tsc 0 · lint 0 · unit 153 files / 1546 pass · `npm run build` pass (dummy env, per subagents) · `npm run test:deploy` pass (Task 8 subagent) · SQL on a clone of the updated `:3501` DB: all 8 `sales*.sql` + `fr55-roles-permissions.sql` + `request-edit.sql` PASS.
+- NOT checked signed in in a browser; e2e not run (see Findings).
 
 **State left behind / how to resume**
-- Continue the plan from the first unchecked task in `docs/TASKS.md` (Sales › CEO feedback line). Each task: implement in `../bj-sales`, test on a clone, commit locally (owner OK'd local commits; never push).
-- When all tasks are done: update the `:3501` stack from the branch (pg_dump its DB first, apply new migrations, sync View-as hook, rebuild app from `../bj-sales`, restart rest, add the `sales-files` volume) and hand to the owner. Push to `main` (deploys to Liara) only when the owner says so.
-
+- Owner tests on `http://localhost:3501`. To rebuild after fixes: `.bj-deploy/approvals-finance/compose-sales up -d --build app`.
+- Open: run the two e2e specs once the owner gives the admin password (env only); `rsync` on the Liara VM unchecked (owner); push/merge to `main` only on the owner's word.
 ## 2026-11-19 — Profile › Mobile for SMS: edit-in-place number + recent texts
 
 **Agent:** Claude Opus 5.5 via Claude Code
