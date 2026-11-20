@@ -3527,7 +3527,8 @@ CREATE FUNCTION private.sales_can(p_key text, p_level text DEFAULT 'edit'::text)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select coalesce(private.has_perm(auth.uid(), 'sales', 'read')
+  select coalesce(not private.is_test_account(auth.uid())
+     and private.has_perm(auth.uid(), 'sales', 'read')
      and private.has_perm(auth.uid(), p_key, p_level), false);
 $$;
 
@@ -3752,6 +3753,33 @@ begin
     (p_company, 'CNY', 'یوان', 'Chinese yuan', null, 2, 5)
     on conflict do nothing;
 end $_$;
+
+
+--
+-- Name: sales_file_ids(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_file_ids() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select id from public.sales_files;
+$$;
+
+
+--
+-- Name: sales_files_gc(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_files_gc() RETURNS SETOF jsonb
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  with gone as (
+    delete from public.sales_files where status = 'pending' and uploaded_at < now() - interval '1 day'
+    returning id, company_id, rfp_id)
+  select jsonb_build_object('id', id, 'company_id', company_id, 'rfp_id', rfp_id) from gone;
+$$;
 
 
 --
@@ -9514,6 +9542,127 @@ end $$;
 
 
 --
+-- Name: app_sales_file_abort(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_file_abort(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales', 'edit'); f public.sales_files;
+begin
+  select * into f from public.sales_files where id = p_id and company_id = v_company;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  perform private.sales_rfp(f.rfp_id, v_company);
+  select * into f from public.sales_files where id = p_id for update;
+  if not found then return; end if;
+  if f.uploaded_by is distinct from auth.uid() then
+    raise exception 'sales: not allowed' using errcode = '42501';
+  end if;
+  if f.status <> 'pending' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  delete from public.sales_files where id = p_id;
+end $$;
+
+
+--
+-- Name: app_sales_file_begin(uuid, uuid, text, bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales', 'edit');
+  v_name text := btrim(coalesce(p_name, '')); v_id uuid := gen_random_uuid();
+begin
+  perform private.sales_rfp(p_rfp, v_company);
+  perform private.sales_writable(p_rfp);
+  if p_size is null or p_size not between 1 and 52428800
+     or char_length(v_name) not between 1 and 255 or v_name ~ '[[:cntrl:]]'
+     or char_length(coalesce(p_mime, '')) > 200
+     or not exists (select 1 from public.sales_stages where id = p_stage and company_id = v_company) then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+  insert into public.sales_files (id, company_id, rfp_id, stage_id, name, size_bytes, mime, uploaded_by)
+    values (v_id, v_company, p_rfp, p_stage, v_name, p_size, nullif(btrim(coalesce(p_mime, '')), ''), auth.uid());
+  return jsonb_build_object('id', v_id, 'company_id', v_company);
+end $$;
+
+
+--
+-- Name: app_sales_file_commit(uuid, bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare v_company uuid := private.sales_company('sales', 'edit'); f public.sales_files;
+begin
+  select * into f from public.sales_files where id = p_id and company_id = v_company;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  perform private.sales_rfp(f.rfp_id, v_company);
+  select * into f from public.sales_files where id = p_id for update;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  if f.uploaded_by is distinct from auth.uid() then
+    raise exception 'sales: not allowed' using errcode = '42501';
+  end if;
+  if f.status <> 'pending' or p_size is distinct from f.size_bytes
+     or (p_sha256 is not null and p_sha256 !~ '^[0-9a-f]{64}$') then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+  update public.sales_files set status = 'ready', sha256 = p_sha256 where id = p_id;
+  perform private.sales_touch(f.rfp_id, 'file', jsonb_build_object('action', 'add', 'name', f.name,
+    'stage', (select s.code from public.sales_stages s where s.id = f.stage_id)));
+end $_$;
+
+
+--
+-- Name: app_sales_file_delete(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_file_delete(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales', 'edit'); f public.sales_files;
+begin
+  select * into f from public.sales_files where id = p_id and company_id = v_company;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  perform private.sales_rfp(f.rfp_id, v_company);
+  select * into f from public.sales_files where id = p_id for update;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  if f.uploaded_by is distinct from auth.uid() and not private.sales_can('sales_settings') then
+    raise exception 'sales: not allowed' using errcode = '42501';
+  end if;
+  perform private.sales_writable(f.rfp_id);
+  delete from public.sales_files where id = p_id;
+  if f.status = 'ready' then
+    perform private.sales_touch(f.rfp_id, 'file', jsonb_build_object('action', 'delete', 'name', f.name,
+      'stage', (select s.code from public.sales_stages s where s.id = f.stage_id)));
+  end if;
+  return jsonb_build_object('company_id', f.company_id, 'rfp_id', f.rfp_id);
+end $$;
+
+
+--
+-- Name: app_sales_file_get(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_file_get(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company(); f public.sales_files;
+begin
+  select * into f from public.sales_files where id = p_id and company_id = v_company and status = 'ready';
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  return jsonb_build_object('id', f.id, 'company_id', f.company_id, 'rfp_id', f.rfp_id,
+                            'name', f.name, 'size_bytes', f.size_bytes);
+end $$;
+
+
+--
 -- Name: app_sales_find_node(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10475,7 +10624,18 @@ begin
     'events', (select coalesce(jsonb_agg(jsonb_build_object('id', e.id, 'at', e.at, 'kind', e.kind,
                  'body', e.body, 'actor_name', (select full_name from public.profiles where id = e.actor_id))
                  order by e.at desc), '[]'::jsonb)
-                 from public.sales_events e where e.rfp_id = p_id))
+                 from public.sales_events e where e.rfp_id = p_id),
+    'files', (select coalesce(jsonb_agg(jsonb_build_object(
+                 'id', f.id, 'stage_id', f.stage_id, 'name', f.name, 'size_bytes', f.size_bytes,
+                 'uploaded_by', f.uploaded_by,
+                 'uploader_name', (select full_name from public.profiles where id = f.uploaded_by),
+                 'uploaded_at', f.uploaded_at,
+                 'can_delete', (f.uploaded_by = auth.uid() or private.sales_can('sales_settings'))
+                               and private.sales_can('sales', 'edit')
+                               and ((select s.kind from public.sales_stages s where s.id = r.stage_id) = 'open'
+                                    or private.sales_can('sales_decide')))
+                 order by f.uploaded_at, f.name), '[]'::jsonb)
+                 from public.sales_files f where f.rfp_id = p_id and f.status = 'ready'))
     || case when v_bonds then jsonb_build_object('payments',
          (select coalesce(jsonb_agg(to_jsonb(pm) - array['company_id','rfp_id'] order by pm.seq), '[]'::jsonb)
             from public.sales_payments pm where pm.rfp_id = p_id)) else '{}'::jsonb end
@@ -15330,7 +15490,7 @@ CREATE TABLE public.sales_events (
     actor_id uuid,
     kind text NOT NULL,
     body jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT sales_events_kind_check CHECK ((kind = ANY (ARRAY['created'::text, 'edit'::text, 'stage'::text, 'decision'::text, 'result'::text, 'comment'::text, 'import'::text, 'items'::text, 'finance'::text])))
+    CONSTRAINT sales_events_kind_check CHECK ((kind = ANY (ARRAY['created'::text, 'edit'::text, 'stage'::text, 'decision'::text, 'result'::text, 'comment'::text, 'import'::text, 'items'::text, 'finance'::text, 'file'::text])))
 );
 
 
@@ -15363,6 +15523,37 @@ CREATE TABLE public.sales_field_defs (
 --
 
 COMMENT ON TABLE public.sales_field_defs IS 'FR-94: the company''s library of extra columns for records (entity rfp) and item rows (entity item). Values live in custom jsonb.';
+
+
+--
+-- Name: sales_files; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_files (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    rfp_id uuid NOT NULL,
+    stage_id uuid NOT NULL,
+    name text NOT NULL,
+    size_bytes bigint NOT NULL,
+    mime text,
+    sha256 text,
+    status text DEFAULT 'pending'::text NOT NULL,
+    uploaded_by uuid,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sales_files_mime_check CHECK (((mime IS NULL) OR (char_length(mime) <= 200))),
+    CONSTRAINT sales_files_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 255))),
+    CONSTRAINT sales_files_sha256_check CHECK (((sha256 IS NULL) OR (sha256 ~ '^[0-9a-f]{64}$'::text))),
+    CONSTRAINT sales_files_size_bytes_check CHECK (((size_bytes >= 1) AND (size_bytes <= 52428800))),
+    CONSTRAINT sales_files_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'ready'::text])))
+);
+
+
+--
+-- Name: TABLE sales_files; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.sales_files IS 'FR-94: record files (metadata; bytes on disk under FILES_DIR/<company>/<rfp>/<id>). Functions only.';
 
 
 --
@@ -16282,6 +16473,14 @@ ALTER TABLE ONLY public.sales_field_defs
 
 
 --
+-- Name: sales_files sales_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_files
+    ADD CONSTRAINT sales_files_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sales_flows sales_flows_company_id_kind_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -16893,6 +17092,13 @@ CREATE INDEX sales_documents_rfp ON public.sales_documents USING btree (rfp_id);
 --
 
 CREATE INDEX sales_events_rfp ON public.sales_events USING btree (rfp_id, at);
+
+
+--
+-- Name: sales_files_rfp_stage; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_files_rfp_stage ON public.sales_files USING btree (rfp_id, stage_id);
 
 
 --
@@ -18170,6 +18376,38 @@ ALTER TABLE ONLY public.sales_field_defs
 
 
 --
+-- Name: sales_files sales_files_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_files
+    ADD CONSTRAINT sales_files_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sales_files sales_files_rfp_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_files
+    ADD CONSTRAINT sales_files_rfp_id_fkey FOREIGN KEY (rfp_id) REFERENCES public.sales_rfps(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sales_files sales_files_stage_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_files
+    ADD CONSTRAINT sales_files_stage_id_fkey FOREIGN KEY (stage_id) REFERENCES public.sales_stages(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: sales_files sales_files_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_files
+    ADD CONSTRAINT sales_files_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: sales_flows sales_flows_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19177,6 +19415,12 @@ ALTER TABLE public.sales_events ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.sales_field_defs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sales_files; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_files ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: sales_flows; Type: ROW SECURITY; Schema: public; Owner: -
@@ -20240,6 +20484,20 @@ REVOKE ALL ON FUNCTION private.sales_date(p text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_file_ids(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_file_ids() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_files_gc(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_files_gc() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_ensure(p_company uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -20314,6 +20572,14 @@ REVOKE ALL ON FUNCTION private.sales_product_default(p_company uuid, p_field tex
 --
 
 REVOKE ALL ON FUNCTION private.sales_rec_ok(p jsonb, p_recv date, p_result text, p_decision text, p_skind text, p_owner uuid) FROM PUBLIC;
+
+
+--
+-- Name: TABLE sales_files; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sales_files TO postgres;
+GRANT ALL ON TABLE public.sales_files TO service_role;
 
 
 --
@@ -21471,6 +21737,56 @@ REVOKE ALL ON FUNCTION public.app_sales_delete_payment(p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_sales_delete_payment(p_id uuid) TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_delete_payment(p_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_delete_payment(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_file_abort(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_file_abort(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_file_abort(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_file_abort(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_file_abort(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_file_begin(p_rfp uuid, p_stage uuid, p_name text, p_size bigint, p_mime text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_file_commit(p_id uuid, p_size bigint, p_sha256 text) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_file_delete(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_file_delete(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_file_delete(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_file_delete(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_file_delete(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_file_get(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_file_get(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_file_get(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_file_get(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_file_get(p_id uuid) TO service_role;
 
 
 --

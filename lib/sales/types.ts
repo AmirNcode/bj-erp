@@ -247,13 +247,24 @@ export type DocumentRow = {
   note: string | null;
 };
 
-export type EventKind = 'created' | 'edit' | 'stage' | 'decision' | 'result' | 'comment' | 'import' | 'items' | 'finance';
+export type EventKind = 'created' | 'edit' | 'stage' | 'decision' | 'result' | 'comment' | 'import' | 'items' | 'finance' | 'file';
 export type EventRow = {
   id: string;
   at: string;
   kind: EventKind;
   actor_name: string | null;
   body: Record<string, unknown>;
+};
+
+export type SalesFile = {
+  id: string;
+  stage_id: string;
+  name: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  uploader_name: string | null;
+  uploaded_at: string;
+  can_delete: boolean;
 };
 
 export type RecordDetail = {
@@ -264,6 +275,7 @@ export type RecordDetail = {
   deadlines: Deadline[];
   documents: DocumentRow[];
   events: EventRow[];
+  files: SalesFile[];
   quote_revisions?: number[];
 };
 

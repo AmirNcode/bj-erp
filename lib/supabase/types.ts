@@ -1995,6 +1995,11 @@ export type Database = {
       app_sales_products: { Args: Record<PropertyKey, never>; Returns: Json }
       app_sales_save_product: { Args: { p_id: string | null; p: Json }; Returns: string }
       app_sales_delete_product: { Args: { p_id: string }; Returns: undefined }
+      app_sales_file_begin: { Args: { p_rfp: string; p_stage: string; p_name: string; p_size: number; p_mime: string | null }; Returns: Json }
+      app_sales_file_commit: { Args: { p_id: string; p_size: number; p_sha256: string | null }; Returns: undefined }
+      app_sales_file_abort: { Args: { p_id: string }; Returns: undefined }
+      app_sales_file_get: { Args: { p_id: string }; Returns: Json }
+      app_sales_file_delete: { Args: { p_id: string }; Returns: Json }
       app_sales_save_settings: { Args: { p: Json }; Returns: undefined }
       app_sales_import: { Args: { p_file: string; p_rows: Json; p_fields?: Json; p_people?: Json }; Returns: Json }
       app_sales_remove_batch: { Args: { p_batch: string }; Returns: Json }
