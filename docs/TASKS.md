@@ -13,7 +13,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
-- ◐ **CEO feedback round 1** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Task 0 merge main ✓ · 1 title link ✓ · 2 Our total price ✓ · 3 currencies ◐ · 4 products ☐ · 5–8 files (DB, routes, UI, deploy/backup) ☐ · 9 e2e + docs ☐ · then update local `:3501` from the branch for owner testing; push to `main` only on the owner's word.
+- ◐ **CEO feedback round 1** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Task 0 merge main ✓ · 1 title link ✓ · 2 Our total price ✓ · 3 currencies ✓ (f9869b6) · 4 products ◐ · 5–8 files (DB, routes, UI, deploy/backup) ☐ · 9 e2e + docs ☐ · then update local `:3501` from the branch for owner testing; push to `main` only on the owner's word.
 - [ ] Owner (live-server check): confirm `rsync` exists on the Liara VM before the first deploy with Sales files (backup mirror needs it).
 - [ ] Watch Liara VM disk once files ship: `sales-files` volume + `/var/backups/bj-erp/files/` mirror.
 
