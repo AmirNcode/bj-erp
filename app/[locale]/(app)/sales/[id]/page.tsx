@@ -4,8 +4,9 @@ export const dynamic = 'force-dynamic';
 
 import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
-import { getSalesRecord } from '@/lib/actions/sales';
+import { getSalesRecord, listSalesProducts } from '@/lib/actions/sales';
 import { loadSalesBootstrap } from '../_components/load';
+import { SalesProductsProvider } from '../_components/parts';
 import { RecordView } from '../_components/RecordView';
 
 type Props = { params: Promise<{ locale: string; id: string }> };
@@ -14,7 +15,11 @@ export default async function SalesRecordPage({ params }: Props) {
   const { locale, id } = await params;
   setRequestLocale(locale);
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
-  const [boot, detail] = await Promise.all([loadSalesBootstrap(), getSalesRecord(id)]);
+  const [boot, detail, products] = await Promise.all([loadSalesBootstrap(), getSalesRecord(id), listSalesProducts()]);
   if (!detail.ok) notFound();
-  return <RecordView key={detail.data.record.id} boot={boot} detail={detail.data} />;
+  return (
+    <SalesProductsProvider products={products.ok ? products.data : []}>
+      <RecordView key={detail.data.record.id} boot={boot} detail={detail.data} />
+    </SalesProductsProvider>
+  );
 }

@@ -2668,7 +2668,8 @@
       "deadlines": "Deadlines",
       "reports": "Reports",
       "settings": "Settings",
-      "customers": "Customers"
+      "customers": "Customers",
+      "products": "Products"
     },
     "search": {
       "label": "Find by record or item number",
@@ -2870,7 +2871,8 @@
       "finance_guarantee_removed": "Guarantee removed",
       "finance_payment_added": "Payment added",
       "finance_payment_changed": "Payment changed",
-      "finance_payment_removed": "Payment removed"
+      "finance_payment_removed": "Payment removed",
+      "item_product": "Product set to {product} on {code}"
     },
     "items": {
       "hint": "One row per item of this record. Open a row to add its parts. Numbers are given on save and never reused.",
@@ -2901,7 +2903,9 @@
       "showColumn": "Show",
       "newColumn": "New column",
       "newColumnHint": "A new column can be used on other records too. Do not put prices in it: everyone who sees items sees it.",
-      "createColumn": "Create and show"
+      "createColumn": "Create and show",
+      "productSearch": "Search products",
+      "productOther": "Other…"
     },
     "documents": {
       "hint": "The proposal package. No file is kept here: record who prepares each document and where it is.",
@@ -3361,6 +3365,40 @@
       "kindAll": "Any type",
       "clear": "Clear filters",
       "label": "Filters"
+    },
+    "products": {
+      "intro": "The product families your company sells. Picking one on an item row fills that row's empty cells with the product's default values; rows already saved are never changed when a product is edited.",
+      "add": "Add product",
+      "addHint": "Name it in both languages. Add its columns and defaults on the next page.",
+      "empty": "No products yet.",
+      "code": "Code",
+      "codeHint": "Optional, unique, e.g. GV",
+      "name": "Name",
+      "nameFa": "Persian name",
+      "nameEn": "English name",
+      "columns": "Columns",
+      "usedOn": "Used on items",
+      "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "create": "Create",
+      "back": "Back to products",
+      "readOnly": "Only people who manage Sales settings can change products.",
+      "activeHint": "Active (shown in the item picker)",
+      "columnsTitle": "Columns and defaults",
+      "columnsHint": "The item columns this product uses. A default is copied into an item row only where that cell is empty. Picking the product also shows these columns on the record.",
+      "noColumns": "No columns yet.",
+      "column": "Column",
+      "default": "Default value",
+      "removeColumn": "Remove column {name}",
+      "addColumn": "Add a column",
+      "addColumnButton": "Add",
+      "newColumn": "New column",
+      "newColumnHint": "A new column joins the company's item column library and can be used on other products and records. Do not put prices in it: everyone who sees items sees it. Choice lists are set in Settings.",
+      "delete": "Delete product",
+      "deleteTitle": "Delete this product?",
+      "deleteBody": "Only a product that no item uses can be deleted. Deactivate it instead to hide it from the picker.",
+      "usedHint": "{count, plural, one {# item row uses this product.} other {# item rows use this product.}}"
     }
   }
 }

@@ -23,7 +23,7 @@ import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 import type { DeadlineState } from '@/lib/sales/deadlines';
 import { currencyLabel, formatMoney } from '@/lib/sales/money';
-import type { CustomValues, Currency, FieldDef, Person, Stage } from '@/lib/sales/types';
+import type { CustomValues, Currency, FieldDef, Person, Product, Stage } from '@/lib/sales/types';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -190,6 +190,17 @@ export function SalesCurrenciesProvider({ currencies, children }: { currencies: 
 
 export function useSalesCurrencies(): Currency[] {
   return useContext(CurrenciesContext);
+}
+
+const ProductsContext = createContext<Product[]>([]);
+
+/** The company's products, filled on the record page (item rows pick from them). */
+export function SalesProductsProvider({ products, children }: { products: Product[]; children: React.ReactNode }) {
+  return <ProductsContext.Provider value={products}>{children}</ProductsContext.Provider>;
+}
+
+export function useSalesProducts(): Product[] {
+  return useContext(ProductsContext);
 }
 
 /** Formatting bound to the page locale. */

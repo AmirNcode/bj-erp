@@ -18,18 +18,20 @@ import { EmptyState } from '@/components/EmptyState';
 import {
   createItemColumn, deleteProjectNode, saveProjectNode, setProjectColumns, setSalesItemPrice,
 } from '@/lib/actions/sales';
+import { applyProductDefaults } from '@/lib/sales/products';
 import { BUILTIN_COLUMNS, buildTree, columnsForDepth, isBuiltinColumn, pathTo, type TreeNode } from '@/lib/sales/tree';
 import type { Bootstrap, CustomValues, FieldDef, FieldType, NodeRow, RecordRow } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
+import { ProductPicker } from './ProductPicker';
 import { ConfirmDialog, CustomFieldInput, Field, NumberInput, Select, useRun, useSalesFormat } from './parts';
 
 type Draft = {
-  description: string; product_type: string; size: string; rating: string; qty: number | null; unit: string;
+  product_id: string | null; description: string; product_type: string; size: string; rating: string; qty: number | null; unit: string;
   custom: CustomValues; unit_price: number | null;
 };
 
 const draftOf = (n: NodeRow | null): Draft => ({
-  description: n?.description ?? '', product_type: n?.product_type ?? '', size: n?.size ?? '', rating: n?.rating ?? '',
+  product_id: n?.product_id ?? null, description: n?.description ?? '', product_type: n?.product_type ?? '', size: n?.size ?? '', rating: n?.rating ?? '',
   qty: n?.qty ?? null, unit: n?.unit ?? '', custom: { ...(n?.custom ?? {}) }, unit_price: n?.unit_price ?? null,
 });
 
@@ -96,6 +98,7 @@ function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusN
     const patch = {
       description: draft.description || null, product_type: draft.product_type || null, size: draft.size || null,
       rating: draft.rating || null, qty: draft.qty, unit: draft.unit || null, custom: draft.custom,
+      product_id: draft.product_id,
     };
     await run(async () => {
       const saved = await saveProjectNode(record.id, n?.id ?? null, parent?.id ?? null, patch);
@@ -115,6 +118,10 @@ function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusN
         <td key={key}>
           {key === 'qty' ? (
             <NumberInput value={draft.qty} onChange={(v) => setDraft({ ...draft, qty: v })} ariaLabel={label(key)} className="w-24" />
+          ) : key === 'product_type' ? (
+            <ProductPicker productId={draft.product_id} productType={draft.product_type}
+              onPick={(p) => setDraft((d) => applyProductDefaults(d, p))}
+              onOther={(type) => setDraft((d) => ({ ...d, product_id: null, product_type: type }))} />
           ) : isBuiltinColumn(key) ? (
             <Input value={String(draft[key] ?? '')} maxLength={200} aria-label={label(key)} className="min-w-28" onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} />
           ) : (

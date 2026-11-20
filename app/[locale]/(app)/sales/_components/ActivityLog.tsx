@@ -42,7 +42,9 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
       case 'stage': return <>{t('event.stage', { from: stageName(b.from), to: stageName(b.to) })}{b.note ? <span className="text-muted-foreground"> · {String(b.note)}</span> : null}</>;
       case 'decision': return <>{b.bid ? t('event.decisionBid') : t('event.decisionNoBid')}{b.reason ? <span className="text-muted-foreground"> · {String(b.reason)}</span> : null}</>;
       case 'result': return <>{t('event.result', { result: t(`result.${String(b.result) as 'won' | 'lost' | 'cancelled'}`) })}{b.reason ? <span className="text-muted-foreground"> · {String(b.reason)}</span> : null}</>;
-      case 'items': return b.action === 'columns' ? t('event.itemColumns') : t(`event.item_${String(b.action) as 'added' | 'changed' | 'removed'}`, { code: String(b.code ?? '') });
+      case 'items':
+        if (b.action === 'product') return t('event.item_product', { code: String(b.code ?? ''), product: String(b.product ?? '') });
+        return b.action === 'columns' ? t('event.itemColumns') : t(`event.item_${String(b.action) as 'added' | 'changed' | 'removed'}`, { code: String(b.code ?? '') });
       case 'finance': return t(`event.finance_${String(b.what) as 'guarantee' | 'payment'}_${String(b.action) as 'added' | 'changed' | 'removed'}`);
       default: {
         const changes = Array.isArray(b.changes) ? (b.changes as Change[]) : null;

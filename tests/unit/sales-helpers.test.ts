@@ -7,7 +7,7 @@ import type { DeadlineRow, NodeRow, Stage } from '@/lib/sales/types';
 
 const node = (id: string, parent: string | null, seq: number, code: string): NodeRow => ({
   id, parent_id: parent, seq, code, depth: code.split('-').length - 1, description: null, product_type: null,
-  size: null, rating: null, qty: null, unit: null, custom: {},
+  size: null, rating: null, qty: null, unit: null, custom: {}, product_id: null,
 });
 const stage = (id: string, position: number, extra: Partial<Stage> = {}): Stage => ({
   id, flow_id: 'f', position, name_fa: id, name_en: id, kind: 'open', action: null, code: id,

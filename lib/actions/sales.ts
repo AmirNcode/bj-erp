@@ -15,7 +15,7 @@ import type { InquiryRow } from '@/lib/sales/inquiry';
 import type { LedgerRow } from '@/lib/sales/ledger';
 import type {
   AddedCustomer, Bootstrap, CustomerDetail, CustomerFilters, CustomerSummary, NameAlias, PersonToMatch, SalesMetrics, SalesReport, DeadlineRow, ImportResult, InquiryImportResult, PriceHistoryRow, RecordDetail,
-  RecordFilters, RecordNumbers, RecordPage, SimilarCustomer,
+  Product, RecordFilters, RecordNumbers, RecordPage, SimilarCustomer,
 } from '@/lib/sales/types';
 
 type Read<T> = { ok: true; data: T } | DbErrorResult;
@@ -427,6 +427,33 @@ export async function deleteSalesCurrency(code: string): Promise<Write> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const { error } = await c.supabase.rpc('app_sales_delete_currency', { p_code: code });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
+export async function listSalesProducts(): Promise<Read<Product[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_products');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as Product[] };
+}
+
+/** Add (`id` null) or edit a product; `fields` (when sent) replaces its column list. */
+export async function saveSalesProduct(id: string | null, patch: Patch): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_save_product', { p_id: id, p: json(patch) });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, id: data as string };
+}
+
+export async function deleteSalesProduct(id: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_delete_product', { p_id: id });
   if (error) return dbErr(error.message);
   invalidateAppCache();
   return { ok: true };

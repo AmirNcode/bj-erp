@@ -103,6 +103,19 @@ export type Bootstrap = {
 
 export type CustomValues = Record<string, string | number | boolean>;
 
+/** A product family (sales_products) with its item columns and their default values. */
+export type Product = {
+  id: string;
+  code: string | null;
+  name_fa: string;
+  name_en: string;
+  active: boolean;
+  position: number;
+  /** Item rows that picked this product. */
+  used_count: number;
+  fields: { field: string; default: string | number | boolean | null }[];
+};
+
 export type RecordRow = {
   id: string;
   record_no: number;
@@ -175,6 +188,7 @@ export type NodeRow = {
   qty: number | null;
   unit: string | null;
   custom: CustomValues;
+  product_id: string | null;
   unit_price?: number | null;
 };
 

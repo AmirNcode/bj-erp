@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
 
-/** Records · Customers · Deadlines · Reports · Settings. The last two only for their holders. */
+/** Records · Customers · Products · Deadlines · Reports · Settings. The last two only for their holders. */
 export function SalesTabs({ reports, settings }: { reports: boolean; settings: boolean }) {
   const t = useTranslations('sales.tabs');
   const locale = useLocale();
@@ -15,6 +15,7 @@ export function SalesTabs({ reports, settings }: { reports: boolean; settings: b
   const tabs = [
     { href: '/sales', key: 'records', on: path === '/sales' || /^\/sales\/[0-9a-f]{8}-[0-9a-f-]{27}/.test(path) },
     { href: '/sales/customers', key: 'customers', on: path.startsWith('/sales/customers') },
+    { href: '/sales/products', key: 'products', on: path.startsWith('/sales/products') },
     { href: '/sales/deadlines', key: 'deadlines', on: path.startsWith('/sales/deadlines') },
     ...(reports ? [{ href: '/sales/reports', key: 'reports', on: path.startsWith('/sales/reports') }] : []),
     ...(settings ? [{ href: '/sales/settings', key: 'settings', on: path.startsWith('/sales/settings') }] : []),
