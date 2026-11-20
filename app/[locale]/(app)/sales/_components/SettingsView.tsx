@@ -13,13 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { orderSalesStages, saveSalesField, saveSalesSettings, saveSalesStage } from '@/lib/actions/sales';
+import { deleteSalesCurrency, orderSalesStages, saveSalesCurrency, saveSalesField, saveSalesSettings, saveSalesStage } from '@/lib/actions/sales';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
-import type { Bootstrap, RecordNumbers, FieldDef, FieldType, Flow, Stage, StageKind } from '@/lib/sales/types';
-import { Field, NumberInput, Select, Tag, useRun, useSalesFormat } from './parts';
+import type { Bootstrap, Currency, RecordNumbers, FieldDef, FieldType, Flow, Stage, StageKind } from '@/lib/sales/types';
+import { ConfirmDialog, Field, NumberInput, Select, Tag, useRun, useSalesFormat } from './parts';
 import { ImportPanel } from './ImportPanel';
 
-type Section = 'stages' | 'fields' | 'general' | 'import';
+type Section = 'stages' | 'fields' | 'currencies' | 'general' | 'import';
 
 export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: RecordNumbers }) {
   const t = useTranslations('sales.settings');
@@ -27,7 +27,7 @@ export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: Reco
   return (
     <div className="flex flex-col gap-5" data-testid="sales-settings">
       <nav className={tabListClass} aria-label={t('label')}>
-        {(['stages', 'fields', 'general', 'import'] as const).map((key) => (
+        {(['stages', 'fields', 'currencies', 'general', 'import'] as const).map((key) => (
           <button key={key} type="button" className={tabClass(section === key)} aria-current={section === key ? 'page' : undefined}
             onClick={() => setSection(key)} data-testid={`sales-settings-${key}`}>
             {t(`section.${key}`)}
@@ -36,6 +36,7 @@ export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: Reco
       </nav>
       {section === 'stages' ? <StagesEditor boot={boot} /> : null}
       {section === 'fields' ? <FieldsEditor boot={boot} /> : null}
+      {section === 'currencies' ? <CurrenciesEditor boot={boot} /> : null}
       {section === 'general' ? <GeneralSettings boot={boot} /> : null}
       {section === 'import' ? <ImportPanel boot={boot} numbers={numbers} /> : null}
     </div>
@@ -300,6 +301,145 @@ function FieldDialog({ entity, def, onClose }: { entity: 'rfp' | 'item'; def: Fi
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ───────────────────────────────────────────────────────────── currencies
+
+function CurrenciesEditor({ boot }: { boot: Bootstrap }) {
+  const t = useTranslations('sales');
+  const f = useSalesFormat();
+  const { run, pending } = useRun();
+  const [editing, setEditing] = useState<{ currency: Currency | null } | null>(null);
+  const can = boot.caps.settings;
+  const list = [...boot.currencies].sort((a, b) => a.position - b.position || a.code.localeCompare(b.code));
+  const move = (index: number, by: number) => {
+    const next = [...list];
+    [next[index], next[index + by]] = [next[index + by], next[index]];
+    // Renumber 1..n so equal or zero positions cannot leave the order ambiguous.
+    return run(async () => {
+      for (const [i, c] of next.entries()) {
+        if (c.position === i + 1) continue;
+        const done = await saveSalesCurrency(c.code, { position: i + 1 });
+        if (!done.ok) return done;
+      }
+      return { ok: true };
+    });
+  };
+  const toggle = (c: Currency) => run(() => saveSalesCurrency(c.code, { active: !c.active }));
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="max-w-3xl text-sm text-muted-foreground">{t('settings.currencies.intro')}</p>
+      {can ? (
+        <div>
+          <Button size="sm" variant="outline" onClick={() => setEditing({ currency: null })} data-testid="sales-currency-add">
+            <Plus aria-hidden="true" /> {t('settings.currencies.add')}
+          </Button>
+        </div>
+      ) : <p className="text-sm text-muted-foreground">{t('settings.currencies.readOnly')}</p>}
+      <div className="max-w-4xl overflow-x-auto border-b border-border">
+        <table className="data-table w-full text-sm" data-testid="sales-currencies">
+          <thead>
+            <tr>
+              {can ? <th className="text-start">{t('settings.order')}</th> : null}
+              <th className="text-start">{t('settings.currencies.code')}</th>
+              <th className="text-start">{t('settings.currencies.nameFa')}</th>
+              <th className="text-start">{t('settings.currencies.nameEn')}</th>
+              <th className="text-start">{t('settings.currencies.symbol')}</th>
+              <th className="text-start">{t('settings.currencies.decimals')}</th>
+              <th className="text-start">{t('settings.currencies.active')}</th>
+              {can ? <th /> : null}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {list.map((c, i) => (
+              <tr key={c.code} className={c.active ? 'whitespace-nowrap' : 'whitespace-nowrap text-muted-foreground'} data-testid={`sales-currency-${c.code}`}>
+                {can ? (
+                  <td>
+                    <Button size="icon-sm" variant="ghost" disabled={pending || i === 0} aria-label={t('settings.moveUp')} onClick={() => void move(i, -1)}><ArrowUp /></Button>
+                    <Button size="icon-sm" variant="ghost" disabled={pending || i === list.length - 1} aria-label={t('settings.moveDown')} onClick={() => void move(i, 1)}><ArrowDown /></Button>
+                  </td>
+                ) : null}
+                <td className="font-medium" dir="ltr">{c.code}</td>
+                <td>{c.name_fa}</td>
+                <td dir="ltr">{c.name_en}</td>
+                <td>{c.symbol ?? '—'}</td>
+                <td>{f.number(c.decimals)}</td>
+                <td>
+                  {can ? (
+                    <input type="checkbox" className="size-4" checked={c.active} disabled={pending} onChange={() => void toggle(c)}
+                      aria-label={`${t('settings.currencies.active')}: ${c.code}`} />
+                  ) : (c.active ? t('yes') : t('no'))}
+                </td>
+                {can ? <td className="text-end"><Button size="xs" variant="ghost" onClick={() => setEditing({ currency: c })}>{t('action.edit')}</Button></td> : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {editing ? <CurrencyDialog currency={editing.currency} count={list.length} onClose={() => setEditing(null)} /> : null}
+    </div>
+  );
+}
+
+function CurrencyDialog({ currency, count, onClose }: { currency: Currency | null; count: number; onClose: () => void }) {
+  const t = useTranslations('sales');
+  const { run, pending } = useRun();
+  const [code, setCode] = useState(currency?.code ?? '');
+  const [nameFa, setNameFa] = useState(currency?.name_fa ?? '');
+  const [nameEn, setNameEn] = useState(currency?.name_en ?? '');
+  const [symbol, setSymbol] = useState(currency?.symbol ?? '');
+  const [decimals, setDecimals] = useState(String(currency?.decimals ?? 0));
+  const [active, setActive] = useState(currency?.active ?? true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const valid = /^[A-Za-z0-9]{1,10}$/.test(code) && nameFa.trim() !== '' && nameEn.trim() !== '';
+  return (
+    <>
+      <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{currency ? t('settings.currencies.edit') : t('settings.currencies.add')}</DialogTitle>
+            <DialogDescription>{t('settings.currencies.dialogHint')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t('settings.currencies.code')} hint={currency ? undefined : t('settings.currencies.codeHint')}>
+              <Input dir="ltr" maxLength={10} value={code} readOnly={!!currency} disabled={!!currency}
+                onChange={(e) => setCode(e.target.value.trim())} data-testid="sales-currency-code" />
+            </Field>
+            <Field label={t('settings.currencies.decimals')}>
+              <Select value={decimals} onChange={setDecimals}>
+                {['0', '1', '2'].map((d) => <option key={d} value={d}>{d}</option>)}
+              </Select>
+            </Field>
+            <Field label={t('settings.currencies.nameFa')}><Input maxLength={40} value={nameFa} onChange={(e) => setNameFa(e.target.value)} data-testid="sales-currency-name-fa" /></Field>
+            <Field label={t('settings.currencies.nameEn')}><Input dir="ltr" maxLength={40} value={nameEn} onChange={(e) => setNameEn(e.target.value)} data-testid="sales-currency-name-en" /></Field>
+            <Field label={t('settings.currencies.symbol')}><Input maxLength={6} value={symbol} onChange={(e) => setSymbol(e.target.value)} /></Field>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm">
+              <input type="checkbox" className="size-4" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              {t('settings.currencies.active')}
+            </label>
+          </div>
+          <DialogFooter>
+            {currency ? (
+              <Button variant="outline" className="sm:me-auto" disabled={pending} onClick={() => setConfirmDelete(true)}>{t('settings.currencies.delete')}</Button>
+            ) : null}
+            <Button variant="outline" onClick={onClose} disabled={pending}>{t('cancel')}</Button>
+            <Button disabled={pending || !valid} data-testid="sales-currency-save"
+              onClick={() => void run(() => saveSalesCurrency(code, {
+                name_fa: nameFa.trim(), name_en: nameEn.trim(), symbol: symbol.trim() || null, decimals: Number(decimals), active,
+                ...(currency ? {} : { position: count + 1 }),
+              }), onClose)}>
+              {t('save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {confirmDelete && currency ? (
+        <ConfirmDialog title={t('settings.currencies.deleteTitle')} body={t('settings.currencies.deleteBody')}
+          confirmLabel={t('settings.currencies.delete')} cancelLabel={t('cancel')} pending={pending}
+          onConfirm={() => void run(() => deleteSalesCurrency(currency.code), onClose)} onClose={() => setConfirmDelete(false)} />
+      ) : null}
+    </>
   );
 }
 

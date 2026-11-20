@@ -6,7 +6,7 @@
  * show the error, refresh" hook every editor uses.
  */
 
-import { useCallback, useState, useTransition } from 'react';
+import { createContext, useCallback, useContext, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -22,7 +22,8 @@ import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave
 import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 import type { DeadlineState } from '@/lib/sales/deadlines';
-import type { CustomValues, FieldDef, Person, Stage } from '@/lib/sales/types';
+import { currencyLabel, formatMoney } from '@/lib/sales/money';
+import type { CustomValues, Currency, FieldDef, Person, Stage } from '@/lib/sales/types';
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -180,16 +181,34 @@ export function CustomFieldInput({ def, value, onChange }: {
   return <Input value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || null)} />;
 }
 
+const CurrenciesContext = createContext<Currency[]>([]);
+
+/** The company's currency list (boot.currencies), filled once in sales/layout.tsx. */
+export function SalesCurrenciesProvider({ currencies, children }: { currencies: Currency[]; children: React.ReactNode }) {
+  return <CurrenciesContext.Provider value={currencies}>{children}</CurrenciesContext.Provider>;
+}
+
+export function useSalesCurrencies(): Currency[] {
+  return useContext(CurrenciesContext);
+}
+
 /** Formatting bound to the page locale. */
 export function useSalesFormat() {
   const locale = useLocale();
   const t = useTranslations('sales');
+  const currencies = useSalesCurrencies();
   return {
+    currencies,
+    /** The currency's name in the page language (the raw code when unknown). */
+    currencyLabel: (code: string | null | undefined) => currencyLabel(code, currencies, locale),
+    /** Picker options: the active currencies, plus `current` when it was retired since. */
+    currencyOptions: (current?: string | null) =>
+      currencies.filter((c) => c.active || c.code === current).sort((a, b) => a.position - b.position),
     locale,
     date: (iso: string | null | undefined) => (iso ? formatCalendarDate(iso.slice(0, 10), locale) : '—'),
     number: (n: number | null | undefined) => (typeof n === 'number' ? formatNumber(n, locale) : '—'),
     money: (n: number | null | undefined, currency: string | null | undefined) =>
-      typeof n === 'number' ? `${formatNumber(n, locale)}${currency ? ` ${currency}` : ''}` : '—',
+      formatMoney(n, currency, currencies, locale),
     percent: (fraction: number | null | undefined) =>
       typeof fraction === 'number' ? `${formatNumber(fraction * 100, locale)}${locale === 'fa' ? '٪' : '%'}` : '—',
     recordNo: (n: number) => String(n),

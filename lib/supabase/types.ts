@@ -1990,6 +1990,8 @@ export type Database = {
       app_sales_save_field: { Args: { p_id: string | null; p: Json }; Returns: string }
       app_sales_save_stage: { Args: { p_id: string | null; p_flow: string | null; p: Json }; Returns: string }
       app_sales_order_stages: { Args: { p_flow: string; p_ids: string[] }; Returns: undefined }
+      app_sales_save_currency: { Args: { p_code: string; p: Json }; Returns: undefined }
+      app_sales_delete_currency: { Args: { p_code: string }; Returns: undefined }
       app_sales_save_settings: { Args: { p: Json }; Returns: undefined }
       app_sales_import: { Args: { p_file: string; p_rows: Json; p_fields?: Json; p_people?: Json }; Returns: Json }
       app_sales_remove_batch: { Args: { p_batch: string }; Returns: Json }

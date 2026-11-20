@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { LEDGER_HEADERS, inChargeNames, parseLedger, templateRows } from '@/lib/sales/ledger';
+import type { Currency } from '@/lib/sales/types';
 import { readXlsx, writeXlsx, type Cell } from '@/lib/sales/xlsx';
+
+const CURRENCIES: Currency[] = [
+  ['IRR', 'ریال', 'Rial'], ['EUR', 'یورو', 'Euro'], ['USD', 'دلار', 'US dollar'], ['AED', 'درهم', 'Dirham'], ['CNY', 'یوان', 'Yuan'],
+].map(([code, name_fa, name_en], position) => ({ code, name_fa, name_en, symbol: null, decimals: 0, active: true, position }));
 
 /** A data row under the template: values by header position. */
 function row(values: Record<number, Cell>): Cell[] {
@@ -10,7 +15,7 @@ function row(values: Record<number, Cell>): Cell[] {
 }
 const sheet = (...rows: Cell[][]) => [...templateRows(), ...rows];
 const parsed = (...rows: Cell[][]) => {
-  const out = parseLedger(sheet(...rows));
+  const out = parseLedger(sheet(...rows), CURRENCIES);
   if (!out.ok) throw new Error('no header');
   return out;
 };
@@ -18,7 +23,7 @@ const parsed = (...rows: Cell[][]) => {
 describe('template', () => {
   it('has the 47 ledger columns and parses clean, also after an xlsx round trip', () => {
     expect(LEDGER_HEADERS).toHaveLength(47);
-    const out = parseLedger(readXlsx(writeXlsx('BJ Contract', templateRows()))[0].rows);
+    const out = parseLedger(readXlsx(writeXlsx('BJ Contract', templateRows()))[0].rows, CURRENCIES);
     expect(out).toEqual({ ok: true, rows: [], issues: [], unknown: [], missing: [] });
   });
   it('group titles carry no personal names', () => {
@@ -32,19 +37,19 @@ describe('header', () => {
     header[8] = 'Order \nIssuance \nDate';
     header[10] = 'Pre Payment \n( yes ? no )';
     header[35] = '% of Down 4 \nAPG';
-    const out = parseLedger([header, row({ 0: 8030, 8: '1404/10/11', 10: 'YES', 35: 0.25 })]);
+    const out = parseLedger([header, row({ 0: 8030, 8: '1404/10/11', 10: 'YES', 35: 0.25 })], CURRENCIES);
     expect(out.ok && out.missing).toEqual([]);
     expect(out.ok && out.rows[0]).toMatchObject({ rec: 8030, order_date: '2026-01-01', prepayment: true });
     expect(out.ok && out.rows[0].bonds).toEqual([expect.objectContaining({ kind: 'advance_payment', seq: 4, percent: 0.25 })]);
   });
   it('a sheet without a Rec header is refused', () => {
-    expect(parseLedger([['Name', 'Value'], ['a', 1]])).toEqual({ ok: false, reason: 'no_header' });
-    expect(parseLedger([])).toEqual({ ok: false, reason: 'no_header' });
+    expect(parseLedger([['Name', 'Value'], ['a', 1]], CURRENCIES)).toEqual({ ok: false, reason: 'no_header' });
+    expect(parseLedger([], CURRENCIES)).toEqual({ ok: false, reason: 'no_header' });
   });
   it('a missing column is reported and the rows still parse; an extra one is kept by header', () => {
     const header = [...LEDGER_HEADERS, 'Region'];
     header[5] = null as unknown as string;
-    const out = parseLedger([header, [...row({ 0: 1, 1: 'A' }), 'South']]);
+    const out = parseLedger([header, [...row({ 0: 1, 1: 'A' }), 'South']], CURRENCIES);
     expect(out.ok && out.missing).toEqual(['Project Site']);
     expect(out.ok && out.unknown).toEqual(['Region']);
     expect(out.ok && out.rows[0].custom).toEqual({ Region: 'South' });

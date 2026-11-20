@@ -49,8 +49,8 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
   const [sort, setSort] = useState<{ key: CustomerSortKey; dir: 'asc' | 'desc' }>({ key: 'records', dir: 'desc' });
 
   const shown = useMemo(() => sortCustomers(searchCustomers(rows, query), sort.key, sort.dir), [rows, query, sort]);
-  const salesCur = useMemo(() => (prices ? presentCurrencies(rows, 'sales') : []), [rows, prices]);
-  const quotedCur = useMemo(() => (prices ? presentCurrencies(rows, 'quoted') : []), [rows, prices]);
+  const salesCur = useMemo(() => (prices ? presentCurrencies(rows, 'sales', f.currencies) : []), [rows, prices, f.currencies]);
+  const quotedCur = useMemo(() => (prices ? presentCurrencies(rows, 'quoted', f.currencies) : []), [rows, prices, f.currencies]);
   const owners = useMemo(() => [...people].sort((a, b) => a.name.localeCompare(b.name, 'fa')), [people]);
   const href = (id: string) => `/${f.locale}/sales/customers/${id}`;
   const dash = <span className="text-muted-foreground">—</span>;
@@ -78,7 +78,7 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
     { key: 'won', label: t('customers.won') },
     { key: 'win_rate', label: t('customers.winRate') },
     { key: 'last_inquiry', label: t('customers.lastInquiry') },
-    ...salesCur.map((c) => ({ key: `sales:${c}` as CustomerSortKey, label: t('customers.salesCur', { currency: c }) })),
+    ...salesCur.map((c) => ({ key: `sales:${c}` as CustomerSortKey, label: t('customers.salesCur', { currency: f.currencyLabel(c) }) })),
   ];
 
   return (
@@ -120,7 +120,7 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
                   </span>
                   <span className="text-xs">{t('customers.winRate')}: {rate(r)}</span>
                   {salesCur.filter((c) => r.sales?.[c] !== undefined).map((c) => (
-                    <span key={c} className="text-xs tabular-nums">{t('customers.salesCur', { currency: c })}: {f.number(r.sales?.[c])}</span>
+                    <span key={c} className="text-xs tabular-nums">{t('customers.salesCur', { currency: f.currencyLabel(c) })}: {f.number(r.sales?.[c])}</span>
                   ))}
                 </Link>
               </li>
@@ -132,14 +132,14 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
                 <tr>
                   {head('name', t('field.buyer'))}
                   {head('records', t('customers.records'), true, 'records')}
-                  {salesCur.map((c) => head(`sales:${c}`, t('customers.salesCur', { currency: c }), true, 'sales'))}
+                  {salesCur.map((c) => head(`sales:${c}`, t('customers.salesCur', { currency: f.currencyLabel(c) }), true, 'sales'))}
                   {head('won', t('customers.won'), true, 'won')}
                   {head('win_rate', t('customers.winRate'), true, 'winRate')}
                   {head('open', t('customers.open'), true, 'open')}
                   {head('lost', t('customers.lost'), true, 'lost')}
                   {head('last_inquiry', t('customers.lastInquiry'), false, 'lastInquiry')}
                   {head('main_owner_name', t('customers.mainContact'), false, 'owner')}
-                  {quotedCur.map((c) => head(`quoted:${c}`, t('customers.quotedCur', { currency: c }), true, 'quoted'))}
+                  {quotedCur.map((c) => head(`quoted:${c}`, t('customers.quotedCur', { currency: f.currencyLabel(c) }), true, 'quoted'))}
                   {head('no_bid', t('customers.noBid'), true, 'noBid')}
                   {head('archived', t('customers.archived'), true, 'archived')}
                   {head('first_inquiry', t('customers.firstInquiry'), false, 'firstInquiry')}
@@ -153,14 +153,14 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
                   const isOpen = open.has(r.id);
                   const items: DetailItem[] = [
                     { key: 'records', label: t('customers.records'), value: f.number(r.records), hideClass: DET.records },
-                    ...salesCur.map((c) => ({ key: `sales:${c}`, label: t('customers.salesCur', { currency: c }), value: money(r.sales, c), hideClass: DET.sales })),
+                    ...salesCur.map((c) => ({ key: `sales:${c}`, label: t('customers.salesCur', { currency: f.currencyLabel(c) }), value: money(r.sales, c), hideClass: DET.sales })),
                     { key: 'won', label: t('customers.won'), value: num(r.won), hideClass: DET.won },
                     { key: 'winRate', label: t('customers.winRate'), value: rate(r), hideClass: DET.winRate },
                     { key: 'open', label: t('customers.open'), value: num(r.open), hideClass: DET.open },
                     { key: 'lost', label: t('customers.lost'), value: num(r.lost), hideClass: DET.lost },
                     { key: 'lastInquiry', label: t('customers.lastInquiry'), value: f.date(r.last_inquiry), hideClass: DET.lastInquiry },
                     { key: 'owner', label: t('customers.mainContact'), value: r.main_owner_name ?? dash, hideClass: DET.owner },
-                    ...quotedCur.map((c) => ({ key: `quoted:${c}`, label: t('customers.quotedCur', { currency: c }), value: money(r.quoted, c), hideClass: DET.quoted })),
+                    ...quotedCur.map((c) => ({ key: `quoted:${c}`, label: t('customers.quotedCur', { currency: f.currencyLabel(c) }), value: money(r.quoted, c), hideClass: DET.quoted })),
                     { key: 'noBid', label: t('customers.noBid'), value: num(r.no_bid), hideClass: DET.noBid },
                     { key: 'archived', label: t('customers.archived'), value: num(r.archived), hideClass: DET.archived },
                     { key: 'firstInquiry', label: t('customers.firstInquiry'), value: f.date(r.first_inquiry), hideClass: DET.firstInquiry },

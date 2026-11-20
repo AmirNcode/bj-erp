@@ -1399,7 +1399,8 @@
     "salesFlowNeedsOpenStage": "At least one in-progress stage must stay in use.",
     "salesInvalidInput": "A value is not valid. Check the form and try again.",
     "salesBatchClosed": "The import was already finished or stopped. Start the import again.",
-    "salesCustomerExists": "A company with this name already exists. Merge into it instead."
+    "salesCustomerExists": "A company with this name already exists. Merge into it instead.",
+    "salesInUse": "This is used by records, so it cannot be deleted. Deactivate it instead."
   },
   "roles": {
     "admin": "Admin",
@@ -2698,13 +2699,6 @@
       "week": "weeks",
       "month": "months"
     },
-    "currency": {
-      "IRR": "Rial (IRR)",
-      "EUR": "Euro (EUR)",
-      "USD": "US dollar (USD)",
-      "AED": "Dirham (AED)",
-      "CNY": "Yuan (CNY)"
-    },
     "decision": {
       "pending": "Not decided",
       "bid": "Bid",
@@ -3051,7 +3045,8 @@
         "stages": "Stages",
         "fields": "Extra fields",
         "general": "General",
-        "import": "Ledger import"
+        "import": "Ledger import",
+        "currencies": "Currencies"
       },
       "stagesIntro": "Each kind of record moves through its own stages. Rename, add, reorder or retire them here; a stage that has records is retired, never deleted.",
       "addStage": "Add stage",
@@ -3097,7 +3092,25 @@
       "validityDays": "Default offer validity (days)",
       "validityDaysHint": "Suggested when a proposal is submitted.",
       "docTemplate": "Documents of a new RFP",
-      "docTemplateHint": "One document per line. Added to every new RFP."
+      "docTemplateHint": "One document per line. Added to every new RFP.",
+      "currencies": {
+        "intro": "The currencies a record, guarantee or price can use. A code is permanent once saved; deactivate a currency to hide it from the lists (old records keep showing it). Decimals only change how amounts are shown.",
+        "code": "Code",
+        "nameFa": "Persian name",
+        "nameEn": "English name",
+        "symbol": "Symbol",
+        "decimals": "Decimals",
+        "active": "Active",
+        "inactive": "Inactive",
+        "add": "Add currency",
+        "edit": "Edit currency",
+        "dialogHint": "The code cannot be changed after saving. The symbol is shown after amounts; without one the name is shown.",
+        "codeHint": "Letters and digits, up to 10, e.g. TMN",
+        "delete": "Delete",
+        "deleteTitle": "Delete this currency?",
+        "deleteBody": "Only a currency that no record uses can be deleted.",
+        "readOnly": "Only people who manage Sales settings can change currencies."
+      }
     },
     "import": {
       "intro": "Bring the contract ledger (the Excel file with one row per record) into the system. The file is read on this computer and is not stored anywhere.",

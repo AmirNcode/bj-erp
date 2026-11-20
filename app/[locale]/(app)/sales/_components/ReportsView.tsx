@@ -153,7 +153,7 @@ export function ReportsView({ boot, report, deadlines }: { boot: Bootstrap; repo
                 [t('reports.quotedOn'), t('field.record_no'), t('items.col.no'), t('field.buyer'), t('items.col.product_type'), t('items.col.size'), t('items.col.rating'),
                   t('items.col.description'), t('items.col.qty'), t('items.unitPrice'), t('field.currency'), t('field.bid_result'), t('field.winning_bid')],
                 ...history.map((h) => [h.quoted_on, String(h.record_no), h.code, h.buyer_name ?? '', h.product_type ?? '', h.size ?? '', h.rating ?? '',
-                  h.description ?? '', h.qty === null ? '' : String(h.qty), String(h.unit_price), h.currency ?? '', h.bid_result ?? '', h.winning_bid === null ? '' : String(h.winning_bid)]),
+                  h.description ?? '', h.qty === null ? '' : String(h.qty), String(h.unit_price), h.currency ? f.currencyLabel(h.currency) : '', h.bid_result ?? '', h.winning_bid === null ? '' : String(h.winning_bid)]),
               ]} />
             ) : null}
           </div>

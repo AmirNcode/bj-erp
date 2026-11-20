@@ -76,6 +76,17 @@ export type ImportBatch = {
   closed: boolean;
 };
 
+/** A company-managed currency (sales_currencies); `decimals` is display only. */
+export type Currency = {
+  code: string;
+  name_fa: string;
+  name_en: string;
+  symbol: string | null;
+  decimals: number;
+  active: boolean;
+  position: number;
+};
+
 export type Bootstrap = {
   caps: SalesCaps;
   me: string;
@@ -87,6 +98,7 @@ export type Bootstrap = {
   roles: RoleRef[];
   settings: SalesSettings;
   batches: ImportBatch[];
+  currencies: Currency[];
 };
 
 export type CustomValues = Record<string, string | number | boolean>;
@@ -305,8 +317,6 @@ export type RecordPage = { rows: RecordRow[]; total: number; truncated: boolean 
 export type CustomerRef = { id: string; name: string; kind: 'government' | 'contractor' | null };
 export type AddedCustomer = CustomerRef & { existed: boolean };
 export type SimilarCustomer = CustomerRef & { distance: number };
-
-export const CURRENCIES = ['IRR', 'EUR', 'USD', 'AED', 'CNY'] as const;
 
 /** One row of the Customers tab (app_sales_customers); value keys only for sales_prices holders. */
 export type CustomerSummary = {

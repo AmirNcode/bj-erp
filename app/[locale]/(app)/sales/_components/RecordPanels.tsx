@@ -273,6 +273,7 @@ export function FinancePanel({ boot, record, bonds, payments, show = 'both' }: {
 
 function BondDialog({ record, bond, onClose }: { record: RecordRow; bond: Bond | null; onClose: () => void }) {
   const t = useTranslations('sales');
+  const f = useSalesFormat();
   const { run, pending } = useRun();
   const [kind, setKind] = useState<BondKind>(bond?.kind ?? (record.flow_kind === 'bid' ? 'bid' : 'performance'));
   const [seq, setSeq] = useState<number | null>(bond?.seq ?? 1);
@@ -315,7 +316,7 @@ function BondDialog({ record, bond, onClose }: { record: RecordRow; bond: Bond |
             </Select>
           </Field>
           <Field label={t('bond.percent')} hint={t('bond.percentHint')}><NumberInput value={percent} onChange={setPercent} /></Field>
-          <Field label={t('bond.amount')} hint={record.currency ? t(`currency.${record.currency}`) : undefined}><NumberInput value={amount} onChange={setAmount} /></Field>
+          <Field label={t('bond.amount')} hint={record.currency ? f.currencyLabel(record.currency) : undefined}><NumberInput value={amount} onChange={setAmount} /></Field>
           <Field label={t('bond.bank')}><Input maxLength={200} value={bank} onChange={(e) => setBank(e.target.value)} /></Field>
           <Field label={t('bond.number')}><Input dir="ltr" maxLength={200} value={number} onChange={(e) => setNumber(e.target.value)} /></Field>
           <Field label={t('bond.issuedOn')}><DateInput value={issuedOn} onChange={setIssuedOn} /></Field>
@@ -333,6 +334,7 @@ function BondDialog({ record, bond, onClose }: { record: RecordRow; bond: Bond |
 
 function PaymentDialog({ record, payment, onClose }: { record: RecordRow; payment: Payment | null; onClose: () => void }) {
   const t = useTranslations('sales');
+  const f = useSalesFormat();
   const { run, pending } = useRun();
   const [amount, setAmount] = useState<number | null>(payment?.amount ?? null);
   const [paidOn, setPaidOn] = useState<string | null>(payment?.paid_on ?? null);
@@ -345,7 +347,7 @@ function PaymentDialog({ record, payment, onClose }: { record: RecordRow; paymen
           <DialogDescription>{t('payment.dialogHint')}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('payment.amount')} hint={record.currency ? t(`currency.${record.currency}`) : undefined}><NumberInput value={amount} onChange={setAmount} /></Field>
+          <Field label={t('payment.amount')} hint={record.currency ? f.currencyLabel(record.currency) : undefined}><NumberInput value={amount} onChange={setAmount} /></Field>
           <Field label={t('payment.paidOn')}><DateInput value={paidOn} onChange={setPaidOn} /></Field>
           <Field label={t('payment.note')} className="sm:col-span-2"><Input maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
         </div>

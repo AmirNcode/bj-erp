@@ -42,10 +42,11 @@ describe('customers tab helpers', () => {
     const q = [c('X', { quoted: { USD: 3 } }), c('Y', { quoted: { USD: 10 } })];
     expect(sortCustomers(q, 'quoted:USD', 'desc').map((r) => r.name)).toEqual(['Y', 'X']);
   });
-  it('lists the currencies present, known ones first', () => {
+  it('lists the currencies present in the company order, unknown ones last', () => {
     const rows = [c('A', { sales: { IRR: 1, XAU: 2 } }), c('B', { sales: { EUR: 1 } })];
-    expect(presentCurrencies(rows, 'sales')).toEqual(['IRR', 'EUR', 'XAU'].sort((a, b) => (a === 'XAU' ? 1 : b === 'XAU' ? -1 : 0)));
-    expect(presentCurrencies(rows, 'quoted')).toEqual([]);
+    const list = ['EUR', 'IRR'].map((code, position) => ({ code, name_fa: code, name_en: code, symbol: null, decimals: 0, active: true, position }));
+    expect(presentCurrencies(rows, 'sales', list)).toEqual(['EUR', 'IRR', 'XAU']);
+    expect(presentCurrencies(rows, 'quoted', list)).toEqual([]);
   });
   it('finds 1 Farvardin of this and last Persian year', () => {
     expect(persianYearStarts('2026-11-17')).toEqual({ yearStart: '2026-03-21', prevYearStart: '2025-03-21' });

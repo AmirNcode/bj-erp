@@ -414,6 +414,24 @@ export async function orderSalesStages(flowId: string, ids: string[]): Promise<W
   return { ok: true };
 }
 
+export async function saveSalesCurrency(code: string, patch: Patch): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_save_currency', { p_code: code, p: json(patch) });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
+export async function deleteSalesCurrency(code: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_delete_currency', { p_code: code });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
 export async function saveSalesSettings(patch: Patch): Promise<Write> {
   const c = await requireCaller();
   if (!c.ok) return c;

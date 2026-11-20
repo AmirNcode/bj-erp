@@ -161,6 +161,7 @@ function MoveDialog({ boot, record, move, onClose, onMoved }: { boot: Bootstrap;
 
 function ResultDialog({ boot, record, onClose, onMoved }: { boot: Bootstrap; record: RecordRow; onClose: () => void; onMoved: () => void }) {
   const t = useTranslations('sales');
+  const f = useSalesFormat();
   const { run, pending } = useRun();
   const [result, setResult] = useState<'won' | 'lost' | 'cancelled'>('won');
   const [winningBid, setWinningBid] = useState<number | null>(null);
@@ -183,7 +184,7 @@ function ResultDialog({ boot, record, onClose, onMoved }: { boot: Bootstrap; rec
           </Field>
           {result !== 'cancelled' ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t('field.winning_bid')} hint={record.currency ? t(`currency.${record.currency as 'IRR'}`) : undefined}>
+              <Field label={t('field.winning_bid')} hint={record.currency ? f.currencyLabel(record.currency) : undefined}>
                 <NumberInput value={winningBid} onChange={setWinningBid} />
               </Field>
               {result === 'lost' ? (

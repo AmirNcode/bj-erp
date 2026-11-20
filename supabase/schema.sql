@@ -3552,6 +3552,20 @@ end $$;
 
 
 --
+-- Name: sales_currency_ok(uuid, text, text); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_currency_ok(p_company uuid, p_code text, p_old text DEFAULT NULL::text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select p_code is null or p_code is not distinct from p_old
+      or exists (select 1 from public.sales_currencies c
+                  where c.company_id = p_company and c.code = p_code and c.active);
+$$;
+
+
+--
 -- Name: sales_customer(uuid, text, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -3687,7 +3701,7 @@ end $_$;
 CREATE FUNCTION private.sales_ensure(p_company uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $$
+    AS $_$
 declare v_bid uuid; v_contract uuid; v_pos integer;
 begin
   insert into public.sales_settings (company_id, doc_template)
@@ -3729,7 +3743,15 @@ begin
       (p_company, v_contract, 4, 'پایان‌یافته', 'Finish', 'done', 'finish'),
       (p_company, v_contract, 5, 'لغوشده', 'Cancel', 'cancelled', 'cancel');
   end if;
-end $$;
+  -- The company's currency list (FR-94 CEO feedback): today's five, managed in Settings afterwards.
+  insert into public.sales_currencies (company_id, code, name_fa, name_en, symbol, decimals, position) values
+    (p_company, 'IRR', 'ریال', 'Rial', null, 0, 1),
+    (p_company, 'EUR', 'یورو', 'Euro', '€', 2, 2),
+    (p_company, 'USD', 'دلار', 'US dollar', '$', 2, 3),
+    (p_company, 'AED', 'درهم', 'UAE dirham', null, 2, 4),
+    (p_company, 'CNY', 'یوان', 'Chinese yuan', null, 2, 5)
+    on conflict do nothing;
+end $_$;
 
 
 --
@@ -3994,7 +4016,7 @@ CREATE TABLE public.sales_rfps (
     import_batches uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     CONSTRAINT sales_rfps_bid_decision_check CHECK ((bid_decision = ANY (ARRAY['pending'::text, 'bid'::text, 'no_bid'::text]))),
     CONSTRAINT sales_rfps_bid_result_check CHECK ((bid_result = ANY (ARRAY['won'::text, 'lost'::text, 'cancelled'::text]))),
-    CONSTRAINT sales_rfps_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT sales_rfps_currency_check CHECK ((currency ~ '^[A-Za-z0-9]{1,10}$'::text)),
     CONSTRAINT sales_rfps_custom_check CHECK ((jsonb_typeof(custom) = 'object'::text)),
     CONSTRAINT sales_rfps_customer_ref_check CHECK ((char_length(customer_ref) <= 200)),
     CONSTRAINT sales_rfps_decision_reason_check CHECK ((char_length(decision_reason) <= 2000)),
@@ -9105,6 +9127,8 @@ begin
                  from public.profiles p where p.company_id = v_company and p.active),
     'roles', (select coalesce(jsonb_agg(jsonb_build_object('id', ro.id, 'name', ro.name) order by ro.name), '[]'::jsonb)
                 from public.roles ro where ro.company_id = v_company),
+    'currencies', (select coalesce(jsonb_agg((to_jsonb(c) - 'company_id') order by c.position, c.code), '[]'::jsonb)
+                     from public.sales_currencies c where c.company_id = v_company),
     'settings', (select to_jsonb(st) - 'company_id' from public.sales_settings st where st.company_id = v_company),
     'batches', case when private.sales_can('sales_settings') then
       (select coalesce(jsonb_agg(jsonb_build_object('id', b.id, 'file_name', b.file_name,
@@ -9285,6 +9309,26 @@ end $$;
 
 
 --
+-- Name: app_sales_delete_currency(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_delete_currency(p_code text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales_settings', 'edit');
+begin
+  perform 1 from public.sales_currencies where company_id = v_company and code = p_code for update;
+  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  if exists (select 1 from public.sales_rfps where company_id = v_company and currency = p_code)
+     or exists (select 1 from public.sales_bonds where company_id = v_company and currency = p_code) then
+    raise exception 'sales: in use' using errcode = '22023';
+  end if;
+  delete from public.sales_currencies where company_id = v_company and code = p_code;
+end $$;
+
+
+--
 -- Name: app_sales_delete_deadline(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9373,7 +9417,7 @@ end $_$;
 CREATE FUNCTION public.app_sales_import(p_file text, p_rows jsonb, p_fields jsonb DEFAULT '[]'::jsonb, p_people jsonb DEFAULT '{}'::jsonb) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
-    AS $_$
+    AS $$
 declare
   v_company uuid := private.sales_company('sales_settings', 'edit');
   v_flow uuid; v_batch uuid; v_row jsonb; v_num numeric; v_rec integer; v_created integer := 0;
@@ -9493,7 +9537,8 @@ begin
         description = coalesce(v_title, description),
         owner_id = coalesce(v_owner, owner_id),
         in_charge_text = coalesce(left(v_name, 200), in_charge_text),
-        currency = coalesce(case when v_row->>'currency' ~ '^[A-Z]{3}$' then v_row->>'currency' end, currency),
+        currency = coalesce(case when private.sales_currency_ok(v_company, nullif(v_row->>'currency', ''), currency)
+                                 then nullif(v_row->>'currency', '') end, currency),
         total_value = coalesce(case when v_prices and private.sales_num(v_row->>'total_value') >= 0
                                     then round(private.sales_num(v_row->>'total_value'), 2) end, total_value),
         order_date = coalesce(private.sales_date(v_row->>'order_date'), order_date),
@@ -9544,7 +9589,9 @@ begin
                   case when private.sales_num(v_b->>'percent') between 0 and 1 then private.sales_num(v_b->>'percent') end,
                   v_form,
                   case when private.sales_num(v_b->>'amount') >= 0 then round(private.sales_num(v_b->>'amount'), 2) end,
-                  case when v_row->>'currency' ~ '^[A-Z]{3}$' then v_row->>'currency' end,
+                  case when private.sales_currency_ok(v_company, nullif(v_row->>'currency', ''),
+                         (select x.currency from public.sales_rfps x where x.id = r.id))
+                       then nullif(v_row->>'currency', '') end,
                   private.sales_date(v_b->>'issued_on'), v_bstatus,
                   nullif(left(btrim(coalesce(v_b->>'note', '')), 2000), ''), true);
         end if;
@@ -9583,7 +9630,7 @@ begin
    where company_id = v_company;
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
     'skipped', v_skipped, 'skipped_rows', v_reasons);
-end $_$;
+end $$;
 
 
 --
@@ -10504,6 +10551,9 @@ begin
   end if;
   begin
     n := jsonb_populate_record(b, v_patch);
+    if not private.sales_currency_ok(v_company, n.currency, b.currency) then
+      raise exception 'sales: invalid input' using errcode = '22023';
+    end if;
     if p_id is null then
       insert into public.sales_bonds select n.*;
     else
@@ -10519,6 +10569,46 @@ begin
     'action', case when p_id is null then 'added' else 'changed' end));
   return n.id;
 end $$;
+
+
+--
+-- Name: app_sales_save_currency(text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_save_currency(p_code text, p jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare v_company uuid := private.sales_company('sales_settings', 'edit');
+  c public.sales_currencies; v_new boolean;
+begin
+  if p_code is null or p_code !~ '^[A-Za-z0-9]{1,10}$' or p is null or jsonb_typeof(p) <> 'object' then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+  select * into c from public.sales_currencies where company_id = v_company and code = p_code for update;
+  v_new := not found;
+  if v_new then
+    c.company_id := v_company; c.code := p_code; c.active := true; c.decimals := 0;
+    c.position := (select coalesce(max(position), 0) + 1 from public.sales_currencies where company_id = v_company);
+  end if;
+  begin
+    if p ? 'name_fa' then c.name_fa := btrim(p->>'name_fa'); end if;
+    if p ? 'name_en' then c.name_en := btrim(p->>'name_en'); end if;
+    if p ? 'symbol' then c.symbol := nullif(btrim(coalesce(p->>'symbol', '')), ''); end if;
+    if p ? 'decimals' then c.decimals := (p->>'decimals')::integer; end if;
+    if p ? 'active' then c.active := (p->>'active')::boolean; end if;
+    if p ? 'position' then c.position := (p->>'position')::integer; end if;
+    if v_new then
+      insert into public.sales_currencies select c.*;
+    else
+      update public.sales_currencies set name_fa = c.name_fa, name_en = c.name_en, symbol = c.symbol,
+        decimals = c.decimals, active = c.active, position = c.position
+       where company_id = v_company and code = p_code;
+    end if;
+  exception when others then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end;
+end $_$;
 
 
 --
@@ -10810,6 +10900,9 @@ begin
   exception when others then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  if not private.sales_currency_ok(v_company, v_new.currency, v_old.currency) then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
   if coalesce(btrim(v_new.title), '') = '' then
     raise exception 'sales: title required' using errcode = '22023';
   end if;
@@ -14907,7 +15000,7 @@ CREATE TABLE public.sales_bonds (
     imported boolean DEFAULT false NOT NULL,
     CONSTRAINT sales_bonds_amount_check CHECK ((amount >= (0)::numeric)),
     CONSTRAINT sales_bonds_bank_check CHECK ((char_length(bank) <= 200)),
-    CONSTRAINT sales_bonds_currency_check CHECK ((currency ~ '^[A-Z]{3}$'::text)),
+    CONSTRAINT sales_bonds_currency_check CHECK ((currency ~ '^[A-Za-z0-9]{1,10}$'::text)),
     CONSTRAINT sales_bonds_form_check CHECK ((form = ANY (ARRAY['bank'::text, 'safteh'::text, 'cheque'::text]))),
     CONSTRAINT sales_bonds_kind_check CHECK ((kind = ANY (ARRAY['bid'::text, 'performance'::text, 'advance_payment'::text]))),
     CONSTRAINT sales_bonds_note_check CHECK ((char_length(note) <= 2000)),
@@ -14916,6 +15009,34 @@ CREATE TABLE public.sales_bonds (
     CONSTRAINT sales_bonds_seq_check CHECK ((seq >= 1)),
     CONSTRAINT sales_bonds_status_check CHECK ((status = ANY (ARRAY['needed'::text, 'requested'::text, 'issued'::text, 'delivered'::text, 'released'::text, 'expired'::text, 'void'::text])))
 );
+
+
+--
+-- Name: sales_currencies; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_currencies (
+    company_id uuid NOT NULL,
+    code text NOT NULL,
+    name_fa text NOT NULL,
+    name_en text NOT NULL,
+    symbol text,
+    decimals integer DEFAULT 0 NOT NULL,
+    active boolean DEFAULT true NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    CONSTRAINT sales_currencies_code_check CHECK ((code ~ '^[A-Za-z0-9]{1,10}$'::text)),
+    CONSTRAINT sales_currencies_decimals_check CHECK (((decimals >= 0) AND (decimals <= 2))),
+    CONSTRAINT sales_currencies_name_en_check CHECK (((char_length(name_en) >= 1) AND (char_length(name_en) <= 40))),
+    CONSTRAINT sales_currencies_name_fa_check CHECK (((char_length(name_fa) >= 1) AND (char_length(name_fa) <= 40))),
+    CONSTRAINT sales_currencies_symbol_check CHECK (((symbol IS NULL) OR ((char_length(symbol) >= 1) AND (char_length(symbol) <= 6))))
+);
+
+
+--
+-- Name: TABLE sales_currencies; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.sales_currencies IS 'FR-94: company-managed currency list (display names, symbol, decimals). Functions only.';
 
 
 --
@@ -15832,6 +15953,14 @@ ALTER TABLE ONLY public.roles
 
 ALTER TABLE ONLY public.sales_bonds
     ADD CONSTRAINT sales_bonds_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sales_currencies sales_currencies_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_currencies
+    ADD CONSTRAINT sales_currencies_pkey PRIMARY KEY (company_id, code);
 
 
 --
@@ -17636,6 +17765,14 @@ ALTER TABLE ONLY public.sales_bonds
 
 
 --
+-- Name: sales_currencies sales_currencies_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_currencies
+    ADD CONSTRAINT sales_currencies_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
 -- Name: sales_customers sales_customers_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18689,6 +18826,12 @@ CREATE POLICY roles_select_auth_admin ON public.roles FOR SELECT TO supabase_aut
 ALTER TABLE public.sales_bonds ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: sales_currencies; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_currencies ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: sales_customers; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -19737,6 +19880,13 @@ REVOKE ALL ON FUNCTION private.sales_can(p_key text, p_level text) FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.sales_company(p_key text, p_level text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_currency_ok(p_company uuid, p_code text, p_old text); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_currency_ok(p_company uuid, p_code text, p_old text) FROM PUBLIC;
 
 
 --
@@ -20948,6 +21098,16 @@ GRANT ALL ON FUNCTION public.app_sales_delete_bond(p_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION app_sales_delete_currency(p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_delete_currency(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_delete_currency(p_code text) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_delete_currency(p_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_delete_currency(p_code text) TO service_role;
+
+
+--
 -- Name: FUNCTION app_sales_delete_deadline(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -21175,6 +21335,16 @@ REVOKE ALL ON FUNCTION public.app_sales_save_bond(p_rfp uuid, p_id uuid, p jsonb
 GRANT ALL ON FUNCTION public.app_sales_save_bond(p_rfp uuid, p_id uuid, p jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_save_bond(p_rfp uuid, p_id uuid, p jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_save_bond(p_rfp uuid, p_id uuid, p jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_save_currency(p_code text, p jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_save_currency(p_code text, p jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_save_currency(p_code text, p jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_save_currency(p_code text, p jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_save_currency(p_code text, p jsonb) TO service_role;
 
 
 --
@@ -22304,6 +22474,14 @@ GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 
 GRANT ALL ON TABLE public.sales_bonds TO postgres;
 GRANT ALL ON TABLE public.sales_bonds TO service_role;
+
+
+--
+-- Name: TABLE sales_currencies; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sales_currencies TO postgres;
+GRANT ALL ON TABLE public.sales_currencies TO service_role;
 
 
 --

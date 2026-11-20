@@ -63,7 +63,7 @@ function LedgerImport({ boot, existingNumbers }: { boot: Bootstrap; existingNumb
       const sheets = readXlsx(new Uint8Array(await file.arrayBuffer()));
       // The ledger sheet is the first one that has the Rec header.
       for (const sheet of sheets) {
-        const attempt = parseLedger(sheet.rows);
+        const attempt = parseLedger(sheet.rows, boot.currencies);
         if (attempt.ok) { out = attempt; break; }
       }
     } catch {

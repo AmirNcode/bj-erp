@@ -10,7 +10,7 @@ import { useTranslations } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { canEditKey } from '@/lib/sales/stagePages';
-import { CURRENCIES, type Bootstrap, type CustomValues, type RecordRow } from '@/lib/sales/types';
+import { type Bootstrap, type CustomValues, type RecordRow } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
 import { CustomerCombo } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useSalesFormat } from './parts';
@@ -85,6 +85,7 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
   fieldKey: string; boot: Bootstrap; record: RecordRow; draft: Draft; onChange: (next: Draft) => void;
 }) {
   const t = useTranslations('sales');
+  const f = useSalesFormat();
   const set = (k: string, v: unknown) => onChange({ ...draft, [k]: v });
   const testId = `sales-input-${key}`;
   const v = draft[key];
@@ -133,7 +134,7 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
       return (
         <Select value={str(v)} onChange={(x) => set(key, orNull(x))} testId={testId}>
           <option value="">—</option>
-          {CURRENCIES.map((c) => <option key={c} value={c}>{t(`currency.${c}`)}</option>)}
+          {f.currencyOptions(record.currency).map((c) => <option key={c.code} value={c.code}>{f.currencyLabel(c.code)}</option>)}
         </Select>
       );
     case 'delivery_method':
@@ -195,7 +196,7 @@ export function FieldText({ fieldKey: key, boot, record, value }: {
     case 'owner_id': return boot.people.find((p) => p.id === value)?.name ?? record.owner_name ?? '—';
     case 'buyer_kind': return t(`customerKind.${value as 'government'}`);
     case 'source': return t(`source.${value as 'email'}`);
-    case 'currency': return t(`currency.${value as 'IRR'}`);
+    case 'currency': return f.currencyLabel(String(value));
     case 'delivery_method': return t(`delivery.${value as 'hand'}`);
     case 'our_price': case 'winning_bid': case 'total_value': return f.money(value as number, record.currency);
     case 'validity_days': return t('daysCount', { days: value as number });

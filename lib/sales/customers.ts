@@ -6,7 +6,7 @@ import gregorian_en from 'react-date-object/locales/gregorian_en';
 import persian from 'react-date-object/calendars/persian';
 import persian_en from 'react-date-object/locales/persian_en';
 import { nameKey } from './inquiry';
-import { CURRENCIES, type CustomerFilters, type CustomerSummary, type ResultFilter } from './types';
+import { type Currency, type CustomerFilters, type CustomerSummary, type ResultFilter } from './types';
 
 export type CustomerSortKey =
   | 'name' | 'records' | 'open' | 'won' | 'lost' | 'no_bid' | 'archived'
@@ -20,12 +20,12 @@ function sortValue(r: CustomerSummary, key: CustomerSortKey): string | number | 
   return r[key as keyof CustomerSummary] as string | number | null;
 }
 
-/** Currencies present in the rows' `sales` or `quoted` sums: the known order first, others by code. */
-export function presentCurrencies(rows: CustomerSummary[], field: 'sales' | 'quoted'): string[] {
+/** Currencies present in the rows' `sales` or `quoted` sums: the company's order first, unknown codes by code. */
+export function presentCurrencies(rows: CustomerSummary[], field: 'sales' | 'quoted', currencies: Currency[]): string[] {
   const seen = new Set<string>();
   for (const r of rows) for (const cur of Object.keys(r[field] ?? {})) seen.add(cur);
-  const known = CURRENCIES.filter((c) => seen.has(c)) as string[];
-  const rest = [...seen].filter((c) => !(CURRENCIES as readonly string[]).includes(c)).sort();
+  const known = [...currencies].sort((a, b) => a.position - b.position).map((c) => c.code).filter((c) => seen.has(c));
+  const rest = [...seen].filter((c) => !currencies.some((x) => x.code === c)).sort();
   return [...known, ...rest];
 }
 

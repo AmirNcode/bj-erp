@@ -10,6 +10,8 @@
 
 import { toAsciiDigits } from '@/lib/employees/code';
 import { parseUserDate } from '@/lib/leave/parseUserDate';
+import { matchCurrency } from './money';
+import type { Currency } from './types';
 import type { Cell } from './xlsx';
 
 /** Template row 2: the ledger's own header text, in its order. */
@@ -188,13 +190,6 @@ function number(cell: Cell): number | null | undefined {
   return Number(cleaned);
 }
 
-const CURRENCY: Record<string, string> = {
-  euro: 'EUR', eur: 'EUR', '€': 'EUR', 'یورو': 'EUR',
-  dollar: 'USD', usd: 'USD', uds: 'USD', $: 'USD', 'دلار': 'USD',
-  rial: 'IRR', rials: 'IRR', irr: 'IRR', 'ریال': 'IRR',
-  aed: 'AED', dirham: 'AED', 'درهم': 'AED', cny: 'CNY', yuan: 'CNY', 'یوان': 'CNY',
-};
-
 function yesNo(value: string): boolean | undefined {
   const v = value.toLowerCase();
   if (/^(y|yes|بله|دارد)$/.test(v)) return true;
@@ -221,7 +216,7 @@ const isBlank = (row: Cell[]) => row.every((c) => text(c) === null);
  * first filled cell is "Rec". Rows without a usable Rec, and repeats of a Rec, are
  * errors and left out; anything else unreadable is a warning and that cell stays empty.
  */
-export function parseLedger(sheet: Cell[][]): LedgerParse {
+export function parseLedger(sheet: Cell[][], currencies: Currency[]): LedgerParse {
   const headerIndex = sheet.slice(0, 5).findIndex((row) => headerKey(row.find((c) => text(c) !== null) ?? null) === 'rec');
   if (headerIndex < 0) return { ok: false, reason: 'no_header' };
   const columns = mapColumns(sheet[headerIndex]);
@@ -347,7 +342,7 @@ export function parseLedger(sheet: Cell[][]): LedgerParse {
         }
         case 'currency': {
           if (value === null) break;
-          const code = CURRENCY[value.toLowerCase()] ?? (/^[A-Za-z]{3}$/.test(value) ? value.toUpperCase() : null);
+          const code = matchCurrency(value, currencies);
           if (code) row.currency = code;
           else warn(column.label, cell, 'bad_value');
           break;

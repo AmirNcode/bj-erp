@@ -15,6 +15,7 @@ import { getMessages, getTranslations } from 'next-intl/server';
 import { getCachedUser } from '@/lib/auth/context';
 import { PageHeader } from '../_components/PageHeader';
 import { loadSalesBootstrap } from './_components/load';
+import { SalesCurrenciesProvider } from './_components/parts';
 import { SalesTabs } from './_components/SalesTabs';
 import { NodeSearch } from './_components/NodeSearch';
 
@@ -33,7 +34,7 @@ export default async function SalesLayout({ children, params }: Props) {
       <div data-wide className="flex w-full flex-col gap-4">
         <PageHeader section title={t('title')} action={<NodeSearch />} />
         <SalesTabs reports={boot.caps.reports} settings={boot.caps.settings} />
-        {children}
+        <SalesCurrenciesProvider currencies={boot.currencies}>{children}</SalesCurrenciesProvider>
       </div>
     </NextIntlClientProvider>
   );

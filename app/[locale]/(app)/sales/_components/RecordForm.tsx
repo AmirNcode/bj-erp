@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { saveSalesRecord } from '@/lib/actions/sales';
-import { CURRENCIES, type Bootstrap, type CustomValues, type FlowKind, type RecordRow } from '@/lib/sales/types';
+import { type Bootstrap, type CustomValues, type FlowKind, type RecordRow } from '@/lib/sales/types';
 import { CustomerCombo } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useRun, useSalesFormat } from './parts';
 
@@ -187,7 +187,7 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
         <Field label={t('field.currency')}>
           <Select value={d.currency} onChange={(v) => set('currency', v)}>
             <option value="">—</option>
-            {CURRENCIES.map((c) => <option key={c} value={c}>{t(`currency.${c}`)}</option>)}
+            {f.currencyOptions(record?.currency).map((c) => <option key={c.code} value={c.code}>{f.currencyLabel(c.code)}</option>)}
           </Select>
         </Field>
         {bid ? (
