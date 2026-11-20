@@ -3,6 +3,7 @@
     "dismiss": "انصراف"
   },
   "nav": {
+    "goTo": "رفتن به {section}",
     "appName": "بهسازان جنوب",
     "primary": "ناوبری اصلی",
     "home": "خانه",

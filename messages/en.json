@@ -3,6 +3,7 @@
     "dismiss": "Cancel"
   },
   "nav": {
+    "goTo": "Go to {section}",
     "appName": "Behsazan Jonoob",
     "primary": "Primary",
     "home": "Home",
