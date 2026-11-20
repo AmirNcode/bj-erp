@@ -1935,7 +1935,7 @@
       },
       "sales_prices": {
         "label": "Sales prices",
-        "description": "Read: unit prices, our price, contract value, winning bid and past quotes. Edit: type them. Without this, prices never reach the person."
+        "description": "Read: unit prices, our total price, contract value, winning bid and past quotes. Edit: type them. Without this, prices never reach the person."
       },
       "sales_bonds": {
         "label": "Guarantees and payments",
@@ -2758,7 +2758,7 @@
       "proposal_due": "Proposal deadline",
       "quote_due": "Quote deadline",
       "bond_due": "Bond deadline",
-      "our_price": "Our price",
+      "our_price": "Our total price",
       "total_value": "Contract value",
       "winning_bid": "Winning bid",
       "winner_name": "Winner",
@@ -3234,7 +3234,7 @@
       "noPage": "This stage has no page of its own. Its required fields are below.",
       "noFields": "Nothing to fill in on this stage.",
       "bidSummary": "From the bid",
-      "pricedByItems": "Our price is the sum of the item prices (Pricing items).",
+      "pricedByItems": "Our total price is the sum of the item prices (Pricing items).",
       "on": "on {stage}",
       "changedHidden": "changed",
       "bidBondOpened": "Bid bond opened for finance",
