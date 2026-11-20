@@ -20,11 +20,12 @@ import type { Bootstrap, RecordDetail } from '@/lib/sales/types';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
 import { DEADLINE_TONE, useSalesFormat } from './parts';
 import { ActivityLog } from './ActivityLog';
+import { FilesTab } from './FilesTab';
 import { DeadlinesPanel } from './RecordPanels';
 import { StageBody, type DraftEntry } from './StageBody';
 import { StageNav } from './StageNav';
 
-type TabKey = 'deadlines' | 'activity';
+type TabKey = 'deadlines' | 'files' | 'activity';
 
 export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDetail }) {
   const t = useTranslations('sales');
@@ -86,6 +87,7 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: 'activity', label: t('recordTabs.activity') },
     { key: 'deadlines', label: t('recordTabs.deadlines'), count: openDeadlines.length },
+    { key: 'files', label: t('recordTabs.files'), count: detail.files.length },
   ];
 
   return (
@@ -122,7 +124,7 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
 
       {selected ? (
         <StageBody key={selected.id} boot={boot} detail={detail} stage={selected} stages={stages}
-          focusNode={focusNode} entry={drafts[selected.id]} onEntry={(e) => onEntry(selected.id, e)} />
+          focusNode={focusNode} onOpenFiles={() => setTab('files')} entry={drafts[selected.id]} onEntry={(e) => onEntry(selected.id, e)} />
       ) : null}
 
       <nav className={tabListClass} aria-label={t('recordTabs.label')}>
@@ -135,6 +137,7 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
         ))}
       </nav>
       {tab === 'deadlines' ? <DeadlinesPanel boot={boot} record={r} deadlines={detail.deadlines} /> : null}
+      {tab === 'files' ? <FilesTab boot={boot} detail={detail} /> : null}
       {tab === 'activity' ? <ActivityLog boot={boot} record={r} events={detail.events} /> : null}
     </div>
   );

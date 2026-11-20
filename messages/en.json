@@ -2826,7 +2826,8 @@
       "documents": "Documents",
       "finance": "Guarantees & payments",
       "deadlines": "Deadlines",
-      "activity": "Activity"
+      "activity": "Activity",
+      "files": "Files"
     },
     "move": {
       "intro": "Choose the next stage and who takes the record.",
@@ -2872,7 +2873,9 @@
       "finance_payment_added": "Payment added",
       "finance_payment_changed": "Payment changed",
       "finance_payment_removed": "Payment removed",
-      "item_product": "Product set to {product} on {code}"
+      "item_product": "Product set to {product} on {code}",
+      "file_add": "File <n>{name}</n> added",
+      "file_delete": "File <n>{name}</n> deleted"
     },
     "items": {
       "hint": "One row per item of this record. Open a row to add its parts. Numbers are given on save and never reused.",
@@ -3399,6 +3402,39 @@
       "deleteTitle": "Delete this product?",
       "deleteBody": "Only a product that no item uses can be deleted. Deactivate it instead to hide it from the picker.",
       "usedHint": "{count, plural, one {# item row uses this product.} other {# item rows use this product.}}"
+    },
+    "files": {
+      "hint": "Any file type, up to 50 MB each. Everyone who can see this record can download its files.",
+      "upload": "Upload files",
+      "empty": "No files yet.",
+      "drop": "Drop files here to upload",
+      "other": "Other",
+      "name": "File",
+      "size": "Size",
+      "uploader": "Uploaded by",
+      "date": "Date",
+      "download": "Download",
+      "dismiss": "Dismiss",
+      "uploading": "Uploading files",
+      "deleteTitle": "Delete file?",
+      "deleteBody": "The file {name} will be deleted and cannot be recovered.",
+      "receivedHint": "Upload the RFP documents in Files",
+      "receivedOpen": "Open Files",
+      "unit": {
+        "B": "B",
+        "KB": "KB",
+        "MB": "MB"
+      },
+      "error": {
+        "unauthorized": "Please sign in again.",
+        "forbidden": "You are not allowed to do this.",
+        "notFound": "The record or file was not found.",
+        "length": "The browser did not send the file size.",
+        "tooLarge": "The file is larger than 50 MB.",
+        "invalid": "This file cannot be uploaded.",
+        "empty": "The file is empty.",
+        "failed": "Upload failed. Try again."
+      }
     }
   }
 }

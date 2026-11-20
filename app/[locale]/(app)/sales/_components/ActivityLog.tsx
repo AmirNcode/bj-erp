@@ -45,6 +45,11 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
       case 'items':
         if (b.action === 'product') return t('event.item_product', { code: String(b.code ?? ''), product: String(b.product ?? '') });
         return b.action === 'columns' ? t('event.itemColumns') : t(`event.item_${String(b.action) as 'added' | 'changed' | 'removed'}`, { code: String(b.code ?? '') });
+      case 'file': {
+        const stage = boot.stages.find((s) => s.code === b.stage && s.flow_id === record.flow_id) ?? boot.stages.find((s) => s.code === b.stage);
+        const key = b.action === 'delete' ? 'event.file_delete' : 'event.file_add';
+        return <>{t.rich(key, { name: String(b.name ?? ''), n: (chunks) => <bdi className="font-medium">{chunks}</bdi> })}{stage ? <span className="text-muted-foreground"> · {f.stageName(stage)}</span> : null}</>;
+      }
       case 'finance': return t(`event.finance_${String(b.what) as 'guarantee' | 'payment'}_${String(b.action) as 'added' | 'changed' | 'removed'}`);
       default: {
         const changes = Array.isArray(b.changes) ? (b.changes as Change[]) : null;

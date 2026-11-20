@@ -22,11 +22,13 @@ import { StageFieldGrid, type Draft } from './StageFields';
 
 export type DraftEntry = { base: Draft; draft: Draft };
 
-export function StageBody({ boot, detail, stage, stages, focusNode, entry, onEntry }: {
+export function StageBody({ boot, detail, stage, stages, focusNode, entry, onEntry, onOpenFiles }: {
   boot: Bootstrap; detail: RecordDetail; stage: Stage; stages: Stage[]; focusNode: string | null;
   /** This stage's draft and the stored values it started from; undefined = untouched. */
   entry: DraftEntry | undefined;
   onEntry: (entry: DraftEntry) => void;
+  /** Switches the record to its Files tab (the Received page points there). */
+  onOpenFiles?: () => void;
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
@@ -83,6 +85,13 @@ export function StageBody({ boot, detail, stage, stages, focusNode, entry, onEnt
           <span className="text-muted-foreground">{t('field.bid_decision')}: </span>
           <span className="font-semibold" data-testid="sales-decision-value">{t(`decision.${r.bid_decision}`)}</span>
           {kind === 'closed' && r.bid_result ? <> · <span className="text-muted-foreground">{t('field.bid_result')}: </span><span className="font-semibold">{t(`result.${r.bid_result}`)}</span></> : null}
+        </p>
+      ) : null}
+
+      {kind === 'received' && onOpenFiles ? (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="sales-received-files-hint">
+          {t('files.receivedHint')}
+          <Button type="button" size="xs" variant="outline" onClick={onOpenFiles}>{t('files.receivedOpen')}</Button>
         </p>
       ) : null}
 
