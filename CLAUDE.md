@@ -11,7 +11,7 @@ database** spanning every department (HR, quality control, finance, procurement,
 manual, paper-based time-off process. Other client companies, if any, get **separate deploys on
 separate servers** (not one shared DB); focus now is this one company.
 
-**Status (2026-11-16):** Module #2 **ERP › Sales (FR-94)** built on branch `feat/erp-sales-module`, local only (spec `docs/specs/2026-11-16-sales-rfp-module-design.md`). HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed; SMS username + API key connection and PR #17 F4/F5 pushed 2026-11-16. Beyond v1: leave v2
+**Status (2026-11-20):** Module #2 **ERP › Sales (FR-94)** built on branch `feat/erp-sales-module`, local only (worktree `../bj-sales`; spec `docs/specs/2026-11-16-sales-rfp-module-design.md`). **In progress: CEO feedback round 1** (title link, currencies, Our total price, Products, record Files) — spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md` (tasks 0–9; progress in `docs/AGENT-LOG.md` top entry). HR → leave module live for testing on Liara; FR-92 (Manager negative balance) and FR-93 (lunch break not deducted from hourly leave) deployed; SMS username + API key connection and PR #17 F4/F5 pushed 2026-11-16. Beyond v1: leave v2
 (minutes, monthly accrual, hourly, replacement, serials), work + daily errands, signed approvals,
 Persian-only calendar, `hr` role, approval chain, reports, print, CSV import, org chart, bulk
 personnel import (add / update / replace), department-manager approval step. What shipped:
@@ -218,6 +218,12 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **`npm audit --omit=dev` is a CI gate** (`scripts/audit-gate.mjs`): a new advisory fails every deploy until upgraded (2026-11-16: next 16.4.3 → 16.4.6). Only an advisory with no fixed version may go on its `IGNORED` list, with a reason + a TASKS line (2026-11-18: picomatch GHSA-fc5q-39xc-vjpf).
 - **Test roles (FR-95): any `app_role` starting with `test-` (today `test-emp`) = `private.is_test_account`, which beats every other role** — own data only, no requests. A new function that lists colleagues or files on someone's behalf must check it.
 - **Own SMS mobile = `app_set_my_mobile` (FR-96), never the RLS update** (that needs `personal_info_own`). Profile is route tabs (`profile/layout.tsx`); language + password live on `/profile/account`, so e2e goes there.
+- **Sales branch works in worktree `/Users/amir/Workspace/bj-sales`** (main checkout stays on `main`). The `:3501` stack's DB (`bj-approvals-finance-db-1`, db `postgres`) already holds every Sales migration + main's; dry-run new Sales migrations on a clone of it, never on the DB itself until deploying the branch there.
+- **The `:3501` stack builds from the main checkout** (`.bj-deploy/approvals-finance/compose` does `cd /Users/amir/Workspace/bj`): to run the Sales branch there, build the app from `../bj-sales` (same project name/env/override files, absolute paths) — do not switch the main checkout's branch.
+- **Sales files (2026-11-20 spec): bytes on volume `sales-files` (`FILES_DIR`, `/data/files`), only through `lib/files/store.ts`; SQL `app_sales_file_*` owns every check; uploads are raw-body POST + `X-File-Name` (never `formData()`, it buffers); downloads always `attachment`.** `proxy.ts` skips `/api`, so file routes refresh the session themselves.
+- **Sales currencies come from `sales_currencies` (`boot.currencies`), never a constant; a code is permanent once used** (deactivate, don't delete). **Product defaults are copied into item rows on pick (`app_project_save_node`), never linked.**
+- **Sales View as = read-only transaction (writes fail `25006`); there is no `private.view_as_active()`.** Route handlers refuse writes when the `bj-view-as` cookie exists; client components use `useViewAs()`.
+- **New `sales_events` kinds need the `sales_events_kind_check` constraint re-created** and a case in `ActivityLog`.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

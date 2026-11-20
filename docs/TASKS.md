@@ -13,6 +13,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
+- ◐ **CEO feedback round 1** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Task 0 merge main ✓ · 1 title link ✓ · 2 Our total price ✓ · 3 currencies ◐ · 4 products ☐ · 5–8 files (DB, routes, UI, deploy/backup) ☐ · 9 e2e + docs ☐ · then update local `:3501` from the branch for owner testing; push to `main` only on the owner's word.
+- [ ] Owner (live-server check): confirm `rsync` exists on the Liara VM before the first deploy with Sales files (backup mirror needs it).
+- [ ] Watch Liara VM disk once files ship: `sales-files` volume + `/var/backups/bj-erp/files/` mirror.
+
 - [ ] **Owner re-imports the register once on :3501** (fixes the 6 Rial-in-EURO rows: 8894, 8902, 9098, 9958, 9965, 10384), then tests Name matching, sorting, metrics and filters.
 - [ ] **Owner tests the inquiry import (local :3501, migrations applied)**: Settings › Sales › Import › Inquiry register with the real `.csv`, then the ledger; Customers tab; merge a duplicate company.
 - [ ] **Client questions from the register check** (`erp-module/reports/Inquiry register - data issues.md`): what WINNER / LOSER mean (36 contracts have a LOSER price), Y / N in In-charge, Date = arrival?, two companies in one cell, Request No. vs project name, Inquiry No. channel values, Tender/Project values, "در ادامه رکورد …" links, Rial units, contact phone numbers.

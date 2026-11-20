@@ -78,6 +78,32 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-20 — ERP › Sales: CEO feedback round 1 (in progress)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead) + Sonnet 5.5 subagents per task, Opus reviewer for the plan
+**Branch / HEAD at start:** `feat/erp-sales-module` @ 4f61405 (18 behind main), worktree `/Users/amir/Workspace/bj-sales`
+**Trigger:** CEO feedback: clickable page title, currencies in Settings, "Our total price", per-record Files by stage, Products page with column templates for items.
+
+**Decisions (owner, in chat)** — recorded in the spec §10: files on Liara VM disk (Docker volume; S3 later maybe), separate Files tab grouped by stage, 50 MB / any type / uploader or Sales-settings holder deletes, **no price restriction on files**, products = columns + defaults copied on pick, currencies free codes (add/rename/hide), title link in every section styled as a button, "Our total price" everywhere.
+Lead calls (spec §11 + plan): files grouped across every flow the record was in; stage with files can't be deleted; currency decimals 0–2 display only; file backup = one rsync mirror, deleted kept 30 days; raw-body upload (not multipart); FR-95 test accounts blocked in `private.sales_can` (Task 5 migration).
+
+**What changed so far**
+- Spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md` (builder-checked by a subagent) + plan `docs/plans/2026-11-20-sales-ceo-feedback.md` (reviewed and edited by an Opus subagent: View as = read-only tx, real cap names, `sales_events_kind_check`, `sales_ensure` seeding, raw-body upload, deploy-test harness) — commit 4cf20ff.
+- Task 0: merged `main` (1d8eb0e); conflicts only in CLAUDE.md gotchas + this log (kept both). Migration order check: `deploy/lib/migrations.sh` applies unrecorded files by name and accepts older names; main's 11-18/19 migrations touch no Sales function → no renames.
+- Task 1 (6816a0f): `lib/nav/sectionFor.ts`, `MobileTopBar` title = bordered link with chevron. Task 2 (91687d0): "Our total price" / «قیمت کل ما» in messages.
+- Task 3 currencies: running (see the next entry/commits).
+
+**Actions outside the repo**
+- `git worktree add ../bj-sales feat/erp-sales-module`; node_modules copied (`cp -Rc`).
+- SQL tests run only on throwaway clones of the `:3501` DB (`bj-approvals-finance-db-1`, db `postgres`), helper `sqltest.sh` in the session scratchpad (clone → apply migrations → run tests → drop). No migration applied to any real DB yet.
+
+**Verification**
+- After merge: tsc 0 · lint 0 · unit 145 files / 1493 pass · `tests/sql/sales*.sql` 5/5 PASS on a clone. After Tasks 1–2: unit 1498 pass (subagent report; lead reviewed the diff).
+
+**State left behind / how to resume**
+- Continue the plan from the first unchecked task in `docs/TASKS.md` (Sales › CEO feedback line). Each task: implement in `../bj-sales`, test on a clone, commit locally (owner OK'd local commits; never push).
+- When all tasks are done: update the `:3501` stack from the branch (pg_dump its DB first, apply new migrations, sync View-as hook, rebuild app from `../bj-sales`, restart rest, add the `sales-files` volume) and hand to the owner. Push to `main` (deploys to Liara) only when the owner says so.
+
 ## 2026-11-19 — Profile › Mobile for SMS: edit-in-place number + recent texts
 
 **Agent:** Claude Opus 5.5 via Claude Code
