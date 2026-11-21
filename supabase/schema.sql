@@ -1546,6 +1546,8 @@ begin
        where x.employee_id = r.employee_id and x.id <> r.id
          and x.status in ('pending', 'approved')
          and x.start_date <= p_end and x.end_date >= p_start
+         and not (x.kind = 'leave' and x.unit = 'hour' and r.kind = 'errand')
+         and not (r.kind = 'leave' and p_unit = 'hour' and x.kind = 'errand')
          and (x.unit = 'day' or p_unit = 'day'
               or (x.start_time < p_end_time and x.end_time > p_start_time))
     ) or (r.kind = 'errand' and p_unit = 'day'
@@ -1937,6 +1939,7 @@ CREATE FUNCTION private.extension_overlaps(p_request uuid, p_employee uuid, p_st
       select 1 from public.leave_requests r
        where r.employee_id = p_employee and r.id <> p_request
          and r.status in ('pending', 'approved')
+         and not (r.kind = 'leave' and r.unit = 'hour')
          and r.start_date <= p_end and r.end_date >= p_start)
     or exists (
       select 1 from public.errand_extensions e
@@ -1966,6 +1969,8 @@ begin
     and not private.request_step_decided(p_id,s.id,'approved')) then return false; end if;
   if exists (select 1 from public.leave_requests lr where lr.employee_id=r.employee_id and lr.id<>r.id
     and lr.status='approved' and lr.start_date<=r.end_date and lr.end_date>=r.start_date
+    and not (lr.kind = 'leave' and lr.unit = 'hour' and r.kind = 'errand')
+    and not (r.kind = 'leave' and r.unit = 'hour' and lr.kind = 'errand')
     and (lr.unit='day' or r.unit='day' or (lr.start_time<r.end_time and lr.end_time>r.start_time))) then
     raise exception 'overlapping approved leave exists' using errcode='22023'; end if;
   if r.replacement_id is not null and private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,
@@ -5338,6 +5343,8 @@ begin
        and r.status in ('pending', 'approved')
        and r.start_date <= p_end
        and r.end_date >= p_start
+       and not (r.kind = 'leave' and r.unit = 'hour' and p_kind = 'errand')
+       and not (p_kind = 'leave' and p_unit = 'hour' and r.kind = 'errand')
        and (
          r.unit = 'day' or p_unit = 'day'
          or (r.start_time < p_end_time and r.end_time > p_start_time)

@@ -851,10 +851,7 @@ not blocked by a boundary — while the 4h/day cap still governs the total. **Ac
 am/pm half-day plus an hourly request on the same date is refused, because am/pm is stored as
 `unit='day'`. Mirrored in `lib/leave/hourly.ts` (`rangesOverlap`, 17 unit tests).
 
-**Errands reuse the same rule.** Hourly errands are `unit='hour'`, so adjacent slots remain free.
-Daily errands are `unit='day'`, so they occupy each whole date in their range and conflict with any
-intersecting daily or hourly leave/errand. This satisfies FR-30 and FR-33 without a second overlap
-algorithm.
+**Hourly personal leave and work trips:** A daily or hourly errand may coincide with hourly personal leave in either filing order, including overlapping hours. For all other pairs the interval rules above apply.
 
 **Checked 2026-07-30, no change needed:** `approve_leave_request`'s overlap re-check is already
 time-aware and mirrors the submit rule. The date-only version that appears in

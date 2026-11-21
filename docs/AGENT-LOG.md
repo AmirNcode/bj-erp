@@ -78,6 +78,89 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-21 — Release hourly leave and Finance exports
+
+Owner confirmed local testing and requested the main-branch deployment. Finance component suite passed all 14 tests. Selected only the work-trip and Finance export changes for release.
+
+## 2026-11-21 — Hourly personal leave and work trips on port 3501
+
+**Agent:** Codex on main at 96da80b. Owner requested local implementation.
+
+Updated submission, final approval, edit and extension overlap rules in migration 20261121170000 and schema.sql. Updated requirements, data model and changelog. Extended tests/sql/lunch-break.sql with approved hourly leave followed by either trip type. Disposable database setup initially hit an existing public schema, then caught excess DDL in the draft migration. Corrected both before applying. The regression suite passed on the disposable local clone. Applied the migration and checksum atomically to bj-approvals-finance-db-1. Port 3501 returned healthy. No signed-in browser test. Uncommitted, local only.
+
+## 2026-11-21 — Switching a same-day trip to hourly
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner asked about redirecting the requester to the hourly trip form when hourly leave exists.
+
+**What changed:** Recommended offering the switch on single-day trips. Daily classification lets HR handle per diem and travel bookings later.
+
+**Actions outside the repo:** None.
+
+**Verification:** Checked FR-61 and FR-70 in `docs/REQUIREMENTS.md`. Advisory session, no tests run.
+
+**State left behind:** Proposal only. Journal entry uncommitted.
+
+**For the next agent:** If approved, preserve shared draft fields on switch and ask for actual trip times.
+
+## 2026-11-21 — Date-only daily trip proposal
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner asked whether hourly personal leave and a daily work trip could share a date with the existing form.
+
+**What changed:** Recommended allowing that specific pair in either filing order. HR would see the trip date and the recorded leave minutes. This revises the earlier suggestion to collect trip times.
+
+**Actions outside the repo:** None.
+
+**Verification:** Discussion only. No application changes or test run.
+
+**State left behind:** Recommendation awaiting a decision, journal entry uncommitted.
+
+**For the next agent:** If approved, apply the exception consistently across submission, approval, edits and trip extensions.
+
+## 2026-11-21 — Hourly leave and a same-day work trip
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** HR reported that an approved 30-minute morning leave blocked a daily work trip later that day.
+
+**What changed**
+- Recorded a policy recommendation for HR review. Allow a daily trip to record departure and return times on partial travel days. Use those times to check conflicts and report trip duration, while preserving the separate leave record.
+
+**Actions outside the repo**
+- None.
+
+**Verification**
+- Read FR-33, FR-57, FR-61, the errand duration rules and the submission and final approval checks in `supabase/schema.sql`. The current daily unit occupies the entire date. Tests were not run for this advisory session.
+
+**State left behind**
+- Journal entry only, uncommitted. HR policy decision pending.
+
+**For the next agent**
+- Confirm how HR awards per diem for partial travel days before implementation. Cover both filing orders, edits and extensions.
+
+## 2026-11-21 — Finance CSV and Excel downloads on port 3501
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner approved the format picker and requested a local deployment.
+
+**What changed** — FinanceList now offers a bilingual dialog and exports the same filtered, sorted rows to CSV or a typed Excel worksheet using the existing Sales writer. The download helpers share the blob-saving code. Updated messages, Finance component tests and changelog.
+
+**Local deployment** — Both checkouts had HEAD `96da80b`. Rebuilt the updated main checkout using `.bj-deploy/approvals-finance/compose up -d --no-deps --build app`. Only the local app container was recreated.
+
+**Verification** — 20 focused tests passed (Finance, XLSX and CSV), TypeScript and targeted lint passed, Docker production build succeeded. Local gateway health returned OK and both Finance URLs reached sign-in. Desktop Excel and the signed-in local page were not exercised.
+
+## 2026-11-21 — Finance export format assessment
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner requested an estimate for offering CSV and XLSX from one Finance export dialog.
+
+Reviewed the Finance CSV row builder, the shared dialog, and the Sales workbook writer and its tests. Both formats can share one row builder and download locally. The worksheet should retain numeric amounts and durations and text identifiers and Jalali dates. Assessment only. No application changes, tests, or external actions.
+
 ## 2026-11-20 — ERP › Sales: CEO feedback round 1 (built; owner testing on :3501)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead, reviewed every diff) + Sonnet 5.5 subagents per task; Opus subagents for the spec builder-check and the plan review

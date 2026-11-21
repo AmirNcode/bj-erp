@@ -191,4 +191,19 @@ update public.work_settings set lunch_minutes=0 where company_id=pg_temp.fx('com
 select pg_temp.expect('lunch_minutes 0: 12:00-15:00 counts 3h', pg_temp.mins(pg_temp.subt('emp',13,'12:00','15:00')),'180');
 select pg_temp.expect('lunch_minutes 0: 13:00-14:00 counts 1h', pg_temp.mins(pg_temp.subt('emp',14,'13:00','14:00')),'60');
 
+-- Approved personal leave may coexist with either trip form, even during the same hours.
+select pg_temp.mk('morning','emp',19,'08:00','08:30');
+select pg_temp.expect('approve morning leave',pg_temp.approve('morning'),'ok');
+insert into lb_fx values ('daily-trip',pg_temp.as_scalar('emp',format(
+  'select public.submit_daily_errand_request_v2(%L,%L,''Site'',%L,true)',
+  pg_temp.d(19),pg_temp.d(19),pg_temp.sig()))::uuid);
+select pg_temp.expect('approve daily trip after hourly leave',pg_temp.approve('daily-trip'),'ok');
+select pg_temp.mk('morning2','emp',20,'08:00','08:30');
+select pg_temp.expect('approve second morning leave',pg_temp.approve('morning2'),'ok');
+insert into lb_fx values ('hourly-trip',pg_temp.as_scalar('emp',format(
+  'select public.submit_errand_request_v2(%L,''08:15'',''09:00'',''Site'',%L,true)',
+  pg_temp.d(20),pg_temp.sig()))::uuid);
+select pg_temp.expect('approve overlapping hourly trip',pg_temp.approve('hourly-trip'),'ok');
+select pg_temp.expect('leave keeps 30 minutes',pg_temp.mins(pg_temp.fx('morning')::text),'30');
+
 rollback;

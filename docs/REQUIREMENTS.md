@@ -115,7 +115,7 @@ Validation/release status stays in `docs/TASKS.md`.
   and an optional description. It is work rather than leave: it has no leave type, replacement, or
   balance effect; may include weekends/holidays; uses the existing errand tracking sequence; and
   follows the same signed request and signed manager/admin approval flow as hourly work errands.
-  Any overlapping leave or errand conflicts in both directions. *(2026-08-05.)*
+  Daily and hourly work errands may coincide with hourly personal leave in either filing order. Other overlapping requests conflict. *(2026-08-05.)*
 
 - **FR-36** ☑ **Configurable approval chain.** A request requires satisfaction of every applicable
   **active step** configured for its kind, not a single decision. Steps ship seeded as

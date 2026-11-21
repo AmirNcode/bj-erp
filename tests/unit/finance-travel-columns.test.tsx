@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readXlsx } from '@/lib/sales/xlsx';
 import en from '@/messages/en.json';
 import { FinanceList } from '@/app/[locale]/(app)/finance/FinanceList';
 import type { FinanceRow } from '@/lib/actions/finance';
@@ -63,12 +64,32 @@ describe('finance: travel costs (FR-70)', () => {
     expect(screen.getByTestId('finance-approved-total').textContent).toContain('600,000');
   });
 
+  it('downloads filtered worksheet rows with numeric costs and literal identifiers and locations', async () => {
+    const save = vi.fn<(blob: Blob) => string>().mockReturnValue('blob:x');
+    URL.createObjectURL = save;
+    URL.revokeObjectURL = vi.fn();
+    renderList([{ ...base, personnel_no: '00123', errand_location: '=1+1' }, cancelled]);
+    fireEvent.change(screen.getByTestId('finance-search'), { target: { value: '00123' } });
+    fireEvent.click(screen.getByTestId('finance-export'));
+    expect(save).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Excel Worksheet (.xlsx)' }));
+    const blob = save.mock.calls[0][0];
+    expect(blob.type).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const [sheet] = readXlsx(new Uint8Array(await blob.arrayBuffer()));
+    expect(sheet.rows).toHaveLength(2);
+    const row = sheet.rows[1];
+    expect(row[1]).toBe('00123');
+    expect(row.slice(10, 14)).toEqual([2, 0, '=1+1', 500000]);
+    expect(row.slice(16, 20)).toEqual([3000000, 2000000, null, 5500000]);
+  });
+
   it('the CSV carries the travel columns', async () => {
     let blob: Blob | null = null;
     URL.createObjectURL = vi.fn((b: Blob) => { blob = b; return 'blob:x'; }) as never;
     URL.revokeObjectURL = vi.fn();
     renderList([base, cancelled]);
     fireEvent.click(screen.getByTestId('finance-export'));
+    fireEvent.click(screen.getByRole('button', { name: 'CSV (.csv)' }));
     await waitFor(() => expect(blob).not.toBeNull());
     const text = await (blob as unknown as Blob).text();
     const [header, first, second] = text.replace(/^﻿/, '').split(/\r?\n/);
@@ -136,6 +157,7 @@ describe('finance: approved and pending sections', () => {
     URL.revokeObjectURL = vi.fn();
     renderList([pendingErrand, unbooked]);
     fireEvent.click(screen.getByTestId('finance-export'));
+    fireEvent.click(screen.getByRole('button', { name: 'CSV (.csv)' }));
     await waitFor(() => expect(blob).not.toBeNull());
     const text = await (blob as unknown as Blob).text();
     const [, first, second] = text.replace(/^﻿/, '').split(/\r?\n/);

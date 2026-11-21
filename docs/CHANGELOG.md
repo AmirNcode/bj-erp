@@ -9,6 +9,10 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+- Employees can submit daily and hourly work trips on dates with hourly personal leave, including overlapping hours.
+
+- Finance now offers CSV and Excel Worksheet downloads for the filtered requests. The worksheet keeps personnel numbers as text and costs and durations as numbers.
+
 ### ERP › Sales: CEO feedback round 1 (FR-94) — 2026-11-20, branch `feat/erp-sales-module`
 
 - **Section title is a button** (phones, every section): tapping it goes to that section's main page (ERP on a record → the records list).
