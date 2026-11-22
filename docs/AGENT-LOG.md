@@ -78,6 +78,12 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Full-width employee editor tabs
+
+Codex on `codex/employee-edit-tabs` from `57e67c51`. Implemented the owner-approved Personal Information, Time Off Details and Account tabs, separate saves, retained drafts and temporary-password copying. Applied the page-width convention to Admin Panel, Profile and Settings and recorded it in DESIGN.md.
+
+TypeScript, targeted lint and 1,547 unit tests passed (five skipped). The Browser plugin was unavailable. Playwright checked the editor with synthetic data on English desktop and Persian mobile, including draft retention, field validation, isolated Save requests, copying the returned reset password and horizontal overflow. Save and reset responses were mocked. The ordinary Farsi preview URL hit a redirect loop on loopback, so the mobile check used a temporary direct-locale fixture. Signed-in database actions were not exercised. No production actions.
+
 ## 2026-11-22 — Implemented SMS password recovery and delegated resets
 
 Codex, branch `codex/sms-password-recovery` from `2790540`. Implemented the approved Persian and English recovery flow, masked mobile confirmation, database throttling, phone-change invalidation and opt-in role permission. Added migration `20261122175225_employee_password_recovery.sql`. HR retains existing mobile-edit access. Single-person reset and manual sign-out have independent authorization.

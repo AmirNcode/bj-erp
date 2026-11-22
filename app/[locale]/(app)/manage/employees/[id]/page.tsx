@@ -19,8 +19,7 @@ import { can, type Perms } from '@/lib/permissions/catalog';
 import { PageHeader } from '../../../_components/PageHeader';
 import { EditEmployeeForm } from './EditEmployeeForm';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
-import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { getSpecialLeaveGrants } from '@/lib/actions/specialLeave';
 import { SpecialLeaveCard } from './SpecialLeaveCard';
 import { PersonnelNoDialog } from './PersonnelNoDialog';
@@ -175,10 +174,9 @@ export default async function EditEmployeePage({ params }: Props) {
   const personalInfoRes = caps.personalInfo ? await getPersonalInfo(id) : null;
   // FR-65: special_leave edit holders grant extra leave for marriage / a death in the family.
   const specialLeaveRes = caps.specialLeave ? await getSpecialLeaveGrants(id) : null;
-  const tPi = await getTranslations('personalInfo');
 
   return (
-    <main className="p-6 max-w-2xl mx-auto space-y-6">
+    <div data-wide className="w-full space-y-5">
       <PageHeader
         title={t('employees.editTitle')}
         action={
@@ -193,18 +191,6 @@ export default async function EditEmployeePage({ params }: Props) {
           )
         }
       />
-      {photoRes?.ok && (
-        <Card data-testid="employee-photo">
-          <CardContent className="pt-4">
-            <ProfilePhotoCard
-              employeeId={id}
-              name={employee.full_name}
-              initial={photoRes.photo}
-              mode={isSelf ? 'self' : 'hr'}
-            />
-          </CardContent>
-        </Card>
-      )}
       <EditEmployeeForm
         employee={employee}
         allRoles={allRoles}
@@ -221,31 +207,29 @@ export default async function EditEmployeePage({ params }: Props) {
         typeDefaults={typeDefaults ?? []}
         accrualStartMonth={accrualStartMonth}
         locale={locale}
+        photo={photoRes?.ok ? (
+          <Card data-testid="employee-photo">
+            <CardContent className="pt-4">
+              <ProfilePhotoCard
+                employeeId={id}
+                name={employee.full_name}
+                initial={photoRes.photo}
+                mode={isSelf ? 'self' : 'hr'}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
+        personalInfo={personalInfoRes?.ok ? personalInfoRes.info : null}
+        specialLeave={specialLeaveRes?.ok ? (
+          <SpecialLeaveCard
+            employeeId={id}
+            grants={specialLeaveRes.grants}
+            // undefined = unreadable (no personal_info read): Marriage stays offered
+            // and the RPC refuses a non-single target itself (R3 ruling).
+            maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : undefined}
+          />
+        ) : null}
       />
-      {personalInfoRes?.ok && (
-        <Card data-testid="employee-personal-info">
-          <CardHeader className="border-b pb-4">
-            <CardTitle>{tPi('title')}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <PersonalInfoForm
-              employeeId={id}
-              initial={personalInfoRes.info}
-              readOnly={caps.personalInfo === 'view'}
-              readOnlyReason={caps.lockedReason === 'self' ? 'self' : 'admin'}
-            />
-          </CardContent>
-        </Card>
-      )}
-      {specialLeaveRes?.ok && (
-        <SpecialLeaveCard
-          employeeId={id}
-          grants={specialLeaveRes.grants}
-          // undefined = unreadable (no personal_info read): Marriage stays offered
-          // and the RPC refuses a non-single target itself (R3 ruling).
-          maritalStatus={personalInfoRes?.ok ? (personalInfoRes.info.marital_status ?? null) : undefined}
-        />
-      )}
-    </main>
+    </div>
   );
 }

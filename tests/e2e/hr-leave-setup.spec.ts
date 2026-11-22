@@ -67,6 +67,7 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   // ── 3. It actually landed — read it back on the edit screen ───────────────
   await page.goto(`/en/manage/employees?q=${pno}`);
   await page.locator('tr', { hasText: pno }).first().locator('a[href*="/manage/employees/"]').click();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="policy-section"]')).toBeVisible();
   await expect(page.locator('[data-testid="policy-rate-annual"]')).toHaveValue('2');
@@ -74,7 +75,7 @@ test('hr sets an opening balance and accrual policy when adding an employee', as
   // ── 4. HR may EDIT the balance too, not only set it once ──────────────────
   await openLeaveSections(page);
   await page.fill('[data-testid="balance-days-annual"]', '15');
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(page.locator('[data-testid="balance-days-annual"]')).toHaveValue('15', {
@@ -96,6 +97,7 @@ test('hr is refused when editing their own record', async ({ page }) => {
     .first()
     .locator('a[href*="/manage/employees/"]')
     .click();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
 
   // HR reads their own record like anyone else's, but the leave fields are locked:
