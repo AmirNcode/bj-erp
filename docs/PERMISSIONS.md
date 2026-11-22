@@ -408,7 +408,7 @@ or print read through the same request scope. A named approver does not need bro
   are exposed for explicit review. Full contract: `docs/plans/approval-delegation-rpc-contract.md`.
 
 **Deferred credential/session risk:** the owner explicitly deferred hardening. Account creators may
-retain issued credentials; password reset does not revoke existing sessions. Such access can
+retain issued credentials. Password resets now revoke the target’s sessions. Such access can
 impersonate a principal/delegate despite valid SQL authority checks. This remains disclosed residual
 risk, not a new activation gate. Single-person resets follow the Password recovery rules above.
 

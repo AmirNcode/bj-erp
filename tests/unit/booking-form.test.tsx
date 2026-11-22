@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import en from '@/messages/en.json';
@@ -130,12 +130,13 @@ describe('procurement booking form (FR-70, FR-73)', () => {
     })));
   });
 
-  it('adds a stay starting where the last ended, and removes it', () => {
+  it('adds a stay starting where the last ended, and removes it', async () => {
     renderForm();
     fireEvent.click(screen.getByTestId('stay-add'));
     expect(screen.getByTestId('stay-1')).toBeTruthy();
     // The first stay already ends on the trip's last day, so the new one has no check-out yet.
-    expect((screen.getByTestId('stays-1-check_out').querySelector('input') as HTMLInputElement).value).toBe('');
+    const checkout = await within(screen.getByTestId('stays-1-check_out')).findByRole<HTMLInputElement>('textbox');
+    expect(checkout.value).toBe('');
     expect(screen.getByText('Stay 2')).toBeTruthy();
     fireEvent.click(screen.getByTestId('stay-1-remove'));
     expect(screen.queryByTestId('stay-1')).toBeNull();

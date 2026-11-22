@@ -4636,6 +4636,21 @@ begin
       continue;
     end if;
     select * into s from private.sms_settings where company_id = o.company_id;
+    -- Providers can echo the submitted text in any free-form field. Retain only
+    -- the numeric response codes needed for classification of password texts.
+    if o.event = 'password_reset' then
+      begin v_json := resp.content::jsonb; exception when others then v_json := null; end;
+      if v_json ? 'RetStatus' then
+        resp.content := jsonb_build_object(
+          'RetStatus', case when v_json->>'RetStatus' ~ '^[0-9]{1,4}$' then v_json->>'RetStatus' end,
+          'Value', case when v_json->>'Value' ~ '^-?[0-9]{1,24}$' then v_json->>'Value' end
+        )::text;
+      else
+        resp.content := jsonb_build_object('recId',
+          case when v_json->>'recId' ~ '^[0-9]{6,24}$' then v_json->>'recId' end)::text;
+      end if;
+      if resp.error_msg is not null then resp.error_msg := 'password SMS transport error'; end if;
+    end if;
     insert into private.sms_outbox_events (outbox_id, kind, attempt, http_status, timed_out, error, response)
     values (o.id, 'reply', o.attempts, resp.status_code, resp.timed_out,
             private.sms_scrub(resp.error_msg, s.api_key), private.sms_scrub(resp.content, s.api_key));
@@ -4674,8 +4689,8 @@ begin
    exception when others then
     -- F5: one unreadable reply must not stop every other text. It may have been sent: no retry.
     get stacked diagnostics v_err = message_text;
-    perform private.sms_fail(o.id, 'could not read the reply: '
-      || private.sms_scrub(v_err, (select k.api_key from private.sms_settings k where k.company_id = o.company_id), 300), false);
+    perform private.sms_fail(o.id, case when o.event = 'password_reset' then 'could not read password SMS reply'
+      else 'could not read the reply: ' || private.sms_scrub(v_err, (select k.api_key from private.sms_settings k where k.company_id = o.company_id), 300) end, false);
    end;
   end loop;
 
@@ -4807,7 +4822,8 @@ begin
    exception when others then
     -- F5: this row failed before anything was sent (the block's pg_net request is rolled back too).
     get stacked diagnostics v_err = message_text;
-    perform private.sms_fail(o.id, 'could not send: ' || private.sms_scrub(v_err, s.api_key, 300), false);
+    perform private.sms_fail(o.id, case when o.event = 'password_reset' then 'could not send password SMS'
+      else 'could not send: ' || private.sms_scrub(v_err, s.api_key, 300) end, false);
     update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
      where id = o.id and event = 'password_reset';
    end;
@@ -7571,7 +7587,7 @@ begin
     join private.recovery_requests q on q.employee_id=i.employee_id
     where q.id=p_request and q.created_at >= now()-interval '10 minutes' for update of i;
   select * into r from private.recovery_requests where id=p_request for update;
-  if not found or r.created_at < now()-interval '10 minutes' or r.attempts >= 5 or r.issued_at is not null then return; end if;
+  if not found or r.created_at < clock_timestamp()-interval '10 minutes' or r.attempts >= 5 or r.issued_at is not null then return; end if;
   update private.recovery_requests set attempts=attempts+1 where id=r.id;
   if r.mobile is null or r.mobile is distinct from private.normalize_ir_mobile(left(p_mobile,64)) then return; end if;
 
@@ -7605,6 +7621,9 @@ begin
     on conflict(employee_id) do update set password_fingerprint=excluded.password_fingerprint,outbox_id=excluded.outbox_id;
   update private.recovery_requests set issued_at=clock_timestamp() where id=r.id;
   insert into public.audit_log(action,entity,entity_id) values('password_recovery','auth.users',p.id);
+exception when others then
+  -- PostgREST includes DETAIL, which can contain the entire rejected outbox row.
+  raise exception 'recovery unavailable';
 end $$;
 
 
@@ -12959,7 +12978,6 @@ begin
   hint := '09•••••••' || lpad((get_byte(code_key,0) % 100)::text, 2, '0');
   perform pg_advisory_xact_lock(hashtextextended(encode(source_key,'hex'), 0));
   perform pg_advisory_xact_lock(hashtextextended(encode(code_key,'hex'), 1));
-  delete from private.recovery_requests where created_at < now() - interval '2 hours';
   if (select count(*) from private.recovery_requests r where r.source_key = lookup.source_key
         and r.created_at > now()-interval '10 minutes') >= 30
      or (select count(*) from private.recovery_requests r where r.code_key = lookup.code_key
@@ -12968,10 +12986,14 @@ begin
   end if;
   select p.id, private.normalize_ir_mobile(i.mobile) into target, mobile
     from public.profiles p join public.employee_personal_info i on i.employee_id=p.id
-    where lower(p.employee_code)=code and p.active and not private.is_admin(p.id);
+    where lower(p.employee_code)=code and p.active and not private.is_admin(p.id)
+    for share of i;
   if mobile is not null then hint := left(mobile,2) || '•••••••' || right(mobile,2); end if;
   insert into private.recovery_requests(id,source_key,code_key,employee_id,mobile)
     values(request_id,source_key,code_key,target,mobile);
+  delete from private.recovery_requests where id in (
+    select r.id from private.recovery_requests r where r.created_at < now() - interval '2 hours'
+    order by r.created_at limit 100 for update skip locked);
   return next;
 end $$;
 
@@ -19805,7 +19827,7 @@ ALTER TABLE public.sms_outbox ENABLE ROW LEVEL SECURITY;
 -- Name: sms_outbox sms_outbox_select_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY sms_outbox_select_admin ON public.sms_outbox FOR SELECT TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+CREATE POLICY sms_outbox_select_admin ON public.sms_outbox FOR SELECT TO authenticated USING (((event <> 'password_reset'::text) AND private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
@@ -23611,8 +23633,8 @@ GRANT SELECT ON TABLE public.separations TO authenticated;
 --
 
 GRANT ALL ON TABLE public.sms_outbox TO postgres;
-GRANT ALL ON TABLE public.sms_outbox TO anon;
-GRANT ALL ON TABLE public.sms_outbox TO authenticated;
+GRANT SELECT ON TABLE public.sms_outbox TO anon;
+GRANT SELECT ON TABLE public.sms_outbox TO authenticated;
 GRANT ALL ON TABLE public.sms_outbox TO service_role;
 
 
