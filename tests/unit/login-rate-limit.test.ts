@@ -25,7 +25,7 @@ describe('login rate limiting wiring', () => {
     const stamps = caddyfile.match(
       new RegExp(`header_up\\s+${CLIENT_IP_HEADER}\\s+\\{client_ip\\}`, 'gi')
     );
-    expect(stamps).toHaveLength(2);
+    expect(stamps).toHaveLength(3);
   });
 
   it('overwrites client identity without a conflicting delete operation', () => {
@@ -34,7 +34,7 @@ describe('login rate limiting wiring', () => {
     for (const path of ['deploy/caddy/Caddyfile', 'deploy/liara/Caddyfile']) {
       const config = readFileSync(path, 'utf8');
       expect(config).not.toMatch(/header_up\s+-X-BJ-Client-IP/i);
-      expect(config.match(/header_up\s+X-BJ-Client-IP\s+\{client_ip\}/gi)).toHaveLength(2);
+      expect(config.match(/header_up\s+X-BJ-Client-IP\s+\{client_ip\}/gi)).toHaveLength(3);
     }
   });
 
