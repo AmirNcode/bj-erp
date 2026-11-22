@@ -212,13 +212,13 @@ export async function signOutEverywhere(id: string): Promise<{ ok: true; count: 
 
 /**
  * Resets an employee's password and returns the new temp password.
- * Admin-only. The new password is shown once to the admin.
+ * The authorized operator sees the temporary password once.
  */
 export async function resetPassword(
   id: string,
   options: { textIt?: boolean } = {}
 ): Promise<{ ok: true; tempPassword: string; sms: PasswordSmsResult } | DbErrorResult> {
-  const c = await requireCaller({ anyOf: ['admin'] }) // admin-only (20261013200007);
+  const c = await requireCaller({ perm: ['reset_employee_password', 'edit'] });
   if (!c.ok) return c;
 
   const tempPassword = generateTempPassword();

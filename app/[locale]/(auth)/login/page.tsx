@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { Link } from '@/i18n/navigation';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
@@ -22,6 +23,7 @@ import { Button } from '@/components/ui/button';
 
 export default function LoginPage() {
   const t = useTranslations('login');
+  const recovery = useTranslations('recovery');
   const router = useRouter();
   const params = useParams<{ locale: string }>();
   const locale = params.locale ?? 'fa';
@@ -158,6 +160,7 @@ export default function LoginPage() {
                 {loading ? '...' : t('submit')}
               </Button>
             </form>
+            <Link className="mt-4 block text-center text-sm text-primary underline" href="/forgot-password">{recovery('title')}</Link>
           </CardContent>
         </Card>
       </div>

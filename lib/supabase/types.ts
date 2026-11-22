@@ -2055,6 +2055,8 @@ export type Database = {
         Args: { p_status?: string | null; p_event?: string | null; p_limit?: number; p_offset?: number }
         Returns: Json
       }
+      app_start_password_recovery: { Args: { p_code: string }; Returns: { request_id: string; hint: string }[] }
+      app_confirm_password_recovery: { Args: { p_request: string; p_mobile: string }; Returns: undefined }
       app_enqueue_password_sms: { Args: { p_employee: string; p_password: string }; Returns: string }
       app_set_employee_password: {
         Args: { p_password: string; p_user_id: string }

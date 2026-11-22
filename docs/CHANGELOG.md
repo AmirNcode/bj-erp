@@ -9,6 +9,8 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+- Employees can recover a forgotten password by confirming their registered mobile. Administrators can delegate single-person password resets through Settings → Roles.
+
 - Employees can submit daily and hourly work trips on dates with hourly personal leave, including overlapping hours.
 
 - Finance now offers CSV and Excel Worksheet downloads for the filtered requests. The worksheet keeps personnel numbers as text and costs and durations as numbers.

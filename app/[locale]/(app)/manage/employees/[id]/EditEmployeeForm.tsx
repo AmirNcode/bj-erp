@@ -715,7 +715,7 @@ export function EditEmployeeForm({
             <CardTitle className="text-sm text-muted-foreground">{t('accountActions')}</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            {caps.resetPassword && (
+            {caps.resetPassword && (employee.active || caps.signOutEverywhere) && (
               <div className="flex flex-wrap items-center gap-3">
                 <Button
                   variant="outline"
@@ -728,7 +728,7 @@ export function EditEmployeeForm({
                   {labels.resetPwd}
                 </Button>
                 {/* FR-78: optional text of the new password (admin panel › SMS decides if it goes out). */}
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                {caps.signOutEverywhere && <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={textPassword}
@@ -738,11 +738,10 @@ export function EditEmployeeForm({
                     data-testid="reset-password-text-it"
                   />
                   {labels.textPassword}
-                </label>
+                </label>}
               </div>
             )}
-            {caps.resetPassword && (
-              // FR-79: admin only, like the reset (resetPassword is admin-only since 20261013200007).
+            {caps.signOutEverywhere && (
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
                   data-testid="sign-out-everywhere">

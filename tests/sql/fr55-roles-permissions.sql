@@ -106,8 +106,8 @@ begin
 end $$;
 
 -- ── tables (Task 1) ─────────────────────────────────────────────────────────
-select pg_temp.expect('seven roles seeded for the company (FR-70 added Procurement)',
-  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'company')), '7');
+select pg_temp.expect('eight roles seeded for the company (including test-emp)',
+  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'company')), '8');
 select pg_temp.expect('enum-only insert gets role_id',
   (select count(*)::text from public.user_roles ur join public.roles r on r.id = ur.role_id
     where ur.user_id = (select id from fx where k = 'hr') and r.system_key = 'hr'), '1');
@@ -145,7 +145,7 @@ select pg_temp.expect('personal_info_own is on no preset of any company',
 select pg_temp.expect('catalog: 26 keys (FR-75 dropped absences; FR-91 added five edit keys; passwords remain admin-only) incl. finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '33:3');
+  '34:3');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -171,8 +171,8 @@ begin
   insert into public.companies (name) values ('FR55 Other Co') returning id into v_new;
   insert into fx values ('other_company', v_new);
 end $$;
-select pg_temp.expect('a new company gets its seven roles',
-  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'other_company')), '7');
+select pg_temp.expect('a new company gets its eight roles',
+  (select count(*)::text from public.roles where company_id = (select id from fx where k = 'other_company')), '8');
 do $$
 begin
   begin
@@ -260,7 +260,7 @@ select pg_temp.expect('… to finance',
 select pg_temp.expect('(cleanup) emp2 back to employee',
   pg_temp.try_su(format('update public.user_roles set role_id = %s where user_id = %s', pg_temp.role_id('company', 'employee'), pg_temp.id('emp2'))), 'ok:1');
 select pg_temp.expect('a member reads their own company''s roles',
-  pg_temp.try_as('emp', format('select 1 from public.roles where company_id = %s', pg_temp.id('company'))), 'ok:7');
+  pg_temp.try_as('emp', format('select 1 from public.roles where company_id = %s', pg_temp.id('company'))), 'ok:8');
 select pg_temp.expect('nobody reads another company''s roles (not even the admin)',
   pg_temp.try_as('admin', format('select 1 from public.roles where company_id = %s', pg_temp.id('other_company'))), 'ok:0');
 select pg_temp.expect('nobody reads another company''s role permissions',
@@ -780,7 +780,7 @@ select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwor
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
 select pg_temp.expect('token hook: the admin gets every key',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
-            -> 'claims' -> 'app_perms'))::text), '33');
+            -> 'claims' -> 'app_perms'))::text), '34');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' ->> 'app_roles')), '["employee"]');
@@ -1026,8 +1026,8 @@ select pg_temp.expect('system roles cannot be deleted',
 
 -- fix round 1: identity presets (approval-step and clearance signers) need the
 -- matching edit permission to give or take away, on top of D5.
-select pg_temp.expect('nosign (every item but approval_steps and clearance) may not reset emp''s password: admin-only (200007)',
-  pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), '42501');
+select pg_temp.expect('nosign holds reset_employee_password and may reset emp',
+  pg_temp.try_as('nosign', format('select public.app_set_employee_password(%s, %L)', pg_temp.id('emp'), 'Temp!2026x')), 'ok:1');
 -- R2: security never signs an approval step any more (main's CHECK), so giving
 -- Security is plain D5: nosign holds every Security permission.
 select pg_temp.expect('… and may give emp Security and take it away (security is no identity preset now)',

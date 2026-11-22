@@ -31,6 +31,10 @@ A user may hold multiple roles (`user_roles` table). Highest applicable permissi
 inactive profile retains only read access to its own profile shell so the login flow can explain
 the disabled state; it has no business-data access and cannot use employee-facing RPCs.
 
+## Password recovery
+
+Active non-admin users can recover through their registered SMS mobile. HR can correct the number through existing personal-information permissions. The administrator can enable **Reset employee passwords** (`reset_employee_password`) on a custom role such as HR Head. It authorizes individual resets for other active, same-company non-admin employees, including HR. No preset receives the permission. Bulk reset and manual sign-out stay admin-only.
+
 ## Visibility matrix (time-off)
 
 | Viewer | Whose time-off can they SEE | Whom can they EDIT / APPROVE |
@@ -124,9 +128,9 @@ surface); `EXECUTE` is granted to `authenticated` only. Policies reference them 
   `company_id` are admin-only. **FR-55:** the editor branch is `people` edit **and**
   `can_act_on(caller, target)` (D4: same company, no admin row, nothing above the caller's levels,
   plus the relationship and identity clauses). The `passwords` branch FR-55 added is gone since
-  `20261013200007`: password resets are admin-only. (Before FR-51 the trigger never compared `job_title` or
+  `20261013200007`: delegated resets now use the separate recovery permission above. (Before FR-51 the trigger never compared `job_title` or
   `personnel_no`, so a self or manager update could change them.) `must_change_password` (FR-50) is
-  admin-only too, except that `app_set_initial_password` / `app_change_my_password` clear the
+  set by authorized reset routines. In addition, `app_set_initial_password` / `app_change_my_password` clear the
   caller's own flag; they mark the transaction with `bj.password_flag_write`, a setting PostgREST
   clients cannot set. Deactivating the last active admin is
   rejected by a database trigger, and `manager_id = id` is prohibited by a table constraint.
@@ -404,9 +408,9 @@ or print read through the same request scope. A named approver does not need bro
   are exposed for explicit review. Full contract: `docs/plans/approval-delegation-rpc-contract.md`.
 
 **Deferred credential/session risk:** the owner explicitly deferred hardening. Account creators may
-retain issued credentials; password reset does not revoke existing sessions. Such access can
+retain issued credentials. Password resets now revoke the target’s sessions. Such access can
 impersonate a principal/delegate despite valid SQL authority checks. This remains disclosed residual
-risk, not a new activation gate. All password resets remain admin-only.
+risk, not a new activation gate. Single-person resets follow the Password recovery rules above.
 
 ### Request edits and quick add (FR-91 replacing FR-84, FR-85, unreleased)
 
@@ -589,7 +593,7 @@ Shape: `R/E` both levels, `E` action only, `R` read only. Single source: SQL
 
 `personal_info_own`, `role_assign`, unreleased `approval_delegate` and `edit_requests_own` are on no preset. The released
 catalog has 19 items; delegation adds the twentieth and FR-91 five more (25). `passwords` was
-removed by `20261013200007` (password resets are admin-only; a stored row counts for nothing). `admin`, `manager` and
+removed by `20261013200007` (the retired key grants no access). `admin`, `manager` and
 `employee` carry no permission rows (admin holds every item implicitly; manager has the hard-wired
 company-wide read through `reads_*`). Presets keep their name and cannot be deleted; permissions are
 editable. HR holds `work_settings`, `holidays`, `special_leave` and `finance` read under

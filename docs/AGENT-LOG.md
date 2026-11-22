@@ -78,6 +78,45 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Implemented SMS password recovery and delegated resets
+
+Codex, branch `codex/sms-password-recovery` from `2790540`. Implemented the approved Persian and English recovery flow, masked mobile confirmation, database throttling, phone-change invalidation and opt-in role permission. Added migration `20261122175225_employee_password_recovery.sql`. HR retains existing mobile-edit access. Single-person reset and manual sign-out have independent authorization.
+
+Verified on a freshly migrated, synthetic Docker stack with SMS dispatch disabled. The production build, TypeScript, 1,552 unit tests, deployment tests and five SQL suites passed. Lint reports one pre-existing unused import in the Sales e2e tests. Five concurrent requests issued one credential. Playwright verified old-password rejection, temporary login, forced change and permanent login in en and fa. Browser plugin not available. The first Farsi check encountered a loop with next start bound to 127.0.0.1; retested with the standalone server bound to localhost and both languages passed. No production changes, external texts or role assignments. The release requires explicitly applying the changed Liara gateway configuration before the guarded deployment.
+
+## 2026-11-22 — Confirmed head-of-HR recovery authority
+
+Codex on main updated the recovery spec with the owner’s custom-role assignment and target policy. Added acceptance coverage for two HR staff with different effective permissions and for role rename and revocation. Documentation only. No roles assigned, external actions, or tests run.
+
+## 2026-11-22 — Specified delegated employee password resets
+
+Codex on main added the owner-requested Roles switch and implementation plan to `docs/specs/2026-11-22-forgot-password-design.md` after reviewing the role catalog, employee actions and database reset checks. Proposed single-person scope and HR peer eligibility await design review. Documentation only, uncommitted. No tests or external actions.
+
+## 2026-11-22 — Drafted SMS password recovery spec
+
+Codex on main at 2790540 recorded the owner's login code, phone mask, temporary password, and eligibility decisions in `docs/specs/2026-11-22-forgot-password-design.md`. Checked the existing admin-only reset rule, employee reset action, and self-service mobile definition. HR's role in assisted resets awaits clarification. Documentation only, uncommitted. No tests, external actions, or deployment.
+
+## 2026-11-22 — Self-service password recovery discovery
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 2790540
+**Trigger:** Design a forgotten-password flow using the employee's SMS mobile.
+
+**What changed**
+Reviewed the login-code override, profile SMS mobile, and first-login password flow. Identified recovery credential, identifier, and administrator eligibility as design decisions for the owner.
+
+**Actions outside the repo**
+None.
+
+**Verification**
+Source inspection only. No application changes or tests.
+
+**State left behind**
+Discovery entry only, uncommitted. Design questions open.
+
+**For the next agent**
+Use the owner's answers to write the recovery spec and acceptance criteria before implementation.
+
 ## 2026-11-21 — Release hourly leave and Finance exports
 
 Owner confirmed local testing and requested the main-branch deployment. Finance component suite passed all 14 tests. Selected only the work-trip and Finance export changes for release.

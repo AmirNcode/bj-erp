@@ -39,6 +39,19 @@
     "reason": "Reason: {note}",
     "show": "Show"
   },
+  "recovery": {
+    "title": "Forgot password?",
+    "code": "Login code",
+    "next": "Continue",
+    "phone": "Confirm your full mobile number",
+    "hint": "Mobile on file",
+    "send": "Text temporary password",
+    "done": "If the details match, your temporary password will be texted to your registered mobile. Sign in with it and choose a new password.",
+    "login": "Back to sign in",
+    "help": "If you don’t recognize this number or can’t receive the text, contact HR or your administrator.",
+    "error": "Unable to process this request. Try again later or contact HR.",
+    "restart": "Start again"
+  },
   "login": {
     "brand": "Behsazan Jonoob",
     "title": "Sign In",
@@ -1843,6 +1856,10 @@
       "people": {
         "label": "Employee records",
         "description": "Read: the employee list and records. Allowed: edit name, hire date, department, manager, title; deactivate."
+      },
+      "reset_employee_password": {
+        "label": "Reset employee passwords",
+        "description": "Issue a temporary password to another active employee, including HR and managers. Administrator accounts are excluded."
       },
       "people_create": {
         "label": "Add employees",
