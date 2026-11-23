@@ -317,6 +317,16 @@
     "nextMonth": "Next month"
   },
   "profile": {
+    "textSize": {
+      "title": "Text size",
+      "description": "Makes the text in the whole app larger for you only.",
+      "sampleTitle": "Daily leave request — 3 days",
+      "sampleLine1": "From 1405/09/10 to 1405/09/12, waiting for your manager",
+      "sampleLine2": "Annual leave left: 12 days 4 hours",
+      "save": "Save",
+      "saved": "Saved",
+      "viewAsDisabled": "Not available while viewing as someone else."
+    },
     "title": "Profile",
     "name": "Name",
     "code": "Employee Code",

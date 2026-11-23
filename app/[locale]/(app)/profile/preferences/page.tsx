@@ -5,7 +5,9 @@
 export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { TextSizeControl } from '@/components/profile/TextSizeControl';
+import { getOwnFontStep } from '@/lib/prefs/fontStep.server';
 import { LanguageSwitch } from '../../_components/LanguageSwitch';
 
 type Props = {
@@ -16,6 +18,7 @@ export default async function PreferencesPage({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations('profile');
+  const fontStep = await getOwnFontStep();
 
   return (
     <div className="w-full max-w-md">
@@ -29,7 +32,15 @@ export default async function PreferencesPage({ params }: Props) {
           </CardContent>
         </Card>
 
-        {/* TASK 7: TextSizeControl card goes here, right after the Language card. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>{t('textSize.title')}</CardTitle>
+            <CardDescription>{t('textSize.description')}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TextSizeControl initialStep={fontStep} locale={locale === 'en' ? 'en' : 'fa'} />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
