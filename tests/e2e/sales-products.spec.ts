@@ -6,7 +6,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { ADMIN_CODE, ADMIN_PASSWORD, createEmployee, login } from './_helpers';
-import { createBidRecord, createSalesRole, deleteRoleIfPresent } from './_sales';
+import { createSalesRole, deleteRoleIfPresent } from './_sales';
 
 test('sales products: Size default fills the item row; a new currency reaches the record picker', async ({ page, browser }) => {
   test.setTimeout(420_000);

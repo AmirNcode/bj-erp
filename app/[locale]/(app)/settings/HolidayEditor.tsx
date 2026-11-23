@@ -179,7 +179,7 @@ export function HolidayEditor({
     'h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
   return (
-    <Card className="gap-0 py-0" data-testid="holiday-editor">
+    <Card className="w-full max-w-4xl gap-0 py-0" data-testid="holiday-editor">
       <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-4">
         <div>
           <h2 className="text-base font-semibold">{labels.holidaysTitle}</h2>

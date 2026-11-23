@@ -78,6 +78,12 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Sized forms on full-width tabbed pages
+
+Codex on `codex/tabbed-form-sizing` from `3566658` addressed the widescreen feedback for Edit Employee, Settings, Admin Panel and Profile. Documented field and panel sizing and removed the unused Sales test import flagged during deployment.
+
+Playwright checked synthetic employee, holiday, SMS and password fields on English 2560×1440, Persian 1920×1080 and Persian 390×844 layouts. Day inputs measured 108–120 px on desktop and the leave cards stacked on mobile. TypeScript and lint with zero warnings passed. Unit tests passed (1,547 passed, five skipped). Signed-in e2e tests were not run. No production actions.
+
 ## 2026-11-22 — Full-width employee editor tabs
 
 Codex on `codex/employee-edit-tabs` from `57e67c51`. Implemented the owner-approved Personal Information, Time Off Details and Account tabs, separate saves, retained drafts and temporary-password copying. Applied the page-width convention to Admin Panel, Profile and Settings and recorded it in DESIGN.md.

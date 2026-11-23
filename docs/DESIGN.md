@@ -53,7 +53,7 @@ left in Farsi).
 
 ## Tabs
 
-Pages with top-level tabs use the full available shell width in both languages. Align the header, tab bar and panels to the shell gutters. Apply `data-wide` to the page root and omit page-width caps inside it. Individual controls can keep a comfortable width.
+Use the full shell width for the page header, tab bar and data tables. Set `data-wide` on the page root. Align forms to the same start gutter and size their panels and columns for the content. On desktop, group related fields into two or three columns, give a day/hour pair about 18rem total, a date about 12rem and a notes field up to 36rem. Independent cards can sit side by side when both fit. Let controls shrink with their container on phones.
 
 Tabs are underlined text, never pills. Use `lib/ui/tabs.ts`:
 

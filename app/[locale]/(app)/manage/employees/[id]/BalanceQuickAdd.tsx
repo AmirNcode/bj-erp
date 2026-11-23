@@ -73,7 +73,7 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay, pendingCoun
       if (e.key === 'Enter' && e.target instanceof HTMLInputElement) e.preventDefault();
     }}>
       {balances.length > 1 && (
-        <div className="space-y-1.5">
+        <div className="max-w-sm space-y-1.5">
           <Label htmlFor="quick-add-type">{t('leaveType')}</Label>
           <select id="quick-add-type" className={nativeSelectClass} value={leaveTypeId} disabled={pending}
             onChange={(e) => setLeaveTypeId(e.target.value)} data-testid="quick-add-type">
@@ -88,7 +88,7 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay, pendingCoun
       <PendingBalanceWarning count={pendingCounts[leaveTypeId]?.count ?? 0} typeName={selectedName} />
       <fieldset className="space-y-1">
         <legend className="text-sm font-medium">{t('amount')}</legend>
-        <div className="flex gap-2">
+        <div className="flex max-w-72 gap-2">
           <div className="flex flex-1 items-center gap-1.5">
             <Input id="quick-add-days" type="number" min={0} step={1} value={days} disabled={pending}
               onChange={(e) => setDays(e.target.value)} className="min-w-0" data-testid="quick-add-amount-days" />
@@ -101,7 +101,7 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay, pendingCoun
           </div>
         </div>
       </fieldset>
-      <div className="space-y-1.5">
+      <div className="max-w-xl space-y-1.5">
         <Label htmlFor="quick-add-reason">{t('reason')}</Label>
         <Textarea id="quick-add-reason" rows={2} maxLength={500} value={reason} disabled={pending}
           onChange={(e) => setReason(e.target.value)} data-testid="quick-add-reason" />

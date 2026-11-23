@@ -128,9 +128,9 @@ export function PersonalInfoFields({ editor, readOnly, readOnlyReason }: {
       {PERSONAL_INFO_GROUPS.map((group) => (
         <fieldset key={group} className="space-y-3">
           <legend className="mb-2 text-sm font-semibold">{t(`groups.${group}`)}</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {PERSONAL_INFO_FIELDS.filter((f) => f.group === group).map((field) => (
-              <div key={field.key} className={field.kind === 'longtext' ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}>
+              <div key={field.key} className={field.kind === 'longtext' ? 'w-full max-w-xl space-y-1.5 sm:col-span-full' : 'space-y-1.5'}>
                 <Label htmlFor={`pi-${field.key}`}>{t(`fields.${field.key}`)}</Label>
                 {input(field)}
                 {problems[field.key] ? (

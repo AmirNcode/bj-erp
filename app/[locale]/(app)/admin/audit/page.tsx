@@ -58,7 +58,7 @@ export default async function AdminAuditPage({ params, searchParams }: Props) {
   return (
     <Section title={t('tabs.audit')} testId="admin-audit"
       action={<span className="text-xs text-muted-foreground">{t('audit.total', { count: log.total })}</span>}>
-      <form method="get" className="mb-4 grid gap-3 sm:grid-cols-3 sm:items-end">
+      <form method="get" className="mb-4 grid max-w-4xl gap-3 sm:grid-cols-3 sm:items-end">
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           {t('audit.range')}
           <select name="range" defaultValue={range ? String(range) : ''} className={nativeSelectClass}>

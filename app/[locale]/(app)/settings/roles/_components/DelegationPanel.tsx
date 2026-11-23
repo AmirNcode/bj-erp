@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getDelegationContext, searchDelegates, setApprovalDelegate, setExecutiveSettings } from '@/lib/actions/approval-delegation';
 import type { DelegateCandidate, DelegationContext, ExecutiveSettings } from '@/lib/leave/delegation';
 
-const selectClass = 'min-h-11 w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const selectClass = 'min-h-11 w-full max-w-md rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Settings access here does not grant access to role authoring or personnel. */
 export function DelegationPanel({ initial, initialCandidates, locale }: {
@@ -67,7 +67,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
     : null;
 
   return (
-    <>
+    <div className="grid max-w-5xl items-start gap-5 xl:grid-cols-2">
       <Card data-testid="approval-delegation-panel">
         <CardHeader><CardTitle>{context.is_admin ? t('title') : t('myTitle')}</CardTitle></CardHeader>
         <CardContent className="space-y-5">
@@ -89,7 +89,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
           </dl>
           {effective?.source_request_id && <p className="text-sm text-muted-foreground">{t('fallback', { name: saved?.delegate_name ?? t('none') })}</p>}
           {!canManage && <p className="rounded-lg bg-muted p-3 text-sm" role="note">{t('permissionRequired')}</p>}
-          <form className="space-y-2" onSubmit={(e) => {
+          <form className="max-w-md space-y-2" onSubmit={(e) => {
             e.preventDefault(); setError('');
             startTransition(async () => {
               const result = await searchDelegates(context.principal_id, search);
@@ -116,7 +116,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
         </CardContent>
       </Card>
       {context.is_admin && <ExecutiveSettingsPanel key={JSON.stringify(context.executive_settings)} context={context} onSaved={() => refreshPrincipal(context.principal_id)} />}
-    </>
+    </div>
   );
 }
 

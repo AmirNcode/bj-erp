@@ -52,21 +52,23 @@ export default async function SettingsPage({ params }: Props) {
       {(capabilities.isAdmin || capabilities.canDelegate) && <SettingsTabs locale={locale} active="general" />}
       <h1 className="text-2xl font-bold tracking-tight max-md:sr-only">{tNav('settings')}</h1>
 
-      <WorkSettingsForm
-        initial={weekendDays}
-        initialBiweekly={biweeklyWeekendDays}
-        initialAnchor={biweeklyAnchor}
-        initialUpdatedAt={updatedAt}
-        locale={locale}
-        initialWorkStart={workStart}
-        initialWorkEnd={workEnd}
-        initialHourlyCapMinutes={hourlyCapMinutes}
-        initialLunchStart={lunchStart}
-        initialLunchMinutes={lunchMinutes}
-        readOnly={!canEditWork}
-      />
+      <div className="grid max-w-[90rem] items-start gap-5 2xl:grid-cols-[minmax(0,3fr)_minmax(0,4fr)]">
+        <WorkSettingsForm
+          initial={weekendDays}
+          initialBiweekly={biweeklyWeekendDays}
+          initialAnchor={biweeklyAnchor}
+          initialUpdatedAt={updatedAt}
+          locale={locale}
+          initialWorkStart={workStart}
+          initialWorkEnd={workEnd}
+          initialHourlyCapMinutes={hourlyCapMinutes}
+          initialLunchStart={lunchStart}
+          initialLunchMinutes={lunchMinutes}
+          readOnly={!canEditWork}
+        />
 
-      <HolidayEditor initial={holidays} readOnly={!canEditHolidays} locale={locale} />
+        <HolidayEditor initial={holidays} readOnly={!canEditHolidays} locale={locale} />
+      </div>
     </div>
   );
 }

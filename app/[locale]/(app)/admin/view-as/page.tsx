@@ -19,10 +19,12 @@ export default async function AdminViewAsPage({ params, searchParams }: Props) {
   const roster = await getViewAsPeople();
   if (!roster.ok) return <ErrorNote message={roster.error} />;
   return (
-    <Section title={t('title')} testId="admin-view-as">
-      {ended && <p className="mb-3 text-sm text-muted-foreground" data-testid="view-as-ended">{t('ended')}</p>}
-      <p className="mb-4 text-sm text-muted-foreground">{t('note')}</p>
-      <ViewAsPicker people={roster.people} locale={locale} />
-    </Section>
+    <div className="max-w-2xl">
+      <Section title={t('title')} testId="admin-view-as">
+        {ended && <p className="mb-3 text-sm text-muted-foreground" data-testid="view-as-ended">{t('ended')}</p>}
+        <p className="mb-4 text-sm text-muted-foreground">{t('note')}</p>
+        <ViewAsPicker people={roster.people} locale={locale} />
+      </Section>
+    </div>
   );
 }
