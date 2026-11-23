@@ -485,6 +485,7 @@
       "available": "Available",
       "requested": "Requested",
       "after": "Balance after approval",
+      "insufficientBalance": "Final approval requires more available annual leave.",
       "overdraft": "{value} over the balance. The balance will go negative.",
       "unpaid": "{value} will be recorded as unpaid."
     }
@@ -1849,6 +1850,10 @@
       "personal_info_own": {
         "label": "Own personal information",
         "description": "May edit their own personal information. Without it, people only view theirs on Profile."
+      },
+      "annual_leave_borrow": {
+        "label": "Allow negative annual leave balance",
+        "description": "May borrow paid annual leave against future accruals without a limit."
       },
       "special_leave": {
         "label": "Leave outside the list",

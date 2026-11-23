@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Implemented explicit annual leave borrowing
+
+Codex on codex/annual-leave-borrowing from main at `70c2cbff` implemented the approved permission, pending-aware final approval and edits, bilingual previews, and regression tests. Verified daily and hourly workflows on a disposable schema-only copy with synthetic fixtures. The checked-in schema includes only the six regenerated function definitions because the local database has unrelated schema and ACL drift. No production data or role assignments were changed during implementation.
+
 ## 2026-11-22 — Split Settings into Working Times and Official Holidays
 
 Codex updated the open PR #30 branch for local review on port 3501. Settings renders one panel at a time, removes the redundant title, and opens the available panel for users with only one permission. The Roles and delegation routes keep their existing access rules. Updated the English and Persian labels and the affected e2e navigation. Three focused tests passed for tab selection and permissions, along with TypeScript and lint. The owner requested local testing before authorizing a merge.

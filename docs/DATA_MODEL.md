@@ -279,12 +279,11 @@ A non-balance type with `is_paid = false` records every request as fully unpaid
 (`leave_requests.unpaid_minutes = requested_minutes`). The seed had `is_paid = true` for unpaid
 until `20261006120003`, which corrected it and backfilled those requests.
 `manager_overdraft bool` (default false; FR-92, 2026-11-12): marks the **annual** type, the one whose
-balance a Manager may overdraw. `private.annual_type(company)` = the active type with the flag. The
+balance an explicitly authorized employee may overdraw. `private.annual_type(company)` = the active type with the flag. The
 migration flags `name_en = 'Annual Leave' and affects_balance`; **the seed sets it too**, because on a
 fresh install migrations run before the seed and an UPDATE alone matches nothing.
 `private.balance_rule(employee, type)` returns the rule of one request: `none` (type has no balance) ·
-`overdraft` (flagged type and the person holds the Manager role **now**: `has_role`, so it is the role at
-action time, not at submission) · `strict` (flagged type, anyone else, admin and HR included) · `split`
+`overdraft` (flagged type and the person has the explicit `annual_leave_borrow` permission at action time) · `strict` (flagged type, anyone else, admin and HR included) · `split`
 (any other balance type, e.g. sick). TS mirror: `projectLeaveBalance` (`lib/leave/duration.ts`).
 
 ### `employee_leave_policies`
@@ -370,13 +369,12 @@ lock. For a balance-affecting paid type, paid minutes are
 only the paid portion is written to the ledger. Selecting the unpaid leave type records the whole
 request as unpaid. Existing rows default to zero, preserving their historical behavior.
 **Amended 2026-11-12 (FR-92): the split follows `private.balance_rule`.**
-- `overdraft` (Manager, annual): the whole request is paid; submit and approval store
+- `overdraft` (explicit borrowing permission, annual): the whole request is paid; submit and approval store
   `unpaid_minutes = 0` and the ledger takes the full amount, so the balance may go below zero.
 - `strict` (other people, annual): submit is **pending-aware**: the request must fit in
   `balance - private.pending_leave_minutes(employee, type, excluding this request)` (pending requests of
   that type, daily and hourly together, read under the company and employee locks), else 22023. At
-  approval, if the balance dropped meanwhile (HR lowered it), the old split still applies: paid up to
-  the balance, the rest unpaid.
+  final approval, a shortfall leaves the request pending. Increases to approved annual leave must fit the additional charge against available minutes.
 - `split` (sick): unchanged. `none`: the unpaid type, always fully unpaid.
 `app_my_leave_availability(type)` gives the form its balance, own pending minutes and rule.
 **Tracking numbers (2026-07-29, FR-29):** `company_id → companies` (denormalised deliberately — it makes
@@ -758,9 +756,9 @@ row noted "manager overdraft backfill (FR-92)" (balance goes negative; ordered b
 applied. **Before the deploy run `scripts/sql/manager-overdraft-backfill-dryrun.sql`** on a restore of the
 newest live backup: it lists every request that will move (person, serial, minutes) for Amir/HR.
 If payroll already deducted one of them, HR converts the amount back with the tool above.
-**Edit side effect:** an edit by a Manager (`overdraft`) sets `unpaid_minutes = 0` and posts the
+**Edit side effect:** an edit for someone with borrowing permission (`overdraft`) sets `unpaid_minutes = 0` and posts the
 difference against the *old paid* part, so an approved request that still carried an unpaid part (e.g.
-the person gained the Manager role after approval, which the backfill did not cover) moves that old
+the person gained borrowing permission after approval, which the backfill did not cover) moves that old
 unpaid part onto the ledger on the next reshaping edit. Payroll may have deducted it already.
 
 ### `leave_ledger`
@@ -807,10 +805,7 @@ portion and sets `balance_after_minutes`; it never takes a paid balance below ze
 `approve_leave_request` re-checks overlap against approved requests and finalizes the paid/unpaid
 split under the ledger lock. **A balance goes negative only through an opening balance or an
 HR/admin adjustment (FR-48, 2026-10-05; `set_leave_balance` bounds it at -366 workdays), or, since
-FR-92 (2026-11-12), through a Manager's annual leave (`overdraft` rule; no bound)** — for every
-other person a request never pushes it lower: the paid part is `least(minutes, greatest(balance, 0))` and
-the excess is recorded in `leave_requests.unpaid_minutes` rather than rejected (annual leave of a
-non-Manager is refused at submit when it exceeds available). Error messages are stable English strings
+FR-92 (2026-11-12), through annual leave with explicit borrowing permission (unlimited)**. Annual leave otherwise requires sufficient available minutes. Sick leave splits any excess into unpaid time. Error messages are stable English strings
 mapped to fa/en in `lib/errors/db-error.ts` + `messages/*.json` (`dbErrors`).
 
 ## Monthly accrual (server-side, FR-27)

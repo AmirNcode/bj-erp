@@ -451,14 +451,14 @@ Validation/release status stays in `docs/TASKS.md`.
   deployed.)*
   **Inquiry register (2026-11-17, spec §16):** bulk import of the client's inquiry register (`.csv` / `.xlsx`), re-importable, merged with ledger records by number; Archived stage for old no-result inquiries; company / client picked through a lookup (new ones via "Create …" with a similar-name check); Customers tab and customer page with per-customer figures, rename and merge. Known-value inputs are picked, never free-typed (§16.5, Phase B).
 - **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
-  A **Manager** (built-in role, checked at action time) may request annual leave (daily and hourly)
+  An employee with the **Allow negative annual leave balance** role permission (checked at action time) may request annual leave (daily and hourly)
   past the available balance: the whole amount is paid and the balance goes negative (no limit), after
   a confirm dialog on the request form; monthly accruals pay it back and a negative carries over at
   Farvardin 1. Everyone else (HR and the admin included) is **capped at available** = balance minus the
   person's own pending requests of that type; over it the request is refused and the form points to the
   unpaid leave type. Sick leave keeps the paid/unpaid split. The approve dialog shows the full request
   and balance figures (balance now, other pending, available, requested, after) to every approver. If an
-  employee's balance dropped since submission, approval still splits paid/unpaid. HR gets a warning
+  annual request exceeds availability at final approval, it stays pending. Increases to approved requests must fit the extra charge against availability. HR gets a warning
   when changing a balance that has a pending request of that type. Employees page: **Balance**, **Used
   this year**, **Unpaid** columns (Jalali year to date; visible to `people` read), no horizontal scroll
   (low-priority columns move into an expandable row on every width, Edit inside). **Convert negatives

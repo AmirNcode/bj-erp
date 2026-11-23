@@ -429,7 +429,9 @@ risk, not a new activation gate. Single-person resets follow the Password recove
   balance unless admin, `can_manage_leave_of` for non-admins (was `can_act_on` until 2026-11-11). The reason lands in `leave_ledger.note`, which the employee
   can read through RLS.
 
-### Manager negative balance (FR-92, 2026-11-12, not deployed)
+### Annual leave balances and borrowing
+
+The action permission `annual_leave_borrow` permits unlimited borrowing of annual leave by the role holder. It requires an explicit grant even for an administrator. No role receives it automatically. Final approval checks the requester’s current permission and reserves other pending requests.
 
 All new RPCs are `security definer`, `search_path ''`, revoked from `public`/`anon`, scoped to the caller's company.
 
