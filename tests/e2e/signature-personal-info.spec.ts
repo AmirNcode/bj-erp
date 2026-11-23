@@ -145,7 +145,7 @@ test('saved signature pre-fills requests; personal info view-only for self, edit
   const card = page.locator('[data-testid="employee-personal-info"]');
   await expect(card).toBeVisible({ timeout: 30_000 });
   await card.locator('[data-testid="pi-national_id"]').fill('0012345678');
-  await card.locator('[data-testid="personal-info-save"]').click();
+  await page.getByTestId('edit-save').click();
   await expect(card.locator('#pi-national_id-problem')).toBeVisible();
 
   await card.locator('[data-testid="pi-national_id"]').fill('۰۰۱۲۳۴۵۶۷۹');
@@ -154,8 +154,8 @@ test('saved signature pre-fills requests; personal info view-only for self, edit
   await card.locator('[data-testid="pi-sheba"]').fill('IR82 0540 1026 8002 0817 9090 02');
   await card.locator('[data-testid="pi-mobile"]').fill('09121234567');
   await card.locator('[data-testid="pi-education"]').selectOption('diploma');
-  await card.locator('[data-testid="personal-info-save"]').click();
-  await expect(card.locator('[data-testid="personal-info-status"]')).toHaveText('Saved.', { timeout: 30_000 });
+  await page.getByTestId('edit-save').click();
+  await expect(page.getByTestId('edit-success')).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(card.locator('[data-testid="pi-sheba"]')).toHaveValue('IR820540102680020817909002', {
     timeout: 30_000,
@@ -171,8 +171,8 @@ test('saved signature pre-fills requests; personal info view-only for self, edit
   await expect(card).toBeVisible({ timeout: 30_000 });
   await expect(card.locator('[data-testid="pi-national_id"]')).toHaveValue('0012345679');
   await card.locator('[data-testid="pi-mobile"]').fill('');
-  await card.locator('[data-testid="personal-info-save"]').click();
-  await expect(card.locator('[data-testid="personal-info-status"]')).toHaveText('Saved.', { timeout: 30_000 });
+  await page.getByTestId('edit-save').click();
+  await expect(page.getByTestId('edit-success')).toBeVisible({ timeout: 30_000 });
 
   await page.goto(`/en/manage/employees?filter=incomplete&q=${encodeURIComponent(worker.code)}`);
   await expect(page.locator('tr', { hasText: worker.code }).first()).toBeVisible({ timeout: 30_000 });

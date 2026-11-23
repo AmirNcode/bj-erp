@@ -36,7 +36,7 @@ export default async function RolesPage({ params }: Props) {
   const adminHolder = holders?.ok ? (holders.holders[0] ?? null) : null;
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+    <div data-wide className="flex w-full flex-col gap-5">
       <SettingsTabs locale={locale} active="roles" />
       {list && !list.ok && (
         <p role="alert" className="text-sm text-destructive">

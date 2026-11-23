@@ -444,6 +444,7 @@ async function drawAndAuthorizeSignature(page: Page, canvasSelector: string, pre
 
 /** FR-85: Edit Employee keeps Leave balances and Monthly accrual policy collapsed. */
 export async function openLeaveSections(page: Page) {
+  await page.getByTestId('employee-tab-leave').click();
   for (const id of ['balances-section', 'policy-section']) {
     const section = page.locator(`[data-testid="${id}"]`);
     if ((await section.count()) === 0) continue;
@@ -471,7 +472,7 @@ export async function allocate(page: Page, employeeCode: string, days: number): 
   await expect(field).toBeVisible({ timeout: 20_000 });
   const current = Number(await field.inputValue());
   await field.fill(String(current + Math.round(days)));
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 20_000 });
 
   const leaveTypeId = (await field.getAttribute('data-leave-type-id')) ?? '';

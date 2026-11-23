@@ -48,10 +48,12 @@ left in Farsi).
   Active tab: primary text and a 3px rule on top. No circles behind icons.
 - The top bar names the section, so a top-level page passes `section` to `PageHeader`
   (title becomes screen-reader only on phones).
-- `<main>` is `max-w-6xl`. A page with a wide data table puts `data-wide` on its root element
+- `<main>` is `max-w-6xl`. A page with top-level tabs or a wide data table puts `data-wide` on its root element
   and gets the full width. Never widen only the table.
 
 ## Tabs
+
+Pages with top-level tabs use the full available shell width in both languages. Align the header, tab bar and panels to the shell gutters. Apply `data-wide` to the page root and omit page-width caps inside it. Individual controls can keep a comfortable width.
 
 Tabs are underlined text, never pills. Use `lib/ui/tabs.ts`:
 

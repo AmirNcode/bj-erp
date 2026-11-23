@@ -55,7 +55,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await openEdit(page, worker.code);
   await expect(page.locator('[data-testid="role-security"] input')).toBeDisabled();
   await expect(page.locator('[data-testid="role-admin"] input')).toBeDisabled();
-  await expect(page.locator('[data-testid="employee-deactivate"]')).toBeVisible();
+  await expect(page.getByTestId('employee-tab-account')).toBeVisible();
 
   const dept = page.locator('#department_id');
   const newDept = (await dept.locator('option').nth(2).getAttribute('value')) ?? '';
@@ -79,6 +79,7 @@ test('hr edits, deactivates and promotes an employee, but not an admin or themse
   await expect(page.locator('[data-testid="role-manager"] input')).not.toBeChecked({ timeout: 30_000 });
 
   // ── 3. deactivate, then reactivate ───────────────────────────────────────
+  await page.getByTestId('employee-tab-account').click();
   await page.click('[data-testid="employee-deactivate"]');
   await page.click('[data-testid="employee-deactivate-confirm"]');
   await expect(page.locator('[data-testid="employee-activate"]')).toBeVisible({ timeout: 30_000 });

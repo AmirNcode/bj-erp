@@ -32,7 +32,7 @@ export default async function PersonalInfoPage({ params }: Props) {
   const readOnly = !canEditOwnPersonalInfo(perms);
 
   return (
-    <div className="max-w-3xl space-y-4">
+    <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{t('intro')}</p>
       <Card>
         <CardContent className="pt-6">

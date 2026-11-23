@@ -1,7 +1,12 @@
 'use client';
 
 import { PersonSearch } from '@/components/PersonSearch';
-import { useState } from 'react';
+import { Tabs } from 'radix-ui';
+import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { PersonalInfoFields, usePersonalInfoEditor } from '@/components/personal-info/PersonalInfoForm';
+import type { PersonalInfoValues } from '@/lib/personal-info/fields';
+import { CopyPassword } from './CopyPassword';
+import { useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { updateEmployee, setRoles, setActive, resetPassword, signOutEverywhere } from '@/lib/actions/employees';
@@ -117,6 +122,9 @@ function useLabels() {
 }
 
 type Props = {
+  photo: ReactNode;
+  personalInfo: PersonalInfoValues | null;
+  specialLeave: ReactNode;
   employee: Profile;
   /** Every role of the company (app_list_roles order). */
   allRoles: RoleRow[];
@@ -160,6 +168,9 @@ type Props = {
 
 export function EditEmployeeForm({
   employee,
+  photo,
+  personalInfo,
+  specialLeave,
   allRoles,
   targetRoleIds,
   caps,
@@ -175,6 +186,10 @@ export function EditEmployeeForm({
   accrualStartMonth,
   locale,
 }: Props) {
+  const [tab, setTab] = useState('personal');
+  const tPersonal = useTranslations('personalInfo');
+  const personalEditor = usePersonalInfoEditor(employee.id, personalInfo);
+  const canSaveInfo = personalInfo !== null && caps.personalInfo === 'edit';
   const labels = useLabels();
   const router = useRouter();
   const tDuration = useTranslations('manage.employees.duration');
@@ -215,7 +230,7 @@ export function EditEmployeeForm({
     };
   };
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function savePersonal(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setSuccess(false);
@@ -223,38 +238,14 @@ export function EditEmployeeForm({
 
     const fd = new FormData(e.currentTarget);
 
-    // Leave amounts are read and checked before ANY write, so a bad entry cannot
-    // leave the profile and roles saved but the balances not.
-    const amounts = leaveAmountReader(fd, hoursPerDay);
-    const targets = canSaveLeave
-      ? balances.map((balance) => ({
-          leaveTypeId: balance.leaveTypeId,
-          target: amounts.read(`balance_${balance.leaveTypeId}`, true),
-        }))
-      : [];
-    const policyInputs = canSaveLeave
-      ? balances.map((balance) => ({
-          leaveTypeId: balance.leaveTypeId,
-          ...amounts.policy(balance.leaveTypeId),
-        }))
-      : [];
-    setAmountErrors(amounts.errors);
-    if (Object.keys(amounts.errors).length > 0) {
-      // FR-85: never leave an error inside a closed section.
-      const keys = Object.keys(amounts.errors);
-      setOpenSections((open) => ({
-        balances: open.balances || keys.some((k) => k.startsWith('balance_')),
-        policy: open.policy || keys.some((k) => !k.startsWith('balance_')),
-      }));
-      setPending(false);
-      setError(tDuration('invalid'));
-      return;
+    if (canSaveInfo && personalEditor.dirty) {
+      const problem = personalEditor.validate();
+      if (problem) {
+        setError(problem);
+        setPending(false);
+        return;
+      }
     }
-
-    // Basic fields — skipped entirely for a caller who may not change them (a
-    // people-edit holder on the admin, on themselves or on someone with more
-    // access, FR-55 D3/D4), so the save proceeds straight to the leave
-    // sections instead of failing here on a write they were never allowed to make.
     const nameFields = {
       first_name: ((fd.get('first_name') as string) ?? '').trim(),
       // FR-83: may stay blank; a blank is the marker that the name still needs splitting.
@@ -303,45 +294,84 @@ export function EditEmployeeForm({
       }
     }
 
-    // Balance and accrual policy (FR-43, leave_balances edit). Split out of the
-    // branch above: assigning roles and administering leave are different
-    // authorities that belong to different people.
-    if (canSaveLeave) {
-      // Only balances whose minute total changed are written, so saving a role
-      // change never touches a balance.
-      const changes = balanceAdjustments(
-        balances.map((balance) => ({
-          leaveTypeId: balance.leaveTypeId,
-          balance: balance.balanceMinutes,
-        })),
-        targets
-      );
-
-      for (const change of changes) {
-        const balanceResult = await setLeaveBalance(employee.id, change.leaveTypeId, change.target);
-        if (!balanceResult.ok) {
-          setPending(false);
-          setError(balanceResult.error);
-          return;
-        }
+    if (canSaveInfo && personalEditor.dirty) {
+      const problem = await personalEditor.save();
+      if (problem) {
+        setError(problem);
+        setPending(false);
+        return;
       }
+      router.refresh();
+    }
+    setPending(false);
+    setSuccess(true);
+  }
 
-      // Accrual policy per balance-affecting type, already in minutes.
-      for (const policy of policyInputs) {
-        const policyResult = await setEmployeeLeavePolicy({
-          employeeId: employee.id,
-          leaveTypeId: policy.leaveTypeId,
-          accrualMinutesPerMonth: policy.rate,
-          annualCapMinutes: policy.cap > 0 ? policy.cap : null,
-          carryoverCapMinutes: policy.carry,
-          accrualStartMonth: policyMinutesFor(policy.leaveTypeId).startMonth,
-        });
+  async function saveLeave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!canSaveLeave) return;
+    setError(null);
+    setSuccess(false);
+    setPending(true);
 
-        if (!policyResult.ok) {
-          setPending(false);
-          setError(`${labels.policyWarn} ${policyResult.error}`);
-          return;
-        }
+    const fd = new FormData(e.currentTarget);
+
+    const amounts = leaveAmountReader(fd, hoursPerDay);
+    const targets = balances.map((balance) => ({
+      leaveTypeId: balance.leaveTypeId,
+      target: amounts.read(`balance_${balance.leaveTypeId}`, true),
+    }));
+    const policyInputs = policies !== null
+      ? balances.map((balance) => ({
+          leaveTypeId: balance.leaveTypeId,
+          ...amounts.policy(balance.leaveTypeId),
+        }))
+      : [];
+    setAmountErrors(amounts.errors);
+    if (Object.keys(amounts.errors).length > 0) {
+      // FR-85: never leave an error inside a closed section.
+      const keys = Object.keys(amounts.errors);
+      setOpenSections((open) => ({
+        balances: open.balances || keys.some((k) => k.startsWith('balance_')),
+        policy: open.policy || keys.some((k) => !k.startsWith('balance_')),
+      }));
+      setPending(false);
+      setError(tDuration('invalid'));
+      return;
+    }
+
+    const changes = balanceAdjustments(
+      balances.map((balance) => ({
+        leaveTypeId: balance.leaveTypeId,
+        balance: balance.balanceMinutes,
+      })),
+      targets
+    );
+
+    for (const change of changes) {
+      const balanceResult = await setLeaveBalance(employee.id, change.leaveTypeId, change.target);
+      if (!balanceResult.ok) {
+        setPending(false);
+        setError(balanceResult.error);
+        return;
+      }
+    }
+
+    // Accrual policy per balance-affecting type, already in minutes.
+    for (const policy of policyInputs) {
+      const policyResult = await setEmployeeLeavePolicy({
+        employeeId: employee.id,
+        leaveTypeId: policy.leaveTypeId,
+        accrualMinutesPerMonth: policy.rate,
+        annualCapMinutes: policy.cap > 0 ? policy.cap : null,
+        carryoverCapMinutes: policy.carry,
+        accrualStartMonth: policyMinutesFor(policy.leaveTypeId).startMonth,
+      });
+
+      if (!policyResult.ok) {
+        setPending(false);
+        setError(`${labels.policyWarn} ${policyResult.error}`);
+        return;
       }
     }
 
@@ -351,6 +381,8 @@ export function EditEmployeeForm({
 
   async function handleResetPassword() {
     setError(null);
+    setNewTempPassword(null);
+    setPasswordSms(null);
     setPending(true);
     const result = await resetPassword(employee.id, { textIt: textPassword });
     setPending(false);
@@ -387,8 +419,38 @@ export function EditEmployeeForm({
     router.refresh();
   }
 
+  function saveButtons(editable: boolean, testId: string) {
+    return (
+      <div className="flex gap-3 pt-2">
+        {editable && (
+          <Button type="submit" disabled={pending} data-testid={testId}>
+            {pending ? '...' : labels.save}
+          </Button>
+        )}
+        <Button type="button" variant="outline" onClick={() => router.push(`/${locale}/manage/employees`)}>
+          {labels.cancel}
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <Tabs.Root value={tab} dir={locale === 'fa' ? 'rtl' : 'ltr'} onValueChange={(value) => {
+      setTab(value);
+      setError(null);
+      setSuccess(false);
+    }} className="space-y-5">
+      <Tabs.List className={tabListClass} aria-label={t('editTitle')}>
+        {[
+          { id: 'personal', label: t('personalTab'), visible: true },
+          { id: 'leave', label: t('timeOffDetails'), visible: (canManageLeave && balances.length > 0) || !!specialLeave },
+          { id: 'account', label: t('accountActions'), visible: caps.org || caps.signOutEverywhere || (caps.resetPassword && employee.active) },
+        ].filter((item) => item.visible).map((item) => (
+          <Tabs.Trigger key={item.id} value={item.id} className={tabClass(item.id === tab)} disabled={pending} data-testid={`employee-tab-${item.id}`}>
+            {item.label}
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
       {view.note && (view.note !== 'manager' || labels.managerNote) && (
         <p
           className="bg-secondary text-secondary-foreground border border-border px-4 py-3 rounded-lg text-sm"
@@ -417,391 +479,395 @@ export function EditEmployeeForm({
           {labels.saved}
         </p>
       )}
-      {newTempPassword && (
-        <Card className="border-2 border-success/30 bg-success-foreground">
-          <CardContent className="space-y-2 pt-4">
-            <p className="text-sm font-semibold text-success">{labels.tempPasswordLabel}</p>
-            <p className="font-mono text-xl bg-background border border-success/20 rounded-lg px-4 py-2 select-all tracking-widest">
-              {newTempPassword}
-            </p>
-            <p className="text-xs text-success">{labels.tempPasswordHint}</p>
-            {passwordSms && (
-              <p className="text-xs text-muted-foreground" data-testid="reset-password-sms">
-                {{ queued: labels.smsQueued, skipped: labels.smsSkipped, off: labels.smsOff, failed: labels.smsFailed }[passwordSms]}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="first_name">{labels.firstName}</Label>
-                <Input
-                  id="first_name"
-                  name="first_name"
-                  required
-                  defaultValue={employee.first_name}
-                  // Read-only for a caller who cannot save it: an editable box
-                  // whose value is silently discarded is worse than a disabled one.
-                  disabled={!caps.name}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="last_name">{labels.lastName}</Label>
-                <Input
-                  id="last_name"
-                  name="last_name"
-                  defaultValue={employee.last_name ?? ''}
-                  disabled={!caps.name}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="hire_date">{labels.hireDate}</Label>
-              <PersianDateField
-                id="hire_date"
-                testId="hire-date-picker"
-                locale={locale}
-                value={hireDate}
-                onChange={setHireDate}
-                disabled={!caps.profile}
-              />
-            </div>
-
-            {/* Department, manager and title: people edit on a target the caller
-                may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
-                admin, yourself, someone above you); a manager without people read
-                does not see them. */}
-            {view.orgBlock && (
-              <>
+      <Tabs.Content value="personal" forceMount hidden={tab !== 'personal'} className="space-y-5">
+        {photo}
+        <form onSubmit={savePersonal} className="space-y-5">
+          <Card>
+            <CardContent className="space-y-5 pt-6">
+              <div className="grid gap-5 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="job_title">{labels.jobTitle}</Label>
+                  <Label htmlFor="first_name">{labels.firstName}</Label>
                   <Input
-                    id="job_title"
-                    name="job_title"
-                    defaultValue={employee.job_title ?? ''}
-                    disabled={!caps.org}
-                    data-testid="job-title"
+                    id="first_name"
+                    name="first_name"
+                    required
+                    defaultValue={employee.first_name}
+                    // Read-only for a caller who cannot save it: an editable box
+                    // whose value is silently discarded is worse than a disabled one.
+                    disabled={!caps.name}
                   />
                 </div>
-
-                {/* Native <select> — must stay native for Playwright selectOption e2e */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="department_id">{labels.department}</Label>
-                  <select
-                    id="department_id"
-                    name="department_id"
-                    defaultValue={employee.department_id ?? ''}
-                    disabled={!caps.org}
-                    className={nativeSelectClass}
-                  >
-                    <option value="">{labels.selectDept}</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {locale === 'fa' ? d.name_fa : d.name_en}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="manager_id">{labels.manager}</Label>
-                  <PersonSearch
-                    id="manager_id"
-                    name="manager_id"
-                    people={managerOptions}
-                    value={managerId}
-                    onChange={setManagerId}
-                    disabled={!caps.org}
-                    testId="manager-search"
+                  <Label htmlFor="last_name">{labels.lastName}</Label>
+                  <Input
+                    id="last_name"
+                    name="last_name"
+                    defaultValue={employee.last_name ?? ''}
+                    disabled={!caps.name}
                   />
                 </div>
+              </div>
 
-              </>
-            )}
+              <div className="space-y-1.5">
+                <Label htmlFor="hire_date">{labels.hireDate}</Label>
+                <PersianDateField
+                  id="hire_date"
+                  testId="hire-date-picker"
+                  locale={locale}
+                  value={hireDate}
+                  onChange={setHireDate}
+                  disabled={!caps.profile}
+                />
+              </div>
 
-            {/* Roles: shown with the org fields, and to a role assigner who
-                cannot edit them (role_assign needs only people read). */}
-            {view.rolesBlock && (
-              <RoleCheckboxes
-                label={labels.roles}
-                roles={allRoles}
-                selected={selectedRoleIds}
-                onChange={setSelectedRoleIds}
-                editable={caps.editableRoleIds}
-                adminHint={labels.adminTransferHint}
-              />
-            )}
-
-            {/* FR-43: balance and accrual policy, leave_balances read to see and
-                edit to save — a different authority from the org fields above.
-                A disabled fieldset also leaves its inputs out of the submit,
-                which the leave writes skip anyway (canSaveLeave). */}
-            {canManageLeave && (
-              <fieldset disabled={!canSaveLeave} className="space-y-5">
-
-                {/* FR-85: quick add and history. */}
-                {balances.length > 0 && (
-                  <div
-                    className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
-                    data-testid="quick-add-section"
-                  >
-                    <span className="block text-sm font-semibold">{t('quickAdd.title')}</span>
-                    {canSaveLeave && (
-                      <BalanceQuickAdd
-                        employeeId={employee.id}
-                        balances={balances}
-                        hoursPerDay={hoursPerDay}
-                        pendingCounts={pendingCounts}
-                      />
-                    )}
-                    {canSaveLeave && annual && annual.balanceMinutes < 0 && (
-                      <ConvertNegativeForm
-                        employeeId={employee.id}
-                        balanceMinutes={annual.balanceMinutes}
-                        hoursPerDay={hoursPerDay}
-                        pendingCount={pendingCounts[annual.leaveTypeId]?.count ?? 0}
-                        typeName={locale === 'fa' ? annual.name_fa : annual.name_en ?? annual.name_fa}
-                      />
-                    )}
-                    <BalanceHistory employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
+              {/* Department, manager and title: people edit on a target the caller
+                  may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
+                  admin, yourself, someone above you); a manager without people read
+                  does not see them. */}
+              {view.orgBlock && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="job_title">{labels.jobTitle}</Label>
+                    <Input
+                      id="job_title"
+                      name="job_title"
+                      defaultValue={employee.job_title ?? ''}
+                      disabled={!caps.org}
+                      data-testid="job-title"
+                    />
                   </div>
-                )}
 
-                {/* Collapsed with <details> so the closed fields stay in the DOM: the
-                    form reads them from FormData on Save. An invalid field opens its
-                    section, since the browser cannot focus a hidden input. */}
-                {balances.length > 0 && (
-                  <details
-                    className="group rounded-lg border border-border bg-secondary/40 p-4"
-                    data-testid="balances-section"
-                    open={openSections.balances}
-                    onToggle={(e) => {
-                      const open = e.currentTarget.open;
-                      setOpenSections((s) => ({ ...s, balances: open }));
-                    }}
-                    onInvalidCapture={() => setOpenSections((s) => ({ ...s, balances: true }))}
-                  >
-                    <summary className="flex cursor-pointer list-none items-start gap-2">
-                      <ChevronDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-180" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
-                        {balances.map((balance) => (
-                          <span
-                            key={balance.leaveTypeId}
-                            className="mt-0.5 block text-xs text-muted-foreground"
-                            data-testid={`balance-total-${leaveTypeSlug(balance)}`}
-                          >
-                            {locale === 'fa' ? balance.name_fa : balance.name_en ?? balance.name_fa}:{' '}
-                            {formatDuration(balance.balanceMinutes, hoursPerDay, locale, durationLabelsFrom(tLeave))}
-                          </span>
-                        ))}
-                      </span>
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      {balances.map((balance) => {
-                        const slug = leaveTypeSlug(balance);
-                        const label =
-                          locale === 'fa'
-                            ? balance.name_fa
-                            : balance.name_en ?? balance.name_fa;
-                        const name = `balance_${balance.leaveTypeId}`;
-                        return (
-                          <div key={balance.leaveTypeId} className="space-y-1.5">
-                            <PendingBalanceWarning
-                              count={pendingCounts[balance.leaveTypeId]?.count ?? 0}
-                              typeName={label}
-                            />
-                            <DaysHoursField
-                              // The inputs are uncontrolled: a quick add must remount them,
-                              // or the next Save writes the old balance back over it.
-                              key={`${balance.leaveTypeId}-${balance.balanceMinutes}`}
-                              name={name}
-                              label={label}
-                              minutes={balance.balanceMinutes}
-                              hoursPerDay={hoursPerDay}
-                              // FR-48: a balance may be negative (leave taken in
-                              // advance); the database bounds it at -366 days.
-                              allowNegative
-                              testId={`balance-days-${slug}`}
-                              hoursTestId={`balance-hours-${slug}`}
-                              leaveTypeId={balance.leaveTypeId}
-                              error={amountErrors[name]}
-                            />
-                            <BalanceBreakdownLines
-                              balanceMinutes={balance.balanceMinutes}
-                              leaveTypeId={balance.leaveTypeId}
-                              quickAdds={quickAdds}
-                              hoursPerDay={hoursPerDay}
-                              testId={`balance-breakdown-${slug}`}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </details>
-                )}
+                  {/* Native <select> — must stay native for Playwright selectOption e2e */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="department_id">{labels.department}</Label>
+                    <select
+                      id="department_id"
+                      name="department_id"
+                      defaultValue={employee.department_id ?? ''}
+                      disabled={!caps.org}
+                      className={nativeSelectClass}
+                    >
+                      <option value="">{labels.selectDept}</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {locale === 'fa' ? d.name_fa : d.name_en}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {balances.length > 0 && policies !== null && (
-                  <details
-                    className="group rounded-lg border border-border bg-secondary/40 p-4"
-                    data-testid="policy-section"
-                    open={openSections.policy}
-                    onToggle={(e) => {
-                      const open = e.currentTarget.open;
-                      setOpenSections((s) => ({ ...s, policy: open }));
-                    }}
-                    onInvalidCapture={() => setOpenSections((s) => ({ ...s, policy: true }))}
-                  >
-                    <summary className="flex cursor-pointer list-none items-center gap-2">
-                      <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
-                      <span className="block text-sm font-semibold">{labels.policyTitle}</span>
-                    </summary>
-                    <div className="mt-3 space-y-3">
-                      <p className="text-sm text-muted-foreground">{labels.policyHint}</p>
-                      {balances.map((balance) => {
-                        const slug = leaveTypeSlug(balance);
-                        const label =
-                          locale === 'fa'
-                            ? balance.name_fa
-                            : balance.name_en ?? balance.name_fa;
-                        return (
-                          <AccrualPolicyFields
-                            key={`policy-${balance.leaveTypeId}`}
-                            leaveTypeId={balance.leaveTypeId}
-                            slug={slug}
-                            legend={label}
-                            defaults={policyMinutesFor(balance.leaveTypeId)}
-                            hoursPerDay={hoursPerDay}
-                            errors={amountErrors}
-                            labels={labels}
-                          />
-                        );
-                      })}
-                    </div>
-                  </details>
-                )}
-              </fieldset>
-            )}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="manager_id">{labels.manager}</Label>
+                    <PersonSearch
+                      id="manager_id"
+                      name="manager_id"
+                      people={managerOptions}
+                      value={managerId}
+                      onChange={setManagerId}
+                      disabled={!caps.org}
+                      testId="manager-search"
+                    />
+                  </div>
 
-            <div className="flex gap-3 pt-2">
-              {/* Hidden when nothing on the form can be written: a Save that
-                  writes nothing would report a false "saved". */}
-              {view.saveable && (
-                <Button type="submit" disabled={pending} data-testid="edit-save">
-                  {pending ? '...' : labels.save}
-                </Button>
+                </>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push(`/${locale}/manage/employees`)}
-              >
-                {labels.cancel}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
 
-      {(caps.resetPassword || caps.org) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">{t('accountActions')}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            {caps.resetPassword && (employee.active || caps.signOutEverywhere) && (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetPassword}
-                  disabled={pending}
-                  data-testid="reset-password"
-                  className="border-orange-300 text-orange-700 hover:bg-orange-50"
-                >
-                  {labels.resetPwd}
-                </Button>
-                {/* FR-78: optional text of the new password (admin panel › SMS decides if it goes out). */}
-                {caps.signOutEverywhere && <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={textPassword}
-                    onChange={(e) => setTextPassword(e.target.checked)}
-                    disabled={pending}
-                    className="size-4 accent-primary"
-                    data-testid="reset-password-text-it"
-                  />
-                  {labels.textPassword}
-                </label>}
-              </div>
-            )}
-            {caps.signOutEverywhere && (
-              <div className="flex flex-wrap items-center gap-3">
-                <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
-                  data-testid="sign-out-everywhere">
-                  {t('signOutEverywhere')}
-                </Button>
-                {signedOut !== null && (
-                  <span role="status" className="text-xs text-muted-foreground" data-testid="signed-out-count">
-                    {t('signedOutDevices', { count: signedOut })}
-                  </span>
-                )}
-              </div>
-            )}
-            {!caps.org ? null : employee.active ? (
-              // Deactivating locks the person out at once, so it asks first.
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              {/* Roles: shown with the org fields, and to a role assigner who
+                  cannot edit them (role_assign needs only people read). */}
+              {view.rolesBlock && (
+                <RoleCheckboxes
+                  label={labels.roles}
+                  roles={allRoles}
+                  selected={selectedRoleIds}
+                  onChange={setSelectedRoleIds}
+                  editable={caps.editableRoleIds}
+                  adminHint={labels.adminTransferHint}
+                />
+              )}
+
+            </CardContent>
+          </Card>
+          {personalInfo && (
+            <Card data-testid="employee-personal-info">
+              <CardHeader className="border-b pb-4">
+                <CardTitle>{tPersonal('title')}</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <PersonalInfoFields editor={personalEditor} readOnly={!canSaveInfo}
+                  readOnlyReason={caps.lockedReason === 'self' ? 'self' : 'admin'} />
+              </CardContent>
+            </Card>
+          )}
+          {saveButtons(caps.profile || caps.name || caps.org || caps.editableRoleIds.length > 0 || canSaveInfo, 'edit-save')}
+        </form>
+      </Tabs.Content>
+
+      <Tabs.Content value="leave" forceMount hidden={tab !== 'leave'} className="space-y-5">
+        {canManageLeave && balances.length > 0 && (
+          <Card>
+            <CardContent className="pt-6">
+              <form onSubmit={saveLeave} className="space-y-5">
+                <fieldset disabled={!canSaveLeave} className="space-y-5">
+
+                  {/* FR-85: quick add and history. */}
+                  {balances.length > 0 && (
+                    <div
+                      className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
+                      data-testid="quick-add-section"
+                    >
+                      <span className="block text-sm font-semibold">{t('quickAdd.title')}</span>
+                      {canSaveLeave && (
+                        <BalanceQuickAdd
+                          employeeId={employee.id}
+                          balances={balances}
+                          hoursPerDay={hoursPerDay}
+                          pendingCounts={pendingCounts}
+                        />
+                      )}
+                      {canSaveLeave && annual && annual.balanceMinutes < 0 && (
+                        <ConvertNegativeForm
+                          employeeId={employee.id}
+                          balanceMinutes={annual.balanceMinutes}
+                          hoursPerDay={hoursPerDay}
+                          pendingCount={pendingCounts[annual.leaveTypeId]?.count ?? 0}
+                          typeName={locale === 'fa' ? annual.name_fa : annual.name_en ?? annual.name_fa}
+                        />
+                      )}
+                      <BalanceHistory employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
+                    </div>
+                  )}
+
+                  {/* Collapsed with <details> so the closed fields stay in the DOM: the
+                      form reads them from FormData on Save. An invalid field opens its
+                      section, since the browser cannot focus a hidden input. */}
+                  {balances.length > 0 && (
+                    <details
+                      className="group rounded-lg border border-border bg-secondary/40 p-4"
+                      data-testid="balances-section"
+                      open={openSections.balances}
+                      onToggle={(e) => {
+                        const open = e.currentTarget.open;
+                        setOpenSections((s) => ({ ...s, balances: open }));
+                      }}
+                      onInvalidCapture={() => setOpenSections((s) => ({ ...s, balances: true }))}
+                    >
+                      <summary className="flex cursor-pointer list-none items-start gap-2">
+                        <ChevronDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-180" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
+                          {balances.map((balance) => (
+                            <span
+                              key={balance.leaveTypeId}
+                              className="mt-0.5 block text-xs text-muted-foreground"
+                              data-testid={`balance-total-${leaveTypeSlug(balance)}`}
+                            >
+                              {locale === 'fa' ? balance.name_fa : balance.name_en ?? balance.name_fa}:{' '}
+                              {formatDuration(balance.balanceMinutes, hoursPerDay, locale, durationLabelsFrom(tLeave))}
+                            </span>
+                          ))}
+                        </span>
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        {balances.map((balance) => {
+                          const slug = leaveTypeSlug(balance);
+                          const label =
+                            locale === 'fa'
+                              ? balance.name_fa
+                              : balance.name_en ?? balance.name_fa;
+                          const name = `balance_${balance.leaveTypeId}`;
+                          return (
+                            <div key={balance.leaveTypeId} className="space-y-1.5">
+                              <PendingBalanceWarning
+                                count={pendingCounts[balance.leaveTypeId]?.count ?? 0}
+                                typeName={label}
+                              />
+                              <DaysHoursField
+                                // The inputs are uncontrolled: a quick add must remount them,
+                                // or the next Save writes the old balance back over it.
+                                key={`${balance.leaveTypeId}-${balance.balanceMinutes}`}
+                                name={name}
+                                label={label}
+                                minutes={balance.balanceMinutes}
+                                hoursPerDay={hoursPerDay}
+                                // FR-48: a balance may be negative (leave taken in
+                                // advance); the database bounds it at -366 days.
+                                allowNegative
+                                testId={`balance-days-${slug}`}
+                                hoursTestId={`balance-hours-${slug}`}
+                                leaveTypeId={balance.leaveTypeId}
+                                error={amountErrors[name]}
+                              />
+                              <BalanceBreakdownLines
+                                balanceMinutes={balance.balanceMinutes}
+                                leaveTypeId={balance.leaveTypeId}
+                                quickAdds={quickAdds}
+                                hoursPerDay={hoursPerDay}
+                                testId={`balance-breakdown-${slug}`}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
+
+                  {balances.length > 0 && policies !== null && (
+                    <details
+                      className="group rounded-lg border border-border bg-secondary/40 p-4"
+                      data-testid="policy-section"
+                      open={openSections.policy}
+                      onToggle={(e) => {
+                        const open = e.currentTarget.open;
+                        setOpenSections((s) => ({ ...s, policy: open }));
+                      }}
+                      onInvalidCapture={() => setOpenSections((s) => ({ ...s, policy: true }))}
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-2">
+                        <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+                        <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <p className="text-sm text-muted-foreground">{labels.policyHint}</p>
+                        {balances.map((balance) => {
+                          const slug = leaveTypeSlug(balance);
+                          const label =
+                            locale === 'fa'
+                              ? balance.name_fa
+                              : balance.name_en ?? balance.name_fa;
+                          return (
+                            <AccrualPolicyFields
+                              key={`policy-${balance.leaveTypeId}`}
+                              leaveTypeId={balance.leaveTypeId}
+                              slug={slug}
+                              legend={label}
+                              defaults={policyMinutesFor(balance.leaveTypeId)}
+                              hoursPerDay={hoursPerDay}
+                              errors={amountErrors}
+                              labels={labels}
+                            />
+                          );
+                        })}
+                      </div>
+                    </details>
+                  )}
+                </fieldset>
+                {saveButtons(canSaveLeave, 'leave-save')}
+              </form>
+            </CardContent>
+          </Card>
+        )}
+        {specialLeave}
+      </Tabs.Content>
+      <Tabs.Content value="account" className="space-y-5">
+        {newTempPassword && (
+          <Card className="border-2 border-success/30 bg-success-foreground">
+            <CardContent className="space-y-2 pt-4">
+              <p className="text-sm font-semibold text-success">{labels.tempPasswordLabel}</p>
+              <CopyPassword key={newTempPassword} password={newTempPassword} />
+              <p className="text-xs text-success">{labels.tempPasswordHint}</p>
+              {passwordSms && (
+                <p className="text-xs text-muted-foreground" data-testid="reset-password-sms">
+                  {{ queued: labels.smsQueued, skipped: labels.smsSkipped, off: labels.smsOff, failed: labels.smsFailed }[passwordSms]}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {(caps.resetPassword || caps.org) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm text-muted-foreground">{t('accountActions')}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-3">
+              {caps.resetPassword && (employee.active || caps.signOutEverywhere) && (
+                <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={handleResetPassword}
                     disabled={pending}
-                    className="border-destructive/30 text-destructive hover:bg-destructive/10"
-                    data-testid="employee-deactivate"
+                    data-testid="reset-password"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-50"
                   >
-                    {labels.deactivate}
+                    {labels.resetPwd}
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent size="sm">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{labels.deactivateConfirmTitle}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {labels.deactivateConfirmBody.replace('{name}', employee.full_name)}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel data-testid="employee-deactivate-cancel">{labels.cancel}</AlertDialogCancel>
-                    <AlertDialogAction
-                      variant="destructive"
-                      onClick={handleToggleActive}
-                      data-testid="employee-deactivate-confirm"
+                  {/* FR-78: optional text of the new password (admin panel › SMS decides if it goes out). */}
+                  {caps.signOutEverywhere && <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={textPassword}
+                      onChange={(e) => setTextPassword(e.target.checked)}
+                      disabled={pending}
+                      className="size-4 accent-primary"
+                      data-testid="reset-password-text-it"
+                    />
+                    {labels.textPassword}
+                  </label>}
+                </div>
+              )}
+              {caps.signOutEverywhere && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
+                    data-testid="sign-out-everywhere">
+                    {t('signOutEverywhere')}
+                  </Button>
+                  {signedOut !== null && (
+                    <span role="status" className="text-xs text-muted-foreground" data-testid="signed-out-count">
+                      {t('signedOutDevices', { count: signedOut })}
+                    </span>
+                  )}
+                </div>
+              )}
+              {!caps.org ? null : employee.active ? (
+                // Deactivating locks the person out at once, so it asks first.
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                      data-testid="employee-deactivate"
                     >
                       {labels.deactivate}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleToggleActive}
-                disabled={pending}
-                className="border-success/30 text-success hover:bg-success-foreground"
-                data-testid="employee-activate"
-              >
-                {labels.activate}
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-    </div>
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent size="sm">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{labels.deactivateConfirmTitle}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {labels.deactivateConfirmBody.replace('{name}', employee.full_name)}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel data-testid="employee-deactivate-cancel">{labels.cancel}</AlertDialogCancel>
+                      <AlertDialogAction
+                        variant="destructive"
+                        onClick={handleToggleActive}
+                        data-testid="employee-deactivate-confirm"
+                      >
+                        {labels.deactivate}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleActive}
+                  disabled={pending}
+                  className="border-success/30 text-success hover:bg-success-foreground"
+                  data-testid="employee-activate"
+                >
+                  {labels.activate}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </Tabs.Content>
+    </Tabs.Root>
   );
 }
