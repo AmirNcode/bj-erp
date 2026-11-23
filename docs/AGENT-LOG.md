@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Split Settings into Working Times and Official Holidays
+
+Codex updated the open PR #30 branch for local review on port 3501. Settings renders one panel at a time, removes the redundant title, and opens the available panel for users with only one permission. The Roles and delegation routes keep their existing access rules. Updated the English and Persian labels and the affected e2e navigation. Three focused tests passed for tab selection and permissions, along with TypeScript and lint. The owner requested local testing before authorizing a merge.
+
 ## 2026-11-22 — Sized forms on full-width tabbed pages
 
 Codex on `codex/tabbed-form-sizing` from `3566658` addressed the widescreen feedback for Edit Employee, Settings, Admin Panel and Profile. Documented field and panel sizing and removed the unused Sales test import flagged during deployment.

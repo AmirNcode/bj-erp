@@ -9,6 +9,8 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+- Settings now has separate Working Times and Official Holidays tabs.
+
 - Sized employee, settings, admin and profile forms for widescreen desktops, with compact numeric fields and responsive card layouts.
 
 - Edit Employee now groups personal information, time off and account actions into full-width tabs. Switching tabs keeps drafts. Each editable tab saves its own fields, and password resets offer a Copy button. Admin Panel, Settings and Profile also use the full available width.

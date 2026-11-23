@@ -23,12 +23,15 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   await page.goto('/settings');
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 15_000 });
 
+  await expect(page.getByTestId('holiday-editor')).toHaveCount(0);
+  await page.getByTestId('settings-tab-holidays').click();
+  await expect(page.getByTestId('work-settings')).toHaveCount(0);
   const picker = page.locator('.rmdp-container input').first();
   await picker.click();
   await picker.fill('1405/10/01'); // Jalali (admin default calendar) → stored Gregorian
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
-  await page.locator('h1').click(); // close the calendar popup
+  await page.getByTestId('holiday-name-fa').click(); // close the calendar popup
   await page.fill('[data-testid="holiday-name-fa"]', HOLIDAY_NAME);
   await page.click('[data-testid="holiday-add"]');
 
@@ -39,6 +42,7 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   //
   // Driven with selectOption on the native day dropdowns: the "off every week"
   // row is a list of <select>s, one per day, plus an "Add day" button.
+  await page.getByTestId('settings-tab-workingTimes').click();
   const weeklyValues = () =>
     page
       .locator('select[data-testid^="weekend-weekly-"]')
@@ -65,6 +69,7 @@ test('admin edits work settings + holidays; non-admin blocked', async ({ page })
   expect(await weeklyValues()).toEqual(['fri']);
 
   // Cleanup: delete the holiday we added via AlertDialog confirm; it disappears from the list.
+  await page.getByTestId('settings-tab-holidays').click();
   await addedRow.locator('button').click(); // opens AlertDialog
   // Click the confirm action button inside the AlertDialog (data-testid includes the holiday id)
   await page.locator('[data-testid^="holiday-delete-confirm-"]').click();
