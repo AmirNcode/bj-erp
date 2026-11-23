@@ -7,6 +7,8 @@ import type { SmsEvent, SmsStatus } from '@/lib/admin/types';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { EmptyState } from '@/components/EmptyState';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
 import { cn } from '@/lib/utils';
 import { ErrorNote, Pager, PillLinks, Section } from '../_components/parts';
 import { SmsSettingsForm } from './SmsSettingsForm';
@@ -67,15 +69,19 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
           {t('sms.authPaused', { error: s.auth_error })}
         </p>
       )}
-      <div className="grid max-w-6xl items-start gap-5 lg:grid-cols-[3fr_2fr]">
-        <Section title={t('sms.settings')} testId="admin-sms-settings">
-          <SmsSettingsForm initial={s} />
-        </Section>
-        <div className="flex flex-col gap-5">
-          <Section title={t('sms.test')}>
+      <div data-testid="admin-sms-settings">
+        <SmsSettingsForm initial={s} />
+      </div>
+      <FormSection title={t('sms.test')}>
+        <Card>
+          <CardContent>
             <SmsTestForm disabled={s.mode === 'off'} pattern={s.send_method === 'pattern'} />
-          </Section>
-          <Section title={t('sms.credit')} testId="admin-sms-credit">
+          </CardContent>
+        </Card>
+      </FormSection>
+      <FormSection title={t('sms.credit')}>
+        <Card data-testid="admin-sms-credit">
+          <CardContent>
             <div className="flex flex-col gap-2 text-sm">
               {s.credit_amount !== null && (
                 <p className="text-lg font-semibold tabular-nums">{t('sms.creditAmount', { amount: formatNumber(s.credit_amount, ADMIN_LOCALE) })}</p>
@@ -88,9 +94,9 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
               {s.credit_error && <p className="text-xs text-destructive">{t('sms.creditError', { error: s.credit_error })}</p>}
               <SmsCreditButton disabled={!s.has_api_key} />
             </div>
-          </Section>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
+      </FormSection>
 
       <Section title={t('sms.log')} testId="admin-sms-log">
         <div className="mb-4 flex flex-col gap-2">

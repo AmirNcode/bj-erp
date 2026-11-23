@@ -37,7 +37,7 @@ export default async function ApprovalStepsPage({ params }: Props) {
   ]);
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+    <div className="flex w-full flex-col">
       <PageHeader section title={tNav('approvalSteps')} />
       <ApprovalStepsCard
         steps={approvalData.ok ? approvalData.steps : []}
