@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP › Sales: Delete / Archive a record (FR-94) — 2026-11-23, branch `feat/erp-sales-module`
+
+- **Delete / Archive** button on the record page (admin only). The dialog offers **Archive** (record moves to the Archived stage, closed) or **Delete** (record hidden from lists, reports, metrics, customers, deadlines and searches), then Confirm or Cancel.
+- Contracts gain an **Archived** stage.
+- **Records › Deleted** (admin only) lists deleted records; a deleted record opens read-only with a **Restore** button. Record numbers are never reused.
+- Imports skip rows that match a deleted record (counted as "deleted").
+- Migration `20261123100000_sales_record_remove`. Spec `docs/specs/2026-11-23-sales-record-delete-archive-design.md`.
+
 ### ERP › Sales: CEO feedback round 1 (FR-94) — 2026-11-20, branch `feat/erp-sales-module`
 
 - **Section title is a button** (phones, every section): tapping it goes to that section's main page (ERP on a record → the records list).

@@ -14,6 +14,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 ## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
 
 - ◐ **CEO feedback round 1 — built, owner testing on `:3501`** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Tasks 0–8 done and committed on the branch; `:3501` runs the branch (`compose-sales`). Left: (1) owner checks title link, currencies, Our total price, Products, Files on `:3501`; (2) run `tests/e2e/sales-files.spec.ts` + `sales-products.spec.ts` (written, never run — need the local admin password as `E2E_ADMIN_PASSWORD`; each run leaves one `E2E …` record + one product in the DB); (3) push / merge to `main` only on the owner's word (deploys to Liara; newest commit must not be `[skip ci]`).
+- ◐ **Delete / Archive a record — built 2026-11-23** (spec `docs/specs/2026-11-23-sales-record-delete-archive-design.md`, plan `docs/plans/2026-11-23-sales-record-delete-archive.md`): SQL + UI committed on the branch; migration `20261123100000` not yet applied to `:3501`. Left: apply on `:3501` + browser check; run `tests/e2e/sales-remove.spec.ts` (never run; leaves two `E2E …` records).
 - [ ] Owner (live-server check): confirm `rsync` exists on the Liara VM before the first deploy with Sales files (backup mirror needs it).
 - [ ] Watch Liara VM disk once files ship: `sales-files` volume + `/var/backups/bj-erp/files/` mirror.
 

@@ -209,7 +209,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql` (33 since FR-94).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
-- **Sales stage kind `archived`** (imported inquiry, no result): closed, bid flow, entered only by the inquiry import or `sales_decide`; any check listing closed kinds must include it.
+- **Sales stage kind `archived`** (imported inquiry, no result): closed, bid flow, entered only by the inquiry import, `sales_decide` or `app_sales_archive` (admin; contracts have one too since 2026-11-23); any check listing closed kinds must include it.
+- **Deleted Sales records (`sales_rfps.deleted_at`, admin-only soft delete):** `private.sales_rfp` refuses them unless `p_include_deleted`; a new reader of `sales_rfps` must filter `deleted_at is null`.
 - **Sales import removal follows `sales_rfps.import_batches`** (every batch that wrote the row), not `import_batch_id`; a new import function must `array_append` its batch.
 - **Sales customers are picked (`CustomerCombo`), never created by typing** (owner rule §16.5); `app_sales_add_customer` / `similar_customers` behind "Create …". Merge logs events without `sales_touch` (keeps batches removable).
 - **Sales imports resolve `sales_name_aliases` first** (customer spelling → customer, person name → employee); merges / renames / Name matching write them. Imports keep `in_charge_text` even when an owner is set (Name matching needs it).

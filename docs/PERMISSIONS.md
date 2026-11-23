@@ -917,6 +917,8 @@ named key, else `sales: not allowed`. A reader without `sales_prices` receives J
 the price keys (`our_price`, `winning_bid`, `winner_name`, `total_value`, `unit_price`,
 `quote_revisions`); without `sales_bonds`, guarantees arrive as kind + status only and payments
 not at all. Failed CHECKs are re-raised as `sales: invalid input`, so a row is never echoed.
+**Archive / delete / restore a whole record** (`app_sales_archive`, `app_sales_delete_record`, `app_sales_restore_record`, 2026-11-23) is **admin role only** (`private.sales_is_admin()`, never a test account); no catalog key. Only the admin sees deleted records (Records › Deleted, read-only).
+
 Records are scoped to the caller's company (`sales: not found` otherwise). Item rows (and item-number search) need `project_items` read. A closed record takes notes, documents, deadlines and field edits only from a `sales_decide` holder (`private.sales_writable`); items and guarantees / payments stay open to their own holders.
 **Files, products, currencies (2026-11-20).** Files: list / download = `sales` read on the record (no price or bond restriction — owner decision); upload = `sales` edit + `sales_writable`; delete = uploader or `sales_settings`, + `sales_writable`; View as cannot upload or delete. The bytes are served only by `/api/sales/files/<id>` after `app_sales_file_get`, always as an attachment. Products and currencies: read with `sales`, edit with `sales_settings`. `private.sales_can` is false for FR-95 test accounts.
 

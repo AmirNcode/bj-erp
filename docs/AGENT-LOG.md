@@ -78,27 +78,31 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
-## 2026-11-23 — ERP › Sales: Delete / Archive a record (spec only)
+## 2026-11-23 — ERP › Sales: Delete / Archive a record (built, not yet on :3501)
 
-**Agent:** Claude Opus 5.5 via Claude Code
+**Agent:** Claude Opus 5.5 via Claude Code (lead + two Sonnet subagents)
 **Branch / HEAD at start:** feat/erp-sales-module @ 96da80b
-**Trigger:** Owner wants to remove test records 1 and 2; asked for delete/archive. Spec approved same day; plan written.
+**Trigger:** Owner wants to remove test records 1 and 2; asked for delete/archive (button on the record page, dialog Delete / Archive + Confirm / Cancel).
 
 **What changed**
-- `docs/plans/2026-11-23-sales-record-delete-archive.md` — implementation plan, tasks 1–10.
-- `docs/specs/2026-11-23-sales-record-delete-archive-design.md` — spec, approved 2026-11-23 (keep Restore via Records › Deleted; no un-archive). Cap name `remove_records`. Decisions: button on the record page (not a bulk edit mode on the list), dialog Delete / Archive + Confirm / Cancel, soft delete (`deleted_at`), archive = Archived stage (contracts get one), admin only, any record.
+- 6adc466 spec `docs/specs/2026-11-23-sales-record-delete-archive-design.md` (approved: soft delete, Archive = Archived stage, admin only, any record, Restore via Records › Deleted, no un-archive) + plan `docs/plans/2026-11-23-sales-record-delete-archive.md`.
+- c7dd0ce migration `20261123100000_sales_record_remove.sql`: `sales_rfps.deleted_at/deleted_by`, contract Archived stage (`private.sales_ensure`, re-run for every company), event kinds archived/deleted/restored, `private.sales_rfp(..., p_include_deleted)` (old 3-arg dropped), `private.sales_is_admin()`, `app_sales_archive/delete_record/restore_record`, `deleted_at is null` in every reader (list in migration header; extra: `app_sales_file_get`). Imports skip deleted matches (`deleted` count). `schema.sql` patched block by block. `tests/sql/sales-record-remove.sql` (105 checks); `tests/sql/sales.sql` seed count 15 → 16 stages.
+- 0adee19 UI: `RemoveRecordDialog.tsx`, header button + deleted banner/Restore in `RecordView.tsx` (deleted = derived boot with edit caps off), Deleted state in Records list, ActivityLog lines, import summaries, actions in `lib/actions/sales.ts`, `lib/sales/removeDialog.ts` + unit test, `tests/e2e/sales-remove.spec.ts`.
+- Docs: CHANGELOG, DATA_MODEL, PERMISSIONS, TASKS, CLAUDE.md (archived-kind line + deleted-records line).
 
 **Actions outside the repo**
-- none
+- Clone DB `sales_rm_dry` in `bj-approvals-finance-db-1`: created, migrated, tested, dropped. Real `postgres` DB untouched.
 
 **Verification**
-- none (docs only). Found: no whole-record delete exists today; Archived stage is import-only.
+- On the clone: all 9 `tests/sql/sales*.sql` pass (sales.sql via a temp copy expecting 34 catalog keys — :3501 has main's extra key; repo file stays 33).
+- tsc 0 · lint 0 errors · unit 154 files / 1549 pass · `npm run build` pass (dummy env). e2e not run. No browser check yet.
 
 **State left behind**
-- Spec + plan uncommitted. No code yet; next is Task 1 after owner OKs commits.
+- Committed on the branch, not pushed. Migration NOT applied to `:3501`: since 2026-11-22 `:3501` runs main's app (PR #30, from `../bj` + `/private/tmp/bj-3501-settings-tabs.yml`), and the branch lacks main's newest migrations/features — owner decides whether to merge main into the branch first.
 
 **For the next agent**
-- `private.sales_rfp` refusing deleted rows covers per-record paths; list/report readers in spec §6.1 need explicit filters.
+- `f.date(deleted_at)` uses the UTC date part (near-midnight Tehran deletions can show the neighbouring day); same limitation as ActivityLog.
+- e2e `sales-remove.spec.ts` leaves two `E2E …` records.
 
 ---
 
