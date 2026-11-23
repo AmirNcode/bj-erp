@@ -183,7 +183,7 @@ export function HolidayEditor({
       <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-4">
         <div>
           <h2 className="text-base font-semibold">{labels.holidaysTitle}</h2>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
+          <p className="mt-0.5 text-13 text-muted-foreground">
             {labels.holidaysCount.replace('{count}', formatNumber(holidays.length, locale))}
           </p>
         </div>
@@ -289,7 +289,7 @@ export function HolidayEditor({
                 className="group grid grid-cols-[1fr_40px] items-center gap-x-3 border-b border-muted py-2.5 text-sm transition-colors last:border-b-0 hover:bg-red-50 sm:grid-cols-[160px_110px_1fr_40px]"
               >
                 <span className="whitespace-nowrap font-medium">{show(h.holiday_date)}</span>
-                <span className="hidden text-[13px] text-muted-foreground sm:block">
+                <span className="hidden text-13 text-muted-foreground sm:block">
                   {formatCalendarDate(h.holiday_date, locale, 'dddd')}
                 </span>
                 <span className="col-start-1 row-start-2 sm:col-start-auto sm:row-start-auto">

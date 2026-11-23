@@ -58,7 +58,7 @@ function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: str
   return (
     <span
       data-testid="nav-approvals-count"
-      className="ms-auto rounded-sm bg-white px-1.5 text-[11.5px] font-semibold leading-5 text-sidebar"
+      className="ms-auto rounded-sm bg-white px-1.5 text-11 font-semibold leading-5 text-sidebar"
     >
       {formatNumber(n, locale)}
     </span>
@@ -206,7 +206,7 @@ export function MainNav({
 
       {manageItems.length > 0 && (
         <div className="hidden md:block">
-          <p className="px-3 pt-4 pb-1 text-[11.5px] font-semibold text-white/60">
+          <p className="px-3 pt-4 pb-1 text-11 font-semibold text-white/60">
             {t('manage')}
           </p>
           <ul className="flex flex-col gap-0.5">{manageItems.map(sideLink)}</ul>
@@ -262,7 +262,7 @@ export function MainNav({
           )}
           {profile && (
             <span className="min-w-0">
-              <span className="block truncate whitespace-nowrap text-[13.5px] font-semibold text-white">
+              <span className="block truncate whitespace-nowrap text-13 font-semibold text-white">
                 <bdi>{profile.name}</bdi>
               </span>
               <span className="block truncate whitespace-nowrap text-xs text-white/70">

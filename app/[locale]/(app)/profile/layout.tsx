@@ -17,7 +17,7 @@ import { ProfileTabs } from './_components/ProfileTabs';
 type Props = { children: React.ReactNode; params: Promise<{ locale: string }> };
 
 const linkClass =
-  'inline-flex h-9 min-w-0 items-center justify-center truncate rounded-sm border border-border bg-card px-2 text-[12.5px] font-semibold transition-colors hover:border-primary/40 hover:bg-primary/5';
+  'inline-flex h-9 min-w-0 items-center justify-center truncate rounded-sm border border-border bg-card px-2 text-xs font-semibold transition-colors hover:border-primary/40 hover:bg-primary/5';
 
 export default async function ProfileLayout({ children, params }: Props) {
   const { locale } = await params;

@@ -62,7 +62,7 @@ export function PageRefreshButton({ initialUpdatedAt, onDark, className }: Props
       onClick={handleRefresh}
       disabled={isRefreshing}
       className={cn(
-        'h-[30px] self-start whitespace-nowrap rounded-sm px-3 text-[12.5px] font-semibold',
+        'h-[30px] self-start whitespace-nowrap rounded-sm px-3 text-xs font-semibold',
         onDark
           ? 'border-white/30 bg-transparent text-white/85 hover:bg-white/10 hover:text-white'
           : 'bg-card text-muted-foreground hover:bg-primary/10 hover:text-primary',

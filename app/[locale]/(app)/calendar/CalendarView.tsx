@@ -361,16 +361,16 @@ export function CalendarView({
               selectedDay?.iso === day.iso && 'ring-2 ring-primary ring-offset-2'
             )}
           >
-            <span className="text-[11px] font-semibold sm:text-xs">{day.dayLabel}</span>
+            <span className="text-11 font-semibold sm:text-xs">{day.dayLabel}</span>
             {day.count > 0 && (
               <span
                 data-testid={`calendar-day-count-${day.iso}`}
-                className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground sm:end-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-[10px]"
+                className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-10 font-semibold text-primary-foreground sm:end-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-10"
               >
                 {formatNumber(day.count, locale)}
               </span>
             )}
-            <span className="mt-2 flex min-w-0 flex-col gap-0.5 text-[9px] leading-tight sm:mt-4 sm:text-xs">
+            <span className="mt-2 flex min-w-0 flex-col gap-0.5 text-10 leading-tight sm:mt-4 sm:text-xs">
               {day.visibleNames.map((name) => (
                 <span key={name} className="truncate">
                   {name}

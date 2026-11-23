@@ -82,7 +82,7 @@ export function OrgChart({ people, myId, locale, limited = false }: Props) {
           <span className="flex items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{nameWithPersonnelNo(person)}</span>
             {person.id === myId && (
-              <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
+              <span className="shrink-0 rounded bg-primary px-1.5 py-0.5 text-10 text-primary-foreground">
                 {t('you')}
               </span>
             )}

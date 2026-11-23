@@ -88,7 +88,7 @@ export async function SmsLogHistory({ events, statusStyle }: {
                 {e.response && (
                   <div className="flex flex-col gap-0.5">
                     <span className="text-muted-foreground">{h('response')}</span>
-                    <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-background p-2 font-mono text-[11px]">
+                    <pre dir="ltr" className="overflow-x-auto whitespace-pre-wrap break-all rounded bg-background p-2 font-mono text-11">
                       {e.response}
                     </pre>
                   </div>

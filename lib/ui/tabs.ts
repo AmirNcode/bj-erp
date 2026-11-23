@@ -18,7 +18,7 @@ export const subTabListClass = 'flex max-w-full flex-wrap gap-1';
 
 export function subTabClass(on: boolean): string {
   return [
-    'inline-flex h-9 items-center whitespace-nowrap rounded-sm px-3 text-[13px] transition-colors sm:h-8',
+    'inline-flex h-9 items-center whitespace-nowrap rounded-sm px-3 text-13 transition-colors sm:h-8',
     on ? 'bg-secondary font-semibold text-primary' : 'text-muted-foreground hover:text-foreground',
   ].join(' ');
 }

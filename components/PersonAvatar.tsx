@@ -16,7 +16,7 @@ import { usePhotoVersion } from '@/lib/photo/usePhotoVersion';
 import { cn } from '@/lib/utils';
 
 const SIZES = {
-  xs: 'size-6 text-[10px]',
+  xs: 'size-6 text-10',
   sm: 'size-8 text-xs',
   md: 'size-10 text-sm',
   lg: 'size-14 text-lg',

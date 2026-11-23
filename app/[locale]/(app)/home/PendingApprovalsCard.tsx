@@ -147,12 +147,12 @@ export function PendingApprovalsCard({ rows, total, count, locale, hoursPerDay, 
                   <bdi>{row.employeeName}</bdi>
                 </span>
                 {row.departmentName && (
-                  <span className="whitespace-nowrap text-[12.5px] text-muted-foreground">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
                     {row.departmentName}
                   </span>
                 )}
               </div>
-              <p className="text-[13px]">{row.summary}</p>
+              <p className="text-13">{row.summary}</p>
               {row.warning ? (
                 <p className="flex items-center gap-1 text-xs text-warning">
                   <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />

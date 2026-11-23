@@ -167,7 +167,7 @@ export function WorkSettingsForm({
               const next = isoOf(e.target.value);
               setSlots((prev) => prev.map((v, j) => (j === i ? next : v)));
             }}
-            className={cn(nativeSelectClass, 'h-9 w-40 rounded-md bg-card text-[13px]')}
+            className={cn(nativeSelectClass, 'h-9 w-40 rounded-md bg-card text-13')}
           >
             <option value="none">{labels.dayNone}</option>
             {WEEKDAYS.map((d) => (
@@ -248,7 +248,7 @@ export function WorkSettingsForm({
     <Card className="w-full max-w-2xl gap-0 py-0" data-testid="work-settings">
       <div className="px-6 pt-5 pb-1">
         <h2 className="text-base font-semibold">{labels.weekendTitle}</h2>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.weekendHint}</p>
+        <p className="mt-0.5 text-13 text-muted-foreground">{labels.weekendHint}</p>
       </div>
 
       {/* Two fixed rows: a label column, then the row's controls stacked. */}
@@ -257,7 +257,7 @@ export function WorkSettingsForm({
           className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-weekly-row"
         >
-          <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
+          <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
             {labels.frequencyWeekly}
           </span>
           {renderSlots('weekly', weeklySlots, setWeeklySlots)}
@@ -267,7 +267,7 @@ export function WorkSettingsForm({
           className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
           data-testid="weekend-biweekly-row"
         >
-          <span className="whitespace-nowrap text-[13.5px] font-semibold sm:leading-9">
+          <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
             {labels.frequencyBiweekly}
           </span>
           <div className="flex flex-col gap-2">
@@ -277,7 +277,7 @@ export function WorkSettingsForm({
                 refuses the save rather than guessing one. */}
             {biweekly.length > 0 && (
               <div className="mt-1 flex flex-col gap-1 border-t border-muted pt-3">
-                <label className="text-[13px] font-medium">{labels.anchorLabel}</label>
+                <label className="text-13 font-medium">{labels.anchorLabel}</label>
                 {/* rmdp-container class is intentional — e2e locates input via it. */}
                 <div data-testid="biweekly-anchor" className="w-40">
                   <DatePicker
@@ -301,7 +301,7 @@ export function WorkSettingsForm({
       <div className="space-y-3 border-t px-6 py-4">
         <div>
           <h3 className="text-sm font-semibold">{labels.hoursTitle}</h3>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.hoursHint}</p>
+          <p className="mt-0.5 text-13 text-muted-foreground">{labels.hoursHint}</p>
         </div>
         <div className={rowClass} data-testid="work-hours-row">
           <label className={fieldClass}>
@@ -383,12 +383,12 @@ export function WorkSettingsForm({
       {(!readOnly || savedAt) && (
         <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t bg-muted/30 px-6 py-3.5">
           {okMsg && (
-            <p role="status" data-testid="work-settings-saved" className="text-[12.5px] text-success">
+            <p role="status" data-testid="work-settings-saved" className="text-xs text-success">
               {okMsg}
             </p>
           )}
           {savedAt && (
-            <p className="text-[12.5px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {labels.lastSaved.replace('{date}', formatCalendarDate(todayInAppTz(new Date(savedAt)), locale))}
             </p>
           )}

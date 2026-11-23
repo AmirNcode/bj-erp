@@ -30,13 +30,13 @@ export function MobileTopBar({ locale, appName }: { locale: string; appName: str
           href={`/${locale}${section.href}`}
           aria-label={t('goTo', { section: name })}
           data-testid="mobile-section-link"
-          className="inline-flex min-w-0 items-center gap-1 rounded-md border border-white/40 px-2.5 py-1 text-[17px] font-semibold hover:bg-white/10 active:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          className="inline-flex min-w-0 items-center gap-1 rounded-md border border-white/40 px-2.5 py-1 text-lg font-semibold hover:bg-white/10 active:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
         >
           <ChevronLeft aria-hidden className="size-4 shrink-0 rtl:rotate-180" />
           <span className="truncate">{name}</span>
         </Link>
       ) : (
-        <span className="min-w-0 truncate text-[17px] font-semibold">{name}</span>
+        <span className="min-w-0 truncate text-lg font-semibold">{name}</span>
       )}
       <Link href={`/${locale}/home`} aria-label={t('home')} data-testid="mobile-logo-link" className="shrink-0">
       <Image

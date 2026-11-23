@@ -90,7 +90,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
             <label
               key={m}
               className={cn(
-                'inline-flex h-9 cursor-pointer items-center rounded-lg px-4 text-[13px] transition-colors',
+                'inline-flex h-9 cursor-pointer items-center rounded-lg px-4 text-13 transition-colors',
                 form.mode === m ? 'bg-card font-semibold text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
               )}
             >
