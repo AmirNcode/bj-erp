@@ -1,4 +1,5 @@
 import { cache } from 'react';
+import { getCachedClaims } from '@/lib/auth/context';
 import { createRealClient } from '@/lib/supabase/server';
 import { isFontStep, type FontStep } from '@/lib/prefs/fontScale';
 
@@ -9,10 +10,11 @@ import { isFontStep, type FontStep } from '@/lib/prefs/fontScale';
  */
 export const getOwnFontStep = cache(async (): Promise<FontStep> => {
   try {
-    const supabase = await createRealClient();
-    const { data: auth } = await supabase.auth.getUser();
-    const uid = auth?.user?.id;
+    // Claims stay the admin's own during View as; no GoTrue round trip.
+    const claims = await getCachedClaims();
+    const uid = claims?.sub;
     if (!uid) return 0;
+    const supabase = await createRealClient();
     const { data, error } = await supabase
       .from('profiles')
       .select('font_step')

@@ -8,11 +8,13 @@ const createClient = vi.fn();
 
 function fake() {
   return {
-    auth: { getUser: async () => ({ data: { user } }) },
     from: () => ({ select: () => ({ eq: () => ({ single: async () => result }) }) }),
   };
 }
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(f: T) => f }));
+vi.mock('@/lib/auth/context', () => ({
+  getCachedClaims: async () => (user ? { sub: user.id } : null),
+}));
 vi.mock('@/lib/supabase/server', () => ({
   createRealClient: (...a: unknown[]) => { createRealClient(...a); return fake(); },
   createClient: (...a: unknown[]) => { createClient(...a); return fake(); },

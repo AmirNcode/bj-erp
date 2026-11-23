@@ -32,13 +32,13 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const [roles, profile, perms, capabilities] = await Promise.all([
+  const [roles, profile, perms, capabilities, fontStep] = await Promise.all([
     getCachedRoles(user.id),
     getCachedProfile(user.id),
     getCachedPermissions(user.id),
     getApprovalCapabilities(),
+    getOwnFontStep(),
   ]);
-  const fontStep = await getOwnFontStep();
   if (!profile?.active) {
     redirect(`/${locale}/login`);
   }
@@ -96,24 +96,24 @@ export default async function AppLayout({ children, params }: Props) {
 
   return (
     <>
-    <FontStepStyle step={fontStep} />
-    <AppShell
-      roles={roles}
-      perms={perms}
-      canApprove={canApprove}
-      canDelegate={capabilities.canDelegate}
-      hasReports={capabilities.hasReports}
-      absencesPage={capabilities.absencesPage}
-      timeOff={capabilities.timeOff}
-      locale={locale}
-      appName={t('appName')}
-      profile={profileSummary}
-      pendingCount={pendingCount}
-      myPending={myPending}
-      viewAs={view ? { name: view.name, personnelNo: view.personnelNo, expiresAt: view.expiresAt } : null}
-    >
-      {children}
-    </AppShell>
+      <FontStepStyle step={fontStep} />
+      <AppShell
+        roles={roles}
+        perms={perms}
+        canApprove={canApprove}
+        canDelegate={capabilities.canDelegate}
+        hasReports={capabilities.hasReports}
+        absencesPage={capabilities.absencesPage}
+        timeOff={capabilities.timeOff}
+        locale={locale}
+        appName={t('appName')}
+        profile={profileSummary}
+        pendingCount={pendingCount}
+        myPending={myPending}
+        viewAs={view ? { name: view.name, personnelNo: view.personnelNo, expiresAt: view.expiresAt } : null}
+      >
+        {children}
+      </AppShell>
     </>
   );
 }
