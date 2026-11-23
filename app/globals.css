@@ -111,6 +111,22 @@ select:not([multiple]):not([size]) {
 }
 
 /*
+ * Owner rule: no input, select, textarea or date field may trigger the iPhone
+ * zoom-on-focus, which happens whenever a field's computed font-size is under
+ * 16px. On touch screens every text-entry control is at least 16px, whatever
+ * size class it carries (`text-sm`, `text-[13px]`, `md:text-sm` at landscape
+ * widths). Unlayered on purpose so it beats Tailwind's layered utilities.
+ * Never fix the zoom with `maximum-scale` / `user-scalable=no` (blocks pinch zoom).
+ */
+@media (pointer: coarse) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [type='hidden']),
+  select,
+  textarea {
+    font-size: max(16px, var(--text-base));
+  }
+}
+
+/*
  * Login slips (components/CredentialsDownload.tsx). The slips are portalled to
  * <body> only while printing, and while <html> carries `print-slips` the
  * printout holds the slips and nothing else from the page.

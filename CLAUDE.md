@@ -226,6 +226,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Sales currencies come from `sales_currencies` (`boot.currencies`), never a constant; a code is permanent once used** (deactivate, don't delete). **Product defaults are copied into item rows on pick (`app_project_save_node`), never linked.**
 - **Sales View as = read-only transaction (writes fail `25006`); there is no `private.view_as_active()`.** Route handlers refuse writes when the `bj-view-as` cookie exists; client components use `useViewAs()`.
 - **New `sales_events` kinds need the `sales_events_kind_check` constraint re-created** and a case in `ActivityLog`.
+- **Fields stay ≥ 16px on touch screens (no iPhone zoom):** one unlayered `@media (pointer: coarse)` rule in `globals.css` sets `font-size: max(16px, var(--text-base))` on input/select/textarea; never shrink a field below it with a class, never add `maximum-scale`/`user-scalable=no`.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

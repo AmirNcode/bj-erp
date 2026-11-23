@@ -55,6 +55,8 @@ left in Farsi).
 
 Use the full shell width for the page header, tab bar and data tables. Set `data-wide` on the page root. Align forms to the same start gutter and size their panels and columns for the content. On desktop, group related fields into two or three columns, give a day/hour pair about 18rem total, a date about 12rem and a notes field up to 36rem. Independent cards can sit side by side when both fit. Let controls shrink with their container on phones.
 
+Fields are never under 16px on touch screens: the global `@media (pointer: coarse)` rule in `globals.css` handles it (it beats `text-sm`, `text-[13px]`, `md:text-sm`). Never add `maximum-scale` or `user-scalable=no` to the viewport.
+
 Tabs are underlined text, never pills. Use `lib/ui/tabs.ts`:
 
 - `tabListClass` + `tabClass(active)`: page-level tabs and list filters (Settings, Admin panel,
