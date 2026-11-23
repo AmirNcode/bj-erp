@@ -1797,7 +1797,7 @@ begin
 
   if new.id = v_uid then
     -- FR-83: a name is no longer the person's own to change; only a people edit holder keeps it.
-    v_allowed := array['language_pref', 'calendar_pref'];
+    v_allowed := array['language_pref', 'calendar_pref', 'font_step'];
     if private.has_perm(v_uid, 'people', 'edit') then
       v_allowed := v_allowed || array['full_name', 'first_name', 'last_name'];
     end if;
@@ -1829,6 +1829,7 @@ begin
      or (new.active        is distinct from old.active        and not ('active'        = any (v_allowed)))
      or (new.language_pref is distinct from old.language_pref and not ('language_pref' = any (v_allowed)))
      or (new.calendar_pref is distinct from old.calendar_pref and not ('calendar_pref' = any (v_allowed)))
+     or (new.font_step     is distinct from old.font_step     and not ('font_step'     = any (v_allowed)))
   then
     raise exception 'not permitted to modify restricted profile fields' using errcode = '42501';
   end if;
@@ -14264,8 +14265,10 @@ CREATE TABLE public.profiles (
     must_change_password boolean DEFAULT true NOT NULL,
     first_name text NOT NULL COLLATE pg_catalog."fa-IR-x-icu",
     last_name text COLLATE pg_catalog."fa-IR-x-icu",
+    font_step smallint DEFAULT 0 NOT NULL,
     CONSTRAINT profiles_calendar_pref_persian_only CHECK ((calendar_pref = 'jalali'::text)),
     CONSTRAINT profiles_first_name_format CHECK (((first_name <> ''::text) AND (first_name = btrim(first_name)))),
+    CONSTRAINT profiles_font_step_range CHECK (((font_step >= 0) AND (font_step <= 4))),
     CONSTRAINT profiles_last_name_format CHECK (((last_name IS NULL) OR ((last_name <> ''::text) AND (last_name = btrim(last_name))))),
     CONSTRAINT profiles_manager_not_self CHECK (((manager_id IS NULL) OR (manager_id <> id))),
     CONSTRAINT profiles_personnel_no_format CHECK (((personnel_no IS NULL) OR (((char_length(personnel_no) >= 1) AND (char_length(personnel_no) <= 64)) AND (personnel_no = btrim(personnel_no)))))
@@ -14277,6 +14280,13 @@ CREATE TABLE public.profiles (
 --
 
 COMMENT ON COLUMN public.profiles.calendar_pref IS 'Compatibility column fixed to jalali; the application no longer exposes a calendar preference.';
+
+
+--
+-- Name: COLUMN profiles.font_step; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.font_step IS 'Own text-size step 0..4 (100%..140% label); changed only by the person or the admin.';
 
 
 --
