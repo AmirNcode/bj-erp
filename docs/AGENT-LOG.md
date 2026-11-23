@@ -78,6 +78,30 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-23 — ERP › Sales: Delete / Archive a record (spec only)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/erp-sales-module @ 96da80b
+**Trigger:** Owner wants to remove test records 1 and 2; asked for delete/archive. Spec approved same day; plan written.
+
+**What changed**
+- `docs/plans/2026-11-23-sales-record-delete-archive.md` — implementation plan, tasks 1–10.
+- `docs/specs/2026-11-23-sales-record-delete-archive-design.md` — spec, approved 2026-11-23 (keep Restore via Records › Deleted; no un-archive). Cap name `remove_records`. Decisions: button on the record page (not a bulk edit mode on the list), dialog Delete / Archive + Confirm / Cancel, soft delete (`deleted_at`), archive = Archived stage (contracts get one), admin only, any record.
+
+**Actions outside the repo**
+- none
+
+**Verification**
+- none (docs only). Found: no whole-record delete exists today; Archived stage is import-only.
+
+**State left behind**
+- Spec + plan uncommitted. No code yet; next is Task 1 after owner OKs commits.
+
+**For the next agent**
+- `private.sales_rfp` refusing deleted rows covers per-record paths; list/report readers in spec §6.1 need explicit filters.
+
+---
+
 ## 2026-11-20 — ERP › Sales: CEO feedback round 1 (built; owner testing on :3501)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead, reviewed every diff) + Sonnet 5.5 subagents per task; Opus subagents for the spec builder-check and the plan review
