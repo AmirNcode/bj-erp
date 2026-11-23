@@ -95,10 +95,11 @@ Copy this block verbatim and fill it in.
 **Verification**
 - Merged branch: tsc 0 · lint 0 · unit 155 files / 1553 pass · build pass (dummy env).
 - Clone: all 9 `sales*.sql` + `request-edit.sql` pass. `fr55-roles-permissions.sql` 14 FAIL, all role-preset data drift on the live-backup data (9 roles, edited HR preset), unrelated to this change.
-- Browser check not done yet: needs an admin sign-in on `http://192.168.2.85:3501`.
+- Browser check on `http://192.168.2.85:3501` (owner signed in as admin, en, desktop width): created test record **11660** "E2E delete-archive check A" (ODCC) → Archive (toast, stage Archived (no result), activity line) → dialog again: Archive disabled "Already archived", Delete turns Confirm red → Delete (lands on Records, gone from Open) → Records › Deleted lists it → read-only page with banner + Restore → Restore (back, activity line) → deleted again to clean up. Console: only COOP-over-HTTP warnings. Not checked: Farsi (switching language would change the admin's saved preference), phone width.
+- Note: an archived record still shows the existing **Reopen** button (closed-stage action for `sales_decide`), so un-archive is possible that way.
 
 **State left behind**
-- Branch committed, not pushed. `:3501` runs the merged Sales branch.
+- Branch committed, not pushed. `:3501` runs the merged Sales branch. Test record 11660 left soft-deleted in the `:3501` DB (number stays taken).
 
 ---
 
