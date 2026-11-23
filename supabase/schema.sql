@@ -3607,7 +3607,7 @@ CREATE FUNCTION private.sales_customer_rows(p_company uuid, p_prices boolean, p_
       from public.sales_rfps r
       join public.sales_stages s on s.id = r.stage_id
       join public.sales_flows f on f.id = r.flow_id
-     where r.company_id = p_company
+     where r.company_id = p_company and r.deleted_at is null
        and (r.buyer_id is not null or r.client_id is not null)
        and (p_id is null or r.buyer_id = p_id or r.client_id = p_id)
        and private.sales_rec_ok(p_f, r.received_on, r.bid_result, r.bid_decision, s.kind, r.owner_id)),
@@ -3744,6 +3744,12 @@ begin
       (p_company, v_contract, 4, 'پایان‌یافته', 'Finish', 'done', 'finish'),
       (p_company, v_contract, 5, 'لغوشده', 'Cancel', 'cancelled', 'cancel');
   end if;
+  -- The contract flow also gets an Archived stage (admin archive, 2026-11-23): last, closed.
+  if not exists (select 1 from public.sales_stages where flow_id = v_contract and (code = 'archived' or kind = 'archived')) then
+    insert into public.sales_stages (company_id, flow_id, position, name_fa, name_en, kind, action, code)
+      select p_company, v_contract, coalesce(max(position), 0) + 1, 'بایگانی', 'Archived', 'archived', null, 'archived'
+        from public.sales_stages where flow_id = v_contract;
+  end if;
   -- The company's currency list (FR-94 CEO feedback): today's five, managed in Settings afterwards.
   insert into public.sales_currencies (company_id, code, name_fa, name_en, symbol, decimals, position) values
     (p_company, 'IRR', 'ریال', 'Rial', null, 0, 1),
@@ -3874,6 +3880,18 @@ begin
     end if;
   end loop;
 end $$;
+
+
+--
+-- Name: sales_is_admin(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_is_admin() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select coalesce(private.has_role(auth.uid(), 'admin') and not private.is_test_account(auth.uid()), false);
+$$;
 
 
 --
@@ -4088,6 +4106,8 @@ CREATE TABLE public.sales_rfps (
     updated_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     import_batches uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    deleted_at timestamp with time zone,
+    deleted_by uuid,
     CONSTRAINT sales_rfps_bid_decision_check CHECK ((bid_decision = ANY (ARRAY['pending'::text, 'bid'::text, 'no_bid'::text]))),
     CONSTRAINT sales_rfps_bid_result_check CHECK ((bid_result = ANY (ARRAY['won'::text, 'lost'::text, 'cancelled'::text]))),
     CONSTRAINT sales_rfps_currency_check CHECK ((currency ~ '^[A-Za-z0-9]{1,10}$'::text)),
@@ -4124,10 +4144,10 @@ COMMENT ON TABLE public.sales_rfps IS 'FR-94: one record per RFP / contract; rec
 
 
 --
--- Name: sales_rfp(uuid, uuid, boolean); Type: FUNCTION; Schema: private; Owner: -
+-- Name: sales_rfp(uuid, uuid, boolean, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
-CREATE FUNCTION private.sales_rfp(p_id uuid, p_company uuid, p_lock boolean DEFAULT true) RETURNS public.sales_rfps
+CREATE FUNCTION private.sales_rfp(p_id uuid, p_company uuid, p_lock boolean DEFAULT true, p_include_deleted boolean DEFAULT false) RETURNS public.sales_rfps
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
@@ -4138,7 +4158,9 @@ begin
   else
     select * into r from public.sales_rfps where id = p_id and company_id = p_company;
   end if;
-  if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  if not found or (r.deleted_at is not null and not p_include_deleted) then
+    raise exception 'sales: not found' using errcode = 'P0002';
+  end if;
   return r;
 end $$;
 
@@ -4163,6 +4185,7 @@ CREATE FUNCTION private.sales_rfp_json(r public.sales_rfps, p_prices boolean) RE
          'flow_kind', (select kind from public.sales_flows where id = r.flow_id),
          'stage_kind', (select kind from public.sales_stages where id = r.stage_id),
          'imported', r.import_batch_id is not null,
+         'deleted_by_name', (select full_name from public.profiles where id = r.deleted_by),
          'next_deadline', (select min(d.due_on) from public.sales_deadlines d
                             where d.rfp_id = r.id and d.done_at is null));
 $$;
@@ -9226,6 +9249,30 @@ end $$;
 
 
 --
+-- Name: app_sales_archive(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_archive(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; r public.sales_rfps; v_kind text; v_target uuid;
+begin
+  if not private.sales_is_admin() then raise exception 'sales: not allowed' using errcode = '42501'; end if;
+  v_company := private.sales_company('sales', 'read');
+  r := private.sales_rfp(p_id, v_company);
+  select kind into v_kind from public.sales_stages where id = r.stage_id;
+  if v_kind = 'archived' then raise exception 'sales: stage not available' using errcode = '22023'; end if;
+  select id into v_target from public.sales_stages
+   where flow_id = r.flow_id and active and kind = 'archived' order by position limit 1;
+  if v_target is null then raise exception 'sales: stage not available' using errcode = '22023'; end if;
+  update public.sales_rfps set stage_id = v_target, result_at = coalesce(result_at, now()) where id = r.id;
+  -- sales_touch logs the event and resyncs the deadlines: the closed stage marks the auto ones done.
+  perform private.sales_touch(r.id, 'archived', jsonb_build_object('from_stage', r.stage_id));
+end $$;
+
+
+--
 -- Name: app_sales_bootstrap(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9246,7 +9293,8 @@ begin
       'reports', private.sales_can('sales_reports', 'read'),
       'settings', private.sales_can('sales_settings', 'edit'),
       'items', private.sales_can('project_items', 'read'),
-      'items_edit', private.sales_can('project_items', 'edit')),
+      'items_edit', private.sales_can('project_items', 'edit'),
+      'remove_records', private.sales_is_admin()),
     'me', auth.uid(),
     'flows', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'kind', f.kind,
                 'name_fa', f.name_fa, 'name_en', f.name_en) order by f.kind), '[]'::jsonb)
@@ -9320,19 +9368,19 @@ begin
                                 count(*) filter (where bid_result = 'won') as won,
                                 count(*) filter (where bid_result = 'lost') as lost
                            from public.sales_rfps
-                          where company_id = v_company and buyer_id = p_id and received_on is not null
+                          where company_id = v_company and deleted_at is null and buyer_id = p_id and received_on is not null
                           group by 1 order by 1 desc limit 12) t),
     'client_of', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name, 'count', n)
                                             order by n desc, name), '[]'::jsonb)
                     from (select b.id, b.name, count(*) as n
                             from public.sales_rfps r join public.sales_customers b on b.id = r.buyer_id
-                           where r.company_id = v_company and r.client_id = p_id
+                           where r.company_id = v_company and r.deleted_at is null and r.client_id = p_id
                            group by b.id, b.name) t),
     'top_words', (select coalesce(jsonb_agg(jsonb_build_object('word', word, 'count', n) order by n desc, word), '[]'::jsonb)
                     from (select w.word, count(*) as n
                             from public.sales_rfps r,
                                  lateral regexp_split_to_table(lower(r.title), '[^[:alnum:]]+') as w(word)
-                           where r.company_id = v_company and r.buyer_id = p_id
+                           where r.company_id = v_company and r.deleted_at is null and r.buyer_id = p_id
                              and char_length(w.word) >= 3
                              and w.word <> all (array['and', 'of', 'for', 'the', 'with', 'و', 'برای'])
                            group by w.word order by count(*) desc, w.word limit 10) t),
@@ -9340,7 +9388,7 @@ begin
                                          order by n desc, name), '[]'::jsonb)
                  from (select o.id, o.full_name as name, count(*) as n
                          from public.sales_rfps r join public.profiles o on o.id = r.owner_id
-                        where r.company_id = v_company and r.buyer_id = p_id
+                        where r.company_id = v_company and r.deleted_at is null and r.buyer_id = p_id
                         group by o.id, o.full_name) t));
 end $$;
 
@@ -9379,7 +9427,7 @@ begin
                  'responsible_name', (select full_name from public.profiles where id = d.responsible_id))
             order by d.due_on, r.record_no), '[]'::jsonb)
             from public.sales_deadlines d join public.sales_rfps r on r.id = d.rfp_id
-           where d.company_id = v_company and (p_include_done or d.done_at is null));
+           where d.company_id = v_company and r.deleted_at is null and (p_include_done or d.done_at is null));
 end $$;
 
 
@@ -9542,6 +9590,25 @@ end $$;
 
 
 --
+-- Name: app_sales_delete_record(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_delete_record(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; r public.sales_rfps;
+begin
+  if not private.sales_is_admin() then raise exception 'sales: not allowed' using errcode = '42501'; end if;
+  v_company := private.sales_company('sales', 'read');
+  r := private.sales_rfp(p_id, v_company);
+  update public.sales_rfps set deleted_at = now(), deleted_by = auth.uid() where id = r.id;
+  insert into public.sales_events (company_id, rfp_id, actor_id, kind, body)
+    values (v_company, r.id, auth.uid(), 'deleted', '{}'::jsonb);
+end $$;
+
+
+--
 -- Name: app_sales_file_abort(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9656,7 +9723,9 @@ CREATE FUNCTION public.app_sales_file_get(p_id uuid) RETURNS jsonb
     AS $$
 declare v_company uuid := private.sales_company(); f public.sales_files;
 begin
-  select * into f from public.sales_files where id = p_id and company_id = v_company and status = 'ready';
+  select * into f from public.sales_files where id = p_id and company_id = v_company and status = 'ready'
+     and (private.sales_is_admin() or not exists (
+           select 1 from public.sales_rfps x where x.id = rfp_id and x.deleted_at is not null));
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   return jsonb_build_object('id', f.id, 'company_id', f.company_id, 'rfp_id', f.rfp_id,
                             'name', f.name, 'size_bytes', f.size_bytes);
@@ -9680,10 +9749,11 @@ begin
     from unnest(string_to_array(v_code, '-')) with ordinality as t(seg, ord);
   select jsonb_build_object('rfp_id', n.rfp_id, 'node_id', n.id) into v_out
     from public.project_nodes n
-   where n.company_id = v_company and n.code = v_code and private.sales_can('project_items', 'read');
+   where n.company_id = v_company and n.code = v_code and private.sales_can('project_items', 'read')
+     and not exists (select 1 from public.sales_rfps x where x.id = n.rfp_id and x.deleted_at is not null);
   if v_out is null and v_code ~ '^\d+$' then
     select jsonb_build_object('rfp_id', r.id, 'node_id', null) into v_out
-      from public.sales_rfps r where r.company_id = v_company and r.record_no = v_code::bigint;
+      from public.sales_rfps r where r.company_id = v_company and r.record_no = v_code::bigint and r.deleted_at is null;
   end if;
   return v_out;
 end $_$;
@@ -9700,7 +9770,7 @@ CREATE FUNCTION public.app_sales_import(p_file text, p_rows jsonb, p_fields json
 declare
   v_company uuid := private.sales_company('sales_settings', 'edit');
   v_flow uuid; v_batch uuid; v_row jsonb; v_num numeric; v_rec integer; v_created integer := 0;
-  v_updated integer := 0; v_skipped integer := 0; r public.sales_rfps; v_buyer uuid; v_client uuid;
+  v_updated integer := 0; v_skipped integer := 0; v_deleted integer := 0; r public.sales_rfps; v_buyer uuid; v_client uuid;
   v_stage uuid; v_status text; v_owner uuid; v_name text; v_custom jsonb; v_map jsonb := '{}';
   v_header text; v_key text; v_try integer; v_b jsonb; v_id uuid; v_title text; v_form text;
   v_kind text; v_seq integer; v_bstatus text; v_reasons jsonb := '[]';
@@ -9747,6 +9817,14 @@ begin
         continue;
       end if;
       v_rec := v_num::integer;
+      -- A deleted record is never revived or duplicated by an import: the row is skipped.
+      perform 1 from public.sales_rfps
+        where company_id = v_company and record_no = v_rec and deleted_at is not null for update;
+      if found then
+        v_skipped := v_skipped + 1; v_deleted := v_deleted + 1;
+        v_reasons := v_reasons || jsonb_build_object('rec', v_rec, 'reason', 'deleted');
+        continue;
+      end if;
       -- A record made in the app is never overwritten by a ledger row with its number.
       if exists (select 1 from public.sales_rfps
                   where company_id = v_company and record_no = v_rec and import_batch_id is null) then
@@ -9908,7 +9986,7 @@ begin
       (select coalesce(max(record_no), 0) + 1 from public.sales_rfps where company_id = v_company))
    where company_id = v_company;
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
-    'skipped', v_skipped, 'skipped_rows', v_reasons);
+    'skipped', v_skipped, 'skipped_rows', v_reasons, 'deleted', v_deleted);
 end $$;
 
 
@@ -9926,7 +10004,7 @@ declare
   v_cutoff date := coalesce(p_cutoff, (private.sales_today() - interval '6 months')::date);
   v_batch uuid; b public.sales_import_batches; v_bid uuid; v_contract uuid;
   v_row jsonb; v_num numeric; v_rec integer; r public.sales_rfps; v_existed boolean;
-  v_created integer := 0; v_updated integer := 0; v_skipped integer := 0; v_reasons jsonb := '[]';
+  v_created integer := 0; v_updated integer := 0; v_skipped integer := 0; v_deleted integer := 0; v_reasons jsonb := '[]';
   v_by jsonb := '{"won":0,"lost":0,"no_bid":0,"cancelled":0,"open":0,"archived":0}';
   v_origin text; v_fill boolean; v_edited boolean; v_classify boolean;
   v_phrase text; v_wp numeric; v_lp numeric; v_recv date; v_sub date; v_class text;
@@ -9968,6 +10046,12 @@ begin
       select * into r from public.sales_rfps where company_id = v_company and record_no = v_rec for update;
       v_existed := found; v_fill := false; v_edited := false;
       if v_existed then
+        -- A deleted record is never revived or duplicated by an import: the row is skipped.
+        if r.deleted_at is not null then
+          v_skipped := v_skipped + 1; v_deleted := v_deleted + 1;
+          v_reasons := v_reasons || jsonb_build_object('rec', v_rec, 'reason', 'deleted');
+          continue;
+        end if;
         if v_batch = any (r.import_batches) then
           -- Same number twice in one file: the first row won.
           v_skipped := v_skipped + 1;
@@ -10132,7 +10216,7 @@ begin
       (select coalesce(max(record_no), 0) + 1 from public.sales_rfps where company_id = v_company))
    where company_id = v_company;
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
-    'skipped', v_skipped, 'skipped_rows', v_reasons, 'by_result', v_by);
+    'skipped', v_skipped, 'skipped_rows', v_reasons, 'by_result', v_by, 'deleted', v_deleted);
 end $$;
 
 
@@ -10147,7 +10231,7 @@ CREATE FUNCTION public.app_sales_list() RETURNS jsonb
 declare v_company uuid := private.sales_company(); v_prices boolean := private.sales_can('sales_prices', 'read');
 begin
   return (select coalesce(jsonb_agg(private.sales_rfp_json(r, v_prices) order by r.record_no desc), '[]'::jsonb)
-            from public.sales_rfps r where r.company_id = v_company);
+            from public.sales_rfps r where r.company_id = v_company and r.deleted_at is null);
 end $$;
 
 
@@ -10166,7 +10250,8 @@ declare v_company uuid := private.sales_company(); v_prices boolean := private.s
   v_sort text := coalesce(nullif(p->>'sort', ''), 'record_no'); v_dir text := nullif(p->>'dir', '');
   v_limit integer; v_pat text; v_no integer; v_total integer; v_rows jsonb;
 begin
-  if jsonb_typeof(coalesce(p, '{}'::jsonb)) <> 'object' or v_state not in ('open', 'closed', 'all')
+  if jsonb_typeof(coalesce(p, '{}'::jsonb)) <> 'object' or v_state not in ('open', 'closed', 'all', 'deleted')
+     or (v_state = 'deleted' and not private.sales_is_admin())
      or (v_flow is not null and v_flow not in ('bid', 'contract'))
      or v_sort not in ('record_no', 'received_on', 'buyer', 'title', 'stage', 'owner', 'deadline', 'value')
      or (v_dir is not null and v_dir not in ('asc', 'desc')) then
@@ -10199,7 +10284,8 @@ begin
       left join public.sales_customers c on c.id = r.client_id
       left join public.profiles o on o.id = r.owner_id
      where r.company_id = v_company
-       and (v_state = 'all' or (v_state = 'open') = (s.kind = 'open'))
+       and case when v_state = 'deleted' then r.deleted_at is not null
+                else r.deleted_at is null and (v_state = 'all' or (v_state = 'open') = (s.kind = 'open')) end
        and (v_flow is null or fl.kind = v_flow)
        and (v_stage is null or r.stage_id = v_stage)
        and (v_owner is null or r.owner_id = v_owner)
@@ -10247,7 +10333,7 @@ begin
   -- The affected records are locked first, by id.
   select coalesce(array_agg(id order by id), '{}') into v_ids from (
     select id from public.sales_rfps
-     where company_id = v_company and in_charge_text is not null
+     where company_id = v_company and deleted_at is null and in_charge_text is not null
        and private.sales_name_key(in_charge_text) = v_key
        and owner_id is distinct from p_profile
        and case when p_profile is null then v_old is not null and owner_id = v_old
@@ -10356,7 +10442,7 @@ begin
       join public.sales_stages s on s.id = r.stage_id
       join public.sales_flows fl on fl.id = r.flow_id
       left join public.sales_customers b on b.id = r.buyer_id
-     where r.company_id = v_company
+     where r.company_id = v_company and r.deleted_at is null
        and (v_kind is null or b.kind = v_kind)
        and private.sales_rec_ok(p, r.received_on, r.bid_result, r.bid_decision, s.kind, r.owner_id)),
   mine as (select * from rf where p_customer is null or buyer_id = p_customer),
@@ -10376,7 +10462,7 @@ begin
   nc as (
     select count(*) as n from (
       select x.buyer_id from public.sales_rfps x
-       where x.company_id = v_company and x.buyer_id in (select buyer_id from mine where buyer_id is not null)
+       where x.company_id = v_company and x.deleted_at is null and x.buyer_id in (select buyer_id from mine where buyer_id is not null)
        group by x.buyer_id having min(x.received_on) >= p_year_start) t)
   select jsonb_build_object('projects', b.projects, 'active', b.active, 'won', b.won, 'lost', b.lost,
            'decided', b.won + b.lost,
@@ -10516,7 +10602,7 @@ begin
     with t as (
       select private.sales_name_key(r.in_charge_text) as k, btrim(r.in_charge_text) as nm
         from public.sales_rfps r
-       where r.company_id = v_company and nullif(btrim(r.in_charge_text), '') is not null
+       where r.company_id = v_company and r.deleted_at is null and nullif(btrim(r.in_charge_text), '') is not null
          and btrim(r.in_charge_text) not in ('Y', 'N')
          and (p_batch is null or p_batch = any (r.import_batches))),
     g as (select k, count(*) as n from t group by k),
@@ -10550,7 +10636,7 @@ begin
              q.unit_price, q.quoted_on, r.id as rfp_id, r.record_no, r.currency, r.bid_result, r.winning_bid,
              (select name from public.sales_customers where id = r.buyer_id) as buyer_name
         from public.sales_quote_lines q join public.sales_rfps r on r.id = q.rfp_id
-       where q.company_id = v_company
+       where q.company_id = v_company and r.deleted_at is null
          and not exists (
            select 1 from unnest(regexp_split_to_array(btrim(coalesce(p_q, '')), '\s+')) as t(term)
             where term <> ''
@@ -10593,7 +10679,7 @@ CREATE FUNCTION public.app_sales_record(p_id uuid) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company();
-  r public.sales_rfps := private.sales_rfp(p_id, v_company, false);
+  r public.sales_rfps := private.sales_rfp(p_id, v_company, false, private.sales_is_admin());
   v_prices boolean := private.sales_can('sales_prices', 'read');
   v_bonds boolean := private.sales_can('sales_bonds', 'read');
   v_items boolean := private.sales_can('project_items', 'read');
@@ -10667,7 +10753,7 @@ begin
             from public.sales_rfps x
             join public.sales_flows f on f.id = x.flow_id
             left join public.sales_import_batches b on b.id = x.import_batch_id
-           where x.company_id = v_company) r);
+           where x.company_id = v_company and x.deleted_at is null) r);
 end $$;
 
 
@@ -10779,18 +10865,38 @@ begin
         order by t.position), '[]'::jsonb)
       from (select r.stage_id, s.position, count(*) as n
               from public.sales_rfps r join public.sales_stages s on s.id = r.stage_id
-             where r.company_id = v_company group by r.stage_id, s.position) t
+             where r.company_id = v_company and r.deleted_at is null group by r.stage_id, s.position) t
       left join (select stage_id, jsonb_object_agg(currency, amt) as j
                    from (select stage_id, currency, sum(coalesce(total_value, our_price)) as amt
                            from public.sales_rfps
-                          where company_id = v_company and currency is not null
+                          where company_id = v_company and deleted_at is null and currency is not null
                             and coalesce(total_value, our_price) is not null
                           group by stage_id, currency) q group by stage_id) v on v.stage_id = t.stage_id),
     'decided', (select coalesce(jsonb_agg(jsonb_build_object(
           'buyer_name', b.name, 'result_at', r.result_at, 'bid_result', r.bid_result)), '[]'::jsonb)
       from public.sales_rfps r left join public.sales_customers b on b.id = r.buyer_id
-     where r.company_id = v_company and r.bid_decision = 'bid' and r.bid_result is not null
+     where r.company_id = v_company and r.deleted_at is null and r.bid_decision = 'bid' and r.bid_result is not null
        and r.import_batch_id is null and cardinality(r.import_batches) = 0));
+end $$;
+
+
+--
+-- Name: app_sales_restore_record(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_restore_record(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid; r public.sales_rfps;
+begin
+  if not private.sales_is_admin() then raise exception 'sales: not allowed' using errcode = '42501'; end if;
+  v_company := private.sales_company('sales', 'read');
+  r := private.sales_rfp(p_id, v_company, true, true);
+  if r.deleted_at is null then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  update public.sales_rfps set deleted_at = null, deleted_by = null where id = r.id;
+  insert into public.sales_events (company_id, rfp_id, actor_id, kind, body)
+    values (v_company, r.id, auth.uid(), 'restored', '{}'::jsonb);
 end $$;
 
 
@@ -15491,7 +15597,7 @@ CREATE TABLE public.sales_events (
     actor_id uuid,
     kind text NOT NULL,
     body jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT sales_events_kind_check CHECK ((kind = ANY (ARRAY['created'::text, 'edit'::text, 'stage'::text, 'decision'::text, 'result'::text, 'comment'::text, 'import'::text, 'items'::text, 'finance'::text, 'file'::text])))
+    CONSTRAINT sales_events_kind_check CHECK ((kind = ANY (ARRAY['created'::text, 'edit'::text, 'stage'::text, 'decision'::text, 'result'::text, 'comment'::text, 'import'::text, 'items'::text, 'finance'::text, 'file'::text, 'archived'::text, 'deleted'::text, 'restored'::text])))
 );
 
 
@@ -17145,6 +17251,13 @@ CREATE INDEX sales_rfps_company_no ON public.sales_rfps USING btree (company_id,
 
 
 --
+-- Name: sales_rfps_live_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_rfps_live_idx ON public.sales_rfps USING btree (company_id, record_no) WHERE (deleted_at IS NULL);
+
+
+--
 -- Name: sales_rfps_stage; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -18534,6 +18647,14 @@ ALTER TABLE ONLY public.sales_rfps
 
 ALTER TABLE ONLY public.sales_rfps
     ADD CONSTRAINT sales_rfps_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: sales_rfps sales_rfps_deleted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_rfps
+    ADD CONSTRAINT sales_rfps_deleted_by_fkey FOREIGN KEY (deleted_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 
 
 --
@@ -20534,6 +20655,13 @@ REVOKE ALL ON FUNCTION private.sales_inquiry_fields(p_company uuid) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_is_admin(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_is_admin() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_levenshtein(a text, b text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -20599,10 +20727,10 @@ GRANT ALL ON TABLE public.sales_rfps TO service_role;
 
 
 --
--- Name: FUNCTION sales_rfp(p_id uuid, p_company uuid, p_lock boolean); Type: ACL; Schema: private; Owner: -
+-- Name: FUNCTION sales_rfp(p_id uuid, p_company uuid, p_lock boolean, p_include_deleted boolean); Type: ACL; Schema: private; Owner: -
 --
 
-REVOKE ALL ON FUNCTION private.sales_rfp(p_id uuid, p_company uuid, p_lock boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.sales_rfp(p_id uuid, p_company uuid, p_lock boolean, p_include_deleted boolean) FROM PUBLIC;
 
 
 --
@@ -21631,6 +21759,16 @@ GRANT ALL ON FUNCTION public.app_sales_aliases() TO service_role;
 
 
 --
+-- Name: FUNCTION app_sales_archive(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_archive(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_archive(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_archive(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_archive(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_sales_bootstrap(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -21798,6 +21936,16 @@ REVOKE ALL ON FUNCTION public.app_sales_delete_product(p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_sales_delete_product(p_id uuid) TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_delete_product(p_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_delete_product(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_delete_record(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_delete_record(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_delete_record(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_delete_record(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_delete_record(p_id uuid) TO service_role;
 
 
 --
@@ -21988,6 +22136,16 @@ REVOKE ALL ON FUNCTION public.app_sales_report() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_sales_report() TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_report() TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_report() TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_restore_record(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_restore_record(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_restore_record(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_restore_record(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_restore_record(p_id uuid) TO service_role;
 
 
 --

@@ -111,10 +111,10 @@ select pg_temp.expect('six keys depend on sales',
 select pg_temp.expect('no preset or system role holds a new key',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id=rp.role_id
     where r.kind<>'custom' and (rp.permission like 'sales%' or rp.permission='project_items')),'0');
-select pg_temp.expect('a new company is seeded on insert: 2 flows, 15 stages (incl. Archived), settings',
+select pg_temp.expect('a new company is seeded on insert: 2 flows, 16 stages (incl. both Archived), settings',
   (select (select count(*) from public.sales_flows where company_id=pg_temp.fx('company'))||':'||
           (select count(*) from public.sales_stages where company_id=pg_temp.fx('company'))||':'||
-          (select count(*) from public.sales_settings where company_id=pg_temp.fx('company'))),'2:15:1');
+          (select count(*) from public.sales_settings where company_id=pg_temp.fx('company'))),'2:16:1');
 select pg_temp.assert('every table has RLS on and no client grant',
   not exists (select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
     where n.nspname='public' and (c.relname like 'sales\_%' or c.relname='project_nodes') and c.relkind='r'
