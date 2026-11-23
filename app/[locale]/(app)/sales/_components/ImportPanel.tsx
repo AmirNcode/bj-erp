@@ -122,6 +122,7 @@ function LedgerImport({ boot, existingNumbers }: { boot: Bootstrap; existingNumb
         {result ? (
           <div role="status" className="border-s-[3px] border-success ps-3 text-sm" data-testid="sales-import-result">
             <p className="font-semibold">{t('import.done', { created: result.created, updated: result.updated, skipped: result.skipped })}</p>
+            {result.deleted ? <p className="mt-1 text-muted-foreground" data-testid="sales-import-deleted">{t('import.deletedNote', { count: result.deleted })}</p> : null}
             {result.skipped_rows.length > 0 ? (
               <ul className="mt-1 text-muted-foreground">
                 {result.skipped_rows.slice(0, 20).map((s, i) => <li key={i}><bdi dir="ltr">{String(s.rec ?? '—')}</bdi>: {t(`import.skip.${s.reason}`)}</li>)}

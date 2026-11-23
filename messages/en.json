@@ -2659,7 +2659,28 @@
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",
-    "remove": "Remove",
+    "remove": {
+      "button": "Delete / Archive",
+      "title": "Delete or archive record no. {no} — {title}",
+      "intro": "Pick one of the two, then confirm.",
+      "archive": "Archive",
+      "archiveBody": "Close the record and move it to \"Archived\". It stays in lists under \"Closed\" and counts as archived in reports.",
+      "delete": "Delete",
+      "deleteBody": "Hide the record everywhere: lists, reports, deadlines, search. The admin can restore it later from Records › Deleted.",
+      "alreadyArchived": "Already archived.",
+      "counts": "This record has {list}.",
+      "count": {
+        "items": "{count, plural, one {# item} other {# items}}",
+        "payments": "{count, plural, one {# payment} other {# payments}}",
+        "files": "{count, plural, one {# file} other {# files}}"
+      },
+      "confirm": "Confirm",
+      "archivedToast": "Record archived.",
+      "deletedToast": "Record deleted.",
+      "restoredToast": "Record restored.",
+      "banner": "Deleted on {date} by {name}.",
+      "restore": "Restore"
+    },
     "removeTitle": "Remove this row?",
     "daysCount": "{days, plural, one {# day} other {# days}}",
     "tabs": {
@@ -2797,7 +2818,9 @@
       "loading": "Loading…",
       "sort": "Sort",
       "showDetails": "Show details",
-      "hideDetails": "Hide details"
+      "hideDetails": "Hide details",
+      "stateDeleted": "Deleted",
+      "deletedOn": "Deleted {date} · {name}"
     },
     "form": {
       "create": "Create record",
@@ -2875,7 +2898,10 @@
       "finance_payment_removed": "Payment removed",
       "item_product": "Product set to {product} on {code}",
       "file_add": "File <n>{name}</n> added",
-      "file_delete": "File <n>{name}</n> deleted"
+      "file_delete": "File <n>{name}</n> deleted",
+      "archived": "Record archived",
+      "deleted": "Record deleted",
+      "restored": "Record restored"
     },
     "items": {
       "hint": "One row per item of this record. Open a row to add its parts. Numbers are given on save and never reused.",
@@ -3160,7 +3186,8 @@
         "bad_rec": "no usable record number",
         "exists_in_app": "a record with this number was created here; not overwritten",
         "unreadable": "could not be read",
-        "duplicate": "the same number appears earlier in the file"
+        "duplicate": "the same number appears earlier in the file",
+        "deleted": "this number belongs to a deleted record; skipped"
       },
       "batchesTitle": "Earlier imports",
       "batchesHint": "Removing an import deletes the records it created that nobody has changed since. Use it to clear test data before importing the real file.",
@@ -3221,7 +3248,8 @@
         "done": "Imported: {created} new, {updated} updated, {skipped} skipped. Won {won} · lost {lost} · no bid {no_bid} · cancelled {cancelled} · open {open} · archived {archived}.",
         "templateName": "inquiry-register-template.xlsx",
         "merged": "{count, plural, one {# spelling merged automatically (only capitals or spaces differ)} other {# spellings merged automatically (only capitals or spaces differ)}}"
-      }
+      },
+      "deletedNote": "{count, plural, one {# row matched} other {# rows matched}} a deleted record and {count, plural, one {was} other {were}} skipped."
     },
     "stagePage": {
       "label": "Stages",

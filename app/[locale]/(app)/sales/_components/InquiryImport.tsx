@@ -161,7 +161,7 @@ export function InquiryImport({ boot, numbers }: { boot: Bootstrap; numbers: Rec
     stopRef.current = false;
     setResult(null);
     setSending({ done: 0, total: rows.length });
-    const total: InquiryImportResult = { batch_id: '', created: 0, updated: 0, skipped: 0, skipped_rows: [], by_result: { won: 0, lost: 0, no_bid: 0, cancelled: 0, open: 0, archived: 0 } };
+    const total: InquiryImportResult = { batch_id: '', created: 0, updated: 0, skipped: 0, deleted: 0, skipped_rows: [], by_result: { won: 0, lost: 0, no_bid: 0, cancelled: 0, open: 0, archived: 0 } };
     let batchId: string | null = null;
     let done = 0;
     let stopped = false;
@@ -175,6 +175,7 @@ export function InquiryImport({ boot, numbers }: { boot: Bootstrap; numbers: Rec
         total.created += out.data.created;
         total.updated += out.data.updated;
         total.skipped += out.data.skipped;
+        total.deleted = (total.deleted ?? 0) + (out.data.deleted ?? 0);
         total.skipped_rows.push(...out.data.skipped_rows);
         for (const k of RESULT_KEYS) total.by_result[k] += out.data.by_result?.[k] ?? 0;
         done = Math.min(at + CHUNK, rows.length);
@@ -221,6 +222,7 @@ export function InquiryImport({ boot, numbers }: { boot: Bootstrap; numbers: Rec
             <p className="font-semibold">
               {t('import.inquiry.done', { created: result.data.created, updated: result.data.updated, skipped: result.data.skipped, ...result.data.by_result })}
             </p>
+            {result.data.deleted ? <p className="mt-1 text-muted-foreground" data-testid="sales-inquiry-deleted">{t('import.deletedNote', { count: result.data.deleted })}</p> : null}
             {result.stopped ? <p className="mt-1 text-warning">{t('import.inquiry.stopped')}</p> : null}
             {result.data.skipped_rows.length > 0 ? (
               <ul className="mt-1 text-muted-foreground">

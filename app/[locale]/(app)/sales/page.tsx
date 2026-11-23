@@ -23,7 +23,7 @@ export default async function SalesPage({ params, searchParams }: Props) {
   const state = one(sp.state);
   const flow = one(sp.flow);
   const filters: RecordFilters = {
-    state: state === 'closed' || state === 'all' ? state : 'open',
+    state: state === 'closed' || state === 'all' || state === 'deleted' ? state : 'open',
     flow: flow === 'bid' || flow === 'contract' ? flow : '',
     stage: one(sp.stage),
     owner: one(sp.owner),

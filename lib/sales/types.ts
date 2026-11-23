@@ -15,10 +15,12 @@ export type SalesCaps = {
   settings: boolean;
   items: boolean;
   items_edit: boolean;
+  /** Admin only: archive, delete and restore a whole record. */
+  remove_records: boolean;
 };
 
 export type FlowKind = 'bid' | 'contract';
-export type StageKind = 'open' | 'lost' | 'no_bid' | 'cancelled' | 'done';
+export type StageKind = 'open' | 'lost' | 'no_bid' | 'cancelled' | 'done' | 'archived';
 export type StageAction = 'decide' | 'quote' | 'submit';
 
 export type Flow = { id: string; kind: FlowKind; name_fa: string; name_en: string };
@@ -170,6 +172,9 @@ export type RecordRow = {
   custom: CustomValues;
   item_columns: Record<string, string[]> | null;
   imported: boolean;
+  /** Set on a soft-deleted record (admin only ever sees one). */
+  deleted_at: string | null;
+  deleted_by_name: string | null;
   next_deadline: string | null;
   created_at: string;
   updated_at: string;
@@ -247,7 +252,7 @@ export type DocumentRow = {
   note: string | null;
 };
 
-export type EventKind = 'created' | 'edit' | 'stage' | 'decision' | 'result' | 'comment' | 'import' | 'items' | 'finance' | 'file';
+export type EventKind = 'created' | 'edit' | 'stage' | 'decision' | 'result' | 'comment' | 'import' | 'items' | 'finance' | 'file' | 'archived' | 'deleted' | 'restored';
 export type EventRow = {
   id: string;
   at: string;
@@ -303,7 +308,9 @@ export type ImportResult = {
   created: number;
   updated: number;
   skipped: number;
-  skipped_rows: { rec: string | number | null; reason: 'bad_rec' | 'exists_in_app' | 'unreadable' | 'duplicate' }[];
+  /** Rows that matched a deleted record (also listed in skipped_rows with reason 'deleted'). */
+  deleted?: number;
+  skipped_rows: { rec: string | number | null; reason: 'bad_rec' | 'exists_in_app' | 'unreadable' | 'duplicate' | 'deleted' }[];
 };
 
 export type InquiryResultKey = 'won' | 'lost' | 'no_bid' | 'cancelled' | 'open' | 'archived';
@@ -313,7 +320,7 @@ export type InquiryImportResult = ImportResult & { by_result: Record<InquiryResu
 export type RecordNumbers = { app: number[]; ledger: number[]; inquiry: number[] };
 
 export type RecordFilters = {
-  state?: 'open' | 'closed' | 'all';
+  state?: 'open' | 'closed' | 'all' | 'deleted';
   flow?: FlowKind | '';
   stage?: string;
   owner?: string;

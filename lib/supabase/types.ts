@@ -1972,6 +1972,9 @@ export type Database = {
         Returns: undefined
       }
       app_sales_decide: { Args: { p_id: string; p_bid: boolean; p_reason?: string | null }; Returns: undefined }
+      app_sales_archive: { Args: { p_id: string }; Returns: undefined }
+      app_sales_delete_record: { Args: { p_id: string }; Returns: undefined }
+      app_sales_restore_record: { Args: { p_id: string }; Returns: undefined }
       app_sales_result: { Args: { p_id: string; p_result: string; p?: Json }; Returns: undefined }
       app_sales_comment: { Args: { p_id: string; p_text: string }; Returns: undefined }
       app_sales_save_bond: { Args: { p_rfp: string; p_id: string | null; p: Json }; Returns: string }

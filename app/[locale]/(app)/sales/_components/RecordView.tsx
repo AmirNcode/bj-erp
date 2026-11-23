@@ -12,29 +12,42 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { restoreSalesRecord } from '@/lib/actions/sales';
 import { todayInAppTz } from '@/lib/appDate';
 import { daysLeft, deadlineState } from '@/lib/sales/deadlines';
 import { isDirty, pageKind } from '@/lib/sales/stagePages';
 import { flowStages } from '@/lib/sales/stages';
 import type { Bootstrap, RecordDetail } from '@/lib/sales/types';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
-import { DEADLINE_TONE, useSalesFormat } from './parts';
+import { useViewAs } from '../../_components/ViewAsContext';
+import { DEADLINE_TONE, useRun, useSalesFormat } from './parts';
 import { ActivityLog } from './ActivityLog';
 import { FilesTab } from './FilesTab';
 import { DeadlinesPanel } from './RecordPanels';
+import { RemoveRecordDialog } from './RemoveRecordDialog';
 import { StageBody, type DraftEntry } from './StageBody';
 import { StageNav } from './StageNav';
 
 type TabKey = 'deadlines' | 'files' | 'activity';
 
-export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDetail }) {
+export function RecordView({ boot: liveBoot, detail }: { boot: Bootstrap; detail: RecordDetail }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const focusNode = params.get('node');
+  const viewAs = useViewAs();
+  const { run, pending: restoring } = useRun();
+  const [removing, setRemoving] = useState(false);
   const r = detail.record;
+  // A deleted record (admin only) reads like View as: every edit right is off, the database refuses writes anyway.
+  const boot: Bootstrap = r.deleted_at
+    ? { ...liveBoot, caps: { ...liveBoot.caps, edit: false, decide: false, items_edit: false, prices_edit: false, bonds_edit: false } }
+    : liveBoot;
+  const canRemove = liveBoot.caps.remove_records && !viewAs && !r.deleted_at;
   const today = todayInAppTz();
   const [tab, setTab] = useState<TabKey>('activity');
 
@@ -92,7 +105,19 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
 
   return (
     <div className="flex flex-col gap-5" data-testid="sales-record">
+      {r.deleted_at ? (
+        <div className="flex flex-col gap-2 border border-destructive bg-destructive/10 p-3 text-sm sm:flex-row sm:items-center sm:justify-between" role="status" data-testid="sales-deleted-banner">
+          <p className="font-semibold text-destructive">{t('remove.banner', { date: f.date(r.deleted_at), name: r.deleted_by_name ?? '—' })}</p>
+          {liveBoot.caps.remove_records && !viewAs ? (
+            <Button variant="outline" className="max-sm:h-11" disabled={restoring} data-testid="sales-restore"
+              onClick={() => void run(() => restoreSalesRecord(r.id), () => toast.success(t('remove.restoredToast')))}>
+              {t('remove.restore')}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <header className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
             {t(`flow.${r.flow_kind}`)} · {t('field.record_no')}{' '}
@@ -103,6 +128,12 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
           <p className="mt-1 text-sm text-muted-foreground">
             {[r.buyer_name, r.client_name && r.client_name !== r.buyer_name ? r.client_name : null].filter(Boolean).join(' · ') || '—'}
           </p>
+        </div>
+        {canRemove ? (
+          <Button variant="outline" className="shrink-0 border-destructive text-destructive hover:text-destructive max-sm:h-11 max-sm:w-full" onClick={() => setRemoving(true)} data-testid="sales-remove-open">
+            {t('remove.button')}
+          </Button>
+        ) : null}
         </div>
 
         {selected ? <StageNav stages={stages} current={current} selectedId={selected.id} unsavedIds={dirtyIds} onSelect={selectStage} /> : null}
@@ -139,6 +170,7 @@ export function RecordView({ boot, detail }: { boot: Bootstrap; detail: RecordDe
       {tab === 'deadlines' ? <DeadlinesPanel boot={boot} record={r} deadlines={detail.deadlines} /> : null}
       {tab === 'files' ? <FilesTab boot={boot} detail={detail} /> : null}
       {tab === 'activity' ? <ActivityLog boot={boot} record={r} events={detail.events} /> : null}
+      {removing ? <RemoveRecordDialog detail={detail} onClose={() => setRemoving(false)} /> : null}
     </div>
   );
 }

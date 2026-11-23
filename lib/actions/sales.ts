@@ -244,6 +244,36 @@ export async function decideSalesBid(id: string, bid: boolean, reason: string): 
   return { ok: true };
 }
 
+/** Admin only (FR-94 record removal): move a record to its flow's Archived stage. */
+export async function archiveSalesRecord(id: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_archive', { p_id: id });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
+/** Admin only: soft-delete a record (hidden everywhere, restorable). */
+export async function deleteSalesRecord(id: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_delete_record', { p_id: id });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
+/** Admin only: bring a deleted record back in the stage it had. */
+export async function restoreSalesRecord(id: string): Promise<Write> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { error } = await c.supabase.rpc('app_sales_restore_record', { p_id: id });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true };
+}
+
 export async function setSalesResult(
   id: string, result: 'won' | 'lost' | 'cancelled', details: { winning_bid?: number | null; winner_name?: string; reason?: string }
 ): Promise<Write> {

@@ -19,7 +19,7 @@ import { DEFAULT_RECORD_SORT, parseRecordSort } from '@/lib/sales/recordSort';
 import { RecordSortSelect, RecordsTable } from './RecordsTable';
 import { RecordForm } from './RecordForm';
 
-type StateFilter = 'open' | 'closed' | 'all';
+type StateFilter = 'open' | 'closed' | 'all' | 'deleted';
 
 export function RecordsList({ boot, page, filters }: { boot: Bootstrap; page: RecordPage; filters: RecordFilters }) {
   const t = useTranslations('sales');
@@ -80,6 +80,7 @@ export function RecordsList({ boot, page, filters }: { boot: Bootstrap; page: Re
           <option value="open">{t('list.stateOpen')}</option>
           <option value="closed">{t('list.stateClosed')}</option>
           <option value="all">{t('list.stateAll')}</option>
+          {boot.caps.remove_records ? <option value="deleted">{t('list.stateDeleted')}</option> : null}
         </Select>
         <Select value={flow} onChange={(v) => push({ flow: v, stage: '' })} ariaLabel={t('list.flow')}>
           <option value="">{t('list.flowAll')}</option>

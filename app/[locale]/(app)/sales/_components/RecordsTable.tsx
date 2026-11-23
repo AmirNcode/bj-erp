@@ -73,6 +73,7 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
   const dash = <span className="text-muted-foreground">—</span>;
 
   const deadline = (r: RecordRow) => {
+    if (r.deleted_at) return <span className="text-destructive">{t('list.deletedOn', { date: f.date(r.deleted_at), name: r.deleted_by_name ?? '—' })}</span>;
     if (!r.next_deadline) return dash;
     const tone = DEADLINE_TONE[deadlineState(r.next_deadline, today, boot.settings.warn_days)];
     return <span className={tone}>{f.date(r.next_deadline)} · {f.daysText(daysLeft(r.next_deadline, today))}</span>;

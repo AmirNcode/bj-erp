@@ -38,6 +38,9 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
     switch (e.kind) {
       case 'created': return t('event.created');
       case 'import': return t('event.import');
+      case 'archived': return <>{t('event.archived')}{b.from_stage ? <span className="text-muted-foreground"> · {stageName(b.from_stage)}</span> : null}</>;
+      case 'deleted': return t('event.deleted');
+      case 'restored': return t('event.restored');
       case 'comment': return <span className="whitespace-pre-wrap">{String(b.text ?? '')}</span>;
       case 'stage': return <>{t('event.stage', { from: stageName(b.from), to: stageName(b.to) })}{b.note ? <span className="text-muted-foreground"> · {String(b.note)}</span> : null}</>;
       case 'decision': return <>{b.bid ? t('event.decisionBid') : t('event.decisionNoBid')}{b.reason ? <span className="text-muted-foreground"> · {String(b.reason)}</span> : null}</>;
