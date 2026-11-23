@@ -7,11 +7,15 @@ import { formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
+import { cn } from '@/lib/utils';
 import { getDelegationContext, searchDelegates, setApprovalDelegate, setExecutiveSettings } from '@/lib/actions/approval-delegation';
 import type { DelegateCandidate, DelegationContext, ExecutiveSettings } from '@/lib/leave/delegation';
 
-const selectClass = 'min-h-11 w-full max-w-md rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const selectClass = 'min-h-11 rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const personSelect = cn(selectClass, FIELD_W.name);
 
 /** Settings access here does not grant access to role authoring or personnel. */
 export function DelegationPanel({ initial, initialCandidates, locale }: {
@@ -67,15 +71,14 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
     : null;
 
   return (
-    <div className="grid max-w-5xl items-start gap-5 xl:grid-cols-2">
+    <div>
+      <FormSection title={context.is_admin ? t('title') : t('myTitle')} description={t('hint')}>
       <Card data-testid="approval-delegation-panel">
-        <CardHeader><CardTitle>{context.is_admin ? t('title') : t('myTitle')}</CardTitle></CardHeader>
         <CardContent className="space-y-5">
-          <p className="text-sm text-muted-foreground">{t('hint')}</p>
           {context.is_admin && (
             <div className="space-y-2">
               <Label htmlFor="delegate-principal">{t('principal')}</Label>
-              <select id="delegate-principal" className={selectClass} value={context.principal_id} disabled={isPending} onChange={(e) => changePrincipal(e.target.value)} data-testid="delegate-principal">
+              <select id="delegate-principal" className={personSelect} value={context.principal_id} disabled={isPending} onChange={(e) => changePrincipal(e.target.value)} data-testid="delegate-principal">
                 {!context.principals.some((p) => p.profile_id === context.principal_id) && <option value={context.principal_id}>{context.principal_name}</option>}
                 {context.principals.map((p) => <option key={p.profile_id} value={p.profile_id}>{p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}</option>)}
               </select>
@@ -89,7 +92,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
           </dl>
           {effective?.source_request_id && <p className="text-sm text-muted-foreground">{t('fallback', { name: saved?.delegate_name ?? t('none') })}</p>}
           {!canManage && <p className="rounded-lg bg-muted p-3 text-sm" role="note">{t('permissionRequired')}</p>}
-          <form className="max-w-md space-y-2" onSubmit={(e) => {
+          <form className={cn('space-y-2', FIELD_W.name)} onSubmit={(e) => {
             e.preventDefault(); setError('');
             startTransition(async () => {
               const result = await searchDelegates(context.principal_id, search);
@@ -101,7 +104,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
           </form>
           <div className="space-y-2">
             <Label htmlFor="saved-approval-delegate">{t('selectDelegate')}</Label>
-            <select id="saved-approval-delegate" value={delegateId} className={selectClass} disabled={isPending || !canManage} onChange={(e) => { setDelegateId(e.target.value); setAuthorized(false); }} data-testid="saved-approval-delegate">
+            <select id="saved-approval-delegate" value={delegateId} className={personSelect} disabled={isPending || !canManage} onChange={(e) => { setDelegateId(e.target.value); setAuthorized(false); }} data-testid="saved-approval-delegate">
               <option value="">{t('none')}</option>
               {saved && savedOutsideResults && <option value={saved.delegate_id} disabled>{saved.delegate_name}</option>}
               {candidates.map((p) => <option key={p.profile_id} value={p.profile_id}>{p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}</option>)}
@@ -115,6 +118,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
           <Button onClick={save} disabled={isPending || !canManage || !eligibleSelection || (isCeo && !!delegateId && !authorized)} data-testid="delegate-save">{isPending ? t('saving') : t('save')}</Button>
         </CardContent>
       </Card>
+      </FormSection>
       {context.is_admin && <ExecutiveSettingsPanel key={JSON.stringify(context.executive_settings)} context={context} onSaved={() => refreshPrincipal(context.principal_id)} />}
     </div>
   );
@@ -132,10 +136,10 @@ function ExecutiveSettingsPanel({ context, onSaved }: { context: DelegationConte
   const [notice, setNotice] = useState('');
   const [isPending, startTransition] = useTransition();
   return (
-    <Card data-testid="executive-approval-settings"><CardHeader><CardTitle>{t('executiveTitle')}</CardTitle></CardHeader>
+    <FormSection title={t('executiveTitle')} description={t('executiveHint')}>
+    <Card data-testid="executive-approval-settings">
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">{t('executiveHint')}</p>
-        {(['ceo_id', 'hr_head_id'] as const).map((key) => <div key={key} className="space-y-2"><Label htmlFor={key}>{key === 'ceo_id' ? t('ceo') : t('hrHead')}</Label><select id={key} className={selectClass} value={settings[key] ?? ''} disabled={isPending} onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.value || null }))}><option value="">{t('none')}</option>{context.principals.map((p) => <option key={p.profile_id} value={p.profile_id}>{p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}</option>)}</select></div>)}
+        {(['ceo_id', 'hr_head_id'] as const).map((key) => <div key={key} className="space-y-2"><Label htmlFor={key}>{key === 'ceo_id' ? t('ceo') : t('hrHead')}</Label><select id={key} className={personSelect} value={settings[key] ?? ''} disabled={isPending} onChange={(e) => setSettings((s) => ({ ...s, [key]: e.target.value || null }))}><option value="">{t('none')}</option>{context.principals.map((p) => <option key={p.profile_id} value={p.profile_id}>{p.full_name} {p.employee_code ? `(${p.employee_code})` : ''}</option>)}</select></div>)}
         <fieldset className="space-y-3"><legend className="mb-2 text-sm font-medium">{t('hrSteps')}</legend>
           <p className="text-xs text-muted-foreground">{t('hrStepsHint')}</p>
           {context.hr_steps.length === 0 && <p className="text-sm">{t('noSteps')}</p>}
@@ -146,6 +150,7 @@ function ExecutiveSettingsPanel({ context, onSaved }: { context: DelegationConte
         <Button disabled={isPending} data-testid="executive-settings-save" onClick={() => { setError(''); setNotice(''); startTransition(async () => { const result = await setExecutiveSettings(settings); if (!result.ok) { setError(result.error); return; } await onSaved(); setNotice(t('saved')); router.refresh(); }); }}>{isPending ? t('saving') : t('saveExecutive')}</Button>
       </CardContent>
     </Card>
+    </FormSection>
   );
 }
 

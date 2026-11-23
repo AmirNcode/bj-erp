@@ -33,6 +33,7 @@ import {
   type SectionKey,
 } from '@/lib/permissions/catalog';
 import { cn } from '@/lib/utils';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { AdminOnlyCard } from './AdminOnlyCard';
 import { PermissionSection, type PermNote } from './PermissionSection';
 
@@ -187,7 +188,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
   };
 
   return (
-    <div className="flex max-w-5xl flex-col gap-4" data-testid="role-editor">
+    <div className="flex flex-col gap-4" data-testid="role-editor">
       <div className="space-y-1.5">
         <Label htmlFor="role-name">{t('nameLabel')}</Label>
         <Input
@@ -199,7 +200,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
           autoComplete="off"
           aria-invalid={nameError ? true : undefined}
           aria-describedby="role-name-hint"
-          className="h-10 max-w-sm"
+          className={cn('h-10', FIELD_W.name)}
           data-testid="role-name"
           onChange={(e) => {
             setName(e.target.value);

@@ -11,6 +11,8 @@ import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
 import { todayInAppTz } from '@/lib/appDate';
@@ -167,7 +169,7 @@ export function WorkSettingsForm({
               const next = isoOf(e.target.value);
               setSlots((prev) => prev.map((v, j) => (j === i ? next : v)));
             }}
-            className={cn(nativeSelectClass, 'h-9 w-40 rounded-md bg-card text-13')}
+            className={cn(nativeSelectClass, 'h-9 rounded-md bg-card text-13', FIELD_W.shortSelect)}
           >
             <option value="none">{labels.dayNone}</option>
             {WEEKDAYS.map((d) => (
@@ -234,154 +236,149 @@ export function WorkSettingsForm({
     });
   };
 
-  const inputClass =
-    'h-9 w-full rounded-md border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:w-[180px]';
+  const inputBase =
+    'h-9 rounded-md border border-input bg-card px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
   // iOS Safari gives time inputs an intrinsic width that ignores w-full, so
   // they overflow their cell; min-w-0 + appearance-none let them shrink.
-  const timeInputClass = cn(inputClass, 'min-w-0 appearance-none');
-  // Phone: two equal columns; sm+: a wrapping row of fixed-width fields.
-  const rowClass = 'grid grid-cols-2 gap-3 sm:flex sm:flex-wrap';
+  const timeInputClass = cn(inputBase, FIELD_W.time, 'min-w-0 appearance-none');
+  const numberInputClass = cn(inputBase, FIELD_W.number);
+  const rowClass = 'flex flex-wrap gap-4';
   const fieldClass = 'min-w-0 space-y-1 text-sm';
 
-  // Save covers this card only (weekly days off + working hours).
+  // One Save for both sections (weekly days off + working hours).
   return (
-    <Card className="w-full max-w-2xl gap-0 py-0" data-testid="work-settings">
-      <div className="px-6 pt-5 pb-1">
-        <h2 className="text-base font-semibold">{labels.weekendTitle}</h2>
-        <p className="mt-0.5 text-13 text-muted-foreground">{labels.weekendHint}</p>
-      </div>
-
-      {/* Two fixed rows: a label column, then the row's controls stacked. */}
-      <div className="flex flex-col gap-2.5 px-6 py-3.5">
-        <div
-          className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
-          data-testid="weekend-weekly-row"
-        >
-          <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
-            {labels.frequencyWeekly}
-          </span>
-          {renderSlots('weekly', weeklySlots, setWeeklySlots)}
-        </div>
-
-        <div
-          className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
-          data-testid="weekend-biweekly-row"
-        >
-          <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
-            {labels.frequencyBiweekly}
-          </span>
-          <div className="flex flex-col gap-2">
-            {renderSlots('biweekly', biweeklySlots, setBiweeklySlots)}
-            {/* Only meaningful once a day is fortnightly: without a reference date
-                the parity — WHICH Thursdays are off — is undefined, and the server
-                refuses the save rather than guessing one. */}
-            {biweekly.length > 0 && (
-              <div className="mt-1 flex flex-col gap-1 border-t border-muted pt-3">
-                <label className="text-13 font-medium">{labels.anchorLabel}</label>
-                {/* rmdp-container class is intentional — e2e locates input via it. */}
-                <div data-testid="biweekly-anchor" className="w-40">
-                  <DatePicker
-                    value={anchor}
-                    onChange={setAnchor}
-                    disabled={readOnly}
-                    calendar={calendarPickerConfig(locale).calendar}
-                    locale={calendarPickerConfig(locale).calLocale}
-                    containerClassName="w-full"
-                    inputClass="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
-              </div>
-            )}
+    <div data-testid="work-settings">
+      <FormSection title={labels.weekendTitle} description={labels.weekendHint}>
+        <Card className="gap-2.5 p-4">
+          {/* Two fixed rows: a label column, then the row's controls stacked. */}
+          <div
+            className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
+            data-testid="weekend-weekly-row"
+          >
+            <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
+              {labels.frequencyWeekly}
+            </span>
+            {renderSlots('weekly', weeklySlots, setWeeklySlots)}
           </div>
-        </div>
-      </div>
+
+          <div
+            className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
+            data-testid="weekend-biweekly-row"
+          >
+            <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
+              {labels.frequencyBiweekly}
+            </span>
+            <div className="flex flex-col gap-2">
+              {renderSlots('biweekly', biweeklySlots, setBiweeklySlots)}
+              {/* Only meaningful once a day is fortnightly: without a reference date
+                  the parity — WHICH Thursdays are off — is undefined, and the server
+                  refuses the save rather than guessing one. */}
+              {biweekly.length > 0 && (
+                <div className="mt-1 flex flex-col gap-1 border-t border-muted pt-3">
+                  <label className="text-13 font-medium">{labels.anchorLabel}</label>
+                  {/* rmdp-container class is intentional — e2e locates input via it. */}
+                  <div data-testid="biweekly-anchor" className={FIELD_W.date}>
+                    <DatePicker
+                      value={anchor}
+                      onChange={setAnchor}
+                      disabled={readOnly}
+                      calendar={calendarPickerConfig(locale).calendar}
+                      locale={calendarPickerConfig(locale).calLocale}
+                      containerClassName="w-full"
+                      inputClass="h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{labels.anchorHint}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      </FormSection>
 
       {/* Work-hours window + hourly cap — the bounds hourly requests validate against. */}
-      <div className="space-y-3 border-t px-6 py-4">
-        <div>
-          <h3 className="text-sm font-semibold">{labels.hoursTitle}</h3>
-          <p className="mt-0.5 text-13 text-muted-foreground">{labels.hoursHint}</p>
-        </div>
-        <div className={rowClass} data-testid="work-hours-row">
-          <label className={fieldClass}>
-            <span className="block text-xs text-muted-foreground">{labels.workStart}</span>
-            <input
-              type="time"
-              value={workStart}
-              onChange={(e) => setWorkStart(e.target.value)}
-              disabled={locked}
-              dir="ltr"
-              data-testid="work-start"
-              className={timeInputClass}
-            />
-          </label>
-          <label className={fieldClass}>
-            <span className="block text-xs text-muted-foreground">{labels.workEnd}</span>
-            <input
-              type="time"
-              value={workEnd}
-              onChange={(e) => setWorkEnd(e.target.value)}
-              disabled={locked}
-              dir="ltr"
-              data-testid="work-end"
-              className={timeInputClass}
-            />
-          </label>
-          <label className={cn(fieldClass, 'col-span-2')}>
-            <span className="block text-xs text-muted-foreground">{labels.hourlyCap}</span>
-            <input
-              type="number"
-              min={0.5}
-              max={4}
-              step="0.5"
-              value={capHours}
-              onChange={(e) => setCapHours(Number(e.target.value))}
-              disabled={locked}
-              data-testid="hourly-cap-hours"
-              className={inputClass}
-            />
-          </label>
-        </div>
-        {/* Lunch break (FR-93) on its own row. */}
-        <div className={rowClass} data-testid="lunch-row">
-          <label className={fieldClass}>
-            <span className="block text-xs text-muted-foreground">{labels.lunchStart}</span>
-            <input
-              type="time"
-              value={lunchStart}
-              onChange={(e) => setLunchStart(e.target.value)}
-              disabled={locked}
-              dir="ltr"
-              data-testid="lunch-start"
-              className={timeInputClass}
-            />
-          </label>
-          <label className={fieldClass}>
-            <span className="block text-xs text-muted-foreground">{labels.lunchMinutes}</span>
-            <input
-              type="number"
-              min={0}
-              max={180}
-              step={5}
-              value={lunchMinutes}
-              onChange={(e) => setLunchMinutes(Number(e.target.value))}
-              disabled={locked}
-              data-testid="lunch-minutes"
-              className={inputClass}
-            />
-          </label>
-        </div>
-      </div>
+      <FormSection title={labels.hoursTitle} description={labels.hoursHint}>
+        <Card className="gap-4 p-4">
+          <div className={rowClass} data-testid="work-hours-row">
+            <label className={fieldClass}>
+              <span className="block text-xs text-muted-foreground">{labels.workStart}</span>
+              <input
+                type="time"
+                value={workStart}
+                onChange={(e) => setWorkStart(e.target.value)}
+                disabled={locked}
+                dir="ltr"
+                data-testid="work-start"
+                className={timeInputClass}
+              />
+            </label>
+            <label className={fieldClass}>
+              <span className="block text-xs text-muted-foreground">{labels.workEnd}</span>
+              <input
+                type="time"
+                value={workEnd}
+                onChange={(e) => setWorkEnd(e.target.value)}
+                disabled={locked}
+                dir="ltr"
+                data-testid="work-end"
+                className={timeInputClass}
+              />
+            </label>
+            <label className={fieldClass}>
+              <span className="block text-xs text-muted-foreground">{labels.hourlyCap}</span>
+              <input
+                type="number"
+                min={0.5}
+                max={4}
+                step="0.5"
+                value={capHours}
+                onChange={(e) => setCapHours(Number(e.target.value))}
+                disabled={locked}
+                data-testid="hourly-cap-hours"
+                className={numberInputClass}
+              />
+            </label>
+          </div>
+          {/* Lunch break (FR-93) on its own row. */}
+          <div className={rowClass} data-testid="lunch-row">
+            <label className={fieldClass}>
+              <span className="block text-xs text-muted-foreground">{labels.lunchStart}</span>
+              <input
+                type="time"
+                value={lunchStart}
+                onChange={(e) => setLunchStart(e.target.value)}
+                disabled={locked}
+                dir="ltr"
+                data-testid="lunch-start"
+                className={timeInputClass}
+              />
+            </label>
+            <label className={fieldClass}>
+              <span className="block text-xs text-muted-foreground">{labels.lunchMinutes}</span>
+              <input
+                type="number"
+                min={0}
+                max={180}
+                step={5}
+                value={lunchMinutes}
+                onChange={(e) => setLunchMinutes(Number(e.target.value))}
+                disabled={locked}
+                data-testid="lunch-minutes"
+                className={numberInputClass}
+              />
+            </label>
+          </div>
+        </Card>
+      </FormSection>
 
       {errMsg && (
-        <p role="alert" data-testid="work-settings-error" className="px-6 pb-3 text-sm text-destructive">
+        <p role="alert" data-testid="work-settings-error" className="pt-4 text-sm text-destructive lg:ms-[calc(20rem+2.5rem)]">
           {labels.errorLabel}: {errMsg}
         </p>
       )}
 
       {(!readOnly || savedAt) && (
-        <div className="flex flex-wrap items-center justify-end gap-3 rounded-b-xl border-t bg-muted/30 px-6 py-3.5">
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 lg:ms-[calc(20rem+2.5rem)]">
           {okMsg && (
             <p role="status" data-testid="work-settings-saved" className="text-xs text-success">
               {okMsg}
@@ -405,6 +402,6 @@ export function WorkSettingsForm({
           )}
         </div>
       )}
-    </Card>
+    </div>
   );
 }
