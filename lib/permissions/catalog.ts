@@ -12,9 +12,9 @@
 
 export type Level = 'read' | 'edit';
 export type PermKey =
-  | 'people' | 'people_create' | 'role_manager' | 'role_assign'
+  | 'reset_employee_password' | 'people' | 'people_create' | 'role_manager' | 'role_assign'
   | 'personal_info' | 'personal_info_own' | 'clearance' | 'departments' | 'leave_balances'
-  | 'leave_accrual' | 'special_leave' | 'leave_requests' | 'calendar' | 'reports'
+  | 'leave_accrual' | 'annual_leave_borrow' | 'special_leave' | 'leave_requests' | 'calendar' | 'reports'
   | 'finance' | 'finance_forms' | 'approval_steps' | 'approval_delegate' | 'work_settings' | 'holidays'
   | 'travel_booking'
   | 'edit_leave_daily' | 'edit_leave_hourly' | 'edit_errand_daily' | 'edit_errand_hourly' | 'edit_requests_own'
@@ -27,9 +27,9 @@ export type SectionKey = 'employees' | 'departments' | 'leave' | 'requestEdits' 
 export type SectionChoice = 'custom' | 'allow' | 'read' | 'none';
 
 export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
-  { key: 'employees', items: ['people', 'people_create', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
+  { key: 'employees', items: ['people', 'reset_employee_password', 'people_create', 'role_manager', 'role_assign', 'personal_info', 'personal_info_own', 'clearance'] },
   { key: 'departments', items: ['departments'] },
-  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'reports'] },
+  { key: 'leave', items: ['leave_balances', 'leave_accrual', 'annual_leave_borrow', 'special_leave', 'leave_requests', 'calendar', 'reports'] },
   // FR-91: which approved requests a role may edit.
   { key: 'requestEdits', items: ['edit_leave_daily', 'edit_leave_hourly', 'edit_errand_daily', 'edit_errand_hourly', 'edit_requests_own'] },
   { key: 'finance', items: ['finance', 'finance_forms'] },
@@ -42,9 +42,9 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
 ];
 
 export const SHAPES: Record<PermKey, Shape> = {
-  people: 'RE', people_create: 'E', role_manager: 'E', role_assign: 'E',
+  people: 'RE', reset_employee_password: 'E', people_create: 'E', role_manager: 'E', role_assign: 'E',
   personal_info: 'RE', personal_info_own: 'E', clearance: 'RE', departments: 'RE',
-  leave_balances: 'RE', leave_accrual: 'E', special_leave: 'E', leave_requests: 'RE',
+  leave_balances: 'RE', leave_accrual: 'E', annual_leave_borrow: 'E', special_leave: 'E', leave_requests: 'RE',
   calendar: 'R', reports: 'R', finance: 'R', finance_forms: 'R',
   approval_steps: 'RE', approval_delegate: 'E', work_settings: 'RE', holidays: 'RE',
   travel_booking: 'E',
@@ -61,6 +61,7 @@ export function sensitivePermissions(perms: Perms): PermKey[] {
 /** D6. `keyLevel` 'read' = applies at any level; 'edit' = only when the key is edit. */
 export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] = [
   { key: 'finance_forms', keyLevel: 'read', needs: 'finance' },
+  { key: 'reset_employee_password', keyLevel: 'read', needs: 'people' },
   { key: 'people_create', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'people' },
   { key: 'role_manager', keyLevel: 'read', needs: 'leave_balances' },

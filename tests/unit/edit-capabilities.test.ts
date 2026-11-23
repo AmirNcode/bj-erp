@@ -103,6 +103,7 @@ describe('employeeEditCapabilities', () => {
       name: true,
       org: true,
       editableRoleIds: ALL.filter((r) => r.systemKey !== 'admin').map((r) => r.id),
+      signOutEverywhere: true,
       resetPassword: true,
       leave: true,
       leaveEdit: true,
@@ -291,11 +292,14 @@ describe('employeeEditCapabilities', () => {
     });
   });
 
-  it('password resets are the admin alone (20261013200007), even with a stale passwords grant', () => {
+  it('password resets require the explicit grant or admin, and exclude delegated resets of admin accounts', () => {
     const stale = { people: 'edit', passwords: 'edit' } as unknown as Perms;
     expect(caps({ roles: ['employee'], perms: stale }, ['employee']).resetPassword).toBe(false);
     expect(caps(hr(), ['employee']).resetPassword).toBe(false);
-    expect(caps({ roles: ['employee'], perms: { ...fullPerms() } }, ['employee']).resetPassword).toBe(false);
+    const head = { roles: ['hr'], perms: { ...HR, reset_employee_password: 'edit' } as Perms };
+    expect(caps(head, ['hr']).resetPassword).toBe(true);
+    expect(caps(head, ['admin']).resetPassword).toBe(false);
+    expect(caps(head, ['hr']).signOutEverywhere).toBeFalsy();
     expect(caps(ADMIN, ['employee']).resetPassword).toBe(true);
   });
 

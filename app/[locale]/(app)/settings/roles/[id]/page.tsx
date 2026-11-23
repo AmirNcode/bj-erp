@@ -24,7 +24,7 @@ export default async function EditRolePage({ params }: Props) {
   if (role.kind === 'system') redirect(`/${locale}/settings/roles`);
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+    <div data-wide className="flex w-full flex-col gap-5">
       <SettingsTabs locale={locale} active="roles" />
       <h1 className="text-2xl font-bold tracking-tight">
         <bdi>{role.name}</bdi>

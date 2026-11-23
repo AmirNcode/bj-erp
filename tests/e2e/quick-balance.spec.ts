@@ -11,6 +11,7 @@ const days = '[data-testid="balance-days-annual"]';
 async function openEdit(page: Page, code: string) {
   await page.goto(`/en/manage/employees?q=${code}`);
   await page.locator('tr', { hasText: code }).first().locator('a[href*="/manage/employees/"]').click();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator('[data-testid="quick-add-section"]')).toBeVisible({ timeout: 30_000 });
 }
 
@@ -47,9 +48,10 @@ test('quick add, breakdown, history and collapsed sections', async ({ page }) =>
   await expect(page.locator('[data-testid="balance-breakdown-annual"]')).toContainText('Returned early from leave');
 
   // Saving the form afterwards keeps the add.
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 30_000 });
   await page.reload();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator(days)).toHaveAttribute('data-minutes', String(before + 1440), { timeout: 20_000 });
 
   // A value typed but not saved does not undo the next add.
@@ -57,9 +59,10 @@ test('quick add, breakdown, history and collapsed sections', async ({ page }) =>
   await page.fill(days, '50');
   await quickAdd(page, '1', 'Second add');
   await expect(page.locator(days)).toHaveAttribute('data-minutes', String(before + 1920), { timeout: 20_000 });
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 30_000 });
   await page.reload();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator(days)).toHaveAttribute('data-minutes', String(before + 1920), { timeout: 20_000 });
 
   // History lists both, newest first, with who added them and no hand edit.
@@ -75,6 +78,7 @@ test('quick add, breakdown, history and collapsed sections', async ({ page }) =>
   await page.dblclick('[data-testid="quick-add-submit"]');
   await expect(page.locator('[data-testid="quick-add-done"]')).toBeVisible({ timeout: 30_000 });
   await page.reload();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator(days)).toHaveAttribute('data-minutes', String(before + 2400), { timeout: 20_000 });
   await page.locator('[data-testid="balance-history"] summary').click();
   await expect(rows.first()).toContainText('Double click', { timeout: 20_000 });
@@ -103,7 +107,7 @@ test('an invalid value in a closed section opens it', async ({ page }) => {
   await page.fill('[data-testid="balance-hours-annual"]', '999');
   await page.locator('[data-testid="balances-section"] summary').click();
   await expect(page.locator('[data-testid="balances-section"]')).not.toHaveAttribute('open', '');
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="balances-section"]')).toHaveAttribute('open', '', { timeout: 10_000 });
 });
 
@@ -135,6 +139,7 @@ test('a viewer who cannot edit balances sees history, not the add fields', async
   // HR holds leave_balances edit, but never on their own record.
   await login(page, hr.code, hr.password);
   await page.goto(url);
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator('[data-testid="quick-add-section"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.locator('[data-testid="quick-add-submit"]')).toHaveCount(0);
   await page.locator('[data-testid="balance-history"] summary').click();

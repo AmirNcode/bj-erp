@@ -4,7 +4,7 @@
  *
  * Every approved and pending work errand (hourly or daily; finance sees no
  * leave) overlapping a Jalali month range, in two sections with their own
- * totals, with the per diem HR entered and FR-70 travel costs, and a CSV
+ * totals, with the per diem HR entered and FR-70 travel costs, and CSV or Excel
  * export of both. The range is a URL
  * parameter like the reports screen's, defaulting to the current month and the
  * next one (upcoming trips show at once).

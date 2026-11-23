@@ -6,7 +6,7 @@ export type BalanceFigures = {
   otherPendingMinutes: number;
   availableMinutes: number;
   requestedMinutes: number;
-  afterMinutes: number;
+  afterMinutes: number | null;
   unpaidMinutes: number;
   overdraftMinutes: number;
 };
@@ -39,6 +39,17 @@ export function balanceFigures(row: Input): BalanceFigures | null {
       afterMinutes: balance - requested,
       unpaidMinutes: 0,
       overdraftMinutes: Math.max(requested - Math.max(balance, 0), 0),
+    };
+  }
+  if (rule === 'strict') {
+    return {
+      balanceMinutes: balance,
+      otherPendingMinutes: other,
+      availableMinutes: balance - other,
+      requestedMinutes: requested,
+      afterMinutes: requested > Math.max(balance - other, 0) ? null : balance - requested,
+      unpaidMinutes: 0,
+      overdraftMinutes: 0,
     };
   }
   const paid = Math.min(requested, Math.max(balance, 0));

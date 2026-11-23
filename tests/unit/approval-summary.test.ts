@@ -8,11 +8,11 @@ describe('balanceFigures', () => {
     const f = balanceFigures({ ...base, requested_minutes: 2400, balance_minutes: 960, balance_rule: 'overdraft' });
     expect(f).toMatchObject({ afterMinutes: -1440, overdraftMinutes: 1440, unpaidMinutes: 0 });
   });
-  it('strict (balance dropped): paid up to balance, rest unpaid', () => {
+  it('strict: insufficient balance blocks final approval', () => {
     const f = balanceFigures({ ...base, balance_rule: 'strict' });
-    expect(f).toMatchObject({ afterMinutes: 0, unpaidMinutes: 960, overdraftMinutes: 0 });
+    expect(f).toMatchObject({ afterMinutes: null, unpaidMinutes: 0, overdraftMinutes: 0 });
   });
-  it('split: same as strict', () => {
+  it('split: excess time becomes unpaid', () => {
     expect(balanceFigures(base)).toMatchObject({ afterMinutes: 0, unpaidMinutes: 960 });
   });
   it('other pending reduces available but not the after figure', () => {

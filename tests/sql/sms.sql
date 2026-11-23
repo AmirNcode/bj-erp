@@ -534,6 +534,25 @@ select pg_temp.expect('F5: unreadable reply → failed without retry; later rows
   'failed/could not read the reply: boom ***/sending');
 drop trigger sm_poison on private.sms_outbox_events;
 
+-- Successful and refused provider replies can both echo submitted password text.
+do $$ begin perform pg_temp.login('admin');
+  perform public.app_enqueue_password_sms(pg_temp.fx('emp'),'EchoSent9!');
+  perform public.app_enqueue_password_sms(pg_temp.fx('emp'),'EchoFailed9!');
+end $$;
+select private.sms_dispatch();
+insert into net._http_response(id,status_code,content,timed_out,error_msg)
+select net_request_id, case when rn=1 then 200 else 400 end,
+  case when rn=1 then '{"recId":"987654321","status":"EchoSent9!"}'
+       else '{"status":"EchoFailed9!"}' end,false,'EchoFailed9!'
+from (select net_request_id,row_number() over(order by net_request_id) rn
+      from public.sms_outbox where event='password_reset' and status='sending') pending;
+select private.sms_dispatch();
+select pg_temp.expect('password replies preserve accepted and refused outcomes',
+  (select count(distinct status)::text from public.sms_outbox
+    where event='password_reset' and status in ('sent','failed') and attempts>0),'2');
+select pg_temp.expect('password replies omit echoed text from administrator history',
+  pg_temp.as_scalar('admin',$q$select (public.app_sms_log(null,'password_reset')::text !~ 'Echo(Sent|Failed)9')::text$q$),'true');
+
 -- ── errors never carry the key (PR #17 review F1) ──
 -- Message and DETAIL of a refused save, as an admin through PostgREST would see them.
 create function pg_temp.err_text(p_key text,p_sql text) returns text language plpgsql as $$

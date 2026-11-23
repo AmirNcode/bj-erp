@@ -19,6 +19,7 @@ export type EditCapabilities = {
   org: boolean;
   /** Role ids the caller may toggle; the other boxes render disabled. Never the admin role. */
   editableRoleIds: string[];
+  signOutEverywhere?: boolean;
   resetPassword: boolean;
   /** Balances and accrual policy are shown (leave_balances read). */
   leave: boolean;
@@ -108,6 +109,7 @@ export function employeeEditCapabilities({
       name: true,
       org: true,
       editableRoleIds: assignable.map((r) => r.id),
+      signOutEverywhere: true,
       resetPassword: true,
       leave: true,
       leaveEdit: true,
@@ -153,8 +155,7 @@ export function employeeEditCapabilities({
     name: (actor || self) && can(callerPerms, 'people'),
     org: actor && can(callerPerms, 'people'),
     editableRoleIds: actor ? assignable.filter(mayToggle).map((r) => r.id) : [],
-    // Password resets are the admin's alone (20261013200007, returned above).
-    resetPassword: false,
+    resetPassword: leaveTarget && can(callerPerms, 'reset_employee_password'),
     leave: can(callerPerms, 'leave_balances', 'read') || (callerIsDirectManager && !self),
     leaveEdit: leaveTarget && can(callerPerms, 'leave_balances'),
     lockedReason,

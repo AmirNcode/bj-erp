@@ -67,7 +67,9 @@ https://{$APP_HOST} {
 
 	handle /rest/v1/* {
 		uri strip_prefix /rest/v1
-		reverse_proxy rest:3000
+		reverse_proxy rest:3000 {
+			header_up X-BJ-Client-IP {client_ip}
+		}
 	}
 
 	handle {

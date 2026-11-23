@@ -99,7 +99,7 @@ begin
 end; $$;
 
 -- ============================================================ catalog and seed
-select pg_temp.expect('catalog: 33 keys',(select count(*)::text from private.permission_keys()),'33');
+select pg_temp.expect('catalog: 35 keys',(select count(*)::text from private.permission_keys()),'35');
 select pg_temp.assert('shapes: sales RE, decide and settings edit-only, reports read-only',
   private.permission_allows('sales','read') and private.permission_allows('sales','edit')
   and private.permission_allows('sales_prices','read') and private.permission_allows('project_items','edit')

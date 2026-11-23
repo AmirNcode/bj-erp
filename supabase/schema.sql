@@ -738,7 +738,7 @@ CREATE FUNCTION private.balance_rule(p_employee uuid, p_leave_type uuid) RETURNS
     AS $$
   select case
     when lt.id is null or not lt.affects_balance then 'none'
-    when lt.manager_overdraft and private.has_role(p_employee, 'manager') then 'overdraft'
+    when lt.manager_overdraft and private.has_perm(p_employee, 'annual_leave_borrow', 'edit') then 'overdraft'
     when lt.manager_overdraft then 'strict'
     else 'split'
   end
@@ -955,7 +955,11 @@ CREATE FUNCTION private.can_reset_password(p_caller uuid, p_target uuid) RETURNS
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO ''
     AS $$
-  select coalesce(private.is_admin(p_caller), false);
+  select private.is_admin(p_caller) or (
+    p_target <> p_caller and private.has_perm(p_caller, 'reset_employee_password')
+    and exists (select 1 from public.profiles t join public.profiles c on t.company_id = c.company_id
+                where t.id = p_target and t.active and c.id = p_caller)
+    and not private.is_admin(p_target));
 $$;
 
 
@@ -1399,6 +1403,7 @@ declare
   v_shape_changed boolean;
   v_dates_changed boolean;
   v_balance integer;
+  v_rule text;
   v_old_paid integer;
   v_new_paid integer;
   v_delta integer := 0;
@@ -1546,6 +1551,8 @@ begin
        where x.employee_id = r.employee_id and x.id <> r.id
          and x.status in ('pending', 'approved')
          and x.start_date <= p_end and x.end_date >= p_start
+         and not (x.kind = 'leave' and x.unit = 'hour' and r.kind = 'errand')
+         and not (r.kind = 'leave' and p_unit = 'hour' and x.kind = 'errand')
          and (x.unit = 'day' or p_unit = 'day'
               or (x.start_time < p_end_time and x.end_time > p_start_time))
     ) or (r.kind = 'errand' and p_unit = 'day'
@@ -1569,9 +1576,18 @@ begin
       if lt.affects_balance then
         v_old_paid := r.requested_minutes - r.unpaid_minutes;
         v_balance := public.current_leave_balance(r.employee_id, r.leave_type_id);
-        if private.balance_rule(r.employee_id, r.leave_type_id) = 'overdraft' then
+        v_rule := private.balance_rule(r.employee_id, r.leave_type_id);
+        if v_rule = 'overdraft' then
           v_new_paid := v_minutes;
           v_unpaid := 0;
+        elsif v_rule = 'strict' then
+          -- Preserve historical unpaid time on increases. Reductions remove unpaid time first.
+          v_new_paid := least(v_minutes, v_old_paid) + greatest(v_minutes - r.requested_minutes, 0);
+          if v_new_paid > v_old_paid and v_new_paid - v_old_paid >
+              v_balance - private.pending_leave_minutes(r.employee_id, r.leave_type_id, r.id) then
+            raise exception 'request exceeds available balance' using errcode = '22023';
+          end if;
+          v_unpaid := v_minutes - v_new_paid;
         else
           v_new_paid := least(v_minutes, greatest(v_balance, 0) + v_old_paid);
           v_unpaid := v_minutes - v_new_paid;
@@ -1770,6 +1786,11 @@ begin
     return new;
   end if;
 
+  -- Credential writers may change this flag alone. Direct profile updates still pass the normal guard.
+  if current_setting('bj.password_flag_write', true) = 'on' and new.must_change_password
+     and (to_jsonb(new) - 'must_change_password') = (to_jsonb(old) - 'must_change_password') then
+    return new;
+  end if;
   if private.is_admin(v_uid) then
     return new;  -- admins may change anything
   end if;
@@ -1937,6 +1958,7 @@ CREATE FUNCTION private.extension_overlaps(p_request uuid, p_employee uuid, p_st
       select 1 from public.leave_requests r
        where r.employee_id = p_employee and r.id <> p_request
          and r.status in ('pending', 'approved')
+         and not (r.kind = 'leave' and r.unit = 'hour')
          and r.start_date <= p_end and r.end_date >= p_start)
     or exists (
       select 1 from public.errand_extensions e
@@ -1955,7 +1977,7 @@ CREATE FUNCTION private.finalize_approval_request(p_id uuid, p_actor uuid, p_sig
     SET search_path TO ''
     AS $$
 declare r public.leave_requests%rowtype; v_affects boolean; v_is_paid boolean;
-  v_prev integer:=0; v_paid integer:=0; v_unpaid integer:=0;
+  v_rule text; v_prev integer:=0; v_paid integer:=0; v_unpaid integer:=0;
 begin
   select * into r from public.leave_requests where id=p_id;
   perform private.approval_lock(r.company_id);
@@ -1966,6 +1988,8 @@ begin
     and not private.request_step_decided(p_id,s.id,'approved')) then return false; end if;
   if exists (select 1 from public.leave_requests lr where lr.employee_id=r.employee_id and lr.id<>r.id
     and lr.status='approved' and lr.start_date<=r.end_date and lr.end_date>=r.start_date
+    and not (lr.kind = 'leave' and lr.unit = 'hour' and r.kind = 'errand')
+    and not (r.kind = 'leave' and r.unit = 'hour' and lr.kind = 'errand')
     and (lr.unit='day' or r.unit='day' or (lr.start_time<r.end_time and lr.end_time>r.start_time))) then
     raise exception 'overlapping approved leave exists' using errcode='22023'; end if;
   if r.replacement_id is not null and private.replacement_is_away(r.replacement_id,r.start_date,r.end_date,
@@ -1973,7 +1997,12 @@ begin
   select affects_balance,is_paid into v_affects,v_is_paid from public.leave_types where id=r.leave_type_id;
   if v_affects then
     v_prev:=public.current_leave_balance(r.employee_id,r.leave_type_id);
-    if private.balance_rule(r.employee_id,r.leave_type_id)='overdraft' then
+    v_rule := private.balance_rule(r.employee_id, r.leave_type_id);
+    if v_rule = 'strict' and r.requested_minutes > 0 and r.requested_minutes >
+        v_prev - private.pending_leave_minutes(r.employee_id, r.leave_type_id, r.id) then
+      raise exception 'request exceeds available balance' using errcode = '22023';
+    end if;
+    if v_rule in ('overdraft', 'strict') then
       v_paid:=r.requested_minutes; v_unpaid:=0;
     else
       v_paid:=least(r.requested_minutes,greatest(v_prev,0)); v_unpaid:=r.requested_minutes-v_paid;
@@ -1986,7 +2015,7 @@ begin
   if not found then return false; end if;
   if v_affects and v_paid>0 then
     insert into public.leave_ledger(employee_id,leave_type_id,request_id,entry_type,delta_minutes,balance_after_minutes,note)
-    values(r.employee_id,r.leave_type_id,p_id,'consumption',-v_paid,v_prev-v_paid,case when private.balance_rule(r.employee_id,r.leave_type_id)='overdraft' then 'consumed on approval (manager overdraft)' else 'paid portion consumed on approval' end);
+    values(r.employee_id,r.leave_type_id,p_id,'consumption',-v_paid,v_prev-v_paid,case when v_rule = 'overdraft' then 'consumed on approval (annual leave borrowing)' else 'paid portion consumed on approval' end);
   end if;
   insert into public.audit_log(actor_id,action,entity,entity_id,after) values
     (p_actor,'approve_leave_request','leave_requests',p_id,jsonb_build_object('employee_id',r.employee_id,
@@ -2056,6 +2085,31 @@ CREATE FUNCTION private.has_role(uid uuid, r public.app_role) RETURNS boolean
           and role = r
      );
 $$;
+
+
+--
+-- Name: invalidate_mobile_recovery(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.invalidate_mobile_recovery() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare c private.recovery_credentials%rowtype;
+begin
+  if tg_op='UPDATE' and private.normalize_ir_mobile(old.mobile) is not distinct from private.normalize_ir_mobile(new.mobile) then return null; end if;
+  -- Also invalidate challenges if the number changes away and subsequently changes back.
+  update private.recovery_requests set mobile=null where employee_id=old.employee_id and mobile is not null;
+  delete from private.recovery_credentials where employee_id=old.employee_id returning * into c;
+  if found then
+    update auth.users set encrypted_password=extensions.crypt(encode(extensions.gen_random_bytes(32),'hex'),extensions.gen_salt('bf')),updated_at=now()
+      where id=c.employee_id and extensions.digest(encrypted_password,'sha256')=c.password_fingerprint;
+    if found then perform private.revoke_sessions(c.employee_id,'recovery_mobile_changed'); end if;
+    update public.sms_outbox set status='skipped', skip_reason='mobile_changed',
+      body=private.sms_mask(event,body,args),args='{}' where id=c.outbox_id and status='queued';
+  end if;
+  return null;
+end $$;
 
 
 --
@@ -2623,7 +2677,7 @@ CREATE FUNCTION private.perm_level(uid uuid, p_key text) RETURNS integer
   -- Ignores `active` on purpose: a deactivated holder keeps their latent levels,
   -- so someone weaker cannot reactivate them (D4). Callers add is_active.
   select case
-    when exists (select 1 from public.user_roles where user_id = uid and role = 'admin') then
+    when p_key <> 'annual_leave_borrow' and exists (select 1 from public.user_roles where user_id = uid and role = 'admin') then
       case when private.permission_allows(p_key, 'edit') then 2
            when private.permission_allows(p_key, 'read') then 1 else 0 end
     else coalesce((
@@ -2645,8 +2699,8 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     SET search_path TO ''
     AS $$
   select case
-    when p_key in ('people_create','role_manager','role_assign','leave_accrual',
-      'personal_info_own','special_leave','approval_delegate','travel_booking',
+    when p_key in ('people_create','reset_employee_password','role_manager','role_assign','leave_accrual',
+      'personal_info_own','annual_leave_borrow','special_leave','approval_delegate','travel_booking',
       'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly',
       'edit_requests_own','sales_decide','sales_settings') then p_level = 'edit'
     when p_key in ('calendar','reports','finance','finance_forms','sales_reports') then p_level = 'read'
@@ -2667,7 +2721,7 @@ CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text
     AS $$
   values
     ('finance_forms','read','finance'),
-    ('people_create','read','people'),
+    ('people_create','read','people'), ('reset_employee_password','read','people'),
     ('role_manager','read','people'), ('role_manager','read','leave_balances'),
     ('role_manager','read','calendar'), ('role_assign','read','people'),
     ('personal_info','read','people'), ('clearance','edit','people'),
@@ -2692,9 +2746,9 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     LANGUAGE sql IMMUTABLE
     SET search_path TO ''
     AS $$
-  select unnest(array['people','people_create','role_manager','role_assign',
+  select unnest(array['people','people_create','reset_employee_password','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
-    'special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
+    'annual_leave_borrow','special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
     'work_settings','holidays','finance','finance_forms','travel_booking',
     'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly','edit_requests_own',
     'sales','sales_prices','sales_bonds','sales_decide','sales_reports','sales_settings','project_items']);
@@ -4620,6 +4674,21 @@ begin
       continue;
     end if;
     select * into s from private.sms_settings where company_id = o.company_id;
+    -- Providers can echo the submitted text in any free-form field. Retain only
+    -- the numeric response codes needed for classification of password texts.
+    if o.event = 'password_reset' then
+      begin v_json := resp.content::jsonb; exception when others then v_json := null; end;
+      if v_json ? 'RetStatus' then
+        resp.content := jsonb_build_object(
+          'RetStatus', case when v_json->>'RetStatus' ~ '^[0-9]{1,4}$' then v_json->>'RetStatus' end,
+          'Value', case when v_json->>'Value' ~ '^-?[0-9]{1,24}$' then v_json->>'Value' end
+        )::text;
+      else
+        resp.content := jsonb_build_object('recId',
+          case when v_json->>'recId' ~ '^[0-9]{6,24}$' then v_json->>'recId' end)::text;
+      end if;
+      if resp.error_msg is not null then resp.error_msg := 'password SMS transport error'; end if;
+    end if;
     insert into private.sms_outbox_events (outbox_id, kind, attempt, http_status, timed_out, error, response)
     values (o.id, 'reply', o.attempts, resp.status_code, resp.timed_out,
             private.sms_scrub(resp.error_msg, s.api_key), private.sms_scrub(resp.content, s.api_key));
@@ -4658,8 +4727,8 @@ begin
    exception when others then
     -- F5: one unreadable reply must not stop every other text. It may have been sent: no retry.
     get stacked diagnostics v_err = message_text;
-    perform private.sms_fail(o.id, 'could not read the reply: '
-      || private.sms_scrub(v_err, (select k.api_key from private.sms_settings k where k.company_id = o.company_id), 300), false);
+    perform private.sms_fail(o.id, case when o.event = 'password_reset' then 'could not read password SMS reply'
+      else 'could not read the reply: ' || private.sms_scrub(v_err, (select k.api_key from private.sms_settings k where k.company_id = o.company_id), 300) end, false);
    end;
   end loop;
 
@@ -4791,7 +4860,8 @@ begin
    exception when others then
     -- F5: this row failed before anything was sent (the block's pg_net request is rolled back too).
     get stacked diagnostics v_err = message_text;
-    perform private.sms_fail(o.id, 'could not send: ' || private.sms_scrub(v_err, s.api_key, 300), false);
+    perform private.sms_fail(o.id, case when o.event = 'password_reset' then 'could not send password SMS'
+      else 'could not send: ' || private.sms_scrub(v_err, s.api_key, 300) end, false);
     update public.sms_outbox set body = private.sms_mask(event, body, args), args = '{}'
      where id = o.id and event = 'password_reset';
    end;
@@ -4894,7 +4964,7 @@ CREATE FUNCTION private.sms_fail(p_id uuid, p_error text, p_retry boolean) RETUR
     AS $$
 begin
   update public.sms_outbox o
-     set status = case when p_retry and o.attempts < 3 then 'queued' else 'failed' end,
+     set status = case when p_retry and o.attempts < 3 and (o.event <> 'password_reset' or cardinality(o.args) > 0) then 'queued' else 'failed' end,
          next_attempt_at = now() + case o.attempts when 1 then interval '1 minute' else interval '5 minutes' end,
          error = left(p_error, 500), net_request_id = null, sending_since = null
    where o.id = p_id;
@@ -5361,6 +5431,8 @@ begin
        and r.status in ('pending', 'approved')
        and r.start_date <= p_end
        and r.end_date >= p_start
+       and not (r.kind = 'leave' and r.unit = 'hour' and p_kind = 'errand')
+       and not (p_kind = 'leave' and p_unit = 'hour' and r.kind = 'errand')
        and (
          r.unit = 'day' or p_unit = 'day'
          or (r.start_time < p_end_time and r.end_time > p_start_time)
@@ -7529,6 +7601,68 @@ begin
   return v_count;
 end;
 $_$;
+
+
+--
+-- Name: app_confirm_password_recovery(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_confirm_password_recovery(p_request uuid, p_mobile text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare
+  r private.recovery_requests%rowtype;
+  p public.profiles%rowtype;
+  s private.sms_settings%rowtype;
+  mobile text;
+  password text;
+  hashed text;
+  outbox uuid;
+begin
+  -- Lock mobile first, matching the phone-update trigger's lock order.
+  select private.normalize_ir_mobile(i.mobile) into mobile from public.employee_personal_info i
+    join private.recovery_requests q on q.employee_id=i.employee_id
+    where q.id=p_request and q.created_at >= now()-interval '10 minutes' for update of i;
+  select * into r from private.recovery_requests where id=p_request for update;
+  if not found or r.created_at < clock_timestamp()-interval '10 minutes' or r.attempts >= 5 or r.issued_at is not null then return; end if;
+  update private.recovery_requests set attempts=attempts+1 where id=r.id;
+  if r.mobile is null or r.mobile is distinct from private.normalize_ir_mobile(left(p_mobile,64)) then return; end if;
+
+  if mobile is distinct from r.mobile then return; end if;
+  select * into p from public.profiles where id=r.employee_id for update;
+  if not found or not p.active or private.is_admin(p.id) or
+    r.code_key <> (select extensions.hmac(convert_to(lower(p.employee_code),'UTF8'), salt,'sha256') from private.recovery_secret) then return; end if;
+  if exists(select 1 from private.recovery_requests where employee_id=p.id and issued_at>now()-interval '1 minute')
+    or (select count(*) from private.recovery_requests where employee_id=p.id and issued_at>now()-interval '1 hour') >= 3 then return; end if;
+  select * into s from private.sms_settings where company_id=p.company_id for share;
+  if not found or s.mode <> 'live' or not s.notify_password_reset or
+     (s.connection='webservice' and (s.username is null or s.auth_error is not null)) or
+     (s.send_method='pattern' and s.body_password_reset is null) or
+     (s.send_method='line' and s.sender_line is null) then return; end if;
+
+  -- Generate inside the trusted transaction. The public endpoint never accepts or returns a password.
+  password := encode(extensions.gen_random_bytes(9),'hex') || '!2';
+  hashed := extensions.crypt(password,extensions.gen_salt('bf'));
+  outbox := private.sms_queue(p.company_id,'password_reset',p.id,null,null,
+    case when p.language_pref='en' then 'Your temporary password: ' else 'رمز موقت شما: ' end || password || chr(10) ||
+    case when p.language_pref='en' then 'Login code: ' else 'کد ورود: ' end || p.employee_code || chr(10) || s.site_label,
+    array[password,p.employee_code],mobile,null);
+  if outbox is null then raise exception 'recovery unavailable'; end if;
+  update auth.users set encrypted_password=hashed, updated_at=now() where id=p.id;
+  if not found then raise exception 'recovery unavailable'; end if;
+  perform set_config('bj.password_flag_write','on',true);
+  update public.profiles set must_change_password=true where id=p.id;
+  perform set_config('bj.password_flag_write','',true);
+  perform private.revoke_sessions(p.id,'password_recovery');
+  insert into private.recovery_credentials values(p.id,extensions.digest(hashed,'sha256'),outbox)
+    on conflict(employee_id) do update set password_fingerprint=excluded.password_fingerprint,outbox_id=excluded.outbox_id;
+  update private.recovery_requests set issued_at=clock_timestamp() where id=r.id;
+  insert into public.audit_log(action,entity,entity_id) values('password_recovery','auth.users',p.id);
+exception when others then
+  -- PostgREST includes DETAIL, which can contain the entire rejected outbox row.
+  raise exception 'recovery unavailable';
+end $$;
 
 
 --
@@ -12102,6 +12236,8 @@ CREATE FUNCTION public.app_set_employee_password(p_user_id uuid, p_password text
 declare
   v_rows int;
 begin
+  -- Serialize with admin transfer and role assignment, which lock profiles in ID order.
+  perform 1 from public.profiles where id in (auth.uid(),p_user_id) order by id for no key update;
   if not private.can_reset_password(auth.uid(), p_user_id) then
     raise exception 'not allowed to reset this password' using errcode = '42501';
   end if;
@@ -12935,6 +13071,51 @@ begin
   values (auth.uid(), 'sms_test', 'sms_outbox', v_id,
           jsonb_build_object('mode', s.mode, 'send_method', s.send_method, 'template', v_template));
   return v_id;
+end $$;
+
+
+--
+-- Name: app_start_password_recovery(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_start_password_recovery(p_code text) RETURNS TABLE(request_id uuid, hint text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+<<lookup>>
+declare
+  code text := lower(btrim(left(p_code, 65)));
+  ip text := coalesce(nullif(current_setting('request.headers', true),'')::jsonb->>'x-bj-client-ip','unknown');
+  salt bytea;
+  source_key bytea;
+  code_key bytea;
+  target uuid;
+  mobile text;
+begin
+  select s.salt into strict salt from private.recovery_secret s;
+  source_key := extensions.hmac(convert_to(ip,'UTF8'), salt, 'sha256');
+  code_key := extensions.hmac(convert_to(coalesce(code,''),'UTF8'), salt, 'sha256');
+  request_id := gen_random_uuid();
+  hint := '09•••••••' || lpad((get_byte(code_key,0) % 100)::text, 2, '0');
+  perform pg_advisory_xact_lock(hashtextextended(encode(source_key,'hex'), 0));
+  perform pg_advisory_xact_lock(hashtextextended(encode(code_key,'hex'), 1));
+  if (select count(*) from private.recovery_requests r where r.source_key = lookup.source_key
+        and r.created_at > now()-interval '10 minutes') >= 30
+     or (select count(*) from private.recovery_requests r where r.code_key = lookup.code_key
+        and r.created_at > now()-interval '10 minutes') >= 10 then
+    return next; return;
+  end if;
+  select p.id, private.normalize_ir_mobile(i.mobile) into target, mobile
+    from public.profiles p join public.employee_personal_info i on i.employee_id=p.id
+    where lower(p.employee_code)=code and p.active and not private.is_admin(p.id)
+    for share of i;
+  if mobile is not null then hint := left(mobile,2) || '•••••••' || right(mobile,2); end if;
+  insert into private.recovery_requests(id,source_key,code_key,employee_id,mobile)
+    values(request_id,source_key,code_key,target,mobile);
+  delete from private.recovery_requests where id in (
+    select r.id from private.recovery_requests r where r.created_at < now() - interval '2 hours'
+    order by r.created_at limit 100 for update skip locked);
+  return next;
 end $$;
 
 
@@ -14684,6 +14865,42 @@ ALTER SEQUENCE private.profile_photo_version_seq OWNED BY private.profile_photos
 
 
 --
+-- Name: recovery_credentials; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.recovery_credentials (
+    employee_id uuid NOT NULL,
+    password_fingerprint bytea NOT NULL,
+    outbox_id uuid NOT NULL
+);
+
+
+--
+-- Name: recovery_requests; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.recovery_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    source_key bytea NOT NULL,
+    code_key bytea NOT NULL,
+    employee_id uuid,
+    mobile text,
+    attempts integer DEFAULT 0 NOT NULL,
+    issued_at timestamp with time zone
+);
+
+
+--
+-- Name: recovery_secret; Type: TABLE; Schema: private; Owner: -
+--
+
+CREATE TABLE private.recovery_secret (
+    salt bytea NOT NULL
+);
+
+
+--
 -- Name: sms_outbox_events; Type: TABLE; Schema: private; Owner: -
 --
 
@@ -16244,6 +16461,22 @@ ALTER TABLE ONLY private.profile_photos
 
 
 --
+-- Name: recovery_credentials recovery_credentials_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.recovery_credentials
+    ADD CONSTRAINT recovery_credentials_pkey PRIMARY KEY (employee_id);
+
+
+--
+-- Name: recovery_requests recovery_requests_pkey; Type: CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.recovery_requests
+    ADD CONSTRAINT recovery_requests_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sms_outbox_events sms_outbox_events_pkey; Type: CONSTRAINT; Schema: private; Owner: -
 --
 
@@ -16793,6 +17026,34 @@ ALTER TABLE ONLY public.user_signatures
 
 ALTER TABLE ONLY public.work_settings
     ADD CONSTRAINT work_settings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recovery_requests_code; Type: INDEX; Schema: private; Owner: -
+--
+
+CREATE INDEX recovery_requests_code ON private.recovery_requests USING btree (code_key, created_at);
+
+
+--
+-- Name: recovery_requests_created; Type: INDEX; Schema: private; Owner: -
+--
+
+CREATE INDEX recovery_requests_created ON private.recovery_requests USING btree (created_at);
+
+
+--
+-- Name: recovery_requests_employee; Type: INDEX; Schema: private; Owner: -
+--
+
+CREATE INDEX recovery_requests_employee ON private.recovery_requests USING btree (employee_id, issued_at);
+
+
+--
+-- Name: recovery_requests_source; Type: INDEX; Schema: private; Owner: -
+--
+
+CREATE INDEX recovery_requests_source ON private.recovery_requests USING btree (source_key, created_at);
 
 
 --
@@ -17615,6 +17876,13 @@ CREATE TRIGGER leave_types_audit_change AFTER INSERT OR DELETE OR UPDATE ON publ
 
 
 --
+-- Name: employee_personal_info mobile_invalidates_recovery; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER mobile_invalidates_recovery AFTER DELETE OR UPDATE OF mobile ON public.employee_personal_info FOR EACH ROW EXECUTE FUNCTION private.invalidate_mobile_recovery();
+
+
+--
 -- Name: profiles profiles_audit_update; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -17783,6 +18051,22 @@ ALTER TABLE ONLY private.profile_photos
 
 ALTER TABLE ONLY private.profile_photos
     ADD CONSTRAINT profile_photos_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: recovery_credentials recovery_credentials_employee_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.recovery_credentials
+    ADD CONSTRAINT recovery_credentials_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: recovery_requests recovery_requests_employee_id_fkey; Type: FK CONSTRAINT; Schema: private; Owner: -
+--
+
+ALTER TABLE ONLY private.recovery_requests
+    ADD CONSTRAINT recovery_requests_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -18986,6 +19270,24 @@ ALTER TABLE ONLY public.work_settings
 
 
 --
+-- Name: recovery_credentials; Type: ROW SECURITY; Schema: private; Owner: -
+--
+
+ALTER TABLE private.recovery_credentials ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: recovery_requests; Type: ROW SECURITY; Schema: private; Owner: -
+--
+
+ALTER TABLE private.recovery_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: recovery_secret; Type: ROW SECURITY; Schema: private; Owner: -
+--
+
+ALTER TABLE private.recovery_secret ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: view_as_sessions; Type: ROW SECURITY; Schema: private; Owner: -
 --
 
@@ -19661,7 +19963,7 @@ ALTER TABLE public.sms_outbox ENABLE ROW LEVEL SECURITY;
 -- Name: sms_outbox sms_outbox_select_admin; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY sms_outbox_select_admin ON public.sms_outbox FOR SELECT TO authenticated USING ((private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
+CREATE POLICY sms_outbox_select_admin ON public.sms_outbox FOR SELECT TO authenticated USING (((event <> 'password_reset'::text) AND private.is_admin(( SELECT auth.uid() AS uid)) AND (company_id = ( SELECT private.caller_company() AS caller_company))));
 
 
 --
@@ -20139,6 +20441,13 @@ GRANT ALL ON FUNCTION private.has_permission(uid uuid, p_permission text) TO aut
 
 REVOKE ALL ON FUNCTION private.has_role(uid uuid, r public.app_role) FROM PUBLIC;
 GRANT ALL ON FUNCTION private.has_role(uid uuid, r public.app_role) TO authenticated;
+
+
+--
+-- Name: FUNCTION invalidate_mobile_recovery(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.invalidate_mobile_recovery() FROM PUBLIC;
 
 
 --
@@ -21275,6 +21584,16 @@ REVOKE ALL ON FUNCTION public.app_cleanup_e2e_users() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO postgres;
 GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO authenticated;
 GRANT ALL ON FUNCTION public.app_cleanup_e2e_users() TO service_role;
+
+
+--
+-- Name: FUNCTION app_confirm_password_recovery(p_request uuid, p_mobile text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_confirm_password_recovery(p_request uuid, p_mobile text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_confirm_password_recovery(p_request uuid, p_mobile text) TO postgres;
+GRANT ALL ON FUNCTION public.app_confirm_password_recovery(p_request uuid, p_mobile text) TO service_role;
+GRANT ALL ON FUNCTION public.app_confirm_password_recovery(p_request uuid, p_mobile text) TO anon;
 
 
 --
@@ -22559,6 +22878,16 @@ GRANT ALL ON FUNCTION public.app_sms_test(p_mobile text, p_template text) TO ser
 
 
 --
+-- Name: FUNCTION app_start_password_recovery(p_code text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_start_password_recovery(p_code text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_start_password_recovery(p_code text) TO postgres;
+GRANT ALL ON FUNCTION public.app_start_password_recovery(p_code text) TO service_role;
+GRANT ALL ON FUNCTION public.app_start_password_recovery(p_code text) TO anon;
+
+
+--
 -- Name: FUNCTION app_transfer_admin(p_target uuid, p_personnel_no text, p_password text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -23477,8 +23806,8 @@ GRANT SELECT ON TABLE public.separations TO authenticated;
 --
 
 GRANT ALL ON TABLE public.sms_outbox TO postgres;
-GRANT ALL ON TABLE public.sms_outbox TO anon;
-GRANT ALL ON TABLE public.sms_outbox TO authenticated;
+GRANT SELECT ON TABLE public.sms_outbox TO anon;
+GRANT SELECT ON TABLE public.sms_outbox TO authenticated;
 GRANT ALL ON TABLE public.sms_outbox TO service_role;
 
 

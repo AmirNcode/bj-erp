@@ -16,6 +16,19 @@ was deployed; semantic versioning starts at the first tag.
 - **Records › Deleted** (admin only) lists deleted records; a deleted record opens read-only with a **Restore** button. Record numbers are never reused.
 - Imports skip rows that match a deleted record (counted as "deleted").
 - Migration `20261123100000_sales_record_remove`. Spec `docs/specs/2026-11-23-sales-record-delete-archive-design.md`.
+- Annual leave borrowing now requires an explicit role permission. Requests, increases and final approval use earned leave minus other pending requests. Existing debt continues to be covered by accrual.
+
+- Settings now has separate Working Times and Official Holidays tabs.
+
+- Sized employee, settings, admin and profile forms for widescreen desktops, with compact numeric fields and responsive card layouts.
+
+- Edit Employee now groups personal information, time off and account actions into full-width tabs. Switching tabs keeps drafts. Each editable tab saves its own fields, and password resets offer a Copy button. Admin Panel, Settings and Profile also use the full available width.
+
+- Employees can recover a forgotten password by confirming their registered mobile. Administrators can delegate single-person password resets through Settings → Roles.
+
+- Employees can submit daily and hourly work trips on dates with hourly personal leave, including overlapping hours.
+
+- Finance now offers CSV and Excel Worksheet downloads for the filtered requests. The worksheet keeps personnel numbers as text and costs and durations as numbers.
 
 ### ERP › Sales: CEO feedback round 1 (FR-94) — 2026-11-20, branch `feat/erp-sales-module`
 

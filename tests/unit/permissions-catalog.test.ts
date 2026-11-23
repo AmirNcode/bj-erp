@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(33);
+    expect(ALL_KEYS).toHaveLength(35);
     // Password resets are admin-only (20261013200007): no role can hold them.
     expect(ALL_KEYS).not.toContain('passwords');
     expect(body).not.toContain("'passwords'");
@@ -91,7 +91,7 @@ describe('section layout', () => {
   });
   it('leave: special leave after accrual; no absences item (FR-75)', () => {
     expect(items('leave')).toEqual([
-      'leave_balances', 'leave_accrual', 'special_leave', 'leave_requests', 'calendar', 'reports',
+      'leave_balances', 'leave_accrual', 'annual_leave_borrow', 'special_leave', 'leave_requests', 'calendar', 'reports',
     ]);
   });
   it('the claim parser keeps the new keys', () => {
@@ -213,7 +213,7 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(33);
+    expect(Object.keys(f)).toHaveLength(35);
     expect(f.travel_booking).toBe('edit');
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');

@@ -115,7 +115,7 @@ Validation/release status stays in `docs/TASKS.md`.
   and an optional description. It is work rather than leave: it has no leave type, replacement, or
   balance effect; may include weekends/holidays; uses the existing errand tracking sequence; and
   follows the same signed request and signed manager/admin approval flow as hourly work errands.
-  Any overlapping leave or errand conflicts in both directions. *(2026-08-05.)*
+  Daily and hourly work errands may coincide with hourly personal leave in either filing order. Other overlapping requests conflict. *(2026-08-05.)*
 
 - **FR-36** ☑ **Configurable approval chain.** A request requires satisfaction of every applicable
   **active step** configured for its kind, not a single decision. Steps ship seeded as
@@ -450,15 +450,15 @@ Validation/release status stays in `docs/TASKS.md`.
   spec `docs/specs/2026-11-16-sales-rfp-module-design.md`; built on `feat/erp-sales-module`, not
   deployed.)*
   **Inquiry register (2026-11-17, spec §16):** bulk import of the client's inquiry register (`.csv` / `.xlsx`), re-importable, merged with ledger records by number; Archived stage for old no-result inquiries; company / client picked through a lookup (new ones via "Create …" with a similar-name check); Customers tab and customer page with per-customer figures, rename and merge. Known-value inputs are picked, never free-typed (§16.5, Phase B).
-- **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
-  A **Manager** (built-in role, checked at action time) may request annual leave (daily and hourly)
+- **FR-92** ☑ **Annual leave borrowing, pending-aware balances, approval details, Employees balances.**
+  An employee with the **Allow negative annual leave balance** role permission (checked at action time) may request annual leave (daily and hourly)
   past the available balance: the whole amount is paid and the balance goes negative (no limit), after
   a confirm dialog on the request form; monthly accruals pay it back and a negative carries over at
   Farvardin 1. Everyone else (HR and the admin included) is **capped at available** = balance minus the
   person's own pending requests of that type; over it the request is refused and the form points to the
   unpaid leave type. Sick leave keeps the paid/unpaid split. The approve dialog shows the full request
   and balance figures (balance now, other pending, available, requested, after) to every approver. If an
-  employee's balance dropped since submission, approval still splits paid/unpaid. HR gets a warning
+  annual request exceeds availability at final approval, it stays pending. Increases to approved requests must fit the extra charge against availability. HR gets a warning
   when changing a balance that has a pending request of that type. Employees page: **Balance**, **Used
   this year**, **Unpaid** columns (Jalali year to date; visible to `people` read), no horizontal scroll
   (low-priority columns move into an expandable row on every width, Edit inside). **Convert negatives
@@ -466,9 +466,9 @@ Validation/release status stays in `docs/TASKS.md`.
   unticking) and a partial amount on the edit page; the balance returns to 0 by an adjustment row and a
   `leave_unpaid_conversions` row. **Payroll** section in Reports (`reports` read, CSV): unpaid-type
   requests, unpaid parts and conversions per person plus the annual balance. CSV exports guard cells
-  that start with `= + - @`. Past Managers' unpaid annual parts are backfilled onto the ledger
-  (migration `20261112120200`). Amends FR-13, FR-48, FR-91. *(2026-11-12; spec
-  `2026-11-12-manager-negative-balance-design.md`; branch `feat/manager-negative-balance`, not deployed.)*
+  that start with `= + - @`. The original FR-92 migration `20261112120200` moved qualifying managers' unpaid
+  annual time onto the ledger. The 2026-11-22 borrowing policy preserves historical balances and
+  approved requests. See `docs/specs/2026-11-22-annual-leave-borrowing.md`. Amends FR-13, FR-48 and FR-91.
 - **FR-93** ☑ **Lunch break not deducted from hourly leave.** Settings › Working hours and hourly leave
   has *Lunch starts* (default 13:00) and *Lunch duration (minutes)* (default 60; 0 = none), inside the
   working hours, under the existing `work_settings` permission (HR has it). Hourly leave deducts

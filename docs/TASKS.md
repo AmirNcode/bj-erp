@@ -46,7 +46,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 - ☐ **Before merge (owner/HR):** owner tests on the local stack `bj-approvals-finance` (http://localhost:3501, FR-92 migrations applied 2026-11-12). Backfill dry run on `daily-20261112T020206Z` (2026-11-12): **0 requests, 0 people** move (the only annual request with an unpaid part belongs to a non-Manager). 2 people already have a negative annual balance from earlier edits: they appear in "Convert negatives" after deploy.
 - ☐ Import "overwrite balances" (`app_bulk_import_employees`) lacks the pending-request warning that quick add, set balance and convert show (spec 10, final review #12). Idea: the dry-run step counts people with pending annual requests.
-- ☐ Strict (employee) edits ignore pending: `app_edit_request` keeps the old "an edit cannot make leave unpaid" rule and does not check the pending-aware available figure.
 - ☐ Phone details panel on Employees repeats "Last name" although the full name is in the row.
 - ☐ Partial convert on the edit page has no client-side max (the server refuses with a mapped message; the field is prefilled with the full negative).
 - ☐ Payroll is a section under the Reports dashboard, not a tab. Revisit when Reports gets tabs (`lib/ui/tabs.ts`) or a Payroll module appears; `app_payroll_unpaid` and `lib/reports/payroll.ts` are self-contained for that.

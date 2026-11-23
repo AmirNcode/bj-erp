@@ -18,12 +18,13 @@ const hours = '[data-testid="balance-hours-annual"]';
 async function openEdit(page: Page, code: string) {
   await page.goto(`/en/manage/employees?q=${code}`);
   await page.locator('tr', { hasText: code }).first().locator('a[href*="/manage/employees/"]').click();
+  await page.getByTestId('employee-tab-leave').click();
   await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 30_000 });
   await openLeaveSections(page);
 }
 
-async function save(page: Page) {
-  await page.click('button[type="submit"]');
+async function save(page: Page, section: 'personal' | 'leave') {
+  await page.getByTestId(section === 'personal' ? 'edit-save' : 'leave-save').click();
   await expect(page.locator('[data-testid="edit-success"]')).toBeVisible({ timeout: 30_000 });
 }
 
@@ -37,16 +38,22 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   await openEdit(page, emp.code);
   await page.fill(days, '3');
   await page.fill(hours, '6');
-  await save(page);
+  await save(page, 'leave');
   await page.reload();
   await expect(page.locator(days)).toHaveValue('3', { timeout: 20_000 });
   await expect(page.locator(hours)).toHaveValue('6');
   // 3 days at the 8h demo day + 6 hours, stored exactly.
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
 
+  await openLeaveSections(page);
+  await page.fill(days, '12');
+  await page.getByTestId('employee-tab-personal').click();
+  await page.getByTestId('employee-tab-leave').click();
+  await expect(page.locator(days)).toHaveValue('12');
+  await page.getByTestId('employee-tab-personal').click();
   // ── 2. Change only the roles: the save goes through, the balance stays ───
   await page.locator('[data-testid="role-hr"]').click();
-  await save(page);
+  await save(page, 'personal');
   await page.reload();
   await expect(page.locator('[data-testid="role-hr"] input')).toBeChecked({ timeout: 20_000 });
   await expect(page.locator(days)).toHaveAttribute('data-minutes', '1800');
@@ -56,7 +63,7 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   // ── 3. A mixed sign is refused before anything is written ────────────────
   await page.fill(days, '-1');
   await page.fill(hours, '4');
-  await page.click('button[type="submit"]');
+  await page.getByTestId('leave-save').click();
   await expect(page.locator('[data-testid="edit-error"]')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('put the minus sign on both days and hours')).toBeVisible();
   await page.reload();
@@ -66,7 +73,7 @@ test('a days + hours balance survives an unrelated save, and negatives work', as
   // ── 4. A negative balance (leave taken in advance, FR-48) ────────────────
   await page.fill(days, '-1');
   await page.fill(hours, '-4');
-  await save(page);
+  await save(page, 'leave');
   await page.reload();
   await expect(page.locator(days)).toHaveValue('-1', { timeout: 20_000 });
   await expect(page.locator(hours)).toHaveValue('-4');

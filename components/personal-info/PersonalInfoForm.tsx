@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { savePersonalInfo } from '@/lib/actions/personal-info';
 import {
+  emptyPersonalInfo,
   PERSONAL_INFO_FIELDS,
   PERSONAL_INFO_GROUPS,
   fieldToInput,
@@ -36,24 +37,14 @@ type Props = {
 
 const LTR_KINDS = new Set(['digits', 'sheba', 'date', 'count']);
 
-export function PersonalInfoForm({
-  employeeId,
-  initial,
-  readOnly = false,
-  readOnlyReason = 'admin',
-}: Props) {
+export function usePersonalInfoEditor(employeeId: string, initial: PersonalInfoValues | null) {
   const t = useTranslations('personalInfo');
-  const router = useRouter();
-  const [text, setText] = useState<Record<PersonalInfoKey, string>>(
-    () =>
-      Object.fromEntries(
-        PERSONAL_INFO_FIELDS.map((f) => [f.key, fieldToInput(f, initial[f.key])])
-      ) as Record<PersonalInfoKey, string>
-  );
+  const [baseline, setBaseline] = useState(() => {
+    const values = initial ?? emptyPersonalInfo();
+    return Object.fromEntries(PERSONAL_INFO_FIELDS.map((f) => [f.key, fieldToInput(f, values[f.key])])) as Record<PersonalInfoKey, string>;
+  });
+  const [text, setText] = useState(baseline);
   const [problems, setProblems] = useState<Partial<Record<PersonalInfoKey, FieldProblem>>>({});
-  const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
-  const [isPending, startTransition] = useTransition();
-
   const set = (key: PersonalInfoKey, value: string) => {
     setText((prev) => ({ ...prev, [key]: value }));
     setProblems((prev) => {
@@ -62,30 +53,33 @@ export function PersonalInfoForm({
       delete next[key];
       return next;
     });
-    setStatus(null);
   };
 
-  const onSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    setStatus(null);
-    const parsed = parsePersonalInfoForm(text);
-    if (Object.keys(parsed.problems).length > 0) {
-      setProblems(parsed.problems);
-      setStatus({ ok: false, message: t('fixProblems') });
-      return;
+  const validate = () => {
+    const { problems } = parsePersonalInfoForm(text);
+    setProblems(problems);
+    return Object.keys(problems).length ? t('fixProblems') : null;
+  };
+
+  const save = async () => {
+    const res = await savePersonalInfo(employeeId, text);
+    if (!res.ok) {
+      if (res.problems) setProblems(res.problems);
+      return res.error;
     }
-    startTransition(async () => {
-      const res = await savePersonalInfo(employeeId, text);
-      if (!res.ok) {
-        if (res.problems) setProblems(res.problems);
-        setStatus({ ok: false, message: res.error });
-        return;
-      }
-      setStatus({ ok: true, message: t('saved') });
-      router.refresh();
-    });
+    setBaseline(text);
+    return null;
   };
 
+  const dirty = PERSONAL_INFO_FIELDS.some(({ key }) => baseline[key] !== text[key]);
+  return { text, problems, set, validate, save, dirty };
+}
+
+export function PersonalInfoFields({ editor, readOnly, readOnlyReason }: {
+  editor: ReturnType<typeof usePersonalInfoEditor>;
+} & Pick<Props, 'readOnly' | 'readOnlyReason'>) {
+  const t = useTranslations('personalInfo');
+  const { text, problems, set } = editor;
   const input = (field: PersonalInfoField) => {
     const id = `pi-${field.key}`;
     const common = {
@@ -125,7 +119,7 @@ export function PersonalInfoForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6" data-testid="personal-info-form" noValidate>
+    <div className="space-y-6">
       {readOnly && (
         <p className="text-sm text-muted-foreground" data-testid="personal-info-read-only">
           {readOnlyReason === 'self' ? t('readOnlySelf') : t('readOnly')}
@@ -134,9 +128,9 @@ export function PersonalInfoForm({
       {PERSONAL_INFO_GROUPS.map((group) => (
         <fieldset key={group} className="space-y-3">
           <legend className="mb-2 text-sm font-semibold">{t(`groups.${group}`)}</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {PERSONAL_INFO_FIELDS.filter((f) => f.group === group).map((field) => (
-              <div key={field.key} className={field.kind === 'longtext' ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'}>
+              <div key={field.key} className={field.kind === 'longtext' ? 'w-full max-w-xl space-y-1.5 sm:col-span-full' : 'space-y-1.5'}>
                 <Label htmlFor={`pi-${field.key}`}>{t(`fields.${field.key}`)}</Label>
                 {input(field)}
                 {problems[field.key] ? (
@@ -154,6 +148,27 @@ export function PersonalInfoForm({
         </fieldset>
       ))}
 
+    </div>
+  );
+}
+
+export function PersonalInfoForm({ employeeId, initial, readOnly, readOnlyReason }: Props) {
+  const editor = usePersonalInfoEditor(employeeId, initial);
+  const t = useTranslations('personalInfo');
+  const router = useRouter();
+  const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isPending, startTransition] = useTransition();
+  function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    startTransition(async () => {
+      const error = editor.validate() ?? await editor.save();
+      setStatus(error ? { ok: false, message: error } : { ok: true, message: t('saved') });
+      if (!error) router.refresh();
+    });
+  }
+  return (
+    <form onSubmit={onSubmit} onChange={() => setStatus(null)} className="space-y-6" data-testid="personal-info-form" noValidate>
+      <PersonalInfoFields editor={editor} readOnly={readOnly} readOnlyReason={readOnlyReason} />
       {status && (
         <p
           role={status.ok ? 'status' : 'alert'}

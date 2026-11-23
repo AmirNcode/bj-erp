@@ -105,6 +105,155 @@ Copy this block verbatim and fill it in.
 - e2e `sales-remove.spec.ts` leaves two `E2E …` records.
 
 ---
+## 2026-11-22 — Reviewed annual borrowing PR #31
+
+Codex reviewed `685b86ec` on `codex/annual-leave-borrowing` against main `70c2cbff`. All six migration definitions match the schema dump. Daily/hourly submissions, signed approval bundles, admin overrides, legacy decisions, HR-exempt submissions and delegated automatic decisions use the shared balance rules. The authority-change trigger marks pending configurations for review. The migration writes no assignments, requests or ledger data.
+
+Corrected the English and Persian messages shown to approvers and editors when an employee lacks available annual leave, the admin role description and the current policy docs. Added SQL regressions for an administrator with and without the explicit grant, a borrower approving someone else’s strict request, preserving historical unpaid minutes, a zero-minute final approval while in debt, and a final signature one minute over the pending-adjusted balance. Retrying at the exact boundary keeps the first signature and charges once.
+
+Verification on `bj-borrow-qa-1122` used synthetic fixtures. Borrowing (101 assertions), lunch (41), approved edits (148), and unpaid conversions (57) passed. Approval history (41), delegation (163), HR-head per diem (27), and role permissions (355) passed after applying the grants from committed main inside the tests’ rollback transactions. The disposable restore had inherited extra client grants, and the role suite assumes a single company's requests, so the separate synthetic race request was isolated for that test. The concurrent submission check accepted one request for the last day and rejected the other. Lint, TypeScript and 1,550 unit tests passed with five skipped. No signed-in browser test was run. GitHub showed no PR review comments or pre-merge check runs. No manual deployment.
+
+## 2026-11-22 — Implemented explicit annual leave borrowing
+
+Codex on codex/annual-leave-borrowing from main at `70c2cbff` implemented the approved permission, pending-aware final approval and edits, bilingual previews, and regression tests. Verified daily and hourly workflows on a disposable schema-only copy with synthetic fixtures. The checked-in schema includes only the six regenerated function definitions because the local database has unrelated schema and ACL drift. No production data or role assignments were changed during implementation.
+
+## 2026-11-22 — Split Settings into Working Times and Official Holidays
+
+Codex updated the open PR #30 branch for local review on port 3501. Settings renders one panel at a time, removes the redundant title, and opens the available panel for users with only one permission. The Roles and delegation routes keep their existing access rules. Updated the English and Persian labels and the affected e2e navigation. Three focused tests passed for tab selection and permissions, along with TypeScript and lint. The owner requested local testing before authorizing a merge.
+
+## 2026-11-22 — Sized forms on full-width tabbed pages
+
+Codex on `codex/tabbed-form-sizing` from `3566658` addressed the widescreen feedback for Edit Employee, Settings, Admin Panel and Profile. Documented field and panel sizing and removed the unused Sales test import flagged during deployment.
+
+Playwright checked synthetic employee, holiday, SMS and password fields on English 2560×1440, Persian 1920×1080 and Persian 390×844 layouts. Day inputs measured 108–120 px on desktop and the leave cards stacked on mobile. TypeScript and lint with zero warnings passed. Unit tests passed (1,547 passed, five skipped). Signed-in e2e tests were not run. No production actions.
+
+## 2026-11-22 — Full-width employee editor tabs
+
+Codex on `codex/employee-edit-tabs` from `57e67c51`. Implemented the owner-approved Personal Information, Time Off Details and Account tabs, separate saves, retained drafts and temporary-password copying. Applied the page-width convention to Admin Panel, Profile and Settings and recorded it in DESIGN.md.
+
+TypeScript, targeted lint and 1,547 unit tests passed (five skipped). The Browser plugin was unavailable. Playwright checked the editor with synthetic data on English desktop and Persian mobile, including draft retention, field validation, isolated Save requests, copying the returned reset password and horizontal overflow. Save and reset responses were mocked. The ordinary Farsi preview URL hit a redirect loop on loopback, so the mobile check used a temporary direct-locale fixture. Signed-in database actions were not exercised. No production actions.
+
+## 2026-11-22 — Implemented SMS password recovery and delegated resets
+
+Codex, branch `codex/sms-password-recovery` from `2790540`. Implemented the approved Persian and English recovery flow, masked mobile confirmation, database throttling, phone-change invalidation and opt-in role permission. Added migration `20261122175225_employee_password_recovery.sql`. HR retains existing mobile-edit access. Single-person reset and manual sign-out have independent authorization.
+
+Verified on a freshly migrated, synthetic Docker stack with SMS dispatch disabled. The production build, TypeScript, 1,552 unit tests, deployment tests and five SQL suites passed. Lint reports one pre-existing unused import in the Sales e2e tests. Five concurrent requests issued one credential. Playwright verified old-password rejection, temporary login, forced change and permanent login in en and fa. Browser plugin not available. The first Farsi check encountered a loop with next start bound to 127.0.0.1; retested with the standalone server bound to localhost and both languages passed. No production changes, external texts or role assignments. The release requires explicitly applying the changed Liara gateway configuration before the guarded deployment.
+
+## 2026-11-22 — Confirmed head-of-HR recovery authority
+
+Codex on main updated the recovery spec with the owner’s custom-role assignment and target policy. Added acceptance coverage for two HR staff with different effective permissions and for role rename and revocation. Documentation only. No roles assigned, external actions, or tests run.
+
+## 2026-11-22 — Specified delegated employee password resets
+
+Codex on main added the owner-requested Roles switch and implementation plan to `docs/specs/2026-11-22-forgot-password-design.md` after reviewing the role catalog, employee actions and database reset checks. Proposed single-person scope and HR peer eligibility await design review. Documentation only, uncommitted. No tests or external actions.
+
+## 2026-11-22 — Drafted SMS password recovery spec
+
+Codex on main at 2790540 recorded the owner's login code, phone mask, temporary password, and eligibility decisions in `docs/specs/2026-11-22-forgot-password-design.md`. Checked the existing admin-only reset rule, employee reset action, and self-service mobile definition. HR's role in assisted resets awaits clarification. Documentation only, uncommitted. No tests, external actions, or deployment.
+
+## 2026-11-22 — Self-service password recovery discovery
+
+**Agent:** Codex
+**Branch / HEAD at start:** main @ 2790540
+**Trigger:** Design a forgotten-password flow using the employee's SMS mobile.
+
+**What changed**
+Reviewed the login-code override, profile SMS mobile, and first-login password flow. Identified recovery credential, identifier, and administrator eligibility as design decisions for the owner.
+
+**Actions outside the repo**
+None.
+
+**Verification**
+Source inspection only. No application changes or tests.
+
+**State left behind**
+Discovery entry only, uncommitted. Design questions open.
+
+**For the next agent**
+Use the owner's answers to write the recovery spec and acceptance criteria before implementation.
+
+## 2026-11-21 — Release hourly leave and Finance exports
+
+Owner confirmed local testing and requested the main-branch deployment. Finance component suite passed all 14 tests. Selected only the work-trip and Finance export changes for release.
+
+## 2026-11-21 — Hourly personal leave and work trips on port 3501
+
+**Agent:** Codex on main at 96da80b. Owner requested local implementation.
+
+Updated submission, final approval, edit and extension overlap rules in migration 20261121170000 and schema.sql. Updated requirements, data model and changelog. Extended tests/sql/lunch-break.sql with approved hourly leave followed by either trip type. Disposable database setup initially hit an existing public schema, then caught excess DDL in the draft migration. Corrected both before applying. The regression suite passed on the disposable local clone. Applied the migration and checksum atomically to bj-approvals-finance-db-1. Port 3501 returned healthy. No signed-in browser test. Uncommitted, local only.
+
+## 2026-11-21 — Switching a same-day trip to hourly
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner asked about redirecting the requester to the hourly trip form when hourly leave exists.
+
+**What changed:** Recommended offering the switch on single-day trips. Daily classification lets HR handle per diem and travel bookings later.
+
+**Actions outside the repo:** None.
+
+**Verification:** Checked FR-61 and FR-70 in `docs/REQUIREMENTS.md`. Advisory session, no tests run.
+
+**State left behind:** Proposal only. Journal entry uncommitted.
+
+**For the next agent:** If approved, preserve shared draft fields on switch and ask for actual trip times.
+
+## 2026-11-21 — Date-only daily trip proposal
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner asked whether hourly personal leave and a daily work trip could share a date with the existing form.
+
+**What changed:** Recommended allowing that specific pair in either filing order. HR would see the trip date and the recorded leave minutes. This revises the earlier suggestion to collect trip times.
+
+**Actions outside the repo:** None.
+
+**Verification:** Discussion only. No application changes or test run.
+
+**State left behind:** Recommendation awaiting a decision, journal entry uncommitted.
+
+**For the next agent:** If approved, apply the exception consistently across submission, approval, edits and trip extensions.
+
+## 2026-11-21 — Hourly leave and a same-day work trip
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** HR reported that an approved 30-minute morning leave blocked a daily work trip later that day.
+
+**What changed**
+- Recorded a policy recommendation for HR review. Allow a daily trip to record departure and return times on partial travel days. Use those times to check conflicts and report trip duration, while preserving the separate leave record.
+
+**Actions outside the repo**
+- None.
+
+**Verification**
+- Read FR-33, FR-57, FR-61, the errand duration rules and the submission and final approval checks in `supabase/schema.sql`. The current daily unit occupies the entire date. Tests were not run for this advisory session.
+
+**State left behind**
+- Journal entry only, uncommitted. HR policy decision pending.
+
+**For the next agent**
+- Confirm how HR awards per diem for partial travel days before implementation. Cover both filing orders, edits and extensions.
+
+## 2026-11-21 — Finance CSV and Excel downloads on port 3501
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner approved the format picker and requested a local deployment.
+
+**What changed** — FinanceList now offers a bilingual dialog and exports the same filtered, sorted rows to CSV or a typed Excel worksheet using the existing Sales writer. The download helpers share the blob-saving code. Updated messages, Finance component tests and changelog.
+
+**Local deployment** — Both checkouts had HEAD `96da80b`. Rebuilt the updated main checkout using `.bj-deploy/approvals-finance/compose up -d --no-deps --build app`. Only the local app container was recreated.
+
+**Verification** — 20 focused tests passed (Finance, XLSX and CSV), TypeScript and targeted lint passed, Docker production build succeeded. Local gateway health returned OK and both Finance URLs reached sign-in. Desktop Excel and the signed-in local page were not exercised.
+
+## 2026-11-21 — Finance export format assessment
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner requested an estimate for offering CSV and XLSX from one Finance export dialog.
+
+Reviewed the Finance CSV row builder, the shared dialog, and the Sales workbook writer and its tests. Both formats can share one row builder and download locally. The worksheet should retain numeric amounts and durations and text identifiers and Jalali dates. Assessment only. No application changes, tests, or external actions.
 
 ## 2026-11-20 — ERP › Sales: CEO feedback round 1 (built; owner testing on :3501)
 

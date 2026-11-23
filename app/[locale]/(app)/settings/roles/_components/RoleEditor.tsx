@@ -187,7 +187,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
   };
 
   return (
-    <div className="flex flex-col gap-4" data-testid="role-editor">
+    <div className="flex max-w-5xl flex-col gap-4" data-testid="role-editor">
       <div className="space-y-1.5">
         <Label htmlFor="role-name">{t('nameLabel')}</Label>
         <Input

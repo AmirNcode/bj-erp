@@ -227,7 +227,7 @@ async function HomeBoardData({
       cover: r.replacement_name ? `${tRepl('coverLabel')}: ${r.replacement_name}` : null,
       balanceAfter: figures ? (
         <>
-          {t.rich('balanceAfter', { value: duration(figures.afterMinutes), bdi: (c) => <bdi>{c}</bdi> })}
+          {figures.afterMinutes === null ? tSummary('insufficientBalance') : t.rich('balanceAfter', { value: duration(figures.afterMinutes), bdi: (c) => <bdi>{c}</bdi> })}
           {figures.overdraftMinutes > 0 && (
             <> - {tSummary('overdraft', { value: `⁨${duration(figures.overdraftMinutes)}⁩` })}</>
           )}

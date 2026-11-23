@@ -34,8 +34,8 @@ test('admin bulk-uploads holidays, then re-uploads to overwrite them', async ({ 
   const nameAFixed = `${nameA} اصلاح‌شده`;
 
   await login(page, ADMIN_CODE, ADMIN_PASSWORD);
-  await page.goto('/en/settings');
-  await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 30_000 });
+  await page.goto('/en/settings?tab=holidays');
+  await expect(page.locator('[data-testid="holiday-editor"]')).toBeVisible({ timeout: 30_000 });
 
   const header = 'تاریخ (holiday_date),نام فارسی (name_fa),نام انگلیسی (name_en),تکرار سالانه (is_recurring)';
 

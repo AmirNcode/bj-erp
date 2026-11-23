@@ -139,6 +139,13 @@ select pg_temp.assert('only Annual Leave rows with a balance are switched on by 
   and not exists (select 1 from public.leave_types where manager_overdraft and not affects_balance));
 
 -- ============================================================ rule
+select pg_temp.expect('manager without explicit grant is strict',pg_temp.rule('mgr','annual'),'strict');
+select pg_temp.expect('HR without explicit grant is strict',pg_temp.rule('hr','annual'),'strict');
+select pg_temp.expect('manager without grant cannot borrow',pg_temp.err(pg_temp.sub('mgr','annual',0,1)),'22023');
+insert into mo_fx select 'borrow_role',public.app_save_role(null,'Annual borrowing','{"annual_leave_borrow":"edit"}')
+  from (select pg_temp.login('admin')) logged_in;
+insert into public.user_roles(user_id,role_id)
+  select pg_temp.fx(k),pg_temp.fx('borrow_role') from unnest(array['mgr','mgr2','mgr4']) k;
 select pg_temp.expect('rule mgr annual',pg_temp.rule('mgr','annual'),'overdraft');
 select pg_temp.expect('rule emp annual',pg_temp.rule('emp','annual'),'strict');
 select pg_temp.expect('rule emp sick',pg_temp.rule('emp','sick'),'split');
@@ -146,6 +153,18 @@ select pg_temp.expect('rule mgr sick',pg_temp.rule('mgr','sick'),'split');
 select pg_temp.expect('rule emp unpaid',pg_temp.rule('emp','unpaid'),'none');
 select pg_temp.expect('rule with no type',private.balance_rule(pg_temp.fx('mgr'),null),'none');
 select pg_temp.expect('admin is not special-cased',pg_temp.rule('admin','annual'),'strict');
+select pg_temp.expect('admin sees no implicit borrowing permission',
+  pg_temp.as_scalar('admin',$q$select (public.app_my_permissions() ? 'annual_leave_borrow')::text$q$),'false');
+select pg_temp.expect('admin without grant cannot borrow',
+  pg_temp.as_scalar('admin',format('select public.submit_leave_request_v2(%L,%L,%L,''full'',%L,true)',
+    pg_temp.fx('annual'),pg_temp.d(0),pg_temp.d(0),pg_temp.sig())),
+  'ERROR 22023 request exceeds available balance');
+select pg_temp.login('admin');
+select public.app_set_user_role_ids(pg_temp.fx('admin'),
+  array(select role_id from public.user_roles where user_id=pg_temp.fx('admin')) || pg_temp.fx('borrow_role'));
+select pg_temp.expect('admin sees the explicit grant',
+  pg_temp.as_scalar('admin',$q$select public.app_my_permissions()->>'annual_leave_borrow'$q$),'edit');
+-- All override approvals below are now performed by a borrower, including approvals that must fail.
 
 -- ============================================================ strict: pending counts
 select pg_temp.setbal('emp','annual',5*480);
@@ -183,7 +202,7 @@ select pg_temp.expect('mgr over: consumption of the full 5 days',pg_temp.ledger(
 select pg_temp.expect('mgr over: balance is -3 days',pg_temp.bal('mgr','annual'),(-3*480)::text);
 select pg_temp.expect('mgr over: request unpaid stays 0',pg_temp.unpaid('m1'),'0');
 select pg_temp.expect('mgr over: ledger note names the overdraft',
-  (select note from public.leave_ledger where request_id=pg_temp.fx('m1')),'consumed on approval (manager overdraft)');
+  (select note from public.leave_ledger where request_id=pg_temp.fx('m1')),'consumed on approval (annual leave borrowing)');
 select pg_temp.expect('mgr may keep going while negative',pg_temp.err(pg_temp.sub('mgr','annual',20,1)),'ok');
 
 -- cancel overdraft
@@ -196,29 +215,31 @@ select pg_temp.expect('cancel overdraft: balance back to 2 days',pg_temp.bal('mg
 select pg_temp.setbal('mgr2','annual',480);
 select pg_temp.mk('rl','mgr2','annual',0,3);
 select pg_temp.expect('role lost: submitted as manager, unpaid 0',pg_temp.unpaid('rl'),'0');
-delete from public.user_roles where user_id=pg_temp.fx('mgr2') and role='manager';
-select pg_temp.expect('role lost: approval ok',pg_temp.approve('rl'),'ok');
-select pg_temp.expect('role lost: unpaid is 2 days',pg_temp.unpaid('rl'),(2*480)::text);
-select pg_temp.expect('role lost: consumption is 1 day',pg_temp.ledger('rl'),'consumption:-480');
-select pg_temp.expect('role lost: balance 0',pg_temp.bal('mgr2','annual'),'0');
+delete from public.user_roles where user_id=pg_temp.fx('mgr2') and role_id=pg_temp.fx('borrow_role');
+select pg_temp.expect('revoked before final approval',pg_temp.approve('rl'),'22023');
+select pg_temp.expect('failed approval leaves request pending',(select status::text from public.leave_requests where id=pg_temp.fx('rl')),'pending');
+select pg_temp.expect('failed approval leaves ledger untouched',pg_temp.ledger('rl'),'none');
+select pg_temp.setbal('mgr2','annual',3*480);
+select pg_temp.expect('eligible again after accrual',pg_temp.approve('rl'),'ok');
 
 select pg_temp.setbal('emp4','annual',3*480);
 select pg_temp.mk('rg','emp4','annual',0,3);
 select pg_temp.setbal('emp4','annual',480);
-insert into public.user_roles(user_id,role) values(pg_temp.fx('emp4'),'manager');
+select pg_temp.login('admin');
+select public.app_set_user_role_ids(pg_temp.fx('emp4'),
+  array(select role_id from public.user_roles where user_id=pg_temp.fx('emp4')) || pg_temp.fx('borrow_role'));
 select pg_temp.expect('role gained: approval ok',pg_temp.approve('rg'),'ok');
 select pg_temp.expect('role gained: consumption is the full 3 days',pg_temp.ledger('rg'),'consumption:-1440');
 select pg_temp.expect('role gained: balance -2 days',pg_temp.bal('emp4','annual'),(-2*480)::text);
 select pg_temp.expect('role gained: unpaid 0',pg_temp.unpaid('rg'),'0');
 
--- employee split at approval (spec 9)
+-- Strict annual leave stays pending if HR reduces the balance.
 select pg_temp.setbal('emp5','annual',3*480);
 select pg_temp.mk('es','emp5','annual',0,3);
 select pg_temp.setbal('emp5','annual',480);
-select pg_temp.expect('employee split: approval ok',pg_temp.approve('es'),'ok');
-select pg_temp.expect('employee split: unpaid 2 days',pg_temp.unpaid('es'),(2*480)::text);
-select pg_temp.expect('employee split: balance 0',pg_temp.bal('emp5','annual'),'0');
-select pg_temp.expect('employee split: consumption is the paid day',pg_temp.ledger('es'),'consumption:-480');
+select pg_temp.expect('balance fell: approval waits',pg_temp.approve('es'),'22023');
+select pg_temp.expect('balance fell: no payroll split',pg_temp.unpaid('es'),'0');
+select pg_temp.expect('balance fell: no consumption',pg_temp.ledger('es'),'none');
 
 -- sick unchanged: even a manager gets the split
 select pg_temp.setbal('mgr3','sick',480);
@@ -246,8 +267,14 @@ select pg_temp.expect('edit emp: approved',pg_temp.approve('ed2'),'ok');
 select pg_temp.expect('edit emp unpaid refused',
   pg_temp.as_scalar('ed',format('select public.app_edit_request(%L,''day'',%L,%L,''full'',null,null,null,''r'',%L,true)::text',
     pg_temp.fx('ed2'),pg_temp.d(60),pg_temp.d(63),pg_temp.sig())),
-  'ERROR 22023 an edit cannot make leave unpaid');
+  'ERROR 22023 request exceeds available balance');
 
+select pg_temp.expect('pending reservations block even a one-day increase',
+  pg_temp.err(pg_temp.edit('ed','ed2',60,2)),'22023');
+select pg_temp.setbal('emp2','annual',3*480);
+select pg_temp.expect('increase exactly fits after other pending',pg_temp.err(pg_temp.edit('ed','ed2',60,2)),'ok');
+select pg_temp.setbal('emp2','annual',-480);
+select pg_temp.expect('reducing an approved request while in debt',pg_temp.err(pg_temp.edit('ed','ed2',60,1)),'ok');
 -- ============================================================ availability RPC
 select pg_temp.setbal('emp','annual',4*480);
 select pg_temp.expect('availability rpc: emp strict',
@@ -324,5 +351,55 @@ select pg_temp.expect('hourly overdraft: submits 3h on 1h, unpaid 0',pg_temp.unp
 select pg_temp.expect('hourly overdraft: approval ok',pg_temp.approve('h2'),'ok');
 select pg_temp.expect('hourly overdraft: full 3h on the ledger',pg_temp.ledger('h2'),'consumption:-180');
 select pg_temp.expect('hourly overdraft: balance is -2h',pg_temp.bal('mgr4','annual'),'-120');
+
+-- A historical approved annual request contains one paid day and two unpaid days.
+insert into mo_fx values('legacy',gen_random_uuid());
+insert into public.leave_requests(id,company_id,employee_id,leave_type_id,start_date,end_date,
+  status,requested_minutes,unpaid_minutes,serial_year,serial_seq)
+values(pg_temp.fx('legacy'),pg_temp.fx('company'),pg_temp.fx('emp3'),pg_temp.fx('annual'),
+  pg_temp.d(140),pg_temp.d(142),'approved',1440,960,1406,999999);
+select pg_temp.setbal('emp3','annual',960);
+insert into public.leave_ledger(employee_id,leave_type_id,request_id,entry_type,delta_minutes,balance_after_minutes,note)
+values(pg_temp.fx('emp3'),pg_temp.fx('annual'),pg_temp.fx('legacy'),'consumption',-480,480,'historical paid portion');
+select pg_temp.expect('legacy split: an increase charges only the extra day',
+  pg_temp.err(pg_temp.edit('ed','legacy',140,4)),'ok');
+select pg_temp.expect('legacy split: old unpaid minutes retained',pg_temp.unpaid('legacy'),'960');
+select pg_temp.expect('legacy split: only extra charge posted',pg_temp.ledger('legacy'),'consumption:-480,consumption:-480');
+select pg_temp.setbal('emp3','annual',-480);
+select pg_temp.expect('legacy split: reducing while negative succeeds',
+  pg_temp.err(pg_temp.edit('ed','legacy',140,2)),'ok');
+select pg_temp.expect('legacy split: reduction removes unpaid time first',pg_temp.unpaid('legacy'),'0');
+select pg_temp.expect('legacy split: removing unpaid time leaves ledger alone',
+  pg_temp.ledger('legacy'),'consumption:-480,consumption:-480');
+
+-- Keep the first signature when a later signer cannot finalize due to another pending request.
+select pg_temp.login('admin');
+insert into mo_fx values('first_step',gen_random_uuid()),('last_step',gen_random_uuid());
+insert into public.approval_steps(id,company_id,role,approver_id,step_order,applies_to) values
+  (pg_temp.fx('first_step'),pg_temp.fx('company'),'employee',pg_temp.fx('mgr'),1,'{leave}'),
+  (pg_temp.fx('last_step'),pg_temp.fx('company'),'employee',pg_temp.fx('hr'),2,'{leave}');
+select pg_temp.setbal('emp3','annual',960);
+select pg_temp.mk('chain','emp3','annual',150,1);
+select pg_temp.mk('reserved','emp3','annual',152,1);
+select pg_temp.setbal('emp3','annual',959);
+create function pg_temp.sign_step(p_signer text,p_step text) returns text language sql as $$
+  select pg_temp.as_scalar(p_signer,format(
+    'select public.approve_leave_request_steps(%L,array[%L::uuid],%L,true)::text',
+    pg_temp.fx('chain'),pg_temp.fx(p_step),pg_temp.sig()));
+$$;
+select pg_temp.expect('nonfinal step can still sign',pg_temp.sign_step('mgr','first_step'),'');
+select pg_temp.expect('final signer is one minute short because another date is reserved',
+  pg_temp.sign_step('hr','last_step'),'ERROR 22023 request exceeds available balance');
+select pg_temp.assert('only the original signature survives',
+  (select count(*)=1 and bool_and(step_id=pg_temp.fx('first_step') and approver_id=pg_temp.fx('mgr'))
+   from public.leave_request_approvals where request_id=pg_temp.fx('chain')));
+select pg_temp.assert('failed decision leaves request pending with no final signature',
+  (select status='pending' and approver_signature_data is null and unpaid_minutes=0
+   from public.leave_requests where id=pg_temp.fx('chain')));
+select pg_temp.expect('failed final step leaves ledger alone',pg_temp.ledger('chain'),'none');
+select pg_temp.setbal('emp3','annual',960);
+select pg_temp.expect('final signer can retry at the exact boundary',pg_temp.sign_step('hr','last_step'),'');
+select pg_temp.expect('retry consumes one day once',pg_temp.ledger('chain'),'consumption:-480');
+select pg_temp.expect('retry preserves the other request’s reserved day',pg_temp.bal('emp3','annual'),'480');
 
 rollback;

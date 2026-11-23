@@ -56,6 +56,7 @@ test('errand request: submit, manager approves, leave balance untouched', async 
     await page.click(
       `tr:has-text("${code}") a:has-text("ویرایش"), tr:has-text("${code}") a:has-text("Edit")`
     );
+    await page.getByTestId('employee-tab-leave').click();
     await expect(page.locator('[data-testid="balances-section"]')).toBeVisible({ timeout: 20_000 });
     // The stored balance in minutes: the form shows whole days + whole hours.
     return Number(await balanceField.getAttribute('data-minutes'));

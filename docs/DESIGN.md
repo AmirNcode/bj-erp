@@ -48,10 +48,12 @@ left in Farsi).
   Active tab: primary text and a 3px rule on top. No circles behind icons.
 - The top bar names the section, so a top-level page passes `section` to `PageHeader`
   (title becomes screen-reader only on phones).
-- `<main>` is `max-w-6xl`. A page with a wide data table puts `data-wide` on its root element
+- `<main>` is `max-w-6xl`. A page with top-level tabs or a wide data table puts `data-wide` on its root element
   and gets the full width. Never widen only the table.
 
 ## Tabs
+
+Use the full shell width for the page header, tab bar and data tables. Set `data-wide` on the page root. Align forms to the same start gutter and size their panels and columns for the content. On desktop, group related fields into two or three columns, give a day/hour pair about 18rem total, a date about 12rem and a notes field up to 36rem. Independent cards can sit side by side when both fit. Let controls shrink with their container on phones.
 
 Tabs are underlined text, never pills. Use `lib/ui/tabs.ts`:
 

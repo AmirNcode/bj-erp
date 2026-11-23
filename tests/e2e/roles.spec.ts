@@ -72,11 +72,11 @@ test('admin creates a personal-info desk; it edits an employee, not a manager, a
     await login(hp, helper.code, helper.password);
     await setFirstPassword(hp, firstLoginPassword(helper.password));
     await openEmployee(hp, worker.code);
-    await expect(hp.getByTestId('personal-info-save')).toBeVisible();
-    await expect(hp.getByTestId('reset-password')).toHaveCount(0);
+    await expect(hp.getByTestId('edit-save')).toBeVisible();
+    await expect(hp.getByTestId('employee-tab-account')).toHaveCount(0);
     await openEmployee(hp, boss.code);
     await expect(hp.getByTestId('personal-info-read-only')).toBeVisible();
-    await expect(hp.getByTestId('reset-password')).toHaveCount(0);
+    await expect(hp.getByTestId('employee-tab-account')).toHaveCount(0);
     await expect(hp.getByTestId('edit-scope-note')).toBeVisible();
     await ctx.close();
 

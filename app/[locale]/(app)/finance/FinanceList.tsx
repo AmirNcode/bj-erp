@@ -11,7 +11,9 @@ import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave
 import { FINANCE_COLUMNS, financeDepartment, filterFinanceRows, sortFinanceRows, validFinanceRange, type FinanceSort } from '@/lib/finance/list';
 import { ArrowUpDown, ArrowUp, ArrowDown, Download } from 'lucide-react';
 import type { FinanceRow } from '@/lib/actions/finance';
-import { downloadCsv } from '@/lib/csv/download';
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { writeXlsx } from '@/lib/sales/xlsx';
+import { downloadBlob, downloadCsv } from '@/lib/csv/download';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatNumber, formatPersianConsentTimestamp } from '@/lib/i18n/format';
 import { displayPersonnelNo } from '@/lib/employees/code';
@@ -47,6 +49,7 @@ function safeCell(value: string): string {
 
 export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
   const t = useTranslations('finance');
+  const common = useTranslations('common');
   const tLeave = useTranslations('leave');
   const tTravel = useTranslations('travel');
   const tApprovals = useTranslations('approvals');
@@ -112,7 +115,6 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
   const transportName = (r: FinanceRow) =>
     r.transport === 'flight' || r.transport === 'company_car' ? tTravel(`transportOptions.${r.transport}`) : '';
   const amount = (v: number | null) => (v === null ? '—' : formatRials(v, locale));
-  const plain = (v: number | null) => (v === null ? '' : String(v));
 
   const typeName = (r: FinanceRow) => t(r.unit === 'hour' ? 'hourlyErrand' : 'dailyErrand');
   const dates = (r: FinanceRow) =>
@@ -124,10 +126,10 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
   const dept = (r: FinanceRow) =>
     (locale === 'fa' ? r.department_name_fa ?? r.department_name_en : r.department_name_en ?? r.department_name_fa) ?? '—';
 
-  const exportCsv = () => {
+  const exportFile = (format: 'csv' | 'xlsx') => {
     // Durations as decimal days and amounts as plain numbers, like the FR-37
     // reports, so finance can sum and sort them in Excel.
-    const days = (minutes: number) => String(Math.round((minutes / (hoursPerDay * 60)) * 100) / 100);
+    const days = (minutes: number) => Math.round((minutes / (hoursPerDay * 60)) * 100) / 100;
     const header = [
       t('csv.trackingNo'),
       t('csv.personnelNo'),
@@ -167,18 +169,27 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
       days(r.requested_minutes),
       days(r.unpaid_minutes),
       r.errand_location ?? '',
-      r.per_diem_rials === null ? '' : String(r.per_diem_rials),
+      r.per_diem_rials,
       r.per_diem_rials === null ? '' : r.per_diem_by_requester ? t('csv.perDiemByRequester') : t('csv.perDiemByHr'),
       transportName(r),
-      plain(r.flight_cost_rials),
-      plain(r.hotel_cost_rials),
-      plain(r.lost_rials),
-      String(tripTotal(r)),
+      r.flight_cost_rials,
+      r.hotel_cost_rials,
+      r.lost_rials,
+      tripTotal(r),
       statusText(r),
       r.status === 'pending' ? waitingOn(r) : '',
       r.corrected_at ? formatPersianConsentTimestamp(r.corrected_at, 'fa') : '',
     ]);
-    downloadCsv([header, ...body].map((row) => row.map(safeCell)), `bj-finance-${from}-${to}.csv`);
+    const data = [header, ...body];
+    const filename = `bj-finance-${from}-${to}.${format}`;
+    if (format === 'csv') {
+      downloadCsv(data.map(row => row.map(value => safeCell(String(value ?? '')))), filename);
+    } else {
+      const bytes = writeXlsx(t('title'), data);
+      downloadBlob(new Blob([bytes.buffer as ArrayBuffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }), filename);
+    }
   };
 
   const selectClass = cn(nativeSelectClass, 'h-9 bg-card md:w-auto');
@@ -382,15 +393,23 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
           {departments.map(([id,name]) => <option key={id} value={id}>{name}</option>)}
         </select>
         <Input aria-label={t('search')} placeholder={t('search')} value={query} onChange={e => setQuery(e.target.value)} className="col-span-2 bg-card md:min-w-56 md:flex-1" data-testid="finance-search" />
-        <Button
-          className="col-span-2 max-md:order-first max-md:h-11"
-          onClick={exportCsv}
-          disabled={shown.length === 0}
-          data-testid="finance-export"
-        >
-          <Download aria-hidden="true" />
-          {t('export')}
-        </Button>
+        <Dialog>
+          <DialogTrigger asChild>
+            <Button className="col-span-2 max-md:order-first max-md:h-11" disabled={shown.length === 0} data-testid="finance-export">
+              <Download aria-hidden="true" />
+              {t('export')}
+            </Button>
+          </DialogTrigger>
+          <DialogContent closeLabel={common('dismiss')} aria-describedby={undefined} className="sm:max-w-sm">
+            <DialogTitle>{t('chooseFormat')}</DialogTitle>
+            <DialogClose asChild>
+              <Button onClick={() => exportFile('xlsx')}>{t('excelWorksheet')}</Button>
+            </DialogClose>
+            <DialogClose asChild>
+              <Button variant="outline" onClick={() => exportFile('csv')}>CSV (.csv)</Button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {rangeError && <p role="alert" className="text-sm text-destructive">{t('invalidRange')}</p>}

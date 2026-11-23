@@ -69,7 +69,7 @@ export function RequestSummary({ request, hoursPerDay, locale }: {
             )}
             <Row label={t('available')}>{bdi(figures.availableMinutes)}</Row>
             <Row label={t('requested')}>{bdi(figures.requestedMinutes)}</Row>
-            <Row label={t('after')}>{bdi(figures.afterMinutes)}</Row>
+            <Row label={t('after')}>{figures.afterMinutes === null ? t('insufficientBalance') : bdi(figures.afterMinutes)}</Row>
           </dl>
           {figures.overdraftMinutes > 0 && (
             <p className="rounded-sm bg-warning/10 px-2 py-1 text-sm text-warning" data-testid={`approve-summary-overdraft-${r.id}`}>

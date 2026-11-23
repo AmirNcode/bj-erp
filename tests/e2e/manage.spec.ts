@@ -89,7 +89,7 @@ test.describe('Employee CRUD — admin flow', () => {
     await expect(page).toHaveURL(/\/manage\/employees\/[^/]+$/);
     await openLeaveSections(page);
     await page.fill('[data-testid="balance-days-annual"]', '7');
-    await page.click('button[type="submit"]');
+    await page.getByTestId('leave-save').click();
     await expect(page.getByRole('status')).toBeVisible({ timeout: 15000 });
     await page.reload();
     await expect(page.locator('[data-testid="balance-days-annual"]')).toHaveValue('7');

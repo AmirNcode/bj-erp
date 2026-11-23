@@ -78,7 +78,7 @@ export function DaysHoursField({
   return (
     <fieldset className="space-y-1">
       <legend className={legendClassName}>{label}</legend>
-      <div className="flex gap-2">
+      <div className="flex max-w-72 gap-2">
         <div className="flex flex-1 items-center gap-1.5">
           <Input
             {...inputProps}
