@@ -8,10 +8,11 @@ import { tabClass, tabListClass } from '@/lib/ui/tabs';
 const TABS = [
   { key: 'profile', href: '' },
   { key: 'personalInfo', href: '/personal-info' },
-  { key: 'account', href: '/account' },
+  { key: 'preferences', href: '/preferences' },
+  { key: 'security', href: '/security' },
 ] as const;
 
-/** FR-96: Profile · Personal information · Account, the same underlined tabs as Admin. */
+/** FR-96: Profile · Personal information · Preferences · Account security, the same underlined tabs as Admin. */
 export function ProfileTabs({ locale }: { locale: string }) {
   const t = useTranslations('profile');
   // Farsi (default locale) pathnames carry no prefix; compare without it.

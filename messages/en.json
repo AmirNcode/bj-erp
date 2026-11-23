@@ -342,7 +342,6 @@
       "errorTooLarge": "This photo cannot be made small enough. Try another photo.",
       "errorUnsupported": "This file could not be read as a photo. Try a JPG or PNG."
     },
-    "preferences": "Preferences",
     "language": "Language",
     "langFa": "فارسی",
     "langEn": "English",
@@ -422,7 +421,8 @@
     "tabs": {
       "profile": "Profile",
       "personalInfo": "Personal information",
-      "account": "Account"
+      "preferences": "Preferences",
+      "security": "Account security"
     }
   },
   "approvals": {

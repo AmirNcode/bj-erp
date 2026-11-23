@@ -1,9 +1,9 @@
 /**
- * Profile (FR-23, FR-96): three tabs — Profile, Personal information, Account.
+ * Profile (FR-23, FR-96): four tabs — Profile, Personal information, Preferences, Account security.
  * On phones the page title is left to the top bar (MobileTopBar), and the links
  * the side panel carries on desktop (Organization, Help) sit above the tabs in
  * one row with the refresh button. Settings is under the Manage tab; Logout is
- * on the Account tab.
+ * on the Account security tab.
  */
 export const dynamic = 'force-dynamic';
 
