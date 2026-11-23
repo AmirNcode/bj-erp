@@ -738,7 +738,7 @@ CREATE FUNCTION private.balance_rule(p_employee uuid, p_leave_type uuid) RETURNS
     AS $$
   select case
     when lt.id is null or not lt.affects_balance then 'none'
-    when lt.manager_overdraft and private.has_role(p_employee, 'manager') then 'overdraft'
+    when lt.manager_overdraft and private.has_perm(p_employee, 'annual_leave_borrow', 'edit') then 'overdraft'
     when lt.manager_overdraft then 'strict'
     else 'split'
   end
@@ -1403,6 +1403,7 @@ declare
   v_shape_changed boolean;
   v_dates_changed boolean;
   v_balance integer;
+  v_rule text;
   v_old_paid integer;
   v_new_paid integer;
   v_delta integer := 0;
@@ -1575,9 +1576,18 @@ begin
       if lt.affects_balance then
         v_old_paid := r.requested_minutes - r.unpaid_minutes;
         v_balance := public.current_leave_balance(r.employee_id, r.leave_type_id);
-        if private.balance_rule(r.employee_id, r.leave_type_id) = 'overdraft' then
+        v_rule := private.balance_rule(r.employee_id, r.leave_type_id);
+        if v_rule = 'overdraft' then
           v_new_paid := v_minutes;
           v_unpaid := 0;
+        elsif v_rule = 'strict' then
+          -- Preserve historical unpaid time on increases. Reductions remove unpaid time first.
+          v_new_paid := least(v_minutes, v_old_paid) + greatest(v_minutes - r.requested_minutes, 0);
+          if v_new_paid > v_old_paid and v_new_paid - v_old_paid >
+              v_balance - private.pending_leave_minutes(r.employee_id, r.leave_type_id, r.id) then
+            raise exception 'request exceeds available balance' using errcode = '22023';
+          end if;
+          v_unpaid := v_minutes - v_new_paid;
         else
           v_new_paid := least(v_minutes, greatest(v_balance, 0) + v_old_paid);
           v_unpaid := v_minutes - v_new_paid;
@@ -1967,7 +1977,7 @@ CREATE FUNCTION private.finalize_approval_request(p_id uuid, p_actor uuid, p_sig
     SET search_path TO ''
     AS $$
 declare r public.leave_requests%rowtype; v_affects boolean; v_is_paid boolean;
-  v_prev integer:=0; v_paid integer:=0; v_unpaid integer:=0;
+  v_rule text; v_prev integer:=0; v_paid integer:=0; v_unpaid integer:=0;
 begin
   select * into r from public.leave_requests where id=p_id;
   perform private.approval_lock(r.company_id);
@@ -1987,7 +1997,12 @@ begin
   select affects_balance,is_paid into v_affects,v_is_paid from public.leave_types where id=r.leave_type_id;
   if v_affects then
     v_prev:=public.current_leave_balance(r.employee_id,r.leave_type_id);
-    if private.balance_rule(r.employee_id,r.leave_type_id)='overdraft' then
+    v_rule := private.balance_rule(r.employee_id, r.leave_type_id);
+    if v_rule = 'strict' and r.requested_minutes > 0 and r.requested_minutes >
+        v_prev - private.pending_leave_minutes(r.employee_id, r.leave_type_id, r.id) then
+      raise exception 'request exceeds available balance' using errcode = '22023';
+    end if;
+    if v_rule in ('overdraft', 'strict') then
       v_paid:=r.requested_minutes; v_unpaid:=0;
     else
       v_paid:=least(r.requested_minutes,greatest(v_prev,0)); v_unpaid:=r.requested_minutes-v_paid;
@@ -2000,7 +2015,7 @@ begin
   if not found then return false; end if;
   if v_affects and v_paid>0 then
     insert into public.leave_ledger(employee_id,leave_type_id,request_id,entry_type,delta_minutes,balance_after_minutes,note)
-    values(r.employee_id,r.leave_type_id,p_id,'consumption',-v_paid,v_prev-v_paid,case when private.balance_rule(r.employee_id,r.leave_type_id)='overdraft' then 'consumed on approval (manager overdraft)' else 'paid portion consumed on approval' end);
+    values(r.employee_id,r.leave_type_id,p_id,'consumption',-v_paid,v_prev-v_paid,case when v_rule = 'overdraft' then 'consumed on approval (annual leave borrowing)' else 'paid portion consumed on approval' end);
   end if;
   insert into public.audit_log(actor_id,action,entity,entity_id,after) values
     (p_actor,'approve_leave_request','leave_requests',p_id,jsonb_build_object('employee_id',r.employee_id,
@@ -2662,7 +2677,7 @@ CREATE FUNCTION private.perm_level(uid uuid, p_key text) RETURNS integer
   -- Ignores `active` on purpose: a deactivated holder keeps their latent levels,
   -- so someone weaker cannot reactivate them (D4). Callers add is_active.
   select case
-    when exists (select 1 from public.user_roles where user_id = uid and role = 'admin') then
+    when p_key <> 'annual_leave_borrow' and exists (select 1 from public.user_roles where user_id = uid and role = 'admin') then
       case when private.permission_allows(p_key, 'edit') then 2
            when private.permission_allows(p_key, 'read') then 1 else 0 end
     else coalesce((
@@ -2685,7 +2700,7 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
     AS $$
   select case
     when p_key in ('people_create','reset_employee_password','role_manager','role_assign','leave_accrual',
-      'personal_info_own','special_leave','approval_delegate','travel_booking',
+      'personal_info_own','annual_leave_borrow','special_leave','approval_delegate','travel_booking',
       'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly',
       'edit_requests_own','sales_decide','sales_settings') then p_level = 'edit'
     when p_key in ('calendar','reports','finance','finance_forms','sales_reports') then p_level = 'read'
@@ -2733,7 +2748,7 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     AS $$
   select unnest(array['people','people_create','reset_employee_password','role_manager','role_assign',
     'personal_info','personal_info_own','clearance','departments','leave_balances','leave_accrual',
-    'special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
+    'annual_leave_borrow','special_leave','leave_requests','calendar','reports','approval_steps','approval_delegate',
     'work_settings','holidays','finance','finance_forms','travel_booking',
     'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly','edit_requests_own',
     'sales','sales_prices','sales_bonds','sales_decide','sales_reports','sales_settings','project_items']);

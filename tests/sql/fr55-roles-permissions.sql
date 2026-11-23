@@ -145,7 +145,7 @@ select pg_temp.expect('personal_info_own is on no preset of any company',
 select pg_temp.expect('catalog: 26 keys (FR-75 dropped absences; FR-91 added five edit keys; passwords remain admin-only) incl. finance, personal_info_own, special_leave',
   (select count(*)::text || ':' || count(*) filter (where k in ('absences','finance','personal_info_own','special_leave'))::text
      from private.permission_keys() k),
-  '34:3');
+  '35:3');
 select pg_temp.expect('catalog shape: special_leave is edit-only (an action)',
   (select coalesce(private.permission_allows('special_leave','edit'), false)::text
        || coalesce(private.permission_allows('special_leave','read'), false)::text), 'truefalse');
@@ -778,7 +778,7 @@ select pg_temp.expect('app_my_permissions: an employee has none',
 select pg_temp.expect('token hook emits app_perms (catalog keys only: no passwords, 200007)',
   (select (public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='help'),'claims','{}'::jsonb))
             -> 'claims' -> 'app_perms')::text), '{"people": "read", "role_assign": "edit"}');
-select pg_temp.expect('token hook: the admin gets every key',
+select pg_temp.expect('token hook: the admin gets all standard capabilities, excluding personal borrowing',
   (select (select count(*) from jsonb_object_keys(public.custom_access_token_hook(jsonb_build_object('user_id',(select id from fx where k='admin'),'claims','{}'::jsonb))
             -> 'claims' -> 'app_perms'))::text), '34');
 select pg_temp.expect('token hook: custom roles stay out of app_roles',

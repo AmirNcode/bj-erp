@@ -1,0 +1,6 @@
+# Annual leave borrowing implementation plan
+
+1. Add an action permission to the database and TypeScript role catalogs and the English and Farsi role editor. Ensure effective permissions and their displayed values require an explicit assigned grant, including for administrators. Seed no grants. Preserve the ability to manage and assign roles.
+2. Add a forward migration for the shared annual balance rule, final approval and approved-request correction. Use the existing employee leave lock and pending-time calculation. Preserve the final approval transaction so a failed balance check rolls back the final decision. Check submission and any automatic or bulk finalization paths against the same rule. Preserve zero-minute hourly leave.
+3. Verify both request forms and the approval preview use the employee’s rule. Show an actionable insufficient-balance message on failed final approval and on increases beyond availability. Ensure strict annual leave never previews or posts an automatic unpaid split.
+4. Exercise the acceptance examples against an isolated database, including grant and revocation, hourly boundary amounts, existing debt, reducing an approved request, and existing pending requests. Check role catalog parity, bilingual labels, approval projections, sick leave and unpaid leave. Regenerate the schema and update the current policy documentation.

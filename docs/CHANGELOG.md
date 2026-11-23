@@ -9,6 +9,8 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+- Annual leave borrowing now requires an explicit role permission. Requests, increases and final approval use earned leave minus other pending requests. Existing debt continues to be covered by accrual.
+
 - Settings now has separate Working Times and Official Holidays tabs.
 
 - Sized employee, settings, admin and profile forms for widescreen desktops, with compact numeric fields and responsive card layouts.

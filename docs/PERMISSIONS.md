@@ -429,7 +429,9 @@ risk, not a new activation gate. Single-person resets follow the Password recove
   balance unless admin, `can_manage_leave_of` for non-admins (was `can_act_on` until 2026-11-11). The reason lands in `leave_ledger.note`, which the employee
   can read through RLS.
 
-### Manager negative balance (FR-92, 2026-11-12, not deployed)
+### Annual leave balances and borrowing
+
+The action permission `annual_leave_borrow` permits unlimited borrowing of annual leave by the role holder. It requires an explicit grant even for an administrator. No role receives it automatically. Final approval checks the requester’s current permission and reserves other pending requests.
 
 All new RPCs are `security definer`, `search_path ''`, revoked from `public`/`anon`, scoped to the caller's company.
 
@@ -757,9 +759,10 @@ Every function that reads-then-writes `leave_ledger` (`allocate_leave`, `approve
 per employee so concurrent writers cannot write stale `balance_after` values. On top of that:
 `submit_leave_request` rejects ranges > 366 days and ranges overlapping the caller's own
 pending/approved requests; `approve_leave_request` re-reads the request under the lock and rejects
-overlap with an already-approved request. If paid leave exceeds the then-current balance, approval
-consumes only the available paid minutes and atomically records the remainder in
-`leave_requests.unpaid_minutes`; it never writes a negative paid balance. All RLS policies use
+overlap with an already-approved request. Annual leave consumes the full charge on approval.
+Borrowing requires an explicit role grant. A shortfall for any other employee leaves the request
+pending. Sick leave consumes the available paid minutes and records the remainder in
+`leave_requests.unpaid_minutes`. All RLS policies use
 `(select auth.uid())` (advisor lint 0003, initplan).
 
 ## FR-25 — leave `reason` is private (ENFORCED in Phase 3)

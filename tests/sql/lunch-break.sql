@@ -152,8 +152,12 @@ select pg_temp.expect('lunch-only: approval ok', pg_temp.approve('lunch'),'ok');
 select pg_temp.expect('lunch-only: approved', (select status::text from public.leave_requests where id=pg_temp.fx('lunch')),'approved');
 select pg_temp.expect('lunch-only: no ledger row', pg_temp.ledger('lunch'),'none');
 select pg_temp.expect('lunch-only: balance unchanged', pg_temp.bal('emp2'),'100000');
+select pg_temp.mk('negative-lunch','neg',16,'13:00','14:00');
 select pg_temp.expect('negative available balance can still log a lunch exit',
-  pg_temp.mins(pg_temp.subt('neg',16,'13:00','14:00')),'0');
+  pg_temp.mins(pg_temp.fx('negative-lunch')::text),'0');
+select pg_temp.expect('final approval accepts a zero charge despite existing debt',
+  pg_temp.approve('negative-lunch'),'ok');
+select pg_temp.expect('zero charge creates no consumption',pg_temp.ledger('negative-lunch'),'none');
 select pg_temp.expect('negative available balance: real hourly leave still refused',
   pg_temp.subt('neg',17,'09:00','10:00'),'ERROR 22023 request exceeds available balance');
 

@@ -485,6 +485,7 @@
       "available": "Available",
       "requested": "Requested",
       "after": "Balance after approval",
+      "insufficientBalance": "Final approval requires more available annual leave.",
       "overdraft": "{value} over the balance. The balance will go negative.",
       "unpaid": "{value} will be recorded as unpaid."
     }
@@ -1403,7 +1404,7 @@
     "requestEditNotApproved": "Only an approved request can be edited.",
     "requestEditNothing": "Nothing was changed.",
     "requestEditUnpaid": "This change needs more leave than the balance holds. An edit cannot make leave unpaid.",
-    "requestExceedsBalance": "This request is more than your available balance. File the rest as unpaid leave.",
+    "requestExceedsBalance": "The employee has too little annual leave available for this request. Reduce the paid time or retry when more leave is available.",
     "convertExceedsNegative": "The amount is more than the negative balance.",
     "convertNotNegative": "The balance is not negative.",
     "requestEditBookingStarted": "Procurement has already started booking this trip, so it cannot become an hourly errand.",
@@ -1850,6 +1851,10 @@
         "label": "Own personal information",
         "description": "May edit their own personal information. Without it, people only view theirs on Profile."
       },
+      "annual_leave_borrow": {
+        "label": "Allow negative annual leave balance",
+        "description": "May borrow paid annual leave against future accruals without a limit."
+      },
       "special_leave": {
         "label": "Leave outside the list",
         "description": "Grant marriage or bereavement leave days."
@@ -2017,7 +2022,7 @@
     "newTitle": "New role",
     "holders": "{count, plural, =0 {No one} one {# person} other {# people}}",
     "builtIn": "Built-in",
-    "adminRow": "Full access. Exactly one person holds it.",
+    "adminRow": "One person holds the administrator role. Borrowing annual leave requires a separate role grant.",
     "noAdmin": "No one",
     "managerNote": "Built-in. Sees direct reports and the company calendar, approves requests. Cannot change employees.",
     "employeeNote": "Everyone",
