@@ -30,7 +30,7 @@ export default async function AdminSystemPage({ params }: Props) {
   const offsiteBad = offsiteStale || offsite.missing.length > 0 || offsite.mismatched.length > 0;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex max-w-7xl flex-col gap-5">
       <div className="grid gap-5 lg:grid-cols-2">
         <Section title={t('version')} testId="admin-version">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">

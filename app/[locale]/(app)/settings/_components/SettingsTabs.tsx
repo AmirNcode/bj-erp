@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
-import { getCachedUser, getCachedRoles, getCachedPermissions } from '@/lib/auth/context';
+import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { can } from '@/lib/permissions/catalog';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
@@ -12,18 +12,18 @@ export async function SettingsTabs({
   active,
 }: {
   locale: string;
-  active: 'general' | 'roles';
+  active: 'workingTimes' | 'holidays' | 'roles';
 }) {
   const t = await getTranslations('rolesAdmin.tabs');
   const tNav = await getTranslations('nav');
   const user = await getCachedUser();
   if (!user) return null;
-  const [roles, perms, capabilities] = await Promise.all([getCachedRoles(user.id), getCachedPermissions(user.id), getApprovalCapabilities()]);
-  const general = roles.includes('admin') || can(perms, 'work_settings', 'read') || can(perms, 'holidays', 'read');
+  const [perms, capabilities] = await Promise.all([getCachedPermissions(user.id), getApprovalCapabilities()]);
   const tabs = [
-    { key: 'general' as const, href: `/${locale}/settings`, label: t('general') },
-    { key: 'roles' as const, href: `/${locale}/settings/roles`, label: capabilities.isAdmin ? t('roles') : t('myDelegate') },
-  ].filter((tab) => tab.key === 'general' ? general : capabilities.isAdmin || capabilities.canDelegate);
+    { key: 'workingTimes', href: `/${locale}/settings`, label: t('workingTimes'), visible: capabilities.isAdmin || can(perms, 'work_settings', 'read') },
+    { key: 'holidays', href: `/${locale}/settings?tab=holidays`, label: t('holidays'), visible: capabilities.isAdmin || can(perms, 'holidays', 'read') },
+    { key: 'roles', href: `/${locale}/settings/roles`, label: capabilities.isAdmin ? t('roles') : t('myDelegate'), visible: capabilities.isAdmin || capabilities.canDelegate },
+  ].filter((tab) => tab.visible);
   return (
     <nav aria-label={tNav('settings')} className={tabListClass}>
       {tabs.map((tab) => {

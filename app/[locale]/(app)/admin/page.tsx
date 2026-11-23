@@ -55,7 +55,7 @@ export default async function AdminOverviewPage({ params, searchParams }: Props)
   const smsKeys = ['sent', 'dry_run', 'failed', 'skipped', 'queued'] as const;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex max-w-7xl flex-col gap-5">
       <div className="flex flex-wrap items-center gap-3">
         <PillLinks
           label={t('range.label')}

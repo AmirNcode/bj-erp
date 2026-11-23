@@ -479,12 +479,12 @@ export function EditEmployeeForm({
           {labels.saved}
         </p>
       )}
-      <Tabs.Content value="personal" forceMount hidden={tab !== 'personal'} className="space-y-5">
+      <Tabs.Content value="personal" forceMount hidden={tab !== 'personal'} className="max-w-5xl space-y-5">
         {photo}
         <form onSubmit={savePersonal} className="space-y-5">
           <Card>
             <CardContent className="space-y-5 pt-6">
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="first_name">{labels.firstName}</Label>
                   <Input
@@ -506,71 +506,70 @@ export function EditEmployeeForm({
                     disabled={!caps.name}
                   />
                 </div>
+                <div className="w-full max-w-48 space-y-1.5">
+                  <Label htmlFor="hire_date">{labels.hireDate}</Label>
+                  <PersianDateField
+                    id="hire_date"
+                    testId="hire-date-picker"
+                    locale={locale}
+                    value={hireDate}
+                    onChange={setHireDate}
+                    disabled={!caps.profile}
+                  />
+                </div>
+
+                {/* Department, manager and title: people edit on a target the caller
+                    may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
+                    admin, yourself, someone above you); a manager without people read
+                    does not see them. */}
+                {view.orgBlock && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="job_title">{labels.jobTitle}</Label>
+                      <Input
+                        id="job_title"
+                        name="job_title"
+                        defaultValue={employee.job_title ?? ''}
+                        disabled={!caps.org}
+                        data-testid="job-title"
+                      />
+                    </div>
+
+                    {/* Native <select> — must stay native for Playwright selectOption e2e */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="department_id">{labels.department}</Label>
+                      <select
+                        id="department_id"
+                        name="department_id"
+                        defaultValue={employee.department_id ?? ''}
+                        disabled={!caps.org}
+                        className={nativeSelectClass}
+                      >
+                        <option value="">{labels.selectDept}</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {locale === 'fa' ? d.name_fa : d.name_en}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="manager_id">{labels.manager}</Label>
+                      <PersonSearch
+                        id="manager_id"
+                        name="manager_id"
+                        people={managerOptions}
+                        value={managerId}
+                        onChange={setManagerId}
+                        disabled={!caps.org}
+                        testId="manager-search"
+                      />
+                    </div>
+
+                  </>
+                )}
               </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="hire_date">{labels.hireDate}</Label>
-                <PersianDateField
-                  id="hire_date"
-                  testId="hire-date-picker"
-                  locale={locale}
-                  value={hireDate}
-                  onChange={setHireDate}
-                  disabled={!caps.profile}
-                />
-              </div>
-
-              {/* Department, manager and title: people edit on a target the caller
-                  may act on (FR-51, FR-55 D3/D4). Read-only on a locked target (the
-                  admin, yourself, someone above you); a manager without people read
-                  does not see them. */}
-              {view.orgBlock && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="job_title">{labels.jobTitle}</Label>
-                    <Input
-                      id="job_title"
-                      name="job_title"
-                      defaultValue={employee.job_title ?? ''}
-                      disabled={!caps.org}
-                      data-testid="job-title"
-                    />
-                  </div>
-
-                  {/* Native <select> — must stay native for Playwright selectOption e2e */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="department_id">{labels.department}</Label>
-                    <select
-                      id="department_id"
-                      name="department_id"
-                      defaultValue={employee.department_id ?? ''}
-                      disabled={!caps.org}
-                      className={nativeSelectClass}
-                    >
-                      <option value="">{labels.selectDept}</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {locale === 'fa' ? d.name_fa : d.name_en}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="manager_id">{labels.manager}</Label>
-                    <PersonSearch
-                      id="manager_id"
-                      name="manager_id"
-                      people={managerOptions}
-                      value={managerId}
-                      onChange={setManagerId}
-                      disabled={!caps.org}
-                      testId="manager-search"
-                    />
-                  </div>
-
-                </>
-              )}
 
               {/* Roles: shown with the org fields, and to a role assigner who
                   cannot edit them (role_assign needs only people read). */}
@@ -602,7 +601,7 @@ export function EditEmployeeForm({
         </form>
       </Tabs.Content>
 
-      <Tabs.Content value="leave" forceMount hidden={tab !== 'leave'} className="space-y-5">
+      <Tabs.Content value="leave" forceMount hidden={tab !== 'leave'} className="grid max-w-7xl items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         {canManageLeave && balances.length > 0 && (
           <Card>
             <CardContent className="pt-6">
@@ -758,7 +757,7 @@ export function EditEmployeeForm({
         )}
         {specialLeave}
       </Tabs.Content>
-      <Tabs.Content value="account" className="space-y-5">
+      <Tabs.Content value="account" className="max-w-2xl space-y-5">
         {newTempPassword && (
           <Card className="border-2 border-success/30 bg-success-foreground">
             <CardContent className="space-y-2 pt-4">

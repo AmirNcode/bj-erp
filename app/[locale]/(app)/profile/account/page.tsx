@@ -1,6 +1,6 @@
 /**
  * Profile › Account tab (FR-23, FR-96): language, password, then Logout.
- * One column, half the page wide on desktop (matches the Profile tab tiles).
+ * One column, sized for password and language controls.
  */
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export default async function AccountPage({ params }: Props) {
   const [t, tp] = await Promise.all([getTranslations('profile'), getTranslations('profile.password')]);
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="w-full max-w-md">
       <div className="space-y-4">
         <Card>
           <CardHeader className="border-b pb-4">

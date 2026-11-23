@@ -67,7 +67,7 @@ export default async function AdminSmsPage({ params, searchParams }: Props) {
           {t('sms.authPaused', { error: s.auth_error })}
         </p>
       )}
-      <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
+      <div className="grid max-w-6xl items-start gap-5 lg:grid-cols-[3fr_2fr]">
         <Section title={t('sms.settings')} testId="admin-sms-settings">
           <SmsSettingsForm initial={s} />
         </Section>

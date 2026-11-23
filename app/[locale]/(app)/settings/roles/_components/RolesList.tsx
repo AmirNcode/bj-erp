@@ -33,7 +33,7 @@ export function RolesList({
   const base = `/${locale}/settings/roles`;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-5xl flex-col gap-4">
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>

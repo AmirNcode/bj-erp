@@ -81,7 +81,8 @@ test('hr role: reaches Manage and reads company-wide, but not admin-only config'
   await expect(page.locator('[data-testid="holiday-editor"]')).toHaveCount(0);
   await page.goto('/settings');
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator('[data-testid="holiday-editor"]')).toBeVisible();
+  await page.getByTestId('settings-tab-holidays').click();
+  await expect(page.getByTestId('holiday-editor')).toBeVisible();
   await page.goto('/manage/settings');
   await expect(page).toHaveURL(/(?<!\/manage)\/settings$/, { timeout: 20_000 });
   await expect(page.locator('[data-testid="work-settings"]')).toBeVisible({ timeout: 20_000 });

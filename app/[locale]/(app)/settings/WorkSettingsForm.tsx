@@ -245,7 +245,7 @@ export function WorkSettingsForm({
 
   // Save covers this card only (weekly days off + working hours).
   return (
-    <Card className="gap-0 py-0" data-testid="work-settings">
+    <Card className="w-full max-w-2xl gap-0 py-0" data-testid="work-settings">
       <div className="px-6 pt-5 pb-1">
         <h2 className="text-base font-semibold">{labels.weekendTitle}</h2>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{labels.weekendHint}</p>

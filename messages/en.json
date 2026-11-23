@@ -2006,7 +2006,8 @@
     "sensitiveDescription": "These permissions can change employee data, balances, access or company settings. They may have unintended consequences, especially when combined with other roles. Only the admin can assign roles with this access. Review the permissions below before saving. Changes to an existing role affect everyone who holds it.",
     "sensitiveProceed": "I understand — save role",
     "tabs": {
-      "general": "General",
+      "workingTimes": "Working Times",
+      "holidays": "Official Holidays",
       "roles": "Roles",
       "myDelegate": "My delegate"
     },
