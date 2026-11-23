@@ -176,7 +176,7 @@ export default async function EditEmployeePage({ params }: Props) {
   const specialLeaveRes = caps.specialLeave ? await getSpecialLeaveGrants(id) : null;
 
   return (
-    <div data-wide className="w-full space-y-5">
+    <div className="w-full space-y-5">
       <PageHeader
         title={t('employees.editTitle')}
         action={

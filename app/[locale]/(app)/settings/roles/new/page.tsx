@@ -17,7 +17,7 @@ export default async function NewRolePage({ params }: Props) {
   const t = await getTranslations('rolesAdmin');
 
   return (
-    <div data-wide className="flex w-full flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <SettingsTabs locale={locale} active="roles" />
       <h1 className="text-2xl font-bold tracking-tight">{t('newTitle')}</h1>
       <RoleEditor role={null} locale={locale} />

@@ -180,7 +180,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Route handlers must build redirects as relative `Location` paths, never from `request.nextUrl`:** behind the gateway it holds the container origin (`https://0.0.0.0:3000`).
 - **`tests/e2e/view-as.spec.ts` runs only against the local Docker stack with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty:** otherwise the global setup rewrites the real admin's language and weekend settings.
 - **UI follows `docs/DESIGN.md` (Blueprint).** Every table gets `className="data-table"` (header band + row hover: mandatory); tabs come from `lib/ui/tabs.ts`, never pills; no `shadow-*`, no `rounded-[Npx]`, `rounded-full` only for circles.
-- **Full-width page = `data-wide` on the page's root element** (`AppShell` lifts `max-w-6xl`); never widen just the table.
+- **Pages sit in one 1280px column (`AppShell` `max-w-7xl`); `data-wide` on a page root lifts it, only for Employees list, Sales records list (`sales/page.tsx`), Finance** — never widen just the table; forms use `FormSection` + `FIELD_W`.
 - **Light only:** `dark:` utilities are dead (`@custom-variant dark` in `globals.css`); they once followed the OS and greyed inputs.
 - **Two blues:** `--sidebar` `#20409a` (logo blue: side panel, phone top bar) and `--primary` `#2E3C92` (buttons). The logo PNG's white is transparent: on blue it needs the white plate from `MainNav`.
 - **Phone titles:** `MobileTopBar` shows the section name, so top-level pages pass `section` to `PageHeader`; a new nav section needs a row in its `SECTIONS` list.

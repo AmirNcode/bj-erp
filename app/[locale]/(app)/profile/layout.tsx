@@ -28,7 +28,7 @@ export default async function ProfileLayout({ children, params }: Props) {
   const [t, tNav] = await Promise.all([getTranslations('profile'), getTranslations('nav')]);
 
   return (
-    <div data-wide className="flex w-full flex-col gap-4">
+    <div className="flex w-full flex-col gap-4">
       <PageHeader section title={t('title')} />
 
       {/* Phones have no side panel: refresh + its links (FR-44 org chart, Help), equal width in one row. */}

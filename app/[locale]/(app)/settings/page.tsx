@@ -39,7 +39,7 @@ export default async function SettingsPage({ params, searchParams }: Props) {
   const updatedAt = data.ok ? data.updatedAt : null;
 
   return (
-    <div data-wide className="flex w-full flex-col gap-5">
+    <div className="flex w-full flex-col gap-5">
       <SettingsTabs locale={locale} active={showHolidays ? 'holidays' : 'workingTimes'} />
       {showHolidays ? (
         <HolidayEditor initial={holidays} readOnly={!canEditHolidays} locale={locale} />

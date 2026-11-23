@@ -32,5 +32,10 @@ export default async function SalesPage({ params, searchParams }: Props) {
   };
   const [boot, page] = await Promise.all([loadSalesBootstrap(), listSalesRecordsPage(filters)]);
   if (!page.ok) return <p role="alert" className="text-sm text-destructive">{page.error}</p>;
-  return <RecordsList boot={boot} page={page.data} filters={filters} />;
+  return (
+    // data-wide: the records table is one of the few pages that runs edge to edge; `contents` keeps the layout's flex gap.
+    <div data-wide className="contents">
+      <RecordsList boot={boot} page={page.data} filters={filters} />
+    </div>
+  );
 }
