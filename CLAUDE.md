@@ -206,7 +206,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **A new Sales write function calls `private.sales_writable(rfp)`** (closed record = `sales_decide` only) unless it is items or finance, which stay open on purpose.
 - **Date field inside a scrolling dialog:** `<PersianDateField portal>` + a dialog content that ignores outside presses on `.rmdp-portal` (Sales: `ModalContent`); otherwise the calendar is clipped.
 - **Item numbers (`project_nodes.code`) are permanent:** never decrement `node_seq` / `child_seq`, never renumber, never change `record_no`.
-- **Catalog key count is asserted in three places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql`, `tests/sql/sales.sql` (35 since annual borrowing).
+- **Catalog key count is asserted in four places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql`, `tests/sql/sales.sql` (35 since annual borrowing).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
 - **Sales stage kind `archived`** (imported inquiry, no result): closed, bid flow, entered only by the inquiry import, `sales_decide` or `app_sales_archive` (admin; contracts have one too since 2026-11-23); any check listing closed kinds must include it.

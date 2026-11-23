@@ -78,6 +78,30 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-23 — Merged origin/main into the Sales branch; :3501 runs it with Delete / Archive
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** feat/erp-sales-module @ 649e582
+**Trigger:** Owner: "Merge main, deploy" (local :3501 only; nothing pushed).
+
+**What changed**
+- 3e102fa merge `origin/main` @ f91f5ed (PR #28–#31; local `main` was behind origin). Conflicts only AGENT-LOG + CHANGELOG (kept both). Catalog is 35 keys after the merge: `tests/sql/sales.sql` 33 → 35; CLAUDE.md catalog line lists four places.
+
+**Actions outside the repo**
+- `:3501` DB backup `.bj-deploy/approvals-finance/pre-sales-remove-20261123-125442.dump` (7.8 MB).
+- Dry run on clone `sales_rm_dry2` (dropped after), then `bj_apply_migrations` (release `sales-remove-local`, scratch wrapper `apply.sh` with a docker-exec `pgexec`) on `postgres`: applied `20261123033757_annual_leave_borrowing` + `20261123100000_sales_record_remove`; View-as hook synced.
+- `compose-sales up -d --build app` (replaces the PR #30 image built from `/private/tmp/bj-tabbed-sizing`), rest restarted, `/api/health` 200, `docker builder prune -f` (4.5 GB).
+
+**Verification**
+- Merged branch: tsc 0 · lint 0 · unit 155 files / 1553 pass · build pass (dummy env).
+- Clone: all 9 `sales*.sql` + `request-edit.sql` pass. `fr55-roles-permissions.sql` 14 FAIL, all role-preset data drift on the live-backup data (9 roles, edited HR preset), unrelated to this change.
+- Browser check not done yet: needs an admin sign-in on `http://192.168.2.85:3501`.
+
+**State left behind**
+- Branch committed, not pushed. `:3501` runs the merged Sales branch.
+
+---
+
 ## 2026-11-23 — ERP › Sales: Delete / Archive a record (built, not yet on :3501)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead + two Sonnet subagents)
