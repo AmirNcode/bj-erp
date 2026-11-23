@@ -656,6 +656,7 @@
       "lastName": "Last name",
       "department": "Department",
       "manager": "Direct Manager",
+      "jobSection": "Job and organization",
       "roles": "Roles",
       "hireDate": "Hire Date",
       "balance": "Balance",

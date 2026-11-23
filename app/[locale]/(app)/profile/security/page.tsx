@@ -1,12 +1,14 @@
 /**
  * Profile › Account security tab (FR-23, FR-96): password, then Logout.
- * One column, sized for the password form.
+ * Annotated section, then Logout in the end column.
  */
 
 export const dynamic = 'force-dynamic';
 
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { ChangePasswordForm } from '../ChangePasswordForm';
 import { LogoutButton } from '../LogoutButton';
 
@@ -20,18 +22,15 @@ export default async function SecurityPage({ params }: Props) {
   const tp = await getTranslations('profile.password');
 
   return (
-    <div className="w-full max-w-md">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="border-b pb-4">
-            <CardTitle>{tp('title')}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <ChangePasswordForm />
-          </CardContent>
+    <div>
+      <FormSection title={tp('title')}>
+        <Card className="p-4">
+          <ChangePasswordForm />
         </Card>
+      </FormSection>
 
-        <LogoutButton locale={locale} />
+      <div className="pt-4 lg:ms-[calc(20rem+2.5rem)]">
+        <LogoutButton locale={locale} className={FIELD_W.shortSelect} />
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatNumber } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import {
   daysHoursToMinutes,
   minutesToDaysHours,
@@ -78,7 +79,7 @@ export function DaysHoursField({
   return (
     <fieldset className="space-y-1">
       <legend className={legendClassName}>{label}</legend>
-      <div className="flex max-w-72 gap-2">
+      <div className={cn('flex gap-2', FIELD_W.dayHour)}>
         <div className="flex flex-1 items-center gap-1.5">
           <Input
             {...inputProps}

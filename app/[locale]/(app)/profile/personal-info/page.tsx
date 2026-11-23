@@ -13,7 +13,6 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { canEditOwnPersonalInfo } from '@/lib/employees/editCapabilities';
 import { getPersonalInfo } from '@/lib/actions/personal-info';
-import { Card, CardContent } from '@/components/ui/card';
 import { PersonalInfoForm } from '@/components/personal-info/PersonalInfoForm';
 
 type Props = {
@@ -32,24 +31,20 @@ export default async function PersonalInfoPage({ params }: Props) {
   const readOnly = !canEditOwnPersonalInfo(perms);
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="space-y-2">
       <p className="text-sm text-muted-foreground">{t('intro')}</p>
-      <Card>
-        <CardContent className="pt-6">
-          {res.ok ? (
-            <PersonalInfoForm
-              employeeId={user.id}
-              initial={res.info}
-              readOnly={readOnly}
-              readOnlyReason="self"
-            />
-          ) : (
-            <p role="alert" className="text-sm text-destructive">
-              {res.error}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {res.ok ? (
+        <PersonalInfoForm
+          employeeId={user.id}
+          initial={res.info}
+          readOnly={readOnly}
+          readOnlyReason="self"
+        />
+      ) : (
+        <p role="alert" className="text-sm text-destructive">
+          {res.error}
+        </p>
+      )}
     </div>
   );
 }
