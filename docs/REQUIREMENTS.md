@@ -450,7 +450,7 @@ Validation/release status stays in `docs/TASKS.md`.
   spec `docs/specs/2026-11-16-sales-rfp-module-design.md`; built on `feat/erp-sales-module`, not
   deployed.)*
   **Inquiry register (2026-11-17, spec §16):** bulk import of the client's inquiry register (`.csv` / `.xlsx`), re-importable, merged with ledger records by number; Archived stage for old no-result inquiries; company / client picked through a lookup (new ones via "Create …" with a similar-name check); Customers tab and customer page with per-customer figures, rename and merge. Known-value inputs are picked, never free-typed (§16.5, Phase B).
-- **FR-92** ☑ **Manager negative balance, pending-aware balance, approval details, Employees balances.**
+- **FR-92** ☑ **Annual leave borrowing, pending-aware balances, approval details, Employees balances.**
   An employee with the **Allow negative annual leave balance** role permission (checked at action time) may request annual leave (daily and hourly)
   past the available balance: the whole amount is paid and the balance goes negative (no limit), after
   a confirm dialog on the request form; monthly accruals pay it back and a negative carries over at
@@ -466,9 +466,9 @@ Validation/release status stays in `docs/TASKS.md`.
   unticking) and a partial amount on the edit page; the balance returns to 0 by an adjustment row and a
   `leave_unpaid_conversions` row. **Payroll** section in Reports (`reports` read, CSV): unpaid-type
   requests, unpaid parts and conversions per person plus the annual balance. CSV exports guard cells
-  that start with `= + - @`. Past Managers' unpaid annual parts are backfilled onto the ledger
-  (migration `20261112120200`). Amends FR-13, FR-48, FR-91. *(2026-11-12; spec
-  `2026-11-12-manager-negative-balance-design.md`; branch `feat/manager-negative-balance`, not deployed.)*
+  that start with `= + - @`. The original FR-92 migration `20261112120200` moved qualifying managers' unpaid
+  annual time onto the ledger. The 2026-11-22 borrowing policy preserves historical balances and
+  approved requests. See `docs/specs/2026-11-22-annual-leave-borrowing.md`. Amends FR-13, FR-48 and FR-91.
 - **FR-93** ☑ **Lunch break not deducted from hourly leave.** Settings › Working hours and hourly leave
   has *Lunch starts* (default 13:00) and *Lunch duration (minutes)* (default 60; 0 = none), inside the
   working hours, under the existing `work_settings` permission (HR has it). Hourly leave deducts

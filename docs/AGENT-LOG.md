@@ -78,6 +78,14 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-22 — Reviewed annual borrowing PR #31
+
+Codex reviewed `685b86ec` on `codex/annual-leave-borrowing` against main `70c2cbff`. All six migration definitions match the schema dump. Daily/hourly submissions, signed approval bundles, admin overrides, legacy decisions, HR-exempt submissions and delegated automatic decisions use the shared balance rules. The authority-change trigger marks pending configurations for review. The migration writes no assignments, requests or ledger data.
+
+Corrected the English and Persian messages shown to approvers and editors when an employee lacks available annual leave, the admin role description and the current policy docs. Added SQL regressions for an administrator with and without the explicit grant, a borrower approving someone else’s strict request, preserving historical unpaid minutes, a zero-minute final approval while in debt, and a final signature one minute over the pending-adjusted balance. Retrying at the exact boundary keeps the first signature and charges once.
+
+Verification on `bj-borrow-qa-1122` used synthetic fixtures. Borrowing (101 assertions), lunch (41), approved edits (148), and unpaid conversions (57) passed. Approval history (41), delegation (163), HR-head per diem (27), and role permissions (355) passed after applying the grants from committed main inside the tests’ rollback transactions. The disposable restore had inherited extra client grants, and the role suite assumes a single company's requests, so the separate synthetic race request was isolated for that test. The concurrent submission check accepted one request for the last day and rejected the other. Lint, TypeScript and 1,550 unit tests passed with five skipped. No signed-in browser test was run. GitHub showed no PR review comments or pre-merge check runs. No manual deployment.
+
 ## 2026-11-22 — Implemented explicit annual leave borrowing
 
 Codex on codex/annual-leave-borrowing from main at `70c2cbff` implemented the approved permission, pending-aware final approval and edits, bilingual previews, and regression tests. Verified daily and hourly workflows on a disposable schema-only copy with synthetic fixtures. The checked-in schema includes only the six regenerated function definitions because the local database has unrelated schema and ACL drift. No production data or role assignments were changed during implementation.

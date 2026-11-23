@@ -759,9 +759,10 @@ Every function that reads-then-writes `leave_ledger` (`allocate_leave`, `approve
 per employee so concurrent writers cannot write stale `balance_after` values. On top of that:
 `submit_leave_request` rejects ranges > 366 days and ranges overlapping the caller's own
 pending/approved requests; `approve_leave_request` re-reads the request under the lock and rejects
-overlap with an already-approved request. If paid leave exceeds the then-current balance, approval
-consumes only the available paid minutes and atomically records the remainder in
-`leave_requests.unpaid_minutes`; it never writes a negative paid balance. All RLS policies use
+overlap with an already-approved request. Annual leave consumes the full charge on approval.
+Borrowing requires an explicit role grant. A shortfall for any other employee leaves the request
+pending. Sick leave consumes the available paid minutes and records the remainder in
+`leave_requests.unpaid_minutes`. All RLS policies use
 `(select auth.uid())` (advisor lint 0003, initplan).
 
 ## FR-25 — leave `reason` is private (ENFORCED in Phase 3)
