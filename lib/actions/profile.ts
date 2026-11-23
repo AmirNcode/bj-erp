@@ -7,24 +7,27 @@ import { requireCaller } from '@/lib/auth/context';
 import { invalidateAppCache } from '@/lib/cache/invalidate-app';
 import { dbErr, type DbErrorResult } from '@/lib/errors/db-error';
 import { LOCALE_COOKIE, LOCALE_COOKIE_ATTRS } from '@/lib/i18n/locale';
+import { isFontStep, type FontStep } from '@/lib/prefs/fontScale';
 import { VIEW_AS_COOKIE } from '@/lib/supabase/constants';
 
 export type UpdatePrefsResult = { ok: true } | DbErrorResult;
 
 /**
- * Self-update the caller's language preference. Persian is the only calendar,
+ * Self-update the caller's language and text-size preferences. Persian is the only calendar,
  * so `calendar_pref` is deliberately no longer accepted by the application.
  */
 export async function updateMyPrefs(input: {
   languagePref?: 'fa' | 'en';
+  fontStep?: FontStep;
 }): Promise<UpdatePrefsResult> {
   const c = await requireCaller();
   if (!c.ok) return c;
 
-  const patch: { language_pref?: string } = {};
+  const patch: { language_pref?: string; font_step?: number } = {};
   if (input.languagePref === 'fa' || input.languagePref === 'en') {
     patch.language_pref = input.languagePref;
   }
+  if (isFontStep(input.fontStep)) patch.font_step = input.fontStep;
   if (Object.keys(patch).length === 0) {
     return dbErr('not permitted to update these fields');
   }

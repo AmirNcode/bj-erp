@@ -13,7 +13,9 @@ import { parsePermsClaim, type Perms } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
+import { getOwnFontStep } from '@/lib/prefs/fontStep.server';
 import { AppShell } from './_components/AppShell';
+import { FontStepStyle } from './_components/FontStepStyle';
 
 type Props = {
   children: React.ReactNode;
@@ -36,6 +38,7 @@ export default async function AppLayout({ children, params }: Props) {
     getCachedPermissions(user.id),
     getApprovalCapabilities(),
   ]);
+  const fontStep = await getOwnFontStep();
   if (!profile?.active) {
     redirect(`/${locale}/login`);
   }
@@ -92,6 +95,8 @@ export default async function AppLayout({ children, params }: Props) {
     .catch(() => []);
 
   return (
+    <>
+    <FontStepStyle step={fontStep} />
     <AppShell
       roles={roles}
       perms={perms}
@@ -109,5 +114,6 @@ export default async function AppLayout({ children, params }: Props) {
     >
       {children}
     </AppShell>
+    </>
   );
 }
