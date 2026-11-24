@@ -4,6 +4,7 @@
  */
 
 import { appLocale, formatNumber } from '@/lib/i18n/format';
+import { formatCompactAmount } from './compactAmount';
 import type { Currency } from './types';
 
 const byCode = (code: string, currencies: Currency[]) => currencies.find((c) => c.code === code);
@@ -26,6 +27,15 @@ export function formatMoney(
   if (!c) return `${formatNumber(n, locale)} ${code}`;
   const digits = { minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals };
   return `${formatNumber(n, locale, digits)} ${c.symbol ?? currencyLabel(code, currencies, locale)}`;
+}
+
+/** `formatMoney` with a compact amount (207.5B €), for the metric tiles; unknown code → the raw code. */
+export function formatCompactMoney(
+  n: number, code: string, currencies: Currency[], locale: string,
+): string {
+  const amount = formatCompactAmount(n, appLocale(locale) === 'fa' ? 'fa' : 'en');
+  const c = byCode(code, currencies);
+  return `${amount} ${c ? (c.symbol ?? currencyLabel(code, currencies, locale)) : code}`;
 }
 
 // Spellings the contract ledger used before currencies were managed; kept so old files still map.

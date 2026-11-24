@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { FormSection } from '@/components/FormSection';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
 import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { saveSmsSettings, type SmsSettingsInput } from '@/lib/actions/admin';
 import type { SmsConnection, SmsMode, SmsSettings } from '@/lib/admin/types';
@@ -229,11 +229,11 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
 
       {message && (
         <p role={message.ok ? 'status' : 'alert'}
-          className={cn('rounded-lg px-4 py-3 text-sm lg:ms-[calc(20rem+2.5rem)]', message.ok ? 'bg-success-foreground text-success' : 'bg-destructive/10 text-destructive')}>
+          className={cn('rounded-lg px-4 py-3 text-sm', FORM_SECTION_END_COL, message.ok ? 'bg-success-foreground text-success' : 'bg-destructive/10 text-destructive')}>
           {message.text}
         </p>
       )}
-      <div className="flex items-center justify-end gap-3 pt-4 lg:ms-[calc(20rem+2.5rem)]">
+      <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
         <Button type="submit" disabled={pending} data-testid="sms-save">
           {pending ? t('saving') : t('save')}
         </Button>

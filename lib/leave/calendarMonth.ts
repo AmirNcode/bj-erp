@@ -28,6 +28,8 @@ export type CalendarDayCell = {
 export type CalendarMonth = {
   days: CalendarDayCell[];
   weekdayLabels: string[];
+  /** Same order as `weekdayLabels`: ISO weekday (1 = Monday … 7 = Sunday) and the full name. */
+  weekdays: { isoDay: number; longName: string }[];
 };
 
 function displayConfig(locale: string) {
@@ -108,6 +110,17 @@ export function currentCalendarMonthRange(
   };
 }
 
+function weekdayNames(weekStartsOn: number, locale: string): { isoDay: number; longName: string }[] {
+  const formatter = new Intl.DateTimeFormat(appLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
+    weekday: 'long',
+    timeZone: 'UTC',
+  });
+  return Array.from({ length: 7 }, (_, i) => {
+    const isoDay = ((weekStartsOn + i - 1) % 7) + 1;
+    return { isoDay, longName: formatter.format(new Date(Date.UTC(2024, 0, isoDay))) };
+  });
+}
+
 function weekdayLabels(weekStartsOn: number, locale: string): string[] {
   const labels: string[] = [];
   const formatter = new Intl.DateTimeFormat(appLocale(locale) === 'fa' ? 'fa-IR' : 'en-US', {
@@ -175,5 +188,6 @@ export function buildCalendarMonth({
   return {
     days,
     weekdayLabels: weekdayLabels(weekStartsOn, locale),
+    weekdays: weekdayNames(weekStartsOn, locale),
   };
 }

@@ -57,7 +57,7 @@ export default async function DepartmentsPage({ params }: Props) {
     .sort((a, b) => a.fullName.localeCompare(b.fullName, 'fa'));
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <PageHeader section title={tNav('departments')} />
 
       <Card>

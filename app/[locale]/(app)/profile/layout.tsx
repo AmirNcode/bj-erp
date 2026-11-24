@@ -1,5 +1,5 @@
 /**
- * Profile (FR-23, FR-96): four tabs — Profile, Personal information, Preferences, Account security.
+ * Profile (FR-23, FR-97): four tabs — Profile, Personal information, Preferences, Account security.
  * On phones the page title is left to the top bar (MobileTopBar), and the links
  * the side panel carries on desktop (Organization, Help) sit above the tabs in
  * one row with the refresh button. Settings is under the Manage tab; Logout is

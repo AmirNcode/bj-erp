@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
+/** Left edge of the fields column: indent for a Save bar under the sections. */
+export const FORM_SECTION_END_COL = 'lg:ms-[calc(20rem+2.5rem)]';
+
 /**
  * Annotated section: title + explanation at the start, the fields card beside it
  * (below it under 1024px). Callers pass a `Card` as children. Stack several with
@@ -22,7 +25,7 @@ export function FormSection({
   return (
     <section
       id={id}
-      className={cn('grid gap-4 py-6 border-b last:border-b-0 lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-10', className)}
+      className={cn('grid gap-4 py-6 border-b [&:not(:has(~section))]:border-b-0 lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-10', className)}
     >
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold">{title}</h2>

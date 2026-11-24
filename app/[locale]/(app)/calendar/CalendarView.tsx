@@ -54,6 +54,8 @@ function useLabels() {
     offOn: t('offOn'),
     noOffThisDay: t('noOffThisDay'),
     returns: t('returns'),
+    // ISO weekday order: Monday … Sunday.
+    weekdayShort: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((k) => t(`weekdayShort.${k}`)),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
     approve: tApprovals('approve'),
@@ -239,6 +241,7 @@ export function CalendarView({
   nextHref,
 }: Props) {
   const labels = useLabels();
+  const isFa = locale !== 'en';
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   // Ids decided in this session — hides the buttons instantly; router.refresh()
@@ -327,11 +330,22 @@ export function CalendarView({
         className="grid gap-1 text-center text-xs font-semibold text-muted-foreground"
         style={sevenColumnGridStyle}
       >
-        {month.weekdayLabels.map((label) => (
-          <div key={label} className="py-1">
-            {label}
-          </div>
-        ))}
+        {month.weekdayLabels.map((label, i) => {
+          const day = month.weekdays[i];
+          const short = labels.weekdayShort[day.isoDay - 1];
+          return (
+            <div key={day.isoDay} className="py-1" title={day.longName} aria-label={day.longName}>
+              {isFa ? (
+                short
+              ) : (
+                <>
+                  <span className="sm:hidden">{short}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div

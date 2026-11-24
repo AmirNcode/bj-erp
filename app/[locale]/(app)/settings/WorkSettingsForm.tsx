@@ -11,7 +11,7 @@ import { calendarPickerConfig } from '@/lib/leave/calendarPicker';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FormSection } from '@/components/FormSection';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
 import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { nativeSelectClass } from '@/lib/native-select';
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
@@ -255,7 +255,7 @@ export function WorkSettingsForm({
             className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
             data-testid="weekend-weekly-row"
           >
-            <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
+            <span className="text-13 font-semibold sm:leading-9">
               {labels.frequencyWeekly}
             </span>
             {renderSlots('weekly', weeklySlots, setWeeklySlots)}
@@ -265,7 +265,7 @@ export function WorkSettingsForm({
             className="grid items-start gap-x-3 gap-y-2 rounded-md border p-3 sm:grid-cols-[11rem_1fr]"
             data-testid="weekend-biweekly-row"
           >
-            <span className="whitespace-nowrap text-13 font-semibold sm:leading-9">
+            <span className="text-13 font-semibold sm:leading-9">
               {labels.frequencyBiweekly}
             </span>
             <div className="flex flex-col gap-2">
@@ -372,13 +372,13 @@ export function WorkSettingsForm({
       </FormSection>
 
       {errMsg && (
-        <p role="alert" data-testid="work-settings-error" className="pt-4 text-sm text-destructive lg:ms-[calc(20rem+2.5rem)]">
+        <p role="alert" data-testid="work-settings-error" className={`pt-4 text-sm text-destructive ${FORM_SECTION_END_COL}`}>
           {labels.errorLabel}: {errMsg}
         </p>
       )}
 
       {(!readOnly || savedAt) && (
-        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 lg:ms-[calc(20rem+2.5rem)]">
+        <div className={`flex flex-wrap items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
           {okMsg && (
             <p role="status" data-testid="work-settings-saved" className="text-xs text-success">
               {okMsg}

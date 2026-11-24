@@ -1,5 +1,5 @@
 /**
- * Profile › Preferences tab (FR-96): language and text size. Annotated sections.
+ * Profile › Preferences tab (FR-97): language and text size. Annotated sections.
  */
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +31,7 @@ export default async function PreferencesPage({ params }: Props) {
 
       <FormSection title={t('textSize.title')} description={t('textSize.description')}>
         <Card className="p-4">
-          <TextSizeControl initialStep={fontStep} locale={locale === 'en' ? 'en' : 'fa'} />
+          <TextSizeControl initialStep={fontStep} />
         </Card>
       </FormSection>
     </div>

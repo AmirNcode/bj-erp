@@ -215,6 +215,7 @@ export default async function EditEmployeePage({ params }: Props) {
                 name={employee.full_name}
                 initial={photoRes.photo}
                 mode={isSelf ? 'self' : 'hr'}
+                hideTitle
               />
             </CardContent>
           </Card>

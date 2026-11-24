@@ -11,24 +11,30 @@ export function MetricsStrip({ metrics }: { metrics: SalesMetrics }) {
   const f = useSalesFormat();
   const dash = <span className="text-muted-foreground">—</span>;
 
-  const figure = (key: string, label: string, value: React.ReactNode) => (
-    <div key={key} className="border-s-[3px] border-primary ps-3" data-testid={`sales-metric-${key}`}>
+  const figure = (key: string, label: string, value: React.ReactNode, wide = false) => (
+    <div
+      key={key}
+      className={`min-w-0 border-s-[3px] border-primary ps-3${wide ? ' col-span-2 sm:col-span-1' : ''}`}
+      data-testid={`sales-metric-${key}`}
+    >
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="text-xl font-semibold tabular-nums">{value}</dd>
+      <dd className="break-words text-xl font-semibold tabular-nums">{value}</dd>
     </div>
   );
-  const money = (key: string, label: string, sums: Record<string, number> | undefined) => {
+  const money = (key: string, label: string, sums: Record<string, number> | undefined, wide = false) => {
     if (sums === undefined) return null;
     const entries = Object.entries(sums);
     return figure(key, label, entries.length === 0 ? dash : (
       <span className="flex flex-col">
-        {entries.map(([cur, amount]) => <span key={cur} className="whitespace-nowrap">{f.money(amount, cur)}</span>)}
+        {entries.map(([cur, amount]) => (
+          <span key={cur} className="whitespace-nowrap" title={f.money(amount, cur)}>{f.compactMoney(amount, cur)}</span>
+        ))}
       </span>
-    ));
+    ), wide);
   };
 
   const figures = [
-    money('salesAll', t('metrics.salesAll'), metrics.sales_all),
+    money('salesAll', t('metrics.salesAll'), metrics.sales_all, true),
     money('salesYtd', t('metrics.salesYtd'), metrics.sales_ytd),
     money('salesPrevYear', t('metrics.salesPrevYear'), metrics.sales_prev_year),
     metrics.share === undefined ? null : figure('share', t('metrics.share'), Object.keys(metrics.share).length === 0 ? dash : (

@@ -13,7 +13,7 @@ vi.mock('@/app/[locale]/(app)/_components/ViewAsContext', () => ({ useViewAs: mo
 function renderControl(locale: 'fa' | 'en', initialStep: 0 | 1 | 2 | 3 | 4 = 0) {
   render(
     <NextIntlClientProvider locale={locale} messages={locale === 'en' ? en : fa}>
-      <TextSizeControl initialStep={initialStep} locale={locale} />
+      <TextSizeControl initialStep={initialStep} />
     </NextIntlClientProvider>
   );
 }
@@ -30,7 +30,7 @@ afterEach(cleanup);
 describe('TextSizeControl', () => {
   it.each([
     ['en', '1.2'],
-    ['fa', '1.3'],
+    ['fa', '1.2'],
   ] as const)('step 2 scales the sample only (%s)', (locale, scale) => {
     renderControl(locale);
     slide(2);

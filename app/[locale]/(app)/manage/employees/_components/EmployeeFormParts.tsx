@@ -165,6 +165,7 @@ export function RoleCheckboxes({
   onChange,
   editable,
   adminHint,
+  hideLabel,
 }: {
   label: string;
   roles: RoleRow[];
@@ -174,13 +175,15 @@ export function RoleCheckboxes({
   /** Role ids the caller may toggle. */
   editable: readonly string[];
   adminHint: string;
+  /** Keep the label for screen readers only (the section heading already shows it). */
+  hideLabel?: boolean;
 }) {
   const t = useTranslations('manage.employees');
   const hasAdmin = roles.some((r) => r.systemKey === 'admin');
   const hasSecurity = roles.some((r) => r.systemKey === 'security');
   return (
     <div className="space-y-2">
-      <span className="block text-sm font-medium leading-none">{label}</span>
+      <span className={cn('block text-sm font-medium leading-none', hideLabel && 'sr-only')}>{label}</span>
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => {
           const canToggle = role.systemKey !== 'admin' && editable.includes(role.id);

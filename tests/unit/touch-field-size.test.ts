@@ -41,6 +41,17 @@ describe('touch screens keep form fields at 16px (no iPhone zoom)', () => {
     }
   });
 
+  it('has an unlayered min-height rule so big text never clips in a fixed-height field', () => {
+    const m = /\n(input:not\([^{]*?select)\s*\{([^}]*)\}/.exec(css);
+    expect(m).not.toBeNull();
+    expect(m![2].replace(/\s+/g, ' ').trim()).toBe('min-height: calc(1lh + 0.625rem);');
+    const at2 = m!.index;
+    for (const l of css.matchAll(/@layer\b[^{;]*\{/g)) {
+      const b = block(css, l.index!);
+      expect(at2 < b.start || at2 > b.end).toBe(true);
+    }
+  });
+
   it('never disables pinch zoom in the viewport', () => {
     const layout = readFileSync(join(root, 'app/[locale]/layout.tsx'), 'utf8');
     expect(layout).not.toMatch(/maximumScale/);

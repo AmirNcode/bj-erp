@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FormSection } from '@/components/FormSection';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
 import { FIELD_W } from '@/lib/ui/fieldWidths';
 
 type Props = {
@@ -191,7 +191,7 @@ export function PersonalInfoForm({ employeeId, initial, readOnly, readOnlyReason
     <form onSubmit={onSubmit} onChange={() => setStatus(null)} data-testid="personal-info-form" noValidate>
       <PersonalInfoFields editor={editor} readOnly={readOnly} readOnlyReason={readOnlyReason} />
       {(status || !readOnly) && (
-        <div className="flex items-center justify-end gap-3 pt-4 lg:ms-[calc(20rem+2.5rem)]">
+        <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
           {status && (
             <p
               role={status.ok ? 'status' : 'alert'}

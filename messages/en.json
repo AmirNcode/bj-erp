@@ -312,6 +312,7 @@
     "offOn": "Off on",
     "noOffThisDay": "No one is off this day.",
     "returns": "Returns",
+    "weekdayShort": { "mon": "Mo", "tue": "Tu", "wed": "We", "thu": "Th", "fri": "Fr", "sat": "Sa", "sun": "Su" },
     "error": "Error",
     "prevMonth": "Previous month",
     "nextMonth": "Next month"

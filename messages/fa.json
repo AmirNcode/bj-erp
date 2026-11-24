@@ -312,6 +312,7 @@
     "offOn": "مرخصی در",
     "noOffThisDay": "در این روز کسی در مرخصی نیست.",
     "returns": "بازگشت",
+    "weekdayShort": { "mon": "د", "tue": "س", "wed": "چ", "thu": "پ", "fri": "ج", "sat": "ش", "sun": "ی" },
     "error": "خطا",
     "prevMonth": "ماه قبل",
     "nextMonth": "ماه بعد"

@@ -340,7 +340,8 @@ export function EmployeesTable({ employees, canBulkReset, showLocks, locale, bas
                             />
                           </Button>
                           <PersonAvatar id={emp.id} name={emp.full_name} />
-                          <span className="whitespace-nowrap font-medium">
+                          {/* Wraps on narrow screens so a long name at a large text size never widens the page. */}
+                          <span className="min-w-0 font-medium @xl:whitespace-nowrap">
                             <bdi>{emp.first_name}</bdi>
                             {/* Narrow: the last-name column is hidden, so show the whole name. */}
                             {emp.last_name && (

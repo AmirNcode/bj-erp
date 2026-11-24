@@ -12,7 +12,7 @@ const TABS = [
   { key: 'security', href: '/security' },
 ] as const;
 
-/** FR-96: Profile · Personal information · Preferences · Account security, the same underlined tabs as Admin. */
+/** FR-97: Profile · Personal information · Preferences · Account security, the same underlined tabs as Admin. */
 export function ProfileTabs({ locale }: { locale: string }) {
   const t = useTranslations('profile');
   // Farsi (default locale) pathnames carry no prefix; compare without it.

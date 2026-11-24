@@ -31,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FormSection } from '@/components/FormSection';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
 import { FIELD_W } from '@/lib/ui/fieldWidths';
 import {
   AlertDialog,
@@ -424,7 +424,7 @@ export function EditEmployeeForm({
 
   function saveButtons(editable: boolean, testId: string) {
     return (
-      <div className="flex items-center justify-end gap-3 pt-4 lg:ms-[calc(20rem+2.5rem)]">
+      <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
         {editable && (
           <Button type="submit" disabled={pending} data-testid={testId}>
             {pending ? '...' : labels.save}
@@ -582,6 +582,7 @@ export function EditEmployeeForm({
               <Card className="p-4">
                 <RoleCheckboxes
                   label={labels.roles}
+                  hideLabel
                   roles={allRoles}
                   selected={selectedRoleIds}
                   onChange={setSelectedRoleIds}
@@ -727,7 +728,7 @@ export function EditEmployeeForm({
                     >
                       <summary className="flex cursor-pointer list-none items-center gap-2">
                         <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
-                        <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                        <span className="sr-only">{labels.policyTitle}</span>
                       </summary>
                       <div className="mt-3 space-y-3">
                         {balances.map((balance) => {

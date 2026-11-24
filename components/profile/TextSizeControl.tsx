@@ -15,7 +15,7 @@ import { FONT_STEPS, fontScale, fontStepLabel, isFontStep, type FontStep } from 
 import { useViewAs } from '@/app/[locale]/(app)/_components/ViewAsContext';
 import { Button } from '@/components/ui/button';
 
-export function TextSizeControl({ initialStep, locale }: { initialStep: FontStep; locale: 'fa' | 'en' }) {
+export function TextSizeControl({ initialStep }: { initialStep: FontStep }) {
   const t = useTranslations('profile.textSize');
   const router = useRouter();
   const viewing = useViewAs() !== null;
@@ -39,7 +39,7 @@ export function TextSizeControl({ initialStep, locale }: { initialStep: FontStep
 
   return (
     <div className="space-y-3">
-      <div className="space-y-2">
+      <div className="max-w-md space-y-2">
         <input
           type="range"
           min={0}
@@ -49,7 +49,7 @@ export function TextSizeControl({ initialStep, locale }: { initialStep: FontStep
           aria-label={t('title')}
           aria-valuetext={fontStepLabel(step)}
           data-testid="text-size-slider"
-          className="w-full accent-primary"
+          className="text-size-range w-full"
           onChange={(e) => {
             const n = Number(e.target.value);
             if (isFontStep(n)) {
@@ -58,9 +58,14 @@ export function TextSizeControl({ initialStep, locale }: { initialStep: FontStep
             }
           }}
         />
-        <div className="grid grid-cols-5 text-center text-xs text-muted-foreground" aria-hidden="true">
+        {/* Each label sits under its thumb stop (0.5rem = half the native thumb). */}
+        <div className="relative h-5 text-xs text-muted-foreground" aria-hidden="true">
           {FONT_STEPS.map((s) => (
-            <span key={s} className={s === step ? 'font-semibold text-foreground' : undefined}>
+            <span
+              key={s}
+              className={`absolute top-0 -translate-x-1/2 whitespace-nowrap rtl:translate-x-1/2 ${s === step ? 'font-semibold text-foreground' : ''}`}
+              style={{ insetInlineStart: `calc(0.5rem + (100% - 1rem) * ${s} / 4)` }}
+            >
               {fontStepLabel(s)}
             </span>
           ))}
@@ -69,7 +74,7 @@ export function TextSizeControl({ initialStep, locale }: { initialStep: FontStep
 
       <div
         className="font-scale-scope rounded-md border p-3 space-y-1"
-        style={{ '--font-scale': fontScale(step, locale) } as React.CSSProperties}
+        style={{ '--font-scale': fontScale(step) } as React.CSSProperties}
         data-testid="text-size-sample"
       >
         <p className="text-base font-semibold">{t('sampleTitle')}</p>

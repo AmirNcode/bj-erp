@@ -73,7 +73,7 @@ export function PageRefreshButton({ initialUpdatedAt, onDark, className }: Props
         aria-hidden="true"
         className={cn('size-3.5', isRefreshing && 'animate-spin')}
       />
-      {isRefreshing ? t('pending') : updatedLabel}
+      <span className="min-w-0 truncate">{isRefreshing ? t('pending') : updatedLabel}</span>
     </Button>
   );
 }

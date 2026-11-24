@@ -27,15 +27,17 @@ describe('scaled text tokens', () => {
   const theme = tokens(block('@theme static'));
   const scope = tokens(block('.font-scale-scope'));
 
+  it('body text defaults to the scaled base size', () => {
+    expect(css).toMatch(/\nbody \{[^}]*font-size:\s*var\(--text-base\)/);
+  });
   it('every token scales by --font-scale in @theme', () => {
     for (const n of NAMES) expect(theme[n], n).toContain('var(--font-scale');
   });
   it('.font-scale-scope re-declares the same values', () => {
     for (const n of NAMES) expect(scope[n], n).toBe(theme[n]);
   });
-  it("html[lang='fa'] derives --font-scale from 1.1", () => {
-    const fa = block("html[lang='fa']");
-    expect(fa).toMatch(/--font-scale:\s*calc\(1\.1\b[^;]*var\(--font-step\)/);
+  it('Farsi uses the same scale as English (no lang-specific --font-scale)', () => {
+    expect(css).not.toMatch(/\[lang=['"]fa['"]\][^{]*\{[^}]*--font-scale/);
   });
   it('hand-written font-size declarations are scaled', () => {
     // Strip @media print blocks, then check every font-size line.

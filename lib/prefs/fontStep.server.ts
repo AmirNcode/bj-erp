@@ -1,5 +1,6 @@
 import { cache } from 'react';
-import { getCachedClaims } from '@/lib/auth/context';
+import { getCachedClaims, getCachedProfile } from '@/lib/auth/context';
+import { getViewAs } from '@/lib/auth/viewAs';
 import { createRealClient } from '@/lib/supabase/server';
 import { isFontStep, type FontStep } from '@/lib/prefs/fontScale';
 
@@ -14,6 +15,14 @@ export const getOwnFontStep = cache(async (): Promise<FontStep> => {
     const claims = await getCachedClaims();
     const uid = claims?.sub;
     if (!uid) return 0;
+    // No live View as: the request client is the person's own, and the profile
+    // row is already cached for this request.
+    const view = await getViewAs();
+    if (!view || view.status !== 'live') {
+      const profile = await getCachedProfile(uid);
+      const step = profile?.font_step;
+      return isFontStep(step) ? step : 0;
+    }
     const supabase = await createRealClient();
     const { data, error } = await supabase
       .from('profiles')

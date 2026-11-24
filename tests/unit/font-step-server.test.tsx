@@ -5,6 +5,9 @@ let user: { id: string } | null = { id: 'u1' };
 let result: { data: unknown; error: unknown } = { data: { font_step: 2 }, error: null };
 const createRealClient = vi.fn();
 const createClient = vi.fn();
+let view: { status: string } | null = null;
+let cachedProfile: { font_step: unknown } | null = { font_step: 3 };
+const getCachedProfile = vi.fn(async () => cachedProfile);
 
 function fake() {
   return {
@@ -14,7 +17,9 @@ function fake() {
 vi.mock('react', async (orig) => ({ ...(await orig<typeof import('react')>()), cache: <T,>(f: T) => f }));
 vi.mock('@/lib/auth/context', () => ({
   getCachedClaims: async () => (user ? { sub: user.id } : null),
+  getCachedProfile: (...a: unknown[]) => getCachedProfile(...(a as [])),
 }));
+vi.mock('@/lib/auth/viewAs', () => ({ getViewAs: async () => view }));
 vi.mock('@/lib/supabase/server', () => ({
   createRealClient: (...a: unknown[]) => { createRealClient(...a); return fake(); },
   createClient: (...a: unknown[]) => { createClient(...a); return fake(); },
@@ -26,8 +31,27 @@ const { FontStepStyle } = await import('@/app/[locale]/(app)/_components/FontSte
 beforeEach(() => {
   user = { id: 'u1' };
   result = { data: { font_step: 2 }, error: null };
+  view = { status: 'live' };
+  cachedProfile = { font_step: 3 };
+  getCachedProfile.mockClear();
   createRealClient.mockClear();
   createClient.mockClear();
+});
+
+describe('getOwnFontStep without a live View as', () => {
+  it('reads the cached profile and skips the real client', async () => {
+    view = null;
+    expect(await getOwnFontStep()).toBe(3);
+    expect(getCachedProfile).toHaveBeenCalledWith('u1');
+    expect(createRealClient).not.toHaveBeenCalled();
+  });
+  it('falls back to 0 for a missing or invalid value', async () => {
+    view = null;
+    cachedProfile = { font_step: 9 };
+    expect(await getOwnFontStep()).toBe(0);
+    cachedProfile = null;
+    expect(await getOwnFontStep()).toBe(0);
+  });
 });
 
 describe('getOwnFontStep', () => {

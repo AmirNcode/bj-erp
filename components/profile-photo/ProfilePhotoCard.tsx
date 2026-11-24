@@ -41,9 +41,11 @@ type Props = {
   name: string;
   initial: PhotoInfo | null;
   mode: 'self' | 'hr';
+  /** Hide the inner heading when the surrounding section already shows it. */
+  hideTitle?: boolean;
 };
 
-export function ProfilePhotoCard({ employeeId, name, initial, mode }: Props) {
+export function ProfilePhotoCard({ employeeId, name, initial, mode, hideTitle }: Props) {
   const t = useTranslations('profile.photo');
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -144,7 +146,7 @@ export function ProfilePhotoCard({ employeeId, name, initial, mode }: Props) {
     <div className="flex items-start gap-4" data-testid="profile-photo-card">
       <PersonAvatar id={employeeId} name={name} version={photo?.version ?? null} size="xl" />
       <div className="min-w-0 flex-1 space-y-2">
-        <p className="text-sm font-semibold">{t('title')}</p>
+        {!hideTitle && <p className="text-sm font-semibold">{t('title')}</p>}
         {lockedForMe ? (
           <p className="flex items-start gap-1.5 text-sm text-muted-foreground" data-testid="profile-photo-locked">
             <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
