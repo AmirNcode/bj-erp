@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-24 — PR #32 (UI readability, FR-97) review, one fix, merge
+
+**Agent:** Claude Opus 5.5 via Claude Code (subagent)
+**Branch / HEAD at start:** `claude/ui-readability-layout` @ a876b43 (already contains `origin/main` @ 1ca84ef, no merge needed)
+**Trigger:** Owner asked to review, fix and merge PR #32 (merge deploys to Liara).
+
+**What changed**
+- `app/[locale]/(app)/calendar/CalendarView.tsx` weekday header: `aria-label` on a plain div is ignored by screen readers (Farsi showed only one letter); full weekday name is now `sr-only` text, the short letters `aria-hidden`.
+
+**Review findings (no fix needed)**
+- Migration `20261123140000_profile_font_step.sql`: sorts after main's newest (`20261123100000`); adds a defaulted NOT NULL column + CHECK (safe for the still-running old app); trigger body diffed against `origin/main` `schema.sql` = identical plus the two `font_step` lines. `schema.sql` / `types.ts` consistent.
+- `font_step` writable only by self or admin (trigger); `updateMyPrefs` validates with `isFontStep`; `<FontStepStyle>` interpolates only a validated 0..4; `getOwnFontStep` uses claims + `createRealClient` under live View as.
+- `cn()` tailwind-merge v3 `font-size` group extension correct (unit-tested). No `data-testid` removed (all moved ones kept). Weekday letters / ISO mapping correct (`weekStartsOn` fixed at 6).
+- Minor, left as is: Edit Employee › leave policy `<details>` summary is now a lone chevron when closed (title moved to FormSection, owner-checked); `audit-gate` says picomatch `IGNORED` entry is stale (passes; clean up separately).
+
+**Actions outside the repo**
+- none (no DB, no e2e).
+
+**Verification**
+- `npx vitest run` 1620 passed / 5 skipped · `npx tsc --noEmit` ok · `npm run lint` ok · `npm run build` ok · `node scripts/audit-gate.mjs` ok.
+
+**State left behind**
+- Fix + this entry committed and pushed on the branch; PR merged with `gh pr merge 32 --merge` (deploys to Liara).
+
+**For the next agent**
+- e2e still not run for this branch (needs an isolated demo stack; listed in `docs/TASKS.md`).
+
 ## 2026-11-23 — UI readability and desktop layout (FR-97): no-zoom fields, text size, 1280px column
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead + Sonnet subagents per task; lead reviewed each diff)

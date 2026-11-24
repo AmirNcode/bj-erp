@@ -334,13 +334,15 @@ export function CalendarView({
           const day = month.weekdays[i];
           const short = labels.weekdayShort[day.isoDay - 1];
           return (
-            <div key={day.isoDay} className="py-1" title={day.longName} aria-label={day.longName}>
+            <div key={day.isoDay} className="py-1" title={day.longName}>
+              {/* aria-label is ignored on a plain div, so the full name is sr-only text. */}
+              <span className="sr-only">{day.longName}</span>
               {isFa ? (
-                short
+                <span aria-hidden="true">{short}</span>
               ) : (
                 <>
-                  <span className="sm:hidden">{short}</span>
-                  <span className="hidden sm:inline">{label}</span>
+                  <span aria-hidden="true" className="sm:hidden">{short}</span>
+                  <span aria-hidden="true" className="hidden sm:inline">{label}</span>
                 </>
               )}
             </div>
