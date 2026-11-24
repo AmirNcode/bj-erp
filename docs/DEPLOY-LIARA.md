@@ -209,6 +209,8 @@ self.addEventListener('activate', (event) => {
 ```
 
 `/sw.js` is served `no-cache` (`next.config.ts`), so the replacement reaches users on their next page load.
+In the same deploy, remove `<ServiceWorkerRegister />` from the root layout; otherwise every page load
+registers the stub again and it reinstalls, clears and unregisters each time.
 
 ## Company domain
 

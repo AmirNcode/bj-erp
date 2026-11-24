@@ -54,7 +54,7 @@ left in Farsi).
 ## Page layout and forms
 
 - **Frame:** `<main>` is one centred column, max 1280px (`max-w-7xl`). Header, tabs and content all sit inside it, so the tab line ends where the content ends. No page-level `max-w-[900px]` / `max-w-5xl` / `mx-auto` wrappers.
-- **`data-wide`** (edge to edge) only on the big tables: Employees list, Sales records list (`sales/page.tsx`), Finance. Header and tabs widen with the table.
+- **`data-wide`** (edge to edge) only on the big tables: Employees list, Sales records list (`sales/(records)/page.tsx`), Finance. Header and tabs widen with the table.
 - **Annotated section:** settings-style forms use `components/FormSection.tsx`: title + explanation at the start, the fields `Card` beside it from `lg` (1024px), stacked below. One Save bar per form after the last section (`flex items-center justify-end gap-3 pt-4`, `lg:ms-[calc(20rem+2.5rem)]`).
 - **Field widths** come from `lib/ui/fieldWidths.ts` (`FIELD_W`): time 9rem, number 8rem, date 12rem, day + hour pair 18rem, short select 14rem, name / person / job title 20rem, notes up to 36rem on desktop; full width on phones. Never a stretched `w-full` input on desktop. Group related fields in a wrapping grid.
 - **Type sizes:** no `text-[Npx]`; use the tokens (`text-10`, `text-11`, `text-13`, `text-15`) or `text-xs` ... `text-2xl`.

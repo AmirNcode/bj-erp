@@ -6,8 +6,8 @@ import { setRequestLocale } from 'next-intl/server';
 import { listSalesRecordsPage } from '@/lib/actions/sales';
 import type { RecordFilters, RecordSort } from '@/lib/sales/types';
 import { RECORD_SORTS as SORTS } from '@/lib/sales/recordSort';
-import { loadSalesBootstrap } from './_components/load';
-import { RecordsList } from './_components/RecordsList';
+import { loadSalesBootstrap } from '../_components/load';
+import { RecordsList } from '../_components/RecordsList';
 
 type Props = {
   params: Promise<{ locale: string }>;

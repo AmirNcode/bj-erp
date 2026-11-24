@@ -3,7 +3,8 @@
  *
  * ALLOWLIST: it stores build files, icons, the logo and the offline page, nothing else.
  * Every other request is left to the browser (no respondWith): page data, RSC fetches,
- * /api (uploads and downloads, even as navigations), /rest, /auth, /print. Page navigations pass
+ * /api (uploads and downloads), /rest, /auth, /print. As navigations these get the preload
+ * response (or the network), never the offline page and never stored. Page navigations pass
  * straight to the network and are never stored; only a network failure shows the
  * offline page. Never add a data path here: it would keep personal data on devices.
  *
@@ -16,7 +17,7 @@ const OFFLINE = '/offline.html';
 // The offline page and the logo it shows, stored on install. Bump SHELL (and CACHE
 // for /icons) when the logo or icons change: they are not content-hashed.
 const PRECACHE = [OFFLINE, '/bj-logo.png'];
-// Never handled by the worker, even as a navigation (file downloads, printouts, data).
+// Never cached and never given the offline page (file downloads, printouts, data).
 const BYPASS = ['/api/', '/rest/', '/auth/'];
 
 function isStatic(pathname) {
@@ -85,7 +86,13 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  if (BYPASS.some((p) => url.pathname.startsWith(p)) || /^\/[a-z]{2}\/print\/|^\/print\//.test(url.pathname)) return;
+  const bypass = BYPASS.some((p) => url.pathname.startsWith(p)) || /^\/[a-z]{2}\/print\/|^\/print\//.test(url.pathname);
+  if (bypass) {
+    // Navigation preload already sent this request: answer with it (no offline page, nothing
+    // stored). Returning without respondWith would cancel it and fetch the file a second time.
+    if (request.mode === 'navigate') event.respondWith(navigate(event));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(navigate(event).catch(offlineFallback));

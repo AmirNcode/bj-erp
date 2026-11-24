@@ -186,11 +186,27 @@ describe('lifecycle', () => {
 });
 
 describe('review fixes', () => {
-  it('an /api download navigation is left to the browser', () => {
-    expect(fire('/api/sales/files/x', { mode: 'navigate' }).event.respondWith).not.toHaveBeenCalled();
+  // Navigation preload is on, so the browser already sent the request: a bypassed navigation
+  // must answer with that preload (a fallback would cancel it and download the file twice),
+  // and must never get the offline page.
+  it.each(['/api/sales/files/x', '/fa/print/request/1', '/print/request/1'])(
+    'a bypassed navigation (%s) uses the preload response, fetches once',
+    async (u) => {
+      const pre = res(200, 'basic', 'file');
+      expect(await fire(u, { mode: 'navigate', preload: pre }).responded).toBe(pre);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+  it('a bypassed navigation without preload goes to the network unchanged and is not stored', async () => {
+    const file = res(200, 'basic', 'file');
+    fetchMock.mockResolvedValueOnce(file);
+    expect(await fire('/api/sales/files/x', { mode: 'navigate' }).responded).toBe(file);
+    expect(cacheSize()).toBe(0);
   });
-  it('a /print navigation is left to the browser', () => {
-    expect(fire('/fa/print/request/1', { mode: 'navigate' }).event.respondWith).not.toHaveBeenCalled();
+  it('a failed bypassed navigation is not answered with the offline page', async () => {
+    await lifecycle('install');
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(fire('/api/sales/files/x', { mode: 'navigate' }).responded).rejects.toThrow('Failed to fetch');
   });
   it('the offline page survives cache trimming', async () => {
     await lifecycle('install');
