@@ -46,6 +46,21 @@ describe('currentCalendarMonthRange', () => {
   });
 });
 
+describe('buildCalendarMonth weekdays', () => {
+  it('carries ISO weekday + long name for each header, in week order', () => {
+    const month = buildCalendarMonth({
+      entries: [],
+      rangeStart: '2026-06-01',
+      rangeEnd: '2026-06-30',
+      locale: 'en',
+      workSettings: { ...WORK_SETTINGS_FALLBACK, holidays: [] },
+    });
+    expect(month.weekdays).toHaveLength(7);
+    expect(month.weekdays.map((d) => d.isoDay).sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(month.weekdays.find((d) => d.isoDay === 1)?.longName).toBe('Monday');
+  });
+});
+
 describe('buildCalendarMonth', () => {
   it('groups multi-day leave entries into each covered day and caps visible names', () => {
     const month = buildCalendarMonth({

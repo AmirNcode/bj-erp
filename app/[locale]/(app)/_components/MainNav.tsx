@@ -58,7 +58,7 @@ function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: str
   return (
     <span
       data-testid="nav-approvals-count"
-      className="ms-auto rounded-sm bg-white px-1.5 text-[11.5px] font-semibold leading-5 text-sidebar"
+      className="ms-auto rounded-sm bg-white px-1.5 text-11 font-semibold leading-5 text-sidebar"
     >
       {formatNumber(n, locale)}
     </span>
@@ -164,7 +164,7 @@ export function MainNav({
             <li
               key={tab.key}
               className={cn(
-                'flex-1 md:flex-none',
+                'min-w-0 flex-1 md:flex-none',
                 mobileOnly && 'md:hidden',
                 tab.desktopOnly && 'hidden md:block'
               )}
@@ -176,37 +176,37 @@ export function MainNav({
                 data-testid={mobileOnly ? 'nav-manage-tab' : `nav-${tab.key}`}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex min-h-14 flex-col items-center justify-center gap-1 whitespace-nowrap py-2 text-xs transition-colors',
+                  'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors',
                   'md:min-h-0 md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:py-[9px] md:text-sm',
                   active ? tabActive : inactiveItem
                 )}
               >
                 <span aria-hidden="true">{NAV_ICONS[tab.key]}</span>
-                <span>{t(tab.key)}</span>
+                <span className="max-w-full truncate">{t(tab.key)}</span>
               </Link>
             </li>
           );
         })}
         {/* Mobile has no side panel footer, so the bar carries Profile. */}
-        <li className="flex-1 md:hidden">
+        <li className="min-w-0 flex-1 md:hidden">
           <Link
             href={`/${locale}/profile`}
             data-testid="nav-profile-tab"
             aria-current={isActive('/profile') ? 'page' : undefined}
             className={cn(
-              'relative flex min-h-14 flex-col items-center justify-center gap-1 whitespace-nowrap py-2 text-xs transition-colors',
+              'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors',
               isActive('/profile') ? tabActive : inactiveItem
             )}
           >
             <span aria-hidden="true">{NAV_ICONS.profile}</span>
-            <span>{t('profile')}</span>
+            <span className="max-w-full truncate">{t('profile')}</span>
           </Link>
         </li>
       </ul>
 
       {manageItems.length > 0 && (
         <div className="hidden md:block">
-          <p className="px-3 pt-4 pb-1 text-[11.5px] font-semibold text-white/60">
+          <p className="px-3 pt-4 pb-1 text-11 font-semibold text-white/60">
             {t('manage')}
           </p>
           <ul className="flex flex-col gap-0.5">{manageItems.map(sideLink)}</ul>
@@ -262,7 +262,7 @@ export function MainNav({
           )}
           {profile && (
             <span className="min-w-0">
-              <span className="block truncate whitespace-nowrap text-[13.5px] font-semibold text-white">
+              <span className="block truncate whitespace-nowrap text-13 font-semibold text-white">
                 <bdi>{profile.name}</bdi>
               </span>
               <span className="block truncate whitespace-nowrap text-xs text-white/70">

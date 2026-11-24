@@ -23,7 +23,7 @@ export default async function AdminLayout({ children, params }: Props) {
   const messages = await getMessages({ locale: ADMIN_LOCALE });
   return (
     <NextIntlClientProvider locale={ADMIN_LOCALE} messages={messages}>
-      <div dir="ltr" lang={ADMIN_LOCALE} data-wide className="flex w-full flex-col gap-5" data-testid="admin-panel">
+      <div dir="ltr" lang={ADMIN_LOCALE} className="flex w-full flex-col gap-5" data-testid="admin-panel">
         <PageHeader section title={t('title')} />
         <AdminTabs locale={locale} />
         {children}

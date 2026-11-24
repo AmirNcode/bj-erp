@@ -12,6 +12,8 @@ import { HolidayImportDialog, type HolidayImportLabels } from './HolidayImportDi
 import { CalendarDays, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { formatNumber } from '@/lib/i18n/format';
 import {
   AlertDialog,
@@ -176,14 +178,14 @@ export function HolidayEditor({
   };
 
   const fieldClass =
-    'h-9 w-full rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+    'h-9 rounded-md border border-input bg-card px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
   return (
-    <Card className="w-full max-w-4xl gap-0 py-0" data-testid="holiday-editor">
+    <Card className="w-full gap-0 py-0" data-testid="holiday-editor">
       <div className="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-4">
         <div>
           <h2 className="text-base font-semibold">{labels.holidaysTitle}</h2>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">
+          <p className="mt-0.5 text-13 text-muted-foreground">
             {labels.holidaysCount.replace('{count}', formatNumber(holidays.length, locale))}
           </p>
         </div>
@@ -206,8 +208,8 @@ export function HolidayEditor({
       {/* Add form: one row on desktop. */}
       {!readOnly && (
         <div className="mx-6 space-y-2.5 rounded-xl border border-muted bg-muted/35 p-3.5">
-          <div className="grid grid-cols-1 items-end gap-2.5 md:grid-cols-[180px_1fr_1fr_auto]">
-            <div className="flex flex-col gap-1">
+          <div className="flex flex-col items-stretch gap-2.5 md:flex-row md:flex-wrap md:items-end">
+            <div className={cn('flex flex-col gap-1', FIELD_W.date)}>
               <label className="text-xs font-medium text-muted-foreground">{labels.dateLabel}</label>
               <div className="relative">
                 <CalendarDays
@@ -221,11 +223,11 @@ export function HolidayEditor({
                   calendar={calendar}
                   locale={calLocale}
                   containerClassName="w-full"
-                  inputClass={`${fieldClass} ps-9`}
+                  inputClass={`${fieldClass} w-full ps-9`}
                 />
               </div>
             </div>
-            <div className="flex flex-col gap-1">
+            <div className={cn('flex flex-col gap-1', FIELD_W.name)}>
               <label htmlFor="hol-name-fa" className="text-xs font-medium text-muted-foreground">
                 {labels.nameFaLabel}
               </label>
@@ -234,11 +236,11 @@ export function HolidayEditor({
                 data-testid="holiday-name-fa"
                 value={nameFa}
                 onChange={(e) => setNameFa(e.target.value)}
-                className={fieldClass}
+                className={cn(fieldClass, 'w-full')}
                 disabled={isPending}
               />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className={cn('flex flex-col gap-1', FIELD_W.name)}>
               <label htmlFor="hol-name-en" className="text-xs font-medium text-muted-foreground">
                 {labels.nameEnLabel}
               </label>
@@ -247,7 +249,7 @@ export function HolidayEditor({
                 dir="ltr"
                 value={nameEn}
                 onChange={(e) => setNameEn(e.target.value)}
-                className={fieldClass}
+                className={cn(fieldClass, 'w-full')}
                 disabled={isPending}
               />
             </div>
@@ -289,7 +291,7 @@ export function HolidayEditor({
                 className="group grid grid-cols-[1fr_40px] items-center gap-x-3 border-b border-muted py-2.5 text-sm transition-colors last:border-b-0 hover:bg-red-50 sm:grid-cols-[160px_110px_1fr_40px]"
               >
                 <span className="whitespace-nowrap font-medium">{show(h.holiday_date)}</span>
-                <span className="hidden text-[13px] text-muted-foreground sm:block">
+                <span className="hidden text-13 text-muted-foreground sm:block">
                   {formatCalendarDate(h.holiday_date, locale, 'dddd')}
                 </span>
                 <span className="col-start-1 row-start-2 sm:col-start-auto sm:row-start-auto">

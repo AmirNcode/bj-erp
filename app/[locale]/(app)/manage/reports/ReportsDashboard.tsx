@@ -341,7 +341,7 @@ export function ReportsDashboard({ data, months, capacity, locale }: Props) {
     <div className="flex flex-col gap-5" data-testid="reports-dashboard">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[12.5px] text-muted-foreground">{labels.breadcrumb}</p>
+          <p className="text-xs text-muted-foreground">{labels.breadcrumb}</p>
           <h1 className="text-2xl font-bold tracking-tight">{labels.title}</h1>
         </div>
         <div className={cn('flex flex-wrap items-center gap-2', isPending && 'opacity-70')}>
@@ -382,7 +382,7 @@ export function ReportsDashboard({ data, months, capacity, locale }: Props) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-base font-semibold">{labels.capacityTitle}</h2>
-                <p className="text-[13px] text-muted-foreground">{labels.capacitySub}</p>
+                <p className="text-13 text-muted-foreground">{labels.capacitySub}</p>
               </div>
               <span className="whitespace-nowrap text-sm font-semibold" dir="ltr">
                 {num(present)} / {num(headcount)}
@@ -432,7 +432,7 @@ export function ReportsDashboard({ data, months, capacity, locale }: Props) {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">{labels.absenceChartTitle}</h2>
-              <p className="text-[13px] text-muted-foreground">
+              <p className="text-13 text-muted-foreground">
                 {labels.absenceChartSub
                   .replace('{from}', fromMonth ? monthLabel(fromMonth) : data.rangeStart)
                   .replace('{to}', toMonth ? monthLabel(toMonth) : data.rangeEnd)}

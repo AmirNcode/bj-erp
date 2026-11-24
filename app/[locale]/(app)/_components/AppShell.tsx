@@ -37,7 +37,7 @@ type Props = {
 /**
  * Desktop: logo, nav, refresh, profile and the language switch all live in the
  * side panel. Mobile: a top bar (section name + logo) and the bottom tab bar.
- * A page that sets `data-wide` on an element (data tables) gets the full width.
+ * A page that sets `data-wide` on an element (data tables) gets the full width; every other page sits in the 1280px column.
  */
 export function AppShell({
   roles,
@@ -64,7 +64,7 @@ export function AppShell({
       {(viewAs || roles.includes('admin')) && <ViewAsTabSync />}
       <MobileTopBar locale={locale} appName={appName} />
       {/* The top bar takes the top safe-area inset; the bottom one is 0 outside the installed iPhone PWA. */}
-      <main className="mx-auto w-full max-w-6xl px-4 pt-5 has-[[data-wide]]:max-w-none pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
+      <main className="mx-auto w-full max-w-7xl px-4 pt-5 has-[[data-wide]]:max-w-none pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-8 md:py-7 md:pb-8">
         {myPending && <RequestOutcomeBanner pending={myPending} />}
         {children}
       </main>

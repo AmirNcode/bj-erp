@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatNumber } from '@/lib/i18n/format';
 import { cn } from '@/lib/utils';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import {
   daysHoursToMinutes,
   minutesToDaysHours,
@@ -78,7 +79,7 @@ export function DaysHoursField({
   return (
     <fieldset className="space-y-1">
       <legend className={legendClassName}>{label}</legend>
-      <div className="flex max-w-72 gap-2">
+      <div className={cn('flex gap-2', FIELD_W.dayHour)}>
         <div className="flex flex-1 items-center gap-1.5">
           <Input
             {...inputProps}
@@ -164,6 +165,7 @@ export function RoleCheckboxes({
   onChange,
   editable,
   adminHint,
+  hideLabel,
 }: {
   label: string;
   roles: RoleRow[];
@@ -173,13 +175,15 @@ export function RoleCheckboxes({
   /** Role ids the caller may toggle. */
   editable: readonly string[];
   adminHint: string;
+  /** Keep the label for screen readers only (the section heading already shows it). */
+  hideLabel?: boolean;
 }) {
   const t = useTranslations('manage.employees');
   const hasAdmin = roles.some((r) => r.systemKey === 'admin');
   const hasSecurity = roles.some((r) => r.systemKey === 'security');
   return (
     <div className="space-y-2">
-      <span className="block text-sm font-medium leading-none">{label}</span>
+      <span className={cn('block text-sm font-medium leading-none', hideLabel && 'sr-only')}>{label}</span>
       <div className="flex flex-wrap gap-2">
         {roles.map((role) => {
           const canToggle = role.systemKey !== 'admin' && editable.includes(role.id);

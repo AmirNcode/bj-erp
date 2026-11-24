@@ -91,7 +91,7 @@ keeps it; a write of `full_name` alone is split by `private.split_full_name`) ·
 (`fa-IR-x-icu`, not null) · `last_name` (`fa-IR-x-icu`, NULL = not split yet, first_name then holds the
 whole name; FR-83) ·
 `department_id → departments` · `manager_id → profiles` (self-FK, nullable) · `hire_date` ·
-`language_pref` (`fa|en`, default `fa`) · `calendar_pref` (`jalali` only, default `jalali`; retained
+`language_pref` (`fa|en`, default `fa`) · `font_step` (`smallint` 0..4, default 0, CHECK `profiles_font_step_range`; the person's own text-size step, labels 100%..140%; own-row or admin only) · `calendar_pref` (`jalali` only, default `jalali`; retained
 as a compatibility column while the UI has no calendar setting) ·
 `active bool` · `must_change_password bool` (default **true** for new rows: the account still uses
 an admin-issued password, FR-50; rows that existed on 2026-10-06 were set false) · `created_at`.

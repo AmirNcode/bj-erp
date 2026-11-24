@@ -244,11 +244,11 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
                       {formatRials(tripTotal(r), locale)} <span className="text-xs font-normal text-muted-foreground">{t('rials')}</span>
                     </span>
                   </div>
-                  <div className="text-[13px] text-muted-foreground">
+                  <div className="text-13 text-muted-foreground">
                     {r.personnel_no ? `${displayPersonnelNo(r.personnel_no, (n) => formatNumber(n, locale, { useGrouping: false }))} · ` : ''}
                     {dept(r)}
                   </div>
-                  <div className="text-[13px]">
+                  <div className="text-13">
                     {[typeName(r), r.errand_location, dates(r)].filter(Boolean).join(' · ')}
                   </div>
                   {r.status !== 'approved' || bookingOpen(r) || r.corrected_at ? (
@@ -266,7 +266,7 @@ export function FinanceList({ rows, from, to, locale, hoursPerDay }: Props) {
                       ))}
                     </dl>
                   )}
-                  <div className="flex items-center justify-between gap-3 text-[13px] text-muted-foreground">
+                  <div className="flex items-center justify-between gap-3 text-13 text-muted-foreground">
                     <span className="tabular-nums">{formatSerialLocalized(r.serial_year, r.serial_seq, locale)}</span>
                     {r.can_print && (
                       <Link href={`/${locale}/print/request/${r.id}`} target="_blank" rel="noopener" className="py-1 text-primary hover:underline">{t('viewForm')}</Link>

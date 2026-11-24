@@ -1,51 +1,14 @@
-/**
- * Profile › Account tab (FR-23, FR-96): language, password, then Logout.
- * One column, sized for password and language controls.
- */
+/** Old Account tab: language moved to Preferences, password + logout to Account security. */
 
 export const dynamic = 'force-dynamic';
 
-import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LanguageSwitch } from '../../_components/LanguageSwitch';
-import { ChangePasswordForm } from '../ChangePasswordForm';
-import { LogoutButton } from '../LogoutButton';
+import { redirect } from 'next/navigation';
 
 type Props = {
   params: Promise<{ locale: string }>;
 };
 
-export default async function AccountPage({ params }: Props) {
+export default async function AccountRedirect({ params }: Props) {
   const { locale } = await params;
-  setRequestLocale(locale);
-  const [t, tp] = await Promise.all([getTranslations('profile'), getTranslations('profile.password')]);
-
-  return (
-    <div className="w-full max-w-md">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="border-b pb-4">
-            <CardTitle>{t('preferences')}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">{t('language')}</p>
-              <LanguageSwitch locale={locale} testIdPrefix="settings-language" className="max-w-xs" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="border-b pb-4">
-            <CardTitle>{tp('title')}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <ChangePasswordForm />
-          </CardContent>
-        </Card>
-
-        <LogoutButton locale={locale} />
-      </div>
-    </div>
-  );
+  redirect(`/${locale}/profile/preferences`);
 }

@@ -28,7 +28,8 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
 import { EmptyState } from '@/components/EmptyState';
 import { displayPersonnelNo } from '@/lib/employees/code';
 import { formatNumber } from '@/lib/i18n/format';
@@ -65,12 +66,9 @@ export function AbsenceWatchersCard({ watchers, people, canEdit }: Props) {
   };
 
   return (
+    <FormSection title={t('title')} description={t('hint')}>
     <Card data-testid="absence-watchers-card">
-      <CardHeader>
-        <CardTitle>{t('title')}</CardTitle>
-      </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">{t('hint')}</p>
 
         {watchers.length === 0 ? (
           <EmptyState message={t('empty')} />
@@ -175,5 +173,6 @@ export function AbsenceWatchersCard({ watchers, people, canEdit }: Props) {
         )}
       </CardContent>
     </Card>
+    </FormSection>
   );
 }

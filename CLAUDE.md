@@ -180,7 +180,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Route handlers must build redirects as relative `Location` paths, never from `request.nextUrl`:** behind the gateway it holds the container origin (`https://0.0.0.0:3000`).
 - **`tests/e2e/view-as.spec.ts` runs only against the local Docker stack with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty:** otherwise the global setup rewrites the real admin's language and weekend settings.
 - **UI follows `docs/DESIGN.md` (Blueprint).** Every table gets `className="data-table"` (header band + row hover: mandatory); tabs come from `lib/ui/tabs.ts`, never pills; no `shadow-*`, no `rounded-[Npx]`, `rounded-full` only for circles.
-- **Full-width page = `data-wide` on the page's root element** (`AppShell` lifts `max-w-6xl`); never widen just the table.
+- **Pages sit in one 1280px column (`AppShell` `max-w-7xl`); `data-wide` on a page root lifts it, only for Employees list, Sales records list (`sales/page.tsx`), Finance** — never widen just the table; forms use `FormSection` + `FIELD_W`.
 - **Light only:** `dark:` utilities are dead (`@custom-variant dark` in `globals.css`); they once followed the OS and greyed inputs.
 - **Two blues:** `--sidebar` `#20409a` (logo blue: side panel, phone top bar) and `--primary` `#2E3C92` (buttons). The logo PNG's white is transparent: on blue it needs the white plate from `MainNav`.
 - **Phone titles:** `MobileTopBar` shows the section name, so top-level pages pass `section` to `PageHeader`; a new nav section needs a row in its `SECTIONS` list.
@@ -218,7 +218,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Docker VM disk (15 GB) fills with build cache** after repeated `compose build app`: `docker builder prune -f` frees it; a full disk makes Postgres refuse writes.
 - **`npm audit --omit=dev` is a CI gate** (`scripts/audit-gate.mjs`): a new advisory fails every deploy until upgraded (2026-11-16: next 16.4.3 → 16.4.6). Only an advisory with no fixed version may go on its `IGNORED` list, with a reason + a TASKS line (2026-11-18: picomatch GHSA-fc5q-39xc-vjpf).
 - **Test roles (FR-95): any `app_role` starting with `test-` (today `test-emp`) = `private.is_test_account`, which beats every other role** — own data only, no requests. A new function that lists colleagues or files on someone's behalf must check it.
-- **Own SMS mobile = `app_set_my_mobile` (FR-96), never the RLS update** (that needs `personal_info_own`). Profile is route tabs (`profile/layout.tsx`); language + password live on `/profile/account`, so e2e goes there.
+- **Own SMS mobile = `app_set_my_mobile` (FR-96), never the RLS update** (that needs `personal_info_own`). Profile is route tabs (`profile/layout.tsx`); language + text size live on `/profile/preferences`, password + log out on `/profile/security`, so e2e goes there.
 - **Sales branch works in worktree `/Users/amir/Workspace/bj-sales`** (main checkout stays on `main`). The `:3501` stack's DB (`bj-approvals-finance-db-1`, db `postgres`) already holds every Sales migration + main's; dry-run new Sales migrations on a clone of it, never on the DB itself until deploying the branch there.
 - **`:3501` runs two ways:** `.bj-deploy/approvals-finance/compose` builds from the main checkout (`main`); `.bj-deploy/approvals-finance/compose-sales` (same project, env, DB) builds from `../bj-sales` (Sales branch, adds the `sales-files` volume). Since 2026-11-20 it runs the Sales branch with migrations `20261120*` applied (pre-dump `pre-sales-ceo-*.dump`); going back to `main`'s app on it needs that dump restored first.
 - **Sales file uploads ride Node's default `requestTimeout` (300 s)**: a 50 MB upload needs ≥ ~170 KB/s. Next's standalone `server.js` only exposes `KEEP_ALIVE_TIMEOUT`; `request.body` streams in Node route handlers (no body limit).
@@ -226,6 +226,9 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Sales currencies come from `sales_currencies` (`boot.currencies`), never a constant; a code is permanent once used** (deactivate, don't delete). **Product defaults are copied into item rows on pick (`app_project_save_node`), never linked.**
 - **Sales View as = read-only transaction (writes fail `25006`); there is no `private.view_as_active()`.** Route handlers refuse writes when the `bj-view-as` cookie exists; client components use `useViewAs()`.
 - **New `sales_events` kinds need the `sales_events_kind_check` constraint re-created** and a case in `ActivityLog`.
+- **Text size per person:** `--font-step` is set by `(app)/layout.tsx` `<FontStepStyle>` from `profiles.font_step` via `getOwnFontStep()` (real identity, so View as keeps the admin's); `--font-scale` derives in `globals.css` (same scale for Farsi and English (owner, 2026-11-23 round 2)); text tokens scale, so never write `text-[Npx]` (unit guard); `.font-scale-scope` for previews; print pins 1.
+- **Fields grow with large text:** an unlayered `min-height: calc(1lh + 0.625rem)` on input/select in `globals.css` beats `h-*` classes, so a field is never shorter than its own text.
+- **Fields stay ≥ 16px on touch screens (no iPhone zoom):** one unlayered `@media (pointer: coarse)` rule in `globals.css` sets `font-size: max(16px, var(--text-base))` on input/select/textarea; never shrink a field below it with a class, never add `maximum-scale`/`user-scalable=no`.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

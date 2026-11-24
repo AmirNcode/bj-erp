@@ -61,7 +61,7 @@ export function LanguageSwitch({ locale, testIdPrefix = 'nav-lang', onDark, clas
             data-testid={`${testIdPrefix}-${opt.value}`}
             onClick={() => choose(opt.value)}
             className={cn(
-              'h-8 whitespace-nowrap text-[13px] underline-offset-[6px] transition-colors disabled:opacity-60',
+              'h-8 whitespace-nowrap text-13 underline-offset-[6px] transition-colors disabled:opacity-60',
               active && 'font-semibold underline decoration-2',
               onDark
                 ? active ? 'text-white' : 'text-white/70 hover:text-white'

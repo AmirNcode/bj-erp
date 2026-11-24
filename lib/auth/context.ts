@@ -33,7 +33,7 @@ import { getViewAs } from '@/lib/auth/viewAs';
 export type AuthUser = { id: string; email?: string };
 
 /** Locally verified JWT claims (or null), computed at most once per request. */
-const getCachedClaims = cache(async () => {
+export const getCachedClaims = cache(async () => {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   if (error || !data?.claims?.sub) return null;

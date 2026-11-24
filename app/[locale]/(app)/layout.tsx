@@ -13,7 +13,9 @@ import { parsePermsClaim, type Perms } from '@/lib/permissions/catalog';
 import { createClient } from '@/lib/supabase/server';
 import { getPendingApprovals } from '@/lib/actions/leave/approvals';
 import { getMyPendingRequests } from '@/lib/actions/leave/outcomes';
+import { getOwnFontStep } from '@/lib/prefs/fontStep.server';
 import { AppShell } from './_components/AppShell';
+import { FontStepStyle } from './_components/FontStepStyle';
 
 type Props = {
   children: React.ReactNode;
@@ -30,11 +32,12 @@ export default async function AppLayout({ children, params }: Props) {
     redirect(`/${locale}/login`);
   }
 
-  const [roles, profile, perms, capabilities] = await Promise.all([
+  const [roles, profile, perms, capabilities, fontStep] = await Promise.all([
     getCachedRoles(user.id),
     getCachedProfile(user.id),
     getCachedPermissions(user.id),
     getApprovalCapabilities(),
+    getOwnFontStep(),
   ]);
   if (!profile?.active) {
     redirect(`/${locale}/login`);
@@ -92,22 +95,25 @@ export default async function AppLayout({ children, params }: Props) {
     .catch(() => []);
 
   return (
-    <AppShell
-      roles={roles}
-      perms={perms}
-      canApprove={canApprove}
-      canDelegate={capabilities.canDelegate}
-      hasReports={capabilities.hasReports}
-      absencesPage={capabilities.absencesPage}
-      timeOff={capabilities.timeOff}
-      locale={locale}
-      appName={t('appName')}
-      profile={profileSummary}
-      pendingCount={pendingCount}
-      myPending={myPending}
-      viewAs={view ? { name: view.name, personnelNo: view.personnelNo, expiresAt: view.expiresAt } : null}
-    >
-      {children}
-    </AppShell>
+    <>
+      <FontStepStyle step={fontStep} />
+      <AppShell
+        roles={roles}
+        perms={perms}
+        canApprove={canApprove}
+        canDelegate={capabilities.canDelegate}
+        hasReports={capabilities.hasReports}
+        absencesPage={capabilities.absencesPage}
+        timeOff={capabilities.timeOff}
+        locale={locale}
+        appName={t('appName')}
+        profile={profileSummary}
+        pendingCount={pendingCount}
+        myPending={myPending}
+        viewAs={view ? { name: view.name, personnelNo: view.personnelNo, expiresAt: view.expiresAt } : null}
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }

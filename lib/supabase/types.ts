@@ -1149,6 +1149,7 @@ export type Database = {
           department_id: string | null
           employee_code: string
           first_name: string
+          font_step: number
           full_name: string
           last_name: string | null
           hire_date: string | null
@@ -1167,6 +1168,7 @@ export type Database = {
           department_id?: string | null
           employee_code: string
           first_name?: string
+          font_step?: number
           full_name?: string
           last_name?: string | null
           hire_date?: string | null
@@ -1185,6 +1187,7 @@ export type Database = {
           department_id?: string | null
           employee_code?: string
           first_name?: string
+          font_step?: number
           full_name?: string
           last_name?: string | null
           hire_date?: string | null

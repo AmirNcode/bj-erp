@@ -107,7 +107,7 @@ export default async function CalendarPage({ params, searchParams }: Props) {
   const t = await getTranslations('calendar');
 
   return (
-    <main className="p-6 max-w-3xl mx-auto">
+    <main className="px-3 py-6 sm:p-6 max-w-3xl mx-auto">
       <PageHeader section title={t('title')} />
       <Suspense fallback={<ListSkeleton count={4} />}>
         <CalendarData locale={locale} month={month} />

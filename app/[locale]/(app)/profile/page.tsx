@@ -41,7 +41,7 @@ export default async function ProfilePage({ params }: Props) {
   ]);
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="space-y-4">
       {/* Photo (FR-82) and name/code share one tile, each half of it. */}
       <Card>
         <CardContent className="grid gap-4 pt-2 md:grid-cols-2 md:items-center">

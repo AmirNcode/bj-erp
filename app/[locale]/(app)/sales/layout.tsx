@@ -31,7 +31,7 @@ export default async function SalesLayout({ children, params }: Props) {
 
   return (
     <NextIntlClientProvider messages={messages}>
-      <div data-wide className="flex w-full flex-col gap-4">
+      <div className="flex w-full flex-col gap-4">
         <PageHeader section title={t('title')} action={<NodeSearch />} />
         <SalesTabs reports={boot.caps.reports} settings={boot.caps.settings} />
         <SalesCurrenciesProvider currencies={boot.currencies}>{children}</SalesCurrenciesProvider>

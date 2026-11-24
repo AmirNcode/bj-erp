@@ -30,7 +30,9 @@ import type { RoleRow } from '@/lib/actions/roles-helpers';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -88,6 +90,7 @@ function useLabels() {
     adminTransferHint: t('employees.adminTransferHint'),
     hireDate: t('employees.hireDate'),
     jobTitle: t('employees.jobTitle'),
+    jobSection: t('employees.jobSection'),
     save: t('employees.save'),
     cancel: t('employees.cancel'),
     resetPwd: t('employees.resetPwd'),
@@ -187,7 +190,7 @@ export function EditEmployeeForm({
   locale,
 }: Props) {
   const [tab, setTab] = useState('personal');
-  const tPersonal = useTranslations('personalInfo');
+  const tPhoto = useTranslations('profile.photo');
   const personalEditor = usePersonalInfoEditor(employee.id, personalInfo);
   const canSaveInfo = personalInfo !== null && caps.personalInfo === 'edit';
   const labels = useLabels();
@@ -421,7 +424,7 @@ export function EditEmployeeForm({
 
   function saveButtons(editable: boolean, testId: string) {
     return (
-      <div className="flex gap-3 pt-2">
+      <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
         {editable && (
           <Button type="submit" disabled={pending} data-testid={testId}>
             {pending ? '...' : labels.save}
@@ -479,13 +482,13 @@ export function EditEmployeeForm({
           {labels.saved}
         </p>
       )}
-      <Tabs.Content value="personal" forceMount hidden={tab !== 'personal'} className="max-w-5xl space-y-5">
-        {photo}
-        <form onSubmit={savePersonal} className="space-y-5">
-          <Card>
-            <CardContent className="space-y-5 pt-6">
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-1.5">
+      <Tabs.Content value="personal" forceMount hidden={tab !== 'personal'}>
+        {photo && <FormSection title={tPhoto('title')}>{photo}</FormSection>}
+        <form onSubmit={savePersonal}>
+          <FormSection title={labels.jobSection}>
+            <Card className="p-4">
+              <div className="flex flex-wrap gap-x-4 gap-y-4">
+                <div className={`space-y-1.5 ${FIELD_W.name}`}>
                   <Label htmlFor="first_name">{labels.firstName}</Label>
                   <Input
                     id="first_name"
@@ -497,7 +500,7 @@ export function EditEmployeeForm({
                     disabled={!caps.name}
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className={`space-y-1.5 ${FIELD_W.name}`}>
                   <Label htmlFor="last_name">{labels.lastName}</Label>
                   <Input
                     id="last_name"
@@ -506,7 +509,7 @@ export function EditEmployeeForm({
                     disabled={!caps.name}
                   />
                 </div>
-                <div className="w-full max-w-48 space-y-1.5">
+                <div className={`space-y-1.5 ${FIELD_W.date}`}>
                   <Label htmlFor="hire_date">{labels.hireDate}</Label>
                   <PersianDateField
                     id="hire_date"
@@ -524,7 +527,7 @@ export function EditEmployeeForm({
                     does not see them. */}
                 {view.orgBlock && (
                   <>
-                    <div className="space-y-1.5">
+                    <div className={`space-y-1.5 ${FIELD_W.name}`}>
                       <Label htmlFor="job_title">{labels.jobTitle}</Label>
                       <Input
                         id="job_title"
@@ -536,7 +539,7 @@ export function EditEmployeeForm({
                     </div>
 
                     {/* Native <select> — must stay native for Playwright selectOption e2e */}
-                    <div className="space-y-1.5">
+                    <div className={`space-y-1.5 ${FIELD_W.shortSelect}`}>
                       <Label htmlFor="department_id">{labels.department}</Label>
                       <select
                         id="department_id"
@@ -554,7 +557,7 @@ export function EditEmployeeForm({
                       </select>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className={`space-y-1.5 ${FIELD_W.name}`}>
                       <Label htmlFor="manager_id">{labels.manager}</Label>
                       <PersonSearch
                         id="manager_id"
@@ -566,55 +569,49 @@ export function EditEmployeeForm({
                         testId="manager-search"
                       />
                     </div>
-
                   </>
                 )}
               </div>
+            </Card>
+          </FormSection>
 
-              {/* Roles: shown with the org fields, and to a role assigner who
-                  cannot edit them (role_assign needs only people read). */}
-              {view.rolesBlock && (
+          {/* Roles: shown with the org fields, and to a role assigner who
+              cannot edit them (role_assign needs only people read). */}
+          {view.rolesBlock && (
+            <FormSection title={labels.roles}>
+              <Card className="p-4">
                 <RoleCheckboxes
                   label={labels.roles}
+                  hideLabel
                   roles={allRoles}
                   selected={selectedRoleIds}
                   onChange={setSelectedRoleIds}
                   editable={caps.editableRoleIds}
                   adminHint={labels.adminTransferHint}
                 />
-              )}
-
-            </CardContent>
-          </Card>
+              </Card>
+            </FormSection>
+          )}
           {personalInfo && (
-            <Card data-testid="employee-personal-info">
-              <CardHeader className="border-b pb-4">
-                <CardTitle>{tPersonal('title')}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <PersonalInfoFields editor={personalEditor} readOnly={!canSaveInfo}
-                  readOnlyReason={caps.lockedReason === 'self' ? 'self' : 'admin'} />
-              </CardContent>
-            </Card>
+            <div data-testid="employee-personal-info">
+              <PersonalInfoFields editor={personalEditor} readOnly={!canSaveInfo}
+                readOnlyReason={caps.lockedReason === 'self' ? 'self' : 'admin'} />
+            </div>
           )}
           {saveButtons(caps.profile || caps.name || caps.org || caps.editableRoleIds.length > 0 || canSaveInfo, 'edit-save')}
         </form>
       </Tabs.Content>
 
-      <Tabs.Content value="leave" forceMount hidden={tab !== 'leave'} className="grid max-w-7xl items-start gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <Tabs.Content value="leave" forceMount hidden={tab !== 'leave'} >
         {canManageLeave && balances.length > 0 && (
-          <Card>
-            <CardContent className="pt-6">
-              <form onSubmit={saveLeave} className="space-y-5">
-                <fieldset disabled={!canSaveLeave} className="space-y-5">
+          <form onSubmit={saveLeave}>
+            <fieldset disabled={!canSaveLeave}>
 
                   {/* FR-85: quick add and history. */}
                   {balances.length > 0 && (
-                    <div
-                      className="space-y-3 rounded-lg border border-border bg-secondary/40 p-4"
-                      data-testid="quick-add-section"
-                    >
-                      <span className="block text-sm font-semibold">{t('quickAdd.title')}</span>
+                    <FormSection title={t('quickAdd.title')}>
+                    <Card className="p-4">
+                    <div className="space-y-3" data-testid="quick-add-section">
                       {canSaveLeave && (
                         <BalanceQuickAdd
                           employeeId={employee.id}
@@ -634,14 +631,18 @@ export function EditEmployeeForm({
                       )}
                       <BalanceHistory employeeId={employee.id} balances={balances} hoursPerDay={hoursPerDay} />
                     </div>
+                    </Card>
+                    </FormSection>
                   )}
 
                   {/* Collapsed with <details> so the closed fields stay in the DOM: the
                       form reads them from FormData on Save. An invalid field opens its
                       section, since the browser cannot focus a hidden input. */}
                   {balances.length > 0 && (
+                    <FormSection title={labels.balancesTitle}>
+                    <Card className="p-4">
                     <details
-                      className="group rounded-lg border border-border bg-secondary/40 p-4"
+                      className="group"
                       data-testid="balances-section"
                       open={openSections.balances}
                       onToggle={(e) => {
@@ -653,11 +654,11 @@ export function EditEmployeeForm({
                       <summary className="flex cursor-pointer list-none items-start gap-2">
                         <ChevronDown aria-hidden="true" className="mt-0.5 size-4 shrink-0 transition-transform group-open:rotate-180" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-semibold">{labels.balancesTitle}</span>
+                          <span className="sr-only">{labels.balancesTitle}</span>
                           {balances.map((balance) => (
                             <span
                               key={balance.leaveTypeId}
-                              className="mt-0.5 block text-xs text-muted-foreground"
+                              className="block text-xs text-muted-foreground"
                               data-testid={`balance-total-${leaveTypeSlug(balance)}`}
                             >
                               {locale === 'fa' ? balance.name_fa : balance.name_en ?? balance.name_fa}:{' '}
@@ -708,11 +709,15 @@ export function EditEmployeeForm({
                         })}
                       </div>
                     </details>
+                    </Card>
+                    </FormSection>
                   )}
 
                   {balances.length > 0 && policies !== null && (
+                    <FormSection title={labels.policyTitle} description={labels.policyHint}>
+                    <Card className="p-4">
                     <details
-                      className="group rounded-lg border border-border bg-secondary/40 p-4"
+                      className="group"
                       data-testid="policy-section"
                       open={openSections.policy}
                       onToggle={(e) => {
@@ -723,10 +728,9 @@ export function EditEmployeeForm({
                     >
                       <summary className="flex cursor-pointer list-none items-center gap-2">
                         <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
-                        <span className="block text-sm font-semibold">{labels.policyTitle}</span>
+                        <span className="sr-only">{labels.policyTitle}</span>
                       </summary>
                       <div className="mt-3 space-y-3">
-                        <p className="text-sm text-muted-foreground">{labels.policyHint}</p>
                         {balances.map((balance) => {
                           const slug = leaveTypeSlug(balance);
                           const label =
@@ -748,19 +752,21 @@ export function EditEmployeeForm({
                         })}
                       </div>
                     </details>
+                    </Card>
+                    </FormSection>
                   )}
-                </fieldset>
-                {saveButtons(canSaveLeave, 'leave-save')}
-              </form>
-            </CardContent>
-          </Card>
+            </fieldset>
+            {saveButtons(canSaveLeave, 'leave-save')}
+          </form>
         )}
         {specialLeave}
       </Tabs.Content>
-      <Tabs.Content value="account" className="max-w-2xl space-y-5">
+      <Tabs.Content value="account">
+        <FormSection title={t('accountActions')}>
+        <div className="space-y-4">
         {newTempPassword && (
-          <Card className="border-2 border-success/30 bg-success-foreground">
-            <CardContent className="space-y-2 pt-4">
+          <Card className="border-2 border-success/30 bg-success-foreground p-4">
+            <div className="space-y-2">
               <p className="text-sm font-semibold text-success">{labels.tempPasswordLabel}</p>
               <CopyPassword key={newTempPassword} password={newTempPassword} />
               <p className="text-xs text-success">{labels.tempPasswordHint}</p>
@@ -769,16 +775,13 @@ export function EditEmployeeForm({
                   {{ queued: labels.smsQueued, skipped: labels.smsSkipped, off: labels.smsOff, failed: labels.smsFailed }[passwordSms]}
                 </p>
               )}
-            </CardContent>
+            </div>
           </Card>
         )}
 
         {(caps.resetPassword || caps.org) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">{t('accountActions')}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-3">
+          <Card className="p-4">
+            <div className="flex flex-wrap gap-3">
               {caps.resetPassword && (employee.active || caps.signOutEverywhere) && (
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
@@ -863,9 +866,11 @@ export function EditEmployeeForm({
                   {labels.activate}
                 </Button>
               )}
-            </CardContent>
+            </div>
           </Card>
         )}
+        </div>
+        </FormSection>
       </Tabs.Content>
     </Tabs.Root>
   );

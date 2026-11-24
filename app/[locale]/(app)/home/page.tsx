@@ -309,7 +309,7 @@ async function HomeBoardData({
     <div className="flex flex-col gap-5" data-testid="home-board">
       {canApprove && <NewRequestsBanner currentIds={pending.map((r) => r.id)} />}
       <div>
-        <p className="text-[13px] text-muted-foreground">
+        <p className="text-13 text-muted-foreground">
           {formatCalendarDate(today, locale, 'dddd D MMMM YYYY')}
         </p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight">

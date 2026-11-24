@@ -19,7 +19,8 @@ import { marriageOffer } from '@/lib/employees/specialLeave';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
 import type { DbErrorResult } from '@/lib/errors/db-error';
 
 type Props = {
@@ -77,11 +78,8 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
   };
 
   return (
+    <FormSection title={t('title')} description={t('intro')}>
     <Card data-testid="special-leave">
-      <CardHeader className="border-b pb-4">
-        <CardTitle>{t('title')}</CardTitle>
-        <p className="text-sm text-muted-foreground">{t('intro')}</p>
-      </CardHeader>
       <CardContent className="space-y-5 pt-4">
         <div className="space-y-1">
           <label className="flex items-center gap-2 text-sm font-medium">
@@ -208,5 +206,6 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
         )}
       </CardContent>
     </Card>
+    </FormSection>
   );
 }

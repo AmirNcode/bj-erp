@@ -22,7 +22,7 @@ import { dateObjectToGregorian, gregorianToPersianDateObject } from '@/lib/leave
 import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 import type { DeadlineState } from '@/lib/sales/deadlines';
-import { currencyLabel, formatMoney } from '@/lib/sales/money';
+import { currencyLabel, formatCompactMoney, formatMoney } from '@/lib/sales/money';
 import type { CustomValues, Currency, FieldDef, Person, Product, Stage } from '@/lib/sales/types';
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -220,6 +220,8 @@ export function useSalesFormat() {
     number: (n: number | null | undefined) => (typeof n === 'number' ? formatNumber(n, locale) : '—'),
     money: (n: number | null | undefined, currency: string | null | undefined) =>
       formatMoney(n, currency, currencies, locale),
+    /** Compact amount for the metric tiles (207.5B €); the exact value goes in `money`. */
+    compactMoney: (n: number, currency: string) => formatCompactMoney(n, currency, currencies, locale),
     percent: (fraction: number | null | undefined) =>
       typeof fraction === 'number' ? `${formatNumber(fraction * 100, locale)}${locale === 'fa' ? '٪' : '%'}` : '—',
     recordNo: (n: number) => String(n),

@@ -32,7 +32,7 @@ export default async function HelpPage({ params }: Props) {
                   {t(`${guide.messageKey}.description`)}
                 </span>
                 {guide.lang !== locale && (
-                  <span className="mt-1.5 inline-block rounded-sm bg-muted px-2 text-[11.5px] text-muted-foreground">
+                  <span className="mt-1.5 inline-block rounded-sm bg-muted px-2 text-11 text-muted-foreground">
                     {t('persianOnly')}
                   </span>
                 )}

@@ -113,12 +113,12 @@ export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filter
                   <div className="min-w-0">
                     <div className="flex flex-col items-center gap-1.5 md:flex-row md:gap-2.5">
                       <PersonAvatar id={r.employee_id} name={r.employee_name} />
-                      <div className="min-w-0 max-w-full truncate text-[15px] font-semibold">
+                      <div className="min-w-0 max-w-full truncate text-15 font-semibold">
                         <bdi>{r.employee_name}</bdi>
                       </div>
                       <span className="text-xs tabular-nums text-muted-foreground" dir="ltr">{r.personnel_no ?? '—'}</span>
                     </div>
-                    <div className="mt-3 space-y-1 text-[13px] text-muted-foreground">
+                    <div className="mt-3 space-y-1 text-13 text-muted-foreground">
                       <p className="text-sm text-foreground">{describe(r)}</p>
                       {r.kind === 'errand' && r.errand_location && <p>{r.errand_location}</p>}
                       {dept && <p>{dept}</p>}

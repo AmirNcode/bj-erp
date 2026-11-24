@@ -3,6 +3,13 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-97 UI readability and layout (built 2026-11-23 on `claude/ui-readability-layout`, local only)
+
+- [ ] **Run the touched e2e specs on an isolated/demo stack** (`touch-fields`, `settings`, `password`, `view-as`, `admin-settings`, `holiday-import`, `hr-role`, `approval-step-person`): not run, because global-setup rewrites the admin's language and weekend settings on the real-roster DB (`:3501`).
+- [ ] Remove the `GHSA-fc5q-39xc-vjpf` (picomatch) entry from `IGNORED` in `scripts/audit-gate.mjs`: the audit no longer reports it.
+- [ ] Admin › SMS: consider merging the "First line" and "Last line" sections into one.
+- [ ] Owner: review the uncommitted fix set F1–F6 (see `docs/AGENT-LOG.md`), then commit, PR, merge.
+
 ## FR-96 profile tabs + self-service mobile (merged 2026-11-19)
 
 - [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `password`, `view-as` specs were edited for the new tabs but never run; the local test account's password does not match the local DB): screens checked on a temporary no-login page only. Owner: on bjeng.app, set a mobile on Profile and confirm an SMS arrives.

@@ -35,7 +35,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { FormSection } from '@/components/FormSection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -228,13 +229,9 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
   };
 
   return (
+    <FormSection title={labels.title} description={labels.hint}>
     <Card data-testid="approval-steps-card">
-      <CardHeader>
-        <CardTitle>{labels.title}</CardTitle>
-      </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">{labels.hint}</p>
-
         {steps.length === 0 ? (
           <EmptyState message={labels.empty} />
         ) : (
@@ -434,5 +431,6 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
         )}
       </CardContent>
     </Card>
+    </FormSection>
   );
 }

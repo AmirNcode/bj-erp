@@ -9,6 +9,15 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### UI readability and desktop layout (FR-97) — 2026-11-23, branch `claude/ui-readability-layout`
+
+- Fields never trigger the iPhone zoom: on touch screens every input, select and textarea is at least 16px, in portrait and landscape.
+- **Text size** (Profile › Preferences): five steps, 100–140 %, with a live sample; saved on your profile and used on every device. Same scale for Farsi and English (100 % is the original size). Text only, layout stays; View as keeps the admin's own size; printouts never scale. Fields grow with large text instead of clipping it.
+- Profile tabs are now **Profile · Personal info · Preferences · Account security** (language and text size on Preferences; password and Log out on Account security). Old `/profile/account` links open Preferences.
+- Desktop pages sit in one centred 1280px column; only the Employees list, the Sales records list and Finance use the full width. Settings, Roles, Admin, Approval steps, Edit Employee and Profile forms use annotated sections (title and explanation beside the fields) with fixed field widths.
+- Phones at large text: bottom tab labels truncate instead of overflowing; Employees names wrap; duplicate titles removed from Edit Employee.
+- Migration `20261123140000_profile_font_step`. Spec `docs/specs/2026-11-23-ui-readability-layout-design.md`.
+
 ### ERP › Sales: Delete / Archive a record (FR-94) — 2026-11-23, branch `feat/erp-sales-module`
 
 - **Delete / Archive** button on the record page (admin only). The dialog offers **Archive** (record moves to the Archived stage, closed) or **Delete** (record hidden from lists, reports, metrics, customers, deadlines and searches), then Confirm or Cancel.

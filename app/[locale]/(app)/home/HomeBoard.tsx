@@ -129,12 +129,12 @@ function PulseCard({
         tinted ? 'border-primary/30 bg-secondary transition-colors hover:bg-primary/10' : 'bg-card'
       )}
     >
-      <p className={cn('text-[13px]', tinted ? 'font-semibold text-primary' : 'text-muted-foreground')}>
+      <p className={cn('text-13', tinted ? 'font-semibold text-primary' : 'text-muted-foreground')}>
         {label}
       </p>
       <p
         className={cn(
-          'mt-1 text-[28px] font-bold leading-tight',
+          'mt-1 text-3xl font-bold leading-tight',
           tinted && 'text-secondary-foreground'
         )}
       >
@@ -344,20 +344,20 @@ export function HomeBoard({
                   aria-hidden="true"
                   className="w-14 shrink-0 overflow-hidden rounded-md border text-center"
                 >
-                  <div className="truncate bg-primary px-1 py-0.5 text-[11px] text-primary-foreground">
+                  <div className="truncate bg-primary px-1 py-0.5 text-11 text-primary-foreground">
                     {nextHoliday.month}
                   </div>
-                  <div className="py-1 text-[22px] font-bold leading-tight">{nextHoliday.day}</div>
+                  <div className="py-1 text-2xl font-bold leading-tight">{nextHoliday.day}</div>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[12.5px] text-muted-foreground">{labels.nextHolidayTitle}</p>
+                  <p className="text-xs text-muted-foreground">{labels.nextHolidayTitle}</p>
                   <p className="font-semibold">{nextHoliday.name}</p>
                   <p className="text-xs text-muted-foreground">{nextHoliday.when}</p>
                 </div>
               </>
             ) : (
               <div>
-                <p className="text-[12.5px] text-muted-foreground">{labels.nextHolidayTitle}</p>
+                <p className="text-xs text-muted-foreground">{labels.nextHolidayTitle}</p>
                 <p className="text-sm text-muted-foreground">{labels.noHoliday}</p>
               </div>
             )}
@@ -365,7 +365,7 @@ export function HomeBoard({
 
           {alternating.length > 0 && (
             <Card className="gap-3 px-5 py-5" data-testid="home-alternating-day-off">
-              <h2 className="text-[12.5px] text-muted-foreground">{labels.alternatingTitle}</h2>
+              <h2 className="text-xs text-muted-foreground">{labels.alternatingTitle}</h2>
               <ul className="space-y-3">
                 {alternating.map((d) => (
                   <li key={d.weekday} data-testid={`home-alternating-${d.weekday}`} className="flex gap-2.5">

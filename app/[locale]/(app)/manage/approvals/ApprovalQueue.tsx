@@ -149,7 +149,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                   <div className="min-w-0">
                     <div className="flex flex-col items-center gap-1.5 md:flex-row md:gap-2.5">
                       <PersonAvatar id={req.employee_id} name={req.employee_name} />
-                      <div className="min-w-0 max-w-full truncate text-[15px] font-semibold text-foreground">
+                      <div className="min-w-0 max-w-full truncate text-15 font-semibold text-foreground">
                         <bdi>{req.employee_name}</bdi>
                       </div>
                       <div className="flex items-center gap-2">
@@ -158,7 +158,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                             never reads one as a leave request. */}
                         {req.kind === 'errand' && (
                           <span
-                            className="inline-flex shrink-0 items-center rounded-sm bg-secondary px-1.5 py-0.5 text-[11px] font-semibold text-primary"
+                            className="inline-flex shrink-0 items-center rounded-sm bg-secondary px-1.5 py-0.5 text-11 font-semibold text-primary"
                             data-testid={`errand-badge-${req.id}`}
                           >
                             {labels.errandBadge}
@@ -167,7 +167,7 @@ export function ApprovalQueue({ requests, locale, hoursPerDay }: Props) {
                       </div>
                     </div>
 
-                    <div className="mt-3 space-y-1 text-[13px] text-muted-foreground">
+                    <div className="mt-3 space-y-1 text-13 text-muted-foreground">
                       {req.kind === 'errand' ? (
                         <div className="text-sm text-foreground" data-testid={`errand-location-${req.id}`}>
                           {labels.errandLocation}: {req.errand_location ?? '—'}

@@ -54,6 +54,8 @@ function useLabels() {
     offOn: t('offOn'),
     noOffThisDay: t('noOffThisDay'),
     returns: t('returns'),
+    // ISO weekday order: Monday … Sunday.
+    weekdayShort: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((k) => t(`weekdayShort.${k}`)),
     statusPending: tLeave('status.pending'),
     statusApproved: tLeave('status.approved'),
     approve: tApprovals('approve'),
@@ -239,6 +241,7 @@ export function CalendarView({
   nextHref,
 }: Props) {
   const labels = useLabels();
+  const isFa = locale !== 'en';
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   // Ids decided in this session — hides the buttons instantly; router.refresh()
@@ -327,11 +330,24 @@ export function CalendarView({
         className="grid gap-1 text-center text-xs font-semibold text-muted-foreground"
         style={sevenColumnGridStyle}
       >
-        {month.weekdayLabels.map((label) => (
-          <div key={label} className="py-1">
-            {label}
-          </div>
-        ))}
+        {month.weekdayLabels.map((label, i) => {
+          const day = month.weekdays[i];
+          const short = labels.weekdayShort[day.isoDay - 1];
+          return (
+            <div key={day.isoDay} className="py-1" title={day.longName}>
+              {/* aria-label is ignored on a plain div, so the full name is sr-only text. */}
+              <span className="sr-only">{day.longName}</span>
+              {isFa ? (
+                <span aria-hidden="true">{short}</span>
+              ) : (
+                <>
+                  <span aria-hidden="true" className="sm:hidden">{short}</span>
+                  <span aria-hidden="true" className="hidden sm:inline">{label}</span>
+                </>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div
@@ -361,16 +377,16 @@ export function CalendarView({
               selectedDay?.iso === day.iso && 'ring-2 ring-primary ring-offset-2'
             )}
           >
-            <span className="text-[11px] font-semibold sm:text-xs">{day.dayLabel}</span>
+            <span className="text-11 font-semibold sm:text-xs">{day.dayLabel}</span>
             {day.count > 0 && (
               <span
                 data-testid={`calendar-day-count-${day.iso}`}
-                className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[9px] font-semibold text-primary-foreground sm:end-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-[10px]"
+                className="absolute end-0.5 top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-10 font-semibold text-primary-foreground sm:end-1 sm:top-1 sm:min-w-5 sm:px-1.5 sm:text-10"
               >
                 {formatNumber(day.count, locale)}
               </span>
             )}
-            <span className="mt-2 flex min-w-0 flex-col gap-0.5 text-[9px] leading-tight sm:mt-4 sm:text-xs">
+            <span className="mt-2 flex min-w-0 flex-col gap-0.5 text-10 leading-tight sm:mt-4 sm:text-xs">
               {day.visibleNames.map((name) => (
                 <span key={name} className="truncate">
                   {name}

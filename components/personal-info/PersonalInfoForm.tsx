@@ -26,6 +26,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { FormSection, FORM_SECTION_END_COL } from '@/components/FormSection';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 
 type Props = {
   employeeId: string;
@@ -36,6 +39,23 @@ type Props = {
 };
 
 const LTR_KINDS = new Set(['digits', 'sheba', 'date', 'count']);
+
+/** Desktop width of a field's column (docs/DESIGN.md › Page layout and forms). */
+function fieldWidth(field: PersonalInfoField) {
+  switch (field.kind) {
+    case 'choice':
+      return FIELD_W.shortSelect;
+    case 'date':
+      return FIELD_W.date;
+    case 'count':
+      return FIELD_W.number;
+    case 'sheba':
+    case 'longtext':
+      return FIELD_W.notes;
+    default:
+      return FIELD_W.name;
+  }
+}
 
 export function usePersonalInfoEditor(employeeId: string, initial: PersonalInfoValues | null) {
   const t = useTranslations('personalInfo');
@@ -119,35 +139,36 @@ export function PersonalInfoFields({ editor, readOnly, readOnlyReason }: {
   };
 
   return (
-    <div className="space-y-6">
+    <div>
       {readOnly && (
-        <p className="text-sm text-muted-foreground" data-testid="personal-info-read-only">
+        <p className="py-2 text-sm text-muted-foreground" data-testid="personal-info-read-only">
           {readOnlyReason === 'self' ? t('readOnlySelf') : t('readOnly')}
         </p>
       )}
       {PERSONAL_INFO_GROUPS.map((group) => (
-        <fieldset key={group} className="space-y-3">
-          <legend className="mb-2 text-sm font-semibold">{t(`groups.${group}`)}</legend>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {PERSONAL_INFO_FIELDS.filter((f) => f.group === group).map((field) => (
-              <div key={field.key} className={field.kind === 'longtext' ? 'w-full max-w-xl space-y-1.5 sm:col-span-full' : 'space-y-1.5'}>
-                <Label htmlFor={`pi-${field.key}`}>{t(`fields.${field.key}`)}</Label>
-                {input(field)}
-                {problems[field.key] ? (
-                  <p id={`pi-${field.key}-problem`} className="text-xs text-destructive" role="alert">
-                    {t(`problems.${problems[field.key]}`)}
-                  </p>
-                ) : t.has(`hints.${field.key}`) ? (
-                  <p id={`pi-${field.key}-hint`} className="text-xs text-muted-foreground">
-                    {t(`hints.${field.key}`)}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </fieldset>
+        <FormSection key={group} title={t(`groups.${group}`)}>
+          <Card className="p-4">
+            <fieldset className="flex flex-wrap gap-x-4 gap-y-4">
+              <legend className="sr-only">{t(`groups.${group}`)}</legend>
+              {PERSONAL_INFO_FIELDS.filter((f) => f.group === group).map((field) => (
+                <div key={field.key} className={`space-y-1.5 ${fieldWidth(field)}`}>
+                  <Label htmlFor={`pi-${field.key}`}>{t(`fields.${field.key}`)}</Label>
+                  {input(field)}
+                  {problems[field.key] ? (
+                    <p id={`pi-${field.key}-problem`} className="text-xs text-destructive" role="alert">
+                      {t(`problems.${problems[field.key]}`)}
+                    </p>
+                  ) : t.has(`hints.${field.key}`) ? (
+                    <p id={`pi-${field.key}-hint`} className="text-xs text-muted-foreground">
+                      {t(`hints.${field.key}`)}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </fieldset>
+          </Card>
+        </FormSection>
       ))}
-
     </div>
   );
 }
@@ -167,21 +188,25 @@ export function PersonalInfoForm({ employeeId, initial, readOnly, readOnlyReason
     });
   }
   return (
-    <form onSubmit={onSubmit} onChange={() => setStatus(null)} className="space-y-6" data-testid="personal-info-form" noValidate>
+    <form onSubmit={onSubmit} onChange={() => setStatus(null)} data-testid="personal-info-form" noValidate>
       <PersonalInfoFields editor={editor} readOnly={readOnly} readOnlyReason={readOnlyReason} />
-      {status && (
-        <p
-          role={status.ok ? 'status' : 'alert'}
-          data-testid="personal-info-status"
-          className={status.ok ? 'text-sm text-success' : 'text-sm text-destructive'}
-        >
-          {status.message}
-        </p>
-      )}
-      {!readOnly && (
-        <Button type="submit" disabled={isPending} data-testid="personal-info-save">
-          {t('save')}
-        </Button>
+      {(status || !readOnly) && (
+        <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
+          {status && (
+            <p
+              role={status.ok ? 'status' : 'alert'}
+              data-testid="personal-info-status"
+              className={status.ok ? 'text-sm text-success' : 'text-sm text-destructive'}
+            >
+              {status.message}
+            </p>
+          )}
+          {!readOnly && (
+            <Button type="submit" disabled={isPending} data-testid="personal-info-save">
+              {t('save')}
+            </Button>
+          )}
+        </div>
       )}
     </form>
   );

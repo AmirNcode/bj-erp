@@ -7,6 +7,7 @@ import { validatePassword, toLatinPassword, type PasswordProblem } from '@/lib/a
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 
 /** The form's copy (profile.password, plus the shared error prefix). */
 function useLabels() {
@@ -72,7 +73,7 @@ export function ChangePasswordForm() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4" data-testid="password-form">
+    <form onSubmit={onSubmit} className={`space-y-4 ${FIELD_W.name}`} data-testid="password-form">
       {okMsg && (
         <p
           role="status"

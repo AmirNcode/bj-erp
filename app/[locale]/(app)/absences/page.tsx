@@ -51,7 +51,7 @@ export default async function AbsencesPage({ params, searchParams }: Props) {
   ]);
 
   return (
-    <div className="mx-auto flex w-full max-w-[900px] flex-col">
+    <div className="flex flex-col">
       <PageHeader section title={t('title')} />
       {result.ok ? (
         <AbsencesBoard date={date} today={today} absences={result.absences} locale={locale} />

@@ -152,7 +152,7 @@ export function ImportPlanPanel({ plan, mode, choices, onChoices, labels, locale
                     </span>
                   )}
                   {m.overridden && (
-                    <span className="ms-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">{labels.overridden}</span>
+                    <span className="ms-2 rounded bg-primary/10 px-1.5 py-0.5 text-10 text-primary">{labels.overridden}</span>
                   )}
                 </span>
                 <select

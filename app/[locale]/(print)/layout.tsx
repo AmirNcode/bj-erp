@@ -36,5 +36,11 @@ export default async function PrintLayout({ children, params }: Props) {
   if (!profile?.active) redirect(`/${locale}/login`);
   if (profile.must_change_password && !view) redirect(`/${locale}/set-password`);
 
-  return <div className="min-h-dvh bg-white text-black">{children}</div>;
+  // Print never scales: pin the multiplier above any per-person text size.
+  return (
+    <div className="min-h-dvh bg-white text-black">
+      <style>{':root:root:root{--font-scale:1}'}</style>
+      {children}
+    </div>
+  );
 }

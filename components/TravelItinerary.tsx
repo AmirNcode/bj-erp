@@ -50,7 +50,7 @@ export function TravelItinerary({ itinerary, transport, note, locale, serial, fi
       <div className="flex flex-col items-center text-center text-primary">
         <Plane aria-hidden className="size-5 ltr:-scale-x-100" />
         {f.flight_no && <span className="text-xs font-semibold"><Ltr>{f.flight_no}</Ltr></span>}
-        <span className="text-[11px] text-muted-foreground">{f.airline || t(f.leg)}</span>
+        <span className="text-11 text-muted-foreground">{f.airline || t(f.leg)}</span>
       </div>
       <div className="min-w-0 text-end">
         <p className="text-xl font-bold tabular-nums"><Ltr>{f.arrives ?? '—'}</Ltr></p>

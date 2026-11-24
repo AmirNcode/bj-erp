@@ -317,7 +317,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         {/* Phones: the top bar already names the section. */}
         <div className="max-md:sr-only">
-          <p className="text-[12.5px] text-muted-foreground">{tNav('manage')}</p>
+          <p className="text-xs text-muted-foreground">{tNav('manage')}</p>
           <h1 className="text-2xl font-bold tracking-tight">{tl('title')}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -379,7 +379,7 @@ export default async function EmployeesPage({ params, searchParams }: Props) {
 
       {/* FR-74: only admin and HR change employees. */}
       {readOnly && (
-        <p className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground" data-testid="emp-locked-hint">
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="emp-locked-hint">
           <Lock aria-hidden="true" className="size-3.5 shrink-0" />
           {tl('lockedHint')}
         </p>

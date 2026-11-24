@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { checkSmsCredit, sendSmsTest, type SmsTestTemplate } from '@/lib/actions/admin';
 import { normalizeIrMobile } from '@/lib/admin/format';
 import { nativeSelectClass } from '@/lib/native-select';
+import { FIELD_W } from '@/lib/ui/fieldWidths';
 import { cn } from '@/lib/utils';
 
 function Note({ message }: { message: { ok: boolean; text: string } | null }) {
@@ -52,7 +53,7 @@ export function SmsTestForm({ disabled, pattern }: { disabled: boolean; pattern:
         <>
           <Label htmlFor="sms-test-template">{t('testTemplate')}</Label>
           <select id="sms-test-template" data-testid="sms-test-template" value={template}
-            onChange={(e) => setTemplate(e.target.value as SmsTestTemplate)} className={cn(nativeSelectClass, 'max-w-72')}>
+            onChange={(e) => setTemplate(e.target.value as SmsTestTemplate)} className={cn(nativeSelectClass, FIELD_W.shortSelect)}>
             {TEST_TEMPLATES.map((k) => <option key={k} value={k}>{t(`testTemplates.${k}`)}</option>)}
           </select>
         </>
@@ -60,7 +61,7 @@ export function SmsTestForm({ disabled, pattern }: { disabled: boolean; pattern:
       <Label htmlFor="sms-test-mobile">{t('mobile')}</Label>
       <div className="flex gap-2">
         <Input id="sms-test-mobile" dir="ltr" inputMode="tel" placeholder="09…" value={mobile}
-          onChange={(e) => setMobile(e.target.value)} className="max-w-56" />
+          onChange={(e) => setMobile(e.target.value)} className={FIELD_W.shortSelect} />
         <Button type="submit" variant="outline" disabled={pending || disabled}>{t('send')}</Button>
       </div>
       <p className="text-xs text-muted-foreground">

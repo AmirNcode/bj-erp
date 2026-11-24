@@ -31,7 +31,7 @@ export function NameMatching({ boot, batch, people, aliases, customers }: {
   const t = useTranslations('sales.names');
   const [tab, setTab] = useState<Tab>('people');
   return (
-    <div className="flex flex-col gap-5" data-wide data-testid="sales-names">
+    <div className="flex flex-col gap-5" data-testid="sales-names">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">{t('title')}</h2>
         <p className="max-w-3xl text-sm text-muted-foreground">{t('intro')}</p>

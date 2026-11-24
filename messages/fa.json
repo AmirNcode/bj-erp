@@ -312,11 +312,22 @@
     "offOn": "مرخصی در",
     "noOffThisDay": "در این روز کسی در مرخصی نیست.",
     "returns": "بازگشت",
+    "weekdayShort": { "mon": "د", "tue": "س", "wed": "چ", "thu": "پ", "fri": "ج", "sat": "ش", "sun": "ی" },
     "error": "خطا",
     "prevMonth": "ماه قبل",
     "nextMonth": "ماه بعد"
   },
   "profile": {
+    "textSize": {
+      "title": "اندازه متن",
+      "description": "متن کل برنامه را فقط برای شما بزرگ‌تر می‌کند.",
+      "sampleTitle": "درخواست مرخصی روزانه — ۳ روز",
+      "sampleLine1": "از ۱۴۰۵/۰۹/۱۰ تا ۱۴۰۵/۰۹/۱۲، در انتظار تأیید مدیر",
+      "sampleLine2": "مانده مرخصی سالانه: ۱۲ روز و ۴ ساعت",
+      "save": "ذخیره",
+      "saved": "ذخیره شد",
+      "viewAsDisabled": "در حالت مشاهده به جای دیگری قابل ذخیره نیست."
+    },
     "title": "پروفایل",
     "name": "نام",
     "code": "کد پرسنلی",
@@ -342,7 +353,6 @@
       "errorTooLarge": "حجم این عکس به اندازه کافی کم نمی‌شود. عکس دیگری امتحان کنید.",
       "errorUnsupported": "این فایل به‌عنوان عکس خوانده نشد. یک فایل JPG یا PNG امتحان کنید."
     },
-    "preferences": "ترجیحات",
     "language": "زبان",
     "langFa": "فارسی",
     "langEn": "English",
@@ -422,7 +432,8 @@
     "tabs": {
       "profile": "پروفایل",
       "personalInfo": "اطلاعات شخصی",
-      "account": "حساب کاربری"
+      "preferences": "ترجیحات",
+      "security": "امنیت حساب"
     }
   },
   "approvals": {
@@ -646,6 +657,7 @@
       "lastName": "نام خانوادگی",
       "department": "واحد",
       "manager": "مدیر مستقیم",
+      "jobSection": "شغل و سازمان",
       "roles": "نقش‌ها",
       "hireDate": "تاریخ استخدام",
       "balance": "مانده",
