@@ -5,13 +5,16 @@ import { readFileSync } from 'node:fs';
 const APP = 'app/[locale]/(app)/';
 
 describe('page frame', () => {
-  it('data-wide is only on Employees list, Sales records list and Finance', () => {
+  // Each wide page's loading skeleton is wide too, so the frame doesn't jump when data arrives.
+  it('data-wide is only on Employees list, Sales records list and Finance (+ their loading skeletons)', () => {
     const out = execSync(`grep -rl "data-wide" app components || true`, { encoding: 'utf8' })
       .split('\n').filter(Boolean).sort();
     expect(out).toEqual([
       APP + '_components/AppShell.tsx',
       APP + 'finance/page.tsx',
+      APP + 'manage/employees/loading.tsx',
       APP + 'manage/employees/page.tsx',
+      APP + 'sales/loading.tsx',
       APP + 'sales/page.tsx',
     ].sort());
   });
