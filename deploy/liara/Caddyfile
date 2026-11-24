@@ -12,8 +12,6 @@
 }
 
 https://{$APP_HOST} {
-	# Reused public connections stalled on the tested external route.
-	header Connection close
 	tls {
 		issuer acme {
 			dir {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
@@ -21,7 +19,7 @@ https://{$APP_HOST} {
 			disable_tlsalpn_challenge
 		}
 	}
-	encode gzip
+	encode zstd gzip
 	handle /auth/v1/* {
 		uri strip_prefix /auth/v1
 		reverse_proxy auth:9999 {
