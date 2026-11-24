@@ -415,6 +415,23 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-97** ☐ **UI readability and desktop layout.** *(1) No iPhone zoom (owner rule):* no input, select,
+  textarea or date field is ever under 16px on a touch screen, portrait or landscape, phone or iPad;
+  pinch-zoom itself stays allowed. *(2) Text size per person:* Profile › Preferences has a 5-step slider
+  labelled 100 · 110 · 120 · 130 · 140 %, a live sample and **Save**; the choice is saved on the profile
+  (`profiles.font_step` 0–4, changed by the person only) and follows them to every device. Same scale for both
+  languages, Farsi 100 % = the original size (owner, 2026-11-23 round 2). Text only:
+  spacing, icons, buttons and the side panel do not scale. **View as** keeps the admin's own size; print
+  pages and credential slips never scale; people not signed in get step 0. *(3) Profile tabs:* **Profile ·
+  Personal info · Preferences · Account security**; Preferences holds language and text size, Account
+  security holds Change password and Log out; `/profile/account` redirects to Preferences. *(4) Desktop
+  layout:* every page sits in one centred 1280px column (header, tabs and content share it); full width
+  (`data-wide`) only for the Employees list, the Sales records list and Finance; settings-style forms use
+  annotated sections (title + explanation at the start, fields card beside it from 1024px, stacked below);
+  desktop fields have fixed widths by kind (time 9rem, number 8rem, date 12rem, day + hour 18rem, short
+  select 14rem, name or person 20rem, long text up to 36rem), never stretched. Phones keep full-width fields.
+  *(2026-11-23; spec `docs/specs/2026-11-23-ui-readability-layout-design.md`; branch
+  `claude/ui-readability-layout`; unreleased.)*
 - **FR-96** ☐ **Profile tabs + self-service SMS mobile.** Profile is three tabs — **Profile** (name,
   code, photo, SMS mobile, saved signature; two columns on desktop), **Personal information** (the
   FR-53 form), **Account** (language, password; desktop Logout). On phones the Organization / Help /

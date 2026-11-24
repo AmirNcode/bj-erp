@@ -85,7 +85,7 @@ Part 2 changes font tokens that parts 1 and 3 rely on, so the order matters.
 ### Scale (owner decisions)
 
 - **5 steps**, shown to everyone as **100% · 110% · 120% · 130% · 140%**.
-- **Farsi starts one step higher**: the real multiplier is English `1.00 · 1.10 · 1.20 · 1.30 · 1.40`,
+- ~~**Farsi starts one step higher**~~ — **Changed 2026-11-23 round 2: same scale for both languages (1.00 · 1.10 · 1.20 · 1.30 · 1.40), Farsi 100% is the original size.** Original wording: the real multiplier is English `1.00 · 1.10 · 1.20 · 1.30 · 1.40`,
   Farsi `1.10 · 1.20 · 1.30 · 1.40 · 1.50`. Farsi "100%" = English "110%". The label never shows the hidden step.
 - One saved step per person (not one per language); switching language switches the multiplier table.
 - Default step 0 (= 100%). People who never sign in (login, forgot password) get step 0 for the page's locale,
@@ -192,6 +192,7 @@ On phones every field is full width, as today. These replace the width guidance 
   Procurement lists, Sales sub-pages other than the records list.
 - **Dashboards** (Admin › Overview, Home): card grid filling the column, as today.
 - **Single-purpose forms** (Request forms, login, forgot password): unchanged, narrow centred.
+- *As built:* Admin › System kept its status cards (read-only, not a form); the role editor's name stays a plain field (its permission sections are collapsible cards).
 
 ### Docs
 
@@ -203,9 +204,9 @@ On phones every field is full width, as today. These replace the width guidance 
 
 ## Calls made by the designer (owner: please check)
 
-1. Text size is **one step per person**, and the Farsi bonus step is applied by language at render time.
+1. Text size is **one step per person**. *(Changed 2026-11-23 round 2: no Farsi bonus step; same scale for both languages.)*
 2. **View as** keeps the admin's own text size.
-3. Login and forgot-password pages use step 0 (Farsi still gets its built-in step).
+3. Login and forgot-password pages use step 0 (*changed round 2: no Farsi step*).
 4. Print pages never scale.
 5. Two new small text tokens (≈10px, ≈11px) instead of keeping one-off pixel sizes.
 6. Column max width **1280px**; annotated sections switch to two columns at **1024px**.

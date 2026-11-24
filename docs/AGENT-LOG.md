@@ -78,6 +78,49 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-23 — UI readability and desktop layout (FR-97): no-zoom fields, text size, 1280px column
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead + Sonnet subagents per task; lead reviewed each diff)
+**Branch / HEAD at start:** claude/ui-readability-layout @ c5a7aff (worktree `/Users/amir/Workspace/bj-ui-readability`, cut from origin/main 1ca84ef); HEAD now 4190d6e + uncommitted fixes
+**Trigger:** Owner: stop the iPhone field zoom, add a per-person text size, and give desktop pages a consistent layout.
+
+**What changed**
+- c5a7aff spec `docs/specs/2026-11-23-ui-readability-layout-design.md` + plan `docs/plans/2026-11-23-ui-readability-layout.md`.
+- T1 8061d43 — unlayered coarse-pointer rule in `globals.css`: fields `font-size: max(16px, var(--text-base))`; unit test `touch-field-size`, e2e `touch-fields.spec.ts`.
+- T2 2d1f823 — Tailwind text tokens scale by `--font-scale` (Farsi +1 step; REMOVED in round 2); print pins 1.
+- T3 bf7040d — 54 `text-[Npx]` uses in 26 files moved onto tokens (new scaled tokens `text-10`/`text-11`/`text-13`/`text-15`; 22px/28px Home numerals → `text-2xl`/`text-3xl`); unit guard against new `text-[Npx]`.
+- T4 24a3fb7 — migration `20261123140000_profile_font_step` (`profiles.font_step smallint 0..4`, allowed in `enforce_profile_update_scope`), `schema.sql`, `types.ts`, SQL test.
+- T5 1d92ebd + a2993dc — `<FontStepStyle>` in `(app)/layout.tsx`, `getOwnFontStep()` (real identity; reads cached claims, parallel), `updateMyPrefs({fontStep})`.
+- T6 19e87b5 — Profile tabs Profile · Personal info · Preferences · Account security; `/profile/account` redirects to Preferences.
+- T7 f4eaff8 — `TextSizeControl` (5-stop slider, live sample in `.font-scale-scope`, Save).
+- T8 7efd37f — one 1280px column (`AppShell`), `data-wide` kept only for Employees list / Sales records list / Finance; `FormSection` + `FIELD_W`; `docs/DESIGN.md` rewritten.
+- T9A 02144f4 Settings, 9B 2ce04b1 Admin + approval steps, 9C 4190d6e People — annotated sections. New key `manage.employees.jobSection`.
+- **Uncommitted fix set from the Task 10 browser pass (the fixer's commit was denied by the permission classifier; the lead did not commit on its behalf; awaiting the owner's OK):** F1 `min-height: calc(1lh + 0.625rem)` on fields in `globals.css` (+ unit test) so large text isn't clipped; F2 `MainNav` phone bottom bar: `min-w-0`/`truncate` (bar overflowed 7px at Farsi 140 %); F3 `WorkSettingsForm` row labels wrap (no `whitespace-nowrap`); F4 `TextSizeControl` slider in `max-w-md`, stop labels positioned under thumb stops (RTL-aware); F5 Edit Employee: duplicate "Profile photo" heading hidden (`ProfilePhotoCard` `hideTitle`), "Roles" label `sr-only`; F6 `EmployeesTable` name span wraps on narrow screens (page was 382px wide at fa ×1.5). Also uncommitted: this docs set (REQUIREMENTS FR-97, CHANGELOG, TASKS, AGENT-LOG, CLAUDE.md two gotcha lines).
+
+- **Round 2 (uncommitted):** A: Farsi extra step removed (`fontScale(step)` same for both languages; `html[lang=fa]` and admin scope rules deleted). B: calendar weekday headers. C: Sales customers metric tiles compact money. See `.superpowers/sdd/2026-11-23-ui-readability-layout/round2-report.md`.
+
+**Actions outside the repo**
+- `:3501` DB (`bj-approvals-finance-db-1`, db `postgres`) dumped to `.bj-deploy/approvals-finance/pre-ui-readability-20261123-185742.dump`, then `20261123140000_profile_font_step` applied via `bj_apply_migrations`; PostgREST restarted after the migration and again after the db container restart. Migration dry-run (Task 4) was on clones of that DB, both dropped.
+- `:3501` app rebuilt from this worktree with a new wrapper `.bj-deploy/approvals-finance/compose-ui` (+ `compose-ui.yml`), because the browser pane refused `192.168.2.85:3100`. The first `up -d` without `--no-deps` restarted the db container and revoked the admin's session (owner had to sign in again); later rebuilds used `--no-deps`.
+- **Back to the Sales build:** `.bj-deploy/approvals-finance/compose-sales up -d --build --no-deps app`. The DB keeps `font_step` (additive, harmless to the old app).
+- Temporary `bj-ui-readability` entry in `../bj/.claude/launch.json` added and reverted.
+- The admin's own language and text size were changed during the browser check (en → fa, step 0 → 4) and restored to en / 0; verified in the DB.
+- `../bj/.env.local` (public keys) copied into the worktree for `npm run build`.
+
+**Verification**
+- Run: unit 1596 pass (baseline 1553), `tsc --noEmit`, lint, `npm run build`, `npm audit` gate (picomatch IGNORED entry now stale), SQL test for the migration 9/9 on the clone (14 clone-drift SQL failures pre-existing, unchanged).
+- Browser on `:3501` (admin): desktop 1920 en + fa on Settings, Roles, SMS, Edit Employee, Employees (full width), Preferences; Save at 140 % works app-wide (h1 28px en); phone 375 fa ×1.5 no sideways overflow on home, request, profile, preferences, settings, approvals, calendar, and, after F2/F6, employees, employee edit, preferences; select 46px tall with text fitting; slider labels aligned in RTL.
+- **Not verified:** e2e not run at all (ruling: global-setup rewrites the admin's language and weekend settings on the real-roster DB, and the e2e admin password is unknown); specs written or path-updated: touch-fields, settings, password, view-as. Not checked: real iPhone (zoom checked by computed font-size only), print at large text, non-admin roles, Sales pages other than the records list, the PR review run.
+
+**State left behind**
+- Branch local, 12 commits after the spec, not pushed, no PR. F1–F6 + docs uncommitted. `:3501` runs this branch (compose-ui).
+
+**For the next agent**
+- Open follow-ups are in `docs/TASKS.md` (FR-97): e2e on an isolated stack, drop the stale picomatch audit exception, phone Profile links refresh button overflow at fa 140 %, maybe merge SMS First/Last line sections.
+- `CLAUDE.md` Status paragraph was left alone on purpose.
+
+---
+
 ## 2026-11-23 — Merged origin/main into the Sales branch; :3501 runs it with Delete / Archive
 
 **Agent:** Claude Opus 5.5 via Claude Code
