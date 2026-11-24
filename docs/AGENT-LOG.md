@@ -80,7 +80,9 @@ Copy this block verbatim and fill it in.
 
 ## 2026-11-24 — Merged main into feat/speed-feedback, merged PR #34 (Claude)
 
-Owner applied the new Caddyfile on the VM and re-ran Deploy Liara for #33 (run 45445230881 green). Merged `origin/main` into `feat/speed-feedback`: only conflict was this file (both sides added entries; kept both). Updated the TASKS speed section (Caddy 1a live). Then merged #34; deploy run and live checks recorded in TASKS / below.
+Owner applied the new Caddyfile on the VM and re-ran Deploy Liara for #33 (run 45445230881 green). Merged `origin/main` into `feat/speed-feedback`: only conflict was this file (both sides added entries; kept both). Updated the TASKS speed section (Caddy 1a live). Then merged #34 (merge commit on main, Deploy Liara run 45450399838: all steps green).
+
+Live checks after the deploy (read-only curl): `/sw.js` 200 with `Cache-Control: no-cache, no-store, must-revalidate` and the JS content type; `/offline.html` 200 `no-cache`; `/api/health` ok. **But Caddy still serves the old config:** every response has `Connection: close`, and `Accept-Encoding: zstd, gzip` gets `gzip`; curl confirms the connection is closed after each response. The Caddyfile on disk matches main (the apply guard passed), so the running Caddy has not loaded it. Likely cause: `docker-compose.liara.yml` bind-mounts the single file `./liara/Caddyfile`; replacing the file (rsync / editor = new inode) leaves the container reading the old inode until it restarts. Owner: `sudo docker compose -f docker-compose.yml -f docker-compose.liara.yml restart gateway` in `/opt/bj-erp`, then re-check `curl -sI https://bjeng.app/login` (no `Connection: close`, `Content-Encoding: zstd`).
 
 ## 2026-11-24 — Reviewed PRs #33 (Caddy keep-alive) and #34 (speed feedback); #33 merged, deploy blocked by the infra guard
 
