@@ -58,3 +58,34 @@ export function FormSkeleton({ className }: { className?: string }) {
     </div>
   );
 }
+
+/** A list-page table skeleton: a real `data-table` so it matches the loaded table's frame. */
+export function TableSkeleton({ rows = 8, cols = 5 }: { rows?: number; cols?: number }) {
+  const cells = Array.from({ length: cols });
+  return (
+    <div aria-hidden="true" className="overflow-x-auto">
+      <table className="data-table w-full">
+        <thead>
+          <tr>
+            {cells.map((_, c) => (
+              <th key={c}>
+                <Skeleton className="h-4 w-20" />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {Array.from({ length: rows }).map((_, r) => (
+            <tr key={r}>
+              {cells.map((_, c) => (
+                <td key={c}>
+                  <Skeleton className={cn('h-4', c === 0 ? 'w-16' : 'w-full max-w-40')} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
