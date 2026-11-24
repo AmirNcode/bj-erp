@@ -32,3 +32,12 @@ assert.equal(c.services.auth.environment.GOTRUE_RATE_LIMIT_TOKEN_REFRESH, '300')
 console.log('ok - Liara merge publishes only 80/443, retains private services and certificate storage');
 JS
 bash -n "$ROOT/deploy/liara/package-release.sh" "$ROOT/deploy/liara/apply-release.sh" "$ROOT/deploy/liara/backup.sh" "$ROOT/deploy/liara/backup-files.sh" "$ROOT/deploy/lib/files-gc.sh"
+CADDY="$ROOT/deploy/liara/Caddyfile"
+public_block=$(sed -n '/^https:\/\/{\$APP_HOST}/,/^}/p' "$CADDY")
+[ -n "$public_block" ] || { echo 'not ok - public site block not found'; exit 1; }
+! grep -q 'Connection close' <<<"$public_block" || { echo 'not ok - public block still closes connections'; exit 1; }
+grep -qE '^\s*encode zstd gzip\s*$' <<<"$public_block" || { echo 'not ok - public block must encode zstd gzip'; exit 1; }
+docker run --rm -e APP_HOST=example.invalid -v "$CADDY:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine \
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 \
+  || { echo 'not ok - Liara Caddyfile does not validate'; exit 1; }
+echo 'ok - Liara Caddyfile keeps connections open, compresses with zstd, and validates'
