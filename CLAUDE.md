@@ -230,7 +230,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Fields grow with large text:** an unlayered `min-height: calc(1lh + 0.625rem)` on input/select in `globals.css` beats `h-*` classes, so a field is never shorter than its own text.
 - **Fields stay ≥ 16px on touch screens (no iPhone zoom):** one unlayered `@media (pointer: coarse)` rule in `globals.css` sets `font-size: max(16px, var(--text-base))` on input/select/textarea; never shrink a field below it with a class, never add `maximum-scale`/`user-scalable=no`.
 - **Service worker `public/sw.js` is allowlist-only** (build files, icons, logo, `offline.html`): never add a page, RSC, `/api`, `/rest` or `/auth` path — it would keep personal data on devices. Registered only in production builds; kill switch in `docs/DEPLOY-LIARA.md`.
-- **Save buttons take `pending={…}`** (`components/ui/button.tsx`: spinner, disabled, same width); a `<Link>` gets `<LinkPending />` inside (tabs: hidden + `has-[[data-pending=true]]` pulse). Don't share one pending var across per-row buttons.
+- **Save buttons take `pending={…}`** (`components/ui/button.tsx`: spinner, disabled, same width); a `<Link>` gets `<LinkPending />` inside (tabs: hidden + `has-[[data-pending=true]]` pulse). Siblings may share one pending var: only the pressed button spins (Button tracks the press), the rest just disable.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements
