@@ -110,6 +110,11 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Pilot launch (owner)
 
+- ☐ **Liara deploys are BLOCKED until the owner applies the new Caddyfile (since 2026-11-24, PR #33):**
+  run `a20d9ad` failed with `Infrastructure changed: liara/Caddyfile` (the apply guard; nothing changed
+  on the server). On the VM: validate and apply `deploy/liara/Caddyfile` from main (keep-alive +
+  `encode zstd gzip`), then re-run the Deploy Liara workflow. Every push to `main` fails the same way
+  until then; PR #34 (speed feedback) waits for it. Then test step 1a from Iran and Canada.
 - ☐ `www.bjeng.app`: add the DNS record; then the Caddy site needs the extra hostname and a redirect
   to `bjeng.app`.
 - ☐ One-page Farsi user guide: login code = personnel number, install to home screen (Android

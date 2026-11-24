@@ -78,6 +78,62 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-24 — Reviewed PRs #33 (Caddy keep-alive) and #34 (speed feedback); #33 merged, deploy blocked by the infra guard
+
+**Agent:** Claude Opus 5.5 via Claude Code (subagent)
+**Branch / HEAD at start:** `perf/caddy-keepalive` @ b0c23ab · `feat/speed-feedback` @ 41128de · `main` @ ace0a04
+**Trigger:** Owner asked to review, fix and merge #33 then #34 (each merge deploys to Liara).
+
+**What changed**
+- #34 commit `5224707` (pushed to `feat/speed-feedback`, NOT merged):
+  - `public/sw.js`: navigation preload is on, but `/api`, `/rest`, `/auth`, `/print` navigations returned
+    without `respondWith`, so the browser cancelled the preload and fetched again (a file download or
+    printout requested twice). They now answer with `preloadResponse || fetch` — still never stored,
+    never the offline page. Tests in `tests/unit/service-worker.test.ts` (failed first).
+  - `sales/page.tsx` + its `data-wide` `loading.tsx` moved to `sales/(records)/`; Employees list page +
+    loading to `manage/employees/(list)/`. A segment `loading.tsx` also covers child routes without
+    their own, so Products / Customers / Deadlines / Settings / Edit employee etc. showed a wide table
+    skeleton and the frame jumped back to 1280px. Guard test in `tests/unit/page-width.test.ts`
+    (failed first). Paths updated in `docs/DESIGN.md`, `CLAUDE.md`, a comment in `HolidayEditor.tsx`.
+  - `docs/DEPLOY-LIARA.md` kill switch: also remove `<ServiceWorkerRegister />` in the same deploy.
+- #33 commit `44da96f`: `docs/DEPLOY-LIARA.md` HTTP/1.1 paragraph now records step 1a and the
+  Iran-first / Canada-via-VPN fallback; `tests/deploy/liara-config.test.sh` prints `caddy validate`
+  output on failure.
+- Declined (review findings): #33 "keep `Connection close` until Canada retest" (owner decision:
+  Iran first, spec §3); #33 hardcoded caddy tag in the validate step (the compose assertion beside
+  it already pins the same tag); #34 nits: armed-button spinner after a dialog-opening click,
+  children remount when the spinner toggles, tab pulse overriding `opacity-60`, `asChild`+`pending`
+  (no caller uses it).
+
+**Actions outside the repo**
+- `gh pr merge 33 --merge` → merge commit `a20d9ad`. Deploy run 45445230881: build ✓, deploy ✗ —
+  `Infrastructure changed: liara/Caddyfile. Apply and validate it explicitly before retrying.`
+  (`deploy/liara/apply-release.sh:40`, exits before any rsync / image swap; live server unchanged).
+- #34 NOT merged: every push to `main` now fails the same check until the Caddyfile is applied on the VM
+  by the operator (no SSH by this agent, per instructions).
+- Read-only curls after the failed deploy: `/fa/login` → `307 1.1`, `Connection: close`, no
+  `content-encoding` for `Accept-Encoding: zstd`; `/sw.js` 404; `/api/health` ok. I.e. still the old release.
+
+**Verification**
+- bj-speed: `npx tsc --noEmit` ok (after `next build` regenerated `.next/types` for the moved pages),
+  `npm run lint` ok, `npm run test:unit` 1658 passed / 5 skipped, `npm run build` ok (route manifest maps
+  `(records)/page` → `/[locale]/sales`, `(list)/page` → `/[locale]/manage/employees`),
+  `node scripts/audit-gate.mjs` ok. bj-caddy: `npm run test:deploy` all ok (no node_modules there; change is
+  Caddyfile/shell/docs only). No PR CI exists: `deploy-liara.yml` runs only on push to `main`.
+
+**State left behind**
+- `main` @ a20d9ad (+ this docs commit) holds the Caddy change but Liara runs the release before it.
+- PR #34 open, head `5224707`, merges cleanly onto main (checked with `git merge-tree`).
+- Main checkout `/Users/amir/Workspace/bj` is 30 commits behind with another session's uncommitted
+  AGENT-LOG / CHANGELOG / TASKS edits + two untracked annual-leave-borrowing docs; left untouched.
+
+**For the next agent**
+- Owner: on the VM, validate + apply `deploy/liara/Caddyfile` (see DEPLOY-LIARA "Infrastructure changes
+  require explicit operator application"), then re-run Deploy Liara (`gh workflow run deploy-liara.yml`).
+  After it is green, merge #34 and check `curl -sI https://bjeng.app/sw.js` (no-cache), `/offline.html`,
+  zstd on `/fa/login`. Then the step 1a test from Iran and Canada before h2 (1b).
+- Still open: signed-in throttled tap check and e2e specs for #34.
+
 ## 2026-11-24 — PR #32 (UI readability, FR-97) review, one fix, merge
 
 **Agent:** Claude Opus 5.5 via Claude Code (subagent)
