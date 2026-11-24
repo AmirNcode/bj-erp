@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Loader2 } from "lucide-react"
@@ -47,14 +49,34 @@ function Button({
   pending = false,
   disabled,
   children,
+  onClick,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
-    /** Work in progress: disables the button and shows a spinner over the label (same width). */
+    /**
+     * Work in progress: disables the button. The spinner (over the label, same width)
+     * shows only on the button whose press started it, so siblings that share one
+     * pending flag (Save / Delete) just disable.
+     */
     pending?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
+  // armed = pressed in the last moment; owner = this press started the current pending.
+  const [armed, setArmed] = React.useState(false)
+  const [owner, setOwner] = React.useState(false)
+  const [prevPending, setPrevPending] = React.useState(pending)
+  if (pending !== prevPending) {
+    setPrevPending(pending)
+    setOwner(pending && armed)
+    if (pending) setArmed(false)
+  }
+  React.useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 1500)
+    return () => clearTimeout(t)
+  }, [armed])
+  const showSpinner = pending && owner && !asChild
   const busy = pending
     ? {
         "aria-busy": true as const,
@@ -72,8 +94,12 @@ function Button({
       disabled={asChild ? disabled : disabled || pending}
       {...busy}
       {...props}
+      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+        setArmed(true)
+        onClick?.(e)
+      }}
     >
-      {pending && !asChild ? (
+      {showSpinner ? (
         <>
           <span
             data-slot="button-spinner"
@@ -82,7 +108,7 @@ function Button({
           >
             <Loader2 className="animate-spin" />
           </span>
-          <span className="invisible contents">{children}</span>
+          <span className="inline-flex items-center gap-[inherit] opacity-0">{children}</span>
         </>
       ) : (
         children
