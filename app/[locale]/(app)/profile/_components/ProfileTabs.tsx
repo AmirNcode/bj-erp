@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { LinkPending } from '@/components/LinkPending';
 
 const TABS = [
   { key: 'profile', href: '' },
@@ -33,6 +34,7 @@ export function ProfileTabs({ locale }: { locale: string }) {
             className={tabClass(on)}
           >
             {t(`tabs.${tab.key}`)}
+            <LinkPending className="hidden" />
           </Link>
         );
       })}

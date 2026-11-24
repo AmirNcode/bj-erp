@@ -36,7 +36,7 @@ describe('Button pending', () => {
   it('asChild + pending marks the child busy without a spinner', () => {
     const { container } = render(
       <Button asChild pending>
-        <a href="/x">Go</a>
+        <a href="#x">Go</a>
       </Button>
     );
     const a = screen.getByText('Go');

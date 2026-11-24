@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { subTabClass, subTabListClass } from '@/lib/ui/tabs';
+import { LinkPending } from '@/components/LinkPending';
 
 export function Section({
   title,
@@ -70,6 +71,7 @@ export function PillLinks({
           className={subTabClass(item.active)}
         >
           {item.label}
+          <LinkPending className="hidden" />
         </Link>
       ))}
     </nav>

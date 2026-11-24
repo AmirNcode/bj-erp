@@ -6,6 +6,7 @@ import { getCachedUser, getCachedPermissions } from '@/lib/auth/context';
 import { getApprovalCapabilities } from '@/lib/auth/approval-capabilities';
 import { can } from '@/lib/permissions/catalog';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { LinkPending } from '@/components/LinkPending';
 
 export async function SettingsTabs({
   locale,
@@ -37,6 +38,7 @@ export async function SettingsTabs({
             className={tabClass(on)}
           >
             {tab.label}
+            <LinkPending className="hidden" />
           </Link>
         );
       })}

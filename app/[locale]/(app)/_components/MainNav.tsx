@@ -2,6 +2,7 @@
 import { Suspense, use } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { LinkPending } from '@/components/LinkPending';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import {
@@ -50,7 +51,7 @@ const tabActive =
   'font-semibold text-primary before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-primary before:content-[""] ' +
   'md:bg-white/12 md:text-white md:before:inset-x-auto md:before:inset-y-0 md:before:-start-3 md:before:h-auto md:before:w-[3px] md:before:bg-white';
 const sideItem =
-  'relative flex items-center gap-3 whitespace-nowrap rounded-md px-3 py-[9px] text-sm transition-colors';
+  'relative flex items-center gap-3 whitespace-nowrap rounded-md px-3 py-[9px] text-sm transition-colors active:opacity-80';
 
 function ApprovalsBadge({ count, locale }: { count: Promise<number>; locale: string }) {
   const n = use(count);
@@ -120,6 +121,7 @@ export function MainNav({
               <ApprovalsBadge count={pendingCount} locale={locale} />
             </Suspense>
           )}
+          <LinkPending />
         </Link>
       </li>
     );
@@ -176,13 +178,14 @@ export function MainNav({
                 data-testid={mobileOnly ? 'nav-manage-tab' : `nav-${tab.key}`}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors',
+                  'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors active:opacity-80',
                   'md:min-h-0 md:flex-row md:justify-start md:gap-3 md:rounded-md md:px-3 md:py-[9px] md:text-sm',
                   active ? tabActive : inactiveItem
                 )}
               >
                 <span aria-hidden="true">{NAV_ICONS[tab.key]}</span>
                 <span className="max-w-full truncate">{t(tab.key)}</span>
+                <LinkPending className="top-1.5 end-[calc(50%-1.375rem)] translate-y-0 md:top-1/2 md:end-2 md:-translate-y-1/2" />
               </Link>
             </li>
           );
@@ -194,12 +197,13 @@ export function MainNav({
             data-testid="nav-profile-tab"
             aria-current={isActive('/profile') ? 'page' : undefined}
             className={cn(
-              'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors',
+              'relative flex min-h-14 min-w-0 max-w-full flex-col items-center justify-center gap-1 whitespace-nowrap px-0.5 py-2 text-xs transition-colors active:opacity-80',
               isActive('/profile') ? tabActive : inactiveItem
             )}
           >
             <span aria-hidden="true">{NAV_ICONS.profile}</span>
             <span className="max-w-full truncate">{t('profile')}</span>
+            <LinkPending className="top-1.5 end-[calc(50%-1.375rem)] translate-y-0 md:top-1/2 md:end-2 md:-translate-y-1/2" />
           </Link>
         </li>
       </ul>
@@ -236,6 +240,7 @@ export function MainNav({
               {HELP_ICON}
             </span>
             <span>{t('help')}</span>
+            <LinkPending />
           </Link>
         </li>
       </ul>
@@ -248,7 +253,7 @@ export function MainNav({
           data-testid="nav-profile"
           aria-label={t('profile')}
           aria-current={isActive('/profile') ? 'page' : undefined}
-          className="flex items-center gap-2.5 rounded-md p-1 transition-colors hover:bg-white/8"
+          className="relative flex items-center gap-2.5 rounded-md p-1 transition-colors hover:bg-white/8 active:opacity-80"
         >
           {profile?.id ? (
             <PersonAvatar id={profile.id} name={profile.name} className="size-9" />
@@ -270,6 +275,7 @@ export function MainNav({
               </span>
             </span>
           )}
+          <LinkPending />
         </Link>
         <LanguageSwitch locale={locale} onDark />
       </div>

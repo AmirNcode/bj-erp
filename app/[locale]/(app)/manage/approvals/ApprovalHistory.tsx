@@ -26,6 +26,7 @@ import { formatTimeRange } from '@/lib/leave/formatTimeRange';
 import { formatSerialLocalized } from '@/lib/leave/serial';
 import { formatNumber, localizedLeaveTypeName } from '@/lib/i18n/format';
 import { todayInAppTz } from '@/lib/appDate';
+import { LinkPending } from '@/components/LinkPending';
 
 type Props = { locale: string; page: number; hoursPerDay: number; filters: RequestFilters; travelTicks: TravelTicks; viewerId: string; canReview: boolean; canCancel?: boolean; editKeys?: readonly EditKey[]; workWindow?: { start: string; end: string } };
 
@@ -165,15 +166,17 @@ export async function ApprovalHistoryContent({ locale, page, hoursPerDay, filter
           </span>
           <span className="flex gap-2">
             {current > 1 && (
-              <Link href={href(current - 1)} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 hover:bg-muted" data-testid="history-prev">
+              <Link href={href(current - 1)} className="relative inline-flex items-center gap-1 rounded-md border px-3 py-1.5 hover:bg-muted" data-testid="history-prev">
                 <Prev className="size-4" aria-hidden="true" />
                 {t('prev')}
+                <LinkPending className="top-0.5 end-0.5 translate-y-0 [&_svg]:size-3" />
               </Link>
             )}
             {current < lastPage && (
-              <Link href={href(current + 1)} className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 hover:bg-muted" data-testid="history-next">
+              <Link href={href(current + 1)} className="relative inline-flex items-center gap-1 rounded-md border px-3 py-1.5 hover:bg-muted" data-testid="history-next">
                 {t('next')}
                 <Next className="size-4" aria-hidden="true" />
+                <LinkPending className="top-0.5 end-0.5 translate-y-0 [&_svg]:size-3" />
               </Link>
             )}
           </span>
