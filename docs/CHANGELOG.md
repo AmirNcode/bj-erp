@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Speed on slow links — 2026-11-24, branch `feat/speed-feedback`
+
+- **Every tap shows something at once.** Save buttons (88) show a spinner over their label and cannot be pressed twice while saving; nav items, the phone bottom bar, section tabs, Sales record rows and history paging show they are loading the next page.
+- **Section skeletons** for the Sales list, a Sales record, Sales reports and the Manage Requests / Approvals / Employees lists appear immediately while the server answers.
+- **Static files stay on the device:** a service worker keeps the app's script, style and font files after the first visit, so later visits and pages download only data. It never stores pages or data (no personal, leave, price or guarantee data on devices).
+- **Offline page:** with no connection the app opens a Farsi/English "No internet connection" page instead of a browser error.
+- Liara Caddy change (keep-alive + zstd; HTTP/2 after testing from Iran) ships separately on `perf/caddy-keepalive`. Spec `docs/specs/2026-11-24-perceived-speed-design.md`, plan `docs/plans/2026-11-24-perceived-speed.md`.
+
 ### UI readability and desktop layout (FR-97) — 2026-11-23, branch `claude/ui-readability-layout`
 
 - Fields never trigger the iPhone zoom: on touch screens every input, select and textarea is at least 16px, in portrait and landscape.

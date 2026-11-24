@@ -3,6 +3,13 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## Speed on slow links (spec 2026-11-24)
+
+- ◐ **Part 1 — Liara Caddy:** step 1a (keep-alive + zstd) committed on `perf/caddy-keepalive`, not pushed. Owner: push/PR + merge → deploy, then test from an Iranian mobile network, the office network and Canada (spec §5). Iran OK → step 1b (`protocols h1 h2`, plan Task 2) + update the HTTP/1.1 paragraph in `docs/DEPLOY-LIARA.md`. Iran stalls → revert.
+- ◐ **Parts 2–3 on `feat/speed-feedback`** (pending buttons/links, section skeletons, service worker + offline page): owner check on `:3501` with DevTools "Slow 4G" (signed in: save a Sales stage, file a leave request, switch tabs); run `nav.spec`, `leave.spec`, `settings.spec`, `sales-products.spec` e2e (not run yet).
+- [ ] Owner measures real user speeds from Iran (mobile + office) before/after the Caddy change.
+- [ ] Later, if needed: ERP offline level 2 (IndexedDB read cache) and level 3 (offline edits); resumable uploads for users under ~1.4 Mbps; optimistic update for `TravelTickToggle` (spec §8).
+
 ## FR-97 UI readability and layout (built 2026-11-23 on `claude/ui-readability-layout`, local only)
 
 - [ ] **Run the touched e2e specs on an isolated/demo stack** (`touch-fields`, `settings`, `password`, `view-as`, `admin-settings`, `holiday-import`, `hr-role`, `approval-step-person`): not run, because global-setup rewrites the admin's language and weekend settings on the real-roster DB (`:3501`).

@@ -78,6 +78,15 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-24 — Speed on slow links: spec, plan, implementation (Claude)
+
+Owner reported the app feels slow on users' slow links (owner estimate 1–5 Mbps, unmeasured; Liara VM speedtest ~850 Mbps; rsync 3.2.7 present on the VM). Found `deploy/liara/Caddyfile` forcing `protocols h1` + `header Connection close` (a Canada-route workaround), so every request paid a fresh TLS handshake. Owner decisions: users in Iran first (Canada via VPN/tunnel if needed, revisit if not easy); ERP offline level 1 only, levels 2/3 later. Spec `docs/specs/2026-11-24-perceived-speed-design.md`, plan `docs/plans/2026-11-24-perceived-speed.md`.
+
+- `perf/caddy-keepalive` (worktree `../bj-caddy`, from `origin/main` `ace0a04`): commit `b0c23ab` drops `Connection close`, `encode zstd gzip`; `tests/deploy/liara-config.test.sh` asserts it and runs `caddy validate`. **Not pushed.** HTTP/2 (plan Task 2) waits for the owner's Iran test.
+- `feat/speed-feedback` (worktree `../bj-speed`): `Button` `pending` prop; `components/LinkPending.tsx` in MainNav, six tab bars (pulse), Sales records rows (`useTransition` + `router.push`), approval-history paging; 88 action buttons in 61 files wired to `pending` by script (skipped cancel/close, icon, `size="xs"`, per-row remove); `loading.tsx` for sales list/[id]/reports and manage requests/approvals/employees (home/request already stream); `TableSkeleton`; `public/sw.js` + `public/offline.html` + `ServiceWorkerRegister`, `/sw.js` no-cache header, kill switch in DEPLOY-LIARA.
+- Verified: `npm run test:unit` 1644 passed (new: button-pending, link-pending, skeletons, 14 service-worker tests in `node:vm`), `tsc`, `lint`, `npm run build`, `npm run test:deploy` (caddy branch). Production build in the browser pane on :3200: worker active, 21 cached entries all static, `sw.js` no-cache, offline page (with logo) shown with the server stopped. **Not verified:** signed-in pages, throttled tap feedback, e2e specs — owner check on `:3501`.
+- Main checkout: `.claude/launch.json` got a `bj-speed-prod` entry for the preview (removed again); `.env.local` copied into `../bj-speed` (git-ignored).
+
 ## 2026-11-24 — PR #32 (UI readability, FR-97) review, one fix, merge
 
 **Agent:** Claude Opus 5.5 via Claude Code (subagent)
