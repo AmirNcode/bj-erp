@@ -48,11 +48,15 @@ with burst capacity 30; office users behind one public IP share the bucket.
 
 HTTPS currently uses HTTP/1.1 for compatibility: direct HTTP/2 redirect chains
 from Canada stalled, while HTTP/1.1 and HTTP/2 through an SSH tunnel succeeded.
-Some reused HTTP/1.1 connections also stalled during browser asset/login requests.
-Closing public connections after each response made the complete browser smoke
-test pass. TLS verification remains enabled; private service connections still
-reuse connections. This adds TLS handshake overhead. Re-evaluate these settings
-after the company hostname is connected; the exact upstream cause is unconfirmed.
+Some reused HTTP/1.1 connections also stalled during browser asset/login requests,
+so from 2026-09-30 public connections were closed after each response.
+**Since 2026-11-24 (speed spec `docs/specs/2026-11-24-perceived-speed-design.md`
+step 1a) connections are kept open again and responses use `encode zstd gzip`**:
+users in Iran come first (owner decision); a fresh TLS handshake per request was
+costly on slow links. If Canada stalls again, reach the app through a VPN or the
+SSH tunnel; if Iran stalls, revert that commit. Step 1b (`protocols h1 h2`) waits
+for the owner's test of 1a from Iran and Canada. Record the results here.
+TLS verification remains enabled; private service connections reuse connections.
 
 Do not run `bj-deploy ... client` for Liara: that target intentionally retains
 the client's original server defaults. Do not use `liara deploy` for this VM.

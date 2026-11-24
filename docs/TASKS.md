@@ -5,8 +5,8 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Speed on slow links (spec 2026-11-24)
 
-- ◐ **Part 1 — Liara Caddy:** step 1a (keep-alive + zstd) committed on `perf/caddy-keepalive`, not pushed. Owner: push/PR + merge → deploy, then test from an Iranian mobile network, the office network and Canada (spec §5). Iran OK → step 1b (`protocols h1 h2`, plan Task 2) + update the HTTP/1.1 paragraph in `docs/DEPLOY-LIARA.md`. Iran stalls → revert.
-- ◐ **Parts 2–3 on `feat/speed-feedback`** (pending buttons/links, section skeletons, service worker + offline page): owner check on `:3501` with DevTools "Slow 4G" (signed in: save a Sales stage, file a leave request, switch tabs); run `nav.spec`, `leave.spec`, `settings.spec`, `sales-products.spec` e2e (not run yet).
+- ◐ **Part 1 — Liara Caddy:** step 1a (keep-alive + zstd) live since 2026-11-24 (PR #33, owner applied the Caddyfile on the VM, run 45445230881). Owner: test from an Iranian mobile network, the office network and Canada (spec §5). Iran OK → step 1b (`protocols h1 h2`, plan Task 2; again needs the Caddyfile applied on the VM before CI deploys) + update the HTTP/1.1 paragraph in `docs/DEPLOY-LIARA.md`. Iran stalls → revert.
+- ◐ **Parts 2–3 merged (PR #34)** (pending buttons/links, section skeletons, service worker + offline page): owner check on `:3501` with DevTools "Slow 4G" (signed in: save a Sales stage, file a leave request, switch tabs); run `nav.spec`, `leave.spec`, `settings.spec`, `sales-products.spec` e2e (not run yet).
 - [ ] Owner measures real user speeds from Iran (mobile + office) before/after the Caddy change.
 - [ ] Later, if needed: ERP offline level 2 (IndexedDB read cache) and level 3 (offline edits); resumable uploads for users under ~1.4 Mbps; optimistic update for `TravelTickToggle` (spec §8).
 
