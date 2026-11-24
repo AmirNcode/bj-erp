@@ -1,0 +1,233 @@
+// public/sw.js runs in a fake service-worker global (node:vm). It must cache only
+// static files + the offline page and leave every data / upload request alone.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const SRC = readFileSync(path.resolve(__dirname, '../../public/sw.js'), 'utf8');
+const ORIGIN = 'https://bjeng.app';
+
+type Res = { status: number; type: string; body?: string; clone?: () => Res };
+const res = (status = 200, type = 'basic', body = 'x'): Res => {
+  const r: Res = { status, type, body };
+  r.clone = () => ({ ...r });
+  return r;
+};
+
+function fakeCaches() {
+  const stores = new Map<string, Map<string, Res>>();
+  const handles = new Map<string, unknown>();
+  const open = async (name: string) => {
+    if (!stores.has(name)) stores.set(name, new Map());
+    if (handles.has(name)) return handles.get(name) as ReturnType<typeof make>;
+    const h = make(stores.get(name)!);
+    handles.set(name, h);
+    return h;
+  };
+  const make = (m: Map<string, Res>) => {
+    const key = (r: { url: string } | string) => (typeof r === 'string' ? new URL(r, ORIGIN).href : r.url);
+    return {
+      match: async (r: { url: string } | string) => m.get(key(r)),
+      put: async (r: { url: string } | string, v: Res) => void m.set(key(r), v),
+      add: async (u: string) => void m.set(key(u), res(200, 'basic', 'offline')),
+      addAll: async (us: string[]) => us.forEach((u) => m.set(key(u), res(200, 'basic', u === '/offline.html' ? 'offline' : 'x'))),
+      keys: async () => [...m.keys()].map((url) => ({ url })),
+      delete: async (r: { url: string } | string) => m.delete(key(r)),
+    };
+  };
+  return {
+    stores,
+    api: {
+      open,
+      keys: async () => [...stores.keys()],
+      delete: async (n: string) => (handles.delete(n), stores.delete(n)),
+      match: async (r: { url: string } | string) => {
+        for (const n of stores.keys()) {
+          const hit = await (await open(n)).match(r);
+          if (hit) return hit;
+        }
+        return undefined;
+      },
+    },
+  };
+}
+
+let handlers: Record<string, (e: unknown) => void>;
+let caches: ReturnType<typeof fakeCaches>;
+let fetchMock: ReturnType<typeof vi.fn>;
+let preloadEnable: ReturnType<typeof vi.fn>;
+let pendingWrites: Promise<unknown>[];
+
+function load() {
+  handlers = {};
+  pendingWrites = [];
+  preloadEnable = vi.fn(async () => undefined);
+  caches = fakeCaches();
+  fetchMock = vi.fn(async () => res());
+  const self = {
+    location: { origin: ORIGIN },
+    addEventListener: (t: string, fn: (e: unknown) => void) => (handlers[t] = fn),
+    skipWaiting: vi.fn(),
+    clients: { claim: vi.fn() },
+    registration: { navigationPreload: { enable: preloadEnable } },
+  };
+  vm.runInNewContext(SRC, { self, caches: caches.api, fetch: fetchMock, URL, Promise, console });
+}
+
+function fire(url: string, init: { method?: string; mode?: string; preload?: Res } = {}) {
+  const request = { url: new URL(url, ORIGIN).href, method: init.method ?? 'GET', mode: init.mode ?? 'cors', headers: {} };
+  const event = {
+    request,
+    preloadResponse: Promise.resolve(init.preload),
+    respondWith: vi.fn(),
+    waitUntil: vi.fn((p: Promise<unknown>) => void pendingWrites.push(p)),
+  };
+  handlers.fetch(event);
+  const raw = event.respondWith.mock.calls[0]?.[0] as Promise<Res> | undefined;
+  // Settle the response first, then any background cache writes it started.
+  const responded = raw?.then(async (r) => {
+    await Promise.all(pendingWrites.splice(0));
+    return r;
+  });
+  return { event, responded };
+}
+
+async function lifecycle(type: 'install' | 'activate') {
+  const waits: Promise<unknown>[] = [];
+  handlers[type]({ waitUntil: (p: Promise<unknown>) => waits.push(p) });
+  await Promise.all(waits);
+}
+
+const cacheSize = () => caches.stores.get('bj-static-v1')?.size ?? 0;
+
+beforeEach(load);
+
+describe('service worker leaves data and uploads alone', () => {
+  it('leaves POST /api/sales/files/x alone', () => {
+    expect(fire('/api/sales/files/x', { method: 'POST' }).event.respondWith).not.toHaveBeenCalled();
+  });
+  it('leaves GET /api/sales/files/x alone', () => {
+    expect(fire('/api/sales/files/x').event.respondWith).not.toHaveBeenCalled();
+  });
+  it('leaves GET /rest/v1/profiles alone', () => {
+    expect(fire('/rest/v1/profiles').event.respondWith).not.toHaveBeenCalled();
+  });
+  it('leaves an RSC fetch alone', () => {
+    expect(fire('/fa/sales?_rsc=abc').event.respondWith).not.toHaveBeenCalled();
+  });
+  it('leaves cross-origin GET alone', () => {
+    expect(fire('https://other.example/_next/static/a.js').event.respondWith).not.toHaveBeenCalled();
+  });
+});
+
+describe('navigations', () => {
+  it('returns the network response and stores nothing', async () => {
+    const page = res(200, 'basic', 'page');
+    fetchMock.mockResolvedValueOnce(page);
+    const { responded } = fire('/fa/home', { mode: 'navigate' });
+    expect(await responded).toBe(page);
+    expect(cacheSize()).toBe(0);
+  });
+  it('passes a redirect through unchanged', async () => {
+    const redirect = res(0, 'opaqueredirect', '');
+    fetchMock.mockResolvedValueOnce(redirect);
+    const { responded } = fire('/fa/home', { mode: 'navigate' });
+    expect(await responded).toBe(redirect);
+  });
+  it('offline returns /offline.html', async () => {
+    await lifecycle('install');
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    const { responded } = fire('/fa/home', { mode: 'navigate' });
+    expect((await responded)?.body).toBe('offline');
+  });
+});
+
+describe('static files', () => {
+  it('are cache-first', async () => {
+    await fire('/_next/static/chunks/a.js').responded;
+    const second = await fire('/_next/static/chunks/a.js').responded;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(second?.status).toBe(200);
+  });
+  it('a non-200 response is not stored', async () => {
+    fetchMock.mockResolvedValueOnce(res(404));
+    await fire('/_next/static/chunks/gone.js').responded;
+    expect(cacheSize()).toBe(0);
+  });
+  it('the cache trims to 300 entries', async () => {
+    for (let i = 0; i <= 300; i++) await fire(`/_next/static/chunks/c${i}.js`).responded;
+    expect(cacheSize()).toBe(300);
+    expect(caches.stores.get('bj-static-v1')!.has(`${ORIGIN}/_next/static/chunks/c0.js`)).toBe(false);
+  });
+  it('icons and the logo are cached', async () => {
+    await fire('/icons/icon-192.png').responded;
+    await fire('/bj-logo.png').responded;
+    expect(cacheSize()).toBe(2);
+  });
+});
+
+describe('lifecycle', () => {
+  it('install precaches the offline page and the logo it shows', async () => {
+    await lifecycle('install');
+    expect(caches.stores.get('bj-static-shell-v1')!.has(`${ORIGIN}/offline.html`)).toBe(true);
+    expect(caches.stores.get('bj-static-shell-v1')!.has(`${ORIGIN}/bj-logo.png`)).toBe(true);
+  });
+  it('activate deletes old bj-static caches only (keeps the shell)', async () => {
+    await caches.api.open('bj-static-shell-v1');
+    await caches.api.open('bj-static-v0');
+    await caches.api.open('other');
+    await lifecycle('activate');
+    const names = await caches.api.keys();
+    expect(names).not.toContain('bj-static-v0');
+    expect(names).toContain('other');
+    expect(names).toContain('bj-static-shell-v1');
+  });
+});
+
+describe('review fixes', () => {
+  // Navigation preload is on, so the browser already sent the request: a bypassed navigation
+  // must answer with that preload (a fallback would cancel it and download the file twice),
+  // and must never get the offline page.
+  it.each(['/api/sales/files/x', '/fa/print/request/1', '/print/request/1'])(
+    'a bypassed navigation (%s) uses the preload response, fetches once',
+    async (u) => {
+      const pre = res(200, 'basic', 'file');
+      expect(await fire(u, { mode: 'navigate', preload: pre }).responded).toBe(pre);
+      expect(fetchMock).not.toHaveBeenCalled();
+    }
+  );
+  it('a bypassed navigation without preload goes to the network unchanged and is not stored', async () => {
+    const file = res(200, 'basic', 'file');
+    fetchMock.mockResolvedValueOnce(file);
+    expect(await fire('/api/sales/files/x', { mode: 'navigate' }).responded).toBe(file);
+    expect(cacheSize()).toBe(0);
+  });
+  it('a failed bypassed navigation is not answered with the offline page', async () => {
+    await lifecycle('install');
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(fire('/api/sales/files/x', { mode: 'navigate' }).responded).rejects.toThrow('Failed to fetch');
+  });
+  it('the offline page survives cache trimming', async () => {
+    await lifecycle('install');
+    for (let i = 0; i <= 300; i++) await fire(`/_next/static/chunks/t${i}.js`).responded;
+    fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect((await fire('/fa/home', { mode: 'navigate' }).responded)?.body).toBe('offline');
+  });
+  it('a failing cache write does not fail the request', async () => {
+    const store = await caches.api.open('bj-static-v1');
+    store.put = async () => { throw new Error('QuotaExceededError'); };
+    const r = fire('/_next/static/chunks/q.js');
+    const raw = r.event.respondWith.mock.calls[0][0] as Promise<Res>;
+    expect((await raw).status).toBe(200);
+  });
+  it('navigation uses the preload response when there is one', async () => {
+    const pre = res(200, 'basic', 'preloaded');
+    expect(await fire('/fa/home', { mode: 'navigate', preload: pre }).responded).toBe(pre);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('activate enables navigation preload', async () => {
+    await lifecycle('activate');
+    expect(preloadEnable).toHaveBeenCalled();
+  });
+});

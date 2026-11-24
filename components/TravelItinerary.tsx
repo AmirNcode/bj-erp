@@ -189,11 +189,11 @@ export function TravelItinerary({ itinerary, transport, note, locale, serial, fi
         )}
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" size="sm" disabled={!!busy} onClick={() => save('pdf')} data-testid="itinerary-save-pdf">
+        <Button pending={busy === 'pdf'} type="button" variant="outline" size="sm" disabled={!!busy} onClick={() => save('pdf')} data-testid="itinerary-save-pdf">
           <FileDown aria-hidden />
           {busy === 'pdf' ? t('exporting') : t('savePdf')}
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={!!busy} onClick={() => save('jpg')} data-testid="itinerary-save-image">
+        <Button pending={busy === 'jpg'} type="button" variant="outline" size="sm" disabled={!!busy} onClick={() => save('jpg')} data-testid="itinerary-save-image">
           <ImageDown aria-hidden />
           {busy === 'jpg' ? t('exporting') : t('saveImage')}
         </Button>

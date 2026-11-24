@@ -355,7 +355,7 @@ export function AddApprovalStepDialog({ labels, usedRoles, onAdded }: Props) {
           >
             {labels.cancel}
           </Button>
-          <Button
+          <Button pending={isPending}
             disabled={!canSubmit || isPending}
             data-testid="approval-step-add-confirm"
             onClick={submit}

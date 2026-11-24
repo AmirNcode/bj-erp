@@ -100,7 +100,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
             });
           }}>
             <Label htmlFor="delegate-search">{t('search')}</Label>
-            <div className="flex gap-2"><Input id="delegate-search" value={search} onChange={(e) => setSearch(e.target.value)} disabled={isPending || !canManage} autoComplete="off" /><Button type="submit" variant="outline" disabled={isPending || !canManage}>{t('searchButton')}</Button></div>
+            <div className="flex gap-2"><Input id="delegate-search" value={search} onChange={(e) => setSearch(e.target.value)} disabled={isPending || !canManage} autoComplete="off" /><Button pending={isPending} type="submit" variant="outline" disabled={isPending || !canManage}>{t('searchButton')}</Button></div>
           </form>
           <div className="space-y-2">
             <Label htmlFor="saved-approval-delegate">{t('selectDelegate')}</Label>
@@ -115,7 +115,7 @@ export function DelegationPanel({ initial, initialCandidates, locale }: {
           <p className="text-xs text-muted-foreground">{t('retainedAuthority')}</p>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-          <Button onClick={save} disabled={isPending || !canManage || !eligibleSelection || (isCeo && !!delegateId && !authorized)} data-testid="delegate-save">{isPending ? t('saving') : t('save')}</Button>
+          <Button pending={isPending} onClick={save} disabled={isPending || !canManage || !eligibleSelection || (isCeo && !!delegateId && !authorized)} data-testid="delegate-save">{isPending ? t('saving') : t('save')}</Button>
         </CardContent>
       </Card>
       </FormSection>
@@ -147,7 +147,7 @@ function ExecutiveSettingsPanel({ context, onSaved }: { context: DelegationConte
         </fieldset>
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {notice && <p role="status" className="text-sm text-primary">{notice}</p>}
-        <Button disabled={isPending} data-testid="executive-settings-save" onClick={() => { setError(''); setNotice(''); startTransition(async () => { const result = await setExecutiveSettings(settings); if (!result.ok) { setError(result.error); return; } await onSaved(); setNotice(t('saved')); router.refresh(); }); }}>{isPending ? t('saving') : t('saveExecutive')}</Button>
+        <Button pending={isPending} disabled={isPending} data-testid="executive-settings-save" onClick={() => { setError(''); setNotice(''); startTransition(async () => { const result = await setExecutiveSettings(settings); if (!result.ok) { setError(result.error); return; } await onSaved(); setNotice(t('saved')); router.refresh(); }); }}>{isPending ? t('saving') : t('saveExecutive')}</Button>
       </CardContent>
     </Card>
     </FormSection>

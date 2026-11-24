@@ -109,7 +109,7 @@ export function SetPasswordForm({ locale }: { locale: string }) {
         </p>
       )}
 
-      <Button type="submit" disabled={isPending} className="w-full" data-testid="set-password-submit">
+      <Button pending={isPending} type="submit" disabled={isPending} className="w-full" data-testid="set-password-submit">
         {isPending ? '...' : t('submit')}
       </Button>
     </form>

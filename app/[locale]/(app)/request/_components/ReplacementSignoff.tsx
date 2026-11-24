@@ -100,7 +100,7 @@ function SignDialog({ requestId, employeeName }: { requestId: string; employeeNa
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>{tc('dismiss')}</AlertDialogCancel>
-          <Button type="button" onClick={submit} disabled={isPending} data-testid={`replacement-sign-confirm-${requestId}`}>
+          <Button pending={isPending} type="button" onClick={submit} disabled={isPending} data-testid={`replacement-sign-confirm-${requestId}`}>
             {t('sign')}
           </Button>
         </AlertDialogFooter>
@@ -163,7 +163,7 @@ function DeclineDialog({ requestId, employeeName }: { requestId: string; employe
         {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>{tc('dismiss')}</AlertDialogCancel>
-          <Button
+          <Button pending={isPending}
             type="button"
             variant="destructive"
             onClick={submit}
@@ -343,7 +343,7 @@ export function ReplacementDeclinedNotice({
       </div>
       {error && <p className="text-destructive" role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button
+        <Button pending={isPending}
           size="sm"
           disabled={!choice || isPending}
           onClick={() => save(choice)}
@@ -351,7 +351,7 @@ export function ReplacementDeclinedNotice({
         >
           {t('saveReplacement')}
         </Button>
-        <Button
+        <Button pending={isPending}
           size="sm"
           variant="outline"
           disabled={isPending}

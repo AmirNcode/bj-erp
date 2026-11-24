@@ -195,6 +195,27 @@ Builds run off the VM. Upgrade capacity if measured use warrants it. Release
 artifacts and old images also consume the small disk; retain recovery images
 and remove superseded artifacts deliberately rather than pruning all volumes.
 
+### Service worker kill switch
+
+`public/sw.js` (since 2026-11-24) caches only build files, icons, the logo and `public/offline.html`;
+it never stores pages or data. If it ever misbehaves (stale app, broken loads), replace `public/sw.js`
+with this and deploy; each browser drops the caches and the worker on its next visit:
+
+```js
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((names) => Promise.all(names.filter((n) => n.startsWith('bj-static-')).map((n) => caches.delete(n))))
+      .then(() => self.registration.unregister())
+  );
+});
+```
+
+`/sw.js` is served `no-cache` (`next.config.ts`), so the replacement reaches users on their next page load.
+In the same deploy, remove `<ServiceWorkerRegister />` from the root layout; otherwise every page load
+registers the stub again and it reinstalls, clears and unregisters each time.
+
 ## Company domain
 
 `bjeng.app` is delegated to Liara nameservers with a root A record for

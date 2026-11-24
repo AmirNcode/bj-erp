@@ -112,7 +112,7 @@ function LedgerImport({ boot, existingNumbers }: { boot: Bootstrap; existingNumb
           <Button variant="outline" className="max-sm:h-11" onClick={downloadTemplate} data-testid="sales-import-template">
             <Download aria-hidden="true" /> {t('import.template')}
           </Button>
-          <Button className="max-sm:h-11" onClick={() => input.current?.click()} disabled={pending} data-testid="sales-import-choose">
+          <Button pending={pending} className="max-sm:h-11" onClick={() => input.current?.click()} disabled={pending} data-testid="sales-import-choose">
             <Upload aria-hidden="true" /> {t('import.choose')}
           </Button>
           <input ref={input} type="file" accept=".xlsx" className="hidden" data-testid="sales-import-file"
@@ -207,7 +207,7 @@ function LedgerImport({ boot, existingNumbers }: { boot: Bootstrap; existingNumb
           ) : <p className="text-sm text-success">{t('import.clean')}</p>}
 
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button className="max-sm:h-11" disabled={pending || parsed.rows.length === 0} onClick={() => void doImport()} data-testid="sales-import-confirm">
+            <Button pending={pending} className="max-sm:h-11" disabled={pending || parsed.rows.length === 0} onClick={() => void doImport()} data-testid="sales-import-confirm">
               {t('import.confirm', { count: parsed.rows.length })}
             </Button>
             <Button variant="outline" className="max-sm:h-11" disabled={pending} onClick={reset}>{t('cancel')}</Button>

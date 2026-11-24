@@ -257,7 +257,7 @@ export function NewClearanceForm({ locale, people, allPeople, units, departmentM
         </p>
       )}
 
-      <Button type="submit" disabled={isPending} data-testid="clearance-submit">
+      <Button pending={isPending} type="submit" disabled={isPending} data-testid="clearance-submit">
         {isPending ? t('new.submitting') : t('new.submit')}
       </Button>
     </form>

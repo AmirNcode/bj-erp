@@ -158,11 +158,11 @@ export function BookingForm({
       {saved && <p role="status" className="text-sm text-success">{t('saved')}</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         {!initial.done && (
-          <Button type="button" variant="outline" disabled={pending} onClick={() => submit(false)} data-testid="booking-save">
+          <Button pending={pending} type="button" variant="outline" disabled={pending} onClick={() => submit(false)} data-testid="booking-save">
             {t('saveDraft')}
           </Button>
         )}
-        <Button type="button" disabled={pending} onClick={() => submit(true)} data-testid="booking-done">
+        <Button pending={pending} type="button" disabled={pending} onClick={() => submit(true)} data-testid="booking-done">
           {initial.done ? t('saveChanges') : t('markDone')}
         </Button>
       </div>

@@ -279,7 +279,7 @@ export function HourlyRequestForm({ leaveTypes, workSettings, locale }: Props) {
             errorTestId="hourly-error"
           />
 
-          <Button
+          <Button pending={isPending}
             type="submit"
             disabled={isPending || overLimit || delegation.blocked || balance.loading || !!projection?.blocked || testAccount}
             className="w-full"

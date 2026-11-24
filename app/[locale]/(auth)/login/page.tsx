@@ -152,7 +152,7 @@ export default function LoginPage() {
                 </p>
               )}
 
-              <Button
+              <Button pending={loading}
                 type="submit"
                 disabled={loading}
                 className="w-full"

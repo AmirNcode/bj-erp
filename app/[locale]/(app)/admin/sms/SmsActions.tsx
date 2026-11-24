@@ -62,7 +62,7 @@ export function SmsTestForm({ disabled, pattern }: { disabled: boolean; pattern:
       <div className="flex gap-2">
         <Input id="sms-test-mobile" dir="ltr" inputMode="tel" placeholder="09…" value={mobile}
           onChange={(e) => setMobile(e.target.value)} className={FIELD_W.shortSelect} />
-        <Button type="submit" variant="outline" disabled={pending || disabled}>{t('send')}</Button>
+        <Button pending={pending} type="submit" variant="outline" disabled={pending || disabled}>{t('send')}</Button>
       </div>
       <p className="text-xs text-muted-foreground">
         {t('testHint')} {t(pattern ? 'testHintPattern' : 'testHintLine')}

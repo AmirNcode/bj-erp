@@ -83,7 +83,7 @@ export function ExtendTripDialog({ trip, locale }: { trip: ExtendableTrip; local
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-          <Button disabled={pending} onClick={submit} data-testid={`extend-submit-${id}`}>{t('submit')}</Button>
+          <Button pending={pending} disabled={pending} onClick={submit} data-testid={`extend-submit-${id}`}>{t('submit')}</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

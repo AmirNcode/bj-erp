@@ -83,7 +83,7 @@ export function TextSizeControl({ initialStep }: { initialStep: FontStep }) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" onClick={save} disabled={step === savedStep || isPending || viewing} data-testid="text-size-save">
+        <Button pending={isPending} type="button" onClick={save} disabled={step === savedStep || isPending || viewing} data-testid="text-size-save">
           {t('save')}
         </Button>
         {viewing && <span className="text-xs text-muted-foreground">{t('viewAsDisabled')}</span>}

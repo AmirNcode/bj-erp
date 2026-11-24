@@ -130,7 +130,7 @@ export function SmsMobileCard({ initial, history }: { initial: string | null; hi
                 data-testid="sms-mobile-input"
               />
               <div className="flex gap-2">
-                <Button type="submit" disabled={isPending || unchanged} data-testid="sms-mobile-save">
+                <Button pending={isPending} type="submit" disabled={isPending || unchanged} data-testid="sms-mobile-save">
                   {t('save')}
                 </Button>
                 <Button type="button" variant="outline" disabled={isPending} onClick={discard} data-testid="sms-mobile-discard">

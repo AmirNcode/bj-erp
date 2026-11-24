@@ -109,7 +109,7 @@ export function BalanceQuickAdd({ employeeId, balances, hoursPerDay, pendingCoun
       </div>
       {error && <p role="alert" className="text-sm text-destructive" data-testid="quick-add-error">{error}</p>}
       {done && <p role="status" className="text-sm text-primary" data-testid="quick-add-done">{done}</p>}
-      <Button type="button" variant="outline" onClick={submit} disabled={pending} data-testid="quick-add-submit">
+      <Button pending={pending} type="button" variant="outline" onClick={submit} disabled={pending} data-testid="quick-add-submit">
         {pending ? t('adding') : t('submit')}
       </Button>
     </div>

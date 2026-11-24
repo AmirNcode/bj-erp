@@ -149,7 +149,7 @@ function PeopleTab({ boot, batch, rows }: { boot: Bootstrap; batch: string | nul
       )}
       {changed.length > 0 ? (
         <div className="sticky bottom-0 -mx-1 flex items-center justify-end gap-3 border-t border-border bg-background px-1 py-3 max-md:bottom-16">
-          <Button className="max-sm:h-11 max-sm:flex-1" disabled={saving} onClick={() => void save()} data-testid="sales-names-save">
+          <Button pending={saving} className="max-sm:h-11 max-sm:flex-1" disabled={saving} onClick={() => void save()} data-testid="sales-names-save">
             {t('save')} ({f.number(changed.length)})
           </Button>
         </div>

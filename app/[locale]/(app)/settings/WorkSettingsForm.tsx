@@ -193,7 +193,7 @@ export function WorkSettingsForm({
             </Button>
           )}
           {!readOnly && i === 0 && slots.length < WEEKDAYS.length && (
-            <Button
+            <Button pending={isPending}
               type="button"
               variant="ghost"
               size="sm"
@@ -390,7 +390,7 @@ export function WorkSettingsForm({
             </p>
           )}
           {!readOnly && (
-            <Button
+            <Button pending={isPending}
               type="button"
               data-testid="work-settings-save"
               onClick={onSave}

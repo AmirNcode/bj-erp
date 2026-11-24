@@ -16,6 +16,7 @@ import {
 import { nativeSelectClass } from '@/lib/native-select';
 import { cn } from '@/lib/utils';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { LinkPending } from '@/components/LinkPending';
 
 type Props = {
   /** Locale-prefixed list path, e.g. /fa/manage/employees. */
@@ -91,6 +92,7 @@ export function EmployeesToolbar({ base, query, counts, departments }: Props) {
                   {s.count}
                 </span>
               )}
+              <LinkPending className="hidden" />
             </Link>
           );
         })}

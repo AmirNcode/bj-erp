@@ -3,6 +3,13 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## Speed on slow links (spec 2026-11-24)
+
+- ◐ **Part 1 — Liara Caddy:** step 1a (keep-alive + zstd) live since 2026-11-24 (PR #33, owner applied the Caddyfile on the VM, run 45445230881). Owner: test from an Iranian mobile network, the office network and Canada (spec §5). Iran OK → step 1b (`protocols h1 h2`, plan Task 2; again needs the Caddyfile applied on the VM before CI deploys) + update the HTTP/1.1 paragraph in `docs/DEPLOY-LIARA.md`. Iran stalls → revert.
+- ◐ **Parts 2–3 merged (PR #34)** (pending buttons/links, section skeletons, service worker + offline page): owner check on `:3501` with DevTools "Slow 4G" (signed in: save a Sales stage, file a leave request, switch tabs); run `nav.spec`, `leave.spec`, `settings.spec`, `sales-products.spec` e2e (not run yet).
+- [ ] Owner measures real user speeds from Iran (mobile + office) before/after the Caddy change.
+- [ ] Later, if needed: ERP offline level 2 (IndexedDB read cache) and level 3 (offline edits); resumable uploads for users under ~1.4 Mbps; optimistic update for `TravelTickToggle` (spec §8).
+
 ## FR-97 UI readability and layout (built 2026-11-23 on `claude/ui-readability-layout`, local only)
 
 - [ ] **Run the touched e2e specs on an isolated/demo stack** (`touch-fields`, `settings`, `password`, `view-as`, `admin-settings`, `holiday-import`, `hr-role`, `approval-step-person`): not run, because global-setup rewrites the admin's language and weekend settings on the real-roster DB (`:3501`).
@@ -110,11 +117,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 ## Pilot launch (owner)
 
-- ☐ **Liara deploys are BLOCKED until the owner applies the new Caddyfile (since 2026-11-24, PR #33):**
-  run `a20d9ad` failed with `Infrastructure changed: liara/Caddyfile` (the apply guard; nothing changed
-  on the server). On the VM: validate and apply `deploy/liara/Caddyfile` from main (keep-alive +
-  `encode zstd gzip`), then re-run the Deploy Liara workflow. Every push to `main` fails the same way
-  until then; PR #34 (speed feedback) waits for it. Then test step 1a from Iran and Canada.
 - ☐ `www.bjeng.app`: add the DNS record; then the Caddy site needs the extra hostname and a redirect
   to `bjeng.app`.
 - ☐ One-page Farsi user guide: login code = personnel number, install to home screen (Android

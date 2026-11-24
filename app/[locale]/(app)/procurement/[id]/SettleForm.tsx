@@ -53,7 +53,7 @@ export function SettleForm({ requestId }: { requestId: string }) {
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={pending} onClick={submit} data-testid="settle-submit">{t('settle')}</Button>
+        <Button pending={pending} type="button" disabled={pending} onClick={submit} data-testid="settle-submit">{t('settle')}</Button>
         <Button type="button" variant="outline" disabled={pending} onClick={() => settle(0)} data-testid="settle-nothing">
           {t('nothingBooked')}
         </Button>

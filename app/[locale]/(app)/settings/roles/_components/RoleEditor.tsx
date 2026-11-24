@@ -248,7 +248,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
           </ul>
           <AlertDialogFooter>
             <AlertDialogCancel data-testid="sensitive-cancel">{t('cancel')}</AlertDialogCancel>
-            <Button onClick={() => save(true)} disabled={isPending} data-testid="sensitive-confirm">{t('sensitiveProceed')}</Button>
+            <Button pending={isPending} onClick={() => save(true)} disabled={isPending} data-testid="sensitive-confirm">{t('sensitiveProceed')}</Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -270,7 +270,7 @@ export function RoleEditor({ role, locale }: { role: RoleRow | null; locale: str
           {t('cancel')}
         </Button>
         {/* An existing role saves only a change: an unchanged save would write an empty audit row. */}
-        <Button className="h-10" disabled={isPending || (!!role && !dirty)} onClick={() => save()} data-testid="role-save">
+        <Button pending={isPending} className="h-10" disabled={isPending || (!!role && !dirty)} onClick={() => save()} data-testid="role-save">
           {isPending ? t('saving') : t('save')}
         </Button>
       </div>

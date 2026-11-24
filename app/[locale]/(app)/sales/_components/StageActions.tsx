@@ -49,9 +49,9 @@ export function StageActions({ boot, record, kind, stages, gate, decisionReason 
   if (kind === 'decision') {
     body = boot.caps.decide ? (
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" className="text-destructive max-sm:h-11 max-sm:flex-1" disabled={pending} data-testid="sales-decide-no"
+        <Button pending={pending} variant="outline" className="text-destructive max-sm:h-11 max-sm:flex-1" disabled={pending} data-testid="sales-decide-no"
           onClick={() => void run(() => decideSalesBid(record.id, false, decisionReason ?? ''), toCurrent)}>{t('decide.noBid')}</Button>
-        <Button className="max-sm:h-11 max-sm:flex-1" disabled={pending} data-testid="sales-decide-yes"
+        <Button pending={pending} className="max-sm:h-11 max-sm:flex-1" disabled={pending} data-testid="sales-decide-yes"
           onClick={() => void run(() => decideSalesBid(record.id, true, decisionReason ?? ''), toCurrent)}>{t('decide.bid')}</Button>
       </div>
     ) : note(t('stagePage.decideOnly'));
@@ -149,7 +149,7 @@ function MoveDialog({ boot, record, move, onClose, onMoved }: { boot: Bootstrap;
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending}>{t('cancel')}</Button>
-          <Button disabled={pending || !stageId} data-testid="sales-move-confirm"
+          <Button pending={pending} disabled={pending || !stageId} data-testid="sales-move-confirm"
             onClick={() => void run(() => moveSalesStage(record.id, stageId, owner, text, null), onMoved)}>
             {t('move.confirm')}
           </Button>
@@ -200,7 +200,7 @@ function ResultDialog({ boot, record, onClose, onMoved }: { boot: Bootstrap; rec
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending}>{t('cancel')}</Button>
-          <Button disabled={pending} data-testid="sales-result-confirm"
+          <Button pending={pending} disabled={pending} data-testid="sales-result-confirm"
             onClick={() => void run(() => setSalesResult(record.id, result, { winning_bid: winningBid, winner_name: winner, reason }), onMoved)}>
             {t('resultDialog.confirm')}
           </Button>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useLocale, useTranslations } from 'next-intl';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { LinkPending } from '@/components/LinkPending';
 
 /** Records · Customers · Products · Deadlines · Reports · Settings. The last two only for their holders. */
 export function SalesTabs({ reports, settings }: { reports: boolean; settings: boolean }) {
@@ -31,6 +32,7 @@ export function SalesTabs({ reports, settings }: { reports: boolean; settings: b
           data-testid={`sales-tab-${tab.key}`}
         >
           {t(tab.key)}
+          <LinkPending className="hidden" />
         </Link>
       ))}
     </nav>

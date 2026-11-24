@@ -186,7 +186,7 @@ export function ManageActions(props: Props) {
             <Label htmlFor="clearance-edit-note">{t('fields.note')}</Label>
             <Textarea id="clearance-edit-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} />
           </div>
-          <Button
+          <Button pending={isPending}
             type="button"
             size="sm"
             disabled={isPending || !lastDay}
@@ -206,7 +206,7 @@ export function ManageActions(props: Props) {
       {mode === 'rows' && (
         <div className="space-y-3 rounded-lg border border-border p-3">
           <RowsEditor rows={rows} onChange={setRows} people={props.people} leaverId={props.leaverId} locale={props.locale} />
-          <Button
+          <Button pending={isPending}
             type="button"
             size="sm"
             disabled={isPending}

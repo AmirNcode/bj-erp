@@ -45,6 +45,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Service worker: always re-checked so a deploy is picked up on the next visit.
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+          { key: 'Content-Type', value: 'application/javascript; charset=utf-8' },
+        ],
+      },
+      {
+        source: '/offline.html',
+        headers: [{ key: 'Cache-Control', value: 'no-cache' }],
+      },
+      {
         source: '/(.*)',
         headers: [
           // App is never embedded — block clickjacking.

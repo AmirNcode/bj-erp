@@ -119,13 +119,13 @@ export function StageBody({ boot, detail, stage, stages, focusNode, entry, onEnt
         <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             {showSubmit && kind !== 'decision' ? (
-              <Button className="max-sm:h-11 max-sm:w-full" disabled={pending || !dirty} data-testid="sales-stage-submit"
+              <Button pending={pending} className="max-sm:h-11 max-sm:w-full" disabled={pending || !dirty} data-testid="sales-stage-submit"
                 onClick={() => void run(() => saveSalesStagePage(r.id, stage.id, patch))}>
                 {t('stagePage.submit')}
               </Button>
             ) : null}
             {showSubmit && kind === 'decision' && r.bid_decision !== 'pending' ? (
-              <Button variant="outline" className="max-sm:h-11 max-sm:w-full" disabled={pending || !dirty} data-testid="sales-stage-submit"
+              <Button pending={pending} variant="outline" className="max-sm:h-11 max-sm:w-full" disabled={pending || !dirty} data-testid="sales-stage-submit"
                 onClick={() => void run(() => saveSalesStagePage(r.id, stage.id, patch))}>
                 {t('stagePage.submit')}
               </Button>

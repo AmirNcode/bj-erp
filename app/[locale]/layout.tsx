@@ -6,6 +6,7 @@ import { hasLocale } from 'next-intl';
 import { notFound } from 'next/navigation';
 import { Direction } from 'radix-ui';
 import { routing } from '@/i18n/routing';
+import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
 import '../globals.css';
 
 const vazirmatn = localFont({
@@ -74,6 +75,7 @@ export default async function LocaleLayout({ children, params }: Props) {
             {children}
           </NextIntlClientProvider>
         </Direction.Provider>
+        <ServiceWorkerRegister />
       </body>
     </html>
   );

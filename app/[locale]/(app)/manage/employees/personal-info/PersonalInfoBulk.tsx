@@ -155,7 +155,7 @@ export function PersonalInfoBulk({ locale, canImport }: { locale: string; canImp
                   </ul>
                 </div>
               )}
-              <Button
+              <Button pending={isPending}
                 type="button"
                 onClick={onApply}
                 disabled={isPending || plan.rows.length === 0 || plan.errors.length > 0}

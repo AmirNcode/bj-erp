@@ -204,7 +204,7 @@ export function LeaveRequestForm({ leaveTypes, workSettings, locale }: Props) {
             errorTestId="error-msg"
           />
 
-          <Button
+          <Button pending={isPending}
             type="submit"
             disabled={isPending || delegation.blocked || balance.loading || !!projection?.blocked || testAccount}
             className="w-full"

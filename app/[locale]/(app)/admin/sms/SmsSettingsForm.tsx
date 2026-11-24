@@ -234,7 +234,7 @@ export function SmsSettingsForm({ initial }: { initial: SmsSettings }) {
         </p>
       )}
       <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
-        <Button type="submit" disabled={pending} data-testid="sms-save">
+        <Button pending={pending} type="submit" disabled={pending} data-testid="sms-save">
           {pending ? t('saving') : t('save')}
         </Button>
       </div>

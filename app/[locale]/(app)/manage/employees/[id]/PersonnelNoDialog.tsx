@@ -112,7 +112,7 @@ export function PersonnelNoDialog({ employeeId, employeeCode, personnelNo }: Pro
           )}
         </div>
         <DialogFooter>
-          <Button onClick={save} disabled={!ready || isPending} data-testid="edit-personnel-no-save">
+          <Button pending={isPending} onClick={save} disabled={!ready || isPending} data-testid="edit-personnel-no-save">
             {t('savePersonnelNo')}
           </Button>
         </DialogFooter>

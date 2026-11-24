@@ -180,7 +180,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Route handlers must build redirects as relative `Location` paths, never from `request.nextUrl`:** behind the gateway it holds the container origin (`https://0.0.0.0:3000`).
 - **`tests/e2e/view-as.spec.ts` runs only against the local Docker stack with `NEXT_PUBLIC_SUPABASE_ANON_KEY=` empty:** otherwise the global setup rewrites the real admin's language and weekend settings.
 - **UI follows `docs/DESIGN.md` (Blueprint).** Every table gets `className="data-table"` (header band + row hover: mandatory); tabs come from `lib/ui/tabs.ts`, never pills; no `shadow-*`, no `rounded-[Npx]`, `rounded-full` only for circles.
-- **Pages sit in one 1280px column (`AppShell` `max-w-7xl`); `data-wide` on a page root lifts it, only for Employees list, Sales records list (`sales/page.tsx`), Finance** — never widen just the table; forms use `FormSection` + `FIELD_W`.
+- **Pages sit in one 1280px column (`AppShell` `max-w-7xl`); `data-wide` on a page root lifts it, only for Employees list, Sales records list (`sales/(records)/page.tsx`), Finance** — never widen just the table; forms use `FormSection` + `FIELD_W`.
 - **Light only:** `dark:` utilities are dead (`@custom-variant dark` in `globals.css`); they once followed the OS and greyed inputs.
 - **Two blues:** `--sidebar` `#20409a` (logo blue: side panel, phone top bar) and `--primary` `#2E3C92` (buttons). The logo PNG's white is transparent: on blue it needs the white plate from `MainNav`.
 - **Phone titles:** `MobileTopBar` shows the section name, so top-level pages pass `section` to `PageHeader`; a new nav section needs a row in its `SECTIONS` list.
@@ -229,6 +229,8 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Text size per person:** `--font-step` is set by `(app)/layout.tsx` `<FontStepStyle>` from `profiles.font_step` via `getOwnFontStep()` (real identity, so View as keeps the admin's); `--font-scale` derives in `globals.css` (same scale for Farsi and English (owner, 2026-11-23 round 2)); text tokens scale, so never write `text-[Npx]` (unit guard); `.font-scale-scope` for previews; print pins 1.
 - **Fields grow with large text:** an unlayered `min-height: calc(1lh + 0.625rem)` on input/select in `globals.css` beats `h-*` classes, so a field is never shorter than its own text.
 - **Fields stay ≥ 16px on touch screens (no iPhone zoom):** one unlayered `@media (pointer: coarse)` rule in `globals.css` sets `font-size: max(16px, var(--text-base))` on input/select/textarea; never shrink a field below it with a class, never add `maximum-scale`/`user-scalable=no`.
+- **Service worker `public/sw.js` is allowlist-only** (build files, icons, logo, `offline.html`): never add a page, RSC, `/api`, `/rest` or `/auth` path — it would keep personal data on devices. Registered only in production builds; kill switch in `docs/DEPLOY-LIARA.md`.
+- **Save buttons take `pending={…}`** (`components/ui/button.tsx`: spinner, disabled, same width); a `<Link>` gets `<LinkPending />` inside (tabs: hidden + `has-[[data-pending=true]]` pulse). Siblings may share one pending var: only the pressed button spins (Button tracks the press), the rest just disable.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

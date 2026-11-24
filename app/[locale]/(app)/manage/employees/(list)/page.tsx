@@ -42,9 +42,9 @@ import { WORK_SETTINGS_FALLBACK } from '@/lib/leave/workSettings';
 import { formatDuration } from '@/lib/leave/duration';
 import { durationLabelsFrom } from '@/lib/leave/durationLabels';
 import { passwordResetEligibleIds } from '@/lib/employees/passwordReset';
-import { ConvertNegativesDialog } from './ConvertNegativesDialog';
-import { EmployeesTable, type EmployeeRow } from './EmployeesTable';
-import { EmployeesToolbar } from './EmployeesToolbar';
+import { ConvertNegativesDialog } from '../ConvertNegativesDialog';
+import { EmployeesTable, type EmployeeRow } from '../EmployeesTable';
+import { EmployeesToolbar } from '../EmployeesToolbar';
 
 type Props = {
   params: Promise<{ locale: string }>;

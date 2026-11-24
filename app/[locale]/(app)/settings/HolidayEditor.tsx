@@ -78,7 +78,7 @@ function useLabels(): Labels {
       // only "works" via a production-only fast path in use-intl that
       // skips compilation — under `next dev` it renders the dotted key
       // path instead of a sentence. Same trap, same fix, as the
-      // password-regen dialog in manage/employees/page.tsx.
+      // password-regen dialog in manage/employees/(list)/page.tsx.
       willAdd: tImport.raw('willAdd'),
       willUpdate: tImport.raw('willUpdate'),
       problemsTitle: tImport('problemsTitle'),
@@ -253,7 +253,7 @@ export function HolidayEditor({
                 disabled={isPending}
               />
             </div>
-            <Button
+            <Button pending={isPending}
               type="button"
               data-testid="holiday-add"
               onClick={onAdd}

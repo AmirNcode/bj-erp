@@ -171,7 +171,7 @@ export function DepartmentsCard({
                         data-testid="dept-name-en-input"
                       />
                     </label>
-                    <Button type="submit" size="sm" disabled={isPending} data-testid="dept-rename-save">
+                    <Button pending={isPending} type="submit" size="sm" disabled={isPending} data-testid="dept-rename-save">
                       {labels.save}
                     </Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => setEditing(null)}>

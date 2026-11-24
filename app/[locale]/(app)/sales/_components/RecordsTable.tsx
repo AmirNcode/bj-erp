@@ -6,7 +6,7 @@
  * Phone: stacked rows.
  */
 
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -18,6 +18,8 @@ import { SortTh, TD } from './SortTh';
 import { DetailRow, ExpandCell, ExpandTh, type DetailItem } from './ExpandParts';
 import { recordColumns } from '@/lib/sales/columns';
 import { cn } from '@/lib/utils';
+import { Loader2 } from 'lucide-react';
+import { LinkPending, pendingSpinnerClass } from '@/components/LinkPending';
 import { nextRecordSort, RECORD_SORTS } from '@/lib/sales/recordSort';
 
 const SORT_LABEL: Record<RecordSort, string> = {
@@ -63,6 +65,9 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
   const t = useTranslations('sales');
   const f = useSalesFormat();
   const router = useRouter();
+  // Tap feedback while a record opens: the tapped row dims and shows a spinner.
+  const [opening, startOpening] = useTransition();
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggleOpen = (id: string) => setOpen((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const today = todayInAppTz();
@@ -149,8 +154,21 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
               ];
               return (
                 <Fragment key={r.id}>
-                  <tr className="cursor-pointer" onClick={() => router.push(`/${f.locale}/sales/${r.id}`)}>
-                    <td className={TD}><Link href={`/${f.locale}/sales/${r.id}`} className="font-semibold tabular-nums text-primary" dir="ltr" onClick={(e) => e.stopPropagation()}>{f.recordNo(r.record_no)}</Link></td>
+                  <tr
+                    className={cn('cursor-pointer active:bg-muted', opening && openingId === r.id && 'opacity-60')}
+                    data-pending={opening && openingId === r.id ? '' : undefined}
+                    onClick={() => { setOpeningId(r.id); startOpening(() => router.push(`/${f.locale}/sales/${r.id}`)); }}
+                  >
+                    <td className={TD}>
+                      <Link href={`/${f.locale}/sales/${r.id}`} className="relative inline-flex items-center gap-1.5 pe-5 font-semibold tabular-nums text-primary" dir="ltr" onClick={(e) => e.stopPropagation()}>
+                        {f.recordNo(r.record_no)}
+                        {opening && openingId === r.id ? (
+                          <Loader2 aria-hidden className={cn(pendingSpinnerClass, 'absolute end-0')} />
+                        ) : (
+                          <LinkPending className="end-0" />
+                        )}
+                      </Link>
+                    </td>
                     <td className={`${TD} max-w-[22ch] truncate`} title={r.title}><bdi>{r.title}</bdi></td>
                     {showBuyer ? <td className={cn(TD, 'max-w-[16ch] truncate', SHOW.buyer)} title={r.buyer_name ?? undefined}>{r.buyer_name ?? dash}</td> : null}
                     <td className={cn(TD, SHOW.stage)}>{stageTag(r)}</td>
