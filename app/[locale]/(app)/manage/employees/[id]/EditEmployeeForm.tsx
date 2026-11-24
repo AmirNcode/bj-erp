@@ -426,7 +426,7 @@ export function EditEmployeeForm({
     return (
       <div className={`flex items-center justify-end gap-3 pt-4 ${FORM_SECTION_END_COL}`}>
         {editable && (
-          <Button type="submit" disabled={pending} data-testid={testId}>
+          <Button pending={pending} type="submit" disabled={pending} data-testid={testId}>
             {pending ? '...' : labels.save}
           </Button>
         )}
@@ -784,7 +784,7 @@ export function EditEmployeeForm({
             <div className="flex flex-wrap gap-3">
               {caps.resetPassword && (employee.active || caps.signOutEverywhere) && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button
+                  <Button pending={pending}
                     variant="outline"
                     size="sm"
                     onClick={handleResetPassword}
@@ -810,7 +810,7 @@ export function EditEmployeeForm({
               )}
               {caps.signOutEverywhere && (
                 <div className="flex flex-wrap items-center gap-3">
-                  <Button variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
+                  <Button pending={pending} variant="outline" size="sm" onClick={handleSignOutEverywhere} disabled={pending}
                     data-testid="sign-out-everywhere">
                     {t('signOutEverywhere')}
                   </Button>
@@ -855,7 +855,7 @@ export function EditEmployeeForm({
                   </AlertDialogContent>
                 </AlertDialog>
               ) : (
-                <Button
+                <Button pending={pending}
                   variant="outline"
                   size="sm"
                   onClick={handleToggleActive}

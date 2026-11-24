@@ -86,7 +86,7 @@ export function DocumentsPanel({ boot, record, documents }: { boot: Bootstrap; r
           void run(() => saveSalesDocument(record.id, null, { name }), () => setName(''));
         }}>
           <Input className="sm:w-80" value={name} maxLength={200} onChange={(e) => setName(e.target.value)} placeholder={t('documents.addPlaceholder')} aria-label={t('documents.addPlaceholder')} data-testid="sales-document-name" />
-          <Button type="submit" variant="outline" className="max-sm:h-11" disabled={pending || !name.trim()}><Plus aria-hidden="true" /> {t('documents.add')}</Button>
+          <Button pending={pending} type="submit" variant="outline" className="max-sm:h-11" disabled={pending || !name.trim()}><Plus aria-hidden="true" /> {t('documents.add')}</Button>
         </form>
       ) : null}
       {assigning ? <DocumentDialog boot={boot} record={record} doc={assigning} onClose={() => setAssigning(null)} /> : null}

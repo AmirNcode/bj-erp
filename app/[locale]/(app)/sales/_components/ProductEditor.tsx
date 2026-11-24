@@ -164,8 +164,8 @@ export function ProductEditor({ product, boot }: { product: Product; boot: Boots
 
       {can ? (
         <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-          <Button disabled={pending || !dirty || !(nameFa.trim() || nameEn.trim())} onClick={() => void save()} data-testid="sales-product-save">{t('save')}</Button>
-          <Button variant="outline" className="text-destructive sm:ms-auto" disabled={pending} onClick={() => setConfirmDelete(true)} data-testid="sales-product-delete">
+          <Button pending={pending} disabled={pending || !dirty || !(nameFa.trim() || nameEn.trim())} onClick={() => void save()} data-testid="sales-product-save">{t('save')}</Button>
+          <Button pending={pending} variant="outline" className="text-destructive sm:ms-auto" disabled={pending} onClick={() => setConfirmDelete(true)} data-testid="sales-product-delete">
             {t('products.delete')}
           </Button>
         </div>
@@ -196,7 +196,7 @@ function NewColumnDialog({ pending, onClose, onCreate }: {
   const [type, setType] = useState<FieldType>('text');
   return (
     <DialogShell title={t('products.newColumn')} body={t('products.newColumnHint')} onClose={onClose}
-      action={<Button disabled={pending || !(fa.trim() || en.trim())} onClick={() => void onCreate(fa.trim(), en.trim(), type)} data-testid="sales-product-column-create">{t('items.createColumn')}</Button>}>
+      action={<Button pending={pending} disabled={pending || !(fa.trim() || en.trim())} onClick={() => void onCreate(fa.trim(), en.trim(), type)} data-testid="sales-product-column-create">{t('items.createColumn')}</Button>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label={t('settings.labelFa')}><Input maxLength={80} value={fa} onChange={(e) => setFa(e.target.value)} data-testid="sales-product-column-fa" /></Field>
         <Field label={t('settings.labelEn')}><Input dir="ltr" maxLength={80} value={en} onChange={(e) => setEn(e.target.value)} /></Field>

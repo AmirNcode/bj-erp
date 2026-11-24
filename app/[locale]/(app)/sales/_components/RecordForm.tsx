@@ -314,7 +314,7 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="outline" className="max-sm:h-11" onClick={onCancel} disabled={pending}>{t('cancel')}</Button>
-        <Button type="submit" className="max-sm:h-11" disabled={pending || !d.title.trim()} data-testid="sales-form-save">
+        <Button pending={pending} type="submit" className="max-sm:h-11" disabled={pending || !d.title.trim()} data-testid="sales-form-save">
           {record ? t('save') : t('form.create')}
         </Button>
       </div>

@@ -143,7 +143,7 @@ export function SignDialog(props: Props) {
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>{tc('dismiss')}</AlertDialogCancel>
-          <Button type="button" onClick={submit} disabled={isPending} data-testid={`${idPrefix}-confirm`}>
+          <Button pending={isPending} type="button" onClick={submit} disabled={isPending} data-testid={`${idPrefix}-confirm`}>
             {props.kind === 'row' ? t('sign') : t('financeSign')}
           </Button>
         </AlertDialogFooter>

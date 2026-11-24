@@ -193,7 +193,7 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
           <Input value={name} maxLength={200} onChange={(e) => setName(e.target.value)} aria-label={t('customers.renameTitle')} data-testid="sales-customer-name" />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenaming(false)} disabled={pending}>{t('cancel')}</Button>
-            <Button onClick={rename} disabled={pending || name.trim() === '' || name.trim() === c.name} data-testid="sales-customer-rename-save">{t('save')}</Button>
+            <Button pending={pending} onClick={rename} disabled={pending || name.trim() === '' || name.trim() === c.name} data-testid="sales-customer-rename-save">{t('save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

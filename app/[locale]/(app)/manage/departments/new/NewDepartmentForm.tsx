@@ -136,7 +136,7 @@ export function NewDepartmentForm({ existing, locale }: Props) {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" disabled={pending} data-testid="dept-submit">
+              <Button pending={pending} type="submit" disabled={pending} data-testid="dept-submit">
                 {pending ? '...' : t('create')}
               </Button>
               <Button

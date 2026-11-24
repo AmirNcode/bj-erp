@@ -58,7 +58,7 @@ export function AccrualRunner({ locale }: { locale: string }) {
         <p className="mt-1 text-sm text-muted-foreground">{labels.hint}</p>
       </div>
 
-      <Button onClick={onRun} disabled={isPending} data-testid="accrual-run-btn">
+      <Button pending={isPending} onClick={onRun} disabled={isPending} data-testid="accrual-run-btn">
         {isPending ? '…' : labels.run}
       </Button>
 

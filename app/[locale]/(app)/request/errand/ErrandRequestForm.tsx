@@ -218,7 +218,7 @@ export function ErrandRequestForm({ workSettings, locale }: Props) {
             errorTestId="errand-error"
           />
 
-          <Button type="submit" disabled={isPending || delegation.blocked || testAccount} className="w-full" data-testid="errand-submit">
+          <Button pending={isPending} type="submit" disabled={isPending || delegation.blocked || testAccount} className="w-full" data-testid="errand-submit">
             {isPending ? '...' : labels.submit}
           </Button>
         </form>

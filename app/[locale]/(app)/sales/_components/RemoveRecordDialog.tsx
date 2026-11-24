@@ -86,7 +86,7 @@ export function RemoveRecordDialog({ detail, onClose }: { detail: RecordDetail; 
         {error ? <p className="text-sm text-destructive" role="alert" data-testid="sales-remove-error">{error}</p> : null}
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending} data-testid="sales-remove-cancel">{t('cancel')}</Button>
-          <Button
+          <Button pending={pending}
             variant={destructive ? 'destructive' : 'default'}
             disabled={pending || !canConfirm(choice, r.stage_kind)}
             onClick={() => void confirm()}

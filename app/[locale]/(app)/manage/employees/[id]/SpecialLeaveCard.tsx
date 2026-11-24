@@ -113,7 +113,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
               <p className="text-xs text-muted-foreground">{t('bereavementHint')}</p>
             </div>
             {!adding && (
-              <Button
+              <Button pending={isPending}
                 type="button"
                 variant="outline"
                 size="sm"
@@ -146,7 +146,7 @@ export function SpecialLeaveCard({ employeeId, grants, maritalStatus }: Props) {
                 data-testid="special-leave-bereavement-note"
               />
               <div className="flex gap-2">
-                <Button
+                <Button pending={isPending}
                   type="button"
                   size="sm"
                   disabled={isPending || !note.trim()}

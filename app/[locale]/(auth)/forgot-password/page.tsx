@@ -57,7 +57,7 @@ export default function ForgotPasswordPage() {
               <Input id="recovery-input" name="value" type={challenge ? 'tel' : 'text'} dir="ltr"
                 autoComplete={challenge ? 'tel' : 'username'} maxLength={64} required />
               {failed && <p role="alert">{t('error')}</p>}
-              <Button type="submit" disabled={busy} className="w-full">{t(challenge ? 'send' : 'next')}</Button>
+              <Button pending={busy} type="submit" disabled={busy} className="w-full">{t(challenge ? 'send' : 'next')}</Button>
             </form>
           )}
           <p className="text-sm text-muted-foreground">{t('help')}</p>

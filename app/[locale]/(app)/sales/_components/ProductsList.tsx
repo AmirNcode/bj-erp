@@ -104,7 +104,7 @@ function NewProductDialog({ onClose }: { onClose: () => void }) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={busy}>{t('cancel')}</Button>
-          <Button disabled={busy || !(nameFa.trim() || nameEn.trim())} onClick={() => void create()} data-testid="sales-product-create">{t('products.create')}</Button>
+          <Button pending={busy} disabled={busy || !(nameFa.trim() || nameEn.trim())} onClick={() => void create()} data-testid="sales-product-create">{t('products.create')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -240,7 +240,7 @@ export function EditRequestDialog({ request, units, locale, workWindow, buttonCl
         {error && <p role="alert" className="text-sm text-destructive" data-testid="edit-error">{error}</p>}
         <AlertDialogFooter>
           <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-          <Button disabled={pending || !ready} onClick={submit} data-testid="edit-submit">{t('submit')}</Button>
+          <Button pending={pending} disabled={pending || !ready} onClick={submit} data-testid="edit-submit">{t('submit')}</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

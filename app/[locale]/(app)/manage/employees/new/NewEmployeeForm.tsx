@@ -539,7 +539,7 @@ export function NewEmployeeForm({
           )}
 
           <div className="flex gap-3 pt-2">
-            <Button type="submit" disabled={pending}>
+            <Button pending={pending} type="submit" disabled={pending}>
               {pending ? '...' : labels.submit}
             </Button>
             <Button

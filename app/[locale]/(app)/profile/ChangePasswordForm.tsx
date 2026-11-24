@@ -147,7 +147,7 @@ export function ChangePasswordForm() {
           disabled={isPending}
         />
       </div>
-      <Button
+      <Button pending={isPending}
         type="submit"
         data-testid="password-submit"
         disabled={isPending}

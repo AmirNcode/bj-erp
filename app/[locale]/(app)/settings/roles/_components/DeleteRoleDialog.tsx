@@ -153,7 +153,7 @@ export function DeleteRoleDialog({ roleId, roleName }: { roleId: string; roleNam
             {t('delete.cancel')}
           </AlertDialogCancel>
           {/* A plain button, not AlertDialogAction: the dialog stays open to show a refusal. */}
-          <Button
+          <Button pending={deleting}
             variant="destructive"
             className="h-10"
             disabled={deleting || loading || holders === null}

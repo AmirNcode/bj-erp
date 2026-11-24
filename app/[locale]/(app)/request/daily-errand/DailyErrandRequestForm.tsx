@@ -227,7 +227,7 @@ export function DailyErrandRequestForm({ workSettings, locale, perDiemAllowed }:
             errorTestId="daily-errand-error"
           />
 
-          <Button
+          <Button pending={isPending}
             type="submit"
             disabled={isPending || delegation.blocked || testAccount}
             className="w-full"

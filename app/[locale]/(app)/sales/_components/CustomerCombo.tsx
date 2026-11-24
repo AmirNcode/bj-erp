@@ -230,7 +230,7 @@ export function NewCustomerDialog({ name: initialName, onClose, onPicked }: {
         </div>
         <DialogFooter className="gap-2 max-sm:flex-col-reverse">
           <Button type="button" variant="outline" className="max-sm:h-11" onClick={onClose} disabled={busy}>{t('cancel')}</Button>
-          <Button type="button" className="max-sm:h-11" onClick={create} disabled={busy || !name.trim()} data-testid="sales-new-customer-create">
+          <Button pending={busy} type="button" className="max-sm:h-11" onClick={create} disabled={busy || !name.trim()} data-testid="sales-new-customer-create">
             {t('customerCombo.createAnyway')}
           </Button>
         </DialogFooter>

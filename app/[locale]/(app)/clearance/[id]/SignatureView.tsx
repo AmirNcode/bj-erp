@@ -33,7 +33,7 @@ export function SignatureView({ kind, id }: { kind: 'row' | 'finance'; id: strin
 
   return (
     <div className="mt-1">
-      <Button
+      <Button pending={isPending}
         type="button"
         variant="link"
         size="sm"

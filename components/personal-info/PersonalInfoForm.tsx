@@ -202,7 +202,7 @@ export function PersonalInfoForm({ employeeId, initial, readOnly, readOnlyReason
             </p>
           )}
           {!readOnly && (
-            <Button type="submit" disabled={isPending} data-testid="personal-info-save">
+            <Button pending={isPending} type="submit" disabled={isPending} data-testid="personal-info-save">
               {t('save')}
             </Button>
           )}

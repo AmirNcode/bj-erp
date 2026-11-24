@@ -424,7 +424,7 @@ export function ApprovalStepsCard({ steps, orderEnforced, canEnforceOrder, canEd
 
         {(canEdit || canEnforceOrder) && (
           <div className="flex justify-end">
-            <Button onClick={save} disabled={!dirty || isPending} data-testid="approval-steps-save">
+            <Button pending={isPending} onClick={save} disabled={!dirty || isPending} data-testid="approval-steps-save">
               {isPending ? labels.saving : labels.save}
             </Button>
           </div>

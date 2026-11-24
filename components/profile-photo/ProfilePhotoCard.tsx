@@ -178,7 +178,7 @@ export function ProfilePhotoCard({ employeeId, name, initial, mode, hideTitle }:
               )}
               {photo && confirmRemove && (
                 <>
-                  <Button
+                  <Button pending={isPending}
                     type="button"
                     size="sm"
                     variant="destructive"
@@ -285,7 +285,7 @@ export function ProfilePhotoCard({ employeeId, name, initial, mode, hideTitle }:
             <Button type="button" variant="ghost" onClick={closeCrop}>
               {t('cancel')}
             </Button>
-            <Button type="button" onClick={save} disabled={!area || isPending} data-testid="profile-photo-save">
+            <Button pending={isPending} type="button" onClick={save} disabled={!area || isPending} data-testid="profile-photo-save">
               {isPending ? t('saving') : t('save')}
             </Button>
           </DialogFooter>

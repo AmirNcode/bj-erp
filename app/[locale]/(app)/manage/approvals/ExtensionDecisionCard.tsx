@@ -83,7 +83,7 @@ export function ExtensionDecisionCard({ ext, locale, bare = false }: { ext: Pend
       <div className="flex flex-wrap gap-2">
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size="sm" disabled={pending} data-testid={`extension-approve-open-${id}`}>{t('approve')}</Button>
+            <Button pending={pending} size="sm" disabled={pending} data-testid={`extension-approve-open-${id}`}>{t('approve')}</Button>
           </AlertDialogTrigger>
           <AlertDialogContent size="default">
             <AlertDialogHeader>
@@ -107,13 +107,13 @@ export function ExtensionDecisionCard({ ext, locale, bare = false }: { ext: Pend
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             <AlertDialogFooter>
               <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-              <Button disabled={pending} onClick={() => decide(true)} data-testid={`extension-approve-${id}`}>{t('approve')}</Button>
+              <Button pending={pending} disabled={pending} onClick={() => decide(true)} data-testid={`extension-approve-${id}`}>{t('approve')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button size="sm" variant="outline" disabled={pending} data-testid={`extension-reject-open-${id}`}>{t('reject')}</Button>
+            <Button pending={pending} size="sm" variant="outline" disabled={pending} data-testid={`extension-reject-open-${id}`}>{t('reject')}</Button>
           </AlertDialogTrigger>
           <AlertDialogContent size="default">
             <AlertDialogHeader>
@@ -123,7 +123,7 @@ export function ExtensionDecisionCard({ ext, locale, bare = false }: { ext: Pend
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
             <AlertDialogFooter>
               <AlertDialogCancel>{tc('dismiss')}</AlertDialogCancel>
-              <Button variant="destructive" disabled={pending} onClick={() => decide(false)} data-testid={`extension-reject-${id}`}>{t('reject')}</Button>
+              <Button pending={pending} variant="destructive" disabled={pending} onClick={() => decide(false)} data-testid={`extension-reject-${id}`}>{t('reject')}</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

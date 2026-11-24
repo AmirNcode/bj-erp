@@ -469,7 +469,7 @@ function GeneralSettings({ boot }: { boot: Bootstrap }) {
       <Field label={t('settings.docTemplate')} hint={t('settings.docTemplateHint')}>
         <Textarea rows={6} value={template} onChange={(e) => setTemplate(e.target.value)} />
       </Field>
-      <div><Button type="submit" className="max-sm:h-11 max-sm:w-full" disabled={pending || nextNo === null || warnDays === null || validity === null} data-testid="sales-settings-save">{t('save')}</Button></div>
+      <div><Button pending={pending} type="submit" className="max-sm:h-11 max-sm:w-full" disabled={pending || nextNo === null || warnDays === null || validity === null} data-testid="sales-settings-save">{t('save')}</Button></div>
     </form>
   );
 }

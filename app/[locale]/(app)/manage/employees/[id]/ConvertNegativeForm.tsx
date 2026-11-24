@@ -87,7 +87,7 @@ export function ConvertNegativeForm({ employeeId, balanceMinutes, hoursPerDay, p
       </div>
       {error && <p role="alert" className="text-sm text-destructive" data-testid="convert-one-error">{error}</p>}
       {done && <p role="status" className="text-sm text-primary" data-testid="convert-one-done">{done}</p>}
-      <Button type="button" variant="outline" onClick={submit} disabled={pending} data-testid="convert-one-submit">
+      <Button pending={pending} type="button" variant="outline" onClick={submit} disabled={pending} data-testid="convert-one-submit">
         {pending ? t('converting') : t('submit')}
       </Button>
     </div>

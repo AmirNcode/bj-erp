@@ -270,7 +270,7 @@ export function ConfirmDialog({ title, body, confirmLabel, cancelLabel, pending,
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={pending}>{cancelLabel}</Button>
-          <Button variant="outline" className="text-destructive" onClick={onConfirm} disabled={pending} data-testid="sales-confirm">{confirmLabel}</Button>
+          <Button pending={pending} variant="outline" className="text-destructive" onClick={onConfirm} disabled={pending} data-testid="sales-confirm">{confirmLabel}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

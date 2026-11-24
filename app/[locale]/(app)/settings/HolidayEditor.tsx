@@ -253,7 +253,7 @@ export function HolidayEditor({
                 disabled={isPending}
               />
             </div>
-            <Button
+            <Button pending={isPending}
               type="button"
               data-testid="holiday-add"
               onClick={onAdd}

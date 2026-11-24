@@ -302,7 +302,7 @@ export function HolidayImportDialog({
           >
             {labels.cancel}
           </Button>
-          <Button
+          <Button pending={isPending}
             onClick={runImport}
             disabled={!canImport || isPending}
             data-testid="holiday-import-confirm"

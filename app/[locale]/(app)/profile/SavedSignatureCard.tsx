@@ -127,7 +127,7 @@ export function SavedSignatureCard({ initial }: { initial: SavedSignature | null
             )}
             {initial && confirmDelete && (
               <>
-                <Button type="button" size="sm" variant="destructive" onClick={remove} disabled={isPending} data-testid="saved-signature-delete-confirm">
+                <Button pending={isPending} type="button" size="sm" variant="destructive" onClick={remove} disabled={isPending} data-testid="saved-signature-delete-confirm">
                   {t('deleteConfirm')}
                 </Button>
                 <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
@@ -184,7 +184,7 @@ export function SavedSignatureCard({ initial }: { initial: SavedSignature | null
             <img src={mode.dataUrl} alt={t('title')} className="mx-auto h-auto max-h-32 w-full object-contain" data-testid="saved-signature-preview" />
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button
+            <Button pending={isPending}
               type="button"
               size="sm"
               onClick={() => save(mode.dataUrl, mode.source)}

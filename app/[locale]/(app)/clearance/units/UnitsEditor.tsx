@@ -215,7 +215,7 @@ export function UnitsEditor({ locale, initial, people, departments }: Props) {
         >
           {tRows('add')}
         </Button>
-        <Button type="button" onClick={save} disabled={isPending} data-testid="clearance-units-save">
+        <Button pending={isPending} type="button" onClick={save} disabled={isPending} data-testid="clearance-units-save">
           {t('save')}
         </Button>
       </div>

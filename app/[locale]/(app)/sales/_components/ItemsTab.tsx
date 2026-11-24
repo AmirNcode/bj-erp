@@ -142,7 +142,7 @@ function Level({ boot, record, fields, depth, parent, rows, open, toggle, focusN
         </>
       ) : null}
       <td className="whitespace-nowrap text-end">
-        <Button size="sm" disabled={pending} onClick={() => void save(n)} data-testid="sales-item-save">{t('save')}</Button>{' '}
+        <Button pending={pending} size="sm" disabled={pending} onClick={() => void save(n)} data-testid="sales-item-save">{t('save')}</Button>{' '}
         <Button size="sm" variant="outline" disabled={pending} onClick={() => setEditing(null)}>{t('cancel')}</Button>
       </td>
     </tr>
@@ -314,7 +314,7 @@ function ColumnDialog({ fields, shown, canCreate, pending, onClose, onPick, onCr
               </div>
               <p className="text-xs text-muted-foreground">{t('items.newColumnHint')}</p>
               <div>
-                <Button disabled={pending || !(labelFa.trim() || labelEn.trim())} onClick={() => onCreate(labelFa.trim(), labelEn.trim(), type)} data-testid="sales-column-create">
+                <Button pending={pending} disabled={pending || !(labelFa.trim() || labelEn.trim())} onClick={() => onCreate(labelFa.trim(), labelEn.trim(), type)} data-testid="sales-column-create">
                   {t('items.createColumn')}
                 </Button>
               </div>

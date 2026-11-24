@@ -196,7 +196,7 @@ export function TransferAdminDialog({ locale }: { locale: string }) {
           <Button variant="outline" className="h-10" disabled={isPending} onClick={() => onOpenChange(false)}>
             {t('transfer.cancel')}
           </Button>
-          <Button
+          <Button pending={isPending}
             variant="destructive"
             className="h-10"
             disabled={!ready || isPending}

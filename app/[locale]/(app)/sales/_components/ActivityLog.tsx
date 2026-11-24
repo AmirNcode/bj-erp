@@ -93,7 +93,7 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
           onSubmit={(e) => { e.preventDefault(); void run(() => addSalesComment(record.id, text), () => setText('')); }}
         >
           <Input value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} placeholder={t('activity.placeholder')} aria-label={t('activity.placeholder')} data-testid="sales-comment" />
-          <Button type="submit" variant="outline" className="max-sm:h-11" disabled={pending || !text.trim()}>{t('activity.add')}</Button>
+          <Button pending={pending} type="submit" variant="outline" className="max-sm:h-11" disabled={pending || !text.trim()}>{t('activity.add')}</Button>
         </form>
       ) : null}
       <ol className="divide-y divide-border border-y border-border">
