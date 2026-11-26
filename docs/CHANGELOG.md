@@ -51,7 +51,7 @@ was deployed; semantic versioning starts at the first tag.
 
 - Finance now offers CSV and Excel Worksheet downloads for the filtered requests. The worksheet keeps personnel numbers as text and costs and durations as numbers.
 
-### ERP › Sales: CEO feedback round 1 (FR-94) — 2026-11-20, branch `feat/erp-sales-module`
+### ERP › Sales: CEO feedback round 1 (FR-94) — deployed 2026-11-20 as `96da80b`
 
 - **Section title is a button** (phones, every section): tapping it goes to that section's main page (ERP on a record → the records list).
 - **Currencies in Settings › Sales**: add, rename (fa + en), symbol, decimals (display only), hide; codes are free (e.g. Toman) and permanent once used. Seeded IRR, EUR, USD, AED, CNY.

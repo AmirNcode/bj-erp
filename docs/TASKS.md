@@ -18,6 +18,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - [ ] Admin › SMS: consider merging the "First line" and "Last line" sections into one.
 - [ ] Owner: review the uncommitted fix set F1–F6 (see `docs/AGENT-LOG.md`), then commit, PR, merge.
 
+## Local sign-in on port 3501 (2026-11-21)
+
+- [ ] Make fresh sign-in work through both localhost and the LAN address. The deployed browser bundle sends localhost users to the LAN Auth URL, where the browser blocks the cross-origin request. Use `http://192.168.2.85:3501/login` on the current stack. Show a connection error when Auth cannot be reached.
+
 ## FR-96 profile tabs + self-service mobile (merged 2026-11-19)
 
 - [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `password`, `view-as` specs were edited for the new tabs but never run; the local test account's password does not match the local DB): screens checked on a temporary no-login page only. Owner: on bjeng.app, set a mobile on Profile and confirm an SMS arrives.
@@ -26,11 +30,10 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - [ ] **Audit-gate exception:** remove `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, via next-intl → @parcel/watcher) from `IGNORED` in `scripts/audit-gate.mjs` once picomatch ships a fix (the gate prints "no longer reported" when it can go).
 - [ ] Give the Melipayamak reviewer account `test1` the test-emp role; deactivate it after the templates are approved.
 
-## ERP · Sales module (FR-94, built 2026-11-16 on `feat/erp-sales-module`, local only)
+## ERP · Sales module (FR-94, deployed 2026-11-20 as `96da80b`)
 
-- ◐ **CEO feedback round 1 — built, owner testing on `:3501`** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Tasks 0–8 done and committed on the branch; `:3501` runs the branch (`compose-sales`). Left: (1) owner checks title link, currencies, Our total price, Products, Files on `:3501`; (2) run `tests/e2e/sales-files.spec.ts` + `sales-products.spec.ts` (written, never run — need the local admin password as `E2E_ADMIN_PASSWORD`; each run leaves one `E2E …` record + one product in the DB); (3) push / merge to `main` only on the owner's word (deploys to Liara; newest commit must not be `[skip ci]`).
+- ◐ **CEO feedback round 1 — deployed to Liara, owner testing remains** (spec `docs/specs/2026-11-20-sales-ceo-feedback-design.md`, plan `docs/plans/2026-11-20-sales-ceo-feedback.md`): Tasks 0–8 done and committed on the branch; `:3501` runs the branch (`compose-sales`). Left: (1) owner checks title link, currencies, Our total price, Products, Files on `:3501`; (2) run `tests/e2e/sales-files.spec.ts` + `sales-products.spec.ts` (written, never run — need the local admin password as `E2E_ADMIN_PASSWORD`; each run leaves one `E2E …` record + one product in the DB). Deployment and all seven pending Sales migrations verified on Liara (run `44829916567`, retry 2); rsync and the file-backup mirror verified.
 - ◐ **Delete / Archive a record — built 2026-11-23** (spec `docs/specs/2026-11-23-sales-record-delete-archive-design.md`, plan `docs/plans/2026-11-23-sales-record-delete-archive.md`): SQL + UI committed on the branch; migration `20261123100000` not yet applied to `:3501`. Left: apply on `:3501` + browser check; run `tests/e2e/sales-remove.spec.ts` (never run; leaves two `E2E …` records).
-- [ ] Owner (live-server check): confirm `rsync` exists on the Liara VM before the first deploy with Sales files (backup mirror needs it).
 - [ ] Watch Liara VM disk once files ship: `sales-files` volume + `/var/backups/bj-erp/files/` mirror.
 
 - [ ] **Owner re-imports the register once on :3501** (fixes the 6 Rial-in-EURO rows: 8894, 8902, 9098, 9958, 9965, 10384), then tests Name matching, sorting, metrics and filters.

@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-25 — Synced main checkout, committed stray docs, removed `../bj-clr` (Claude)
+
+Main checkout was at `57e67c5` (46 behind) with uncommitted docs from earlier agents: 10 AGENT-LOG entries (2026-11-20 → 22), CHANGELOG/TASKS marking Sales CEO round 1 deployed as `96da80b`, a TASKS "Local sign-in on port 3501" item. Dropped the untracked annual-borrowing spec/plan (identical on `origin/main`), stashed, fast-forwarded to `06284f8`, re-applied. Conflicts: AGENT-LOG kept both sides; TASKS kept both new sections, took the local "deployed" Sales line plus upstream's Delete/Archive item, dropped the rsync item (local note: verified on Liara). `erp-module/` already in `.gitignore` (line 58, untracked). Removed worktree `../bj-clr` and branch `fix/clearance-optional-en` (already on main). Docs only.
+
 ## 2026-11-25 — Clearance rows: Unit (English) optional (Claude)
 
 **Agent:** Claude Opus 5.5 via Claude Code
@@ -324,6 +328,42 @@ Codex on `codex/employee-edit-tabs` from `57e67c51`. Implemented the owner-appro
 
 TypeScript, targeted lint and 1,547 unit tests passed (five skipped). The Browser plugin was unavailable. Playwright checked the editor with synthetic data on English desktop and Persian mobile, including draft retention, field validation, isolated Save requests, copying the returned reset password and horizontal overflow. Save and reset responses were mocked. The ordinary Farsi preview URL hit a redirect loop on loopback, so the mobile check used a temporary direct-locale fixture. Signed-in database actions were not exercised. No production actions.
 
+## 2026-11-22 — Merged the approved Settings and layout update
+
+After local acceptance on port 3501, PR #30 was squash-merged into main at `70c2cbf`. Confirmed the tested PR head was `8f3e812` and Liara deployment run `45106928974` started.
+
+## 2026-11-22 — Recorded the annual leave borrowing policy and implementation plan
+
+Codex on main at `57e67c5` recorded the owner's choices in `docs/specs/2026-11-22-annual-leave-borrowing.md` and the implementation steps in `docs/plans/2026-11-22-annual-leave-borrowing.md`. Inspected the role catalog, balance rule, approved-request edit and final approval functions. Final approval currently falls back to a paid/unpaid split and needs an explicit strict branch. Plan ready for review under CLAUDE.md. Documentation only. No external actions or runtime tests.
+
+## 2026-11-22 — Clarified annual leave borrowing policy
+
+Codex on `main` at `57e67c5` reviewed `private.balance_rule`, the FR-92 release notes and open edit behavior. Asked the owner about the proposed role permission, available balance, approval timing and existing requests. Awaiting policy decisions. No runtime changes, external actions or tests.
+
+## 2026-11-22 — Deployed PR #30 locally on port 3501
+
+Built and started `bj-erp-app:local-7567a5d` in the existing `bj-approvals-finance` stack. Backed up the local database, checked the dump catalog, applied both pending 20261122 migrations and verified their ledger checksums. The local Caddy gateway now stamps the client IP on all three upstream routes. Verified the LAN health response and English login page (HTTP 200) after startup. Signed-in employee pages were not tested on this deployment.
+
+## 2026-11-22 — Edit Employee tab design clarification
+
+Reviewed the existing editor and shared Save action. Awaiting layout, label and save-behavior choices before implementation.
+
+## 2026-11-22 — Traced the missing-mobile recovery prompt
+
+Codex on main at `57e67c5` investigated the reported masked number for employee code 100. A read-only check on the local port-3501 database confirmed the login and personnel number match an active non-admin profile with no mobile. The merged lookup initializes a synthetic hint for every code and replaces it only for an eligible mobile. The page labels either result as registered, as specified by the original anti-enumeration design. Reviewed the merged source without starting a recovery request, changing credentials, or contacting production. Diagnosis only.
+
+## 2026-11-22 — Reviewed and shipped SMS password recovery (PR #28)
+
+Reviewed and fixed PR #28 on an isolated checkout. The tested head was `4d7022cbf2870e07d819818eaa0145a3976d3173`. Merge `57e67c519718758af1d30b9c3b2df95b5d59da52` has the same tree.
+
+**Changes.** Locked the mobile during challenge creation, rechecked expiry after waiting, bounded expired-row cleanup, suppressed sensitive queue errors, and excluded password SMS from direct outbox reads. Password dispatch records only structured numeric provider outcomes. Added regressions for public grants, rollback, provider echoes, mixed-role admin exclusion, same-company and active targets, permission removal, and admin-only actions. Existing role-assignment guards already protected roles with this grant. Fixed the booking-form test to await its lazy picker after reproducing the timing failure twice.
+
+**Verification.** Production build, TypeScript, 1,552 unit tests, eight SQL suites, deployment tests and dependency audit passed. Lint reported the existing unused Sales e2e import. Isolated English and Persian browser flows completed forced change and rejected spent passwords. Synthetic concurrency tests confirmed 30 lookups/source, 10/code, one issuance from five confirmations, three issuances/hour, and lookup waiting for a mobile correction. Fake responses covered provider acceptance and refusal. No handset delivery test.
+
+**Production.** The gateway initially held an older bind-mounted inode. Recreated the gateway and checked its live IPv4 management endpoint using Python after the localhost probe and missing jq caused rollbacks. The active config matched the reviewed file. Retained rollback copy `/opt/bj-erp/backups/Caddyfile-pre-pr28-20261122T215423Z`. GitHub Actions run [45074819474](https://github.com/AmirNcode/bj-erp/actions/runs/45074819474) succeeded. The ledger grew from 165 to 167 entries. It recorded `20261122175225_employee_password_recovery.sql` (SHA-256 `dbbcd694091839bd2f9bb9907bec0b515378edc99d8d3101098f6698b3e55fe0`) and `20261122214937_harden_employee_password_recovery.sql` (`8939503bb53f3dd74e9c10c3d715557d01fd7bc30a9ef86c2e7a4920794dafa6`) under the merge SHA. Verified the protected pre-deploy dump using pg_restore -l, the running image, all five services, the three public health checks and both recovery pages. No production reset, SMS test or role assignment. Zero production roles carry the new permission.
+
+**Cleanup.** Deleted both PR branches and removed the review worktree and synthetic stack. The primary checkout is on main. Verified all three pre-existing documentation diffs byte for byte before adding this local journal entry.
+
 ## 2026-11-22 — Implemented SMS password recovery and delegated resets
 
 Codex, branch `codex/sms-password-recovery` from `2790540`. Implemented the approved Persian and English recovery flow, masked mobile confirmation, database throttling, phone-change invalidation and opt-in role permission. Added migration `20261122175225_employee_password_recovery.sql`. HR retains existing mobile-edit access. Single-person reset and manual sign-out have independent authorization.
@@ -366,6 +406,18 @@ Use the owner's answers to write the recovery spec and acceptance criteria befor
 ## 2026-11-21 — Release hourly leave and Finance exports
 
 Owner confirmed local testing and requested the main-branch deployment. Finance component suite passed all 14 tests. Selected only the work-trip and Finance export changes for release.
+
+## 2026-11-21 — Verified live login uses the same origin
+
+Codex checked the public login page in fresh Chrome after the owner asked whether the port 3501 issue affected production. Intercepted the form's token request before transmission. Both the page and the Auth destination used `https://bjeng.app`. No credentials submitted or live changes made.
+
+## 2026-11-21 — Local employee sign-in on port 3501
+
+**Agent:** Codex on `main` at `96da80b`. Owner asked why signing in failed after changing a test employee's code and resetting their password.
+
+**Verification:** Read-only checks on the local database showed both code changes and the subsequent resets, an active profile, and matching Auth user and email identity for the restored code `0000003`. The deployed browser bundle targets `http://192.168.2.85:3501`. A fresh Chrome context at `http://localhost:3501/login` with a nonexistent login reproduced the error. The token preflight omitted `Access-Control-Allow-Origin`, so Chrome blocked the password request. On the LAN URL the same form reached Auth and received HTTP 400 for the nonexistent login. The form maps both failures to the same credentials message.
+
+**State left behind:** Recorded the local workaround and follow-up. Investigation only. No credentials changed, no employee session opened, and no deployment changes.
 
 ## 2026-11-21 — Hourly personal leave and work trips on port 3501
 
@@ -445,6 +497,30 @@ Updated submission, final approval, edit and extension overlap rules in migratio
 **Trigger:** Owner requested an estimate for offering CSV and XLSX from one Finance export dialog.
 
 Reviewed the Finance CSV row builder, the shared dialog, and the Sales workbook writer and its tests. Both formats can share one row builder and download locally. The worksheet should retain numeric amounts and durations and text identifiers and Jalali dates. Assessment only. No application changes, tests, or external actions.
+
+## 2026-11-20 — Liara deployment recovery for 96da80b
+
+**Agent:** Codex
+**Branch / HEAD at start:** `main` @ `96da80b`
+**Trigger:** Owner requested investigation, repair, required migrations and retry of failed Liara deployment.
+
+**What changed**
+- Diagnosed run `44829916567`, original job `136613809753`: infrastructure guard refused the new `docker-compose.yml` before migrations or app cutover. Only infrastructure delta is `FILES_DIR=/data/files` and the `sales-files` named volume.
+- No application code change required; deployment guard retained.
+
+**Actions outside the repo**
+- SSH to `liara-bj-vm`: confirmed previous release `ada4e0745eae364c9a2d49acc069bde1dab8c5c2`, healthy existing services, rsync installed, 7.4 GB available.
+- Compared all four guarded infrastructure files against staged release; only base Compose changed. Verified all existing migration checksums; seven pending Sales migrations (`20261117120000`, `130000`, `140000`, `150000`, `20261120100000`, `110000`, `120000`).
+- Under `/run/lock/bj-liara-release.lock`, saved prior Compose as `/opt/bj-erp/backups/compose-before-96da80b786826472a747e45261ffc5bc43c3de7c.yml`, installed staged Compose and validated configuration, upload mount, and absence of public app/db/auth/rest ports.
+- GitHub connector retry returned 403 (integration lacks Actions write); authenticated local `gh run rerun 44829916567 --failed --repo AmirNcode/bj-erp` succeeded. Retry job `136618061563`.
+- Initial sandbox SSH was denied; approved network escalation succeeded. One read-only ledger inspection consumed remaining stdin via Docker exec; reran with stdin redirected and verified checksums successfully.
+
+**Verification / state left behind**
+- Retry completed successfully: all seven pending migrations applied through the immutable ledger; pre-deploy archive `/opt/bj-erp/backups/pre-96da80b786826472a747e45261ffc5bc43c3de7c-2026-11-20-164754.dump` (19 MB) verified. All eight checked data-table row counts unchanged.
+- `DEPLOYED_RELEASE` is `96da80b786826472a747e45261ffc5bc43c3de7c`; health endpoint returned `{"status":"ok","service":"bj-erp-app"}`. Existing db/auth/rest/gateway containers remained running; only app recreated.
+- Verified `bj-erp_sales-files` mounted at `/data/files`, owned by 1000:1000 and writable by the app's node user. Ran installed `liara/backup.sh`: new `/var/backups/bj-erp/daily-20261120T225003Z.dump`, file mirror succeeded, GC found no files and safely skipped orphan sweep.
+- Signed-in Sales browser/e2e tests were not run; this session verified deployment, migrations, storage and backup operation.
+- Journal change uncommitted; no commit or push made.
 
 ## 2026-11-20 — ERP › Sales: CEO feedback round 1 (built; owner testing on :3501)
 
