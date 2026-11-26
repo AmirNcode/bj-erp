@@ -4544,7 +4544,7 @@ declare
 begin
   if jsonb_typeof(p_row) <> 'object'
      or coalesce(char_length(btrim(p_row->>'name_fa')), 0) not between 1 and 100
-     or coalesce(char_length(btrim(p_row->>'name_en')), 0) not between 1 and 100 then
+     or p_row->>'name_en' is null or char_length(btrim(p_row->>'name_en')) > 100 then
     raise exception 'invalid rows' using errcode = '22023';
   end if;
   if v_dept is not null
@@ -11887,7 +11887,7 @@ begin
     v_kind := v_unit->>'kind';
     if jsonb_typeof(v_unit) <> 'object'
        or coalesce(char_length(btrim(v_unit->>'name_fa')), 0) not between 1 and 100
-       or coalesce(char_length(btrim(v_unit->>'name_en')), 0) not between 1 and 100 then
+       or v_unit->>'name_en' is null or char_length(btrim(v_unit->>'name_en')) > 100 then
       raise exception 'invalid rows' using errcode = '22023';
     end if;
     if v_kind = 'hr' then
@@ -16136,7 +16136,7 @@ CREATE TABLE public.separation_signoffs (
     signature_consent_at timestamp with time zone,
     note text,
     CONSTRAINT separation_signoffs_hr_no_signer CHECK (((NOT is_hr) OR (signer_id IS NULL))),
-    CONSTRAINT separation_signoffs_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_signoffs_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND (char_length(btrim(name_en)) <= 100))),
     CONSTRAINT separation_signoffs_note_len CHECK (((note IS NULL) OR (length(note) <= 500))),
     CONSTRAINT separation_signoffs_signature_shape CHECK ((((signature_data IS NULL) AND (signature_consent_at IS NULL)) OR ((signature_data IS NOT NULL) AND (signature_consent_at IS NOT NULL) AND ((length(signature_data) >= 100) AND (length(signature_data) <= 350000)) AND (mod(length(signature_data), 4) = 2) AND (signature_data ~ '^data:image/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$'::text)))),
     CONSTRAINT separation_signoffs_signed_shape CHECK (((signed_at IS NULL) = (signature_data IS NULL)))
@@ -16158,7 +16158,7 @@ CREATE TABLE public.separation_units (
     sort_order integer DEFAULT 0 NOT NULL,
     active boolean DEFAULT true NOT NULL,
     CONSTRAINT separation_units_kind CHECK ((kind = ANY (ARRAY['hr'::text, 'department'::text, 'own_department'::text, 'person'::text]))),
-    CONSTRAINT separation_units_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 100)))),
+    CONSTRAINT separation_units_names CHECK ((((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 100)) AND (char_length(btrim(name_en)) <= 100))),
     CONSTRAINT separation_units_shape CHECK ((((kind = 'hr'::text) AND (department_id IS NULL) AND (signer_id IS NULL) AND active) OR ((kind = 'department'::text) AND (signer_id IS NULL)) OR ((kind = 'own_department'::text) AND (department_id IS NULL) AND (signer_id IS NULL)) OR ((kind = 'person'::text) AND (department_id IS NULL))))
 );
 

@@ -52,7 +52,7 @@ export default async function PrintClearancePage({ params }: Props) {
   const f = res.form;
   const images = sigs.ok ? sigs : { rows: {} as Record<string, string>, finance: null };
   const date = (iso: string | null) => (iso ? formatCalendarDate(iso.slice(0, 10), locale) : '');
-  const name = (fa: string, en: string) => (locale === 'fa' ? fa : en);
+  const name = (fa: string, en: string) => (locale === 'fa' || !en ? fa : en);
   const reasonLabel: Record<SeparationReason, string> = {
     resignation: t('reasons.resignation'),
     dismissal: t('reasons.dismissal'),

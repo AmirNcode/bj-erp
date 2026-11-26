@@ -63,7 +63,7 @@ export default async function ClearanceDetailPage({ params }: Props) {
   const hoursPerDay = ws.ok ? ws.settings.hoursPerDay : WORK_SETTINGS_FALLBACK.hoursPerDay;
   const durationLabels = durationLabelsFrom(tLeave);
   const date = (iso: string | null) => (iso ? formatCalendarDate(iso.slice(0, 10), locale) : '—');
-  const name = (fa: string, en: string) => (locale === 'fa' ? fa : en);
+  const name = (fa: string, en: string) => (locale === 'fa' || !en ? fa : en);
 
   const statusLabel = {
     in_progress: t('status.in_progress'),

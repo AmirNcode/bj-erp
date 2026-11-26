@@ -395,4 +395,18 @@ select pg_temp.expect('a department row needs a department',
   pg_temp.try_as('hr', format('select public.app_save_separation_units(%L)',
     json_build_array(json_build_object('kind', 'department', 'name_fa', 'x', 'name_en', 'x'))::text)), '22023');
 
+select pg_temp.expect('a default row may leave the English name blank',
+  pg_temp.try_as('hr', format('select public.app_save_separation_units(%L)',
+    json_build_array(json_build_object('kind', 'own_department', 'name_fa', 'واحد مربوطه', 'name_en', ''))::text)), 'ok:1');
+select pg_temp.expect('… stored as an empty string',
+  (select name_en from public.separation_units
+    where company_id = (select id from fx where k = 'company') and kind = 'own_department'), '');
+select pg_temp.expect('a default row with no English key is refused',
+  pg_temp.try_as('hr', format('select public.app_save_separation_units(%L)',
+    json_build_array(json_build_object('kind', 'own_department', 'name_fa', 'x'))::text)), '22023');
+select pg_temp.expect('a form row may leave the English name blank',
+  pg_temp.try_as('hr', format('select public.app_create_separation(%s, %L, %L, null, null, null, %L)',
+    pg_temp.id('mgr'), 'resignation', pg_temp.today() + 30,
+    json_build_array(json_build_object('name_fa', 'بی‌انگلیسی', 'name_en', ''))::text)), 'ok:1');
+
 rollback;

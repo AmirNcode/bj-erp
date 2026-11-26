@@ -9,6 +9,10 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### Clearance: English unit name optional — 2026-11-25
+
+- **Unit (English) is optional** on default clearance rows and on each form's rows. A row with no English name shows its Farsi name in English and on the print. Migration `20261125120000_clearance_optional_name_en.sql` (blank stored as `''`, still at most 100 characters).
+
 ### Speed on slow links — 2026-11-24, branch `feat/speed-feedback`
 
 - **Every tap shows something at once.** Save buttons (88) show a spinner over their label and cannot be pressed twice while saving; nav items, the phone bottom bar, section tabs, Sales record rows and history paging show they are loading the next page.

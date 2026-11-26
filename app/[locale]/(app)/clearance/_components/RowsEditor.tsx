@@ -67,7 +67,7 @@ export function RowsEditor({ rows, onChange, people, leaverId, locale }: Props) 
           >
             {row.isHr || row.signed ? (
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="font-semibold">{locale === 'fa' ? row.nameFa : row.nameEn}</span>
+                <span className="font-semibold">{locale === 'fa' || !row.nameEn ? row.nameFa : row.nameEn}</span>
                 <span className="text-xs text-muted-foreground">
                   {row.isHr ? `${t('anyHr')} · ${t('hrLocked')}` : t('signedLocked')}
                 </span>

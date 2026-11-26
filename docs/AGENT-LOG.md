@@ -78,6 +78,30 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-25 — Clearance rows: Unit (English) optional (Claude)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** worktree `../bj-clr` (`fix/clearance-optional-en`) from `origin/main` @ `6c02b1c` (the main checkout was 45 behind with others' uncommitted docs; left untouched)
+**Trigger:** Owner: make the Unit (English) field optional when adding default clearance rows; deploy.
+
+**What changed**
+- `supabase/migrations/20261125120000_clearance_optional_name_en.sql` — `separation_units_names` / `separation_signoffs_names` checks allow a blank `name_en` (≤ 100); `private.separation_row_signer` + `app_save_separation_units` accept `''` (key still required, not null). Owner chose: also on per-form rows; English UI falls back to Farsi.
+- Clearance detail, print, RowsEditor — English name falls back to the Farsi name when blank.
+- `messages/*` — label "Unit (English, optional)"; `clearanceInvalidRows` no longer asks for English.
+- `tests/sql/fr54-clearance.sql` — 4 new assertions; `supabase/schema.sql` patched by hand (only those hunks).
+
+**Actions outside the repo**
+- Dry-run on clone `x_clr` of `bj-approvals-finance-db-1` (db `postgres`): migration applied, `fr54-clearance.sql` all PASS; clone dropped. Pushed to `main` → Liara deploy.
+
+**Verification**
+- `tsc --noEmit`, lint (0 errors), `npm run test:unit` (all pass). UI not checked in a browser.
+
+**State left behind**
+- Committed + pushed to `main`. Worktree `../bj-clr` can be removed.
+
+**For the next agent**
+- `name_en` on clearance rows may now be `''`; any new display must fall back to `name_fa`.
+
 ## 2026-11-24 — Merged main into feat/speed-feedback, merged PR #34 (Claude)
 
 Owner applied the new Caddyfile on the VM and re-ran Deploy Liara for #33 (run 45445230881 green). Merged `origin/main` into `feat/speed-feedback`: only conflict was this file (both sides added entries; kept both). Updated the TASKS speed section (Caddy 1a live). Then merged #34 (merge commit on main, Deploy Liara run 45450399838: all steps green).
