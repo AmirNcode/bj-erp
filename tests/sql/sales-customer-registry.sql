@@ -121,7 +121,8 @@ begin
 end $$;
 
 -- ================================================================ 1. fold parity (tests/unit/sales-customer-search.test.ts)
-select pg_temp.expect('fold 1', private.sales_word_key('شرکت‌ نفتِ «فلات» ABC-12 ـ ۱۲'), 'شرکتنفتفلاتabc12ـ12');
+select pg_temp.expect('fold tatweel', private.sales_word_key('شـرکـت'), 'شرکت');
+select pg_temp.expect('fold 1', private.sales_word_key('شرکت‌ نفتِ «فلات» ABC-12 ـ ۱۲'), 'شرکتنفتفلاتabc1212');
 select pg_temp.expect('fold 2', private.sales_word_key('ملي مناطق نفت‌خيز جنوب'), 'ملیمناطقنفتخیزجنوب');
 select pg_temp.expect('fold 3', private.sales_word_key('NISOC (Co.)'), 'nisocco');
 select pg_temp.expect('fold 4', private.sales_word_key('  Ahvaz  ٣٤ '), 'ahvaz34');
@@ -405,5 +406,16 @@ select pg_temp.expect('add_customer still returns id, existed, name, kind',
   'existed,id,kind,name');
 select pg_temp.expect('add_customer finds an existing customer by name',
   pg_temp.as_json('cust',$q$select public.app_sales_add_customer('{"name":"شرکت الف"}'::jsonb)$q$)->>'existed','true');
+
+-- ============================================================ review fixes (PR #35)
+insert into public.sales_name_aliases(company_id,kind,alias_key,alias,target_id)
+  values(pg_temp.fx('company'),'customer',private.sales_name_key('Old Spelling Co'),'Old Spelling Co',pg_temp.fx('D'));
+select pg_temp.expect('rename onto another customer''s alias: customer exists',
+  pg_temp.msg(pg_temp.as_scalar('setm',format('select public.app_sales_rename_customer(%L,%L)::text',
+    (select id from public.sales_customers where company_id=pg_temp.fx('company') and id<>pg_temp.fx('D') order by created_at limit 1),
+    'Old Spelling Co'))),'sales: customer exists');
+select pg_temp.expect('an import that writes nothing keeps no batch',
+  (select (j->>'batch_id') is null and (j->>'created')='0' and (j->>'updated')='0'
+     from (select pg_temp.as_json('imp',$q$select public.app_sales_customer_import('{"file_name":"empty.xlsx","default_action":"skip","rows":[{"row":2}]}'::jsonb)$q$) j) t)::text,'true');
 
 rollback;

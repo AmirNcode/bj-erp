@@ -413,6 +413,7 @@ export function nameKey(s: string): string {
     .replace(/ي/g, 'ی')
     .replace(/ك/g, 'ک')
     .replace(/‌/g, '')
+    .replace(/ـ/g, '') // tatweel (kashida): decoration, not a letter (FR-98 search)
     .replace(/[^\p{L}\p{N}]/gu, '');
 }
 

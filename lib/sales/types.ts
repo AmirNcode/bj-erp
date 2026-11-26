@@ -540,7 +540,8 @@ export type CustomerImportRequest = {
   cities: Record<string, ImportListDecision>;
 };
 export type CustomerImportResult = {
-  batch_id: string; created: number; updated: number; skipped: number; incomplete: number; dropped: number;
+  /** null when the import created and updated nothing (no batch is kept). */
+  batch_id: string | null; created: number; updated: number; skipped: number; incomplete: number; dropped: number;
 };
 export type CustomerImportBatch = {
   id: string; file_name: string | null; created_at: string; created_by_name: string | null;

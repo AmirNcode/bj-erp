@@ -5,7 +5,7 @@ import { nameKey } from '@/lib/sales/inquiry';
 
 // Shared fold fixture: tests/sql/sales-customer-registry.sql asserts private.sales_word_key gives the same keys.
 export const FOLD_FIXTURE: [string, string][] = [
-  ['شرکت‌ نفتِ «فلات» ABC-12 ـ ۱۲', 'شرکتنفتفلاتabc12ـ12'],
+  ['شرکت‌ نفتِ «فلات» ABC-12 ـ ۱۲', 'شرکتنفتفلاتabc1212'],
   ['ملي مناطق نفت‌خيز جنوب', 'ملیمناطقنفتخیزجنوب'],
   ['NISOC (Co.)', 'nisocco'],
   ['  Ahvaz  ٣٤ ', 'ahvaz34'],
@@ -13,6 +13,7 @@ export const FOLD_FIXTURE: [string, string][] = [
   ['كيش', 'کیش'],
   ['آب و فاضلاب', 'آبوفاضلاب'],
   ['x_y/z.w', 'xyzw'],
+  ['شـرکـت', 'شرکت'],
 ];
 
 describe('word fold', () => {

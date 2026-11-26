@@ -19,7 +19,7 @@ was deployed; semantic versioning starts at the first tag.
 - **Import customers** from an Excel template (one sheet, one contact per row): unknown categories / cities can be created, mapped or left empty; existing customers can be skipped, updated (empty fields only) or overwritten; an import can be removed again.
 - **Settings › Customer lists:** add, rename and hide contractor categories and cities.
 - New permissions **Customers: create and edit** and **Customers: bulk import** (roles that could edit Sales get the first one).
-- Migrations `20261126100000`–`20261126100300`. Spec `docs/specs/2026-11-26-sales-customer-registry-design.md`, plan `docs/plans/2026-11-26-sales-customer-registry.md`.
+- Migrations `20261126100000`–`20261126100400`. Spec `docs/specs/2026-11-26-sales-customer-registry-design.md`, plan `docs/plans/2026-11-26-sales-customer-registry.md`.
 
 ### Clearance: English unit name optional — 2026-11-25
 

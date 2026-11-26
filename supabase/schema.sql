@@ -5104,10 +5104,9 @@ CREATE FUNCTION private.sales_word_key(p text) RETURNS text
     SET search_path TO ''
     AS $$
   select regexp_replace(
-           regexp_replace(
-             translate(lower(coalesce(p, '')), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩يك', '01234567890123456789یک'),
-             '[\u064B-\u065F\u0670\u06D6-\u06ED]', '', 'g'),
-           '[^[:alnum:]]', '', 'g');
+           translate(lower(coalesce(p, '')), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩يك', '01234567890123456789یک'),
+           '[^0-9a-z\u00DF-\u00F6\u00F8-\u00FF\u0100-\u024F\u0621-\u063A\u0641-\u064A\u066E\u066F\u0671-\u06D3\u06D5\u06EE\u06EF\u06FA-\u06FC\u06FF]',
+           '', 'g');
 $$;
 
 
@@ -10446,6 +10445,10 @@ begin
           'name', v_m.name, 'name_en', v_merged.name_en, 'kind', v_merged.kind, 'ceo_name', v_merged.ceo_name,
           'province_code', v_merged.province_code, 'city_id', v_merged.city_id, 'address', v_merged.address,
           'rank', v_merged.rank, 'category_id', v_merged.category_id));
+        -- Update keeps an existing non-contractor type: the file's rank / category cannot be kept.
+        if v_merged.kind is distinct from 'contractor' then
+          v_dropped := v_dropped + (v_cv.rank is not null)::integer + (v_cv.category_id is not null)::integer;
+        end if;
         v_changed := (v_merged.name_en, v_merged.name_en_key, v_merged.kind, v_merged.ceo_name, v_merged.province_code,
                       v_merged.city_id, v_merged.address, v_merged.rank, v_merged.category_id)
           is distinct from (v_m.name_en, v_m.name_en_key, v_m.kind, v_m.ceo_name, v_m.province_code,
@@ -10481,6 +10484,11 @@ begin
 
     update public.sales_import_batches set created_count = v_created, updated_count = v_updated,
         skipped_count = v_skipped where id = v_batch;
+    -- Nothing written: no batch to list or remove.
+    if v_created + v_updated = 0 then
+      delete from public.sales_import_batches where id = v_batch;
+      v_batch := null;
+    end if;
     select count(*)::integer into v_incomplete from public.sales_customers
      where id = any (v_touched) and cardinality(missing) > 0;
   exception
@@ -12044,8 +12052,7 @@ begin
   perform private.sales_customer_lock(v_company);
   select * into v_old from public.sales_customers where id = p_id and company_id = v_company for update;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
-  if exists (select 1 from public.sales_customers
-              where company_id = v_company and id <> p_id and (name_key = v_key or name_en_key = v_key)) then
+  if private.sales_customer_name_clash(v_company, v_key, p_id) is not null then
     raise exception 'sales: customer exists' using errcode = '23505';
   end if;
   update public.sales_customers set name = v_name, name_key = v_key, updated_at = now(), updated_by = auth.uid()
@@ -12680,7 +12687,7 @@ begin
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
   -- FR-98 lock order: the customer lock before the record row lock (only the text path may create).
-  if p ? 'buyer' or p ? 'client' then perform private.sales_customer_lock(v_company); end if;
+  if p ?| array['buyer', 'client', 'buyer_id', 'client_id'] then perform private.sales_customer_lock(v_company); end if;
   if private.sales_can('sales_prices', 'edit') then
     v_keys := v_keys || array['winning_bid','winner_name','total_value'];
     -- Typed only while no item row carries a price; afterwards it is their sum.

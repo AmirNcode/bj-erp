@@ -7,6 +7,8 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 
 - [ ] Owner / CEO check on `:3501` (or Liara after merge): add a draft customer, complete it, picker "Create …", import a small file.
 - [ ] e2e spec `tests/e2e/sales-customers.spec.ts` (add draft → complete → picker Create → small import) not written; the flow was checked by hand in the browser on `:3501`.
+- [ ] Known gap (older than FR-98): removing an old ledger / inquiry batch still deletes *pre-FR-98* hand-made customers created after it and unused (all old rows have `updated_by` null). Tie the delete to the batch (record the creating batch on ledger/inquiry imports too) if this matters.
+- [ ] During the deploy swap only: the old app's typed buyer + buyer type no longer fills an empty customer type (minutes-long window; no action needed after deploy).
 - [ ] CEO to confirm: one rank + category per contractor is enough (D5), or several pairs.
 - [ ] Review the seeded city list (396 county seats, written from memory; uncertain towns left out — e.g. Karun, Bavi, Hamun, Bahestan): fix or add in Settings › Customer lists.
 - [ ] Owner: every existing customer starts Incomplete — fill the data in the form, or import it with the template (action Update).

@@ -106,6 +106,8 @@ Copy this block verbatim and fill it in.
 - Committed on `feat/sales-customer-registry`; PR + review follow (this session).
 - `:3501` DB has the FR-98 migrations; switching `:3501` back to `main`'s app needs the pre-dump restored (or main merged).
 
+**PR #35 review (Opus 5.5, high) and fixes** — no blockers; migrations checked on the clone with real data, privacy clean. Fixed in a new migration `20261126100400_sales_customer_review_fixes.sql` (earlier ones frozen on `:3501`): record save by `buyer_id`/`client_id` now takes the customer lock first (reviewer reproduced a deadlock against merge), rename refuses another customer's alias, an Update import counts rank/category it cannot keep as dropped, an import that writes nothing leaves no batch, `sales_word_key` uses explicit character ranges (no dependence on the live DB ctype) and drops tatweel (TS `nameKey` too). UI: a customer created from the picker keeps its label until refresh (`useCustomerRefs`). Applied to `:3501` DB (ledger) and rebuilt the app there. Left as TASKS: pre-FR-98 batch-removal gap, old-app buyer_kind during the swap. All SQL suites + tsc/lint/1688 unit tests/build green.
+
 **For the next agent**
 - e2e spec not written (TASKS). City seed may hold mistakes: fix in Settings › Customer lists, never in a migration.
 - All existing customers start Incomplete.

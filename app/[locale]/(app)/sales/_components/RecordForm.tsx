@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { saveSalesRecord } from '@/lib/actions/sales';
 import { type Bootstrap, type CustomValues, type FlowKind, type RecordRow } from '@/lib/sales/types';
-import { CustomerCombo } from './CustomerCombo';
+import { CustomerCombo, useCustomerRefs } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useRun, useSalesFormat } from './parts';
 
 type Draft = {
@@ -101,7 +101,8 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
   const [d, setD] = useState<Draft>(() => initial(boot, record, flowKind));
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   const fields = boot.fields.filter((x) => x.entity === 'rfp' && (x.active || d.custom[x.key] !== undefined));
-  const customerById = (id: string) => boot.customers.find((c) => c.id === id) ?? null;
+  const refs = useCustomerRefs(boot.customers);
+  const customerById = (id: string) => refs.byId(id);
   const bid = flowKind === 'bid';
 
   async function save(e: React.FormEvent) {
@@ -158,13 +159,13 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
           <CustomerCombo
             customers={boot.customers}
             value={customerById(d.buyer_id)}
-            onChange={(c) => set('buyer_id', c?.id ?? '')}
+            onChange={(c) => { refs.remember(c); set('buyer_id', c?.id ?? ''); }}
             allowCreate={boot.caps.customers}
             testId="sales-form-buyer"
           />
         </Field>
         <Field label={t('field.client')} hint={t('form.clientHint')}>
-          <CustomerCombo customers={boot.customers} value={customerById(d.client_id)} onChange={(c) => set('client_id', c?.id ?? '')} allowCreate={boot.caps.customers} testId="sales-form-client" />
+          <CustomerCombo customers={boot.customers} value={customerById(d.client_id)} onChange={(c) => { refs.remember(c); set('client_id', c?.id ?? ''); }} allowCreate={boot.caps.customers} testId="sales-form-client" />
         </Field>
         <Field label={t('field.customer_ref')}>
           <Input dir="ltr" maxLength={200} value={d.customer_ref} onChange={(e) => set('customer_ref', e.target.value)} />

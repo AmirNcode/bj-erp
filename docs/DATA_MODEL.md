@@ -897,7 +897,7 @@ feeds the HR warning. Gates: PERMISSIONS.md.
 
 Migration `20261108200021_approvals_finance_usability.sql` adds the catalog permission `finance_forms` (read, depends on finance), defaulting off for non-admin roles. No stored financial columns change. `finance_requests_v2(from,to)` preserves the original rows/calculations and adds stored first/last names, department ID, and request-scoped `can_print`. `app_approval_history_v2(limit,offset,query,status,kind)` filters before pagination and includes authorized archive readers. `app_request_print(id)` aggregates guarded context, signature evidence, extensions and corrections; reusable private projection functions keep the original public RPCs compatible. The original finance/history RPCs remain available through the deployment window. Dates stay Gregorian ISO in URLs/storage and Persian in the calendar UI.
 
-## FR-98 Sales customer registry (2026-11-26, migrations `20261126100000`–`100300`)
+## FR-98 Sales customer registry (2026-11-26, migrations `20261126100000`–`100400`)
 
 | Table / column | Notes |
 |---|---|
@@ -907,7 +907,7 @@ Migration `20261108200021_approvals_finance_usability.sql` adds the catalog perm
 | `sales_cities`, `sales_contractor_categories` | Company lists (seeded once by `private.sales_ensure` → `sales_seed_customer_lists`: 9 categories, 396 county seats); grow through pickers' "Create …" and Settings › Customer lists; hidden, never deleted. |
 | `sales_import_batches.kind` | + `customers` (customer imports; never listed or removed with Sales imports). |
 
-Search keys: `private.sales_word_key` (= TS `nameKey`: digits → ASCII, ی/ک, drop marks / ZWNJ / non-alphanumerics) for word search; `sales_name_key` stays the uniqueness key.
+Search keys: `private.sales_word_key` (= TS `nameKey`: digits → ASCII, ی/ک, drop marks / tatweel / ZWNJ / non-letters; explicit Latin + Arabic-script ranges, so it does not depend on the DB ctype) for word search; `sales_name_key` stays the uniqueness key.
 
 ## FR-94 ERP › Sales module (2026-11-16, not deployed)
 

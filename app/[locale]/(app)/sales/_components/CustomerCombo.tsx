@@ -169,3 +169,17 @@ export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, a
     </div>
   );
 }
+
+/**
+ * Resolve a picked customer id for a CustomerCombo value. A customer created from the picker is not in
+ * `boot.customers` until the page refreshes; remembering it keeps the field's text in the meantime.
+ */
+export function useCustomerRefs(customers: CustomerRef[]) {
+  const [extra, setExtra] = useState<CustomerRef[]>([]);
+  const byId = (id: string | null | undefined): CustomerRef | null =>
+    id ? (customers.find((c) => c.id === id) ?? extra.find((c) => c.id === id) ?? null) : null;
+  const remember = (c: CustomerRef | null) => {
+    if (c && !customers.some((x) => x.id === c.id)) setExtra((prev) => [...prev.filter((x) => x.id !== c.id), c]);
+  };
+  return { byId, remember };
+}

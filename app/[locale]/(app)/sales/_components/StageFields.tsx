@@ -13,7 +13,7 @@ import { canEditKey } from '@/lib/sales/stagePages';
 import { labelOf } from '@/lib/sales/customerLabel';
 import { type Bootstrap, type CustomValues, type RecordRow } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
-import { CustomerCombo } from './CustomerCombo';
+import { CustomerCombo, useCustomerRefs } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useSalesFormat } from './parts';
 
 export type Draft = Record<string, unknown>;
@@ -86,6 +86,7 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
   fieldKey: string; boot: Bootstrap; record: RecordRow; draft: Draft; onChange: (next: Draft) => void;
 }) {
   const t = useTranslations('sales');
+  const refs = useCustomerRefs(boot.customers);
   const f = useSalesFormat();
   const set = (k: string, v: unknown) => onChange({ ...draft, [k]: v });
   const testId = `sales-input-${key}`;
@@ -112,8 +113,8 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
     case 'buyer': case 'client':
       return <CustomerCombo
         customers={boot.customers}
-        value={boot.customers.find((c) => c.id === str(v)) ?? null}
-        onChange={(c) => set(key, c?.id ?? '')}
+        value={refs.byId(str(v))}
+        onChange={(c) => { refs.remember(c); set(key, c?.id ?? ''); }}
         allowCreate={boot.caps.customers}
         testId={testId}
       />;
