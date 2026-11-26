@@ -9,6 +9,18 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP › Sales customer registry (FR-98) — 2026-11-26, branch `feat/sales-customer-registry`
+
+- **Add customer** on the Customers tab and **Create "…"** in the record form's customer picker open one full form: Farsi name, English name / abbreviation, government / contractor, rank + category (contractors), managing director, province / city / address, and a contact list. Missing information can be added later: the customer is saved as a draft and tagged **Incomplete** until complete (a **Missing data only** filter finds them).
+- **No typed company names on records:** records store the picked customer; while registering, every company sharing a word with the typed name is listed so duplicates are caught.
+- **Word search** in the picker, the Customers tab and the Records list: every typed word, any order (ی/ک, half-spaces, digits folded).
+- **English UI** shows a customer's English name / abbreviation when there is one.
+- **Customer page:** company details card and contact list (with call / email links) for permission holders, and **Edit**.
+- **Import customers** from an Excel template (one sheet, one contact per row): unknown categories / cities can be created, mapped or left empty; existing customers can be skipped, updated (empty fields only) or overwritten; an import can be removed again.
+- **Settings › Customer lists:** add, rename and hide contractor categories and cities.
+- New permissions **Customers: create and edit** and **Customers: bulk import** (roles that could edit Sales get the first one).
+- Migrations `20261126100000`–`20261126100300`. Spec `docs/specs/2026-11-26-sales-customer-registry-design.md`, plan `docs/plans/2026-11-26-sales-customer-registry.md`.
+
 ### Clearance: English unit name optional — 2026-11-25
 
 - **Unit (English) is optional** on default clearance rows and on each form's rows. A row with no English name shows its Farsi name in English and on the print. Migration `20261125120000_clearance_optional_name_en.sql` (blank stored as `''`, still at most 100 characters).

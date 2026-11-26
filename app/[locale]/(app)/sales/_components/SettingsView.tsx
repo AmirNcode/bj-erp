@@ -18,8 +18,9 @@ import { tabClass, tabListClass } from '@/lib/ui/tabs';
 import type { Bootstrap, Currency, RecordNumbers, FieldDef, FieldType, Flow, Stage, StageKind } from '@/lib/sales/types';
 import { ConfirmDialog, Field, NumberInput, Select, Tag, useRun, useSalesFormat } from './parts';
 import { ImportPanel } from './ImportPanel';
+import { CustomerListsEditor } from './CustomerListsEditor';
 
-type Section = 'stages' | 'fields' | 'currencies' | 'general' | 'import';
+type Section = 'stages' | 'fields' | 'currencies' | 'customerLists' | 'general' | 'import';
 
 export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: RecordNumbers }) {
   const t = useTranslations('sales.settings');
@@ -27,7 +28,7 @@ export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: Reco
   return (
     <div className="flex flex-col gap-5" data-testid="sales-settings">
       <nav className={tabListClass} aria-label={t('label')}>
-        {(['stages', 'fields', 'currencies', 'general', 'import'] as const).map((key) => (
+        {(['stages', 'fields', 'currencies', 'customerLists', 'general', 'import'] as const).map((key) => (
           <button key={key} type="button" className={tabClass(section === key)} aria-current={section === key ? 'page' : undefined}
             onClick={() => setSection(key)} data-testid={`sales-settings-${key}`}>
             {t(`section.${key}`)}
@@ -37,6 +38,7 @@ export function SettingsView({ boot, numbers }: { boot: Bootstrap; numbers: Reco
       {section === 'stages' ? <StagesEditor boot={boot} /> : null}
       {section === 'fields' ? <FieldsEditor boot={boot} /> : null}
       {section === 'currencies' ? <CurrenciesEditor boot={boot} /> : null}
+      {section === 'customerLists' ? <CustomerListsEditor boot={boot} /> : null}
       {section === 'general' ? <GeneralSettings boot={boot} /> : null}
       {section === 'import' ? <ImportPanel boot={boot} numbers={numbers} /> : null}
     </div>

@@ -78,6 +78,38 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-26 — ERP › Sales customer registry (FR-98): spec, plan, build (Claude)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead) + Sonnet 5.5 subagents (spec / plan review, seed data, import SQL, SQL tests, UI tasks)
+**Branch / HEAD at start:** worktree `../bj-cust`, new branch `feat/sales-customer-registry` from `origin/main` @ `749fd45`
+**Trigger:** Owner (CEO request): "Add customer" button and full customer registration (name, English name/abbreviation, government/contractor, CEO, contacts, rank + category, address), no typed customer names on records, word-by-word duplicate search, bulk import with template; owner answered all design questions in chat.
+
+**What changed**
+- Spec `docs/specs/2026-11-26-sales-customer-registry-design.md` (reviewed by a subagent: 2 blockers fixed — old batch removal deleted every new customer by `created_at`; record save created customers from typed text), plan `docs/plans/2026-11-26-sales-customer-registry.md` (reviewed: seeding moved into `private.sales_ensure`, both imports added, task split).
+- Migrations `20261126100000` (tables, columns, `missing` triggers, `sales_word_key`, 2 permission keys + transition grant to roles holding `sales=edit`), `…100100` (31 provinces, 9 categories, 396 county seats written from memory by a subagent — unsure towns left out), `…100200` (customer save/profile/lists, record save by id + lock order, merge/rename/remove_batch fixes, English names in readers, AND word search in `app_sales_list_page`), `…100300` (import preview/commit/batches/remove).
+- UI: `CustomerForm`, `CustomerCombo` (labels, Incomplete tag, Create → form), Customers tab (Add, Import, Missing data filter), customer page (details card, contacts, Edit), `CustomerImport`, Settings › Customer lists, names by locale everywhere, record form + stage pages send `buyer_id` / `client_id` (buyer_kind input removed).
+- Tests: `tests/sql/sales-customer-registry.sql` (93 assertions), unit tests for search/fold fixture, form, import parsing; older SQL fixtures given `sales_customers`; counts 35 → 37.
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: clones `x_cust` (kept, has all 4 migrations; drop when done) and `x_before` (dropped). Pre-dump `.bj-deploy/approvals-finance/pre-cust-registry-20261126-161928.dump`, then applied `20261125120000` + the four FR-98 migrations to db `postgres` with ledger rows (`release_version` `cust-registry-local`); restarted rest.
+- Docker VM disk filled during `compose build` (Postgres crash-looped on `postmaster.pid`): `docker builder prune -f` (3 GB) fixed it; restarted `bj-approvals-finance-auth-1` (it lost its DB connection).
+- New wrapper `.bj-deploy/approvals-finance/compose-cust` (+ `compose-cust.yml`): `:3501` now runs this branch's app.
+- Throwaway test user `9990980001` (GoTrue admin API, generated password, custom role "Test FR98 Sales") used for the browser check, then deleted with its role, profile, the test customer, test category and the import batch.
+
+**Verification**
+- `npx tsc --noEmit` clean, `npm run lint` clean, `npx vitest run` 1687 passed / 5 skipped, `npm run build` ok.
+- SQL on clone `x_cust`: `sales-customer-registry`, `sales`, `sales-customers`, `sales-inquiry-import`, `sales-name-matching`, `sales-currencies`, `sales-products`, `sales-files`, `sales-record-remove`, `sales-stage-pages`, `request-edit` all PASS; `fr55-roles-permissions` has the same 14 local-drift failures before and after (none new).
+- SQL fold `private.sales_word_key` = TS `nameKey` on a shared fixture.
+- Browser on `localhost:3501` (session cookie set from a GoTrue token, because the app bundle targets the LAN origin): Add customer → draft (Incomplete + missing list) → Edit → complete (tag gone, details card, phone normalized); duplicate word list; picker finds by English abbreviation; Records search "Kala Ahwaz" finds "Ahwaz Kala"; import 3-row file (unknown category create, match update) → 2 new / 1 updated → batch remove 2/0; Settings › Customer lists. Fixed: edit dialog did not close after save.
+
+**State left behind**
+- Committed on `feat/sales-customer-registry`; PR + review follow (this session).
+- `:3501` DB has the FR-98 migrations; switching `:3501` back to `main`'s app needs the pre-dump restored (or main merged).
+
+**For the next agent**
+- e2e spec not written (TASKS). City seed may hold mistakes: fix in Settings › Customer lists, never in a migration.
+- All existing customers start Incomplete.
+
 ## 2026-11-25 — Synced main checkout, committed stray docs, removed `../bj-clr` (Claude)
 
 Main checkout was at `57e67c5` (46 behind) with uncommitted docs from earlier agents: 10 AGENT-LOG entries (2026-11-20 → 22), CHANGELOG/TASKS marking Sales CEO round 1 deployed as `96da80b`, a TASKS "Local sign-in on port 3501" item. Dropped the untracked annual-borrowing spec/plan (identical on `origin/main`), stashed, fast-forwarded to `06284f8`, re-applied. Conflicts: AGENT-LOG kept both sides; TASKS kept both new sections, took the local "deployed" Sales line plus upstream's Delete/Archive item, dropped the rsync item (local note: verified on Liara). `erp-module/` already in `.gitignore` (line 58, untracked). Removed worktree `../bj-clr` and branch `fix/clearance-optional-en` (already on main). Docs only.

@@ -4,7 +4,7 @@
  */
 import { expect, type Page } from '@playwright/test';
 
-export type SalesPerm = 'sales' | 'sales_settings' | 'sales_decide' | 'project_items';
+export type SalesPerm = 'sales' | 'sales_settings' | 'sales_decide' | 'project_items' | 'sales_customers' | 'sales_customers_import';
 
 /** Create a custom role that grants `edit` on each given Sales item. Returns the role id. */
 export async function createSalesRole(page: Page, name: string, edit: SalesPerm[]): Promise<string> {

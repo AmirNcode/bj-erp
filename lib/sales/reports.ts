@@ -1,6 +1,7 @@
 /** FR-94 report maths over the records list. Pure. */
 
 import { formatCalendarDate } from '@/lib/leave/calendarMonth';
+import { labelOf } from './customerLabel';
 import { daysLeft } from './deadlines';
 import type { DeadlineRow, SalesReport, Stage } from './types';
 
@@ -21,14 +22,16 @@ export type ResultRow = { key: string; decided: number; won: number; lost: numbe
  * bids decided in the app (an imported contract is a win with no lost bids beside it
  * and would make every rate 100%).
  */
-export function results(rows: SalesReport['decided'], by: 'customer' | 'year'): ResultRow[] {
+export function results(rows: SalesReport['decided'], by: 'customer' | 'year', locale = 'fa'): ResultRow[] {
   const out = new Map<string, ResultRow>();
   for (const r of rows) {
-    const key = by === 'customer' ? r.buyer_name ?? '—' : r.result_at ? formatCalendarDate(r.result_at.slice(0, 10), 'en', 'YYYY') : '—';
-    const row = out.get(key) ?? { key, decided: 0, won: 0, lost: 0, cancelled: 0, winRate: null };
+    // Customers group by id (name when the row has none); the shown key is the label for the locale.
+    const label = by === 'customer' ? labelOf(r.buyer_name, r.buyer_name_en, locale) || '—' : r.result_at ? formatCalendarDate(r.result_at.slice(0, 10), 'en', 'YYYY') : '—';
+    const group = by === 'customer' ? (r.buyer_id ? `id:${r.buyer_id}` : `name:${label}`) : label;
+    const row = out.get(group) ?? { key: label, decided: 0, won: 0, lost: 0, cancelled: 0, winRate: null };
     row.decided += 1;
     row[r.bid_result] += 1;
-    out.set(key, row);
+    out.set(group, row);
   }
   for (const row of out.values()) {
     const competed = row.won + row.lost;

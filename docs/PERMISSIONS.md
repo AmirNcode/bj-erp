@@ -932,6 +932,14 @@ Records are scoped to the caller's company (`sales: not found` otherwise). Item 
 **Hidden.** No nav entry, Home line or page without `sales`: `/sales/*` answers 404, and the
 module's strings are sent to the browser only from its own layout.
 
+**Customer registry (FR-98, 2026-11-26).** Two more Sales items (37 in the catalog), both Yes / No:
+`sales_customers` (needs `sales`): create and edit customers, create categories / cities from the
+pickers, and read a customer's managing director, address and contacts — nobody else receives those
+fields from any function. `sales_customers_import` (needs `sales_customers`): the customer import
+dialog, its batches and their removal. The migration gave `sales_customers` to every role that held
+`sales = edit` (they could create customers before). Category / city rename and hide stay
+`sales_settings`; merge and rename of customers stay `sales_settings`.
+
 **D4 applies.** Because the keys count in `private.can_act_on`, someone holding Sales permissions
 can be edited (or have a password reset) only by a caller holding at least the same — in practice
 the admin. Intended: nobody weaker may sign in as a Sales holder.

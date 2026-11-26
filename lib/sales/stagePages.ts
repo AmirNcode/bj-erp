@@ -23,9 +23,9 @@ export function pageKind(stage: Stage): PageKind {
   return (stage.code && BY_CODE[stage.code]) || 'generic';
 }
 
-/** Record keys each page edits (spec §7). `buyer` / `client` are written by name. */
+/** Record keys each page edits (spec §7). `buyer` / `client` are field ids: the draft holds the customer id, written as `buyer_id` / `client_id`. */
 export const PAGE_FIELDS: Record<PageKind, string[]> = {
-  received: ['title', 'buyer', 'buyer_kind', 'client', 'customer_ref', 'source', 'received_on', 'project_site',
+  received: ['title', 'buyer', 'client', 'customer_ref', 'source', 'received_on', 'project_site',
     'description', 'owner_id', 'currency', 'proposal_due', 'needs_quote', 'quote_due', 'needs_bond', 'bond_due'],
   decision: ['decision_reason'],
   technical: [],
@@ -133,7 +133,6 @@ export function canEditKey(key: string, caps: SalesCaps, record: RecordRow, pric
   if (PRICE_KEYS.has(key) && !(caps.prices && caps.prices_edit)) return false;
   if (key === 'our_price' && pricedByItems) return false;
   if ((key === 'decision_reason' || key === 'result_reason') && !caps.decide) return false;
-  if (key === 'buyer_kind' && record.buyer_kind) return false;
   return true;
 }
 
@@ -166,20 +165,29 @@ export function nextGate(record: RecordRow, stages: Stage[], caps: SalesCaps, di
   return { target, blocked: null, missing: [] };
 }
 
-/** The page's draft, read off the record: customers by name, custom values as one object. */
+/** The page's draft, read off the record: customers by id, custom values as one object. */
 export function draftFrom(record: RecordRow, fields: string[]): Record<string, unknown> {
   const values = record as unknown as Record<string, unknown>;
   const out: Record<string, unknown> = {};
   for (const k of fields) {
     if (k.startsWith('custom.')) out.custom = { ...(record.custom ?? {}) };
-    else if (k === 'buyer') out.buyer = record.buyer_name ?? '';
-    else if (k === 'client') out.client = record.client_name ?? '';
+    else if (k === 'buyer') out.buyer = record.buyer_id ?? '';
+    else if (k === 'client') out.client = record.client_id ?? '';
     else out[k] = values[k] ?? null;
   }
   return out;
 }
 
-/** The database reads the company type only together with the company name. */
-export function withBuyer(patch: Record<string, unknown>, draft: Record<string, unknown>): Record<string, unknown> {
-  return 'buyer_kind' in patch && !('buyer' in patch) ? { ...patch, buyer: draft.buyer } : patch;
+/**
+ * Draft patch → the keys `app_sales_save_record` reads: the customer fields hold ids and go
+ * as `buyer_id` / `client_id` ('' = cleared = null); `buyer_kind` (now the customer's own) is never sent.
+ */
+export function toRecordPatch(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(patch)) {
+    if (k === 'buyer_kind') continue;
+    if (k === 'buyer' || k === 'client') out[`${k}_id`] = v || null;
+    else out[k] = v;
+  }
+  return out;
 }

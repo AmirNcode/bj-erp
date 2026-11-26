@@ -82,7 +82,8 @@ begin
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlCeo') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_prices','edit'),
     (v_role,'sales_bonds','edit'),(v_role,'sales_decide','edit'),(v_role,'sales_reports','read'),
-    (v_role,'sales_settings','edit'),(v_role,'project_items','edit');
+    (v_role,'sales_settings','edit'),(v_role,'project_items','edit'),
+    (v_role,'sales_customers','edit');  -- FR-98: holders of sales=edit got it in the migration
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('ceo'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlViewer') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','read');
@@ -94,20 +95,20 @@ begin
   insert into public.role_permissions values(v_role,'sales','read'),(v_role,'sales_bonds','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('fin'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlSeller') returning id into v_role;
-  insert into public.role_permissions values(v_role,'sales','edit');
+  insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_customers','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('seller'),v_role);
 end; $$;
 
 -- ============================================================ catalog and seed
-select pg_temp.expect('catalog: 35 keys',(select count(*)::text from private.permission_keys()),'35');
+select pg_temp.expect('catalog: 37 keys',(select count(*)::text from private.permission_keys()),'37');
 select pg_temp.assert('shapes: sales RE, decide and settings edit-only, reports read-only',
   private.permission_allows('sales','read') and private.permission_allows('sales','edit')
   and private.permission_allows('sales_prices','read') and private.permission_allows('project_items','edit')
   and private.permission_allows('sales_decide','edit') and not private.permission_allows('sales_decide','read')
   and private.permission_allows('sales_settings','edit') and not private.permission_allows('sales_settings','read')
   and private.permission_allows('sales_reports','read') and not private.permission_allows('sales_reports','edit'));
-select pg_temp.expect('six keys depend on sales',
-  (select count(*)::text from private.permission_deps() where needs='sales' and key_level='read'),'6');
+select pg_temp.expect('seven keys depend on sales (FR-98: + sales_customers)',
+  (select count(*)::text from private.permission_deps() where needs='sales' and key_level='read'),'7');
 select pg_temp.expect('no preset or system role holds a new key',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id=rp.role_id
     where r.kind<>'custom' and (rp.permission like 'sales%' or rp.permission='project_items')),'0');

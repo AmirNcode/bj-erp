@@ -27,7 +27,7 @@ const BULK_CHOICES = ['allow', 'read', 'none'] as const;
 const YES_NO_KEYS: ReadonlySet<PermKey> = new Set<PermKey>([
   'approval_delegate', 'travel_booking', 'finance_forms',
   'edit_leave_daily', 'edit_leave_hourly', 'edit_errand_daily', 'edit_errand_hourly', 'edit_requests_own',
-  'sales_decide', 'sales_settings',
+  'sales_decide', 'sales_settings', 'sales_customers', 'sales_customers_import',
 ]);
 
 export function PermissionSection({

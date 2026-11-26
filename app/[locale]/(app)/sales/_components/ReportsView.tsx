@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { labelOf } from '@/lib/sales/customerLabel';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +43,7 @@ export function ReportsView({ boot, report, deadlines }: { boot: Bootstrap; repo
   const stages = useMemo(() => [...boot.stages].sort((a, b) => a.flow_id.localeCompare(b.flow_id) || a.position - b.position), [boot.stages]);
   const flowKind = (flowId: string) => boot.flows.find((x) => x.id === flowId)?.kind ?? 'bid';
   const pipe = useMemo(() => pipeline(report.pipeline, stages), [report.pipeline, stages]);
-  const res = useMemo(() => results(report.decided, by), [report.decided, by]);
+  const res = useMemo(() => results(report.decided, by, f.locale), [report.decided, by, f.locale]);
   const perf = useMemo(() => deadlinePerformance(deadlines, today), [deadlines, today]);
   const stageOf = (id: string) => stages.find((s) => s.id === id);
   const values = (value: Record<string, number>) =>
@@ -152,7 +153,7 @@ export function ReportsView({ boot, report, deadlines }: { boot: Bootstrap; repo
               <Csv name="sales-price-history" label={t('reports.csv')} rows={() => [
                 [t('reports.quotedOn'), t('field.record_no'), t('items.col.no'), t('field.buyer'), t('items.col.product_type'), t('items.col.size'), t('items.col.rating'),
                   t('items.col.description'), t('items.col.qty'), t('items.unitPrice'), t('field.currency'), t('field.bid_result'), t('field.winning_bid')],
-                ...history.map((h) => [h.quoted_on, String(h.record_no), h.code, h.buyer_name ?? '', h.product_type ?? '', h.size ?? '', h.rating ?? '',
+                ...history.map((h) => [h.quoted_on, String(h.record_no), h.code, labelOf(h.buyer_name, h.buyer_name_en, f.locale), h.product_type ?? '', h.size ?? '', h.rating ?? '',
                   h.description ?? '', h.qty === null ? '' : String(h.qty), String(h.unit_price), h.currency ? f.currencyLabel(h.currency) : '', h.bid_result ?? '', h.winning_bid === null ? '' : String(h.winning_bid)]),
               ]} />
             ) : null}
@@ -186,7 +187,7 @@ export function ReportsView({ boot, report, deadlines }: { boot: Bootstrap; repo
                     <tr key={`${h.rfp_id}-${h.revision}-${h.code}`} className="whitespace-nowrap">
                       <td>{f.date(h.quoted_on)}</td>
                       <td><Link href={`/${f.locale}/sales/${h.rfp_id}`} className="font-semibold tabular-nums text-primary" dir="ltr">{h.code}</Link></td>
-                      <td>{h.buyer_name ?? '—'}</td>
+                      <td>{labelOf(h.buyer_name, h.buyer_name_en, f.locale) || '—'}</td>
                       <td>{h.product_type ?? '—'}</td>
                       <td><bdi dir="ltr">{h.size ?? '—'}</bdi></td>
                       <td><bdi dir="ltr">{h.rating ?? '—'}</bdi></td>

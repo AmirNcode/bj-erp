@@ -43,6 +43,8 @@ const RULES: Rule[] = [
   { re: /^sales: invalid input$/, key: 'salesInvalidInput' },
   { re: /^sales: batch closed$/, key: 'salesBatchClosed' },
   { re: /^sales: customer exists$/, key: 'salesCustomerExists' },
+  { re: /^sales: duplicate name$/, key: 'salesDuplicateName' },
+  { re: /^sales: unknown customer$/, key: 'salesUnknownCustomer' },
   { re: /^sales: in use$/, key: 'salesInUse' },
   // View as (FR-86). The pre-request hook makes every viewed transaction read-only,
   // so any save fails with Postgres's "cannot execute … in a read-only transaction";
