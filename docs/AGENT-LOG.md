@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-26 — Merged PR #35 (FR-98 customer registry) → Liara (Claude)
+
+Owner asked to merge after review. `gh pr merge 35 --merge` → `ab5436f`. Deploy Liara run 45905058152: build ✓, deploy ✓ (migrations `20261126100000`–`100400` applied on the live DB). `https://bjeng.app/api/health` 200 after. Not checked signed-in on Liara. Dropped clone `x_cust` on `bj-approvals-finance-db-1`. Worktree `../bj-cust` kept (branch merged; can be removed). `:3501` runs the merged code (wrapper `compose-cust`).
+
 ## 2026-11-26 — ERP › Sales customer registry (FR-98): spec, plan, build (Claude)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead) + Sonnet 5.5 subagents (spec / plan review, seed data, import SQL, SQL tests, UI tasks)
