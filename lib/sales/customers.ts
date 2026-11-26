@@ -5,7 +5,7 @@ import gregorian from 'react-date-object/calendars/gregorian';
 import gregorian_en from 'react-date-object/locales/gregorian_en';
 import persian from 'react-date-object/calendars/persian';
 import persian_en from 'react-date-object/locales/persian_en';
-import { nameKey } from './inquiry';
+import { matchAllWords } from './customerSearch';
 import { type Currency, type CustomerFilters, type CustomerSummary, type ResultFilter } from './types';
 
 export type CustomerSortKey =
@@ -43,10 +43,9 @@ export function persianYearStarts(todayIso: string): { yearStart: string; prevYe
   return { yearStart: start(py), prevYearStart: start(py - 1) };
 }
 
-/** Customers whose name key contains the typed key (empty search keeps everyone). */
+/** Customers whose Farsi or English name holds every typed word, any order (FR-98 §6). */
 export function searchCustomers(rows: CustomerSummary[], typed: string): CustomerSummary[] {
-  const key = nameKey(typed);
-  return key ? rows.filter((r) => nameKey(r.name).includes(key)) : rows;
+  return rows.filter((r) => matchAllWords([r.name, r.name_en], typed));
 }
 
 /** Sorted copy; a missing value (no win rate, no deadline) always goes last. Ties by name. */
@@ -92,6 +91,7 @@ export function parseCustomerFilters(sp: Record<string, string | string[] | unde
     result: RESULTS.includes(result) ? result : undefined,
     owner: /^[0-9a-f-]{36}$/i.test(owner) ? owner : undefined,
     kind: opts.kind && (kind === 'government' || kind === 'contractor') ? kind : undefined,
+    incomplete: opts.kind && one(sp.incomplete) === '1' ? '1' : undefined,
   };
 }
 

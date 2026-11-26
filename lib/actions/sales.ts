@@ -14,7 +14,8 @@ import type { Json } from '@/lib/supabase/types';
 import type { InquiryRow } from '@/lib/sales/inquiry';
 import type { LedgerRow } from '@/lib/sales/ledger';
 import type {
-  AddedCustomer, Bootstrap, CustomerDetail, CustomerFilters, CustomerSummary, NameAlias, PersonToMatch, SalesMetrics, SalesReport, DeadlineRow, ImportResult, InquiryImportResult, PriceHistoryRow, RecordDetail,
+  AddedCustomer, Bootstrap, City, ContractorCategory, CustomerImportBatch, CustomerImportCells, CustomerImportPreview,
+  CustomerImportRequest, CustomerImportResult, CustomerInput, CustomerLists, CustomerProfile, DuplicateCustomer, CustomerDetail, CustomerFilters, CustomerSummary, NameAlias, PersonToMatch, SalesMetrics, SalesReport, DeadlineRow, ImportResult, InquiryImportResult, PriceHistoryRow, RecordDetail,
   Product, RecordFilters, RecordNumbers, RecordPage, SimilarCustomer,
 } from '@/lib/sales/types';
 
@@ -167,6 +168,95 @@ export async function findSimilarSalesCustomers(name: string): Promise<Read<Simi
   const { data, error } = await c.supabase.rpc('app_sales_similar_customers', { p_name: name });
   if (error) return dbErr(error.message);
   return { ok: true, data: (data ?? []) as unknown as SimilarCustomer[] };
+}
+
+// ───────────────────────────────────────────── FR-98 customer registry
+
+/** A save refused because another customer already uses the name; `duplicate` names it. */
+type Saved<T> = { ok: true; data: T } | (DbErrorResult & { duplicate?: DuplicateCustomer });
+
+async function duplicateOr(error: { message: string; hint?: string | null }): Promise<DbErrorResult & { duplicate?: DuplicateCustomer }> {
+  const out = await dbErr(error.message);
+  if (error.message === 'sales: duplicate name' && error.hint) {
+    try {
+      const d = JSON.parse(error.hint) as DuplicateCustomer;
+      if (d && typeof d.id === 'string') return { ...out, duplicate: d };
+    } catch { /* not JSON: the plain error is enough */ }
+  }
+  return out;
+}
+
+/** Provinces, cities and contractor categories for the customer form (inactive ones only for settings). */
+export async function getCustomerLists(): Promise<Read<CustomerLists>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer_lists');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as CustomerLists };
+}
+
+/** Create (id null) or update a customer with its whole contact book. */
+export async function saveSalesCustomer(id: string | null, input: CustomerInput): Promise<Saved<CustomerProfile>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_save_customer', { p_id: id, p: json(input) });
+  if (error) return duplicateOr(error);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as CustomerProfile };
+}
+
+/** Create a category (picker "Create …") or edit one (Settings). */
+export async function saveSalesCategory(patch: { id?: string; name_fa: string; name_en?: string | null; active?: boolean; position?: number }): Promise<Saved<ContractorCategory>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_save_category', { p: json(patch) });
+  if (error) return duplicateOr(error);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as ContractorCategory };
+}
+
+/** Create a city in a province (picker "Create …") or edit one (Settings). */
+export async function saveSalesCity(patch: { id?: string; province_code?: string; name_fa: string; name_en?: string | null; active?: boolean }): Promise<Saved<City>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_save_city', { p: json(patch) });
+  if (error) return duplicateOr(error);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as City };
+}
+
+export async function previewCustomerImport(rows: CustomerImportCells[]): Promise<Read<CustomerImportPreview>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer_import_preview', { p_rows: json(rows) });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as CustomerImportPreview };
+}
+
+export async function importCustomers(request: CustomerImportRequest): Promise<Read<CustomerImportResult>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer_import', { p: json(request) });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as CustomerImportResult };
+}
+
+export async function listCustomerImportBatches(): Promise<Read<CustomerImportBatch[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer_batches');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as CustomerImportBatch[] };
+}
+
+export async function removeCustomerImportBatch(id: string): Promise<Read<{ removed: number; kept: number }>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_remove_customer_batch', { p_id: id });
+  if (error) return dbErr(error.message);
+  invalidateAppCache();
+  return { ok: true, data: data as { removed: number; kept: number } };
 }
 
 export async function getSalesRecord(id: string): Promise<Read<RecordDetail>> {

@@ -101,17 +101,18 @@ begin
   insert into public.roles(company_id,kind,name) values(v_company,'custom','IqCeo') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_prices','edit'),
     (v_role,'sales_bonds','edit'),(v_role,'sales_decide','edit'),(v_role,'sales_reports','read'),
-    (v_role,'sales_settings','edit'),(v_role,'project_items','edit');
+    (v_role,'sales_settings','edit'),(v_role,'project_items','edit'),
+    (v_role,'sales_customers','edit');  -- FR-98: holders of sales=edit got it in the migration
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('ceo'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','IqViewer') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','read');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('viewer'),v_role);
   -- Settings without prices: may import, never writes a price.
   insert into public.roles(company_id,kind,name) values(v_company,'custom','IqSetter') returning id into v_role;
-  insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_settings','edit');
+  insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_settings','edit'),(v_role,'sales_customers','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('setter'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','IqSeller') returning id into v_role;
-  insert into public.role_permissions values(v_role,'sales','edit');
+  insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_customers','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('seller'),v_role);
 end; $$;
 

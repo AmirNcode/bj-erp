@@ -12,7 +12,7 @@ import { useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { saveSalesStagePage } from '@/lib/actions/sales';
-import { canEditKey, draftFrom, draftPatch, nextGate, pageFields, pageKind, pageMode, rebaseDraft, withBuyer } from '@/lib/sales/stagePages';
+import { canEditKey, draftFrom, draftPatch, nextGate, pageFields, pageKind, pageMode, rebaseDraft, toRecordPatch } from '@/lib/sales/stagePages';
 import type { Bootstrap, RecordDetail, Stage } from '@/lib/sales/types';
 import { useRun, useSalesFormat } from './parts';
 import { ItemsTab } from './ItemsTab';
@@ -48,7 +48,7 @@ export function StageBody({ boot, detail, stage, stages, focusNode, entry, onEnt
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the stored values change
   }, [originalJson]);
-  const patch = withBuyer(draftPatch(base, draft), draft);
+  const patch = toRecordPatch(draftPatch(base, draft));
   const dirty = Object.keys(patch).length > 0;
 
   const mode = pageMode(stage, r, stages, boot.caps);

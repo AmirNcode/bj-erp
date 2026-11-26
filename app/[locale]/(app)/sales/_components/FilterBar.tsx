@@ -13,7 +13,7 @@ import { RESULTS } from '@/lib/sales/customers';
 import type { CustomerFilters, Person } from '@/lib/sales/types';
 import { DateInput, Select } from './parts';
 
-const FILTER_KEYS = ['from', 'to', 'result', 'owner', 'kind'] as const;
+const FILTER_KEYS = ['from', 'to', 'result', 'owner', 'kind', 'incomplete'] as const;
 
 export function FilterBar({ filters, owners, withKind }: {
   filters: CustomerFilters;
@@ -34,7 +34,7 @@ export function FilterBar({ filters, owners, withKind }: {
     }
     start(() => router.replace(qs.size ? `${pathname}?${qs}` : pathname, { scroll: false }));
   };
-  const any = FILTER_KEYS.some((k) => (k === 'kind' ? withKind && filters.kind : filters[k]));
+  const any = FILTER_KEYS.some((k) => (k === 'kind' || k === 'incomplete' ? withKind && filters[k] : filters[k]));
   const dateField = (label: string, key: 'from' | 'to') => (
     <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">
       {label}
@@ -69,12 +69,24 @@ export function FilterBar({ filters, owners, withKind }: {
           <option value="contractor">{t('customerKind.contractor')}</option>
         </Select>
       ) : null}
+      {withKind ? (
+        <label className="flex h-9 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4 accent-primary"
+            checked={filters.incomplete === '1'}
+            onChange={(e) => set({ incomplete: e.target.checked ? '1' : null })}
+            data-testid="sales-customers-incomplete-filter"
+          />
+          {t('customerProfile.filterIncomplete')}
+        </label>
+      ) : null}
       <Button
         type="button"
         variant="outline"
         className="h-9 max-sm:w-full"
         disabled={!any}
-        onClick={() => set({ from: null, to: null, result: null, owner: null, kind: null })}
+        onClick={() => set({ from: null, to: null, result: null, owner: null, kind: null, incomplete: null })}
         data-testid="sales-filter-clear"
       >
         {t('filters.clear')}

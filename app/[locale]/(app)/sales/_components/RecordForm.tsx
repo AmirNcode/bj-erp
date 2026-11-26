@@ -13,15 +13,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { saveSalesRecord } from '@/lib/actions/sales';
 import { type Bootstrap, type CustomValues, type FlowKind, type RecordRow } from '@/lib/sales/types';
-import { CustomerCombo } from './CustomerCombo';
+import { CustomerCombo, useCustomerRefs } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useRun, useSalesFormat } from './parts';
 
 type Draft = {
   record_no: number | null;
   title: string;
-  buyer: string;
-  buyer_kind: string;
-  client: string;
+  buyer_id: string;
+  client_id: string;
   customer_ref: string;
   project_site: string;
   source: string;
@@ -56,9 +55,8 @@ function initial(boot: Bootstrap, record: RecordRow | null, flowKind: FlowKind):
   return {
     record_no: record ? record.record_no : boot.settings.next_record_no,
     title: record?.title ?? '',
-    buyer: record?.buyer_name ?? '',
-    buyer_kind: record?.buyer_kind ?? '',
-    client: record?.client_name ?? '',
+    buyer_id: record?.buyer_id ?? '',
+    client_id: record?.client_id ?? '',
     customer_ref: record?.customer_ref ?? '',
     project_site: record?.project_site ?? '',
     source: record?.source ?? '',
@@ -103,17 +101,16 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
   const [d, setD] = useState<Draft>(() => initial(boot, record, flowKind));
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setD((prev) => ({ ...prev, [key]: value }));
   const fields = boot.fields.filter((x) => x.entity === 'rfp' && (x.active || d.custom[x.key] !== undefined));
-  const customerByName = (name: string) => boot.customers.find((c) => c.name === name) ?? (name ? { id: '', name, kind: null } : null);
-  const buyerRef = customerByName(d.buyer);
+  const refs = useCustomerRefs(boot.customers);
+  const customerById = (id: string) => refs.byId(id);
   const bid = flowKind === 'bid';
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     const patch: Record<string, unknown> = {
       title: d.title,
-      buyer: d.buyer,
-      buyer_kind: d.buyer_kind || null,
-      client: d.client,
+      buyer_id: d.buyer_id || null,
+      client_id: d.client_id || null,
       customer_ref: d.customer_ref || null,
       project_site: d.project_site || null,
       source: d.source || null,
@@ -161,22 +158,14 @@ export function RecordForm({ boot, record, flowKind, pricedByItems, onDone, onCa
         <Field label={t('field.buyer')}>
           <CustomerCombo
             customers={boot.customers}
-            value={buyerRef}
-            onChange={(c) => setD((prev) => ({ ...prev, buyer: c?.name ?? '', buyer_kind: c?.kind ?? '' }))}
+            value={customerById(d.buyer_id)}
+            onChange={(c) => { refs.remember(c); set('buyer_id', c?.id ?? ''); }}
+            allowCreate={boot.caps.customers}
             testId="sales-form-buyer"
           />
         </Field>
-        {d.buyer.trim() && !buyerRef?.kind ? (
-          <Field label={t('field.buyer_kind')}>
-            <Select value={d.buyer_kind} onChange={(v) => set('buyer_kind', v)}>
-              <option value="">—</option>
-              <option value="government">{t('customerKind.government')}</option>
-              <option value="contractor">{t('customerKind.contractor')}</option>
-            </Select>
-          </Field>
-        ) : null}
         <Field label={t('field.client')} hint={t('form.clientHint')}>
-          <CustomerCombo customers={boot.customers} value={customerByName(d.client)} onChange={(c) => set('client', c?.name ?? '')} testId="sales-form-client" />
+          <CustomerCombo customers={boot.customers} value={customerById(d.client_id)} onChange={(c) => { refs.remember(c); set('client_id', c?.id ?? ''); }} allowCreate={boot.caps.customers} testId="sales-form-client" />
         </Field>
         <Field label={t('field.customer_ref')}>
           <Input dir="ltr" maxLength={200} value={d.customer_ref} onChange={(e) => set('customer_ref', e.target.value)} />

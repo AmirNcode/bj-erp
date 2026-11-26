@@ -415,6 +415,18 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-98** ☐ **ERP › Sales customer registry (CEO request).** Customers are registered once and only
+  *picked* on records (no typed company names). Profile: Farsi name, one English name / abbreviation
+  field, government / contractor, rank (1–5) + category for contractors (one pair), managing director,
+  province + city (lists) + street address, and a contact book (person, job title, office / mobile /
+  fax / other, number, optional email). Saving with gaps is allowed (draft); the customer is usable at
+  once and tagged **Incomplete** until every field is filled. Typing a name lists every company sharing
+  a word (duplicate check); the picker, Customers tab and Records search match word by word in any
+  order. Bulk import from an `.xlsx` template (one sheet, one contact per row) with per-row Skip /
+  Update / Overwrite, choices for unknown categories / cities, and batch removal. Two permissions:
+  **Customers: create and edit** (also reveals CEO, address, contacts) and **Customers: bulk import**.
+  English UI shows the English name when there is one. *(2026-11-26; spec
+  `2026-11-26-sales-customer-registry-design.md`; branch `feat/sales-customer-registry`.)*
 - **FR-97** ☐ **UI readability and desktop layout.** *(1) No iPhone zoom (owner rule):* no input, select,
   textarea or date field is ever under 16px on a touch screen, portrait or landscape, phone or iPad;
   pinch-zoom itself stays allowed. *(2) Text size per person:* Profile › Preferences has a 5-step slider

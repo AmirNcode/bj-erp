@@ -9,10 +9,13 @@ import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/EmptyState';
 import { Input } from '@/components/ui/input';
 import { presentCurrencies, searchCustomers, sortCustomers, type CustomerSortKey } from '@/lib/sales/customers';
-import type { CustomerFilters, CustomerSummary, Person, SalesMetrics } from '@/lib/sales/types';
+import { customerLabel } from '@/lib/sales/customerLabel';
+import type { Bootstrap, CustomerFilters, CustomerMissingKey, CustomerSummary, SalesMetrics } from '@/lib/sales/types';
+import { CustomerForm } from './CustomerForm';
 import { FilterBar } from './FilterBar';
 import { MetricsStrip } from './MetricsStrip';
 import { Select, Tag, useSalesFormat } from './parts';
@@ -20,6 +23,7 @@ import { SortTh, TD } from './SortTh';
 import { DetailRow, ExpandCell, ExpandTh, type DetailItem } from './ExpandParts';
 import { customerColumns, type CustomerColumn } from '@/lib/sales/columns';
 import { cn } from '@/lib/utils';
+import { useViewAs } from '../../_components/ViewAsContext';
 
 /** Sums per currency, stacked one under the other. */
 export function Sums({ value }: { value: Record<string, number> | undefined }) {
@@ -33,15 +37,30 @@ export function Sums({ value }: { value: Record<string, number> | undefined }) {
   );
 }
 
-export function CustomersList({ rows, prices, metrics, filters, people }: {
+/** "Missing: Province, City" — the labels of the fields a customer still lacks. */
+export function useIncompleteHint(): (missing: CustomerMissingKey[]) => string {
+  const t = useTranslations('sales');
+  const f = useSalesFormat();
+  return (missing) => t('customerProfile.incompleteHint', {
+    fields: missing.map((k) => t(`customerMissing.${k}`)).join(f.locale === 'fa' ? '، ' : ', '),
+  });
+}
+
+export function CustomersList({ rows, boot, metrics, filters, importSlot }: {
   rows: CustomerSummary[];
-  prices: boolean;
+  boot: Bootstrap;
   metrics: SalesMetrics | null;
   filters: CustomerFilters;
-  people: Person[];
+  /** Extra header action (the import button), rendered before Add. */
+  importSlot?: React.ReactNode;
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
+  const viewAs = useViewAs();
+  const hint = useIncompleteHint();
+  const [adding, setAdding] = useState(false);
+  const prices = boot.caps.prices;
+  const people = boot.people;
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -58,6 +77,10 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
     r.win_rate === null ? dash : (
       <>{f.percent(r.win_rate)} <span className="text-xs font-normal text-muted-foreground">({f.number(r.decided)})</span></>
     );
+  const label = (r: CustomerSummary) => customerLabel(r, f.locale);
+  const incomplete = (r: CustomerSummary) => (r.missing.length > 0 ? (
+    <span title={hint(r.missing)} data-testid="sales-customer-incomplete"><Tag tone="warn">{t('customerProfile.incomplete')}</Tag></span>
+  ) : null);
   const kind = (r: CustomerSummary) => (r.kind ? <Tag>{t(`customerKind.${r.kind}`)}</Tag> : null);
   const asc = (key: CustomerSortKey) => key === 'name' || key === 'main_owner_name';
   const click = (key: CustomerSortKey) =>
@@ -83,6 +106,12 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
 
   return (
     <div className="flex flex-col gap-4" data-testid="sales-customers">
+      {boot.caps.customers && viewAs === null ? (
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {importSlot}
+          <Button className="max-sm:h-11" onClick={() => setAdding(true)} data-testid="sales-customers-add">{t('customerProfile.add')}</Button>
+        </div>
+      ) : null}
       <FilterBar filters={filters} owners={owners} withKind />
       {metrics ? <MetricsStrip metrics={metrics} /> : null}
       <div className="grid gap-2 sm:grid-cols-2 sm:max-w-xl">
@@ -112,7 +141,7 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
               <li key={r.id}>
                 <Link href={href(r.id)} className="flex flex-col gap-1 py-3">
                   <span className="flex items-center justify-between gap-2">
-                    <span className="font-semibold"><bdi>{r.name}</bdi></span>
+                    <span className="flex flex-wrap items-center gap-2 font-semibold"><bdi>{label(r)}</bdi>{incomplete(r)}</span>
                     {kind(r)}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -170,8 +199,9 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
                   return (
                     <Fragment key={r.id}>
                       <tr className="cursor-pointer" onClick={() => router.push(href(r.id))}>
-                        <td className={`${TD} max-w-[26ch] truncate`} title={r.name}>
-                          <Link href={href(r.id)} className="font-semibold text-primary" onClick={(e) => e.stopPropagation()}><bdi>{r.name}</bdi></Link>
+                        <td className={TD} title={label(r)}>
+                          <Link href={href(r.id)} className="inline-block max-w-[22ch] truncate align-bottom font-semibold text-primary" onClick={(e) => e.stopPropagation()}><bdi>{label(r)}</bdi></Link>
+                          {r.missing.length > 0 ? <> {incomplete(r)}</> : null}
                         </td>
                         <td className={cn(TD, 'text-end tabular-nums', SHOW.records)}>
                           {f.number(r.records)}
@@ -203,6 +233,14 @@ export function CustomersList({ rows, prices, metrics, filters, people }: {
           </div>
         </>
       )}
+      {adding ? (
+        <CustomerForm
+          customerId={null}
+          customers={boot.customers}
+          onSaved={(p) => router.push(`/${f.locale}/sales/customers/${p.id}`)}
+          onClose={() => setAdding(false)}
+        />
+      ) : null}
     </div>
   );
 }

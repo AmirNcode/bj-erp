@@ -17,6 +17,10 @@ export type SalesCaps = {
   items_edit: boolean;
   /** Admin only: archive, delete and restore a whole record. */
   remove_records: boolean;
+  /** FR-98: create / edit customers and see their contact details (sales_customers). */
+  customers: boolean;
+  /** FR-98: bulk import of customers (sales_customers_import). */
+  customers_import: boolean;
 };
 
 export type FlowKind = 'bid' | 'contract';
@@ -53,7 +57,9 @@ export type FieldDef = {
   active: boolean;
 };
 
-export type Customer = { id: string; name: string; kind: 'government' | 'contractor' | null };
+export type CustomerKind = 'government' | 'contractor';
+/** A customer as bootstrap lists it (FR-98: English name, incomplete flag). */
+export type Customer = { id: string; name: string; name_en: string | null; kind: CustomerKind | null; incomplete: boolean };
 export type Person = { id: string; name: string; personnel_no: string | null; role_ids: string[] };
 export type RoleRef = { id: string; name: string };
 
@@ -124,9 +130,11 @@ export type RecordRow = {
   revision: number;
   buyer_id: string | null;
   buyer_name: string | null;
+  buyer_name_en?: string | null;
   buyer_kind: 'government' | 'contractor' | null;
   client_id: string | null;
   client_name: string | null;
+  client_name_en?: string | null;
   customer_ref: string | null;
   project_site: string | null;
   source: 'website' | 'email' | 'other' | null;
@@ -240,6 +248,7 @@ export type DeadlineRow = Deadline & {
   title: string;
   stage_id: string;
   buyer_name: string | null;
+  buyer_name_en?: string | null;
 };
 
 export type DocumentRow = {
@@ -301,6 +310,7 @@ export type PriceHistoryRow = {
   bid_result: 'won' | 'lost' | 'cancelled' | null;
   winning_bid: number | null;
   buyer_name: string | null;
+  buyer_name_en?: string | null;
 };
 
 export type ImportResult = {
@@ -343,11 +353,13 @@ export type CustomerFilters = {
   result?: ResultFilter;
   owner?: string;
   kind?: 'government' | 'contractor';
+  /** FR-98: Customers tab only — customers with missing data. */
+  incomplete?: '1';
 };
 export type RecordSort = 'record_no' | 'received_on' | 'buyer' | 'title' | 'stage' | 'owner' | 'deadline' | 'value';
 export type RecordPage = { rows: RecordRow[]; total: number; truncated: boolean };
 
-export type CustomerRef = { id: string; name: string; kind: 'government' | 'contractor' | null };
+export type CustomerRef = { id: string; name: string; name_en?: string | null; kind: CustomerKind | null; incomplete?: boolean };
 export type AddedCustomer = CustomerRef & { existed: boolean };
 export type SimilarCustomer = CustomerRef & { distance: number };
 
@@ -355,7 +367,10 @@ export type SimilarCustomer = CustomerRef & { distance: number };
 export type CustomerSummary = {
   id: string;
   name: string;
+  name_en: string | null;
   kind: 'government' | 'contractor' | null;
+  /** FR-98: required fields still empty (spec §4 keys); empty = complete. */
+  missing: CustomerMissingKey[];
   records: number;
   as_client: number;
   open: number;
@@ -380,15 +395,17 @@ export type CustomerDetail = {
   customer: CustomerSummary;
   /** Gregorian year of received_on; the page shows it as a Persian year range. */
   per_year: { year: number; total: number; won: number; lost: number }[];
-  client_of: { id: string; name: string; count: number }[];
+  client_of: { id: string; name: string; name_en: string | null; count: number }[];
   top_words: { word: string; count: number }[];
   /** People in charge on this customer's records (owner set), for the page's filter. */
   owners: { id: string; name: string; count: number }[];
+  /** FR-98: the registry profile; ceo_name / address / contacts only for `customers` holders. */
+  profile: CustomerProfile;
 };
 
 export type SalesReport = {
   pipeline: { stage_id: string; count: number; value?: Record<string, number> }[];
-  decided: { buyer_name: string | null; result_at: string; bid_result: 'won' | 'lost' | 'cancelled' }[];
+  decided: { buyer_id: string | null; buyer_name: string | null; buyer_name_en: string | null; result_at: string; bid_result: 'won' | 'lost' | 'cancelled' }[];
 };
 
 /** Figure strip of the Customers tab (all) or one customer page (§16.8). Money keys only with sales_prices. */
@@ -420,4 +437,113 @@ export type NameAlias = {
   target_id: string;
   target_name: string | null;
   created_at: string;
+};
+
+// ───────────────────────────────────────────── FR-98 customer registry
+
+export type CustomerMissingKey =
+  | 'name_en' | 'kind' | 'ceo_name' | 'province' | 'city' | 'address' | 'contacts' | 'rank' | 'category';
+export type ContactLabel = 'office' | 'mobile' | 'fax' | 'other';
+export type CustomerContact = {
+  id?: string;
+  person: string;
+  title: string | null;
+  label: ContactLabel;
+  phone: string;
+  email: string | null;
+};
+
+/** app_sales_customer → profile, app_sales_save_customer's result. */
+export type CustomerProfile = {
+  id: string;
+  name: string;
+  name_en: string | null;
+  kind: CustomerKind | null;
+  rank: number | null;
+  category_id: string | null;
+  category_fa: string | null;
+  category_en: string | null;
+  province_code: string | null;
+  province_fa: string | null;
+  province_en: string | null;
+  city_id: string | null;
+  city_fa: string | null;
+  city_en: string | null;
+  missing: CustomerMissingKey[];
+  created_at: string;
+  updated_at: string | null;
+  /** Only for sales_customers holders. */
+  ceo_name?: string | null;
+  address?: string | null;
+  contacts?: CustomerContact[];
+};
+
+/** What the customer form sends to app_sales_save_customer. */
+export type CustomerInput = {
+  name: string;
+  name_en: string | null;
+  kind: CustomerKind | null;
+  ceo_name: string | null;
+  province_code: string | null;
+  city_id: string | null;
+  address: string | null;
+  rank: number | null;
+  category_id: string | null;
+  contacts: CustomerContact[];
+};
+
+export type Province = { code: string; name_fa: string; name_en: string };
+export type City = { id: string; province_code: string; name_fa: string; name_en: string | null; active: boolean };
+export type ContractorCategory = { id: string; name_fa: string; name_en: string | null; active: boolean; position: number };
+/** app_sales_customer_lists: inactive entries only for sales_settings holders. */
+export type CustomerLists = { provinces: Province[]; cities: City[]; categories: ContractorCategory[] };
+
+/** A refused save because the name (or English name) belongs to another customer. */
+export type DuplicateCustomer = { id: string; name: string; name_en: string | null };
+
+// Bulk import (app_sales_customer_import_preview / _import; plan "Task 4 contract").
+export type CustomerImportCells = {
+  row: number;
+  name?: string; name_en?: string; kind?: string; ceo_name?: string; province?: string; city?: string;
+  address?: string; rank?: string; category?: string; contact_person?: string; contact_title?: string;
+  contact_label?: string; phone?: string; email?: string;
+};
+export type ImportAction = 'skip' | 'update' | 'overwrite';
+export type ImportListDecision = { action: 'create' } | { action: 'use'; id: string } | { action: 'empty' };
+export type CustomerImportPreviewRow = {
+  row: number;
+  status: 'new' | 'match' | 'error';
+  error: 'no_name' | 'duplicate_in_file' | 'invalid' | null;
+  match: DuplicateCustomer | null;
+  values: Partial<Record<'name' | 'name_en' | 'kind' | 'ceo_name' | 'province_code' | 'city_id' | 'address' | 'rank' | 'category_id', string | number | null>>;
+  contact: Omit<CustomerContact, 'id'> | null;
+  /** `detail`: for field `contact`, which part (person, phone, email, label, title). */
+  dropped: { field: string; reason: 'invalid' | 'unknown' | 'duplicate' | 'not_contractor'; detail?: string }[];
+  unknown: { field: 'city' | 'category'; key: string; value: string }[];
+  incomplete: boolean;
+};
+export type CustomerImportPreview = {
+  rows: CustomerImportPreviewRow[];
+  unknown: {
+    categories: { key: string; value: string; rows: number }[];
+    cities: { key: string; value: string; province_code: string; rows: number }[];
+  };
+  counts: { new: number; match: number; error: number };
+};
+export type CustomerImportRequest = {
+  file_name: string;
+  rows: CustomerImportCells[];
+  default_action: ImportAction;
+  actions: Record<string, ImportAction>;
+  categories: Record<string, ImportListDecision>;
+  /** Key: `${province_code}|${key}`. */
+  cities: Record<string, ImportListDecision>;
+};
+export type CustomerImportResult = {
+  /** null when the import created and updated nothing (no batch is kept). */
+  batch_id: string | null; created: number; updated: number; skipped: number; incomplete: number; dropped: number;
+};
+export type CustomerImportBatch = {
+  id: string; file_name: string | null; created_at: string; created_by_name: string | null;
+  created_count: number; updated_count: number; skipped_count: number; remaining: number;
 };

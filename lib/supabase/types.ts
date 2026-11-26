@@ -2016,6 +2016,15 @@ export type Database = {
       app_sales_record_numbers: { Args: Record<PropertyKey, never>; Returns: Json }
       app_sales_list_page: { Args: { p?: Json }; Returns: Json }
       app_sales_add_customer: { Args: { p: Json }; Returns: Json }
+      // FR-98 customer registry.
+      app_sales_save_customer: { Args: { p_id: string | null; p: Json }; Returns: Json }
+      app_sales_customer_lists: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_save_category: { Args: { p: Json }; Returns: Json }
+      app_sales_save_city: { Args: { p: Json }; Returns: Json }
+      app_sales_customer_import_preview: { Args: { p_rows: Json }; Returns: Json }
+      app_sales_customer_import: { Args: { p: Json }; Returns: Json }
+      app_sales_customer_batches: { Args: Record<PropertyKey, never>; Returns: Json }
+      app_sales_remove_customer_batch: { Args: { p_id: string }; Returns: Json }
       app_sales_similar_customers: { Args: { p_name: string }; Returns: Json }
       app_sales_metrics: { Args: { p_customer: string | null; p_year_start: string; p_prev_year_start: string; p?: Json }; Returns: Json }
       app_sales_people_to_match: { Args: { p_batch: string | null }; Returns: Json }

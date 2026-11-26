@@ -10,6 +10,7 @@ import { Fragment, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { labelOf } from '@/lib/sales/customerLabel';
 import { todayInAppTz } from '@/lib/appDate';
 import { daysLeft, deadlineState } from '@/lib/sales/deadlines';
 import type { Bootstrap, RecordRow, RecordSort } from '@/lib/sales/types';
@@ -108,7 +109,7 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
           <li key={r.id}>
             <Link href={`/${f.locale}/sales/${r.id}`} className="flex flex-col gap-1 py-3">
               <span className="flex items-center justify-between gap-2">
-                <span className="font-semibold"><bdi dir="ltr" className="tabular-nums">{f.recordNo(r.record_no)}</bdi>{showBuyer ? <> · {r.buyer_name ?? '—'}</> : null}</span>
+                <span className="font-semibold"><bdi dir="ltr" className="tabular-nums">{f.recordNo(r.record_no)}</bdi>{showBuyer ? <> · {labelOf(r.buyer_name, r.buyer_name_en, f.locale) || '—'}</> : null}</span>
                 {stageTag(r)}
               </span>
               <span dir="auto" className="text-sm">{r.title}</span>
@@ -143,13 +144,13 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
               const isOpen = open.has(r.id);
               const price = f.money(r.total_value ?? r.our_price, r.currency);
               const items: DetailItem[] = [
-                ...(showBuyer ? [{ key: 'buyer', label: t('field.buyer'), value: r.buyer_name ?? dash, hideClass: DET.buyer }] : []),
+                ...(showBuyer ? [{ key: 'buyer', label: t('field.buyer'), value: labelOf(r.buyer_name, r.buyer_name_en, f.locale) || dash, hideClass: DET.buyer }] : []),
                 { key: 'stage', label: t('field.stage'), value: stageTag(r), hideClass: DET.stage },
                 { key: 'owner', label: t('field.owner'), value: who(r), hideClass: DET.owner },
                 { key: 'deadline', label: t('field.next_deadline'), value: deadline(r), hideClass: DET.deadline },
                 { key: 'received', label: t('field.received_on'), value: f.date(r.received_on), hideClass: DET.received },
                 ...(boot.caps.prices ? [{ key: 'value', label: t('field.value'), value: price, hideClass: DET.value }] : []),
-                { key: 'client', label: t('field.client'), value: r.client_name ?? dash, hideClass: DET.client },
+                { key: 'client', label: t('field.client'), value: labelOf(r.client_name, r.client_name_en, f.locale) || dash, hideClass: DET.client },
                 ...listFields.map((def) => ({ key: def.key, label: f.fieldLabel(def), value: f.custom(def, r.custom[def.key]), hideClass: DET.client })),
               ];
               return (
@@ -170,13 +171,13 @@ export function RecordsTable({ boot, rows, sort, dir, hrefFor, showBuyer = true,
                       </Link>
                     </td>
                     <td className={`${TD} max-w-[22ch] truncate`} title={r.title}><bdi>{r.title}</bdi></td>
-                    {showBuyer ? <td className={cn(TD, 'max-w-[16ch] truncate', SHOW.buyer)} title={r.buyer_name ?? undefined}>{r.buyer_name ?? dash}</td> : null}
+                    {showBuyer ? <td className={cn(TD, 'max-w-[16ch] truncate', SHOW.buyer)} title={labelOf(r.buyer_name, r.buyer_name_en, f.locale) || undefined}>{labelOf(r.buyer_name, r.buyer_name_en, f.locale) || dash}</td> : null}
                     <td className={cn(TD, SHOW.stage)}>{stageTag(r)}</td>
                     <td className={cn(TD, 'max-w-[14ch] truncate', SHOW.owner)} title={who(r)}>{who(r)}</td>
                     <td className={cn(TD, SHOW.deadline)}>{deadline(r)}</td>
                     <td className={cn(TD, SHOW.received)}>{f.date(r.received_on)}</td>
                     {boot.caps.prices ? <td className={cn(TD, 'text-end tabular-nums', SHOW.value)}>{price}</td> : null}
-                    <td className={cn(TD, 'max-w-[16ch] truncate', SHOW.client)} title={r.client_name ?? undefined}>{r.client_name ?? dash}</td>
+                    <td className={cn(TD, 'max-w-[16ch] truncate', SHOW.client)} title={labelOf(r.client_name, r.client_name_en, f.locale) || undefined}>{labelOf(r.client_name, r.client_name_en, f.locale) || dash}</td>
                     {listFields.map((def) => <td key={def.key} className={cn(TD, SHOW.client)}>{f.custom(def, r.custom[def.key])}</td>)}
                     <ExpandCell id={`rec-${r.id}`} open={isOpen} hideClass={RECORD_EXPAND_HIDE} onToggle={() => toggleOpen(r.id)} testId={`sales-rexpand-${r.id}`} />
                   </tr>

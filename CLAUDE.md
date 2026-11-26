@@ -206,7 +206,7 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **A new Sales write function calls `private.sales_writable(rfp)`** (closed record = `sales_decide` only) unless it is items or finance, which stay open on purpose.
 - **Date field inside a scrolling dialog:** `<PersianDateField portal>` + a dialog content that ignores outside presses on `.rmdp-portal` (Sales: `ModalContent`); otherwise the calendar is clipped.
 - **Item numbers (`project_nodes.code`) are permanent:** never decrement `node_seq` / `child_seq`, never renumber, never change `record_no`.
-- **Catalog key count is asserted in four places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql`, `tests/sql/sales.sql` (35 since annual borrowing).
+- **Catalog key count is asserted in four places:** `tests/unit/permissions-catalog.test.ts`, `tests/sql/fr55-roles-permissions.sql`, `tests/sql/request-edit.sql`, `tests/sql/sales.sql` (37 since FR-98 customer registry).
 - **SQL test assertions: one statement per step.** `call() and (select … from table)` in one expression may read the table before the call runs (AND reorders by cost).
 - **`.xlsx` is read and written by `lib/sales/xlsx.ts` (fflate, values only)** in the browser; no spreadsheet library, no upload.
 - **Sales stage kind `archived`** (imported inquiry, no result): closed, bid flow, entered only by the inquiry import, `sales_decide` or `app_sales_archive` (admin; contracts have one too since 2026-11-23); any check listing closed kinds must include it.
@@ -231,6 +231,12 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **Fields stay ≥ 16px on touch screens (no iPhone zoom):** one unlayered `@media (pointer: coarse)` rule in `globals.css` sets `font-size: max(16px, var(--text-base))` on input/select/textarea; never shrink a field below it with a class, never add `maximum-scale`/`user-scalable=no`.
 - **Service worker `public/sw.js` is allowlist-only** (build files, icons, logo, `offline.html`): never add a page, RSC, `/api`, `/rest` or `/auth` path — it would keep personal data on devices. Registered only in production builds; kill switch in `docs/DEPLOY-LIARA.md`.
 - **Save buttons take `pending={…}`** (`components/ui/button.tsx`: spinner, disabled, same width); a `<Link>` gets `<LinkPending />` inside (tabs: hidden + `has-[[data-pending=true]]` pulse). Siblings may share one pending var: only the pressed button spins (Button tracks the press), the rest just disable.
+- **Sales customers (FR-98) are picked by id:** the app sends `buyer_id` / `client_id`; the text `buyer` / `client` keys are the old app's and create only for `sales_customers` holders. Every customer write takes `private.sales_customer_lock(company)` **before** any `sales_rfps` row lock (merge, imports, record save text path).
+- **Customer names are one namespace:** a Farsi key, English key (`name_en_key`) or alias names one customer (`private.sales_customer_name_clash`); show names with `customerLabel` / `labelOf` (English UI → `name_en`), never `c.name` directly.
+- **Customer private fields (`ceo_name`, `address`, contacts) come only from `private.sales_customer_profile(id, true)` for `sales_customers` holders;** never `to_jsonb(<customer row>)` in a reader.
+- **`sales_customers.missing` is trigger-maintained** (customers + contacts): don't compute completeness in a reader or the UI (live form feedback excepted, `lib/sales/customerForm.ts`).
+- **Word search = `private.sales_word_key` (SQL) ≡ `nameKey` (TS);** a shared fold fixture is asserted in `tests/unit/sales-customer-search.test.ts` and `tests/sql/sales-customer-registry.sql`. Uniqueness keys stay `sales_name_key`.
+- **Customer lists (cities, contractor categories) are seeded once per company by `private.sales_ensure`** (only while both are empty) — never re-seed in a migration; fix entries in Settings › Customer lists.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

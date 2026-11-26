@@ -270,9 +270,9 @@ select pg_temp.expect('report: only stages with records',
 select pg_temp.expect('report: decided = bids decided in the app, the imported one left out',
   (select count(*)::text||':'||string_agg(d->>'bid_result',',' order by d->>'bid_result') from jsonb_array_elements(pg_temp.report('ceo','decided')) d),
   '3:cancelled,lost,won');
-select pg_temp.expect('report: a decided row has exactly buyer name, result time, result',
+select pg_temp.expect('report: a decided row has exactly buyer id + names (fa, en), result time, result (FR-98)',
   (select (d ? 'buyer_name')::text||(d ? 'result_at')::text||(select count(*)::text from jsonb_object_keys(d))
-     from jsonb_array_elements(pg_temp.report('ceo','decided')) d limit 1),'truetrue3');
+     from jsonb_array_elements(pg_temp.report('ceo','decided')) d limit 1),'truetrue5');
 select pg_temp.expect('report: no value keys without sales_prices',
   (select count(*)::text from jsonb_array_elements(pg_temp.report('reporter','pipeline')) p where p ? 'value'),'0');
 select pg_temp.expect('report: the other company sees none of it',

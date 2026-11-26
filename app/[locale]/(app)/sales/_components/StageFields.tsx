@@ -10,9 +10,10 @@ import { useTranslations } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { canEditKey } from '@/lib/sales/stagePages';
+import { labelOf } from '@/lib/sales/customerLabel';
 import { type Bootstrap, type CustomValues, type RecordRow } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
-import { CustomerCombo } from './CustomerCombo';
+import { CustomerCombo, useCustomerRefs } from './CustomerCombo';
 import { CustomFieldInput, DateInput, Field, NumberInput, PersonPick, Select, useSalesFormat } from './parts';
 
 export type Draft = Record<string, unknown>;
@@ -33,7 +34,7 @@ export function labelKey(key: string): string {
 
 /** Whether a key is shown at all to this caller (price keys need `sales_prices`). */
 export function visibleKey(key: string, boot: Bootstrap): boolean {
-  if (SKIP_KEYS.has(key)) return false;
+  if (SKIP_KEYS.has(key) || key === 'buyer_kind') return false;
   return !PRICE_KEYS.has(key) || boot.caps.prices;
 }
 
@@ -85,6 +86,7 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
   fieldKey: string; boot: Bootstrap; record: RecordRow; draft: Draft; onChange: (next: Draft) => void;
 }) {
   const t = useTranslations('sales');
+  const refs = useCustomerRefs(boot.customers);
   const f = useSalesFormat();
   const set = (k: string, v: unknown) => onChange({ ...draft, [k]: v });
   const testId = `sales-input-${key}`;
@@ -111,18 +113,11 @@ function FieldInput({ fieldKey: key, boot, record, draft, onChange }: {
     case 'buyer': case 'client':
       return <CustomerCombo
         customers={boot.customers}
-        value={str(v) ? (boot.customers.find((c) => c.name === str(v)) ?? { id: '', name: str(v), kind: null }) : null}
-        onChange={(c) => set(key, c?.name ?? '')}
+        value={refs.byId(str(v))}
+        onChange={(c) => { refs.remember(c); set(key, c?.id ?? ''); }}
+        allowCreate={boot.caps.customers}
         testId={testId}
       />;
-    case 'buyer_kind':
-      return (
-        <Select value={str(v)} onChange={(x) => set(key, orNull(x))} testId={testId}>
-          <option value="">—</option>
-          <option value="government">{t('customerKind.government')}</option>
-          <option value="contractor">{t('customerKind.contractor')}</option>
-        </Select>
-      );
     case 'source':
       return (
         <Select value={str(v)} onChange={(x) => set(key, orNull(x))} testId={testId}>
@@ -194,7 +189,8 @@ export function FieldText({ fieldKey: key, boot, record, value }: {
   if (typeof value === 'boolean') return value ? t('yes') : t('no');
   switch (key) {
     case 'owner_id': return boot.people.find((p) => p.id === value)?.name ?? record.owner_name ?? '—';
-    case 'buyer_kind': return t(`customerKind.${value as 'government'}`);
+    case 'buyer': return labelOf(record.buyer_name, record.buyer_name_en, f.locale) || '—';
+    case 'client': return labelOf(record.client_name, record.client_name_en, f.locale) || '—';
     case 'source': return t(`source.${value as 'email'}`);
     case 'currency': return f.currencyLabel(String(value));
     case 'delivery_method': return t(`delivery.${value as 'hand'}`);

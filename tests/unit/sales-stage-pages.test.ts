@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canEditKey, draftFrom, draftPatch, isDirty, nextGate, pageFields, pageKind, pageMode, rebaseDraft, withBuyer } from '@/lib/sales/stagePages';
+import { canEditKey, draftFrom, draftPatch, isDirty, nextGate, pageFields, pageKind, pageMode, rebaseDraft, toRecordPatch } from '@/lib/sales/stagePages';
 import type { FieldDef, RecordRow, SalesCaps, Stage } from '@/lib/sales/types';
 
 const stage = (code: string | null, position: number, extra: Partial<Stage> = {}): Stage => ({
@@ -17,7 +17,8 @@ const contract = [
 ];
 const caps = (extra: Partial<SalesCaps> = {}): SalesCaps => ({
   edit: true, prices: false, prices_edit: false, bonds: false, bonds_edit: false, decide: false,
-  reports: false, settings: false, items: false, items_edit: false, remove_records: false, ...extra,
+  reports: false, settings: false, items: false, items_edit: false, remove_records: false,
+  customers: false, customers_import: false, ...extra,
 });
 const rec = (extra: Partial<RecordRow>): RecordRow => ({
   stage_id: 'technical', stage_kind: 'open', flow_id: 'bid', flow_kind: 'bid', bid_decision: 'bid', needs_quote: true,
@@ -105,15 +106,15 @@ describe('nextGate', () => {
 });
 
 describe('draftFrom', () => {
-  it('reads page fields off the record; customers by name, custom whole', () => {
-    const r = rec({ buyer_name: 'NIOC', buyer_kind: 'government', proposal_due: '2026-11-15', custom: { x_a: 'v' } });
-    expect(draftFrom(r, ['buyer', 'buyer_kind', 'proposal_due', 'custom.x_a'])).toEqual({
-      buyer: 'NIOC', buyer_kind: 'government', proposal_due: '2026-11-15', custom: { x_a: 'v' },
+  it('reads page fields off the record; customers by id, custom whole', () => {
+    const r = rec({ buyer_id: 'c1', buyer_name: 'NIOC', client_id: null, proposal_due: '2026-11-15', custom: { x_a: 'v' } });
+    expect(draftFrom(r, ['buyer', 'client', 'proposal_due', 'custom.x_a'])).toEqual({
+      buyer: 'c1', client: '', proposal_due: '2026-11-15', custom: { x_a: 'v' },
     });
   });
-  it('a buyer kind change sends the buyer with it', () => {
-    expect(withBuyer({ buyer_kind: 'contractor' }, { buyer: 'NIOC' })).toEqual({ buyer_kind: 'contractor', buyer: 'NIOC' });
-    expect(withBuyer({ title: 't' }, { buyer: 'NIOC' })).toEqual({ title: 't' });
+  it('customer fields go to the database as ids; the company type is never sent', () => {
+    expect(toRecordPatch({ buyer: 'c1', client: '', buyer_kind: 'contractor', title: 't' }))
+      .toEqual({ buyer_id: 'c1', client_id: null, title: 't' });
   });
 });
 
@@ -132,10 +133,6 @@ describe('rebaseDraft', () => {
 
 describe('canEditKey', () => {
   const allCaps = caps({ prices: true, prices_edit: true, decide: true });
-  it('company type is fixed once the company has one', () => {
-    expect(canEditKey('buyer_kind', allCaps, rec({ buyer_kind: 'government' }), false)).toBe(false);
-    expect(canEditKey('buyer_kind', allCaps, rec({ buyer_kind: null }), false)).toBe(true);
-  });
   it('prices need prices_edit; our price is fixed when items are priced; reasons need decide', () => {
     expect(canEditKey('our_price', caps({ prices: true }), rec({}), false)).toBe(false);
     expect(canEditKey('our_price', allCaps, rec({}), true)).toBe(false);

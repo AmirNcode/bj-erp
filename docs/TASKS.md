@@ -3,6 +3,16 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-98 Sales customer registry (2026-11-26, branch `feat/sales-customer-registry`)
+
+- [ ] Owner / CEO check on `:3501` (or Liara after merge): add a draft customer, complete it, picker "Create …", import a small file.
+- [ ] e2e spec `tests/e2e/sales-customers.spec.ts` (add draft → complete → picker Create → small import) not written; the flow was checked by hand in the browser on `:3501`.
+- [ ] Known gap (older than FR-98): removing an old ledger / inquiry batch still deletes *pre-FR-98* hand-made customers created after it and unused (all old rows have `updated_by` null). Tie the delete to the batch (record the creating batch on ledger/inquiry imports too) if this matters.
+- [ ] During the deploy swap only: the old app's typed buyer + buyer type no longer fills an empty customer type (minutes-long window; no action needed after deploy).
+- [ ] CEO to confirm: one rank + category per contractor is enough (D5), or several pairs.
+- [ ] Review the seeded city list (396 county seats, written from memory; uncertain towns left out — e.g. Karun, Bavi, Hamun, Bahestan): fix or add in Settings › Customer lists.
+- [ ] Owner: every existing customer starts Incomplete — fill the data in the form, or import it with the template (action Update).
+
 ## Speed on slow links (spec 2026-11-24)
 
 - ☐ **Owner: restart the Liara gateway so Caddy loads the new Caddyfile** (`cd /opt/bj-erp && sudo docker compose -f docker-compose.yml -f docker-compose.liara.yml restart gateway`): after #34's deploy, bjeng.app still sends `Connection: close` and gzip (single-file bind mount holds the old inode). Check: `curl -sI -H 'Accept-Encoding: zstd, gzip' https://bjeng.app/login` → no `Connection: close`, `Content-Encoding: zstd`.

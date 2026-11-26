@@ -18,14 +18,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input';
 import { mergeSalesCustomers, renameSalesCustomer } from '@/lib/actions/sales';
 import { barPercent, persianYearOf } from '@/lib/sales/customers';
+import { customerLabel } from '@/lib/sales/customerLabel';
 import { DEFAULT_RECORD_SORT } from '@/lib/sales/recordSort';
 import type { Bootstrap, CustomerDetail, CustomerFilters, CustomerRef, RecordPage, RecordSort, SalesMetrics } from '@/lib/sales/types';
 import { CustomerCombo } from './CustomerCombo';
-import { Sums } from './CustomersList';
+import { Sums, useIncompleteHint } from './CustomersList';
+import { CustomerForm } from './CustomerForm';
 import { FilterBar } from './FilterBar';
 import { MetricsStrip } from './MetricsStrip';
 import { RecordSortSelect, RecordsTable } from './RecordsTable';
 import { Tag, useRun, useSalesFormat } from './parts';
+import { useViewAs } from '../../_components/ViewAsContext';
 
 export function CustomerView({ boot, detail, page, metrics, filters }: {
   boot: Bootstrap; detail: CustomerDetail; page: RecordPage; metrics: SalesMetrics | null; filters: CustomerFilters;
@@ -45,6 +48,12 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
   };
   const { run, pending } = useRun();
   const c = detail.customer;
+  const viewAs = useViewAs();
+  const hint = useIncompleteHint();
+  const [editing, setEditing] = useState(false);
+  const p = detail.profile;
+  const missing = p.missing;
+  const title = customerLabel(c, f.locale);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState(c.name);
   const [merging, setMerging] = useState(false);
@@ -85,17 +94,77 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
         </Link>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-bold"><bdi>{c.name}</bdi></h2>
+            <h2 className="text-lg font-bold"><bdi>{title}</bdi></h2>
             {c.kind ? <Tag>{t(`customerKind.${c.kind}`)}</Tag> : null}
+            {missing.length > 0 ? <span data-testid="sales-customer-incomplete"><Tag tone="warn">{t('customerProfile.incomplete')}</Tag></span> : null}
           </div>
-          {boot.caps.settings ? (
+          {boot.caps.settings || (boot.caps.customers && viewAs === null) ? (
             <div className="flex flex-col gap-2 sm:flex-row">
+              {boot.caps.customers && viewAs === null ? (
+                <Button variant="outline" className="max-sm:h-11" onClick={() => setEditing(true)} data-testid="sales-customer-edit">{t('customerProfile.edit')}</Button>
+              ) : null}
+              {boot.caps.settings ? (<>
               <Button variant="outline" className="max-sm:h-11" onClick={() => { setName(c.name); setRenaming(true); }} data-testid="sales-customer-rename">{t('customers.rename')}</Button>
               <Button variant="outline" className="max-sm:h-11" onClick={() => { setTarget(null); setMerging(true); }} data-testid="sales-customer-merge">{t('customers.merge')}</Button>
+              </>) : null}
             </div>
           ) : null}
         </div>
+        {missing.length > 0 ? <p className="text-sm text-warning">{hint(missing)}</p> : null}
       </div>
+
+      <section className="flex flex-col gap-3 border border-border bg-card p-4" data-testid="sales-customer-profile">
+        <h3 className="text-sm font-semibold">{t('customerProfile.profile')}</h3>
+        <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {([
+            [t('customerForm.kind'), p.kind ? t(`customerKind.${p.kind}`) : null],
+            ...(p.kind === 'contractor' ? [[
+              t('customerMissing.rank') + ' · ' + t('customerMissing.category'),
+              p.rank || p.category_fa
+                ? t('customerProfile.rankCategory', { rank: p.rank ? f.number(p.rank) : '—', category: (f.locale === 'en' && p.category_en ? p.category_en : p.category_fa) ?? '—' })
+                : null,
+            ] as [string, string | null]] : []),
+            [t('customerProfile.location'), [f.locale === 'en' ? p.province_en : p.province_fa, f.locale === 'en' && p.city_en ? p.city_en : p.city_fa].filter(Boolean).join(' · ') || null],
+            ...(p.ceo_name !== undefined ? [
+              [t('customerProfile.ceo'), p.ceo_name],
+              [t('customerProfile.address'), p.address ?? null],
+            ] as [string, string | null][] : []),
+          ] as [string, string | null][]).map(([label, value]) => (
+            <div key={label} className="flex flex-col gap-0.5">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd>{value ? <bdi>{value}</bdi> : dash}</dd>
+            </div>
+          ))}
+        </dl>
+        {p.contacts !== undefined ? (
+          p.contacts.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerProfile.noContacts')}</p> : (
+            <div className="overflow-x-auto border-b border-border">
+              <table className="data-table w-full text-sm" data-testid="sales-customer-contacts" aria-label={t('customerProfile.contacts')}>
+                <thead>
+                  <tr>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactPerson')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactTitle')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactLabel')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactPhone')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactEmail')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {p.contacts.map((k, i) => (
+                    <tr key={k.id ?? i}>
+                      <td className="px-3 py-2">{k.person}</td>
+                      <td className="px-3 py-2">{k.title ?? dash}</td>
+                      <td className="px-3 py-2">{t(`contactLabel.${k.label}`)}</td>
+                      <td className="px-3 py-2"><a href={`tel:${k.phone}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.call', { phone: k.phone })}>{k.phone}</a></td>
+                      <td className="px-3 py-2">{k.email ? <a href={`mailto:${k.email}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.mail', { email: k.email })}>{k.email}</a> : dash}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        ) : null}
+      </section>
 
       <FilterBar filters={filters} owners={detail.owners.length > 1 ? detail.owners : []} withKind={false} />
       {metrics ? <MetricsStrip metrics={metrics} /> : null}
@@ -151,7 +220,7 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
               <ul className="flex flex-col divide-y divide-border border-y border-border text-sm">
                 {detail.client_of.map((o) => (
                   <li key={o.id} className="flex items-center justify-between gap-3 py-2">
-                    <Link href={`/${f.locale}/sales/customers/${o.id}`} className="text-primary"><bdi>{o.name}</bdi></Link>
+                    <Link href={`/${f.locale}/sales/customers/${o.id}`} className="text-primary"><bdi>{customerLabel(o, f.locale)}</bdi></Link>
                     <span className="tabular-nums text-muted-foreground">{f.number(o.count)}</span>
                   </li>
                 ))}
@@ -183,6 +252,16 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
           </>
         )}
       </section>
+
+      {editing ? (
+        <CustomerForm
+          customerId={c.id}
+          initial={p}
+          customers={boot.customers}
+          onSaved={() => { setEditing(false); router.refresh(); }}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
 
       <Dialog open={renaming} onOpenChange={(o) => { if (!o) setRenaming(false); }}>
         <DialogContent className="sm:max-w-md">

@@ -3,7 +3,7 @@ import { barPercent, persianYearOf, persianYearStarts, presentCurrencies, search
 import type { CustomerSummary } from '@/lib/sales/types';
 
 const c = (name: string, extra: Partial<CustomerSummary> = {}): CustomerSummary => ({
-  id: name, name, kind: null, records: 0, as_client: 0, open: 0, won: 0, lost: 0, no_bid: 0, archived: 0,
+  id: name, name, name_en: null, kind: null, missing: [], records: 0, as_client: 0, open: 0, won: 0, lost: 0, no_bid: 0, archived: 0,
   cancelled: 0, decided: 0, win_rate: null, first_inquiry: null, last_inquiry: null, next_deadline: null,
   main_owner_name: null, ...extra,
 });

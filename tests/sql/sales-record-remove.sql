@@ -82,7 +82,8 @@ begin
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlCeo') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_prices','edit'),
     (v_role,'sales_bonds','edit'),(v_role,'sales_decide','edit'),(v_role,'sales_reports','read'),
-    (v_role,'sales_settings','edit'),(v_role,'project_items','edit');
+    (v_role,'sales_settings','edit'),(v_role,'project_items','edit'),
+    (v_role,'sales_customers','edit');  -- FR-98: holders of sales=edit got it in the migration
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('ceo'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlViewer') returning id into v_role;
   insert into public.role_permissions values(v_role,'sales','read');
@@ -94,7 +95,7 @@ begin
   insert into public.role_permissions values(v_role,'sales','read'),(v_role,'sales_bonds','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('fin'),v_role);
   insert into public.roles(company_id,kind,name) values(v_company,'custom','SlSeller') returning id into v_role;
-  insert into public.role_permissions values(v_role,'sales','edit');
+  insert into public.role_permissions values(v_role,'sales','edit'),(v_role,'sales_customers','edit');
   insert into public.user_roles(user_id,role_id) values(pg_temp.fx('seller'),v_role);
 end; $$;
 

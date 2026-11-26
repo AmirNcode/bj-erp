@@ -3,47 +3,48 @@
 /**
  * FR-94 §16.7: the company lookup (buyer / client). Typing filters the existing customers;
  * only a picked or created customer is committed. A name that matches nothing ends the list
- * with "Create …", which opens a confirm that first shows similar existing names.
+ * with "Create …" (callers with the `customers` cap), which opens the full customer form.
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useLocale, useTranslations } from 'next-intl';
 import { Input } from '@/components/ui/input';
-import { addSalesCustomer, findSimilarSalesCustomers } from '@/lib/actions/sales';
-import type { CustomerRef, SimilarCustomer } from '@/lib/sales/types';
+import { customerLabel } from '@/lib/sales/customerLabel';
+import type { CustomerRef } from '@/lib/sales/types';
 import { cn } from '@/lib/utils';
+import { useViewAs } from '../../_components/ViewAsContext';
+import { CustomerForm } from './CustomerForm';
 import { exactCustomer, filterCustomers } from './customerFilter';
-import { Select } from './parts';
+import { Tag } from './parts';
 
-type Kind = 'government' | 'contractor' | null;
-
-export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, allowCreate = true }: {
+export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, allowCreate = false }: {
   customers: CustomerRef[];
   value: CustomerRef | null;
   onChange: (c: CustomerRef | null) => void;
   testId?: string;
   ariaLabel?: string;
-  /** false: only existing customers can be picked (the merge target). */
+  /** true (callers pass `boot.caps.customers`): the list ends with "Create …". Default: pick only. */
   allowCreate?: boolean;
 }) {
   const t = useTranslations('sales');
+  const locale = useLocale();
+  const router = useRouter();
+  const viewAs = useViewAs();
   const id = useId();
   const listId = `${id}-list`;
   const [added, setAdded] = useState<CustomerRef[]>([]);
-  const [text, setText] = useState(value?.name ?? '');
+  const label = (c: CustomerRef | null) => customerLabel(c, locale);
+  const [text, setText] = useState(label(value));
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [creating, setCreating] = useState<string | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
   // A new committed value from outside (a reset, another draft) replaces the shown text.
-  const committed = `${value?.id ?? ''}|${value?.name ?? ''}`;
+  const committed = `${value?.id ?? ''}|${label(value)}`;
   const [seen, setSeen] = useState(committed);
-  if (seen !== committed) { setSeen(committed); setText(value?.name ?? ''); }
+  if (seen !== committed) { setSeen(committed); setText(label(value)); }
 
   const all = useMemo(() => {
     const ids = new Set(customers.map((c) => c.id));
@@ -51,15 +52,15 @@ export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, a
   }, [customers, added]);
   const typed = text.trim();
   const matches = useMemo(() => filterCustomers(all, text), [all, text]);
-  const canCreate = allowCreate && typed !== '' && exactCustomer(all, text) === null;
+  const canCreate = allowCreate && viewAs === null && typed !== '' && exactCustomer(all, text) === null;
   const count = matches.length + (canCreate ? 1 : 0);
 
   const commit = (c: CustomerRef | null) => {
-    setText(c?.name ?? '');
+    setText(label(c));
     setOpen(false);
     onChange(c);
   };
-  const revert = () => { setText(value?.name ?? ''); setOpen(false); };
+  const revert = () => { setText(label(value)); setOpen(false); };
   const pickAt = (i: number) => {
     if (i < matches.length) commit(matches[i]);
     else if (canCreate) { setOpen(false); setCreating(typed); }
@@ -126,7 +127,10 @@ export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, a
               onMouseEnter={() => setActive(i)}
               onClick={() => pickAt(i)}
             >
-              <bdi>{c.name}</bdi>
+              <span className="flex items-center gap-2">
+                <bdi>{label(c)}</bdi>
+                {c.incomplete ? <Tag tone="warn">{t('customerProfile.incomplete')}</Tag> : null}
+              </span>
             </li>
           ))}
           {canCreate ? (
@@ -147,13 +151,18 @@ export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, a
         </ul>
       ) : null}
       {creating !== null ? (
-        <NewCustomerDialog
-          name={creating}
-          onClose={() => { setCreating(null); setText(value?.name ?? ''); }}
-          onPicked={(c) => {
-            setAdded((prev) => [...prev, c]);
+        <CustomerForm
+          customerId={null}
+          initialName={creating}
+          customers={all}
+          onClose={() => { setCreating(null); setText(label(value)); }}
+          onUse={(c) => { setCreating(null); commit(c); }}
+          onSaved={(p) => {
+            const ref: CustomerRef = { id: p.id, name: p.name, name_en: p.name_en, kind: p.kind, incomplete: p.missing.length > 0 };
+            setAdded((prev) => [...prev, ref]);
             setCreating(null);
-            commit(c);
+            commit(ref);
+            router.refresh();
           }}
         />
       ) : null}
@@ -161,85 +170,16 @@ export function CustomerCombo({ customers, value, onChange, testId, ariaLabel, a
   );
 }
 
-/** Confirm a new company: similar names first ("use this one"), then create. */
-export function NewCustomerDialog({ name: initialName, onClose, onPicked }: {
-  name: string; onClose: () => void; onPicked: (c: CustomerRef) => void;
-}) {
-  const t = useTranslations('sales');
-  const router = useRouter();
-  const [name, setName] = useState(initialName);
-  const [kind, setKind] = useState<'' | 'government' | 'contractor'>('');
-  const [similar, setSimilar] = useState<SimilarCustomer[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    findSalesSimilar(initialName).then((rows) => { if (live) setSimilar(rows); });
-    return () => { live = false; };
-  }, [initialName]);
-
-  async function create() {
-    if (!name.trim() || busy) return;
-    setBusy(true);
-    try {
-      const result = await addSalesCustomer(name.trim(), (kind || null) as Kind);
-      if (!result.ok) { toast.error(result.error); return; }
-      const { id, name: saved, kind: k } = result.data;
-      onPicked({ id, name: saved, kind: k });
-      if (!result.data.existed) router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-md" data-testid="sales-new-customer">
-        <DialogHeader>
-          <DialogTitle>{t('customerCombo.newTitle')}</DialogTitle>
-          <DialogDescription>{t('customerCombo.newHint')}</DialogDescription>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{t('customerCombo.name')}</span>
-            <Input maxLength={200} value={name} onChange={(e) => setName(e.target.value)} data-testid="sales-new-customer-name" />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm">
-            <span className="font-medium">{t('field.buyer_kind')}</span>
-            <Select value={kind} onChange={(v) => setKind(v as typeof kind)}>
-              <option value="">—</option>
-              <option value="government">{t('customerKind.government')}</option>
-              <option value="contractor">{t('customerKind.contractor')}</option>
-            </Select>
-          </label>
-          {similar.length > 0 ? (
-            <div className="flex flex-col gap-1 text-sm" data-testid="sales-new-customer-similar">
-              <span className="text-xs font-medium text-muted-foreground">{t('customerCombo.similar')}</span>
-              <ul className="flex flex-col divide-y divide-border border-y border-border">
-                {similar.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-2 py-2">
-                    <bdi className="min-w-0 break-words">{c.name}</bdi>
-                    <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => onPicked({ id: c.id, name: c.name, kind: c.kind })}>
-                      {t('customerCombo.useThis')}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-        <DialogFooter className="gap-2 max-sm:flex-col-reverse">
-          <Button type="button" variant="outline" className="max-sm:h-11" onClick={onClose} disabled={busy}>{t('cancel')}</Button>
-          <Button pending={busy} type="button" className="max-sm:h-11" onClick={create} disabled={busy || !name.trim()} data-testid="sales-new-customer-create">
-            {t('customerCombo.createAnyway')}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-async function findSalesSimilar(name: string): Promise<SimilarCustomer[]> {
-  const result = await findSimilarSalesCustomers(name);
-  return result.ok ? result.data : [];
+/**
+ * Resolve a picked customer id for a CustomerCombo value. A customer created from the picker is not in
+ * `boot.customers` until the page refreshes; remembering it keeps the field's text in the meantime.
+ */
+export function useCustomerRefs(customers: CustomerRef[]) {
+  const [extra, setExtra] = useState<CustomerRef[]>([]);
+  const byId = (id: string | null | undefined): CustomerRef | null =>
+    id ? (customers.find((c) => c.id === id) ?? extra.find((c) => c.id === id) ?? null) : null;
+  const remember = (c: CustomerRef | null) => {
+    if (c && !customers.some((x) => x.id === c.id)) setExtra((prev) => [...prev.filter((x) => x.id !== c.id), c]);
+  };
+  return { byId, remember };
 }

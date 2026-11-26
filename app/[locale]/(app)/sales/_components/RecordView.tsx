@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { labelOf } from '@/lib/sales/customerLabel';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { restoreSalesRecord } from '@/lib/actions/sales';
@@ -43,6 +44,8 @@ export function RecordView({ boot: liveBoot, detail }: { boot: Bootstrap; detail
   const { run, pending: restoring } = useRun();
   const [removing, setRemoving] = useState(false);
   const r = detail.record;
+  const buyerLabel = labelOf(r.buyer_name, r.buyer_name_en, f.locale);
+  const clientLabel = labelOf(r.client_name, r.client_name_en, f.locale);
   // A deleted record (admin only) reads like View as: every edit right is off, the database refuses writes anyway.
   const boot: Bootstrap = r.deleted_at
     ? { ...liveBoot, caps: { ...liveBoot.caps, edit: false, decide: false, items_edit: false, prices_edit: false, bonds_edit: false } }
@@ -126,7 +129,7 @@ export function RecordView({ boot: liveBoot, detail }: { boot: Bootstrap; detail
           </p>
           <h2 dir="auto" className="mt-1 text-lg font-bold leading-snug">{r.title}</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {[r.buyer_name, r.client_name && r.client_name !== r.buyer_name ? r.client_name : null].filter(Boolean).join(' · ') || '—'}
+            {[buyerLabel, clientLabel && clientLabel !== buyerLabel ? clientLabel : null].filter(Boolean).join(' · ') || '—'}
           </p>
         </div>
         {canRemove ? (

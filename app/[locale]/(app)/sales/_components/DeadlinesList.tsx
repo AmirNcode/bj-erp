@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { labelOf } from '@/lib/sales/customerLabel';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/EmptyState';
 import { setSalesDeadlineDone } from '@/lib/actions/sales';
@@ -91,7 +92,7 @@ export function DeadlinesList({ boot, rows }: { boot: Bootstrap; rows: DeadlineR
                     <td className="font-medium">{name(d)}</td>
                     <td><Link href={`/${f.locale}/sales/${d.rfp_id}`} className="font-semibold tabular-nums text-primary" dir="ltr">{f.recordNo(d.record_no)}</Link></td>
                     <td className="max-w-72 truncate"><bdi>{d.title}</bdi></td>
-                    <td>{d.buyer_name ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td>{labelOf(d.buyer_name, d.buyer_name_en, f.locale) || <span className="text-muted-foreground">—</span>}</td>
                     <td>{f.stageName(stages.get(d.stage_id))}</td>
                     <td>{d.responsible_name ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="text-end">

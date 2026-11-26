@@ -73,7 +73,7 @@ describe('reports', () => {
     ]);
   });
   it('results: win rate over won + lost', () => {
-    const d = (bid_result: 'won' | 'lost' | 'cancelled', buyer_name: string | null = 'NISOC', result_at = '2026-11-16T10:00:00Z') => ({ buyer_name, bid_result, result_at });
+    const d = (bid_result: 'won' | 'lost' | 'cancelled', buyer_name: string | null = 'NISOC', result_at = '2026-11-16T10:00:00Z') => ({ buyer_id: buyer_name, buyer_name, buyer_name_en: null, bid_result, result_at });
     const rows = [d('won'), d('lost'), d('lost'), d('cancelled'), d('cancelled', 'PEDEC'), d('won', null)];
     expect(results(rows, 'customer')).toEqual([
       { key: 'NISOC', decided: 4, won: 1, lost: 2, cancelled: 1, winRate: 1 / 3 },
@@ -81,8 +81,17 @@ describe('reports', () => {
       { key: 'PEDEC', decided: 1, won: 0, lost: 0, cancelled: 1, winRate: null },
     ]);
   });
+  it('results: one buyer id groups despite spelling, and the label follows the locale', () => {
+    const rows = [
+      { buyer_id: 'n', buyer_name: 'نفت', buyer_name_en: 'NIOC', bid_result: 'won' as const, result_at: '2026-11-16T10:00:00Z' },
+      { buyer_id: 'n', buyer_name: 'نفت ایران', buyer_name_en: 'NIOC', bid_result: 'lost' as const, result_at: '2026-11-16T10:00:00Z' },
+    ];
+    expect(results(rows, 'customer', 'en')).toMatchObject([{ key: 'NIOC', decided: 2, won: 1, lost: 1 }]);
+    expect(results(rows, 'customer', 'fa')).toHaveLength(1);
+    expect(results([{ ...rows[0], buyer_name_en: null }], 'customer', 'en')[0].key).toBe('نفت');
+  });
   it('results by Persian year', () => {
-    const rows = [{ buyer_name: 'A', bid_result: 'won' as const, result_at: '2026-11-16T10:00:00Z' }, { buyer_name: 'A', bid_result: 'lost' as const, result_at: '2025-06-01T10:00:00Z' }];
+    const rows = [{ buyer_id: 'a', buyer_name: 'A', buyer_name_en: null, bid_result: 'won' as const, result_at: '2026-11-16T10:00:00Z' }, { buyer_id: 'a', buyer_name: 'A', buyer_name_en: null, bid_result: 'lost' as const, result_at: '2025-06-01T10:00:00Z' }];
     expect(results(rows, 'year').map((r) => r.key)).toEqual(['1405', '1404']);
   });
   it('deadline performance ignores rows that arrived already done', () => {

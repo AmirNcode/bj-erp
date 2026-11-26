@@ -8,6 +8,7 @@ import { todayInAppTz } from '@/lib/appDate';
 import { parseCustomerFilters, persianYearStarts } from '@/lib/sales/customers';
 import { loadSalesBootstrap } from '../_components/load';
 import { CustomersList } from '../_components/CustomersList';
+import { CustomerImport } from '../_components/CustomerImport';
 
 type Props = {
   params: Promise<{ locale: string }>;
@@ -28,10 +29,10 @@ export default async function SalesCustomersPage({ params, searchParams }: Props
   return (
     <CustomersList
       rows={rows.data}
-      prices={boot.caps.prices}
+      boot={boot}
       metrics={metrics.ok ? metrics.data : null}
       filters={filters}
-      people={boot.people}
+      importSlot={boot.caps.customers_import ? <CustomerImport customers={boot.customers} /> : null}
     />
   );
 }
