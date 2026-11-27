@@ -21,7 +21,7 @@ describe('catalog matches SQL', () => {
     const body = fnBody(sql, 'permission_keys');
     for (const k of ALL_KEYS) expect(body).toContain(`'${k}'`);
     expect(body.match(/'[a-z_]+'/g)).toHaveLength(ALL_KEYS.length);
-    expect(ALL_KEYS).toHaveLength(37);
+    expect(ALL_KEYS).toHaveLength(38);
     // Password resets are admin-only (20261013200007): no role can hold them.
     expect(ALL_KEYS).not.toContain('passwords');
     expect(body).not.toContain("'passwords'");
@@ -70,8 +70,9 @@ describe('section layout', () => {
   it('finance has its own section, right after leave; procurement follows it (FR-70)', () => {
     expect(SECTIONS.map((s) => s.key)).toEqual(['employees', 'departments', 'leave', 'requestEdits', 'finance', 'procurement', 'sales', 'approvalChain', 'settings']);
     // FR-94: the hidden ERP › Sales module; `sales` is the door, the others need it
-    // (FR-98: bulk import needs Customers create / edit, which needs `sales`).
-    expect(items('sales')).toEqual(['sales', 'sales_prices', 'sales_bonds', 'sales_decide', 'sales_reports', 'sales_settings', 'project_items', 'sales_customers', 'sales_customers_import']);
+    // (FR-98: bulk import needs Customers create / edit, which needs `sales`; FR-99: the read-only Activity page).
+    expect(items('sales')).toEqual(['sales', 'sales_prices', 'sales_bonds', 'sales_decide', 'sales_reports', 'sales_activity', 'sales_settings', 'project_items', 'sales_customers', 'sales_customers_import']);
+    expect(SHAPES.sales_activity).toBe('R');
     for (const k of items('sales').slice(1, -1)) expect(DEPENDENCIES).toContainEqual({ key: k, keyLevel: 'read', needs: 'sales' });
     expect(DEPENDENCIES).toContainEqual({ key: 'sales_customers_import', keyLevel: 'read', needs: 'sales_customers' });
     expect(items('finance')).toEqual(['finance', 'finance_forms']);
@@ -215,7 +216,7 @@ describe('isWithin / fullPerms', () => {
   });
   it('fullPerms covers every key at its highest level', () => {
     const f = fullPerms();
-    expect(Object.keys(f)).toHaveLength(37);
+    expect(Object.keys(f)).toHaveLength(38);
     expect(f.travel_booking).toBe('edit');
     expect(f.calendar).toBe('read');
     expect(f.finance).toBe('read');

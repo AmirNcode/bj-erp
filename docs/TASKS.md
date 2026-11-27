@@ -3,13 +3,19 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-99 Sales change history + phone book (2026-11-27, branch `feat/sales-customer-phonebook`)
+
+- [ ] Owner / CEO check on `:3501`, then merge on the owner's OK.
+- [ ] Admin: grant **Sales: activity log** to the CEO's role (Settings › Roles) after deploy.
+- [ ] e2e spec for the phone book form and the History tab (checked by hand on `:3501`).
+- [ ] Customers registered before 2026-11-27 have no history (shown as "Registered before history began").
+
 ## FR-98 Sales customer registry (2026-11-26, branch `feat/sales-customer-registry`)
 
 - [ ] Owner / CEO check on `:3501` (or Liara after merge): add a draft customer, complete it, picker "Create …", import a small file.
 - [ ] e2e spec `tests/e2e/sales-customers.spec.ts` (add draft → complete → picker Create → small import) not written; the flow was checked by hand in the browser on `:3501`.
 - [ ] Known gap (older than FR-98): removing an old ledger / inquiry batch still deletes *pre-FR-98* hand-made customers created after it and unused (all old rows have `updated_by` null). Tie the delete to the batch (record the creating batch on ledger/inquiry imports too) if this matters.
 - [ ] During the deploy swap only: the old app's typed buyer + buyer type no longer fills an empty customer type (minutes-long window; no action needed after deploy).
-- [ ] CEO to confirm: one rank + category per contractor is enough (D5), or several pairs.
 - [ ] Review the seeded city list (396 county seats, written from memory; uncertain towns left out — e.g. Karun, Bavi, Hamun, Bahestan): fix or add in Settings › Customer lists.
 - [ ] Several rank / category pairs (2026-11-26): the customer import still takes one pair per row (the main pair); add extra pair columns if the CEO wants them imported.
 - [ ] e2e for the customer form should also cover: Add rank / category rows, the name-match dropdown + Escape.

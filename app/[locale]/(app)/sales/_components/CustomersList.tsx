@@ -42,7 +42,7 @@ export function useIncompleteHint(): (missing: CustomerMissingKey[]) => string {
   const t = useTranslations('sales');
   const f = useSalesFormat();
   return (missing) => t('customerProfile.incompleteHint', {
-    fields: missing.map((k) => t(`customerMissing.${k}`)).join(f.locale === 'fa' ? '، ' : ', '),
+    fields: missing.map((k) => t(t.has(`customerMissing.${k}`) ? `customerMissing.${k}` : 'customerMissing.unknown')).join(f.locale === 'fa' ? '، ' : ', '),
   });
 }
 

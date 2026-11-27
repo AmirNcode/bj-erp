@@ -132,7 +132,7 @@ select pg_temp.expect('fold 7', private.sales_word_key('آب و فاضلاب'), 
 select pg_temp.expect('fold 8', private.sales_word_key('x_y/z.w'), 'xyzw');
 
 -- ================================================================ 2. permission catalog
-select pg_temp.expect('catalog has 37 keys',(select count(*)::text from private.permission_keys()),'37');
+select pg_temp.expect('catalog has 38 keys',(select count(*)::text from private.permission_keys()),'38');
 select pg_temp.expect('sales_customers edit allowed',private.permission_allows('sales_customers','edit')::text,'true');
 select pg_temp.expect('sales_customers read not allowed',private.permission_allows('sales_customers','read')::text,'false');
 select pg_temp.expect('import needs sales_customers',
@@ -161,40 +161,45 @@ grant select on sl_j to authenticated;
 insert into sl_j select 'F',pg_temp.svj('cust',null,jsonb_build_object('name','شرکت الف','name_en','Alef Co','kind','contractor',
   'ceo_name','مدیر الف','province_code','KZ','city_id',pg_temp.city('KZ'),'address','خیابان اول','rank','۲',
   'category_id',pg_temp.cat('ساختمان'),
-  'contacts',jsonb_build_array(jsonb_build_object('person','علی','title','مدیر','label','office','phone','۰۶۱-۳۳۴۴ ۵۵۶۶'))));
+  'people',jsonb_build_array(jsonb_build_object('name','علی','title_id',(select id from public.sales_contact_titles
+     where company_id=pg_temp.fx('company') and name_en='Technical manager'),
+     'phones',jsonb_build_array(jsonb_build_object('label','office','phone','۰۶۱-۳۳۴۴ ۵۵۶۶'))))));
 insert into sl_fx select 'F',(j->>'id')::uuid from sl_j where k='F';
 select pg_temp.expect('full contractor: nothing missing',(select jsonb_array_length(j->'missing')::text from sl_j where k='F'),'0');
 select pg_temp.expect('rank typed in Persian digits is stored as 2',(select j->>'rank' from sl_j where k='F'),'2');
-select pg_temp.expect('phone with Persian digits and dashes is normalized',(select j->'contacts'->0->>'phone' from sl_j where k='F'),'06133445566');
+select pg_temp.expect('phone with Persian digits and dashes is normalized',(select j->'people'->0->'phones'->0->>'phone' from sl_j where k='F'),'06133445566');
 insert into sl_j select 'D',pg_temp.svj('cust',null,jsonb_build_object('name','شرکت ب'));
 insert into sl_fx select 'D',(j->>'id')::uuid from sl_j where k='D';
 select pg_temp.expect('name-only draft lists every missing field in form order',
   (select string_agg(x,',' order by o) from sl_j, jsonb_array_elements_text(j->'missing') with ordinality t(x,o) where k='D'),
-  'name_en,kind,ceo_name,province,city,address,contacts');
+  'name_en,kind,ceo_name,province,city,address,phones,grade_or_activity');
 insert into sl_j select 'G',pg_temp.svj('cust',null,jsonb_build_object('name','شرکت دولتی','kind','government','rank','3'));
 insert into sl_fx select 'G',(j->>'id')::uuid from sl_j where k='G';
 select pg_temp.expect('government with a rank: rank stored null',
   (select coalesce(rank::text,'null') from public.sales_customers where id=pg_temp.fx('G')),'null');
 select pg_temp.expect('city of another province is refused',
   pg_temp.msg(pg_temp.sv('cust',null,jsonb_build_object('name','خطا','province_code','KZ','city_id',pg_temp.city('TE')))),'sales: invalid input');
-select pg_temp.expect('contact with only a phone is refused',
-  pg_temp.msg(pg_temp.sv('cust',null,jsonb_build_object('name','خطا دو','contacts',jsonb_build_array(jsonb_build_object('phone','09121234567','label','mobile'))))),
+select pg_temp.expect('a phone-book number in a bad format is refused',
+  pg_temp.msg(pg_temp.sv('cust',null,jsonb_build_object('name','خطا دو','people',jsonb_build_array(jsonb_build_object('name','x',
+    'phones',jsonb_build_array(jsonb_build_object('phone','0912-abc','label','mobile'))))))),
   'sales: invalid input');
-select pg_temp.expect('more than 50 contacts is refused',
-  pg_temp.msg(pg_temp.sv('cust',null,jsonb_build_object('name','خطا سه','contacts',
-    (select jsonb_agg(jsonb_build_object('person','p'||n,'label','office','phone','0912'||lpad(n::text,7,'0'))) from generate_series(1,51) n)))),
+select pg_temp.expect('more than 50 phone-book entries is refused',
+  pg_temp.msg(pg_temp.sv('cust',null,jsonb_build_object('name','خطا سه','people',
+    (select jsonb_agg(jsonb_build_object('name','p'||n,'phones',jsonb_build_array(jsonb_build_object('label','office','phone','0912'||lpad(n::text,7,'0'))))) from generate_series(1,51) n)))),
   'sales: invalid input');
 
 -- ================================================================ 5. missing is kept by triggers
 update public.sales_customers set updated_at='2020-01-01',updated_by=null where id=pg_temp.fx('F');
 delete from public.sales_customer_contacts where customer_id=pg_temp.fx('F');
-select pg_temp.expect('deleting the last contact puts contacts back in missing',
-  (select ('contacts'=any(missing))::text from public.sales_customers where id=pg_temp.fx('F')),'true');
-insert into public.sales_customer_contacts(company_id,customer_id,person,label,phone,position)
-  values(pg_temp.fx('company'),pg_temp.fx('F'),'علی','office','06133445566',1);
-select pg_temp.expect('adding a contact removes contacts from missing',
-  (select ('contacts'=any(missing))::text from public.sales_customers where id=pg_temp.fx('F')),'false');
-select pg_temp.expect('the contact trigger leaves updated_by / updated_at alone',
+select pg_temp.expect('deleting the last phone-book entry puts phones back in missing',
+  (select ('phones'=any(missing))::text from public.sales_customers where id=pg_temp.fx('F')),'true');
+insert into public.sales_customer_contacts(company_id,customer_id,person,position)
+  values(pg_temp.fx('company'),pg_temp.fx('F'),'علی',1);
+insert into public.sales_customer_phones(company_id,contact_id,label,phone,position)
+  select pg_temp.fx('company'),id,'office','06133445566',1 from public.sales_customer_contacts where customer_id=pg_temp.fx('F');
+select pg_temp.expect('adding a number removes phones from missing',
+  (select ('phones'=any(missing))::text from public.sales_customers where id=pg_temp.fx('F')),'false');
+select pg_temp.expect('the phone-book triggers leave updated_by / updated_at alone',
   (select (updated_by is null and updated_at='2020-01-01')::text from public.sales_customers where id=pg_temp.fx('F')),'true');
 update public.sales_customers set updated_at=now(),updated_by=pg_temp.fx('cust') where id=pg_temp.fx('F');
 
@@ -241,19 +246,19 @@ select pg_temp.expect('settings holder can edit an existing category',
   pg_temp.msg(pg_temp.as_scalar('setm',format($q$select public.app_sales_save_category(%L::jsonb)::text$q$,jsonb_build_object('id',pg_temp.cat('دسته مشتری'),'name_fa','دسته مشتری ۲')::text))),'ok');
 
 -- ================================================================ 8. privacy
-select pg_temp.assert('read-only profile has no ceo_name, address or contacts',
-  (select not (p ? 'ceo_name') and not (p ? 'address') and not (p ? 'contacts')
+select pg_temp.assert('read-only profile has no ceo_name, ceo_phone, address or people',
+  (select not (p ? 'ceo_name') and not (p ? 'ceo_phone') and not (p ? 'address') and not (p ? 'people') and not (p ? 'contacts')
      from (select pg_temp.as_json('viewer',format('select public.app_sales_customer(%L)->%L',pg_temp.fx('F'),'profile')) p) x));
-select pg_temp.assert('customers holder profile has ceo_name, address and contacts',
-  (select p ? 'ceo_name' and p ? 'address' and p ? 'contacts'
+select pg_temp.assert('customers holder profile has ceo_name, ceo_phone, address and people',
+  (select p ? 'ceo_name' and p ? 'ceo_phone' and p ? 'address' and p ? 'people'
      from (select pg_temp.as_json('cust',format('select public.app_sales_customer(%L)->%L',pg_temp.fx('F'),'profile')) p) x));
 select pg_temp.assert('bootstrap customers list is not empty',
   jsonb_array_length(pg_temp.as_json('viewer','select public.app_sales_bootstrap()->''customers'''))>=3);
 select pg_temp.assert('bootstrap customers carry exactly id, incomplete, kind, name, name_en',
   (select bool_and(pg_temp.keys(e)='id,incomplete,kind,name,name_en')
      from jsonb_array_elements(pg_temp.as_json('viewer','select public.app_sales_bootstrap()->''customers''')) e));
-select pg_temp.assert('customers list rows have no ceo_name, address or contacts (even for a holder)',
-  (select bool_and(not (e ? 'ceo_name') and not (e ? 'address') and not (e ? 'contacts'))
+select pg_temp.assert('customers list rows have no ceo_name, ceo_phone, address or people (even for a holder)',
+  (select bool_and(not (e ? 'ceo_name') and not (e ? 'ceo_phone') and not (e ? 'address') and not (e ? 'people'))
      from jsonb_array_elements(pg_temp.as_json('cust','select public.app_sales_customers(''{}''::jsonb)')) e));
 select pg_temp.assert('customers list for a read-only user has rows',
   jsonb_array_length(pg_temp.as_json('viewer','select public.app_sales_customers(''{}''::jsonb)'))>=1);
@@ -292,13 +297,13 @@ select pg_temp.expect('... and creates no new customer',
 
 -- ================================================================ 11. merge keeps the profile
 insert into sl_j select 'M1',pg_temp.svj('cust',null,jsonb_build_object('name','مبدا','name_en','Source Co','ceo_name','رئیس مبدا',
-  'contacts',jsonb_build_array(jsonb_build_object('person','رضا','label','mobile','phone','09120000001'))));
+  'people',jsonb_build_array(jsonb_build_object('name','رضا','phones',jsonb_build_array(jsonb_build_object('label','mobile','phone','09120000001'))))));
 insert into sl_fx select 'M1',(j->>'id')::uuid from sl_j where k='M1';
 insert into sl_j select 'M2',pg_temp.svj('cust',null,jsonb_build_object('name','مقصد'));
 insert into sl_fx select 'M2',(j->>'id')::uuid from sl_j where k='M2';
 select pg_temp.expect('merge runs',
   pg_temp.msg(pg_temp.as_scalar('setm',format('select public.app_sales_merge_customers(%L,%L)::text',pg_temp.fx('M1'),pg_temp.fx('M2')))),'ok');
-select pg_temp.expect('target got the English name, the CEO and the contact',
+select pg_temp.expect('target got the English name, the CEO and the phone-book entry',
   (select name_en||'/'||ceo_name||'/'||(select count(*) from public.sales_customer_contacts k where k.customer_id=c.id)
      from public.sales_customers c where c.id=pg_temp.fx('M2')),'Source Co/رئیس مبدا/1');
 select pg_temp.expect('alias exists for the source Farsi key',

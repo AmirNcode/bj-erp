@@ -6,6 +6,8 @@ import type { Cell } from './xlsx';
 export const CUSTOMER_IMPORT_COLUMNS = [
   'name', 'name_en', 'kind', 'ceo_name', 'province', 'city', 'address', 'rank', 'category',
   'contact_person', 'contact_title', 'contact_label', 'phone', 'email',
+  // FR-99: appended after Email so an old 14-column template still works.
+  'ceo_phone', 'activity',
 ] as const;
 export type CustomerImportColumn = (typeof CUSTOMER_IMPORT_COLUMNS)[number];
 
@@ -18,8 +20,16 @@ export function templateRows(headers: Record<CustomerImportColumn, string>, exam
   return [CUSTOMER_IMPORT_COLUMNS.map((c) => headers[c]), CUSTOMER_IMPORT_COLUMNS.map((c) => example[c])];
 }
 
+/** The first columns of the original (FR-98) 14-column template. */
+const BASE_COLUMNS = 14;
+
+/** A header row has the 14 original labels, then either the 2 FR-99 labels or nothing (old template). */
 function matchesHeaders(row: Cell[], headers: Record<CustomerImportColumn, string>): boolean {
-  return CUSTOMER_IMPORT_COLUMNS.every((c, i) => text(row[i]) === headers[c].trim());
+  const base = CUSTOMER_IMPORT_COLUMNS.slice(0, BASE_COLUMNS).every((c, i) => text(row[i]) === headers[c].trim());
+  if (!base) return false;
+  const extra = CUSTOMER_IMPORT_COLUMNS.slice(BASE_COLUMNS);
+  return extra.every((c, k) => text(row[BASE_COLUMNS + k]) === headers[c].trim())
+    || extra.every((_, k) => text(row[BASE_COLUMNS + k]) === '');
 }
 
 export function parseCustomerSheet(

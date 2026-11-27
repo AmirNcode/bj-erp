@@ -1,6 +1,6 @@
 'use client';
 
-/** Settings › Customer lists: contractor categories and cities (by province), add / rename / hide. */
+/** Settings › Customer lists: contractor categories, cities (by province) and key-person titles, add / rename / hide. */
 
 import { useCallback, useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
@@ -9,14 +9,15 @@ import { ArrowDown, ArrowUp, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { getCustomerLists, saveSalesCategory, saveSalesCity } from '@/lib/actions/sales';
-import type { Bootstrap, City, ContractorCategory, CustomerLists } from '@/lib/sales/types';
+import { getCustomerLists, saveContactTitle, saveSalesCategory, saveSalesCity } from '@/lib/actions/sales';
+import type { Bootstrap, City, ContactTitle, ContractorCategory, CustomerLists } from '@/lib/sales/types';
 import { useViewAs } from '../../_components/ViewAsContext';
 import { Field, Select, Tag } from './parts';
 
 type Edit =
   | { kind: 'category'; item: ContractorCategory | null }
-  | { kind: 'city'; item: City | null };
+  | { kind: 'city'; item: City | null }
+  | { kind: 'title'; item: ContactTitle | null };
 
 export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
   const t = useTranslations('sales');
@@ -56,6 +57,7 @@ export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
   if (!lists) return <p className="text-sm text-muted-foreground" aria-busy="true">…</p>;
 
   const categories = [...lists.categories].sort((a, b) => a.position - b.position || a.name_fa.localeCompare(b.name_fa));
+  const titles = [...lists.titles].sort((a, b) => a.position - b.position || a.name_fa.localeCompare(b.name_fa));
   const cities = lists.cities.filter((c) => c.province_code === province).sort((a, b) => a.name_fa.localeCompare(b.name_fa, 'fa'));
 
   const moveCategory = (i: number, by: number) => {
@@ -66,7 +68,21 @@ export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
     return run(async () => {
       for (const [n, c] of next.entries()) {
         if (c.position === n + 1) continue;
-        const done = await saveSalesCategory({ id: c.id, name_fa: c.name_fa, position: n + 1 });
+        const done = await saveSalesCategory({ id: c.id, name_fa: c.name_fa, name_en: c.name_en, position: n + 1 });
+        if (!done.ok) return done;
+      }
+      return { ok: true };
+    });
+  };
+
+  const moveTitle = (i: number, by: number) => {
+    if (!titles[i + by]) return Promise.resolve(false);
+    const next = [...titles];
+    [next[i], next[i + by]] = [next[i + by], next[i]];
+    return run(async () => {
+      for (const [n, c] of next.entries()) {
+        if (c.position === n + 1) continue;
+        const done = await saveContactTitle({ id: c.id, name_fa: c.name_fa, position: n + 1 });
         if (!done.ok) return done;
       }
       return { ok: true };
@@ -111,7 +127,7 @@ export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
                         <Button size="icon-sm" variant="ghost" disabled={busy || i === categories.length - 1} aria-label={t('customerLists.moveDown')} onClick={() => void moveCategory(i, 1)}><ArrowDown /></Button>
                         <Button size="xs" variant="ghost" disabled={busy} onClick={() => setEditing({ kind: 'category', item: c })}>{t('customerLists.edit')}</Button>
                         <Button size="xs" variant="ghost" disabled={busy}
-                          onClick={() => void run(() => saveSalesCategory({ id: c.id, name_fa: c.name_fa, active: !c.active }))}>
+                          onClick={() => void run(() => saveSalesCategory({ id: c.id, name_fa: c.name_fa, name_en: c.name_en, active: !c.active }))}>
                           {c.active ? t('customerLists.hide') : t('customerLists.show')}
                         </Button>
                       </td>
@@ -153,7 +169,45 @@ export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
                       <td className="whitespace-nowrap text-end">
                         <Button size="xs" variant="ghost" disabled={busy} onClick={() => setEditing({ kind: 'city', item: c })}>{t('customerLists.edit')}</Button>
                         <Button size="xs" variant="ghost" disabled={busy}
-                          onClick={() => void run(() => saveSalesCity({ id: c.id, name_fa: c.name_fa, active: !c.active }))}>
+                          onClick={() => void run(() => saveSalesCity({ id: c.id, name_fa: c.name_fa, name_en: c.name_en, active: !c.active }))}>
+                          {c.active ? t('customerLists.hide') : t('customerLists.show')}
+                        </Button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="flex max-w-4xl flex-col gap-3">
+        <h3 className="text-base font-semibold">{t('customerLists.titles')}</h3>
+        {can ? (
+          <div>
+            <Button size="sm" variant="outline" onClick={() => setEditing({ kind: 'title', item: null })} data-testid="sales-lists-title-add">
+              <Plus aria-hidden="true" /> {t('customerLists.addTitle')}
+            </Button>
+          </div>
+        ) : null}
+        {titles.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerLists.empty')}</p> : (
+          <div className="overflow-x-auto border-b border-border">
+            <table className="data-table w-full text-sm">
+              <thead>{headerRow}</thead>
+              <tbody className="divide-y divide-border">
+                {titles.map((c, i) => (
+                  <tr key={c.id} className={c.active ? undefined : 'text-muted-foreground'} data-testid={`sales-lists-title-row-${i}`}>
+                    <td>{c.name_fa}</td>
+                    <td dir="ltr" className="text-start">{c.name_en ?? '—'}</td>
+                    <td>{c.active ? null : <Tag>{t('customerLists.hidden')}</Tag>}</td>
+                    {can ? (
+                      <td className="whitespace-nowrap text-end">
+                        <Button size="icon-sm" variant="ghost" disabled={busy || i === 0} aria-label={t('customerLists.moveUp')} onClick={() => void moveTitle(i, -1)}><ArrowUp /></Button>
+                        <Button size="icon-sm" variant="ghost" disabled={busy || i === titles.length - 1} aria-label={t('customerLists.moveDown')} onClick={() => void moveTitle(i, 1)}><ArrowDown /></Button>
+                        <Button size="xs" variant="ghost" disabled={busy} onClick={() => setEditing({ kind: 'title', item: c })}>{t('customerLists.edit')}</Button>
+                        <Button size="xs" variant="ghost" disabled={busy}
+                          onClick={() => void run(() => saveContactTitle({ id: c.id, name_fa: c.name_fa, active: !c.active }))}>
                           {c.active ? t('customerLists.hide') : t('customerLists.show')}
                         </Button>
                       </td>
@@ -168,13 +222,18 @@ export function CustomerListsEditor({ boot }: { boot: Bootstrap }) {
 
       {editing && can ? (
         <NameDialog
-          title={editing.item ? t('customerLists.edit') : t('customerLists.add')}
+          title={editing.item ? t('customerLists.edit') : editing.kind === 'title' ? t('customerLists.addTitle') : t('customerLists.add')}
           initial={editing.item}
           busy={busy}
           onClose={() => setEditing(null)}
           onSave={(fa, en) => run(() => (editing.kind === 'category'
             ? saveSalesCategory({
               ...(editing.item ? { id: editing.item.id } : { position: lists.categories.length + 1 }),
+              name_fa: fa, name_en: en,
+            })
+            : editing.kind === 'title'
+            ? saveContactTitle({
+              ...(editing.item ? { id: editing.item.id } : { position: lists.titles.length + 1 }),
               name_fa: fa, name_en: en,
             })
             : saveSalesCity({

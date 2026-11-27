@@ -415,6 +415,22 @@ Validation/release status stays in `docs/TASKS.md`.
   until its return-to-work day (hourly / same-day return: through that day); cancelled ones leave at
   once; a rejected one can be removed with **Remove** (`app_dismiss_home_request`; the Requests tab
   keeps it). *(2026-10-21; same spec; unreleased.)*
+- **FR-99** ☐ **ERP › Sales change history + customer phone book (CEO feedback on FR-98).**
+  *History:* every Sales write is logged with who, when and what changed (old → new): records (as
+  before, plus deadline done / reopened), customers (created — also from a record form or an import —,
+  edited, renamed, merged, imported, removed by an import undo, aliases), products, Settings
+  (currencies, stages, fields, general, categories, cities, titles), Name matching and import batches.
+  The log is append-only. Each customer and product page has a **History** tab (every Sales user;
+  CEO name / phone, address and phone book values only for **Customers: create and edit** holders,
+  others see "Private details changed"); **Sales › Activity** lists everything, filtered by person,
+  dates and type, behind the new permission **Sales: activity log**. *Phone book:* the CEO (name +
+  optional direct phone) and any number of key people — name, a **title picked from a list** (edited
+  only in Settings › Customer lists, never typed), several numbers, email — plus company lines.
+  *Activity description* (شرح فعالیت, free text) for every type; a third type **Private** (rank /
+  category allowed for contractor and private). Complete = names, type, CEO, province, city,
+  address, at least one phone number, and a rank + category pair **or** an activity description.
+  *(2026-11-27; spec `2026-11-27-sales-customer-phonebook-history-design.md`; branch
+  `feat/sales-customer-phonebook`.)*
 - **FR-98** ☐ **ERP › Sales customer registry (CEO request).** Customers are registered once and only
   *picked* on records (no typed company names). Profile: Farsi name, one English name / abbreviation
   field, government / contractor, rank (1–5) + category for contractors (one pair), managing director,

@@ -2704,7 +2704,7 @@ CREATE FUNCTION private.permission_allows(p_key text, p_level text) RETURNS bool
       'personal_info_own','annual_leave_borrow','special_leave','approval_delegate','travel_booking',
       'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly',
       'edit_requests_own','sales_decide','sales_settings','sales_customers','sales_customers_import') then p_level = 'edit'
-    when p_key in ('calendar','reports','finance','finance_forms','sales_reports') then p_level = 'read'
+    when p_key in ('calendar','reports','finance','finance_forms','sales_reports','sales_activity') then p_level = 'read'
     when p_key in ('people','personal_info','clearance','departments','leave_balances',
       'leave_requests','approval_steps','work_settings','holidays',
       'sales','sales_prices','sales_bonds','project_items') then p_level in ('read','edit')
@@ -2736,7 +2736,8 @@ CREATE FUNCTION private.permission_deps() RETURNS TABLE(key text, key_level text
     ('edit_requests_own','read','leave_requests'),
     ('sales_prices','read','sales'), ('sales_bonds','read','sales'), ('sales_decide','read','sales'),
     ('sales_reports','read','sales'), ('sales_settings','read','sales'), ('project_items','read','sales'),
-    ('sales_customers','read','sales'), ('sales_customers_import','read','sales_customers');
+    ('sales_customers','read','sales'), ('sales_customers_import','read','sales_customers'),
+    ('sales_activity','read','sales');
 $$;
 
 
@@ -2754,7 +2755,7 @@ CREATE FUNCTION private.permission_keys() RETURNS SETOF text
     'work_settings','holidays','finance','finance_forms','travel_booking',
     'edit_leave_daily','edit_leave_hourly','edit_errand_daily','edit_errand_hourly','edit_requests_own',
     'sales','sales_prices','sales_bonds','sales_decide','sales_reports','sales_settings','project_items',
-    'sales_customers','sales_customers_import']);
+    'sales_customers','sales_customers_import','sales_activity']);
 $$;
 
 
@@ -3577,6 +3578,20 @@ $$;
 
 
 --
+-- Name: sales_audit_append_only(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_audit_append_only() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+begin
+  if current_user in ('supabase_admin', 'postgres') then return null; end if;
+  raise exception 'sales: history is read-only' using errcode = '42501';
+end $$;
+
+
+--
 -- Name: sales_can(text, text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -3662,21 +3677,30 @@ CREATE FUNCTION private.sales_customer(p_company uuid, p_name text, p_kind text 
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_key text := private.sales_name_key(p_name); v_id uuid;
-  v_kind text := case when p_kind in ('government', 'contractor') then p_kind end;
+declare v_key text := private.sales_name_key(p_name); v_id uuid; v_name text;
+  v_kind text := case when p_kind in ('government', 'contractor', 'private') then p_kind end;
+  v_src text := coalesce(current_setting('bj.sales_source', true), ''); v_extra jsonb;
 begin
   if v_key = '' then return null; end if;
+  v_extra := case when v_src like '%:%'
+    then jsonb_build_object('source', split_part(v_src, ':', 1), 'batch_id', split_part(v_src, ':', 2))
+    else jsonb_build_object('source', 'record') end;
   perform private.sales_customer_lock(p_company);
   v_id := private.sales_customer_find(p_company, p_name);
   if v_id is not null then
     if v_kind is not null then
-      update public.sales_customers set kind = v_kind where id = v_id and kind is null;
+      update public.sales_customers set kind = v_kind where id = v_id and kind is null returning name into v_name;
+      if found then
+        perform private.sales_log(p_company, 'customer', v_id, v_name, 'edited', v_extra || jsonb_build_object(
+          'changes', jsonb_build_array(jsonb_build_object('field', 'kind', 'from', null, 'to', v_kind))));
+      end if;
     end if;
     return v_id;
   end if;
-  insert into public.sales_customers (company_id, name, name_key, kind)
-    values (p_company, left(regexp_replace(btrim(p_name), '\s+', ' ', 'g'), 200), v_key, v_kind)
+  insert into public.sales_customers (company_id, name, name_key, kind, created_by)
+    values (p_company, left(regexp_replace(btrim(p_name), '\s+', ' ', 'g'), 200), v_key, v_kind, auth.uid())
     returning id into v_id;
+  perform private.sales_customer_log_diff(p_company, v_id, 'created', '{}'::jsonb, v_extra);
   return v_id;
 end $$;
 
@@ -3709,7 +3733,7 @@ CREATE FUNCTION private.sales_customer_grades_trg() RETURNS trigger
     SET search_path TO ''
     AS $$
 begin
-  if new.kind is distinct from 'contractor' then
+  if coalesce(new.kind, '') not in ('contractor', 'private') then
     delete from public.sales_customer_grades where customer_id = new.id;
   elsif new.rank is not null and new.category_id is not null then
     delete from public.sales_customer_grades
@@ -3743,11 +3767,16 @@ CREATE TABLE public.sales_customers (
     import_batch_id uuid,
     updated_at timestamp with time zone,
     updated_by uuid,
+    ceo_phone text,
+    activity text,
+    created_by uuid,
+    CONSTRAINT sales_customers_activity_check CHECK (((activity IS NULL) OR ((char_length(btrim(activity)) >= 1) AND (char_length(btrim(activity)) <= 1000)))),
     CONSTRAINT sales_customers_address_check CHECK (((address IS NULL) OR ((char_length(btrim(address)) >= 1) AND (char_length(btrim(address)) <= 500)))),
     CONSTRAINT sales_customers_ceo_name_check CHECK (((ceo_name IS NULL) OR ((char_length(btrim(ceo_name)) >= 1) AND (char_length(btrim(ceo_name)) <= 120)))),
+    CONSTRAINT sales_customers_ceo_phone_check CHECK (((ceo_phone IS NULL) OR (ceo_phone ~ '^\+?[0-9]{5,15}$'::text))),
     CONSTRAINT sales_customers_city_province CHECK (((city_id IS NULL) OR (province_code IS NOT NULL))),
-    CONSTRAINT sales_customers_contractor_only CHECK (((kind = 'contractor'::text) OR ((rank IS NULL) AND (category_id IS NULL)))),
-    CONSTRAINT sales_customers_kind_check CHECK ((kind = ANY (ARRAY['government'::text, 'contractor'::text]))),
+    CONSTRAINT sales_customers_contractor_only CHECK (((kind = ANY (ARRAY['contractor'::text, 'private'::text])) OR ((rank IS NULL) AND (category_id IS NULL)))),
+    CONSTRAINT sales_customers_kind_check CHECK ((kind = ANY (ARRAY['government'::text, 'contractor'::text, 'private'::text]))),
     CONSTRAINT sales_customers_name_check CHECK (((char_length(btrim(name)) >= 1) AND (char_length(btrim(name)) <= 200))),
     CONSTRAINT sales_customers_name_en_check CHECK (((name_en IS NULL) OR ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 200)))),
     CONSTRAINT sales_customers_name_en_key_check CHECK (((name_en_key IS NULL) OR (name_en_key <> ''::text))),
@@ -3777,6 +3806,8 @@ begin
     if v.name_en is not null then r.name_en := v.name_en; r.name_en_key := v.name_en_key; end if;
     r.kind := coalesce(v.kind, m.kind);
     r.ceo_name := coalesce(v.ceo_name, m.ceo_name);
+    r.ceo_phone := coalesce(v.ceo_phone, m.ceo_phone);
+    r.activity := coalesce(v.activity, m.activity);
     r.address := coalesce(v.address, m.address);
     if v.province_code is not null then
       -- A new province drops the old city (the city belongs to its province).
@@ -3790,6 +3821,8 @@ begin
     if m.name_en is null and v.name_en is not null then r.name_en := v.name_en; r.name_en_key := v.name_en_key; end if;
     r.kind := coalesce(m.kind, v.kind);
     r.ceo_name := coalesce(m.ceo_name, v.ceo_name);
+    r.ceo_phone := coalesce(m.ceo_phone, v.ceo_phone);
+    r.activity := coalesce(m.activity, v.activity);
     r.address := coalesce(m.address, v.address);
     if m.province_code is null then r.province_code := v.province_code; end if;
     -- The city only together with its province, or when the customer already has that province.
@@ -3799,7 +3832,7 @@ begin
     r.rank := coalesce(m.rank, v.rank);
     r.category_id := coalesce(m.category_id, v.category_id);
   end if;
-  if r.kind is distinct from 'contractor' then r.rank := null; r.category_id := null; end if;
+  if coalesce(r.kind, '') not in ('contractor', 'private') then r.rank := null; r.category_id := null; end if;
   return r;
 end $$;
 
@@ -3814,15 +3847,16 @@ CREATE FUNCTION private.sales_customer_import_resolve(p_company uuid, p_rows jso
     AS $_$
 declare
   v_e jsonb; v_o bigint; v_num numeric;
-  v_out jsonb := '[]'::jsonb; v_ucat jsonb := '{}'::jsonb; v_ucity jsonb := '{}'::jsonb;
+  v_out jsonb := '[]'::jsonb; v_ucat jsonb := '{}'::jsonb; v_ucity jsonb := '{}'::jsonb; v_utitle jsonb := '{}'::jsonb;
   v_new integer := 0; v_match integer := 0; v_err integer := 0;
   v_seen_ids uuid[] := '{}'; v_seen_keys text[] := '{}';
   v_row integer; v_status text; v_error text; v_name text; v_name_key text; v_en text; v_en_key text;
   v_match_id uuid; v_m public.sales_customers; v_m_kind text; v_m_prov text;
   v_vals jsonb; v_contact jsonb; v_dropped jsonb; v_unknown jsonb; v_incomplete boolean;
-  v_txt text; v_k text; v_kind text; v_eff_kind text; v_ceo text; v_addr text; v_prov text; v_ctx_prov text;
+  v_txt text; v_k text; v_kind text; v_eff_kind text; v_ceo text; v_ceo_phone text; v_act text; v_addr text;
+  v_prov text; v_ctx_prov text;
   v_city uuid; v_cat uuid; v_rank integer; v_mapped text;
-  v_pers text; v_title text; v_label text; v_phone text; v_email text; v_cv public.sales_customers;
+  v_pers text; v_title text; v_tid uuid; v_label text; v_phone text; v_email text; v_cv public.sales_customers;
   v_merged public.sales_customers; v_nc integer;
 begin
   if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) not between 1 and 1000 then
@@ -3891,15 +3925,24 @@ begin
         v_k := private.sales_word_key(v_txt);
         if v_k in ('government', 'دولتی') then v_kind := 'government';
         elsif v_k in ('contractor', 'پیمانکار') then v_kind := 'contractor';
+        elsif v_k in ('private', 'خصوصی') then v_kind := 'private';
         else v_dropped := v_dropped || jsonb_build_object('field', 'kind', 'reason', 'invalid');
         end if;
       end if;
       v_eff_kind := coalesce(v_kind, v_m_kind);
 
-      -- ---- CEO, address
+      -- ---- CEO, CEO phone, activity, address
       v_ceo := private.sales_clean(v_e->>'ceo_name');
       if v_ceo is not null and char_length(v_ceo) > 120 then
         v_dropped := v_dropped || jsonb_build_object('field', 'ceo_name', 'reason', 'invalid'); v_ceo := null;
+      end if;
+      v_ceo_phone := private.sales_phone(v_e->>'ceo_phone');
+      if v_ceo_phone is not null and v_ceo_phone !~ '^\+?[0-9]{5,15}$' then
+        v_dropped := v_dropped || jsonb_build_object('field', 'ceo_phone', 'reason', 'invalid'); v_ceo_phone := null;
+      end if;
+      v_act := nullif(btrim(coalesce(v_e->>'activity', '')), '');
+      if v_act is not null and char_length(v_act) > 1000 then
+        v_dropped := v_dropped || jsonb_build_object('field', 'activity', 'reason', 'invalid'); v_act := null;
       end if;
       v_addr := private.sales_clean(v_e->>'address');
       if v_addr is not null and char_length(v_addr) > 500 then
@@ -3950,11 +3993,11 @@ begin
         end if;
       end if;
 
-      -- ---- rank, category (contractors only)
+      -- ---- rank, category (contractors and private companies)
       v_rank := null; v_cat := null;
       v_txt := private.sales_clean(v_e->>'rank');
       if v_txt is not null then
-        if v_eff_kind is distinct from 'contractor' then
+        if coalesce(v_eff_kind, '') not in ('contractor', 'private') then
           v_dropped := v_dropped || jsonb_build_object('field', 'rank', 'reason', 'not_contractor');
         else
           v_num := private.sales_num(translate(v_txt, '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'));
@@ -3965,7 +4008,7 @@ begin
       end if;
       v_txt := private.sales_clean(v_e->>'category');
       if v_txt is not null then
-        if v_eff_kind is distinct from 'contractor' then
+        if coalesce(v_eff_kind, '') not in ('contractor', 'private') then
           v_dropped := v_dropped || jsonb_build_object('field', 'category', 'reason', 'not_contractor');
         else
           v_k := private.sales_word_key(v_txt);
@@ -3992,19 +4035,23 @@ begin
         end if;
       end if;
 
-      -- ---- contact (kept with person + a valid phone; a bad email is dropped, the contact stays)
+      -- ---- phone-book entry (FR-99): name and title (from the list) optional, at most one number.
+      -- A bad part is dropped, the rest of the entry stays; an entry with no name, title or number is none.
       v_pers := private.sales_clean(v_e->>'contact_person');
       v_title := private.sales_clean(v_e->>'contact_title');
       v_phone := private.sales_phone(v_e->>'phone');
       v_email := lower(private.sales_clean(v_e->>'email'));
-      if v_pers is not null or v_phone is not null or v_email is not null then
-        if v_pers is null or char_length(v_pers) > 120 then
+      v_tid := null; v_label := null;
+      if v_pers is not null or v_title is not null or v_phone is not null or v_email is not null then
+        if v_pers is not null and char_length(v_pers) > 120 then
           v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'person');
+          v_pers := null;
         end if;
-        if v_phone is null or v_phone !~ '^\+?[0-9]{5,15}$' then
+        if v_phone is not null and v_phone !~ '^\+?[0-9]{5,15}$' then
           v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'phone');
+          v_phone := null;
         end if;
-        if not (v_pers is null or char_length(v_pers) > 120 or v_phone is null or v_phone !~ '^\+?[0-9]{5,15}$') then
+        if v_phone is not null then
           v_k := private.sales_word_key(private.sales_clean(v_e->>'contact_label'));
           v_label := case
             when v_k = '' then 'office'
@@ -4017,22 +4064,50 @@ begin
                                         'other', 'سایر', 'دیگر') then
             v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'label');
           end if;
-          if v_title is not null and char_length(v_title) > 80 then
+        end if;
+        if v_title is not null then
+          v_k := private.sales_word_key(v_title);
+          if v_k = '' or char_length(v_title) > 80 then
             v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'title');
-            v_title := null;
+          else
+            v_mapped := p_maps->'titles'->>v_k;
+            if v_mapped is not null then
+              v_tid := private.sales_uuid(v_mapped);
+            else
+              select t.id into v_tid from public.sales_contact_titles t
+               where t.company_id = p_company and t.active
+                 and (private.sales_word_key(t.name_fa) = v_k or private.sales_word_key(t.name_en) = v_k)
+               order by t.position, t.name_fa limit 1;
+            end if;
+            if v_tid is null then
+              -- Titles are never created by an import: pick one in the dialog or leave the entry without.
+              v_unknown := v_unknown || jsonb_build_object('field', 'title', 'key', v_k, 'value', v_title);
+              v_utitle := v_utitle || jsonb_build_object(v_k, jsonb_build_object(
+                'key', v_k, 'value', coalesce(v_utitle->v_k->>'value', v_title),
+                'rows', coalesce((v_utitle->v_k->>'rows')::integer, 0) + 1,
+                'first', coalesce((v_utitle->v_k->>'first')::integer, v_o::integer)));
+            end if;
           end if;
-          if v_email is not null and (char_length(v_email) > 200 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
-            v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'email');
-            v_email := null;
-          end if;
-          v_contact := jsonb_build_object('person', v_pers, 'title', v_title, 'label', v_label,
-                                          'phone', v_phone, 'email', v_email);
+        end if;
+        if v_email is not null and (char_length(v_email) > 200 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$') then
+          v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'email');
+          v_email := null;
+        end if;
+        if v_pers is not null or v_tid is not null or v_phone is not null then
+          v_contact := jsonb_build_object('name', v_pers, 'title_id', v_tid, 'email', v_email,
+            'phones', case when v_phone is not null
+                           then jsonb_build_array(jsonb_build_object('label', v_label, 'phone', v_phone))
+                           else '[]'::jsonb end);
+        elsif v_email is not null then
+          -- Only an email is left: no entry to hold it.
+          v_dropped := v_dropped || jsonb_build_object('field', 'contact', 'reason', 'invalid', 'detail', 'person');
         end if;
       end if;
 
       -- ---- values as the form would validate them (a match keeps its own kind for the rank / category check)
       v_vals := jsonb_strip_nulls(jsonb_build_object('name', v_name, 'name_en', v_en, 'kind', v_kind,
-        'ceo_name', v_ceo, 'province_code', v_prov, 'city_id', v_city, 'address', v_addr,
+        'ceo_name', v_ceo, 'ceo_phone', v_ceo_phone, 'activity', v_act,
+        'province_code', v_prov, 'city_id', v_city, 'address', v_addr,
         'rank', v_rank, 'category_id', v_cat));
       begin
         v_cv := private.sales_customer_values(p_company, v_vals || jsonb_build_object('kind', v_eff_kind));
@@ -4047,15 +4122,17 @@ begin
       if v_en_key is not null then v_seen_keys := v_seen_keys || v_en_key; end if;
       if v_status = 'new' then
         v_incomplete := cardinality(private.sales_customer_missing_of(v_cv,
-          case when v_contact is not null then 1 else 0 end)) > 0;
+          case when v_phone is not null and v_contact is not null then 1 else 0 end)) > 0;
         v_new := v_new + 1;
       else
         -- A match is judged after the "update" action (fills only empty fields).
         v_merged := private.sales_customer_import_merge(v_m, v_cv, false);
-        select count(*)::integer into v_nc from public.sales_customer_contacts where customer_id = v_match_id;
-        if v_contact is not null and v_nc < 50 and not exists (
-             select 1 from public.sales_customer_contacts k
-              where k.customer_id = v_match_id and k.phone = v_contact->>'phone') then
+        v_nc := private.sales_customer_phone_count(v_match_id);
+        if v_contact is not null and v_phone is not null
+           and (select count(*) from public.sales_customer_contacts where customer_id = v_match_id) < 50
+           and not exists (select 1 from public.sales_customer_phones q
+                             join public.sales_customer_contacts k on k.id = q.contact_id
+                            where k.customer_id = v_match_id and q.phone = v_phone) then
           v_nc := v_nc + 1;
         end if;
         v_incomplete := cardinality(private.sales_customer_missing_of(v_merged, v_nc)) > 0;
@@ -4077,7 +4154,9 @@ begin
       'categories', coalesce((select jsonb_agg(j.x - 'first' order by (j.x->>'first')::integer)
                                 from jsonb_each(v_ucat) as j(k, x)), '[]'::jsonb),
       'cities', coalesce((select jsonb_agg(j.x - 'first' order by (j.x->>'first')::integer)
-                            from jsonb_each(v_ucity) as j(k, x)), '[]'::jsonb)),
+                            from jsonb_each(v_ucity) as j(k, x)), '[]'::jsonb),
+      'titles', coalesce((select jsonb_agg(j.x - 'first' order by (j.x->>'first')::integer)
+                            from jsonb_each(v_utitle) as j(k, x)), '[]'::jsonb)),
     'counts', jsonb_build_object('new', v_new, 'match', v_match, 'error', v_err));
 end $_$;
 
@@ -4095,6 +4174,31 @@ $$;
 
 
 --
+-- Name: sales_customer_log_diff(uuid, uuid, text, jsonb, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_customer_log_diff(p_company uuid, p_id uuid, p_action text, p_before jsonb, p_extra jsonb DEFAULT '{}'::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_after jsonb := coalesce(private.sales_customer_snapshot(p_id), '{}'::jsonb);
+  v_b jsonb := coalesce(p_before, '{}'::jsonb); v_a jsonb; v_changes jsonb; v_people jsonb;
+begin
+  v_a := v_after - 'people';
+  if v_b = '{}'::jsonb then
+    v_a := coalesce((select jsonb_object_agg(t.k, t.v) from jsonb_each(v_a) as t(k, v)
+                      where t.v not in ('null'::jsonb, '[]'::jsonb)), '{}'::jsonb);
+  end if;
+  v_changes := private.sales_diff(v_b - 'people', v_a, array['ceo_name', 'ceo_phone', 'address']);
+  v_people := private.sales_people_diff(v_b->'people', v_after->'people');
+  if v_people is not null then v_changes := v_changes || jsonb_build_array(v_people); end if;
+  if v_changes = '[]'::jsonb and p_action in ('edited', 'imported_updated') then return; end if;
+  perform private.sales_log(p_company, 'customer', p_id, coalesce(v_after->>'name', p_extra->>'name'), p_action,
+    coalesce(p_extra, '{}'::jsonb) || jsonb_build_object('changes', v_changes));
+end $$;
+
+
+--
 -- Name: sales_customer_missing_of(public.sales_customers, integer); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4109,9 +4213,10 @@ CREATE FUNCTION private.sales_customer_missing_of(c public.sales_customers, p_co
     case when c.province_code is null then 'province' end,
     case when c.city_id is null then 'city' end,
     case when c.address is null then 'address' end,
-    case when coalesce(p_contacts, 0) = 0 then 'contacts' end,
-    case when c.kind = 'contractor' and c.rank is null then 'rank' end,
-    case when c.kind = 'contractor' and c.category_id is null then 'category' end
+    case when c.ceo_phone is null and coalesce(p_contacts, 0) = 0 then 'phones' end,
+    case when c.category_id is not null and c.rank is null then 'rank' end,
+    case when c.rank is not null and c.category_id is null then 'category' end,
+    case when not (c.rank is not null and c.category_id is not null) and c.activity is null then 'grade_or_activity' end
   ], null);
 $$;
 
@@ -4125,8 +4230,7 @@ CREATE FUNCTION private.sales_customer_missing_trg() RETURNS trigger
     SET search_path TO ''
     AS $$
 begin
-  new.missing := private.sales_customer_missing_of(new,
-    (select count(*)::integer from public.sales_customer_contacts where customer_id = new.id));
+  new.missing := private.sales_customer_missing_of(new, private.sales_customer_phone_count(new.id));
   return new;
 end $$;
 
@@ -4152,6 +4256,20 @@ $$;
 
 
 --
+-- Name: sales_customer_phone_count(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_customer_phone_count(p_customer uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select count(*)::integer from public.sales_customer_phones ph
+    join public.sales_customer_contacts k on k.id = ph.contact_id
+   where k.customer_id = p_customer;
+$$;
+
+
+--
 -- Name: sales_customer_profile(uuid, boolean); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4168,16 +4286,25 @@ CREATE FUNCTION private.sales_customer_profile(p_id uuid, p_private boolean) RET
                   where g.customer_id = c.id),
       'province_code', c.province_code, 'province_fa', pr.name_fa, 'province_en', pr.name_en,
       'city_id', c.city_id, 'city_fa', ci.name_fa, 'city_en', ci.name_en,
-      'missing', to_jsonb(c.missing), 'created_at', c.created_at, 'updated_at', c.updated_at)
-    || case when p_private then jsonb_build_object('ceo_name', c.ceo_name, 'address', c.address,
-         'contacts', (select coalesce(jsonb_agg(jsonb_build_object('id', k.id, 'person', k.person, 'title', k.title,
-                         'label', k.label, 'phone', k.phone, 'email', k.email) order by k.position, k.id), '[]'::jsonb)
-                        from public.sales_customer_contacts k where k.customer_id = c.id))
+      'missing', to_jsonb(c.missing), 'created_at', c.created_at, 'updated_at', c.updated_at,
+      'activity', c.activity, 'created_by_name', cb.full_name)
+    || case when p_private then jsonb_build_object('ceo_name', c.ceo_name, 'ceo_phone', c.ceo_phone,
+         'address', c.address,
+         'people', (select coalesce(jsonb_agg(jsonb_build_object('id', k.id, 'name', k.person, 'title_id', k.title_id,
+                         'title_fa', t.name_fa, 'title_en', t.name_en, 'title_active', t.active, 'email', k.email,
+                         'phones', (select coalesce(jsonb_agg(jsonb_build_object('id', ph.id, 'label', ph.label,
+                                                    'phone', ph.phone) order by ph.position, ph.id), '[]'::jsonb)
+                                      from public.sales_customer_phones ph where ph.contact_id = k.id))
+                       order by k.position, k.id), '[]'::jsonb)
+                      from public.sales_customer_contacts k
+                      left join public.sales_contact_titles t on t.id = k.title_id
+                     where k.customer_id = c.id))
        else '{}'::jsonb end
   from public.sales_customers c
   left join public.sales_contractor_categories cat on cat.id = c.category_id
   left join public.iran_provinces pr on pr.code = c.province_code
   left join public.sales_cities ci on ci.id = c.city_id
+  left join public.profiles cb on cb.id = c.created_by
   where c.id = p_id;
 $$;
 
@@ -4261,7 +4388,8 @@ CREATE FUNCTION private.sales_customer_rows(p_company uuid, p_prices boolean, p_
                and buyer_id is not null
              group by buyer_id, currency) t group by buyer_id)
   select jsonb_build_object(
-      'id', c.id, 'name', c.name, 'name_en', c.name_en, 'kind', c.kind, 'missing', to_jsonb(c.missing),
+      'id', c.id, 'name', c.name, 'name_en', c.name_en, 'kind', c.kind, 'activity', c.activity,
+      'missing', to_jsonb(c.missing),
       'records', coalesce(a.records, 0), 'as_client', coalesce(cli.n, 0),
       'open', coalesce(a.open, 0), 'won', coalesce(a.won, 0), 'lost', coalesce(a.lost, 0),
       'no_bid', coalesce(a.no_bid, 0), 'archived', coalesce(a.archived, 0), 'cancelled', coalesce(a.cancelled, 0),
@@ -4291,28 +4419,6 @@ $$;
 
 
 --
--- Name: sales_customer_set_contacts(uuid, uuid, jsonb); Type: FUNCTION; Schema: private; Owner: -
---
-
-CREATE FUNCTION private.sales_customer_set_contacts(p_company uuid, p_customer uuid, p_contacts jsonb) RETURNS void
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO ''
-    AS $$
-begin
-  if p_contacts is null or jsonb_typeof(p_contacts) <> 'array' or jsonb_array_length(p_contacts) > 50
-     or exists (select 1 from jsonb_array_elements(p_contacts) e where jsonb_typeof(e) <> 'object') then
-    raise exception 'sales: invalid input' using errcode = '22023';
-  end if;
-  delete from public.sales_customer_contacts where customer_id = p_customer;
-  insert into public.sales_customer_contacts (company_id, customer_id, person, title, label, phone, email, position)
-    select p_company, p_customer, private.sales_clean(e->>'person'), private.sales_clean(e->>'title'),
-           coalesce(nullif(e->>'label', ''), 'office'), private.sales_phone(e->>'phone'),
-           lower(private.sales_clean(e->>'email')), o::integer
-      from jsonb_array_elements(p_contacts) with ordinality as t(e, o);
-end $$;
-
-
---
 -- Name: sales_customer_set_grades(uuid, uuid, jsonb); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4328,7 +4434,7 @@ begin
   end if;
   select * into v_c from public.sales_customers where id = p_customer and company_id = p_company;
   delete from public.sales_customer_grades where customer_id = p_customer;
-  if v_c.kind is distinct from 'contractor' then return; end if;
+  if coalesce(v_c.kind, '') not in ('contractor', 'private') then return; end if;
   for v_e in select e from jsonb_array_elements(p_grades) as t(e) loop
     v_rank := private.sales_num(translate(v_e->>'rank', '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'));
     v_cat := private.sales_uuid(v_e->>'category_id');
@@ -4346,13 +4452,107 @@ end $$;
 
 
 --
+-- Name: sales_customer_set_people(uuid, uuid, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_customer_set_people(p_company uuid, p_customer uuid, p_people jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $_$
+declare v_used uuid[]; e jsonb; v_ph jsonb; v_name text; v_title uuid; v_email text; v_pos integer := 0;
+  v_id uuid; v_phones jsonb; v_label text; v_phone text; v_n integer;
+begin
+  if p_people is null or jsonb_typeof(p_people) <> 'array' or jsonb_array_length(p_people) > 50
+     or exists (select 1 from jsonb_array_elements(p_people) x
+                 where jsonb_typeof(x) <> 'object'
+                    or (x ? 'phones' and jsonb_typeof(x->'phones') not in ('array', 'null'))
+                    or (jsonb_typeof(x->'phones') = 'array' and (jsonb_array_length(x->'phones') > 5
+                        or exists (select 1 from jsonb_array_elements(x->'phones') y where jsonb_typeof(y) <> 'object')))) then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+  select coalesce(array_agg(distinct title_id) filter (where title_id is not null), '{}') into v_used
+    from public.sales_customer_contacts where customer_id = p_customer;
+  delete from public.sales_customer_contacts where customer_id = p_customer;
+  for e in select x from jsonb_array_elements(p_people) with ordinality as t(x, o) order by o loop
+    v_name := private.sales_clean(e->>'name');
+    v_email := lower(private.sales_clean(e->>'email'));
+    v_title := null;
+    if nullif(btrim(coalesce(e->>'title_id', '')), '') is not null then
+      v_title := private.sales_uuid(e->>'title_id');
+      if v_title is null or not exists (select 1 from public.sales_contact_titles t
+                                          where t.id = v_title and t.company_id = p_company
+                                            and (t.active or t.id = any (v_used))) then
+        raise exception 'sales: invalid input' using errcode = '22023';
+      end if;
+    end if;
+    v_phones := '[]'::jsonb;
+    for v_ph in select y from jsonb_array_elements(coalesce(case when jsonb_typeof(e->'phones') = 'array' then e->'phones' end,
+                                                             '[]'::jsonb)) with ordinality as u(y, o) order by o loop
+      v_phone := private.sales_phone(v_ph->>'phone');
+      if v_phone is null then continue; end if;              -- an empty number row is dropped
+      v_label := coalesce(nullif(v_ph->>'label', ''), 'office');
+      if v_phone !~ '^\+?[0-9]{5,15}$' or v_label not in ('office', 'mobile', 'fax', 'other') then
+        raise exception 'sales: invalid input' using errcode = '22023';
+      end if;
+      v_phones := v_phones || jsonb_build_array(jsonb_build_object('label', v_label, 'phone', v_phone));
+    end loop;
+    if v_name is null and v_title is null and jsonb_array_length(v_phones) = 0 then continue; end if;
+    if char_length(coalesce(v_name, '')) > 120
+       or (v_email is not null and (char_length(v_email) > 200 or v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$')) then
+      raise exception 'sales: invalid input' using errcode = '22023';
+    end if;
+    v_pos := v_pos + 1;
+    insert into public.sales_customer_contacts (company_id, customer_id, person, title_id, email, position)
+      values (p_company, p_customer, v_name, v_title, v_email, v_pos) returning id into v_id;
+    insert into public.sales_customer_phones (company_id, contact_id, label, phone, position)
+      select p_company, v_id, x->>'label', x->>'phone', o::integer
+        from jsonb_array_elements(v_phones) with ordinality as w(x, o);
+  end loop;
+end $_$;
+
+
+--
+-- Name: sales_customer_snapshot(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_customer_snapshot(p_id uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select jsonb_build_object('name', c.name, 'name_en', c.name_en, 'kind', c.kind, 'rank', c.rank,
+      'category', case when c.category_id is not null then jsonb_build_object('id', c.category_id, 'name', cat.name_fa) end,
+      'grades', (select coalesce(jsonb_agg(jsonb_build_object('rank', g.rank, 'category', gc.name_fa)
+                                           order by g.position, g.id), '[]'::jsonb)
+                   from public.sales_customer_grades g
+                   join public.sales_contractor_categories gc on gc.id = g.category_id
+                  where g.customer_id = c.id),
+      'province', case when c.province_code is not null then jsonb_build_object('code', c.province_code, 'name', pr.name_fa) end,
+      'city', case when c.city_id is not null then jsonb_build_object('id', c.city_id, 'name', ci.name_fa) end,
+      'address', c.address, 'ceo_name', c.ceo_name, 'ceo_phone', c.ceo_phone, 'activity', c.activity,
+      'people', (select coalesce(jsonb_agg(jsonb_build_object('name', k.person, 'title', t.name_fa, 'email', k.email,
+                     'phones', (select coalesce(jsonb_agg(jsonb_build_object('label', ph.label, 'phone', ph.phone)
+                                                          order by ph.position, ph.id), '[]'::jsonb)
+                                  from public.sales_customer_phones ph where ph.contact_id = k.id))
+                   order by k.position, k.id), '[]'::jsonb)
+                   from public.sales_customer_contacts k
+                   left join public.sales_contact_titles t on t.id = k.title_id
+                  where k.customer_id = c.id))
+    from public.sales_customers c
+    left join public.sales_contractor_categories cat on cat.id = c.category_id
+    left join public.iran_provinces pr on pr.code = c.province_code
+    left join public.sales_cities ci on ci.id = c.city_id
+   where c.id = p_id;
+$$;
+
+
+--
 -- Name: sales_customer_values(uuid, jsonb); Type: FUNCTION; Schema: private; Owner: -
 --
 
 CREATE FUNCTION private.sales_customer_values(p_company uuid, p jsonb) RETURNS public.sales_customers
     LANGUAGE plpgsql STABLE SECURITY DEFINER
     SET search_path TO ''
-    AS $$
+    AS $_$
 declare v public.sales_customers; v_rank numeric;
 begin
   v.company_id := p_company;
@@ -4362,6 +4562,8 @@ begin
   v.name_en_key := nullif(private.sales_name_key(v.name_en), '');
   v.kind := nullif(p->>'kind', '');
   v.ceo_name := private.sales_clean(p->>'ceo_name');
+  v.ceo_phone := private.sales_phone(p->>'ceo_phone');
+  v.activity := nullif(btrim(coalesce(p->>'activity', '')), '');
   v.address := private.sales_clean(p->>'address');
   v.province_code := nullif(btrim(coalesce(p->>'province_code', '')), '');
   v.city_id := private.sales_uuid(p->>'city_id');
@@ -4370,7 +4572,9 @@ begin
   if v.name is null or v.name_key = ''
      or char_length(v.name) > 200 or char_length(coalesce(v.name_en, '')) > 200
      or char_length(coalesce(v.ceo_name, '')) > 120 or char_length(coalesce(v.address, '')) > 500
-     or (v.kind is not null and v.kind not in ('government', 'contractor'))
+     or char_length(coalesce(v.activity, '')) > 1000
+     or (v.ceo_phone is not null and v.ceo_phone !~ '^\+?[0-9]{5,15}$')
+     or (v.kind is not null and v.kind not in ('government', 'contractor', 'private'))
      or (nullif(p->>'city_id', '') is not null and v.city_id is null)
      or (nullif(p->>'category_id', '') is not null and v.category_id is null)
      or (nullif(p->>'rank', '') is not null and (v_rank is null or v_rank not in (1, 2, 3, 4, 5)))
@@ -4382,9 +4586,9 @@ begin
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
   v.rank := v_rank::smallint;
-  if v.kind is distinct from 'contractor' then v.rank := null; v.category_id := null; end if;
+  if coalesce(v.kind, '') not in ('contractor', 'private') then v.rank := null; v.category_id := null; end if;
   return v;
-end $$;
+end $_$;
 
 
 --
@@ -4400,6 +4604,27 @@ begin
   return btrim(p)::date;
 exception when others then return null;
 end $_$;
+
+
+--
+-- Name: sales_diff(jsonb, jsonb, text[]); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_diff(p_before jsonb, p_after jsonb, p_private text[] DEFAULT '{}'::text[]) RETURNS jsonb
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object('field', ks.k, 'from', x.b -> ks.k, 'to', x.a -> ks.k)
+           || case when ks.k = any (coalesce(p_private, '{}'::text[])) then '{"private": true}'::jsonb
+                   else '{}'::jsonb end
+           order by ks.k), '[]'::jsonb)
+    from (select case when jsonb_typeof(p_before) = 'object' then p_before else '{}'::jsonb end as b,
+                 case when jsonb_typeof(p_after) = 'object' then p_after else '{}'::jsonb end as a) x
+   cross join lateral (select jsonb_object_keys(x.b) union select jsonb_object_keys(x.a)) as ks(k)
+   where (x.b -> ks.k) is distinct from (x.a -> ks.k)
+     and not (ks.k like '%\_id'
+              and (jsonb_typeof(x.b -> left(ks.k, -3)) = 'object' or jsonb_typeof(x.a -> left(ks.k, -3)) = 'object'));
+$$;
 
 
 --
@@ -4470,6 +4695,8 @@ begin
      and not exists (select 1 from public.sales_cities where company_id = p_company) then
     perform private.sales_seed_customer_lists(p_company);
   end if;
+  -- FR-99: key-person titles, only while the company has none.
+  perform private.sales_seed_contact_titles(p_company);
 end $_$;
 
 
@@ -4529,7 +4756,7 @@ begin
      and p->>'owner' !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
-  if nullif(p->>'kind', '') is not null and p->>'kind' not in ('government', 'contractor') then
+  if nullif(p->>'kind', '') is not null and p->>'kind' not in ('government', 'contractor', 'private') then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
   if nullif(p->>'incomplete', '') is not null and p->>'incomplete' not in ('1', 'true') then
@@ -4637,6 +4864,36 @@ end $$;
 
 
 --
+-- Name: sales_list_op(boolean, jsonb, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_list_op(p_new boolean, p_before jsonb, p_after jsonb) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+  select case when p_new then 'created'
+              when (p_before->>'active')::boolean and not (p_after->>'active')::boolean then 'hidden'
+              when not (p_before->>'active')::boolean and (p_after->>'active')::boolean then 'shown'
+              else 'edited' end;
+$$;
+
+
+--
+-- Name: sales_log(uuid, text, uuid, text, text, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_log(p_company uuid, p_entity text, p_entity_id uuid, p_label text, p_action text, p_body jsonb DEFAULT '{}'::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  insert into public.sales_audit (company_id, actor_id, entity, entity_id, entity_label, action, body)
+    values (p_company, auth.uid(), p_entity, p_entity_id, left(p_label, 300), p_action,
+            coalesce(p_body, '{}'::jsonb));
+end $$;
+
+
+--
 -- Name: sales_name_compact(text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4677,6 +4934,41 @@ end $$;
 
 
 --
+-- Name: sales_people_diff(jsonb, jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_people_diff(p_before jsonb, p_after jsonb) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+declare b jsonb := case when jsonb_typeof(p_before) = 'array' then p_before else '[]'::jsonb end;
+  a jsonb := case when jsonb_typeof(p_after) = 'array' then p_after else '[]'::jsonb end;
+  nb integer; na integer; i integer; v_add integer := 0; v_rem integer := 0; v_chg integer := 0;
+  v_from jsonb := '[]'::jsonb; v_to jsonb := '[]'::jsonb;
+begin
+  nb := jsonb_array_length(b); na := jsonb_array_length(a);
+  for i in 0 .. greatest(na, nb) - 1 loop
+    if i < na and i < nb then
+      if (b->i) is distinct from (a->i) then
+        v_chg := v_chg + 1;
+        v_from := v_from || jsonb_build_array(jsonb_build_object('position', i + 1) || (b->i));
+        v_to := v_to || jsonb_build_array(jsonb_build_object('position', i + 1) || (a->i));
+      end if;
+    elsif i < nb then
+      v_rem := v_rem + 1;
+      v_from := v_from || jsonb_build_array(jsonb_build_object('position', i + 1) || (b->i));
+    else
+      v_add := v_add + 1;
+      v_to := v_to || jsonb_build_array(jsonb_build_object('position', i + 1) || (a->i));
+    end if;
+  end loop;
+  if v_add + v_rem + v_chg = 0 then return null; end if;
+  return jsonb_build_object('field', 'people', 'private', true, 'added', v_add, 'removed', v_rem,
+                            'changed', v_chg, 'from', v_from, 'to', v_to);
+end $$;
+
+
+--
 -- Name: sales_phone(text); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -4687,6 +4979,27 @@ CREATE FUNCTION private.sales_phone(p text) RETURNS text
   select nullif(regexp_replace(translate(btrim(coalesce(p, '')), '۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789'),
                                '[\s().-]', '', 'g'), '');
 $$;
+
+
+--
+-- Name: sales_phones_missing_trg(); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_phones_missing_trg() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    update public.sales_customers set missing = missing
+     where id = (select customer_id from public.sales_customer_contacts where id = old.contact_id);
+  end if;
+  if tg_op = 'INSERT' or (tg_op = 'UPDATE' and new.contact_id <> old.contact_id) then
+    update public.sales_customers set missing = missing
+     where id = (select customer_id from public.sales_customer_contacts where id = new.contact_id);
+  end if;
+  return null;
+end $$;
 
 
 --
@@ -4733,6 +5046,23 @@ begin
   end if;
   return to_jsonb(btrim(p_value #>> '{}'));
 end $_$;
+
+
+--
+-- Name: sales_product_snapshot(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_product_snapshot(p_id uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select jsonb_build_object('name_fa', p.name_fa, 'name_en', p.name_en, 'code', p.code, 'active', p.active,
+           'position', p.position,
+           'fields', (select coalesce(jsonb_agg(jsonb_build_object('field', f.field, 'default', f."default")
+                                                order by f.position, f.field), '[]'::jsonb)
+                        from public.sales_product_fields f where f.product_id = p.id))
+    from public.sales_products p where p.id = p_id;
+$$;
 
 
 --
@@ -4937,6 +5267,35 @@ $$;
 
 
 --
+-- Name: sales_seed_contact_titles(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_seed_contact_titles(p_company uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+begin
+  if exists (select 1 from public.sales_contact_titles where company_id = p_company) then return; end if;
+  insert into public.sales_contact_titles (company_id, name_fa, name_key, name_en, position)
+  select p_company, v.fa, private.sales_name_key(v.fa), v.en, v.pos
+    from (values
+      ('رئیس هیئت مدیره', 'Chairman of the board', 1),
+      ('قائم‌مقام مدیرعامل', 'Deputy CEO', 2),
+      ('مدیر بازرگانی', 'Commercial manager', 3),
+      ('مدیر تأمین', 'Procurement manager', 4),
+      ('کارشناس خرید', 'Purchasing expert', 5),
+      ('مدیر فنی', 'Technical manager', 6),
+      ('مدیر مهندسی', 'Engineering manager', 7),
+      ('مدیر پروژه', 'Project manager', 8),
+      ('مدیر کنترل کیفیت', 'QC manager', 9),
+      ('مدیر برنامه‌ریزی', 'Planning manager', 10),
+      ('مدیر مالی', 'Finance manager', 11),
+      ('دفتر / منشی', 'Office / secretary', 12)) as v(fa, en, pos)
+  on conflict (company_id, name_key) do nothing;
+end $$;
+
+
+--
 -- Name: sales_seed_customer_lists(uuid); Type: FUNCTION; Schema: private; Owner: -
 --
 
@@ -5048,6 +5407,71 @@ begin
          n.description, n.qty, n.unit, ip.unit_price, p_on
     from public.project_nodes n join public.sales_item_prices ip on ip.node_id = n.id
    where n.rfp_id = p_rfp;
+end $$;
+
+
+--
+-- Name: sales_stage_snapshot(uuid); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_stage_snapshot(p_id uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  select jsonb_build_object('name_fa', s.name_fa, 'name_en', s.name_en, 'kind', s.kind, 'action', s.action,
+           'active', s.active, 'required', to_jsonb(s.required),
+           'owner_role', (select jsonb_build_object('id', r.id, 'name', r.name)
+                            from public.roles r where r.id = s.owner_role_id))
+    from public.sales_stages s where s.id = p_id;
+$$;
+
+
+--
+-- Name: sales_strip_private(jsonb, boolean); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_strip_private(p_body jsonb, p_private boolean) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+declare v jsonb;
+begin
+  if p_private or p_body is null then return p_body; end if;
+  v := private.sales_strip_walk(p_body);
+  if v is distinct from p_body and jsonb_typeof(v) = 'object' then
+    v := v || '{"private_changed": true}'::jsonb;
+  end if;
+  return v;
+end $$;
+
+
+--
+-- Name: sales_strip_walk(jsonb); Type: FUNCTION; Schema: private; Owner: -
+--
+
+CREATE FUNCTION private.sales_strip_walk(p jsonb) RETURNS jsonb
+    LANGUAGE plpgsql IMMUTABLE
+    SET search_path TO ''
+    AS $$
+declare v jsonb := '{}'::jsonb; k text; e jsonb; v_hit boolean := false;
+  v_keys text[] := array['ceo_name', 'ceo_phone', 'address', 'people', 'contacts'];
+begin
+  if jsonb_typeof(p) = 'object' then
+    if p->'private' = 'true'::jsonb or (jsonb_typeof(p->'field') = 'string' and p->>'field' = any (v_keys)) then
+      return jsonb_build_object('field', p->'field', 'private', true);
+    end if;
+    for k, e in select * from jsonb_each(p) loop
+      if k = any (v_keys) then v_hit := true;
+      else v := v || jsonb_build_object(k, private.sales_strip_walk(e));
+      end if;
+    end loop;
+    if v_hit then v := v || '{"private_changed": true}'::jsonb; end if;
+    return v;
+  elsif jsonb_typeof(p) = 'array' then
+    return coalesce((select jsonb_agg(private.sales_strip_walk(t.x) order by t.i)
+                       from jsonb_array_elements(p) with ordinality as t(x, i)), '[]'::jsonb);
+  end if;
+  return p;
 end $$;
 
 
@@ -10146,6 +10570,91 @@ end $$;
 
 
 --
+-- Name: app_sales_activity(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_activity(p jsonb DEFAULT '{}'::jsonb) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales_activity', 'read');
+  v_private boolean := private.sales_can('sales_customers', 'edit');
+  v_admin boolean := private.sales_is_admin();
+  v_actor uuid; v_from timestamptz; v_to timestamptz; v_entity text; v_bat timestamptz; v_bid uuid;
+  v_rows jsonb; v_next jsonb;
+begin
+  p := coalesce(p, '{}'::jsonb);
+  if jsonb_typeof(p) <> 'object' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  if nullif(p->>'actor', '') is not null then
+    v_actor := private.sales_uuid(p->>'actor');
+    if v_actor is null then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  end if;
+  if nullif(p->>'from', '') is not null then
+    v_from := private.sales_date(p->>'from')::timestamp at time zone 'Asia/Tehran';
+    if v_from is null then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  end if;
+  if nullif(p->>'to', '') is not null then
+    v_to := (private.sales_date(p->>'to') + 1)::timestamp at time zone 'Asia/Tehran';
+    if v_to is null then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  end if;
+  v_entity := nullif(p->>'entity', '');
+  if v_entity is not null and v_entity not in ('record', 'customer', 'product', 'settings', 'import') then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  end if;
+  if jsonb_typeof(p->'before') = 'object' then
+    begin
+      v_bat := (p->'before'->>'at')::timestamptz;
+    exception when others then
+      raise exception 'sales: invalid input' using errcode = '22023';
+    end;
+    v_bid := private.sales_uuid(p->'before'->>'id');
+    if v_bat is null or v_bid is null then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  end if;
+
+  with ev as (
+    select 'record'::text as source, e.id, e.at, e.actor_id, 'record'::text as entity, e.rfp_id as entity_id,
+           r.record_no::text || ' · ' || r.title as entity_label, e.kind as action, e.body,
+           r.deleted_at is null as present
+      from public.sales_events e join public.sales_rfps r on r.id = e.rfp_id
+     where e.company_id = v_company and e.kind <> 'import'   -- the import audit row stands for them
+       and (r.deleted_at is null or v_admin)
+       and (v_entity is null or v_entity = 'record')
+       and (v_actor is null or e.actor_id = v_actor)
+       and (v_from is null or e.at >= v_from) and (v_to is null or e.at < v_to)
+       and (v_bat is null or (e.at, e.id) < (v_bat, v_bid))
+     order by e.at desc, e.id desc limit 51),
+  au as (
+    select 'audit'::text, a.id, a.at, a.actor_id, a.entity, a.entity_id, a.entity_label, a.action, a.body,
+           case a.entity
+             when 'customer' then exists (select 1 from public.sales_customers c where c.id = a.entity_id)
+             when 'product' then exists (select 1 from public.sales_products x where x.id = a.entity_id)
+             when 'import' then exists (select 1 from public.sales_import_batches b where b.id = a.entity_id)
+             else false end
+      from public.sales_audit a
+     where a.company_id = v_company
+       and (v_entity is null or a.entity = v_entity)
+       and (v_actor is null or a.actor_id = v_actor)
+       and (v_from is null or a.at >= v_from) and (v_to is null or a.at < v_to)
+       and (v_bat is null or (a.at, a.id) < (v_bat, v_bid))
+     order by a.at desc, a.id desc limit 51),
+  pg as (select * from ev union all select * from au order by at desc, id desc limit 51)
+  select coalesce(jsonb_agg(jsonb_build_object('source', pg.source, 'id', pg.id, 'at', pg.at,
+           'actor_id', pg.actor_id, 'actor_name', pr.full_name, 'entity', pg.entity, 'entity_id', pg.entity_id,
+           'entity_label', pg.entity_label, 'action', pg.action,
+           'body', private.sales_strip_private(pg.body, v_private), 'exists', pg.present)
+         order by pg.at desc, pg.id desc), '[]'::jsonb)
+    into v_rows
+    from pg left join public.profiles pr on pr.id = pg.actor_id;
+
+  if jsonb_array_length(v_rows) > 50 then
+    v_next := jsonb_build_object('at', v_rows->49->'at', 'id', v_rows->49->'id');
+    v_rows := v_rows - 50;
+  end if;
+  return jsonb_build_object('rows', v_rows, 'next', v_next);
+end $$;
+
+
+--
 -- Name: app_sales_add_customer(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10162,7 +10671,7 @@ begin
   v_name := private.sales_clean(p->>'name');
   v_kind := nullif(p->>'kind', '');
   if v_name is null or char_length(v_name) > 200 or private.sales_name_key(v_name) = ''
-     or (v_kind is not null and v_kind not in ('government', 'contractor')) then
+     or (v_kind is not null and v_kind not in ('government', 'contractor', 'private')) then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
   perform private.sales_customer_lock(v_company);
@@ -10171,9 +10680,11 @@ begin
     select * into v_found from public.sales_customers where id = v_id;
     return jsonb_build_object('id', v_found.id, 'existed', true, 'name', v_found.name, 'kind', v_found.kind);
   end if;
-  insert into public.sales_customers (company_id, name, name_key, kind, updated_at, updated_by)
-    values (v_company, v_name, private.sales_name_key(v_name), v_kind, now(), auth.uid())
+  insert into public.sales_customers (company_id, name, name_key, kind, created_by, updated_at, updated_by)
+    values (v_company, v_name, private.sales_name_key(v_name), v_kind, auth.uid(), now(), auth.uid())
     returning id into v_id;
+  perform private.sales_customer_log_diff(v_company, v_id, 'created', '{}'::jsonb,
+                                          jsonb_build_object('source', 'record'));
   return jsonb_build_object('id', v_id, 'existed', false, 'name', v_name, 'kind', v_kind);
 end $$;
 
@@ -10247,7 +10758,8 @@ begin
       'items_edit', private.sales_can('project_items', 'edit'),
       'remove_records', private.sales_is_admin(),
       'customers', private.sales_can('sales_customers', 'edit'),
-      'customers_import', private.sales_can('sales_customers_import', 'edit')),
+      'customers_import', private.sales_can('sales_customers_import', 'edit'),
+      'activity', private.sales_can('sales_activity', 'read')),
     'me', auth.uid(),
     'flows', (select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'kind', f.kind,
                 'name_fa', f.name_fa, 'name_en', f.name_en) order by f.kind), '[]'::jsonb)
@@ -10371,6 +10883,35 @@ end $$;
 
 
 --
+-- Name: app_sales_customer_history(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_customer_history(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company(); v_private boolean := private.sales_can('sales_customers', 'edit');
+begin
+  return (
+    with recursive ids(id) as (
+      select p_id
+      union
+      select private.sales_uuid(a.body->>'from_id')
+        from public.sales_audit a join ids on a.entity_id = ids.id
+       where a.company_id = v_company and a.entity = 'customer' and a.action = 'merged_from'
+         and private.sales_uuid(a.body->>'from_id') is not null)
+    select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'at', a.at, 'actor_id', a.actor_id,
+             'actor_name', pr.full_name, 'entity', a.entity, 'entity_id', a.entity_id, 'entity_label', a.entity_label,
+             'action', a.action, 'body', private.sales_strip_private(a.body, v_private))
+           order by a.at desc, a.id desc), '[]'::jsonb)
+      from (select * from public.sales_audit
+             where company_id = v_company and entity = 'customer' and entity_id in (select id from ids)
+             order by at desc, id desc limit 500) a
+      left join public.profiles pr on pr.id = a.actor_id);
+end $$;
+
+
+--
 -- Name: app_sales_customer_import(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10381,14 +10922,16 @@ CREATE FUNCTION public.app_sales_customer_import(p jsonb) RETURNS jsonb
 declare
   v_company uuid := private.sales_company('sales_customers_import', 'edit');
   v_default text; v_file text; v_first jsonb; v_res jsonb; v_maps jsonb;
-  v_cats jsonb := '{}'::jsonb; v_cities jsonb := '{}'::jsonb;
+  v_cats jsonb := '{}'::jsonb; v_cities jsonb := '{}'::jsonb; v_titles jsonb := '{}'::jsonb;
   v_u jsonb; v_dec jsonb; v_act text; v_id uuid; v_fa text; v_en text; v_key text; v_pc text;
   v_batch uuid; v_r jsonb; v_action text; v_m public.sales_customers; v_cv public.sales_customers;
-  v_merged public.sales_customers; v_vals jsonb; v_c jsonb; v_nc integer;
+  v_merged public.sales_customers; v_vals jsonb; v_c jsonb; v_nc integer; v_kid uuid; v_before jsonb;
   v_created integer := 0; v_updated integer := 0; v_skipped integer := 0; v_dropped integer := 0;
   v_touched uuid[] := '{}'; v_changed boolean; v_contact_added boolean; v_incomplete integer;
+  v_lists integer := 0; v_new_list boolean;
 begin
-  if p is null or jsonb_typeof(p) <> 'object' then
+  if p is null or jsonb_typeof(p) <> 'object'
+     or (p ? 'titles' and jsonb_typeof(p->'titles') not in ('object', 'null')) then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
   v_default := coalesce(nullif(p->>'default_action', ''), 'skip');
@@ -10403,7 +10946,7 @@ begin
 
   perform private.sales_customer_lock(v_company);
   begin
-    -- 1. The lists the file needs: create or map the unknown categories / cities, then resolve again.
+    -- 1. The lists the file needs: create or map the unknown categories / cities, map titles, then resolve again.
     v_first := private.sales_customer_import_resolve(v_company, p->'rows');
     for v_u in select x from jsonb_array_elements(v_first->'unknown'->'categories') as t(x) loop
       v_dec := case when jsonb_typeof(p->'categories'->(v_u->>'key')) = 'object' then p->'categories'->(v_u->>'key') else '{}'::jsonb end;
@@ -10420,6 +10963,9 @@ begin
                       (select coalesce(max(position), 0) + 1 from public.sales_contractor_categories where company_id = v_company),
                       auth.uid())
               returning id into v_id;
+            perform private.sales_log(v_company, 'settings', v_id, v_fa, 'category',
+              jsonb_build_object('op', 'created', 'source', 'import', 'name', v_fa, 'name_en', v_en));
+            v_lists := v_lists + 1;
           end if;
         end if;
       elsif v_act = 'use' then
@@ -10446,6 +10992,10 @@ begin
             v_en := case when v_fa !~ '[؀-ۿ]' then v_fa end;
             insert into public.sales_cities (company_id, province_code, name_fa, name_key, name_en, created_by)
               values (v_company, v_pc, v_fa, v_key, v_en, auth.uid()) returning id into v_id;
+            perform private.sales_log(v_company, 'settings', v_id, v_fa, 'city',
+              jsonb_build_object('op', 'created', 'source', 'import', 'name', v_fa, 'name_en', v_en,
+                                 'province_code', v_pc));
+            v_lists := v_lists + 1;
           end if;
         end if;
       elsif v_act = 'use' then
@@ -10459,7 +11009,22 @@ begin
         v_cities := v_cities || jsonb_build_object(v_pc || '|' || (v_u->>'key'), v_id);
       end if;
     end loop;
-    v_maps := jsonb_build_object('categories', v_cats, 'cities', v_cities);
+    -- FR-99: titles are only mapped to an active one (use) or left empty (empty / no decision); never created.
+    for v_u in select x from jsonb_array_elements(v_first->'unknown'->'titles') as t(x) loop
+      v_dec := case when jsonb_typeof(p->'titles') = 'object' then p->'titles'->(v_u->>'key') end;
+      if v_dec is null or jsonb_typeof(v_dec) = 'null' then continue; end if;
+      if jsonb_typeof(v_dec) <> 'object' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+      v_act := v_dec->>'action';
+      if v_act = 'empty' then continue; end if;
+      if v_act is distinct from 'use' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+      v_id := private.sales_uuid(v_dec->>'id');
+      if v_id is null or not exists (select 1 from public.sales_contact_titles
+                                      where id = v_id and company_id = v_company and active) then
+        raise exception 'sales: invalid input' using errcode = '22023';
+      end if;
+      v_titles := v_titles || jsonb_build_object(v_u->>'key', v_id);
+    end loop;
+    v_maps := jsonb_build_object('categories', v_cats, 'cities', v_cities, 'titles', v_titles);
     v_res := private.sales_customer_import_resolve(v_company, p->'rows', v_maps);
 
     -- 2. The batch (counts filled in at the end).
@@ -10475,17 +11040,24 @@ begin
       v_c := case when jsonb_typeof(v_r->'contact') = 'object' then v_r->'contact' end;
       if v_r->>'status' = 'new' then
         v_cv := private.sales_customer_values(v_company, v_r->'values');
-        insert into public.sales_customers (company_id, name, name_key, name_en, name_en_key, kind, ceo_name,
-                                            province_code, city_id, address, rank, category_id, import_batch_id)
+        insert into public.sales_customers (company_id, name, name_key, name_en, name_en_key, kind, ceo_name, ceo_phone,
+                                            activity, province_code, city_id, address, rank, category_id,
+                                            import_batch_id, created_by)
           values (v_company, v_cv.name, v_cv.name_key, v_cv.name_en, v_cv.name_en_key, v_cv.kind, v_cv.ceo_name,
-                  v_cv.province_code, v_cv.city_id, v_cv.address, v_cv.rank, v_cv.category_id, v_batch)
+                  v_cv.ceo_phone, v_cv.activity, v_cv.province_code, v_cv.city_id, v_cv.address, v_cv.rank,
+                  v_cv.category_id, v_batch, auth.uid())
           returning id into v_id;
         if v_c is not null then
-          insert into public.sales_customer_contacts (company_id, customer_id, person, title, label, phone, email, position)
-            values (v_company, v_id, v_c->>'person', v_c->>'title', v_c->>'label', v_c->>'phone', v_c->>'email', 1);
+          insert into public.sales_customer_contacts (company_id, customer_id, person, title_id, email, position)
+            values (v_company, v_id, v_c->>'name', (v_c->>'title_id')::uuid, v_c->>'email', 1) returning id into v_kid;
+          insert into public.sales_customer_phones (company_id, contact_id, label, phone, position)
+            select v_company, v_kid, x->>'label', x->>'phone', o::integer
+              from jsonb_array_elements(v_c->'phones') with ordinality as w(x, o);
         end if;
         v_created := v_created + 1; v_touched := v_touched || v_id;
         v_dropped := v_dropped + jsonb_array_length(v_r->'dropped') + jsonb_array_length(v_r->'unknown');
+        perform private.sales_customer_log_diff(v_company, v_id, 'imported_created', '{}'::jsonb,
+          jsonb_build_object('batch_id', v_batch, 'file', v_file));
       else
         v_action := coalesce(nullif(p->'actions'->>(v_r->>'row'), ''), v_default);
         if v_action = 'skip' then
@@ -10494,36 +11066,54 @@ begin
         end if;
         v_id := (v_r->'match'->>'id')::uuid;
         select * into v_m from public.sales_customers where id = v_id and company_id = v_company for update;
+        v_before := private.sales_customer_snapshot(v_id);
         v_vals := (v_r->'values') || jsonb_build_object('kind', coalesce(v_r->'values'->>'kind', v_m.kind));
         v_cv := private.sales_customer_values(v_company, v_vals);
         v_merged := private.sales_customer_import_merge(v_m, v_cv, v_action = 'overwrite');
         -- Validate the merged row exactly like the form does.
         v_merged := private.sales_customer_values(v_company, jsonb_build_object(
           'name', v_m.name, 'name_en', v_merged.name_en, 'kind', v_merged.kind, 'ceo_name', v_merged.ceo_name,
+          'ceo_phone', v_merged.ceo_phone, 'activity', v_merged.activity,
           'province_code', v_merged.province_code, 'city_id', v_merged.city_id, 'address', v_merged.address,
           'rank', v_merged.rank, 'category_id', v_merged.category_id));
-        -- Update keeps an existing non-contractor type: the file's rank / category cannot be kept.
-        if v_merged.kind is distinct from 'contractor' then
+        -- Update keeps an existing Government type: the file's rank / category cannot be kept.
+        if coalesce(v_merged.kind, '') not in ('contractor', 'private') then
           v_dropped := v_dropped + (v_cv.rank is not null)::integer + (v_cv.category_id is not null)::integer;
         end if;
-        v_changed := (v_merged.name_en, v_merged.name_en_key, v_merged.kind, v_merged.ceo_name, v_merged.province_code,
-                      v_merged.city_id, v_merged.address, v_merged.rank, v_merged.category_id)
-          is distinct from (v_m.name_en, v_m.name_en_key, v_m.kind, v_m.ceo_name, v_m.province_code,
-                            v_m.city_id, v_m.address, v_m.rank, v_m.category_id);
+        v_changed := (v_merged.name_en, v_merged.name_en_key, v_merged.kind, v_merged.ceo_name, v_merged.ceo_phone,
+                      v_merged.activity, v_merged.province_code, v_merged.city_id, v_merged.address, v_merged.rank,
+                      v_merged.category_id)
+          is distinct from (v_m.name_en, v_m.name_en_key, v_m.kind, v_m.ceo_name, v_m.ceo_phone,
+                            v_m.activity, v_m.province_code, v_m.city_id, v_m.address, v_m.rank, v_m.category_id);
+        -- The row's entry joins the phone book unless it is there already (spec §11.4): its number is
+        -- on the customer, or (no number) an entry with the same name and title exists. At most 50.
         v_contact_added := false;
         if v_c is not null then
           select count(*)::integer into v_nc from public.sales_customer_contacts where customer_id = v_id;
-          if v_nc < 50 and not exists (select 1 from public.sales_customer_contacts k
-                                        where k.customer_id = v_id and k.phone = v_c->>'phone') then
-            insert into public.sales_customer_contacts (company_id, customer_id, person, title, label, phone, email, position)
-              values (v_company, v_id, v_c->>'person', v_c->>'title', v_c->>'label', v_c->>'phone', v_c->>'email',
-                      (select coalesce(max(position), 0) + 1 from public.sales_customer_contacts where customer_id = v_id));
+          if v_nc < 50 and not (case
+               when jsonb_array_length(v_c->'phones') > 0 then
+                 exists (select 1 from public.sales_customer_phones q
+                           join public.sales_customer_contacts k on k.id = q.contact_id
+                          where k.customer_id = v_id and q.phone = v_c->'phones'->0->>'phone')
+               else exists (select 1 from public.sales_customer_contacts k
+                             where k.customer_id = v_id
+                               and private.sales_name_key(k.person) = private.sales_name_key(v_c->>'name')
+                               and k.title_id is not distinct from (v_c->>'title_id')::uuid)
+               end) then
+            insert into public.sales_customer_contacts (company_id, customer_id, person, title_id, email, position)
+              values (v_company, v_id, v_c->>'name', (v_c->>'title_id')::uuid, v_c->>'email',
+                      (select coalesce(max(position), 0) + 1 from public.sales_customer_contacts where customer_id = v_id))
+              returning id into v_kid;
+            insert into public.sales_customer_phones (company_id, contact_id, label, phone, position)
+              select v_company, v_kid, x->>'label', x->>'phone', o::integer
+                from jsonb_array_elements(v_c->'phones') with ordinality as w(x, o);
             v_contact_added := true;
           end if;
         end if;
         if v_changed then
           update public.sales_customers set name_en = v_merged.name_en, name_en_key = v_merged.name_en_key,
-              kind = v_merged.kind, ceo_name = v_merged.ceo_name, province_code = v_merged.province_code,
+              kind = v_merged.kind, ceo_name = v_merged.ceo_name, ceo_phone = v_merged.ceo_phone,
+              activity = v_merged.activity, province_code = v_merged.province_code,
               city_id = v_merged.city_id, address = v_merged.address, rank = v_merged.rank,
               category_id = v_merged.category_id, updated_at = now(), updated_by = auth.uid()
            where id = v_id;
@@ -10533,6 +11123,8 @@ begin
         if v_changed or v_contact_added then
           v_updated := v_updated + 1; v_touched := v_touched || v_id;
           v_dropped := v_dropped + jsonb_array_length(v_r->'dropped') + jsonb_array_length(v_r->'unknown');
+          perform private.sales_customer_log_diff(v_company, v_id, 'imported_updated', v_before,
+            jsonb_build_object('batch_id', v_batch, 'file', v_file, 'mode', v_action));
         else
           v_skipped := v_skipped + 1;
         end if;
@@ -10552,6 +11144,11 @@ begin
     when check_violation or not_null_violation or foreign_key_violation or unique_violation then
       raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  if v_created + v_updated + v_lists > 0 then
+    perform private.sales_log(v_company, 'import', v_batch, v_file, 'customer_import',
+      jsonb_build_object('file', v_file, 'created', v_created, 'updated', v_updated, 'skipped', v_skipped,
+                         'incomplete', v_incomplete, 'dropped', v_dropped, 'lists_created', v_lists));
+  end if;
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
     'skipped', v_skipped, 'incomplete', v_incomplete, 'dropped', v_dropped);
 end $$;
@@ -10589,7 +11186,10 @@ begin
                  from public.sales_cities where company_id = v_company and (active or v_all)),
     'categories', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name_fa', name_fa, 'name_en', name_en,
                      'active', active, 'position', position) order by position, name_fa), '[]'::jsonb)
-                     from public.sales_contractor_categories where company_id = v_company and (active or v_all)));
+                     from public.sales_contractor_categories where company_id = v_company and (active or v_all)),
+    'titles', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name_fa', name_fa, 'name_en', name_en,
+                 'active', active, 'position', position) order by position, name_fa), '[]'::jsonb)
+                 from public.sales_contact_titles where company_id = v_company and (active or v_all)));
 end $$;
 
 
@@ -10703,15 +11303,18 @@ CREATE FUNCTION public.app_sales_delete_currency(p_code text) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_company uuid := private.sales_company('sales_settings', 'edit');
+declare v_company uuid := private.sales_company('sales_settings', 'edit'); c public.sales_currencies;
 begin
-  perform 1 from public.sales_currencies where company_id = v_company and code = p_code for update;
+  select * into c from public.sales_currencies where company_id = v_company and code = p_code for update;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   if exists (select 1 from public.sales_rfps where company_id = v_company and currency = p_code)
      or exists (select 1 from public.sales_bonds where company_id = v_company and currency = p_code) then
     raise exception 'sales: in use' using errcode = '22023';
   end if;
   delete from public.sales_currencies where company_id = v_company and code = p_code;
+  perform private.sales_log(v_company, 'settings', null, c.name_fa, 'currency',
+    jsonb_build_object('op', 'deleted', 'name', c.name_fa, 'name_en', c.name_en, 'code', c.code,
+                       'snapshot', to_jsonb(c) - 'company_id'));
 end $$;
 
 
@@ -10779,14 +11382,16 @@ CREATE FUNCTION public.app_sales_delete_product(p_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_company uuid := private.sales_company('sales_settings', 'edit');
+declare v_company uuid := private.sales_company('sales_settings', 'edit'); v_name text; v_snap jsonb;
 begin
-  perform 1 from public.sales_products where id = p_id and company_id = v_company for update;
+  select name_fa into v_name from public.sales_products where id = p_id and company_id = v_company for update;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   if exists (select 1 from public.project_nodes where product_id = p_id) then
     raise exception 'sales: in use' using errcode = '22023';
   end if;
+  v_snap := private.sales_product_snapshot(p_id);
   delete from public.sales_products where id = p_id;
+  perform private.sales_log(v_company, 'product', p_id, v_name, 'deleted', jsonb_build_object('snapshot', v_snap));
 end $$;
 
 
@@ -10986,6 +11591,8 @@ begin
   select id into v_flow from public.sales_flows where company_id = v_company and kind = 'contract';
   insert into public.sales_import_batches (company_id, file_name, created_by)
     values (v_company, nullif(left(btrim(coalesce(p_file, '')), 200), ''), auth.uid()) returning id into v_batch;
+  -- FR-99: customers this import creates log their source (private.sales_customer reads it).
+  perform set_config('bj.sales_source', 'ledger_import:' || v_batch::text, true);
 
   -- Extra columns the importer asked to keep: one text field per header.
   for v_header in select btrim(h) from jsonb_array_elements_text(coalesce(p_fields, '[]')) h loop
@@ -11187,6 +11794,10 @@ begin
   update public.sales_settings set next_record_no = greatest(next_record_no,
       (select coalesce(max(record_no), 0) + 1 from public.sales_rfps where company_id = v_company))
    where company_id = v_company;
+  perform set_config('bj.sales_source', '', true);
+  perform private.sales_log(v_company, 'import', v_batch, nullif(left(btrim(coalesce(p_file, '')), 200), ''),
+    'ledger_import', jsonb_build_object('file', nullif(left(btrim(coalesce(p_file, '')), 200), ''),
+      'created', v_created, 'updated', v_updated, 'skipped', v_skipped, 'deleted', v_deleted));
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
     'skipped', v_skipped, 'skipped_rows', v_reasons, 'deleted', v_deleted);
 end $$;
@@ -11231,6 +11842,8 @@ begin
     end if;
     v_batch := p_batch;
   end if;
+  -- FR-99: customers this import creates log their source (private.sales_customer reads it).
+  perform set_config('bj.sales_source', 'inquiry_import:' || v_batch::text, true);
   select id into v_bid from public.sales_flows where company_id = v_company and kind = 'bid';
   select id into v_contract from public.sales_flows where company_id = v_company and kind = 'contract';
   perform private.sales_inquiry_fields(v_company);
@@ -11418,6 +12031,13 @@ begin
   update public.sales_settings set next_record_no = greatest(next_record_no,
       (select coalesce(max(record_no), 0) + 1 from public.sales_rfps where company_id = v_company))
    where company_id = v_company;
+  perform set_config('bj.sales_source', '', true);
+  -- One row per call (a file arrives in several calls): the counts of this call.
+  perform private.sales_log(v_company, 'import', v_batch,
+    (select file_name from public.sales_import_batches where id = v_batch), 'inquiry_import',
+    jsonb_build_object('file', (select file_name from public.sales_import_batches where id = v_batch),
+      'created', v_created, 'updated', v_updated, 'skipped', v_skipped, 'deleted', v_deleted,
+      'by_result', v_by, 'last', coalesce(p_last, false)));
   return jsonb_build_object('batch_id', v_batch, 'created', v_created, 'updated', v_updated,
     'skipped', v_skipped, 'skipped_rows', v_reasons, 'by_result', v_by, 'deleted', v_deleted);
 end $$;
@@ -11563,6 +12183,12 @@ begin
       on conflict (company_id, kind, alias_key) do update
         set target_id = excluded.target_id, alias = excluded.alias, created_by = excluded.created_by;
   end if;
+  if v_old is distinct from p_profile or v_n > 0 then
+    perform private.sales_log(v_company, 'settings', coalesce(p_profile, v_old), v_name, 'name_match',
+      jsonb_build_object('op', case when p_profile is null then 'removed' else 'added' end, 'name', v_name,
+                         'profile_id', coalesce(p_profile, v_old), 'profile_name', coalesce(v_to, v_from),
+                         'from_name', v_from, 'updated', v_n));
+  end if;
   return jsonb_build_object('updated', v_n);
 end $$;
 
@@ -11577,7 +12203,8 @@ CREATE FUNCTION public.app_sales_merge_customers(p_from uuid, p_into uuid) RETUR
     AS $$
 declare v_company uuid := private.sales_company('sales_settings', 'edit');
   v_from public.sales_customers; v_into public.sales_customers; v_ids uuid[]; v_n integer; v_kind text;
-  v_pairs jsonb; v_after public.sales_customers;
+  v_pairs jsonb; v_after public.sales_customers; v_from_snap jsonb; v_into_before jsonb;
+  v_nk integer; v_pos integer;
 begin
   if p_from is null or p_into is null or p_from = p_into then
     raise exception 'sales: invalid input' using errcode = '22023';
@@ -11589,6 +12216,8 @@ begin
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   select * into v_into from public.sales_customers where id = p_into and company_id = v_company;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  v_from_snap := private.sales_customer_snapshot(p_from);
+  v_into_before := private.sales_customer_snapshot(p_into);
   select coalesce(array_agg(id order by id), '{}') into v_ids from (
     select id from public.sales_rfps
      where company_id = v_company and (buyer_id = p_from or client_id = p_from)
@@ -11603,15 +12232,30 @@ begin
     select v_company, id, auth.uid(), 'edit',
            jsonb_build_object('side', 'customer_merge', 'from', v_from.name, 'into', v_into.name)
       from unnest(v_ids) as u(id);
-  -- FR-98: the source's contacts move (a phone the target has is skipped; at most 50 in all).
-  update public.sales_customer_contacts k set customer_id = p_into,
-         position = k.position + 1000
-   where k.id in (
-     select x.id from public.sales_customer_contacts x
-      where x.customer_id = p_from
-        and not exists (select 1 from public.sales_customer_contacts y where y.customer_id = p_into and y.phone = x.phone)
-      order by x.position, x.id
-      limit greatest(0, 50 - (select count(*) from public.sales_customer_contacts where customer_id = p_into)));
+  -- FR-99: the source's phone-book entries move with their numbers, after the target's own. An entry
+  -- with numbers is skipped when the target already has every one of them; one without numbers when
+  -- the target has an entry with the same name and title. At most 50 entries in all.
+  select count(*)::integer, coalesce(max(position), 0) into v_nk, v_pos
+    from public.sales_customer_contacts where customer_id = p_into;
+  update public.sales_customer_contacts k set customer_id = p_into, position = v_pos + m.rn
+    from (select x.id, row_number() over (order by x.position, x.id) as rn
+            from public.sales_customer_contacts x
+           where x.customer_id = p_from
+             and not case
+               when exists (select 1 from public.sales_customer_phones ph where ph.contact_id = x.id) then
+                 not exists (select 1 from public.sales_customer_phones ph
+                              where ph.contact_id = x.id
+                                and not exists (select 1 from public.sales_customer_phones q
+                                                  join public.sales_customer_contacts y on y.id = q.contact_id
+                                                 where y.customer_id = p_into and q.phone = ph.phone))
+               else exists (select 1 from public.sales_customer_contacts y
+                             where y.customer_id = p_into
+                               and private.sales_name_key(y.person) = private.sales_name_key(x.person)
+                               and y.title_id is not distinct from x.title_id)
+               end
+           order by x.position, x.id
+           limit greatest(0, 50 - v_nk)) m
+   where k.id = m.id;
   -- Every complete pair either side holds, in order (target first), before the source row goes.
   select coalesce(jsonb_agg(jsonb_build_object('rank', rank, 'category_id', category_id) order by side, pos), '[]'::jsonb)
     into v_pairs
@@ -11634,13 +12278,15 @@ begin
       name_en = coalesce(v_into.name_en, v_from.name_en),
       name_en_key = coalesce(v_into.name_en_key, v_from.name_en_key),
       ceo_name = coalesce(v_into.ceo_name, v_from.ceo_name),
+      ceo_phone = coalesce(v_into.ceo_phone, v_from.ceo_phone),
+      activity = coalesce(v_into.activity, v_from.activity),
       address = coalesce(v_into.address, v_from.address),
       province_code = case when v_into.province_code is null then v_from.province_code else v_into.province_code end,
       city_id = case when v_into.province_code is null then v_from.city_id
                      when v_into.city_id is null and v_from.province_code = v_into.province_code then v_from.city_id
                      else v_into.city_id end,
-      rank = case when v_kind = 'contractor' then coalesce(v_into.rank, v_from.rank) end,
-      category_id = case when v_kind = 'contractor' then coalesce(v_into.category_id, v_from.category_id) end,
+      rank = case when v_kind in ('contractor', 'private') then coalesce(v_into.rank, v_from.rank) end,
+      category_id = case when v_kind in ('contractor', 'private') then coalesce(v_into.category_id, v_from.category_id) end,
       updated_at = now(), updated_by = auth.uid()
    where id = p_into;
   -- Further pairs: every distinct complete pair except the target's (new) first one, at most 9.
@@ -11666,6 +12312,16 @@ begin
   delete from public.sales_name_aliases
    where company_id = v_company and kind = 'customer'
      and alias_key in (v_into.name_key, coalesce(v_into.name_en_key, v_from.name_en_key, ''));
+  -- History: on the removed customer (its name kept as the label) and on the kept one.
+  perform private.sales_log(v_company, 'customer', p_from, v_from.name, 'merged_into',
+    jsonb_build_object('into_id', p_into, 'into_name', v_into.name, 'snapshot', v_from_snap));
+  perform private.sales_customer_log_diff(v_company, p_into, 'merged_from', v_into_before,
+    jsonb_build_object('from_id', p_from, 'from_name', v_from.name, 'moved', v_n));
+  perform private.sales_log(v_company, 'customer', p_into, v_into.name, 'alias_added',
+                            jsonb_build_object('name', a.alias))
+     from public.sales_name_aliases a
+    where a.company_id = v_company and a.kind = 'customer' and a.target_id = p_into
+      and a.alias_key in (v_from.name_key, coalesce(v_from.name_en_key, ''));
   return jsonb_build_object('moved', v_n);
 end $$;
 
@@ -11836,7 +12492,7 @@ CREATE FUNCTION public.app_sales_order_stages(p_flow uuid, p_ids uuid[]) RETURNS
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_company uuid := private.sales_company('sales_settings', 'edit');
+declare v_company uuid := private.sales_company('sales_settings', 'edit'); v_from jsonb; v_to jsonb;
 begin
   if not exists (select 1 from public.sales_flows where id = p_flow and company_id = v_company)
      or (select count(*) from public.sales_stages where flow_id = p_flow)
@@ -11844,8 +12500,18 @@ begin
               join public.sales_stages s on s.id = x and s.flow_id = p_flow) then
     raise exception 'sales: invalid input' using errcode = '22023';
   end if;
+  select coalesce(jsonb_agg(name_fa order by position, id), '[]') into v_from
+    from public.sales_stages where flow_id = p_flow;
   update public.sales_stages s set position = t.ord
     from unnest(p_ids) with ordinality as t(sid, ord) where s.id = t.sid and s.flow_id = p_flow;
+  select coalesce(jsonb_agg(name_fa order by position, id), '[]') into v_to
+    from public.sales_stages where flow_id = p_flow;
+  if v_from is distinct from v_to then
+    perform private.sales_log(v_company, 'settings', p_flow,
+      (select name_fa from public.sales_flows where id = p_flow), 'stage_order',
+      jsonb_build_object('flow', p_flow, 'flow_kind', (select kind from public.sales_flows where id = p_flow),
+                         'from', v_from, 'order', v_to));
+  end if;
 end $$;
 
 
@@ -11906,6 +12572,26 @@ begin
                   not ilike '%' || replace(replace(replace(term, '\', '\\'), '%', '\%'), '_', '\_') || '%')
        order by q.quoted_on desc, r.record_no desc
        limit 500) x);
+end $$;
+
+
+--
+-- Name: app_sales_product_history(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_product_history(p_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company();
+begin
+  return (select coalesce(jsonb_agg(jsonb_build_object('id', a.id, 'at', a.at, 'actor_id', a.actor_id,
+                    'actor_name', pr.full_name, 'action', a.action, 'body', a.body, 'entity_label', a.entity_label)
+                  order by a.at desc, a.id desc), '[]'::jsonb)
+            from (select * from public.sales_audit
+                   where company_id = v_company and entity = 'product' and entity_id = p_id
+                   order by at desc, id desc limit 500) a
+            left join public.profiles pr on pr.id = a.actor_id);
 end $$;
 
 
@@ -12027,10 +12713,19 @@ CREATE FUNCTION public.app_sales_remove_alias(p_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_company uuid := private.sales_company('sales_settings', 'edit');
+declare v_company uuid := private.sales_company('sales_settings', 'edit'); a public.sales_name_aliases;
 begin
-  delete from public.sales_name_aliases where id = p_id and company_id = v_company;
+  delete from public.sales_name_aliases where id = p_id and company_id = v_company returning * into a;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  if a.kind = 'customer' then
+    perform private.sales_log(v_company, 'customer', a.target_id,
+      (select name from public.sales_customers where id = a.target_id), 'alias_removed',
+      jsonb_build_object('name', a.alias));
+  else
+    perform private.sales_log(v_company, 'settings', a.target_id, a.alias, 'name_match',
+      jsonb_build_object('op', 'removed', 'name', a.alias, 'profile_id', a.target_id,
+                         'profile_name', (select full_name from public.profiles where id = a.target_id)));
+  end if;
 end $$;
 
 
@@ -12043,9 +12738,9 @@ CREATE FUNCTION public.app_sales_remove_batch(p_batch uuid) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company('sales_settings', 'edit'); v_deleted integer; v_kept integer;
-  v_created timestamptz;
+  v_created timestamptz; v_kind text; v_file text; v_gone integer := 0; g record;
 begin
-  select created_at into v_created from public.sales_import_batches
+  select created_at, kind, file_name into v_created, v_kind, v_file from public.sales_import_batches
    where id = p_batch and company_id = v_company and kind <> 'customers';
   if not found then
     raise exception 'sales: not found' using errcode = 'P0002';
@@ -12069,17 +12764,27 @@ begin
   select v_kept + count(*) into v_kept from public.sales_rfps
    where company_id = v_company and p_batch = any (import_batches);
   -- Customers the import made and nothing uses now (not ones added by hand since).
-  delete from public.sales_customers c
-   where c.company_id = v_company and c.created_at >= v_created
-     -- FR-98: never a registered customer (hand-made, edited, or from a customer import).
-     and c.import_batch_id is null and c.updated_by is null and c.ceo_name is null
-     and not exists (select 1 from public.sales_customer_contacts k where k.customer_id = c.id)
-     and not exists (select 1 from public.sales_rfps r where r.buyer_id = c.id or r.client_id = c.id)
-     and not exists (select 1 from public.sales_name_aliases a where a.kind = 'customer' and a.target_id = c.id);
+  for g in
+    delete from public.sales_customers c
+     where c.company_id = v_company and c.created_at >= v_created
+       -- FR-98: never a registered customer (hand-made, edited, or from a customer import).
+       and c.import_batch_id is null and c.updated_by is null and c.ceo_name is null
+       and not exists (select 1 from public.sales_customer_contacts k where k.customer_id = c.id)
+       and not exists (select 1 from public.sales_rfps r where r.buyer_id = c.id or r.client_id = c.id)
+       and not exists (select 1 from public.sales_name_aliases a where a.kind = 'customer' and a.target_id = c.id)
+     returning c.id, c.name
+  loop
+    v_gone := v_gone + 1;
+    perform private.sales_log(v_company, 'customer', g.id, g.name, 'removed_by_import_undo',
+                              jsonb_build_object('batch_id', p_batch, 'file', v_file));
+  end loop;
   if not exists (select 1 from public.sales_rfps where company_id = v_company
                   and (p_batch = any (import_batches) or import_batch_id = p_batch)) then
     delete from public.sales_import_batches where id = p_batch;
   end if;
+  perform private.sales_log(v_company, 'import', p_batch, v_file, 'batch_removed',
+    jsonb_build_object('kind', v_kind, 'file', v_file, 'removed', v_deleted, 'kept', v_kept,
+                       'customers_removed', v_gone));
   return jsonb_build_object('deleted', v_deleted, 'kept', v_kept);
 end $$;
 
@@ -12093,23 +12798,32 @@ CREATE FUNCTION public.app_sales_remove_customer_batch(p_id uuid) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company('sales_customers_import', 'edit'); v_removed integer; v_kept integer;
+  v_file text; g record;
 begin
-  if not exists (select 1 from public.sales_import_batches
-                  where id = p_id and company_id = v_company and kind = 'customers') then
+  select file_name into v_file from public.sales_import_batches
+   where id = p_id and company_id = v_company and kind = 'customers';
+  if not found then
     raise exception 'sales: not found' using errcode = 'P0002';
   end if;
   perform private.sales_customer_lock(v_company);
-  with gone as (
+  v_removed := 0;
+  for g in
     delete from public.sales_customers c
      where c.company_id = v_company and c.import_batch_id = p_id and c.updated_by is null
        and not exists (select 1 from public.sales_rfps r where r.buyer_id = c.id or r.client_id = c.id)
        and not exists (select 1 from public.sales_name_aliases a where a.kind = 'customer' and a.target_id = c.id)
-     returning 1)
-  select count(*)::integer into v_removed from gone;
+     returning c.id, c.name
+  loop
+    v_removed := v_removed + 1;
+    perform private.sales_log(v_company, 'customer', g.id, g.name, 'removed_by_import_undo',
+                              jsonb_build_object('batch_id', p_id, 'file', v_file));
+  end loop;
   select count(*)::integer into v_kept from public.sales_customers where import_batch_id = p_id;
   if v_kept = 0 then
     delete from public.sales_import_batches where id = p_id;
   end if;
+  perform private.sales_log(v_company, 'import', p_id, v_file, 'batch_removed',
+    jsonb_build_object('kind', 'customers', 'file', v_file, 'removed', v_removed, 'kept', v_kept));
   return jsonb_build_object('removed', v_removed, 'kept', v_kept);
 end $$;
 
@@ -12136,6 +12850,10 @@ begin
   end if;
   update public.sales_customers set name = v_name, name_key = v_key, updated_at = now(), updated_by = auth.uid()
    where id = p_id;
+  if v_old.name is distinct from v_name then
+    perform private.sales_log(v_company, 'customer', p_id, v_name, 'renamed',
+                              jsonb_build_object('from', v_old.name, 'to', v_name));
+  end if;
   if v_old.name_key <> v_key then
     -- The new name is now the real one: an alias with its key would only redirect it elsewhere.
     delete from public.sales_name_aliases where company_id = v_company and kind = 'customer' and alias_key = v_key;
@@ -12143,6 +12861,8 @@ begin
       values (v_company, 'customer', v_old.name_key, v_old.name, p_id, auth.uid())
       on conflict (company_id, kind, alias_key) do update
         set target_id = excluded.target_id, alias = excluded.alias, created_by = excluded.created_by;
+    perform private.sales_log(v_company, 'customer', p_id, v_name, 'alias_added',
+                              jsonb_build_object('name', v_old.name));
   end if;
 end $$;
 
@@ -12300,7 +13020,7 @@ CREATE FUNCTION public.app_sales_save_category(p jsonb) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company(); v_id uuid; v_fa text; v_en text; v_key text; v_other uuid;
-  v_row public.sales_contractor_categories;
+  v_row public.sales_contractor_categories; v_before jsonb := '{}'; v_after jsonb; v_changes jsonb;
 begin
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
   v_id := private.sales_uuid(p->>'id');
@@ -12322,6 +13042,10 @@ begin
       hint = (select jsonb_build_object('id', id, 'name', name_fa, 'name_en', name_en)::text
                 from public.sales_contractor_categories where id = v_other);
   end if;
+  if v_id is not null then
+    select to_jsonb(x) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'] into v_before
+      from public.sales_contractor_categories x where x.id = v_id and x.company_id = v_company;
+  end if;
   begin
     if v_id is null then
       insert into public.sales_contractor_categories (company_id, name_fa, name_key, name_en, position, created_by)
@@ -12340,6 +13064,13 @@ begin
   exception when check_violation or not_null_violation or invalid_text_representation or numeric_value_out_of_range then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  v_after := to_jsonb(v_row) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'];
+  v_changes := private.sales_diff(v_before, v_after);
+  if v_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', v_row.id, v_row.name_fa, 'category',
+      jsonb_build_object('op', private.sales_list_op(v_id is null, v_before, v_after), 'name', v_row.name_fa,
+                         'name_en', v_row.name_en, 'changes', v_changes));
+  end if;
   return to_jsonb(v_row) - array['company_id', 'name_key', 'created_by'];
 end $$;
 
@@ -12353,7 +13084,7 @@ CREATE FUNCTION public.app_sales_save_city(p jsonb) RETURNS jsonb
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company(); v_id uuid; v_fa text; v_en text; v_key text; v_prov text;
-  v_other uuid; v_row public.sales_cities;
+  v_other uuid; v_row public.sales_cities; v_before jsonb := '{}'; v_after jsonb; v_changes jsonb;
 begin
   if p is null or jsonb_typeof(p) <> 'object' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
   v_id := private.sales_uuid(p->>'id');
@@ -12384,6 +13115,10 @@ begin
       hint = (select jsonb_build_object('id', id, 'name', name_fa, 'name_en', name_en)::text
                 from public.sales_cities where id = v_other);
   end if;
+  if v_id is not null then
+    select to_jsonb(x) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'] into v_before
+      from public.sales_cities x where x.id = v_id;
+  end if;
   begin
     if v_id is null then
       insert into public.sales_cities (company_id, province_code, name_fa, name_key, name_en, created_by)
@@ -12396,6 +13131,13 @@ begin
   exception when check_violation or not_null_violation or invalid_text_representation then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  v_after := to_jsonb(v_row) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'];
+  v_changes := private.sales_diff(v_before, v_after);
+  if v_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', v_row.id, v_row.name_fa, 'city',
+      jsonb_build_object('op', private.sales_list_op(v_id is null, v_before, v_after), 'name', v_row.name_fa,
+                         'name_en', v_row.name_en, 'province_code', v_row.province_code, 'changes', v_changes));
+  end if;
   return to_jsonb(v_row) - array['company_id', 'name_key', 'created_by'];
 end $$;
 
@@ -12409,7 +13151,7 @@ CREATE FUNCTION public.app_sales_save_currency(p_code text, p jsonb) RETURNS voi
     SET search_path TO ''
     AS $_$
 declare v_company uuid := private.sales_company('sales_settings', 'edit');
-  c public.sales_currencies; v_new boolean;
+  c public.sales_currencies; v_new boolean; v_before jsonb := '{}'; v_after jsonb; v_changes jsonb;
 begin
   if p_code is null or p_code !~ '^[A-Za-z0-9]{1,10}$' or p is null or jsonb_typeof(p) <> 'object' then
     raise exception 'sales: invalid input' using errcode = '22023';
@@ -12419,6 +13161,8 @@ begin
   if v_new then
     c.company_id := v_company; c.code := p_code; c.active := true; c.decimals := 0;
     c.position := (select coalesce(max(position), 0) + 1 from public.sales_currencies where company_id = v_company);
+  else
+    v_before := to_jsonb(c) - 'company_id';
   end if;
   begin
     if p ? 'name_fa' then c.name_fa := btrim(p->>'name_fa'); end if;
@@ -12437,6 +13181,13 @@ begin
   exception when others then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  v_after := to_jsonb(c) - 'company_id';
+  v_changes := private.sales_diff(v_before, v_after);
+  if v_new or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', null, c.name_fa, 'currency',
+      jsonb_build_object('op', private.sales_list_op(v_new, v_before, v_after), 'name', c.name_fa,
+                         'name_en', c.name_en, 'code', c.code, 'changes', v_changes));
+  end if;
 end $_$;
 
 
@@ -12450,6 +13201,7 @@ CREATE FUNCTION public.app_sales_save_customer(p_id uuid, p jsonb) RETURNS jsonb
     AS $$
 declare v_company uuid := private.sales_company('sales_customers', 'edit');
   v_old public.sales_customers; v public.sales_customers; v_clash uuid; v_id uuid := p_id;
+  v_before jsonb := '{}'::jsonb; v_alias boolean := false;
 begin
   if p is null or jsonb_typeof(p) <> 'object' then
     raise exception 'sales: invalid input' using errcode = '22023';
@@ -12458,8 +13210,14 @@ begin
   if p_id is not null then
     select * into v_old from public.sales_customers where id = p_id and company_id = v_company for update;
     if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+    v_before := private.sales_customer_snapshot(p_id);
   end if;
   v := private.sales_customer_values(v_company, p);
+  -- FR-99 deploy swap: the old app sends no ceo_phone / activity / people: those stay as they were.
+  if p_id is not null then
+    if not (p ? 'ceo_phone') then v.ceo_phone := v_old.ceo_phone; end if;
+    if not (p ? 'activity') then v.activity := v_old.activity; end if;
+  end if;
   v_clash := private.sales_customer_name_clash(v_company, v.name_key, p_id);
   if v_clash is null and v.name_en_key is not null then
     v_clash := private.sales_customer_name_clash(v_company, v.name_en_key, p_id);
@@ -12467,14 +13225,17 @@ begin
   if v_clash is not null then perform private.sales_raise_duplicate(v_clash); end if;
   begin
     if p_id is null then
-      insert into public.sales_customers (company_id, name, name_key, name_en, name_en_key, kind, ceo_name,
-                                          province_code, city_id, address, rank, category_id, updated_at, updated_by)
-        values (v_company, v.name, v.name_key, v.name_en, v.name_en_key, v.kind, v.ceo_name,
-                v.province_code, v.city_id, v.address, v.rank, v.category_id, now(), auth.uid())
+      insert into public.sales_customers (company_id, name, name_key, name_en, name_en_key, kind, ceo_name, ceo_phone,
+                                          activity, province_code, city_id, address, rank, category_id,
+                                          created_by, updated_at, updated_by)
+        values (v_company, v.name, v.name_key, v.name_en, v.name_en_key, v.kind, v.ceo_name, v.ceo_phone,
+                v.activity, v.province_code, v.city_id, v.address, v.rank, v.category_id,
+                auth.uid(), now(), auth.uid())
         returning id into v_id;
     else
       update public.sales_customers set name = v.name, name_key = v.name_key, name_en = v.name_en,
-          name_en_key = v.name_en_key, kind = v.kind, ceo_name = v.ceo_name, province_code = v.province_code,
+          name_en_key = v.name_en_key, kind = v.kind, ceo_name = v.ceo_name, ceo_phone = v.ceo_phone,
+          activity = v.activity, province_code = v.province_code,
           city_id = v.city_id, address = v.address, rank = v.rank, category_id = v.category_id,
           updated_at = now(), updated_by = auth.uid()
        where id = p_id;
@@ -12486,10 +13247,12 @@ begin
           values (v_company, 'customer', v_old.name_key, v_old.name, p_id, auth.uid())
           on conflict (company_id, kind, alias_key) do update
             set target_id = excluded.target_id, alias = excluded.alias, created_by = excluded.created_by;
+        v_alias := true;
       end if;
     end if;
-    if p ? 'contacts' or p_id is null then
-      perform private.sales_customer_set_contacts(v_company, v_id, coalesce(p->'contacts', '[]'::jsonb));
+    -- The old `contacts` key is ignored (FR-99).
+    if p ? 'people' or p_id is null then
+      perform private.sales_customer_set_people(v_company, v_id, coalesce(p->'people', '[]'::jsonb));
     end if;
     if p ? 'grades' or p_id is null then
       perform private.sales_customer_set_grades(v_company, v_id, coalesce(p->'grades', '[]'::jsonb));
@@ -12501,6 +13264,12 @@ begin
     when unique_violation then
       raise exception 'sales: duplicate name' using errcode = '23505';
   end;
+  perform private.sales_customer_log_diff(v_company, v_id, case when p_id is null then 'created' else 'edited' end,
+                                          v_before);
+  if v_alias then
+    perform private.sales_log(v_company, 'customer', v_id, v.name, 'alias_added',
+                              jsonb_build_object('name', v_old.name));
+  end if;
   return private.sales_customer_profile(v_id, true);
 end $$;
 
@@ -12591,6 +13360,7 @@ CREATE FUNCTION public.app_sales_save_field(p_id uuid, p jsonb) RETURNS uuid
     AS $$
 declare v_company uuid := private.sales_company();
   d public.sales_field_defs; v_id uuid := p_id; v_key text; v_try integer := 0;
+  v_before jsonb := '{}'; v_after jsonb; v_changes jsonb;
 begin
   if p_id is null then
     d.entity := p->>'entity'; d.type := coalesce(p->>'type', 'text'); d.options := '{}';
@@ -12601,6 +13371,7 @@ begin
   else
     select * into d from public.sales_field_defs where id = p_id and company_id = v_company for update;
     if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+    v_before := to_jsonb(d) - array['company_id', 'id'];
   end if;
   if not (private.sales_can('sales_settings')
           or (d.entity = 'item' and private.sales_can('project_items'))) then
@@ -12640,6 +13411,13 @@ begin
   else
     update public.sales_field_defs set label_fa = d.label_fa, label_en = d.label_en, options = d.options,
       position = d.position, show_in_list = d.show_in_list, active = d.active where id = p_id;
+  end if;
+  select to_jsonb(x) - array['company_id', 'id'] into v_after from public.sales_field_defs x where x.id = v_id;
+  v_changes := private.sales_diff(v_before, v_after);
+  if p_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', v_id, d.label_fa, 'field',
+      jsonb_build_object('op', private.sales_list_op(p_id is null, v_before, v_after), 'name', d.label_fa,
+                         'name_en', d.label_en, 'entity', d.entity, 'key', v_after->>'key', 'changes', v_changes));
   end if;
   return v_id;
 exception when invalid_text_representation then
@@ -12694,7 +13472,7 @@ CREATE FUNCTION public.app_sales_save_product(p_id uuid, p jsonb) RETURNS uuid
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company('sales_settings', 'edit');
-  pr public.sales_products; e jsonb; v_pos integer := 0; v_field text;
+  pr public.sales_products; e jsonb; v_pos integer := 0; v_field text; v_before jsonb := '{}'; v_changes jsonb;
 begin
   if p is null or jsonb_typeof(p) <> 'object'
      or (p ? 'fields' and jsonb_typeof(p->'fields') <> 'array') then
@@ -12707,6 +13485,7 @@ begin
   else
     select * into pr from public.sales_products where id = p_id and company_id = v_company for update;
     if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+    v_before := private.sales_product_snapshot(p_id);
   end if;
   begin
     if p ? 'code' then pr.code := nullif(btrim(coalesce(p->>'code', '')), ''); end if;
@@ -12741,6 +13520,11 @@ begin
   exception when others then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  v_changes := private.sales_diff(v_before, private.sales_product_snapshot(pr.id));
+  if p_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'product', pr.id, pr.name_fa,
+      case when p_id is null then 'created' else 'edited' end, jsonb_build_object('changes', v_changes));
+  end if;
   return pr.id;
 end $$;
 
@@ -12968,9 +13752,10 @@ CREATE FUNCTION public.app_sales_save_settings(p jsonb) RETURNS void
     SET search_path TO ''
     AS $$
 declare v_company uuid := private.sales_company('sales_settings', 'edit');
-  s public.sales_settings; v_next integer;
+  s public.sales_settings; v_next integer; v_before jsonb; v_changes jsonb;
 begin
   select * into s from public.sales_settings where company_id = v_company for update;
+  v_before := to_jsonb(s) - 'company_id';
   if p ? 'next_record_no' then
     v_next := private.sales_num(p->>'next_record_no')::integer;
     if v_next is null or v_next < 1 or exists (
@@ -12991,6 +13776,11 @@ begin
   exception when check_violation or not_null_violation then
     raise exception 'sales: invalid input' using errcode = '22023';
   end;
+  v_changes := private.sales_diff(v_before,
+    (select to_jsonb(x) - 'company_id' from public.sales_settings x where x.company_id = v_company));
+  if v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', null, null, 'general', jsonb_build_object('changes', v_changes));
+  end if;
 end $$;
 
 
@@ -13003,7 +13793,7 @@ CREATE FUNCTION public.app_sales_save_stage(p_id uuid, p_flow uuid, p jsonb) RET
     SET search_path TO ''
     AS $_$
 declare v_company uuid := private.sales_company('sales_settings', 'edit');
-  s public.sales_stages; v_id uuid := p_id; v_role uuid;
+  s public.sales_stages; v_id uuid := p_id; v_role uuid; v_before jsonb := '{}'; v_after jsonb; v_changes jsonb;
 begin
   if p_id is null then
     if not exists (select 1 from public.sales_flows where id = p_flow and company_id = v_company) then
@@ -13014,6 +13804,7 @@ begin
   else
     select * into s from public.sales_stages where id = p_id and company_id = v_company for update;
     if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+    v_before := private.sales_stage_snapshot(p_id);
   end if;
   if p ? 'name_fa' then s.name_fa := left(btrim(coalesce(p->>'name_fa', '')), 80); end if;
   if p ? 'name_en' then s.name_en := left(btrim(coalesce(p->>'name_en', '')), 80); end if;
@@ -13053,10 +13844,81 @@ begin
   if not exists (select 1 from public.sales_stages where flow_id = s.flow_id and active and kind = 'open') then
     raise exception 'sales: flow needs an open stage' using errcode = '22023';
   end if;
+  v_after := private.sales_stage_snapshot(v_id);
+  v_changes := private.sales_diff(v_before, v_after);
+  if p_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', v_id, s.name_fa, 'stage',
+      jsonb_build_object('op', private.sales_list_op(p_id is null, v_before, v_after), 'name', s.name_fa,
+                         'name_en', s.name_en, 'flow', s.flow_id, 'changes', v_changes));
+  end if;
   return v_id;
 exception when invalid_text_representation then
   raise exception 'sales: invalid input' using errcode = '22023';
 end $_$;
+
+
+--
+-- Name: app_sales_save_title(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_save_title(p jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales_settings', 'edit'); v_id uuid; v_fa text; v_en text;
+  v_key text; v_other uuid; v_row public.sales_contact_titles; v_before jsonb := '{}'::jsonb; v_after jsonb;
+  v_changes jsonb;
+begin
+  if p is null or jsonb_typeof(p) <> 'object' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  v_id := private.sales_uuid(p->>'id');
+  if nullif(p->>'id', '') is not null and v_id is null then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  v_fa := private.sales_clean(p->>'name_fa'); v_en := private.sales_clean(p->>'name_en');
+  v_key := private.sales_name_key(v_fa);
+  if v_fa is null or v_key = '' then raise exception 'sales: invalid input' using errcode = '22023'; end if;
+  perform private.sales_customer_lock(v_company);
+  select id into v_other from public.sales_contact_titles
+   where company_id = v_company and name_key = v_key and id is distinct from v_id;
+  if v_other is not null then
+    raise exception 'sales: duplicate name' using errcode = '23505',
+      hint = (select jsonb_build_object('id', id, 'name', name_fa, 'name_en', name_en)::text
+                from public.sales_contact_titles where id = v_other);
+  end if;
+  if v_id is not null then
+    select to_jsonb(x) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'] into v_before
+      from public.sales_contact_titles x where x.id = v_id and x.company_id = v_company for update;
+    if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
+  end if;
+  begin
+    if v_id is null then
+      insert into public.sales_contact_titles (company_id, name_fa, name_key, name_en, active, position, created_by)
+        values (v_company, v_fa, v_key, v_en, coalesce((p->>'active')::boolean, true),
+                coalesce(private.sales_num(p->>'position')::integer,
+                         (select coalesce(max(position), 0) + 1 from public.sales_contact_titles
+                           where company_id = v_company)), auth.uid())
+        returning * into v_row;
+    else
+      -- An absent name_en keeps the stored one (reorder / hide send only the Farsi name).
+      update public.sales_contact_titles set name_fa = v_fa, name_key = v_key,
+          name_en = case when p ? 'name_en' then v_en else name_en end,
+          active = coalesce((p->>'active')::boolean, active),
+          position = coalesce(private.sales_num(p->>'position')::integer, position)
+       where id = v_id and company_id = v_company returning * into v_row;
+    end if;
+  exception when check_violation or not_null_violation or invalid_text_representation or numeric_value_out_of_range then
+    raise exception 'sales: invalid input' using errcode = '22023';
+  when unique_violation then
+    raise exception 'sales: duplicate name' using errcode = '23505';
+  end;
+  v_after := to_jsonb(v_row) - array['company_id', 'id', 'name_key', 'created_by', 'created_at'];
+  v_changes := private.sales_diff(v_before, v_after);
+  if v_id is null or v_changes <> '[]'::jsonb then
+    perform private.sales_log(v_company, 'settings', v_row.id, v_row.name_fa, 'title',
+      jsonb_build_object('op', private.sales_list_op(v_id is null, v_before, v_after), 'name', v_row.name_fa,
+                         'name_en', v_row.name_en, 'changes', v_changes));
+  end if;
+  return jsonb_build_object('id', v_row.id, 'name_fa', v_row.name_fa, 'name_en', v_row.name_en,
+                            'active', v_row.active, 'position', v_row.position);
+end $$;
 
 
 --
@@ -13067,18 +13929,25 @@ CREATE FUNCTION public.app_sales_set_deadline_done(p_id uuid, p_done boolean) RE
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO ''
     AS $$
-declare v_company uuid := private.sales_company('sales', 'edit'); v_rfp uuid;
+declare v_company uuid := private.sales_company('sales', 'edit'); v_rfp uuid; d public.sales_deadlines;
 begin
   select rfp_id into v_rfp from public.sales_deadlines where id = p_id and company_id = v_company;
   if not found then raise exception 'sales: not found' using errcode = 'P0002'; end if;
   perform private.sales_rfp(v_rfp, v_company);
   perform private.sales_writable(v_rfp);
+  select * into d from public.sales_deadlines where id = p_id;
   update public.sales_deadlines set
     done_at = case when p_done then coalesce(done_at, now()) end,
     done_by = case when p_done then coalesce(done_by, auth.uid()) end
   where id = p_id;
   update public.sales_rfps set updated_by = auth.uid(), updated_at = now(), edited_after_import = true
    where id = v_rfp;
+  if (d.done_at is not null) <> coalesce(p_done, false) then
+    insert into public.sales_events (company_id, rfp_id, actor_id, kind, body)
+      values (v_company, v_rfp, auth.uid(), 'edit',
+              jsonb_build_object('deadline', jsonb_build_object('label', d.label, 'kind', d.kind),
+                                 'done', coalesce(p_done, false)));
+  end if;
 end $$;
 
 
@@ -17070,6 +17939,25 @@ CREATE TABLE public.roles (
 
 
 --
+-- Name: sales_audit; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_audit (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    actor_id uuid,
+    entity text NOT NULL,
+    entity_id uuid,
+    entity_label text,
+    action text NOT NULL,
+    body jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT sales_audit_action_check CHECK (((char_length(action) >= 1) AND (char_length(action) <= 40))),
+    CONSTRAINT sales_audit_entity_check CHECK ((entity = ANY (ARRAY['customer'::text, 'product'::text, 'settings'::text, 'import'::text])))
+);
+
+
+--
 -- Name: sales_bonds; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -17128,6 +18016,33 @@ CREATE TABLE public.sales_cities (
 --
 
 COMMENT ON TABLE public.sales_cities IS 'FR-98: company city list per province (seeded with county seats; grows through "Create …" and Settings). Functions only.';
+
+
+--
+-- Name: sales_contact_titles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_contact_titles (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    name_fa text NOT NULL,
+    name_key text NOT NULL,
+    name_en text,
+    active boolean DEFAULT true NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    CONSTRAINT sales_contact_titles_name_en_check CHECK (((name_en IS NULL) OR ((char_length(btrim(name_en)) >= 1) AND (char_length(btrim(name_en)) <= 80)))),
+    CONSTRAINT sales_contact_titles_name_fa_check CHECK (((char_length(btrim(name_fa)) >= 1) AND (char_length(btrim(name_fa)) <= 80))),
+    CONSTRAINT sales_contact_titles_name_key_check CHECK ((name_key <> ''::text))
+);
+
+
+--
+-- Name: TABLE sales_contact_titles; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.sales_contact_titles IS 'FR-99: titles of a customer''s key people (picked, never typed). Functions only.';
 
 
 --
@@ -17193,17 +18108,12 @@ CREATE TABLE public.sales_customer_contacts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     company_id uuid NOT NULL,
     customer_id uuid NOT NULL,
-    person text NOT NULL,
-    title text,
-    label text NOT NULL,
-    phone text NOT NULL,
+    person text,
     email text,
     "position" integer DEFAULT 0 NOT NULL,
+    title_id uuid,
     CONSTRAINT sales_customer_contacts_email_check CHECK (((email IS NULL) OR ((char_length(email) <= 200) AND (email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'::text)))),
-    CONSTRAINT sales_customer_contacts_label_check CHECK ((label = ANY (ARRAY['office'::text, 'mobile'::text, 'fax'::text, 'other'::text]))),
-    CONSTRAINT sales_customer_contacts_person_check CHECK (((char_length(btrim(person)) >= 1) AND (char_length(btrim(person)) <= 120))),
-    CONSTRAINT sales_customer_contacts_phone_check CHECK ((phone ~ '^\+?[0-9]{5,15}$'::text)),
-    CONSTRAINT sales_customer_contacts_title_check CHECK (((title IS NULL) OR ((char_length(btrim(title)) >= 1) AND (char_length(btrim(title)) <= 80))))
+    CONSTRAINT sales_customer_contacts_person_check CHECK (((char_length(btrim(person)) >= 1) AND (char_length(btrim(person)) <= 120)))
 );
 
 
@@ -17211,7 +18121,7 @@ CREATE TABLE public.sales_customer_contacts (
 -- Name: TABLE sales_customer_contacts; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.sales_customer_contacts IS 'FR-98: a customer''s contact book. Private: only sales_customers holders read it. Functions only.';
+COMMENT ON TABLE public.sales_customer_contacts IS 'FR-99: a customer''s phone book (key people and company lines; numbers in sales_customer_phones). Private: only sales_customers holders read it. Functions only.';
 
 
 --
@@ -17234,6 +18144,29 @@ CREATE TABLE public.sales_customer_grades (
 --
 
 COMMENT ON TABLE public.sales_customer_grades IS 'FR-98: a contractor customer''s further rank + category pairs (the first pair is on sales_customers). Functions only.';
+
+
+--
+-- Name: sales_customer_phones; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sales_customer_phones (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    company_id uuid NOT NULL,
+    contact_id uuid NOT NULL,
+    label text NOT NULL,
+    phone text NOT NULL,
+    "position" integer DEFAULT 0 NOT NULL,
+    CONSTRAINT sales_customer_phones_label_check CHECK ((label = ANY (ARRAY['office'::text, 'mobile'::text, 'fax'::text, 'other'::text]))),
+    CONSTRAINT sales_customer_phones_phone_check CHECK ((phone ~ '^\+?[0-9]{5,15}$'::text))
+);
+
+
+--
+-- Name: TABLE sales_customer_phones; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.sales_customer_phones IS 'FR-99: numbers of a phone-book entry (at most 5). Private like the entries. Functions only.';
 
 
 --
@@ -18224,6 +19157,14 @@ ALTER TABLE ONLY public.roles
 
 
 --
+-- Name: sales_audit sales_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_audit
+    ADD CONSTRAINT sales_audit_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: sales_bonds sales_bonds_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -18253,6 +19194,22 @@ ALTER TABLE ONLY public.sales_cities
 
 ALTER TABLE ONLY public.sales_cities
     ADD CONSTRAINT sales_cities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sales_contact_titles sales_contact_titles_company_id_name_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_contact_titles
+    ADD CONSTRAINT sales_contact_titles_company_id_name_key_key UNIQUE (company_id, name_key);
+
+
+--
+-- Name: sales_contact_titles sales_contact_titles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_contact_titles
+    ADD CONSTRAINT sales_contact_titles_pkey PRIMARY KEY (id);
 
 
 --
@@ -18301,6 +19258,14 @@ ALTER TABLE ONLY public.sales_customer_grades
 
 ALTER TABLE ONLY public.sales_customer_grades
     ADD CONSTRAINT sales_customer_grades_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sales_customer_phones sales_customer_phones_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_customer_phones
+    ADD CONSTRAINT sales_customer_phones_pkey PRIMARY KEY (id);
 
 
 --
@@ -18975,6 +19940,27 @@ CREATE UNIQUE INDEX roles_company_system_key_uniq ON public.roles USING btree (c
 
 
 --
+-- Name: sales_audit_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_audit_actor ON public.sales_audit USING btree (company_id, actor_id, at DESC);
+
+
+--
+-- Name: sales_audit_company_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_audit_company_at ON public.sales_audit USING btree (company_id, at DESC, id);
+
+
+--
+-- Name: sales_audit_entity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_audit_entity ON public.sales_audit USING btree (company_id, entity, entity_id, at DESC);
+
+
+--
 -- Name: sales_bonds_rfp; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -18993,6 +19979,13 @@ CREATE INDEX sales_customer_contacts_customer ON public.sales_customer_contacts 
 --
 
 CREATE INDEX sales_customer_grades_customer ON public.sales_customer_grades USING btree (customer_id, "position");
+
+
+--
+-- Name: sales_customer_phones_contact; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_customer_phones_contact ON public.sales_customer_phones USING btree (contact_id, "position");
 
 
 --
@@ -19021,6 +20014,20 @@ CREATE INDEX sales_deadlines_open ON public.sales_deadlines USING btree (company
 --
 
 CREATE INDEX sales_documents_rfp ON public.sales_documents USING btree (rfp_id);
+
+
+--
+-- Name: sales_events_company_actor; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_events_company_actor ON public.sales_events USING btree (company_id, actor_id, at DESC);
+
+
+--
+-- Name: sales_events_company_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sales_events_company_at ON public.sales_events USING btree (company_id, at DESC, id);
 
 
 --
@@ -19514,10 +20521,24 @@ CREATE TRIGGER role_permissions_guard BEFORE INSERT OR UPDATE ON public.role_per
 
 
 --
+-- Name: sales_audit sales_audit_append_only; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER sales_audit_append_only BEFORE DELETE OR UPDATE OR TRUNCATE ON public.sales_audit FOR EACH STATEMENT EXECUTE FUNCTION private.sales_audit_append_only();
+
+
+--
 -- Name: sales_customer_contacts sales_customer_contacts_missing; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER sales_customer_contacts_missing AFTER INSERT OR DELETE OR UPDATE ON public.sales_customer_contacts FOR EACH ROW EXECUTE FUNCTION private.sales_contacts_missing_trg();
+
+
+--
+-- Name: sales_customer_phones sales_customer_phones_missing; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER sales_customer_phones_missing AFTER INSERT OR DELETE OR UPDATE ON public.sales_customer_phones FOR EACH ROW EXECUTE FUNCTION private.sales_phones_missing_trg();
 
 
 --
@@ -20275,6 +21296,14 @@ ALTER TABLE ONLY public.sales_cities
 
 
 --
+-- Name: sales_contact_titles sales_contact_titles_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_contact_titles
+    ADD CONSTRAINT sales_contact_titles_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
 -- Name: sales_contractor_categories sales_contractor_categories_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -20307,6 +21336,14 @@ ALTER TABLE ONLY public.sales_customer_contacts
 
 
 --
+-- Name: sales_customer_contacts sales_customer_contacts_title_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_customer_contacts
+    ADD CONSTRAINT sales_customer_contacts_title_id_fkey FOREIGN KEY (title_id) REFERENCES public.sales_contact_titles(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: sales_customer_grades sales_customer_grades_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -20328,6 +21365,22 @@ ALTER TABLE ONLY public.sales_customer_grades
 
 ALTER TABLE ONLY public.sales_customer_grades
     ADD CONSTRAINT sales_customer_grades_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.sales_customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sales_customer_phones sales_customer_phones_company_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_customer_phones
+    ADD CONSTRAINT sales_customer_phones_company_id_fkey FOREIGN KEY (company_id) REFERENCES public.companies(id) ON DELETE CASCADE;
+
+
+--
+-- Name: sales_customer_phones sales_customer_phones_contact_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sales_customer_phones
+    ADD CONSTRAINT sales_customer_phones_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES public.sales_customer_contacts(id) ON DELETE CASCADE;
 
 
 --
@@ -21490,6 +22543,12 @@ CREATE POLICY roles_select_auth_admin ON public.roles FOR SELECT TO supabase_aut
 
 
 --
+-- Name: sales_audit; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_audit ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: sales_bonds; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -21500,6 +22559,12 @@ ALTER TABLE public.sales_bonds ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.sales_cities ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sales_contact_titles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_contact_titles ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: sales_contractor_categories; Type: ROW SECURITY; Schema: public; Owner: -
@@ -21524,6 +22589,12 @@ ALTER TABLE public.sales_customer_contacts ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.sales_customer_grades ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: sales_customer_phones; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sales_customer_phones ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: sales_customers; Type: ROW SECURITY; Schema: public; Owner: -
@@ -22588,6 +23659,13 @@ GRANT ALL ON FUNCTION private.role_within(p_role_id uuid, p_uid uuid) TO authent
 
 
 --
+-- Name: FUNCTION sales_audit_append_only(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_audit_append_only() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_can(p_key text, p_level text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -22673,6 +23751,13 @@ REVOKE ALL ON FUNCTION private.sales_customer_lock(p_company uuid) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_customer_log_diff(p_company uuid, p_id uuid, p_action text, p_before jsonb, p_extra jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_log_diff(p_company uuid, p_id uuid, p_action text, p_before jsonb, p_extra jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_customer_missing_of(c public.sales_customers, p_contacts integer); Type: ACL; Schema: private; Owner: -
 --
 
@@ -22691,6 +23776,13 @@ REVOKE ALL ON FUNCTION private.sales_customer_missing_trg() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.sales_customer_name_clash(p_company uuid, p_key text, p_self uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_customer_phone_count(p_customer uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_phone_count(p_customer uuid) FROM PUBLIC;
 
 
 --
@@ -22715,17 +23807,24 @@ REVOKE ALL ON FUNCTION private.sales_customer_rows(p_company uuid, p_prices bool
 
 
 --
--- Name: FUNCTION sales_customer_set_contacts(p_company uuid, p_customer uuid, p_contacts jsonb); Type: ACL; Schema: private; Owner: -
---
-
-REVOKE ALL ON FUNCTION private.sales_customer_set_contacts(p_company uuid, p_customer uuid, p_contacts jsonb) FROM PUBLIC;
-
-
---
 -- Name: FUNCTION sales_customer_set_grades(p_company uuid, p_customer uuid, p_grades jsonb); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.sales_customer_set_grades(p_company uuid, p_customer uuid, p_grades jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_customer_set_people(p_company uuid, p_customer uuid, p_people jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_set_people(p_company uuid, p_customer uuid, p_people jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_customer_snapshot(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_snapshot(p_id uuid) FROM PUBLIC;
 
 
 --
@@ -22754,6 +23853,13 @@ REVOKE ALL ON FUNCTION private.sales_file_ids() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION private.sales_files_gc() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_diff(p_before jsonb, p_after jsonb, p_private text[]); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_diff(p_before jsonb, p_after jsonb, p_private text[]) FROM PUBLIC;
 
 
 --
@@ -22806,6 +23912,20 @@ REVOKE ALL ON FUNCTION private.sales_levenshtein(a text, b text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_list_op(p_new boolean, p_before jsonb, p_after jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_list_op(p_new boolean, p_before jsonb, p_after jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_log(p_company uuid, p_entity text, p_entity_id uuid, p_label text, p_action text, p_body jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_log(p_company uuid, p_entity text, p_entity_id uuid, p_label text, p_action text, p_body jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_name_compact(p text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -22827,6 +23947,13 @@ REVOKE ALL ON FUNCTION private.sales_num(p text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_people_diff(p_before jsonb, p_after jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_people_diff(p_before jsonb, p_after jsonb) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_phone(p text); Type: ACL; Schema: private; Owner: -
 --
 
@@ -22834,10 +23961,24 @@ REVOKE ALL ON FUNCTION private.sales_phone(p text) FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION sales_phones_missing_trg(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_phones_missing_trg() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_product_default(p_company uuid, p_field text, p_value jsonb); Type: ACL; Schema: private; Owner: -
 --
 
 REVOKE ALL ON FUNCTION private.sales_product_default(p_company uuid, p_field text, p_value jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_product_snapshot(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_product_snapshot(p_id uuid) FROM PUBLIC;
 
 
 --
@@ -22892,6 +24033,13 @@ REVOKE ALL ON FUNCTION private.sales_rfp_json(r public.sales_rfps, p_prices bool
 
 
 --
+-- Name: FUNCTION sales_seed_contact_titles(p_company uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_seed_contact_titles(p_company uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION sales_seed_customer_lists(p_company uuid); Type: ACL; Schema: private; Owner: -
 --
 
@@ -22903,6 +24051,27 @@ REVOKE ALL ON FUNCTION private.sales_seed_customer_lists(p_company uuid) FROM PU
 --
 
 REVOKE ALL ON FUNCTION private.sales_snapshot_quote(p_rfp uuid, p_on date) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_stage_snapshot(p_id uuid); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_stage_snapshot(p_id uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_strip_private(p_body jsonb, p_private boolean); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_strip_private(p_body jsonb, p_private boolean) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_strip_walk(p jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_strip_walk(p jsonb) FROM PUBLIC;
 
 
 --
@@ -23921,6 +25090,16 @@ GRANT ALL ON FUNCTION public.app_role_holders(p_role_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION app_sales_activity(p jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_activity(p jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO service_role;
+
+
+--
 -- Name: FUNCTION app_sales_add_customer(p jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -23988,6 +25167,16 @@ REVOKE ALL ON FUNCTION public.app_sales_customer_batches() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_sales_customer_batches() TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_customer_batches() TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_customer_batches() TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_customer_history(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_customer_history(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_customer_history(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_customer_history(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_customer_history(p_id uuid) TO service_role;
 
 
 --
@@ -24291,6 +25480,16 @@ GRANT ALL ON FUNCTION public.app_sales_price_history(p_q text) TO service_role;
 
 
 --
+-- Name: FUNCTION app_sales_product_history(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_product_history(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_product_history(p_id uuid) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_product_history(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_product_history(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION app_sales_products(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -24518,6 +25717,16 @@ REVOKE ALL ON FUNCTION public.app_sales_save_stage(p_id uuid, p_flow uuid, p jso
 GRANT ALL ON FUNCTION public.app_sales_save_stage(p_id uuid, p_flow uuid, p jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_save_stage(p_id uuid, p_flow uuid, p jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_save_stage(p_id uuid, p_flow uuid, p jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_save_title(p jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_save_title(p jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_save_title(p jsonb) TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_save_title(p jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_save_title(p jsonb) TO service_role;
 
 
 --
@@ -25590,6 +26799,14 @@ GRANT SELECT ON TABLE public.roles TO supabase_auth_admin;
 
 
 --
+-- Name: TABLE sales_audit; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sales_audit TO postgres;
+GRANT ALL ON TABLE public.sales_audit TO service_role;
+
+
+--
 -- Name: TABLE sales_bonds; Type: ACL; Schema: public; Owner: -
 --
 
@@ -25603,6 +26820,14 @@ GRANT ALL ON TABLE public.sales_bonds TO service_role;
 
 GRANT ALL ON TABLE public.sales_cities TO postgres;
 GRANT ALL ON TABLE public.sales_cities TO service_role;
+
+
+--
+-- Name: TABLE sales_contact_titles; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sales_contact_titles TO postgres;
+GRANT ALL ON TABLE public.sales_contact_titles TO service_role;
 
 
 --
@@ -25635,6 +26860,14 @@ GRANT ALL ON TABLE public.sales_customer_contacts TO service_role;
 
 GRANT ALL ON TABLE public.sales_customer_grades TO postgres;
 GRANT ALL ON TABLE public.sales_customer_grades TO service_role;
+
+
+--
+-- Name: TABLE sales_customer_phones; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON TABLE public.sales_customer_phones TO postgres;
+GRANT ALL ON TABLE public.sales_customer_phones TO service_role;
 
 
 --

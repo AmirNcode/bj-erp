@@ -940,6 +940,16 @@ dialog, its batches and their removal. The migration gave `sales_customers` to e
 `sales = edit` (they could create customers before). Category / city rename and hide stay
 `sales_settings`; merge and rename of customers stay `sales_settings`.
 
+**Change history (FR-99, 2026-11-27).** One more Sales item (38 in the catalog), read only:
+`sales_activity` (needs `sales`): the Sales › Activity page (every Sales change, records included;
+events of soft-deleted records only for the admin). Granted to nobody by the migration. The History
+tab on a customer or product page needs only `sales` read. Private customer values (CEO name /
+phone, address, phone book) inside history bodies are stripped by the database
+(`private.sales_strip_private`) for callers without `sales_customers`. `sales_audit` is append-only
+(a statement trigger refuses update / delete / truncate for every role but `supabase_admin` /
+`postgres`). Key-person titles are edited with `sales_settings` only (no create from pickers or the
+import).
+
 **D4 applies.** Because the keys count in `private.can_act_on`, someone holding Sales permissions
 can be edited (or have a password reset) only by a caller holding at least the same — in practice
 the admin. Intended: nobody weaker may sign in as a Sales holder.

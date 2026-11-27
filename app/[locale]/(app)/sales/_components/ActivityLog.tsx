@@ -55,6 +55,11 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
       }
       case 'finance': return t(`event.finance_${String(b.what) as 'guarantee' | 'payment'}_${String(b.action) as 'added' | 'changed' | 'removed'}`);
       default: {
+        const dl = b.deadline as { label?: string | null; kind?: string } | undefined;
+        if (dl && typeof dl === 'object') {
+          const name = dl.label || (dl.kind && t.has(`deadline.kind.${dl.kind}`) ? t(`deadline.kind.${dl.kind}` as 'deadline.kind.bid') : String(dl.kind ?? ''));
+          return t.rich(b.done === false ? 'event.deadlineUndone' : 'event.deadlineDone', { name });
+        }
         const changes = Array.isArray(b.changes) ? (b.changes as Change[]) : null;
         const side = Array.isArray(b.side) ? (b.side as string[]) : [];
         if (!changes) return t('event.edit', { count: Array.isArray(b.fields) ? b.fields.length : 1 });

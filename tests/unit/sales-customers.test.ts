@@ -3,12 +3,16 @@ import { barPercent, persianYearOf, persianYearStarts, presentCurrencies, search
 import type { CustomerSummary } from '@/lib/sales/types';
 
 const c = (name: string, extra: Partial<CustomerSummary> = {}): CustomerSummary => ({
-  id: name, name, name_en: null, kind: null, missing: [], records: 0, as_client: 0, open: 0, won: 0, lost: 0, no_bid: 0, archived: 0,
+  id: name, name, name_en: null, kind: null, activity: null, missing: [], records: 0, as_client: 0, open: 0, won: 0, lost: 0, no_bid: 0, archived: 0,
   cancelled: 0, decided: 0, win_rate: null, first_inquiry: null, last_inquiry: null, next_deadline: null,
   main_owner_name: null, ...extra,
 });
 
 describe('customers tab helpers', () => {
+  it('search also matches the activity description (FR-99)', () => {
+    const rows = [c('الف', { activity: 'ساخت راه و پل' }), c('ب')];
+    expect(searchCustomers(rows, 'ساخت راه').map((r) => r.name)).toEqual(['الف']);
+  });
   it('searches by name key: case, spaces and Arabic letters do not matter', () => {
     const rows = [c('NISOC Co.'), c('شرکت كيان'), c('PEDEC')];
     expect(searchCustomers(rows, 'nis oc').map((r) => r.name)).toEqual(['NISOC Co.']);

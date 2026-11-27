@@ -37,11 +37,13 @@ const EXAMPLE: Record<'fa' | 'en', Headers> = {
     name: 'شرکت نمونه', name_en: 'NISOC', kind: 'پیمانکار', ceo_name: 'علی رضایی', province: 'خوزستان', city: 'اهواز',
     address: 'کیانپارس، خیابان نمونه', rank: '1', category: 'نفت و گاز', contact_person: 'محمد احمدی', contact_title: 'مدیر خرید',
     contact_label: 'موبایل', phone: '09121234567', email: 'info@example.com',
+    ceo_phone: '09123456789', activity: 'پیمانکار حفاری',
   },
   en: {
     name: 'شرکت نمونه', name_en: 'NISOC', kind: 'Contractor', ceo_name: 'Ali Rezaei', province: 'Khuzestan', city: 'Ahvaz',
     address: 'Kianpars, Sample St.', rank: '1', category: 'Oil and gas', contact_person: 'Mohammad Ahmadi', contact_title: 'Purchasing manager',
     contact_label: 'Mobile', phone: '09121234567', email: 'info@example.com',
+    ceo_phone: '09123456789', activity: 'Drilling contractor',
   },
 };
 
@@ -64,6 +66,8 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
   const [catUse, setCatUse] = useState<Record<string, string>>({});
   const [city, setCity] = useState<Record<string, Choice>>({});
   const [cityUse, setCityUse] = useState<Record<string, string>>({});
+  const [title, setTitle] = useState<Record<string, 'use' | 'empty'>>({});
+  const [titleUse, setTitleUse] = useState<Record<string, string>>({});
   const [defaultAction, setDefaultAction] = useState<ImportAction>('skip');
   const [actions, setActions] = useState<Record<string, ImportAction | ''>>({});
   const [pending, setPending] = useState(false);
@@ -85,7 +89,7 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
   const steps = useMemo<Step[]>(() => {
     if (!preview) return [];
     const out: Step[] = [];
-    if (preview.unknown.categories.length + preview.unknown.cities.length > 0) out.push('unknown');
+    if (preview.unknown.categories.length + preview.unknown.cities.length + preview.unknown.titles.length > 0) out.push('unknown');
     if (preview.counts.match > 0) out.push('matches');
     out.push('summary');
     return out;
@@ -99,13 +103,14 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
     return p ? (locale === 'fa' ? p.name_fa : p.name_en) : code;
   };
   const activeCategories = lists?.categories.filter((c) => c.active) ?? [];
+  const activeTitles = lists?.titles.filter((c) => c.active) ?? [];
   const citiesOf = (province: string) => lists?.cities.filter((c) => c.active && c.province_code === province) ?? [];
 
   if (viewAs !== null) return null;
 
   function reset() {
     setFileName(''); setRows([]); setPreview(null); setError(null); setStepIdx(0);
-    setCat({}); setCatUse({}); setCity({}); setCityUse({}); setDefaultAction('skip'); setActions({});
+    setCat({}); setCatUse({}); setCity({}); setCityUse({}); setTitle({}); setTitleUse({}); setDefaultAction('skip'); setActions({});
     if (input.current) input.current.value = '';
   }
 
@@ -162,7 +167,8 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
     && (preview?.unknown.cities ?? []).every((u) => {
       const k = `${u.province_code}|${u.key}`;
       return (city[k] ?? 'create') !== 'use' || cityUse[k];
-    });
+    })
+    && (preview?.unknown.titles ?? []).every((u) => (title[u.key] ?? 'empty') !== 'use' || titleUse[u.key]);
 
   async function doImport() {
     if (!preview) return;
@@ -177,11 +183,16 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
       const k = `${u.province_code}|${u.key}`;
       cities[k] = decide(city[k], cityUse[k]);
     }
+    const titles: Record<string, { action: 'use'; id: string } | { action: 'empty' }> = {};
+    for (const u of preview.unknown.titles) {
+      const id = titleUse[u.key];
+      titles[u.key] = title[u.key] === 'use' && id ? { action: 'use', id } : { action: 'empty' };
+    }
     const overrides: Record<string, ImportAction> = {};
     for (const [row, a] of Object.entries(actions)) if (a) overrides[row] = a;
     setPending(true);
     try {
-      const res = await importCustomers({ file_name: fileName, rows, default_action: defaultAction, actions: overrides, categories, cities });
+      const res = await importCustomers({ file_name: fileName, rows, default_action: defaultAction, actions: overrides, categories, cities, titles });
       if (!res.ok) return void toast.error(res.error);
       toast.success(t('done', { created: res.data.created, updated: res.data.updated, skipped: res.data.skipped }));
       close();
@@ -210,7 +221,7 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
   const errorRows = preview?.rows.filter((r) => r.status === 'error') ?? [];
   const incomplete = preview?.rows.filter((r) => r.status !== 'error' && r.incomplete).length ?? 0;
   const dropped = preview?.rows.flatMap((r) => r.dropped.map((d) => ({ row: r.row, ...d }))) ?? [];
-  const fieldName = (field: string) => (field in { name: 1, name_en: 1, kind: 1, ceo_name: 1, province: 1, city: 1, address: 1, rank: 1, category: 1, contact_person: 1, contact_title: 1, contact_label: 1, phone: 1, email: 1 } ? t(`headers.${field as CustomerImportColumn}`) : field === 'contact' ? t('headers.contact_person') : field);
+  const fieldName = (field: string) => (field in { name: 1, name_en: 1, kind: 1, ceo_name: 1, province: 1, city: 1, address: 1, rank: 1, category: 1, contact_person: 1, contact_title: 1, contact_label: 1, phone: 1, email: 1, ceo_phone: 1, activity: 1 } ? t(`headers.${field as CustomerImportColumn}`) : field === 'contact' ? t('headers.contact_person') : field);
   const errorText = (e: string | null) => (e === 'no_name' ? t('errorNoName') : e === 'duplicate_in_file' ? t('errorDuplicateInFile') : t('errorInvalid'));
   const stepLabel = (s: Step) => (s === 'unknown' ? t('stepUnknown') : s === 'matches' ? t('stepMatches') : t('stepSummary'));
 
@@ -250,6 +261,7 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
                   <p>{t('acceptedKind')}</p>
                   <p>{t('acceptedLabel')}</p>
                   <p>{t('acceptedRank')}</p>
+                  <p>{t('acceptedContactTitle')}</p>
                 </div>
                 {reading ? <p className="text-sm text-muted-foreground">{t('reading')}</p> : null}
                 {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -302,6 +314,27 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
                         </div>
                       );
                     })}
+                    {preview.unknown.titles.length > 0 ? (
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium">{t('unknownTitles')}</p>
+                        <p className="text-sm text-muted-foreground">{t('titleHint')}</p>
+                        {preview.unknown.titles.map((u) => (
+                          <div key={`n${u.key}`} className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="min-w-0 flex-1">{t('unknownTitle', { value: u.value, rows: u.rows })}</span>
+                            <Select value={title[u.key] ?? 'empty'} onChange={(v) => setTitle((s) => ({ ...s, [u.key]: v as 'use' | 'empty' }))} ariaLabel={u.value} className="w-48">
+                              <option value="empty">{t('decideEmpty')}</option>
+                              <option value="use">{t('decideUse')}</option>
+                            </Select>
+                            {(title[u.key] ?? 'empty') === 'use' ? (
+                              <Select value={titleUse[u.key] ?? ''} onChange={(v) => setTitleUse((s) => ({ ...s, [u.key]: v }))} ariaLabel={u.value} className="w-48">
+                                <option value="" />
+                                {activeTitles.map((c) => <option key={c.id} value={c.id}>{locale === 'fa' ? c.name_fa : c.name_en || c.name_fa}</option>)}
+                              </Select>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -322,6 +355,8 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
                           <tr>
                             <th className="text-start">{t('rowCol')}</th>
                             <th className="text-start">{t('fileName')}</th>
+                            <th className="text-start">{t('headers.ceo_phone')}</th>
+                            <th className="text-start">{t('headers.activity')}</th>
                             <th className="text-start">{t('existing')}</th>
                             <th className="text-start">{t('action')}</th>
                           </tr>
@@ -331,6 +366,8 @@ export function CustomerImport({ customers }: { customers: CustomerRef[] }) {
                             <tr key={r.row}>
                               <td>{f.number(r.row)}</td>
                               <td>{fileRows.get(r.row)?.name ?? ''}</td>
+                              <td dir="ltr" className="text-start">{r.values.ceo_phone ?? '—'}</td>
+                              <td>{r.values.activity ?? '—'}</td>
                               <td>{r.match ? label(customers.find((c) => c.id === r.match?.id) ?? r.match) : ''}</td>
                               <td>
                                 <Select value={actions[String(r.row)] ?? ''} onChange={(v) => setActions((s) => ({ ...s, [String(r.row)]: v as ImportAction | '' }))} ariaLabel={t('action')} className="w-56">

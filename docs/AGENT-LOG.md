@@ -78,6 +78,39 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — FR-99: Sales change history + customer phone book, activity description, Private type (Claude)
+
+**Agent:** Claude Opus 5.5 via Claude Code (lead); Opus subagents wrote the SQL tasks, Sonnet subagents the TS / UI tasks
+**Branch / HEAD at start:** new worktree `../bj-cust`, branch `feat/sales-customer-phonebook` from `main` @ `bca387d` (local main was 1 commit ahead of origin, unpushed)
+**Trigger:** Owner / CEO feedback on FR-98: log every ERP change (who / what / old → new); phone book of key people with titles from a list (CEO stays, + direct phone); activity description; third company type Private. Owner answers in chat: History tab on customers / products + central Activity page (new permission); many numbers per person; missing CEO = Incomplete, not blocked; complete = rank + category **or** description, plus ≥ 1 phone; seeded 12-title list; history tab for all Sales users with private values stripped.
+
+**What changed**
+- Spec `docs/specs/2026-11-27-sales-customer-phonebook-history-design.md` (subagent-reviewed; §11 amendments), plan `docs/plans/2026-11-27-sales-customer-phonebook-history.md` (subagent-reviewed; amendments A1–A23).
+- Migration `20261127100000_sales_history.sql`: `sales_audit` (append-only statement trigger), `sales_events` indexes, `private.sales_log / sales_diff / sales_strip_private`, logging in product / settings / alias / Name matching / import functions, deadline done → direct `sales_events` insert (not `sales_touch`: its deadline sync would re-mark), `app_sales_product_history`, `app_sales_activity`, permission `sales_activity` (catalog 38).
+- Migration `20261127110000_sales_customer_phonebook.sql`: `sales_contact_titles` (12 seeded), `sales_customer_phones`, contacts → entries (old title / label / phone migrated then dropped; unmatched titles added to the list), `ceo_phone`, `activity`, `created_by`, kind `private`, new `missing` keys, every customer function redefined with logging, `app_sales_save_title`, `app_sales_customer_history`.
+- TS: types, actions, `lib/sales/history.ts`, `HistoryList.tsx`, CustomerForm (Key people), CustomerView (phone book + History tab), product History, `sales/activity` page, Settings titles list, import (2 columns appended after Email, unknown titles use / leave empty), FilterBar / CustomersList Private, ActivityLog deadline lines; fa + en messages.
+- Lead review fixes: phone book rows (unnamed titled people, CEO without name), Private grades on profile, entry warning text, shared history row rendering (`useHistoryParts`), category / city reorder and hide now send `name_en` (it was wiped — pre-existing bug), CEO field label no longer repeats "مدیرعامل", profile Email header.
+- Docs: REQUIREMENTS FR-99, DATA_MODEL, PERMISSIONS, CHANGELOG, TASKS, CLAUDE.md lines.
+
+**Actions outside the repo**
+- Docker VM disk was 100 % full (`could not write init file` on `bj-approvals-finance-db-1`): `docker builder prune -f` (2 GB). Writes to `:3501` may have failed before that.
+- Clones `x_fr99` (and `x_fr99b` for the contact-migration check, dropped) on `bj-approvals-finance-db-1`.
+- `:3501`: pre-dump `.bj-deploy/approvals-finance/pre-fr99-20261127-150654.dump`; applied both migrations to db `postgres` with ledger rows (`release_version` `fr99-local`); restarted rest; new wrapper `.bj-deploy/approvals-finance/compose-cust{,.yml}` (builds from `../bj-cust`); app rebuilt, health 200.
+- Throwaway users `9990990011` (holder) / `9990990012` (sales read + activity), roles "ZZ Test FR99 Holder / Reader", test customer "زززتست دفترچه تلفن" — see State for cleanup.
+- Copied `../bj/.env.local` into the worktree (untracked) for `npm run build`.
+
+**Verification**
+- SQL on `x_fr99`: sales-history 78, sales-customer-phonebook 86, sales-customer-registry 110, sales 98, sales-customers 50, sales-currencies 32, sales-files 57, sales-inquiry-import 104, sales-name-matching 121, sales-products 52, sales-record-remove 105, sales-stage-pages 21, request-edit 148, fr55 341 (14 pre-existing soft NOTICE FAILs on this clone, same as on HEAD) — all ROLLBACK, no error.
+- `tsc` clean, `npm run lint` clean, vitest 1720 passed / 5 skipped, `npm run build` ok, audit gate ok.
+- Browser on `localhost:3501` (session cookie from `127.0.0.1` auth API — no password typed on the LAN host): new Private customer with activity, CEO + phone, QC manager with a number → saved draft (missing 3 = province, city, address); edit CEO phone → History shows "Edited · CEO phone: old ← new"; reader user's HTML has no CEO name / phone ("Private details changed"); Activity page lists customer + record rows; Settings titles list reorder keeps English names.
+
+**State left behind**
+- See the review / merge entry above this one when it exists; at writing: uncommitted on the branch.
+
+**For the next agent**
+- Customers created before 2026-11-27 have no history; that is by design.
+- The record activity log still shows import lines per record; the Activity page hides record `import` events (the batch row stands for them).
+
 ## 2026-11-27 — Cleanups after PR #36: empty audit ignore list, `bj-cust` worktree removed (Claude)
 
 Owner asked for both cleanups. `scripts/audit-gate.mjs`: `IGNORED` emptied (picomatch GHSA-fc5q-39xc-vjpf no longer reported; `node scripts/audit-gate.mjs` → "ok (0 advisory found, 0 ignored)"); both TASKS lines removed, CLAUDE.md audit line reworded. Removed worktree `../bj-cust`, deleted local branches `feat/sales-customer-form-feedback` + `feat/sales-customer-registry` (both merged; remote branches left). Deleted `.bj-deploy/approvals-finance/compose-cust{,.yml}`; `:3501` app rebuilt from the main checkout with `.bj-deploy/approvals-finance/compose` (health 200). Committed on `main` locally; not pushed (a push to main deploys to Liara — waiting for the owner's go).
