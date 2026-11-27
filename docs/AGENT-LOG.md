@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — FR-99 merged and deployed to Liara (Claude)
+
+Owner tested on `:3501` and said "Tested, merge it". PR #37 merged (`966074d`, also carried `bca387d` audit-gate cleanup). Liara run 46079993071: build ✓, deploy ✓ (migrations `20261127100000`, `110000`, `120000`, `130000` on the live DB); `https://bjeng.app/api/health` 200. Not checked signed in on Liara. Open: admin grants **Sales: activity log** to the CEO role on Liara; worktree `../bj-cust` + `.bj-deploy/approvals-finance/compose-cust{,.yml}` still exist (`:3501` runs the branch, which equals `main` now).
+
 ## 2026-11-27 — FR-99 follow-up: Activity person filter (Claude)
 
 Owner: the Activity page's person dropdown listed the whole company; it should list only people who can change ERP › Sales (any Sales permission at edit level; read-only holders excluded). New migration `20261127130000_sales_activity_people.sql`: `app_sales_activity_people()` (stable, `sales_activity` read; active, non-test profiles with `sales` read and any of sales / sales_prices / sales_bonds / sales_decide / sales_settings / project_items / sales_customers / sales_customers_import at edit; the admin passes every check). `listSalesActivityPeople` action; `sales/activity/page.tsx` uses it. Test assertions in `tests/sql/sales-history.sql` (coverage list + edit holder listed, read-only users not, gate) — failed before the migration, 83 PASS after on clone `x_fr99` (re-made, dropped); `sales.sql` 98, `sales-customer-phonebook.sql` 86. `schema.sql`: function + ACL blocks. `:3501`: migration applied with ledger row `fr99-people-local`, rest restarted, app rebuilt (health 200); the function returns 2 of 142 active profiles there. Still waiting for the owner's OK to merge.
