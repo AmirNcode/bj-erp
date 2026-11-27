@@ -78,6 +78,13 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-26 — Reviewed, fixed and merged PR #36 (customer grades, name dropdown) → Liara (Claude)
+
+Owner asked for review + fix + merge. I diffed the redefined `sales_customer_profile` / `app_sales_save_customer` / `app_sales_merge_customers` against `20261126100200`: every earlier behavior is kept. Lock order, the trigger, old-app swap compatibility (`grades` absent = keep) and the merge edge cases are OK. **Fixes (`39016d0`):** (1) new migration `20261126160000_sales_customer_grades_grants.sql` revokes the default PUBLIC EXECUTE on `private.sales_customer_set_grades` (SECURITY DEFINER, no permission check) and on `sales_customer_grades_trg`, like the other FR-98 helpers; new SQL assertion in `tests/sql/sales-customer-registry.sql` (fails without the fix); `schema.sql` + 2 ACL hunks. (2) Name inputs `role="combobox"` + `aria-controls`/`aria-autocomplete` (`aria-expanded` is invalid on a textbox). (3) `ModalContent` Escape guard narrowed to `[role="combobox"][aria-expanded="true"]` (an open disclosure button no longer blocks Escape); CLAUDE.md line updated. Cosmetic issue left: missing marks stay on row 0 when a later row is the main pair.
+Verification: all 10 `tests/sql/sales*.sql` pass on clone `x_rev` (dropped); tsc, lint, vitest 1692 passed, build ok, audit gate ok. The repo has no PR CI (deploy workflow runs on push to main only). Review comment posted on PR #36.
+DB actions: `:3501` pre-dump `.bj-deploy/approvals-finance/pre-cust-grades-review-20261126-234728.dump`; applied `20261126160000` to db `postgres` with ledger row (`cust-grades-review-local`); restarted `bj-approvals-finance-rest-1`; rebuilt app via `compose-cust` (health 200). `docker builder prune -f` (2 GB).
+Merge `465eb49`. Deploy Liara run 45942239806: build ✓, deploy ✓ (migrations `20261126150000` + `160000` on the live DB). `https://bjeng.app/api/health` 200. Not checked signed in on Liara. `scripts/audit-gate.mjs` says GHSA-fc5q-39xc-vjpf is no longer reported, so it can come off `IGNORED` (not done).
+
 ## 2026-11-26 — Sales customer form feedback: several ranks, name-match dropdown, CEO heading (Claude)
 
 **Agent:** Claude Opus 5.5 via Claude Code
