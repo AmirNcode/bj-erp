@@ -122,7 +122,7 @@ insert into hist_lists select 'logs',unnest(array[
   'app_sales_save_record','app_sales_save_settings','app_sales_save_stage','app_sales_save_title',
   'app_sales_set_deadline_done','app_sales_set_item_price']);
 insert into hist_lists select 'readonly',unnest(array[
-  'app_sales_activity','app_sales_aliases','app_sales_bootstrap','app_sales_customer','app_sales_customer_batches',
+  'app_sales_activity','app_sales_activity_people','app_sales_aliases','app_sales_bootstrap','app_sales_customer','app_sales_customer_batches',
   'app_sales_customer_history',
   'app_sales_customer_import_preview','app_sales_customer_lists','app_sales_customers','app_sales_deadlines',
   'app_sales_file_get','app_sales_find_node','app_sales_list','app_sales_list_page','app_sales_metrics',
@@ -425,5 +425,12 @@ set local transaction_read_only = on;
 select pg_temp.assert('the history readers work in a read-only transaction',
   jsonb_typeof(pg_temp.act('act','{}')->'rows')='array'
   and jsonb_array_length(pg_temp.as_json('r1',format('select public.app_sales_product_history(%L)',pg_temp.fx('prod'))))=3);
+
+-- The Activity person filter: only people with a Sales permission at edit level (owner, 2026-11-27).
+select pg_temp.assert('activity people: an edit holder is listed, read-only holders are not',
+  (select bool_or((x->>'id')::uuid=pg_temp.fx('s1')) and not bool_or((x->>'id')::uuid in (pg_temp.fx('r1'),pg_temp.fx('act')))
+     from jsonb_array_elements(pg_temp.as_json('act','select public.app_sales_activity_people()')) x));
+select pg_temp.assert('activity people needs sales_activity',
+  pg_temp.msg(pg_temp.as_scalar('r1','select public.app_sales_activity_people()::text'))='sales: not allowed');
 
 rollback;

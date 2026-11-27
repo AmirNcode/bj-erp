@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — FR-99 follow-up: Activity person filter (Claude)
+
+Owner: the Activity page's person dropdown listed the whole company; it should list only people who can change ERP › Sales (any Sales permission at edit level; read-only holders excluded). New migration `20261127130000_sales_activity_people.sql`: `app_sales_activity_people()` (stable, `sales_activity` read; active, non-test profiles with `sales` read and any of sales / sales_prices / sales_bonds / sales_decide / sales_settings / project_items / sales_customers / sales_customers_import at edit; the admin passes every check). `listSalesActivityPeople` action; `sales/activity/page.tsx` uses it. Test assertions in `tests/sql/sales-history.sql` (coverage list + edit holder listed, read-only users not, gate) — failed before the migration, 83 PASS after on clone `x_fr99` (re-made, dropped); `sales.sql` 98, `sales-customer-phonebook.sql` 86. `schema.sql`: function + ACL blocks. `:3501`: migration applied with ledger row `fr99-people-local`, rest restarted, app rebuilt (health 200); the function returns 2 of 142 active profiles there. Still waiting for the owner's OK to merge.
+
 ## 2026-11-27 — FR-99 on `:3501` for owner test (Claude)
 
 PR #37 (`36f23d3` + review fixes `9493ecc`) pushed. `:3501`: applied `20261127120000_sales_fr99_review_fixes.sql` with a ledger row (`fr99-review-local`), restarted rest, rebuilt the app via `.bj-deploy/approvals-finance/compose-cust` (health 200; customer History, Activity and English profile pages render). Throwaway users `9990990011/12`, their roles, the test customer and their `sales_audit` rows deleted (as `supabase_admin`); title order restored. Clone `x_fr99` dropped. **Waiting for the owner to test on `:3501` and confirm the merge** — do not merge `main` before that. After merge: grant **Sales: activity log** to the CEO role on Liara.

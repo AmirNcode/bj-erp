@@ -10655,6 +10655,31 @@ end $$;
 
 
 --
+-- Name: app_sales_activity_people(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_sales_activity_people() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+declare v_company uuid := private.sales_company('sales_activity', 'read');
+begin
+  return coalesce((
+    select jsonb_agg(jsonb_build_object('id', p.id, 'name', p.full_name) order by p.full_name, p.id)
+      from public.profiles p
+     where p.company_id = v_company
+       and p.active
+       and not private.is_test_account(p.id)
+       and private.has_perm(p.id, 'sales', 'read')
+       and exists (select 1 from unnest(array['sales', 'sales_prices', 'sales_bonds', 'sales_decide',
+                                              'sales_settings', 'project_items', 'sales_customers',
+                                              'sales_customers_import']) as k(key)
+                    where private.has_perm(p.id, k.key, 'edit'))), '[]'::jsonb);
+end $$;
+
+
+
+--
 -- Name: app_sales_add_customer(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -25103,6 +25128,17 @@ REVOKE ALL ON FUNCTION public.app_sales_activity(p jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO postgres;
 GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO authenticated;
 GRANT ALL ON FUNCTION public.app_sales_activity(p jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION app_sales_activity_people(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.app_sales_activity_people() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.app_sales_activity_people() TO postgres;
+GRANT ALL ON FUNCTION public.app_sales_activity_people() TO authenticated;
+GRANT ALL ON FUNCTION public.app_sales_activity_people() TO service_role;
+
 
 
 --

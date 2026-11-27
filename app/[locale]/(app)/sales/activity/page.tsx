@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
-import { listSalesActivity } from '@/lib/actions/sales';
+import { listSalesActivity, listSalesActivityPeople } from '@/lib/actions/sales';
 import type { ActivityFilters } from '@/lib/sales/types';
 import { loadSalesBootstrap } from '../_components/load';
 import { ActivityView } from '../_components/ActivityView';
@@ -38,14 +38,14 @@ export default async function SalesActivityPage({ params, searchParams }: Props)
     ...(to && DAY.test(to) ? { to } : {}),
     ...(entity && (ENTITIES as readonly string[]).includes(entity) ? { entity: entity as ActivityFilters['entity'] } : {}),
   };
-  const page = await listSalesActivity(filters);
+  const [page, people] = await Promise.all([listSalesActivity(filters), listSalesActivityPeople()]);
   if (!page.ok) return <p role="alert" className="text-sm text-destructive">{page.error}</p>;
   return (
     <ActivityView
       // A new filter set remounts the view, so the appended pages restart from the first one.
       key={JSON.stringify(filters)}
       filters={filters}
-      people={boot.people.map((p) => ({ id: p.id, name: p.name }))}
+      people={people.ok ? people.data : []}
       initial={page.data}
     />
   );

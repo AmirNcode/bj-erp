@@ -270,6 +270,15 @@ export async function listSalesActivity(f: ActivityFilters = {}): Promise<Read<A
   return { ok: true, data: data as unknown as ActivityPage };
 }
 
+/** The Activity page's person filter: people with any Sales permission at edit level (`sales_activity` holders). */
+export async function listSalesActivityPeople(): Promise<Read<{ id: string; name: string }[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_activity_people');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as { id: string; name: string }[] };
+}
+
 export async function previewCustomerImport(rows: CustomerImportCells[]): Promise<Read<CustomerImportPreview>> {
   const c = await requireCaller();
   if (!c.ok) return c;
