@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — Cleanups after PR #36: empty audit ignore list, `bj-cust` worktree removed (Claude)
+
+Owner asked for both cleanups. `scripts/audit-gate.mjs`: `IGNORED` emptied (picomatch GHSA-fc5q-39xc-vjpf no longer reported; `node scripts/audit-gate.mjs` → "ok (0 advisory found, 0 ignored)"); both TASKS lines removed, CLAUDE.md audit line reworded. Removed worktree `../bj-cust`, deleted local branches `feat/sales-customer-form-feedback` + `feat/sales-customer-registry` (both merged; remote branches left). Deleted `.bj-deploy/approvals-finance/compose-cust{,.yml}`; `:3501` app rebuilt from the main checkout with `.bj-deploy/approvals-finance/compose` (health 200). Committed on `main` locally; not pushed (a push to main deploys to Liara — waiting for the owner's go).
+
 ## 2026-11-26 — Reviewed, fixed and merged PR #36 (customer grades, name dropdown) → Liara (Claude)
 
 Owner asked for review + fix + merge. I diffed the redefined `sales_customer_profile` / `app_sales_save_customer` / `app_sales_merge_customers` against `20261126100200`: every earlier behavior is kept. Lock order, the trigger, old-app swap compatibility (`grades` absent = keep) and the merge edge cases are OK. **Fixes (`39016d0`):** (1) new migration `20261126160000_sales_customer_grades_grants.sql` revokes the default PUBLIC EXECUTE on `private.sales_customer_set_grades` (SECURITY DEFINER, no permission check) and on `sales_customer_grades_trg`, like the other FR-98 helpers; new SQL assertion in `tests/sql/sales-customer-registry.sql` (fails without the fix); `schema.sql` + 2 ACL hunks. (2) Name inputs `role="combobox"` + `aria-controls`/`aria-autocomplete` (`aria-expanded` is invalid on a textbox). (3) `ModalContent` Escape guard narrowed to `[role="combobox"][aria-expanded="true"]` (an open disclosure button no longer blocks Escape); CLAUDE.md line updated. Cosmetic issue left: missing marks stay on row 0 when a later row is the main pair.
