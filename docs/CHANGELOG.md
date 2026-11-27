@@ -9,6 +9,11 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP › Sales customer form feedback (FR-98 follow-up) — 2026-11-26, branch `feat/sales-customer-form-feedback`
+- A contractor customer can hold several rank + category pairs (CEO): "Add rank / category" in the customer form, every pair on the customer page. The first pair stays the main one (completeness, import); further pairs live in `sales_customer_grades` (migration `20261126150000`), and a merge keeps both customers' pairs.
+- The "is it one of these?" company matches now open as a dropdown under the name / English name field instead of growing the form; Escape closes the list, not the dialog (any open picker in a Sales dialog).
+- The form no longer shows "Managing director" twice.
+
 ### ERP › Sales customer registry (FR-98) — 2026-11-26, branch `feat/sales-customer-registry`
 
 - **Add customer** on the Customers tab and **Create "…"** in the record form's customer picker open one full form: Farsi name, English name / abbreviation, government / contractor, rank + category (contractors), managing director, province / city / address, and a contact list. Missing information can be added later: the customer is saved as a draft and tagged **Incomplete** until complete (a **Missing data only** filter finds them).

@@ -78,6 +78,33 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-26 — Sales customer form feedback: several ranks, name-match dropdown, CEO heading (Claude)
+
+**Agent:** Claude Opus 5.5 via Claude Code
+**Branch / HEAD at start:** worktree `../bj-cust`, new branch `feat/sales-customer-form-feedback` from `main` @ `ca338c7`
+**Trigger:** Owner: (1) "Managing director" shown twice in the New customer form; (2) CEO confirmed customers can have several ranks / categories — add a button for more; (3) the similar-company list grew the form below the English name field — make it a dropdown on the name fields.
+
+**What changed**
+- Migration `20261126150000_sales_customer_grades.sql`: table `sales_customer_grades` (further complete pairs; the first pair stays on `sales_customers` so completeness, import and readers are untouched), `private.sales_customer_set_grades`, trigger `sales_customers_grades_sync` (drops further pairs when kind leaves contractor or a further pair becomes the first), `sales_customer_profile` + `grades`, `app_sales_save_customer` + key `grades` (absent = keep: old app during swap), `app_sales_merge_customers` keeps both customers' pairs (max 9 further).
+- `CustomerForm.tsx`: rank/category rows + "Add rank / category" / Remove (first non-empty row = main pair, may be a draft; a half-filled further row blocks Save with a message); name matches as `SimilarDropdown` under the focused name field (`NameField`); CEO section heading removed. `lib/sales/customerForm.ts` `gradeState` / `gradesPayload` / `hasPartialGrade`. `CustomerView.tsx` lists every pair. `parts.tsx` `ModalContent.onEscapeKeyDown`: Escape with an `aria-expanded` field focused no longer closes the dialog (fixes ListPick too). Messages fa+en.
+- Tests: 15 new assertions in `tests/sql/sales-customer-registry.sql`, 4 unit tests. `schema.sql` patched from clone dump diff (3 pg_restore CHECK hunks reverted).
+
+**Actions outside the repo**
+- `bj-approvals-finance-db-1`: clone `x_grades` (migration + SQL tests, then dropped). Pre-dump `.bj-deploy/approvals-finance/pre-cust-grades-20261126-232422.dump`; applied `20261126150000` to db `postgres` with ledger row (`release_version` `cust-grades-local`); restarted rest. App rebuilt twice via `.bj-deploy/approvals-finance/compose-cust` (comment updated: worktree now on this branch).
+- Throwaway user `9990980011` (GoTrue admin API, generated password; had to set `auth.users.role/aud='authenticated'` — admin-created users get role "" → PostgREST "role \"\" does not exist" → login shows "inactive") + role "Test FR98 Grades" + test customer "ZZ Test Grades Co": all deleted after the check.
+
+**Verification**
+- SQL on clone: `sales-customer-registry` (all incl. new), `sales`, `sales-customers`, `sales-inquiry-import`, `sales-name-matching`, `sales-record-remove` PASS.
+- `tsc` clean, `npm run lint` clean, vitest 1692 passed / 5 skipped, `npm run build` ok.
+- Browser at `http://192.168.2.85:3501` (LAN origin; localhost login fails, bundle targets APP_ORIGIN): heading once; typing "Kala" shows dropdown under the name field, form does not grow; Escape closes only the dropdown; two pairs saved and shown on the customer page; Edit reloads both rows; half-filled row warning; Farsi RTL layout.
+
+**State left behind**
+- Uncommitted on `feat/sales-customer-form-feedback` (owner commits). `:3501` runs this branch with the new migration.
+
+**For the next agent**
+- Import still handles one pair per row (the main pair); several pairs per import row not supported.
+- e2e spec for the customer form still missing (TASKS).
+
 ## 2026-11-26 — Merged PR #35 (FR-98 customer registry) → Liara (Claude)
 
 Owner asked to merge after review. `gh pr merge 35 --merge` → `ab5436f`. Deploy Liara run 45905058152: build ✓, deploy ✓ (migrations `20261126100000`–`100400` applied on the live DB). `https://bjeng.app/api/health` 200 after. Not checked signed-in on Liara. Dropped clone `x_cust` on `bj-approvals-finance-db-1`. Worktree `../bj-cust` kept (branch merged; can be removed). `:3501` runs the merged code (wrapper `compose-cust`).

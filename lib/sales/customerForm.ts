@@ -39,6 +39,36 @@ export function cleanContacts(rows: ContactRow[]): CustomerContact[] {
     }));
 }
 
+/** One rank + category row of the form (the first row is the customer's main pair). */
+export type GradeRow = { key: number; rank: string; categoryId: string | null };
+
+/** empty: nothing picked (dropped on save) · partial: one of the two · ok. */
+export function gradeState(r: GradeRow): ContactState {
+  const rank = r.rank !== '';
+  const cat = !!r.categoryId;
+  if (!rank && !cat) return 'empty';
+  return rank && cat ? 'ok' : 'partial';
+}
+
+/**
+ * The rows as the save payload: empty rows dropped, the first remaining row is the main pair
+ * (may be half filled: the customer is then Incomplete), the rest go to `grades`.
+ */
+export function gradesPayload(rows: GradeRow[]): Pick<CustomerInput, 'rank' | 'category_id' | 'grades'> {
+  const kept = rows.filter((r) => gradeState(r) !== 'empty');
+  const [first, ...rest] = kept;
+  return {
+    rank: first?.rank ? Number(first.rank) : null,
+    category_id: first?.categoryId ?? null,
+    grades: rest.filter((r) => gradeState(r) === 'ok').map((r) => ({ rank: Number(r.rank), category_id: r.categoryId as string })),
+  };
+}
+
+/** True when a row after the main pair is half filled (blocks Save; the main pair may be a draft). */
+export function hasPartialGrade(rows: GradeRow[]): boolean {
+  return rows.filter((r) => gradeState(r) !== 'empty').slice(1).some((r) => gradeState(r) === 'partial');
+}
+
 /** Required keys still empty, in form order (spec §4). */
 export function missingKeys(input: CustomerInput): CustomerMissingKey[] {
   const out: CustomerMissingKey[] = [];

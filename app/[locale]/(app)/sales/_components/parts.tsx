@@ -284,10 +284,17 @@ const inCalendar = (target: EventTarget | null) => target instanceof Element && 
  * (so a scrolling dialog cannot cut it off); a press or focus there must not count as
  * "outside the dialog" and close it.
  */
-export function ModalContent({ onPointerDownOutside, onInteractOutside, ...props }: React.ComponentProps<typeof DialogContent>) {
+export function ModalContent({ onPointerDownOutside, onInteractOutside, onEscapeKeyDown, ...props }: React.ComponentProps<typeof DialogContent>) {
   return (
     <DialogContent
       {...props}
+      // Radix hears Escape in the capture phase, before the field: a combobox with an open list
+      // (aria-expanded) closes that list on its own keydown and the dialog stays open. Only
+      // comboboxes: an open disclosure button must not keep Escape from closing the dialog.
+      onEscapeKeyDown={(e) => {
+        if (document.activeElement?.matches('[role="combobox"][aria-expanded="true"]')) e.preventDefault();
+        else onEscapeKeyDown?.(e);
+      }}
       onPointerDownOutside={(e) => {
         if (inCalendar(e.target)) e.preventDefault();
         else onPointerDownOutside?.(e);

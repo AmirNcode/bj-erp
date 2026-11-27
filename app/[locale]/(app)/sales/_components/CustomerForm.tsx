@@ -20,7 +20,8 @@ import {
   findSimilarSalesCustomers, getCustomerLists, saveSalesCategory, saveSalesCity, saveSalesCustomer,
 } from '@/lib/actions/sales';
 import {
-  CONTACT_LABELS, cleanContacts, contactState, emptyContactRow, hasPartialContact, missingKeys, type ContactRow,
+  CONTACT_LABELS, cleanContacts, contactState, emptyContactRow, gradeState, gradesPayload, hasPartialContact, hasPartialGrade,
+  missingKeys, type ContactRow, type GradeRow,
 } from '@/lib/sales/customerForm';
 import { customerLabel } from '@/lib/sales/customerLabel';
 import { matchAllWords, similarByWords } from '@/lib/sales/customerSearch';
@@ -32,6 +33,11 @@ import { useViewAs } from '../../_components/ViewAsContext';
 import { Field, ModalContent, Select, Tag } from './parts';
 
 const EMPTY_LISTS: CustomerLists = { provinces: [], cities: [], categories: [] };
+/** Rows a contractor may hold: the main pair + 9 further pairs (SQL caps `grades` at 9). */
+const MAX_GRADES = 10;
+
+let gradeKey = 0;
+const newGrade = (rank = '', categoryId: string | null = null): GradeRow => ({ key: ++gradeKey, rank, categoryId });
 
 export function CustomerForm({ customerId, initial, initialName, customers, onSaved, onUse, onClose }: {
   customerId: string | null;
@@ -53,8 +59,10 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
   const [nameFa, setNameFa] = useState(initial?.name ?? initialName ?? '');
   const [nameEn, setNameEn] = useState(initial?.name_en ?? '');
   const [kind, setKind] = useState<CustomerKind | null>(initial?.kind ?? null);
-  const [rank, setRank] = useState(initial?.rank ? String(initial.rank) : '');
-  const [categoryId, setCategoryId] = useState<string | null>(initial?.category_id ?? null);
+  const [grades, setGrades] = useState<GradeRow[]>(() => [
+    newGrade(initial?.rank ? String(initial.rank) : '', initial?.category_id ?? null),
+    ...(initial?.grades ?? []).map((g) => newGrade(String(g.rank), g.category_id)),
+  ]);
   const [ceo, setCeo] = useState(initial?.ceo_name ?? '');
   const [province, setProvince] = useState(initial?.province_code ?? '');
   const [cityId, setCityId] = useState<string | null>(initial?.city_id ?? null);
@@ -66,7 +74,9 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
   const [busy, setBusy] = useState(false);
   const [dup, setDup] = useState<DuplicateCustomer | null>(null);
   const [remote, setRemote] = useState<CustomerRef[]>([]);
-  const [creating, setCreating] = useState<null | { what: 'category' | 'city'; fa: string; en: string }>(null);
+  const [creating, setCreating] = useState<null | CreateState>(null);
+  const [nameFocus, setNameFocus] = useState<null | 'fa' | 'en'>(null);
+  const [similarHidden, setSimilarHidden] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
 
   useEffect(() => {
@@ -110,20 +120,23 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
     province_code: province || null,
     city_id: province ? cityId : null,
     address: address.trim() || null,
-    rank: kind === 'contractor' && rank ? Number(rank) : null,
-    category_id: kind === 'contractor' ? categoryId : null,
+    ...(kind === 'contractor' ? gradesPayload(grades) : { rank: null, category_id: null, grades: [] }),
     contacts: cleanContacts(contacts),
   };
   const missing = missingKeys(input);
   const flagged = new Set<CustomerMissingKey>(
     (initial?.missing ?? []).filter((k) => missing.includes(k)),
   );
-  const partial = hasPartialContact(contacts);
+  const partialGrade = kind === 'contractor' && hasPartialGrade(grades);
+  // Rows after the main pair that are half filled (the first non-empty row is the main pair).
+  const blockedGrades = new Set(grades.filter((g) => gradeState(g) !== 'empty').slice(1)
+    .filter((g) => gradeState(g) === 'partial').map((g) => g.key));
+  const partial = hasPartialContact(contacts) || partialGrade;
   const canSave = nameFa.trim() !== '' && !partial && !busy;
 
   const provinceLabel = (p: { name_fa: string; name_en: string }) => (locale === 'en' && p.name_en ? p.name_en : p.name_fa);
   const listLabel = (p: { name_fa: string; name_en: string | null }) => (locale === 'en' && p.name_en ? p.name_en : p.name_fa);
-  const categories = lists.categories.filter((c) => c.active || c.id === categoryId);
+  const categories = lists.categories.filter((c) => c.active || grades.some((g) => g.categoryId === c.id));
   const cities = lists.cities.filter((c) => c.province_code === province && (c.active || c.id === cityId));
   const provinceName = lists.provinces.find((p) => p.code === province);
 
@@ -152,10 +165,11 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
       if (creating.what === 'category') {
         const r = await saveSalesCategory({ name_fa: creating.fa.trim(), name_en: en });
         if (!r.ok && !r.duplicate) { toast.error(r.error); return; }
+        const row = creating.row;
         if (r.ok) {
           setLists((l) => ({ ...l, categories: [...l.categories, r.data] }));
-          setCategoryId(r.data.id);
-        } else if (r.duplicate) setCategoryId(r.duplicate.id);
+          updateGrade(row, { categoryId: r.data.id });
+        } else if (r.duplicate) updateGrade(row, { categoryId: r.duplicate.id });
       } else {
         const r = await saveSalesCity({ province_code: province, name_fa: creating.fa.trim(), name_en: en });
         if (!r.ok && !r.duplicate) { toast.error(r.error); return; }
@@ -169,6 +183,17 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
       setCreateBusy(false);
     }
   }
+
+  function updateGrade(key: number | undefined, patch: Partial<GradeRow>) {
+    setGrades((rows) => rows.map((g) => (g.key === key ? { ...g, ...patch } : g)));
+  }
+  const showSimilar = similar.length > 0 && !similarHidden;
+  const nameKeys = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && showSimilar && nameFocus) { e.preventDefault(); e.stopPropagation(); setSimilarHidden(true); }
+  };
+  const similarList = (
+    <SimilarDropdown items={similar} locale={locale} onUse={onUse} onPicked={() => setSimilarHidden(true)} />
+  );
 
   const updateContact = (i: number, patch: Partial<ContactRow>) =>
     setContacts((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -187,15 +212,27 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
         <div className="flex flex-col gap-6">
           <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionNames')}>
             <h3 className="text-sm font-semibold">{t('customerForm.sectionNames')}</h3>
-            <Field label={t('customerForm.name')}>
-              <Input maxLength={200} value={nameFa} onChange={(e) => { setNameFa(e.target.value); setDup(null); }}
-                aria-invalid={dup !== null} data-testid="sales-customer-form-name" />
-            </Field>
-            <Field label={t('customerForm.nameEn')} hint={t('customerForm.nameEnHint')}>
-              <Input maxLength={200} dir="ltr" value={nameEn} onChange={(e) => { setNameEn(e.target.value); setDup(null); }}
-                className={invalidCls('name_en')} data-testid="sales-customer-form-name-en" />
-              {note('name_en')}
-            </Field>
+            <NameField label={t('customerForm.name')} field="fa" focus={nameFocus} setFocus={setNameFocus}
+              dropdown={showSimilar ? similarList : null}>
+              {(id, listId) => (
+                <Input id={id} maxLength={200} value={nameFa} autoComplete="off"
+                  role="combobox" aria-autocomplete="list" aria-controls={listId}
+                  onChange={(e) => { setNameFa(e.target.value); setDup(null); setSimilarHidden(false); }}
+                  onKeyDown={nameKeys} aria-expanded={showSimilar && nameFocus === 'fa'}
+                  aria-invalid={dup !== null} data-testid="sales-customer-form-name" />
+              )}
+            </NameField>
+            <NameField label={t('customerForm.nameEn')} hint={t('customerForm.nameEnHint')} field="en" focus={nameFocus} setFocus={setNameFocus}
+              dropdown={showSimilar ? similarList : null}>
+              {(id, listId) => (
+                <Input id={id} maxLength={200} dir="ltr" value={nameEn} autoComplete="off"
+                  role="combobox" aria-autocomplete="list" aria-controls={listId}
+                  onChange={(e) => { setNameEn(e.target.value); setDup(null); setSimilarHidden(false); }}
+                  onKeyDown={nameKeys} aria-expanded={showSimilar && nameFocus === 'en'}
+                  className={invalidCls('name_en')} data-testid="sales-customer-form-name-en" />
+              )}
+            </NameField>
+            {note('name_en')}
             {dup ? (
               <p className="flex flex-wrap items-center gap-2 text-sm text-destructive" role="alert" data-testid="sales-customer-form-duplicate">
                 <span>{t('customerForm.duplicate', { name: customerLabel(dup, locale) })}</span>
@@ -207,30 +244,6 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
                   <Link href={`/${locale}/sales/customers/${dup.id}`} className="underline">{t('customerForm.open')}</Link>
                 )}
               </p>
-            ) : null}
-            {similar.length > 0 ? (
-              <div className="flex flex-col gap-1 text-sm" data-testid="sales-customer-form-similar">
-                <span className="text-xs font-medium text-muted-foreground">{t('customerForm.similarTitle')}</span>
-                <ul className="flex flex-col divide-y divide-border border-y border-border">
-                  {similar.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2 py-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <bdi className="min-w-0 break-words">{customerLabel(c, locale)}</bdi>
-                        {c.incomplete ? <Tag tone="warn">{t('customerProfile.incomplete')}</Tag> : null}
-                      </span>
-                      {onUse ? (
-                        <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => onUse(c)}>
-                          {t('customerForm.useThis')}
-                        </Button>
-                      ) : (
-                        <Link href={`/${locale}/sales/customers/${c.id}`} className="shrink-0 text-sm text-primary underline">
-                          {t('customerForm.open')}
-                        </Link>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
             ) : null}
           </section>
 
@@ -246,37 +259,56 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
             </div>
             {note('kind')}
             {kind === 'contractor' ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label={t('customerForm.rank')}>
-                  <Select value={rank} onChange={setRank} className={invalidCls('rank')} testId="sales-customer-form-rank">
-                    <option value="">{t('customerForm.pick')}</option>
-                    {[1, 2, 3, 4, 5].map((n) => <option key={n} value={String(n)}>{t('customerForm.rankOption', { rank: n })}</option>)}
-                  </Select>
-                  {note('rank')}
-                </Field>
-                <div className="flex min-w-0 flex-col gap-1.5 text-sm">
-                  <span className="font-medium">{t('customerForm.category')}</span>
-                  <ListPick
-                    options={categories.map((c) => ({ id: c.id, label: listLabel(c), search: [c.name_fa, c.name_en] }))}
-                    value={categoryId}
-                    onChange={(id) => setCategoryId(id)}
-                    loading={!listsReady}
-                    allowCreate={canCreateList}
-                    onCreate={(typed) => setCreating({ what: 'category', fa: typed, en: '' })}
-                    invalid={flag('category')}
-                    testId="sales-customer-form-category"
-                  />
-                  {note('category')}
-                </div>
-                {creating?.what === 'category' ? (
-                  <CreatePanel title={t('customerForm.newCategory')} state={creating} setState={setCreating} busy={createBusy} onCreate={createListEntry} />
-                ) : null}
+              <div className="flex flex-col gap-3" data-testid="sales-customer-form-grades">
+                {grades.map((g, i) => (
+                  <div key={g.key} className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-start" data-testid={`sales-customer-form-grade-${i}`}>
+                    <Field label={t('customerForm.rank')}>
+                      <Select value={g.rank} onChange={(v) => updateGrade(g.key, { rank: v })}
+                        className={i === 0 ? invalidCls('rank') : blockedGrades.has(g.key) && !g.rank ? 'border-destructive' : undefined}
+                        testId={i === 0 ? 'sales-customer-form-rank' : `sales-customer-form-rank-${i}`}>
+                        <option value="">{t('customerForm.pick')}</option>
+                        {[1, 2, 3, 4, 5].map((n) => <option key={n} value={String(n)}>{t('customerForm.rankOption', { rank: n })}</option>)}
+                      </Select>
+                      {i === 0 ? note('rank') : null}
+                    </Field>
+                    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                      <span className="font-medium">{t('customerForm.category')}</span>
+                      <ListPick
+                        options={categories.map((c) => ({ id: c.id, label: listLabel(c), search: [c.name_fa, c.name_en] }))}
+                        value={g.categoryId}
+                        onChange={(id) => updateGrade(g.key, { categoryId: id })}
+                        loading={!listsReady}
+                        allowCreate={canCreateList}
+                        onCreate={(typed) => setCreating({ what: 'category', fa: typed, en: '', row: g.key })}
+                        invalid={i === 0 ? flag('category') : blockedGrades.has(g.key) && !g.categoryId}
+                        testId={i === 0 ? 'sales-customer-form-category' : `sales-customer-form-category-${i}`}
+                      />
+                      {i === 0 ? note('category') : null}
+                    </div>
+                    {grades.length > 1 ? (
+                      <Button type="button" variant="outline" className="self-start sm:mt-[calc(1lh+0.375rem)]"
+                        onClick={() => { setGrades((rows) => rows.filter((r) => r.key !== g.key)); if (creating?.row === g.key) setCreating(null); }}
+                        aria-label={t('customerForm.removeGradeAria', { n: i + 1 })} data-testid={`sales-customer-form-remove-grade-${i}`}>
+                        <X aria-hidden />{t('customerForm.removeGrade')}
+                      </Button>
+                    ) : null}
+                    {blockedGrades.has(g.key) ? (
+                      <p className="text-xs text-destructive sm:col-span-full" role="alert">{t('customerForm.gradeIncomplete')}</p>
+                    ) : null}
+                    {creating?.what === 'category' && creating.row === g.key ? (
+                      <CreatePanel title={t('customerForm.newCategory')} state={creating} setState={setCreating} busy={createBusy} onCreate={createListEntry} />
+                    ) : null}
+                  </div>
+                ))}
+                <Button type="button" variant="outline" className="self-start" disabled={grades.length >= MAX_GRADES}
+                  onClick={() => setGrades((rows) => [...rows, newGrade()])} data-testid="sales-customer-form-add-grade">
+                  <Plus aria-hidden />{t('customerForm.addGrade')}
+                </Button>
               </div>
             ) : null}
           </section>
 
           <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionCeo')}>
-            <h3 className="text-sm font-semibold">{t('customerForm.sectionCeo')}</h3>
             <Field label={t('customerForm.ceo')}>
               <Input maxLength={120} value={ceo} onChange={(e) => setCeo(e.target.value)} className={invalidCls('ceo_name')} data-testid="sales-customer-form-ceo" />
               {note('ceo_name')}
@@ -379,17 +411,20 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
   );
 }
 
+/** A list entry being created from a picker; `row` = the rank / category row it fills. */
+type CreateState = { what: 'category' | 'city'; fa: string; en: string; row?: number };
+
 /** Small inline confirm for a new category / city: Farsi name + optional English name. */
 function CreatePanel({ title, state, setState, busy, onCreate }: {
   title: string;
-  state: { what: 'category' | 'city'; fa: string; en: string };
-  setState: (s: { what: 'category' | 'city'; fa: string; en: string } | null) => void;
+  state: CreateState;
+  setState: (s: CreateState | null) => void;
   busy: boolean;
   onCreate: () => void;
 }) {
   const t = useTranslations('sales');
   return (
-    <div className="flex flex-col gap-2 border border-border p-3 sm:col-span-2" data-testid={`sales-customer-form-new-${state.what}`}>
+    <div className="flex flex-col gap-2 border border-border p-3 sm:col-span-full" data-testid={`sales-customer-form-new-${state.what}`}>
       <span className="text-sm font-medium">{title}</span>
       <div className="grid gap-2 sm:grid-cols-2">
         <Field label={t('customerForm.nameFa')}>
@@ -405,6 +440,78 @@ function CreatePanel({ title, state, setState, busy, onCreate }: {
         </Button>
         <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => setState(null)}>{t('cancel')}</Button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * A name input with the "is it one of these?" matches as a dropdown under it (owner, 2026-11-26:
+ * a list growing below the fields went unnoticed). Shown while this field has focus.
+ */
+function NameField({ label, hint, field, focus, setFocus, dropdown, children }: {
+  label: string;
+  hint?: string;
+  field: 'fa' | 'en';
+  focus: null | 'fa' | 'en';
+  setFocus: (f: null | 'fa' | 'en' | ((f: null | 'fa' | 'en') => null | 'fa' | 'en')) => void;
+  dropdown: React.ReactNode;
+  children: (id: string, listId: string) => React.ReactNode;
+}) {
+  const id = useId();
+  const listId = `${id}-similar`;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+      <label htmlFor={id} className="font-medium text-foreground">{label}</label>
+      <div
+        className="relative"
+        onFocus={() => setFocus(field)}
+        onBlur={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setFocus((f) => (f === field ? null : f));
+        }}
+      >
+        {children(id, listId)}
+        {focus === field && dropdown ? <div id={listId} className="contents">{dropdown}</div> : null}
+      </div>
+      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+    </div>
+  );
+}
+
+function SimilarDropdown({ items, locale, onUse, onPicked }: {
+  items: CustomerRef[];
+  locale: string;
+  onUse?: (c: CustomerRef) => void;
+  onPicked: () => void;
+}) {
+  const t = useTranslations('sales');
+  return (
+    <div
+      className="absolute inset-x-0 top-full z-50 mt-1 border border-border bg-popover text-sm text-popover-foreground"
+      // Keep focus in the field: a press inside the list must not close it before the click lands.
+      onMouseDown={(e) => e.preventDefault()}
+      data-testid="sales-customer-form-similar"
+    >
+      <p className="border-b border-border bg-muted px-3 py-2 text-xs font-medium text-muted-foreground">{t('customerForm.similarTitle')}</p>
+      <ul className="max-h-60 divide-y divide-border overflow-y-auto">
+        {items.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-2 px-3 py-2">
+            <span className="flex min-w-0 items-center gap-2">
+              <bdi className="min-w-0 break-words">{customerLabel(c, locale)}</bdi>
+              {c.incomplete ? <Tag tone="warn">{t('customerProfile.incomplete')}</Tag> : null}
+            </span>
+            {onUse ? (
+              <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => { onPicked(); onUse(c); }}>
+                {t('customerForm.useThis')}
+              </Button>
+            ) : (
+              <Link href={`/${locale}/sales/customers/${c.id}`} className="shrink-0 text-sm text-primary underline" onClick={onPicked}>
+                {t('customerForm.open')}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

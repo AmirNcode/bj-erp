@@ -120,9 +120,9 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
             [t('customerForm.kind'), p.kind ? t(`customerKind.${p.kind}`) : null],
             ...(p.kind === 'contractor' ? [[
               t('customerMissing.rank') + ' · ' + t('customerMissing.category'),
-              p.rank || p.category_fa
-                ? t('customerProfile.rankCategory', { rank: p.rank ? f.number(p.rank) : '—', category: (f.locale === 'en' && p.category_en ? p.category_en : p.category_fa) ?? '—' })
-                : null,
+              [...(p.rank || p.category_fa ? [{ rank: p.rank, category_fa: p.category_fa, category_en: p.category_en }] : []), ...(p.grades ?? [])]
+                .map((g) => t('customerProfile.rankCategory', { rank: g.rank ? f.number(g.rank) : '—', category: (f.locale === 'en' && g.category_en ? g.category_en : g.category_fa) ?? '—' }))
+                .join('\n') || null,
             ] as [string, string | null]] : []),
             [t('customerProfile.location'), [f.locale === 'en' ? p.province_en : p.province_fa, f.locale === 'en' && p.city_en ? p.city_en : p.city_fa].filter(Boolean).join(' · ') || null],
             ...(p.ceo_name !== undefined ? [
@@ -132,7 +132,7 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
           ] as [string, string | null][]).map(([label, value]) => (
             <div key={label} className="flex flex-col gap-0.5">
               <dt className="text-xs text-muted-foreground">{label}</dt>
-              <dd>{value ? <bdi>{value}</bdi> : dash}</dd>
+              <dd className="whitespace-pre-line">{value ? <bdi>{value}</bdi> : dash}</dd>
             </div>
           ))}
         </dl>
