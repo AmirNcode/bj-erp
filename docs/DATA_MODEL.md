@@ -897,6 +897,17 @@ feeds the HR warning. Gates: PERMISSIONS.md.
 
 Migration `20261108200021_approvals_finance_usability.sql` adds the catalog permission `finance_forms` (read, depends on finance), defaulting off for non-admin roles. No stored financial columns change. `finance_requests_v2(from,to)` preserves the original rows/calculations and adds stored first/last names, department ID, and request-scoped `can_print`. `app_approval_history_v2(limit,offset,query,status,kind)` filters before pagination and includes authorized archive readers. `app_request_print(id)` aggregates guarded context, signature evidence, extensions and corrections; reusable private projection functions keep the original public RPCs compatible. The original finance/history RPCs remain available through the deployment window. Dates stay Gregorian ISO in URLs/storage and Persian in the calendar UI.
 
+## FR-99 Sales change history + customer phone book (2026-11-27, migrations `20261127100000`, `20261127110000`)
+
+| Table / column | Notes |
+|---|---|
+| `sales_audit` | Append-only history of non-record Sales writes: `entity` (`customer`, `product`, `settings`, `import`), `entity_id` (no FK — outlives deleted / merged rows), `entity_label` (name at write time), `action`, `body` (`changes: [{field, from, to, private?}]` + action extras), `actor_id`, `at`. Written only through `private.sales_log`; record changes stay in `sales_events`. No FK on `company_id`. |
+| `sales_events` | + indexes `(company_id, at desc, id)`, `(company_id, actor_id, at desc)` for the Activity page. Deadline done / reopened: kind `edit`, body `{deadline: {label, kind}, done}`. |
+| `sales_contact_titles` | Company list of key-person titles (`name_fa`, `name_en`, `active`, `position`); seeded with 12 titles; edited only in Settings (`sales_settings`); hidden, never deleted. |
+| `sales_customer_contacts` | Now the phone book **entries**: `person` (nullable), `title_id` → titles, `email`. No name and no title = a company line. ≤ 50 per customer. Old `title` / `label` / `phone` columns moved and dropped. |
+| `sales_customer_phones` | Numbers of an entry: `label` (office / mobile / fax / other), `phone`, `position`; ≤ 5 per entry. |
+| `sales_customers` + `ceo_phone`, `activity`, `created_by` | `kind` adds `private`; rank / category allowed for contractor and private. `ceo_phone` and the phone book are private like `ceo_name` / `address`. `missing` keys: `name_en, kind, ceo_name, province, city, address, phones, rank, category, grade_or_activity` (`phones` = no number on the CEO line or any entry; `grade_or_activity` = no complete main pair and no activity). |
+
 ## FR-98 Sales customer registry (2026-11-26, migrations `20261126100000`–`100400`)
 
 | Table / column | Notes |

@@ -1,6 +1,6 @@
 /**
  * FR-55 permission catalog — the TS mirror of private.permission_keys /
- * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007), plus Finance form reads (20261108200021). 21 items, plus FR-91's five edit-request items (26 in all, migration 20261110110000); FR-94 Sales added 7, FR-98 two more (37, migration 20261126100000):
+ * permission_allows / permission_deps (migrations 20261013200001, 200004, 200007), plus Finance form reads (20261108200021). 21 items, plus FR-91's five edit-request items (26 in all, migration 20261110110000); FR-94 Sales added 7, FR-98 two more (37, migration 20261126100000), FR-99 the read-only sales_activity (38, migration 20261127100000):
  * the spec's 16 less `passwords` (password resets are admin-only since 20261013200007,
  * the FR-55 review decision) plus main's finance, personal_info_own (own
  * personal information, an explicit exception to D3) and special_leave, and FR-70's
@@ -21,7 +21,9 @@ export type PermKey =
   // FR-94 ERP › Sales (hidden module: no preset holds these).
   | 'sales' | 'sales_prices' | 'sales_bonds' | 'sales_decide' | 'sales_reports' | 'sales_settings' | 'project_items'
   // FR-98 customer registry.
-  | 'sales_customers' | 'sales_customers_import';
+  | 'sales_customers' | 'sales_customers_import'
+  // FR-99 change history: the Sales › Activity page.
+  | 'sales_activity';
 /** RE: read and edit · E: action only · R: read only. */
 export type Shape = 'RE' | 'E' | 'R';
 export type Perms = Partial<Record<PermKey, Level>>;
@@ -38,7 +40,7 @@ export const SECTIONS: { key: SectionKey; items: PermKey[] }[] = [
   // FR-70: procurement books approved out-of-town trips.
   { key: 'procurement', items: ['travel_booking'] },
   // FR-94: the ERP › Sales module. `sales` is the door; the rest need it.
-  { key: 'sales', items: ['sales', 'sales_prices', 'sales_bonds', 'sales_decide', 'sales_reports', 'sales_settings', 'project_items', 'sales_customers', 'sales_customers_import'] },
+  { key: 'sales', items: ['sales', 'sales_prices', 'sales_bonds', 'sales_decide', 'sales_reports', 'sales_activity', 'sales_settings', 'project_items', 'sales_customers', 'sales_customers_import'] },
   { key: 'approvalChain', items: ['approval_steps', 'approval_delegate'] },
   { key: 'settings', items: ['work_settings', 'holidays'] },
 ];
@@ -52,7 +54,7 @@ export const SHAPES: Record<PermKey, Shape> = {
   travel_booking: 'E',
   edit_leave_daily: 'E', edit_leave_hourly: 'E', edit_errand_daily: 'E', edit_errand_hourly: 'E', edit_requests_own: 'E',
   sales: 'RE', sales_prices: 'RE', sales_bonds: 'RE', sales_decide: 'E', sales_reports: 'R', sales_settings: 'E', project_items: 'RE',
-  sales_customers: 'E', sales_customers_import: 'E',
+  sales_customers: 'E', sales_customers_import: 'E', sales_activity: 'R',
 };
 
 export const ALL_KEYS = SECTIONS.flatMap((s) => s.items);
@@ -95,6 +97,7 @@ export const DEPENDENCIES: { key: PermKey; keyLevel: Level; needs: PermKey }[] =
   { key: 'project_items', keyLevel: 'read', needs: 'sales' },
   { key: 'sales_customers', keyLevel: 'read', needs: 'sales' },
   { key: 'sales_customers_import', keyLevel: 'read', needs: 'sales_customers' },
+  { key: 'sales_activity', keyLevel: 'read', needs: 'sales' },
 ];
 
 export function levelValue(l: Level | undefined): 0 | 1 | 2 {

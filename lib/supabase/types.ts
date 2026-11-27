@@ -2021,6 +2021,12 @@ export type Database = {
       app_sales_customer_lists: { Args: Record<PropertyKey, never>; Returns: Json }
       app_sales_save_category: { Args: { p: Json }; Returns: Json }
       app_sales_save_city: { Args: { p: Json }; Returns: Json }
+      // FR-99 phone book titles + change history.
+      app_sales_save_title: { Args: { p: Json }; Returns: Json }
+      app_sales_customer_history: { Args: { p_id: string }; Returns: Json }
+      app_sales_product_history: { Args: { p_id: string }; Returns: Json }
+      app_sales_activity: { Args: { p: Json }; Returns: Json }
+      app_sales_activity_people: { Args: Record<PropertyKey, never>; Returns: Json }
       app_sales_customer_import_preview: { Args: { p_rows: Json }; Returns: Json }
       app_sales_customer_import: { Args: { p: Json }; Returns: Json }
       app_sales_customer_batches: { Args: Record<PropertyKey, never>; Returns: Json }

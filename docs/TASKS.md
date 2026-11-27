@@ -3,13 +3,20 @@
 Open work only. Finished work lives in `docs/CHANGELOG.md` and git history, so delete an item when
 it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ blocked.
 
+## FR-99 Sales change history + phone book (2026-11-27, branch `feat/sales-customer-phonebook`)
+
+- [ ] Owner / CEO check on `:3501`, then merge on the owner's OK.
+- [ ] Admin: grant **Sales: activity log** to the CEO's role (Settings › Roles) after deploy.
+- [ ] e2e spec for the phone book form and the History tab (checked by hand on `:3501`).
+- [ ] Customers registered before 2026-11-27 have no history (shown as "Registered before history began").
+- [ ] History rows for stages, currencies and general settings show raw field keys (`decimals`, `warn_days`, …): add `history.field.*` labels.
+
 ## FR-98 Sales customer registry (2026-11-26, branch `feat/sales-customer-registry`)
 
 - [ ] Owner / CEO check on `:3501` (or Liara after merge): add a draft customer, complete it, picker "Create …", import a small file.
 - [ ] e2e spec `tests/e2e/sales-customers.spec.ts` (add draft → complete → picker Create → small import) not written; the flow was checked by hand in the browser on `:3501`.
 - [ ] Known gap (older than FR-98): removing an old ledger / inquiry batch still deletes *pre-FR-98* hand-made customers created after it and unused (all old rows have `updated_by` null). Tie the delete to the batch (record the creating batch on ledger/inquiry imports too) if this matters.
 - [ ] During the deploy swap only: the old app's typed buyer + buyer type no longer fills an empty customer type (minutes-long window; no action needed after deploy).
-- [ ] CEO to confirm: one rank + category per contractor is enough (D5), or several pairs.
 - [ ] Review the seeded city list (396 county seats, written from memory; uncertain towns left out — e.g. Karun, Bavi, Hamun, Bahestan): fix or add in Settings › Customer lists.
 - [ ] Several rank / category pairs (2026-11-26): the customer import still takes one pair per row (the main pair); add extra pair columns if the CEO wants them imported.
 - [ ] e2e for the customer form should also cover: Add rank / category rows, the name-match dropdown + Escape.
@@ -26,7 +33,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 ## FR-97 UI readability and layout (built 2026-11-23 on `claude/ui-readability-layout`, local only)
 
 - [ ] **Run the touched e2e specs on an isolated/demo stack** (`touch-fields`, `settings`, `password`, `view-as`, `admin-settings`, `holiday-import`, `hr-role`, `approval-step-person`): not run, because global-setup rewrites the admin's language and weekend settings on the real-roster DB (`:3501`).
-- [ ] Remove the `GHSA-fc5q-39xc-vjpf` (picomatch) entry from `IGNORED` in `scripts/audit-gate.mjs`: the audit no longer reports it.
 - [ ] Admin › SMS: consider merging the "First line" and "Last line" sections into one.
 - [ ] Owner: review the uncommitted fix set F1–F6 (see `docs/AGENT-LOG.md`), then commit, PR, merge.
 
@@ -39,7 +45,6 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - [ ] Signed-in browser check + e2e (`signature-personal-info`, `settings`, `password`, `view-as` specs were edited for the new tabs but never run; the local test account's password does not match the local DB): screens checked on a temporary no-login page only. Owner: on bjeng.app, set a mobile on Profile and confirm an SMS arrives.
 ## FR-95 test-emp role (2026-11-18)
 
-- [ ] **Audit-gate exception:** remove `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, via next-intl → @parcel/watcher) from `IGNORED` in `scripts/audit-gate.mjs` once picomatch ships a fix (the gate prints "no longer reported" when it can go).
 - [ ] Give the Melipayamak reviewer account `test1` the test-emp role; deactivate it after the templates are approved.
 
 ## ERP · Sales module (FR-94, deployed 2026-11-20 as `96da80b`)

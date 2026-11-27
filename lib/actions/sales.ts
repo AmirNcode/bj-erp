@@ -14,7 +14,7 @@ import type { Json } from '@/lib/supabase/types';
 import type { InquiryRow } from '@/lib/sales/inquiry';
 import type { LedgerRow } from '@/lib/sales/ledger';
 import type {
-  AddedCustomer, Bootstrap, City, ContractorCategory, CustomerImportBatch, CustomerImportCells, CustomerImportPreview,
+  ActivityFilters, ActivityPage, AddedCustomer, Bootstrap, City, ContactTitle, ContractorCategory, CustomerKind, HistoryRow, CustomerImportBatch, CustomerImportCells, CustomerImportPreview,
   CustomerImportRequest, CustomerImportResult, CustomerInput, CustomerLists, CustomerProfile, DuplicateCustomer, CustomerDetail, CustomerFilters, CustomerSummary, NameAlias, PersonToMatch, SalesMetrics, SalesReport, DeadlineRow, ImportResult, InquiryImportResult, PriceHistoryRow, RecordDetail,
   Product, RecordFilters, RecordNumbers, RecordPage, SimilarCustomer,
 } from '@/lib/sales/types';
@@ -152,7 +152,7 @@ export async function listSalesRecordNumbers(): Promise<Read<RecordNumbers>> {
 }
 
 /** Adds a customer picked as "Create …" in the lookup; an existing name key returns that one. */
-export async function addSalesCustomer(name: string, kind: 'government' | 'contractor' | null): Promise<Read<AddedCustomer>> {
+export async function addSalesCustomer(name: string, kind: CustomerKind | null): Promise<Read<AddedCustomer>> {
   const c = await requireCaller();
   if (!c.ok) return c;
   const { data, error } = await c.supabase.rpc('app_sales_add_customer', { p: json({ name, kind }) });
@@ -223,6 +223,60 @@ export async function saveSalesCity(patch: { id?: string; province_code?: string
   if (error) return duplicateOr(error);
   invalidateAppCache();
   return { ok: true, data: data as unknown as City };
+}
+
+/** Create a key-person title (Settings) or edit one; a taken name returns the duplicate error. */
+export async function saveContactTitle(input: { id?: string; name_fa: string; name_en?: string | null; active?: boolean; position?: number }): Promise<Saved<ContactTitle>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_save_title', { p: json(input) });
+  if (error) return duplicateOr(error);
+  invalidateAppCache();
+  return { ok: true, data: data as unknown as ContactTitle };
+}
+
+// ───────────────────────────────────────────── FR-99 history
+
+/** Rows of the history readers carry no `entity` / `entity_id` of their own on some versions: fill them. */
+const asHistory = (rows: unknown, entity: 'customer' | 'product', id: string): HistoryRow[] =>
+  ((rows ?? []) as Partial<HistoryRow>[]).map((r) => ({
+    ...r, entity, entity_id: r.entity_id ?? id,
+  })) as HistoryRow[];
+
+/** A customer's history (and, merged in, that of the customers merged into it), newest first. */
+export async function getCustomerHistory(id: string): Promise<Read<HistoryRow[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_customer_history', { p_id: id });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: asHistory(data, 'customer', id) };
+}
+
+export async function getProductHistory(id: string): Promise<Read<HistoryRow[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_product_history', { p_id: id });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: asHistory(data, 'product', id) };
+}
+
+/** One page (50) of the Sales › Activity page (`sales_activity` holders). */
+export async function listSalesActivity(f: ActivityFilters = {}): Promise<Read<ActivityPage>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const p = Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined && v !== ''));
+  const { data, error } = await c.supabase.rpc('app_sales_activity', { p: json(p) });
+  if (error) return dbErr(error.message);
+  return { ok: true, data: data as unknown as ActivityPage };
+}
+
+/** The Activity page's person filter: people with any Sales permission at edit level (`sales_activity` holders). */
+export async function listSalesActivityPeople(): Promise<Read<{ id: string; name: string }[]>> {
+  const c = await requireCaller();
+  if (!c.ok) return c;
+  const { data, error } = await c.supabase.rpc('app_sales_activity_people');
+  if (error) return dbErr(error.message);
+  return { ok: true, data: (data ?? []) as unknown as { id: string; name: string }[] };
 }
 
 export async function previewCustomerImport(rows: CustomerImportCells[]): Promise<Read<CustomerImportPreview>> {

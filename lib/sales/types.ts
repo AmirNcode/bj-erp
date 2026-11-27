@@ -21,6 +21,8 @@ export type SalesCaps = {
   customers: boolean;
   /** FR-98: bulk import of customers (sales_customers_import). */
   customers_import: boolean;
+  /** FR-99: the Sales › Activity page (sales_activity). */
+  activity: boolean;
 };
 
 export type FlowKind = 'bid' | 'contract';
@@ -57,7 +59,7 @@ export type FieldDef = {
   active: boolean;
 };
 
-export type CustomerKind = 'government' | 'contractor';
+export type CustomerKind = 'government' | 'contractor' | 'private';
 /** A customer as bootstrap lists it (FR-98: English name, incomplete flag). */
 export type Customer = { id: string; name: string; name_en: string | null; kind: CustomerKind | null; incomplete: boolean };
 export type Person = { id: string; name: string; personnel_no: string | null; role_ids: string[] };
@@ -131,7 +133,7 @@ export type RecordRow = {
   buyer_id: string | null;
   buyer_name: string | null;
   buyer_name_en?: string | null;
-  buyer_kind: 'government' | 'contractor' | null;
+  buyer_kind: CustomerKind | null;
   client_id: string | null;
   client_name: string | null;
   client_name_en?: string | null;
@@ -352,7 +354,7 @@ export type CustomerFilters = {
   to?: string;
   result?: ResultFilter;
   owner?: string;
-  kind?: 'government' | 'contractor';
+  kind?: CustomerKind;
   /** FR-98: Customers tab only — customers with missing data. */
   incomplete?: '1';
 };
@@ -368,7 +370,9 @@ export type CustomerSummary = {
   id: string;
   name: string;
   name_en: string | null;
-  kind: 'government' | 'contractor' | null;
+  kind: CustomerKind | null;
+  /** FR-99: description of activity (not private); the Customers tab search reads it. */
+  activity: string | null;
   /** FR-98: required fields still empty (spec §4 keys); empty = complete. */
   missing: CustomerMissingKey[];
   records: number;
@@ -399,7 +403,7 @@ export type CustomerDetail = {
   top_words: { word: string; count: number }[];
   /** People in charge on this customer's records (owner set), for the page's filter. */
   owners: { id: string; name: string; count: number }[];
-  /** FR-98: the registry profile; ceo_name / address / contacts only for `customers` holders. */
+  /** FR-98: the registry profile; ceo_name / ceo_phone / address / people only for `customers` holders. */
   profile: CustomerProfile;
 };
 
@@ -442,16 +446,23 @@ export type NameAlias = {
 // ───────────────────────────────────────────── FR-98 customer registry
 
 export type CustomerMissingKey =
-  | 'name_en' | 'kind' | 'ceo_name' | 'province' | 'city' | 'address' | 'contacts' | 'rank' | 'category';
+  | 'name_en' | 'kind' | 'ceo_name' | 'province' | 'city' | 'address' | 'phones' | 'rank' | 'category' | 'grade_or_activity';
 export type ContactLabel = 'office' | 'mobile' | 'fax' | 'other';
-export type CustomerContact = {
+/** FR-99: one number of a key person (or of the company line). */
+export type CustomerPhone = { id?: string; label: ContactLabel; phone: string };
+/** FR-99: a phone-book entry: a key person, or a company line (no name, no title). */
+export type CustomerPerson = {
   id?: string;
-  person: string;
-  title: string | null;
-  label: ContactLabel;
-  phone: string;
+  name: string | null;
+  title_id: string | null;
+  title_fa?: string | null;
+  title_en?: string | null;
+  title_active?: boolean | null;
   email: string | null;
+  phones: CustomerPhone[];
 };
+/** FR-99: a title from the managed list (Settings › Customer lists). */
+export type ContactTitle = { id: string; name_fa: string; name_en: string | null; active: boolean; position: number };
 
 /** app_sales_customer → profile, app_sales_save_customer's result. */
 export type CustomerProfile = {
@@ -474,10 +485,14 @@ export type CustomerProfile = {
   missing: CustomerMissingKey[];
   created_at: string;
   updated_at: string | null;
+  /** FR-99: what the company does (not private). */
+  activity: string | null;
+  created_by_name: string | null;
   /** Only for sales_customers holders. */
   ceo_name?: string | null;
+  ceo_phone?: string | null;
   address?: string | null;
-  contacts?: CustomerContact[];
+  people?: CustomerPerson[];
 };
 
 /** A contractor's further rank + category pair (always complete). */
@@ -496,14 +511,16 @@ export type CustomerInput = {
   category_id: string | null;
   /** Further pairs, both values set; the first pair travels in rank / category_id. */
   grades: { rank: number; category_id: string }[];
-  contacts: CustomerContact[];
+  ceo_phone: string | null;
+  activity: string | null;
+  people: CustomerPerson[];
 };
 
 export type Province = { code: string; name_fa: string; name_en: string };
 export type City = { id: string; province_code: string; name_fa: string; name_en: string | null; active: boolean };
 export type ContractorCategory = { id: string; name_fa: string; name_en: string | null; active: boolean; position: number };
 /** app_sales_customer_lists: inactive entries only for sales_settings holders. */
-export type CustomerLists = { provinces: Province[]; cities: City[]; categories: ContractorCategory[] };
+export type CustomerLists = { provinces: Province[]; cities: City[]; categories: ContractorCategory[]; titles: ContactTitle[] };
 
 /** A refused save because the name (or English name) belongs to another customer. */
 export type DuplicateCustomer = { id: string; name: string; name_en: string | null };
@@ -514,19 +531,23 @@ export type CustomerImportCells = {
   name?: string; name_en?: string; kind?: string; ceo_name?: string; province?: string; city?: string;
   address?: string; rank?: string; category?: string; contact_person?: string; contact_title?: string;
   contact_label?: string; phone?: string; email?: string;
+  /** FR-99: the two columns appended after Email. */
+  ceo_phone?: string; activity?: string;
 };
 export type ImportAction = 'skip' | 'update' | 'overwrite';
 export type ImportListDecision = { action: 'create' } | { action: 'use'; id: string } | { action: 'empty' };
+/** FR-99: the phone-book entry a row would add (phones empty when no valid number). */
+export type CustomerImportEntry = { name: string | null; title_id: string | null; email: string | null; phones: { label: ContactLabel; phone: string }[] } | null;
 export type CustomerImportPreviewRow = {
   row: number;
   status: 'new' | 'match' | 'error';
   error: 'no_name' | 'duplicate_in_file' | 'invalid' | null;
   match: DuplicateCustomer | null;
-  values: Partial<Record<'name' | 'name_en' | 'kind' | 'ceo_name' | 'province_code' | 'city_id' | 'address' | 'rank' | 'category_id', string | number | null>>;
-  contact: Omit<CustomerContact, 'id'> | null;
+  values: Partial<Record<'name' | 'name_en' | 'kind' | 'ceo_name' | 'ceo_phone' | 'activity' | 'province_code' | 'city_id' | 'address' | 'rank' | 'category_id', string | number | null>>;
+  contact: CustomerImportEntry;
   /** `detail`: for field `contact`, which part (person, phone, email, label, title). */
   dropped: { field: string; reason: 'invalid' | 'unknown' | 'duplicate' | 'not_contractor'; detail?: string }[];
-  unknown: { field: 'city' | 'category'; key: string; value: string }[];
+  unknown: { field: 'city' | 'category' | 'title'; key: string; value: string }[];
   incomplete: boolean;
 };
 export type CustomerImportPreview = {
@@ -534,6 +555,8 @@ export type CustomerImportPreview = {
   unknown: {
     categories: { key: string; value: string; rows: number }[];
     cities: { key: string; value: string; province_code: string; rows: number }[];
+    /** FR-99: contact titles not in the list (never created by an import). */
+    titles: { key: string; value: string; rows: number }[];
   };
   counts: { new: number; match: number; error: number };
 };
@@ -545,6 +568,8 @@ export type CustomerImportRequest = {
   categories: Record<string, ImportListDecision>;
   /** Key: `${province_code}|${key}`. */
   cities: Record<string, ImportListDecision>;
+  /** FR-99: key = unknown title key; only `use` / `empty` are accepted (absent = empty). */
+  titles: Record<string, { action: 'use'; id: string } | { action: 'empty' }>;
 };
 export type CustomerImportResult = {
   /** null when the import created and updated nothing (no batch is kept). */
@@ -553,4 +578,45 @@ export type CustomerImportResult = {
 export type CustomerImportBatch = {
   id: string; file_name: string | null; created_at: string; created_by_name: string | null;
   created_count: number; updated_count: number; skipped_count: number; remaining: number;
+};
+
+// ───────────────────────────────────────────── FR-99 history
+
+/** One change line of a history body (private values stripped for readers without `sales_customers`). */
+export type HistoryChange = {
+  field: string;
+  from?: unknown;
+  to?: unknown;
+  private?: boolean;
+  hidden?: boolean;
+  /** Phone-book change: counts of entries (readers with `sales_customers` only). */
+  added?: number;
+  removed?: number;
+  changed?: number;
+};
+
+/** One row of a customer / product history or of the Sales › Activity page. */
+export type HistoryRow = {
+  id: string;
+  at: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  entity: 'record' | 'customer' | 'product' | 'settings' | 'import';
+  entity_id: string | null;
+  entity_label: string | null;
+  action: string;
+  body: Record<string, unknown>;
+  /** Activity page rows: `record` = sales_events, `audit` = sales_audit. */
+  source?: 'record' | 'audit';
+  /** Activity page rows: the item still exists (so it can be linked). */
+  exists?: boolean;
+};
+export type ActivityCursor = { at: string; id: string };
+export type ActivityPage = { rows: HistoryRow[]; next: ActivityCursor | null };
+export type ActivityFilters = {
+  actor?: string;
+  from?: string;
+  to?: string;
+  entity?: HistoryRow['entity'];
+  before?: ActivityCursor;
 };

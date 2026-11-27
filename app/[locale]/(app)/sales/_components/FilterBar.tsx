@@ -67,6 +67,7 @@ export function FilterBar({ filters, owners, withKind }: {
           <option value="">{t('filters.kindAll')}</option>
           <option value="government">{t('customerKind.government')}</option>
           <option value="contractor">{t('customerKind.contractor')}</option>
+          <option value="private">{t('customerKind.private')}</option>
         </Select>
       ) : null}
       {withKind ? (

@@ -20,9 +20,10 @@ import {
   findSimilarSalesCustomers, getCustomerLists, saveSalesCategory, saveSalesCity, saveSalesCustomer,
 } from '@/lib/actions/sales';
 import {
-  CONTACT_LABELS, cleanContacts, contactState, emptyContactRow, gradeState, gradesPayload, hasPartialContact, hasPartialGrade,
-  missingKeys, type ContactRow, type GradeRow,
+  CONTACT_LABELS, MAX_PEOPLE, MAX_PHONES, cleanPeople, emptyPerson, gradeState, gradesPayload, hasPartialGrade, hasPartialPerson,
+  isValidPhone, missingKeys, personState, type GradeRow, type PersonRow,
 } from '@/lib/sales/customerForm';
+import { hasGrades } from '@/lib/sales/customers';
 import { customerLabel } from '@/lib/sales/customerLabel';
 import { matchAllWords, similarByWords } from '@/lib/sales/customerSearch';
 import type {
@@ -32,7 +33,8 @@ import { cn } from '@/lib/utils';
 import { useViewAs } from '../../_components/ViewAsContext';
 import { Field, ModalContent, Select, Tag } from './parts';
 
-const EMPTY_LISTS: CustomerLists = { provinces: [], cities: [], categories: [] };
+const EMPTY_LISTS: CustomerLists = { provinces: [], cities: [], categories: [], titles: [] };
+const KINDS = ['government', 'contractor', 'private'] as const;
 /** Rows a contractor may hold: the main pair + 9 further pairs (SQL caps `grades` at 9). */
 const MAX_GRADES = 10;
 
@@ -67,10 +69,23 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
   const [province, setProvince] = useState(initial?.province_code ?? '');
   const [cityId, setCityId] = useState<string | null>(initial?.city_id ?? null);
   const [address, setAddress] = useState(initial?.address ?? '');
-  const [contacts, setContacts] = useState<ContactRow[]>(() =>
-    (initial?.contacts ?? []).map((c) => ({
-      person: c.person, title: c.title ?? '', label: c.label, phone: c.phone, email: c.email ?? '',
+  const [ceoPhone, setCeoPhone] = useState(initial?.ceo_phone ?? '');
+  const [activity, setActivity] = useState(initial?.activity ?? '');
+  const [people, setPeople] = useState<PersonRow[]>(() =>
+    (initial?.people ?? []).map((p) => ({
+      name: p.name ?? '',
+      title_id: p.title_id ?? '',
+      email: p.email ?? '',
+      phones: p.phones.map((x) => ({ label: x.label, phone: x.phone })),
+      // An entry with neither a name nor a title is the company line.
+      companyLine: !p.name?.trim() && !p.title_id && p.phones.length > 0,
     })));
+  // Titles of the saved entries, kept so a hidden title still shows its name before the lists (or without them).
+  const ownTitles = useMemo(() => {
+    const m = new Map<string, { name_fa: string; name_en: string | null }>();
+    for (const p of initial?.people ?? []) if (p.title_id && p.title_fa) m.set(p.title_id, { name_fa: p.title_fa, name_en: p.title_en ?? null });
+    return m;
+  }, [initial]);
   const [busy, setBusy] = useState(false);
   const [dup, setDup] = useState<DuplicateCustomer | null>(null);
   const [remote, setRemote] = useState<CustomerRef[]>([]);
@@ -120,18 +135,22 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
     province_code: province || null,
     city_id: province ? cityId : null,
     address: address.trim() || null,
-    ...(kind === 'contractor' ? gradesPayload(grades) : { rank: null, category_id: null, grades: [] }),
-    contacts: cleanContacts(contacts),
+    ...(hasGrades(kind) ? gradesPayload(grades) : { rank: null, category_id: null, grades: [] }),
+    ceo_phone: ceoPhone.trim() || null,
+    activity: activity.trim() || null,
+    people: cleanPeople(people),
   };
   const missing = missingKeys(input);
   const flagged = new Set<CustomerMissingKey>(
     (initial?.missing ?? []).filter((k) => missing.includes(k)),
   );
-  const partialGrade = kind === 'contractor' && hasPartialGrade(grades);
+  const graded = hasGrades(kind);
+  const partialGrade = graded && hasPartialGrade(grades);
   // Rows after the main pair that are half filled (the first non-empty row is the main pair).
   const blockedGrades = new Set(grades.filter((g) => gradeState(g) !== 'empty').slice(1)
     .filter((g) => gradeState(g) === 'partial').map((g) => g.key));
-  const partial = hasPartialContact(contacts) || partialGrade;
+  const ceoPhoneBad = ceoPhone.trim() !== '' && !isValidPhone(ceoPhone);
+  const partial = hasPartialPerson(people) || ceoPhoneBad || partialGrade;
   const canSave = nameFa.trim() !== '' && !partial && !busy;
 
   const provinceLabel = (p: { name_fa: string; name_en: string }) => (locale === 'en' && p.name_en ? p.name_en : p.name_fa);
@@ -195,8 +214,16 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
     <SimilarDropdown items={similar} locale={locale} onUse={onUse} onPicked={() => setSimilarHidden(true)} />
   );
 
-  const updateContact = (i: number, patch: Partial<ContactRow>) =>
-    setContacts((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const updatePerson = (i: number, patch: Partial<PersonRow>) =>
+    setPeople((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const updatePhone = (i: number, j: number, patch: Partial<PersonRow['phones'][number]>) =>
+    setPeople((rows) => rows.map((r, k) => (k === i ? { ...r, phones: r.phones.map((x, m) => (m === j ? { ...x, ...patch } : x)) } : r)));
+  const titleOptions = (r: PersonRow) => {
+    const active = lists.titles.filter((x) => x.active).sort((a, b) => a.position - b.position);
+    const own = r.title_id && !active.some((x) => x.id === r.title_id)
+      ? (lists.titles.find((x) => x.id === r.title_id) ?? ownTitles.get(r.title_id) ?? null) : null;
+    return { active, own };
+  };
   const flag = (k: CustomerMissingKey) => flagged.has(k);
   const note = (k: CustomerMissingKey) => (flag(k) ? <span className="text-xs text-destructive">{t('customerForm.missingField')}</span> : null);
   const invalidCls = (k: CustomerMissingKey) => (flag(k) ? 'border-destructive' : undefined);
@@ -249,8 +276,8 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
 
           <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionType')}>
             <h3 className="text-sm font-semibold">{t('customerForm.sectionType')}</h3>
-            <div role="group" aria-label={t('customerForm.kind')} className={cn('flex w-full gap-2 md:w-80', flag('kind') && 'outline outline-1 outline-destructive')}>
-              {(['government', 'contractor'] as const).map((k) => (
+            <div role="group" aria-label={t('customerForm.kind')} className={cn('flex w-full gap-2 md:w-[26rem]', flag('kind') && 'outline outline-1 outline-destructive')}>
+              {KINDS.map((k) => (
                 <Button key={k} type="button" variant={kind === k ? 'default' : 'outline'} className="flex-1" aria-pressed={kind === k}
                   onClick={() => setKind(kind === k ? null : k)} data-testid={`sales-customer-form-kind-${k}`}>
                   {t(`customerKind.${k}`)}
@@ -258,7 +285,7 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
               ))}
             </div>
             {note('kind')}
-            {kind === 'contractor' ? (
+            {graded ? (
               <div className="flex flex-col gap-3" data-testid="sales-customer-form-grades">
                 {grades.map((g, i) => (
                   <div key={g.key} className="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)_auto] sm:items-start" data-testid={`sales-customer-form-grade-${i}`}>
@@ -306,12 +333,11 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
                 </Button>
               </div>
             ) : null}
-          </section>
-
-          <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionCeo')}>
-            <Field label={t('customerForm.ceo')}>
-              <Input maxLength={120} value={ceo} onChange={(e) => setCeo(e.target.value)} className={invalidCls('ceo_name')} data-testid="sales-customer-form-ceo" />
-              {note('ceo_name')}
+            {graded ? note('grade_or_activity') : null}
+            <Field label={t('customerForm.activity')} hint={t('customerForm.activityHint')}>
+              <Textarea maxLength={1000} value={activity} onChange={(e) => setActivity(e.target.value)}
+                className={invalidCls('grade_or_activity')} data-testid="sales-customer-form-activity" />
+              {note('grade_or_activity')}
             </Field>
           </section>
 
@@ -353,45 +379,105 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
             </Field>
           </section>
 
-          <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionContacts')}>
-            <h3 className="text-sm font-semibold">{t('customerForm.sectionContacts')}</h3>
-            {contacts.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerForm.noContacts')}</p> : null}
-            {flag('contacts') ? note('contacts') : null}
+          <section className="flex flex-col gap-3" aria-label={t('customerForm.sectionPeople')}>
+            <h3 className="text-sm font-semibold">{t('customerForm.sectionPeople')}</h3>
+            {note('phones')}
+            <div className="flex flex-col gap-2 border border-border p-3" data-testid="sales-customer-form-ceo-card">
+              <span className="text-sm font-medium">{t('customerForm.ceoCard')}</span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Field label={t('customerForm.personName')}>
+                  <Input maxLength={120} value={ceo} onChange={(e) => setCeo(e.target.value)} className={invalidCls('ceo_name')} data-testid="sales-customer-form-ceo" />
+                  {note('ceo_name')}
+                </Field>
+                <Field label={t('customerForm.ceoPhone')}>
+                  <Input dir="ltr" inputMode="tel" maxLength={30} value={ceoPhone} onChange={(e) => setCeoPhone(e.target.value)}
+                    aria-invalid={ceoPhoneBad} className={ceoPhoneBad ? 'border-destructive' : undefined} data-testid="sales-customer-form-ceo-phone" />
+                  {ceoPhoneBad ? <span className="text-xs text-destructive" role="alert">{t('customerForm.phoneInvalid')}</span> : null}
+                </Field>
+              </div>
+            </div>
+            {people.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerForm.noPeople')}</p> : null}
             <ul className="flex flex-col gap-3">
-              {contacts.map((r, i) => (
-                <li key={i} className="flex flex-col gap-2 border border-border p-3">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Field label={t('customerForm.contactPerson')}>
-                      <Input maxLength={120} value={r.person} onChange={(e) => updateContact(i, { person: e.target.value })}
-                        aria-invalid={contactState(r) === 'partial' && r.person.trim() === ''} data-testid={`sales-customer-form-contact-person-${i}`} />
-                    </Field>
-                    <Field label={t('customerForm.contactTitle')}>
-                      <Input maxLength={80} value={r.title} onChange={(e) => updateContact(i, { title: e.target.value })} data-testid={`sales-customer-form-contact-title-${i}`} />
-                    </Field>
-                    <Field label={t('customerForm.contactLabel')}>
-                      <Select value={r.label} onChange={(v) => updateContact(i, { label: v as ContactRow['label'] })} testId={`sales-customer-form-contact-label-${i}`}>
-                        {CONTACT_LABELS.map((l) => <option key={l} value={l}>{t(`contactLabel.${l}`)}</option>)}
-                      </Select>
-                    </Field>
-                    <Field label={t('customerForm.contactPhone')}>
-                      <Input dir="ltr" inputMode="tel" maxLength={30} value={r.phone} onChange={(e) => updateContact(i, { phone: e.target.value })}
-                        aria-invalid={contactState(r) === 'partial' && r.phone.trim() === ''} data-testid={`sales-customer-form-contact-phone-${i}`} />
-                    </Field>
-                    <Field label={t('customerForm.contactEmail')} className="sm:col-span-2">
-                      <Input dir="ltr" type="email" inputMode="email" maxLength={200} value={r.email} onChange={(e) => updateContact(i, { email: e.target.value })} data-testid={`sales-customer-form-contact-email-${i}`} />
-                    </Field>
-                  </div>
-                  {contactState(r) === 'partial' ? <p className="text-xs text-destructive" role="alert">{t('customerForm.contactIncomplete')}</p> : null}
-                  <Button type="button" size="sm" variant="outline" className="self-start"
-                    onClick={() => setContacts((rows) => rows.filter((_, j) => j !== i))} data-testid={`sales-customer-form-remove-contact-${i}`}>
-                    <X aria-hidden />{t('customerForm.removeContact')}
-                  </Button>
-                </li>
-              ))}
+              {people.map((r, i) => {
+                const { active, own } = titleOptions(r);
+                const bad = personState(r) === 'partial';
+                return (
+                  <li key={i} className="flex flex-col gap-2 border border-border p-3" data-testid={`sales-customer-form-person-${i}`}>
+                    {r.companyLine ? (
+                      <span className="text-sm font-medium">{t('customerForm.companyLine')}</span>
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <Field label={t('customerForm.personName')}>
+                          <Input maxLength={120} value={r.name} onChange={(e) => updatePerson(i, { name: e.target.value })}
+                            data-testid={`sales-customer-form-person-${i}-name`} />
+                        </Field>
+                        <Field label={t('customerForm.personTitle')}>
+                          <Select value={r.title_id} onChange={(v) => updatePerson(i, { title_id: v })} testId={`sales-customer-form-person-${i}-title`}>
+                            <option value="">{t('customerForm.noTitle')}</option>
+                            {active.map((x) => <option key={x.id} value={x.id}>{listLabel(x)}</option>)}
+                            {own ? <option value={r.title_id}>{t('customerForm.hiddenTitle', { title: listLabel(own) })}</option> : null}
+                          </Select>
+                        </Field>
+                        <Field label={t('customerForm.contactEmail')} className="sm:col-span-2">
+                          <Input dir="ltr" type="email" inputMode="email" maxLength={200} value={r.email} onChange={(e) => updatePerson(i, { email: e.target.value })}
+                            data-testid={`sales-customer-form-person-${i}-email`} />
+                        </Field>
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-2">
+                      {r.phones.map((x, j) => {
+                        const badPhone = x.phone.trim() !== '' && !isValidPhone(x.phone);
+                        return (
+                          <div key={j} className="grid grid-cols-[8rem_minmax(0,1fr)_auto] items-start gap-2">
+                            <Select value={x.label} ariaLabel={t('customerForm.contactLabel')} onChange={(v) => updatePhone(i, j, { label: v as PersonRow['phones'][number]['label'] })}
+                              testId={`sales-customer-form-person-${i}-label-${j}`}>
+                              {CONTACT_LABELS.map((l) => <option key={l} value={l}>{t(`contactLabel.${l}`)}</option>)}
+                            </Select>
+                            <div className="flex min-w-0 flex-col gap-1">
+                              <Input dir="ltr" inputMode="tel" maxLength={30} value={x.phone} aria-label={t('customerForm.contactPhone')}
+                                onChange={(e) => updatePhone(i, j, { phone: e.target.value })} aria-invalid={badPhone}
+                                className={badPhone ? 'border-destructive' : undefined} data-testid={`sales-customer-form-person-${i}-phone-${j}`} />
+                              {badPhone ? <span className="text-xs text-destructive" role="alert">{t('customerForm.phoneInvalid')}</span> : null}
+                            </div>
+                            {r.phones.length > 1 ? (
+                              <Button type="button" size="sm" variant="outline" aria-label={t('customerForm.removeNumber')}
+                                onClick={() => updatePerson(i, { phones: r.phones.filter((_, m) => m !== j) })}
+                                data-testid={`sales-customer-form-person-${i}-remove-phone-${j}`}>
+                                <X aria-hidden />
+                              </Button>
+                            ) : <span />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {bad && !r.phones.some((x) => x.phone.trim() !== '' && !isValidPhone(x.phone)) ? (
+                      <p className="text-xs text-destructive" role="alert">{t('customerForm.personIncomplete')}</p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="outline" disabled={r.phones.length >= MAX_PHONES}
+                        onClick={() => updatePerson(i, { phones: [...r.phones, { label: 'mobile', phone: '' }] })}
+                        data-testid={`sales-customer-form-person-${i}-add-phone`}>
+                        <Plus aria-hidden />{t('customerForm.addNumber')}
+                      </Button>
+                      <Button type="button" size="sm" variant="outline"
+                        onClick={() => setPeople((rows) => rows.filter((_, j) => j !== i))} data-testid={`sales-customer-form-person-${i}-remove`}>
+                        <X aria-hidden />{t('customerForm.removePerson')}
+                      </Button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
-            <Button type="button" variant="outline" className="self-start" onClick={() => setContacts((rows) => [...rows, emptyContactRow()])} data-testid="sales-customer-form-add-contact">
-              <Plus aria-hidden />{t('customerForm.addContact')}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={people.length >= MAX_PEOPLE}
+                onClick={() => setPeople((rows) => [...rows, emptyPerson()])} data-testid="sales-customer-form-add-person">
+                <Plus aria-hidden />{t('customerForm.addPerson')}
+              </Button>
+              <Button type="button" variant="outline" disabled={people.length >= MAX_PEOPLE}
+                onClick={() => setPeople((rows) => [...rows, emptyPerson(true)])} data-testid="sales-customer-form-add-company-line">
+                <Plus aria-hidden />{t('customerForm.addCompanyLine')}
+              </Button>
+            </div>
           </section>
         </div>
 

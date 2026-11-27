@@ -2016,6 +2016,10 @@
       "sales_customers_import": {
         "label": "مشتریان: ورود گروهی",
         "description": "ورود مشتریان از فایل اکسل و حذف آن ورودها."
+      },
+      "sales_activity": {
+        "label": "فروش: سوابق تغییرات",
+        "description": "دیدن همه تغییرات بخش فروش و اینکه چه کسی انجام داده است."
       }
     },
     "levels": {
@@ -2463,7 +2467,8 @@
       "reports": "گزارش‌ها",
       "settings": "تنظیمات",
       "customers": "مشتریان",
-      "products": "محصولات"
+      "products": "محصولات",
+      "activity": "سوابق"
     },
     "search": {
       "label": "جستجو با شماره پرونده یا قلم",
@@ -2478,7 +2483,8 @@
     },
     "customerKind": {
       "government": "دولتی",
-      "contractor": "پیمانکار"
+      "contractor": "پیمانکار",
+      "private": "خصوصی"
     },
     "source": {
       "website": "سامانه مناقصات",
@@ -2674,7 +2680,9 @@
       "file_delete": "فایل <n>{name}</n> حذف شد",
       "archived": "رکورد بایگانی شد",
       "deleted": "رکورد حذف شد",
-      "restored": "رکورد بازگردانده شد"
+      "restored": "رکورد بازگردانده شد",
+      "deadlineDone": "موعد «{name}» انجام شد",
+      "deadlineUndone": "موعد «{name}» باز شد"
     },
     "items": {
       "hint": "برای هر قلم این پرونده یک ردیف. برای افزودن قطعات، ردیف را باز کنید. شماره هنگام ذخیره داده می‌شود و هرگز دوباره استفاده نمی‌شود.",
@@ -3244,13 +3252,11 @@
       "intro": "آنچه را می‌دانید وارد کنید. مشتری با اطلاعات ناقص به‌صورت پیش‌نویس ذخیره می‌شود و تا تکمیل همه فیلدها برچسب «ناقص» دارد.",
       "sectionNames": "نام",
       "sectionType": "نوع",
-      "sectionCeo": "مدیرعامل",
       "sectionAddress": "نشانی",
-      "sectionContacts": "شماره‌های تماس",
       "name": "نام شرکت (فارسی)",
       "nameEn": "نام انگلیسی یا مخفف",
       "nameEnHint": "مثلاً NISOC. وقتی برنامه انگلیسی است نشان داده می‌شود.",
-      "kind": "دولتی یا پیمانکار",
+      "kind": "نوع شرکت",
       "rank": "رتبه",
       "rankOption": "رتبه {rank}",
       "category": "رسته",
@@ -3259,8 +3265,6 @@
       "city": "شهر",
       "cityNeedsProvince": "اول استان را انتخاب کنید.",
       "address": "نشانی",
-      "contactPerson": "نام شخص",
-      "contactTitle": "سمت",
       "contactLabel": "نوع",
       "contactPhone": "شماره",
       "contactEmail": "ایمیل (اختیاری)",
@@ -3268,10 +3272,6 @@
       "removeGrade": "حذف",
       "removeGradeAria": "حذف ردیف رتبه و رسته {n}",
       "gradeIncomplete": "برای این ردیف هم رتبه و هم رسته را انتخاب کنید، یا ردیف را حذف کنید.",
-      "addContact": "افزودن شماره تماس",
-      "removeContact": "حذف شماره تماس",
-      "noContacts": "هنوز شماره‌ای ثبت نشده.",
-      "contactIncomplete": "هر ردیف تماس نام شخص و شماره می‌خواهد.",
       "similarTitle": "شرکت‌هایی با کلمه مشترک — یکی از این‌هاست؟",
       "useThis": "همین را انتخاب کن",
       "open": "باز کردن",
@@ -3289,7 +3289,25 @@
       "newCity": "شهر جدید در {province}",
       "nameFa": "نام (فارسی)",
       "nameEnOptional": "نام (انگلیسی، اختیاری)",
-      "create": "ایجاد"
+      "create": "ایجاد",
+      "activity": "شرح فعالیت",
+      "activityHint": "کار اصلی شرکت را بنویسید؛ برای شرکت بدون رتبه لازم است.",
+      "sectionPeople": "افراد کلیدی",
+      "ceoCard": "مدیرعامل",
+      "ceoPhone": "تلفن مستقیم مدیرعامل (اختیاری)",
+      "personName": "نام",
+      "personTitle": "سمت",
+      "noTitle": "—",
+      "hiddenTitle": "{title} (پنهان)",
+      "addNumber": "افزودن شماره",
+      "removeNumber": "حذف شماره",
+      "addPerson": "افزودن فرد",
+      "addCompanyLine": "افزودن تلفن شرکت",
+      "companyLine": "تلفن شرکت",
+      "removePerson": "حذف",
+      "noPeople": "هنوز فردی ثبت نشده است.",
+      "phoneInvalid": "شماره درست نیست.",
+      "personIncomplete": "نام، سمت یا شماره‌ای وارد کنید، یا این ردیف را حذف کنید."
     },
     "customerProfile": {
       "add": "افزودن مشتری",
@@ -3305,7 +3323,14 @@
       "contacts": "شماره‌های تماس",
       "noContacts": "هنوز شماره‌ای ثبت نشده.",
       "call": "تماس با {phone}",
-      "mail": "ایمیل به {email}"
+      "mail": "ایمیل به {email}",
+      "people": "افراد کلیدی",
+      "activity": "شرح فعالیت",
+      "createdBy": "ثبت: {name} · {date}",
+      "tabProfile": "مشخصات",
+      "tabHistory": "سوابق تغییرات",
+      "numbers": "شماره‌ها",
+      "email": "ایمیل"
     },
     "customerMissing": {
       "name_en": "نام انگلیسی",
@@ -3314,9 +3339,11 @@
       "province": "استان",
       "city": "شهر",
       "address": "نشانی",
-      "contacts": "شماره تماس",
       "rank": "رتبه",
-      "category": "رسته"
+      "category": "رسته",
+      "phones": "شماره تلفن",
+      "grade_or_activity": "رتبه و رشته یا شرح فعالیت",
+      "unknown": "یک فیلد"
     },
     "contactLabel": {
       "office": "دفتر",
@@ -3331,7 +3358,7 @@
       "template": "دریافت قالب",
       "templateFile": "customers-template.xlsx",
       "acceptedTitle": "مقدارهای مجاز",
-      "acceptedKind": "نوع: دولتی / Government، پیمانکار / Contractor",
+      "acceptedKind": "نوع: دولتی / Government، پیمانکار / Contractor، خصوصی / Private",
       "acceptedLabel": "نوع شماره: دفتر / Office، موبایل / Mobile، فکس / Fax، سایر / Other",
       "acceptedRank": "رتبه: ۱ تا ۵. استان، شهر و رسته: نام فارسی یا انگلیسی آن‌ها.",
       "pickFile": "انتخاب فایل ‎.xlsx",
@@ -3394,9 +3421,15 @@
         "contact_title": "سمت",
         "contact_label": "نوع شماره",
         "phone": "شماره",
-        "email": "ایمیل"
+        "email": "ایمیل",
+        "ceo_phone": "تلفن مدیرعامل",
+        "activity": "شرح فعالیت"
       },
-      "errorInvalid": "مقدار نامعتبر دارد"
+      "errorInvalid": "مقدار نامعتبر دارد",
+      "acceptedContactTitle": "سمت: باید یکی از سمت‌های فهرست باشد (تنظیمات › فهرست‌های مشتری)؛ در غیر این صورت خالی می‌ماند.",
+      "unknownTitles": "سمت‌های ناشناخته",
+      "unknownTitle": "سمت «{value}» ({rows, plural, other {# ردیف}})",
+      "titleHint": "سمت‌ها فقط در تنظیمات افزوده می‌شوند؛ یکی را انتخاب کنید یا خالی بگذارید."
     },
     "customerLists": {
       "section": "فهرست‌های مشتری",
@@ -3414,7 +3447,99 @@
       "moveDown": "پایین",
       "edit": "ویرایش",
       "empty": "هنوز چیزی نیست.",
-      "count": "{count, plural, other {# شهر}}"
+      "count": "{count, plural, other {# شهر}}",
+      "titles": "سمت‌های افراد کلیدی",
+      "addTitle": "افزودن سمت"
+    },
+    "history": {
+      "title": "سوابق تغییرات",
+      "beforeHistory": "ثبت‌شده پیش از آغاز ثبت سوابق · {date}",
+      "privateChanged": "جزئیات خصوصی تغییر کرد",
+      "empty": "هنوز تغییری ثبت نشده است.",
+      "loadMore": "بیشتر",
+      "peopleChanged": "افراد کلیدی: {added} افزوده، {changed} تغییر، {removed} حذف",
+      "recordStage": "جابه‌جایی مرحله",
+      "recordOther": "تغییر پرونده",
+      "recordComment": "یادداشت: {text}",
+      "action": {
+        "created": "ایجاد شد",
+        "edited": "ویرایش شد",
+        "renamed": "تغییر نام: {from} ← {to}",
+        "merged_into": "در «{name}» ادغام شد",
+        "merged_from": "«{name}» در این مشتری ادغام شد",
+        "imported_created": "از فایل وارد شد",
+        "imported_updated": "با فایل به‌روز شد",
+        "removed_by_import_undo": "با حذف ورود فایل پاک شد",
+        "alias_added": "نام مشابه افزوده شد: {name}",
+        "alias_removed": "نام مشابه حذف شد: {name}",
+        "deleted": "حذف شد",
+        "currency": "ارز: {name}",
+        "stage": "مرحله: {name}",
+        "stage_order": "ترتیب مراحل",
+        "field": "فیلد: {name}",
+        "general": "تنظیمات کلی",
+        "category": "رشته: {name}",
+        "city": "شهر: {name}",
+        "title": "سمت: {name}",
+        "name_match": "تطبیق نام: {name} ← {profile}",
+        "ledger_import": "ورود فایل دفتر: {file}",
+        "inquiry_import": "ورود فایل استعلام‌ها: {file}",
+        "customer_import": "ورود فایل مشتریان: {file}",
+        "batch_removed": "حذف ورود فایل: {file}"
+      },
+      "op": {
+        "created": "افزوده",
+        "edited": "ویرایش",
+        "hidden": "پنهان",
+        "shown": "نمایان",
+        "deleted": "حذف"
+      },
+      "source": {
+        "record": "از فرم پرونده",
+        "ledger_import": "از ورود فایل",
+        "inquiry_import": "از ورود فایل",
+        "import": "از ورود فایل"
+      },
+      "field": {
+        "name": "نام",
+        "name_en": "نام انگلیسی",
+        "kind": "نوع شرکت",
+        "rank": "رتبه",
+        "category": "رسته",
+        "grades": "رتبه و رسته‌های بیشتر",
+        "province": "استان",
+        "city": "شهر",
+        "address": "نشانی",
+        "ceo_name": "مدیرعامل",
+        "ceo_phone": "تلفن مدیرعامل",
+        "activity": "شرح فعالیت",
+        "people": "افراد کلیدی",
+        "name_fa": "نام (فارسی)",
+        "code": "کد",
+        "active": "فعال",
+        "position": "ترتیب",
+        "fields": "مشخصه‌های پیش‌فرض"
+      }
+    },
+    "activityPage": {
+      "title": "سوابق فروش",
+      "who": "چه کسی",
+      "when": "زمان",
+      "what": "چه تغییری",
+      "item": "مورد",
+      "anyone": "همه",
+      "anyType": "همه موارد",
+      "entity": {
+        "record": "پرونده",
+        "customer": "مشتری",
+        "product": "کالا",
+        "settings": "تنظیمات",
+        "import": "ورود فایل"
+      },
+      "from": "از",
+      "to": "تا",
+      "gone": "(دیگر وجود ندارد)",
+      "empty": "چیزی پیدا نشد."
     }
   }
 }

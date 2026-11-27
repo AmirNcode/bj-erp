@@ -1,44 +1,100 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cleanContacts, contactState, emptyContactRow, gradeState, gradesPayload, hasPartialContact, hasPartialGrade, missingKeys,
+  cleanPeople, emptyPerson, gradeState, gradesPayload, hasPartialGrade, hasPartialPerson, hasPhone, isValidPhone, missingKeys,
+  normalizePhone, personState, type PersonRow,
 } from '@/lib/sales/customerForm';
+import { hasGrades } from '@/lib/sales/customers';
 import type { CustomerInput } from '@/lib/sales/types';
 
 const full: CustomerInput = {
   name: 'نفت', name_en: 'NISOC', kind: 'government', ceo_name: 'A B', province_code: 'KZ', city_id: 'c1',
-  address: 'x', rank: null, category_id: null, grades: [],
-  contacts: [{ person: 'p', title: null, label: 'office', phone: '021', email: null }],
+  address: 'x', rank: null, category_id: null, grades: [], ceo_phone: null, activity: 'Oil',
+  people: [{ name: 'p', title_id: null, email: null, phones: [{ label: 'office', phone: '02112345' }] }],
 };
 
-describe('missingKeys', () => {
-  it('is empty for a complete government customer', () => expect(missingKeys(full)).toEqual([]));
+describe('missingKeys (mirror of sales_customer_missing_of)', () => {
+  it('is empty for a government customer with a description, a phone and the rest', () => expect(missingKeys(full)).toEqual([]));
   it('lists every empty required field in form order', () => {
-    const empty: CustomerInput = { ...full, name_en: ' ', kind: null, ceo_name: null, province_code: null, city_id: null, address: '', contacts: [] };
-    expect(missingKeys(empty)).toEqual(['name_en', 'kind', 'ceo_name', 'province', 'city', 'address', 'contacts']);
+    const empty: CustomerInput = {
+      ...full, name_en: ' ', kind: null, ceo_name: null, province_code: null, city_id: null, address: '', activity: null, people: [],
+    };
+    expect(missingKeys(empty)).toEqual(['name_en', 'kind', 'ceo_name', 'province', 'city', 'address', 'phones', 'grade_or_activity']);
   });
-  it('asks for rank and category only from a contractor', () => {
-    expect(missingKeys({ ...full, kind: 'contractor' })).toEqual(['rank', 'category']);
-    expect(missingKeys({ ...full, kind: 'contractor', rank: 3, category_id: 'k' })).toEqual([]);
+  it('government without a description misses grade_or_activity', () => {
+    expect(missingKeys({ ...full, activity: null })).toEqual(['grade_or_activity']);
+  });
+  it('a contractor with only a rank misses category and grade_or_activity', () => {
+    expect(missingKeys({ ...full, kind: 'contractor', rank: 3, activity: null })).toEqual(['category', 'grade_or_activity']);
+    expect(missingKeys({ ...full, kind: 'contractor', category_id: 'k', activity: null })).toEqual(['rank', 'grade_or_activity']);
+  });
+  it('a contractor with a description only is complete', () => {
+    expect(missingKeys({ ...full, kind: 'contractor', activity: 'Roads' })).toEqual([]);
+  });
+  it('a complete pair meets the rule without a description, for contractor and private', () => {
+    expect(missingKeys({ ...full, kind: 'contractor', rank: 3, category_id: 'k', activity: null })).toEqual([]);
+    expect(missingKeys({ ...full, kind: 'private', rank: 3, category_id: 'k', activity: null })).toEqual([]);
+  });
+  it('a government customer never counts a leftover rank pair', () => {
+    expect(missingKeys({ ...full, rank: 3, category_id: 'k', activity: null })).toEqual(['grade_or_activity']);
+  });
+  it('the CEO direct line alone satisfies phones', () => {
+    expect(missingKeys({ ...full, people: [], ceo_phone: '09121234567' })).toEqual([]);
+    expect(missingKeys({ ...full, people: [] })).toEqual(['phones']);
   });
 });
 
-describe('contact rows', () => {
-  const row = (o: Partial<ReturnType<typeof emptyContactRow>>) => ({ ...emptyContactRow(), ...o });
+describe('hasGrades', () => {
+  it('is true for contractor and private only', () => {
+    expect([hasGrades('contractor'), hasGrades('private'), hasGrades('government'), hasGrades(null)]).toEqual([true, true, false, false]);
+  });
+});
+
+describe('phone numbers', () => {
+  it('normalizes digits and separators like private.sales_phone', () => {
+    expect(normalizePhone(' ۰۹۱۲ ۱۲۳-۴۵۶۷ ')).toBe('09121234567');
+    expect(normalizePhone('+98 (21) 1234.5678')).toBe('+982112345678');
+    expect(normalizePhone('٠٢١٣٤٥٦٧')).toBe('02134567');
+  });
+  it('accepts 5–15 digits with an optional +', () => {
+    expect(isValidPhone('12345')).toBe(true);
+    expect(isValidPhone('1234')).toBe(false);
+    expect(isValidPhone('+1234567890123456')).toBe(false);
+    expect(isValidPhone('abc12345')).toBe(false);
+    expect(isValidPhone('')).toBe(false);
+  });
+  it('hasPhone looks at the CEO line and every entry', () => {
+    expect(hasPhone(null, [])).toBe(false);
+    expect(hasPhone('12345', [])).toBe(true);
+    expect(hasPhone(null, [{ phones: [{ label: 'fax', phone: '021-12345' }] }])).toBe(true);
+    expect(hasPhone(null, [{ phones: [{ label: 'fax', phone: '12' }] }])).toBe(false);
+  });
+});
+
+describe('key people rows', () => {
+  const row = (o: Partial<PersonRow>): PersonRow => ({ ...emptyPerson(), ...o });
   it('classifies empty, partial and ok', () => {
-    expect(contactState(row({}))).toBe('empty');
-    expect(contactState(row({ person: 'a' }))).toBe('partial');
-    expect(contactState(row({ phone: '1' }))).toBe('partial');
-    expect(contactState(row({ title: 'x' }))).toBe('partial');
-    expect(contactState(row({ person: 'a', phone: '1' }))).toBe('ok');
+    expect(personState(row({}))).toBe('empty');
+    expect(personState(row({ name: 'a' }))).toBe('ok');
+    expect(personState(row({ title_id: 't' }))).toBe('ok');
+    expect(personState(row({ phones: [{ label: 'mobile', phone: '09121234567' }] }))).toBe('ok');
+    expect(personState(row({ phones: [{ label: 'mobile', phone: '12' }] }))).toBe('partial');
+    expect(personState(row({ name: 'a', phones: [{ label: 'mobile', phone: '12' }] }))).toBe('partial');
+    expect(personState(row({ email: 'a@b.c' }))).toBe('partial');
   });
   it('blocks only on partial rows', () => {
-    expect(hasPartialContact([row({}), row({ person: 'a', phone: '1' })])).toBe(false);
-    expect(hasPartialContact([row({ person: 'a' })])).toBe(true);
+    expect(hasPartialPerson([row({}), row({ name: 'a' })])).toBe(false);
+    expect(hasPartialPerson([row({ phones: [{ label: 'office', phone: '1' }] })])).toBe(true);
   });
-  it('drops empty rows and trims the rest', () => {
-    expect(cleanContacts([row({}), row({ person: ' a ', phone: ' 1 ', email: ' ' })])).toEqual([
-      { person: 'a', title: null, label: 'office', phone: '1', email: null },
-    ]);
+  it('drops empty entries, trims, normalizes numbers', () => {
+    expect(cleanPeople([
+      row({}),
+      row({ name: ' a ', email: ' ', phones: [{ label: 'mobile', phone: ' ۰۹۱۲ ۱۲۳۴۵۶۷ ' }, { label: 'fax', phone: '' }] }),
+    ])).toEqual([{ name: 'a', title_id: null, email: null, phones: [{ label: 'mobile', phone: '09121234567' }] }]);
+  });
+  it('a company line has no name or title', () => {
+    const line = row({ companyLine: true, name: 'ignored', title_id: 't', phones: [{ label: 'fax', phone: '02112345' }] });
+    expect(cleanPeople([line])).toEqual([{ name: null, title_id: null, email: null, phones: [{ label: 'fax', phone: '02112345' }] }]);
+    expect(personState(row({ companyLine: true }))).toBe('empty');
   });
 });
 

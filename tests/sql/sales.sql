@@ -100,15 +100,15 @@ begin
 end; $$;
 
 -- ============================================================ catalog and seed
-select pg_temp.expect('catalog: 37 keys',(select count(*)::text from private.permission_keys()),'37');
+select pg_temp.expect('catalog: 38 keys',(select count(*)::text from private.permission_keys()),'38');
 select pg_temp.assert('shapes: sales RE, decide and settings edit-only, reports read-only',
   private.permission_allows('sales','read') and private.permission_allows('sales','edit')
   and private.permission_allows('sales_prices','read') and private.permission_allows('project_items','edit')
   and private.permission_allows('sales_decide','edit') and not private.permission_allows('sales_decide','read')
   and private.permission_allows('sales_settings','edit') and not private.permission_allows('sales_settings','read')
   and private.permission_allows('sales_reports','read') and not private.permission_allows('sales_reports','edit'));
-select pg_temp.expect('seven keys depend on sales (FR-98: + sales_customers)',
-  (select count(*)::text from private.permission_deps() where needs='sales' and key_level='read'),'7');
+select pg_temp.expect('eight keys depend on sales (FR-98: + sales_customers; FR-99: + sales_activity)',
+  (select count(*)::text from private.permission_deps() where needs='sales' and key_level='read'),'8');
 select pg_temp.expect('no preset or system role holds a new key',
   (select count(*)::text from public.role_permissions rp join public.roles r on r.id=rp.role_id
     where r.kind<>'custom' and (rp.permission like 'sales%' or rp.permission='project_items')),'0');

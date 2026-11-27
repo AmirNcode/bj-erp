@@ -2016,6 +2016,10 @@
       "sales_customers_import": {
         "label": "Customers: bulk import",
         "description": "Import customers from an Excel file and remove those imports."
+      },
+      "sales_activity": {
+        "label": "Sales: activity log",
+        "description": "See every change in Sales and who made it."
       }
     },
     "levels": {
@@ -2750,7 +2754,8 @@
       "reports": "Reports",
       "settings": "Settings",
       "customers": "Customers",
-      "products": "Products"
+      "products": "Products",
+      "activity": "Activity"
     },
     "search": {
       "label": "Find by record or item number",
@@ -2765,7 +2770,8 @@
     },
     "customerKind": {
       "government": "Government",
-      "contractor": "Contractor"
+      "contractor": "Contractor",
+      "private": "Private"
     },
     "source": {
       "website": "Tender website",
@@ -2961,7 +2967,9 @@
       "file_delete": "File <n>{name}</n> deleted",
       "archived": "Record archived",
       "deleted": "Record deleted",
-      "restored": "Record restored"
+      "restored": "Record restored",
+      "deadlineDone": "Deadline “{name}” marked done",
+      "deadlineUndone": "Deadline “{name}” reopened"
     },
     "items": {
       "hint": "One row per item of this record. Open a row to add its parts. Numbers are given on save and never reused.",
@@ -3531,13 +3539,11 @@
       "intro": "Fill in what you know. A customer with gaps is saved as a draft and tagged Incomplete until every field is filled.",
       "sectionNames": "Name",
       "sectionType": "Type",
-      "sectionCeo": "Managing director",
       "sectionAddress": "Address",
-      "sectionContacts": "Contacts",
       "name": "Company name (Farsi)",
       "nameEn": "English name or abbreviation",
       "nameEnHint": "For example NISOC. Shown when the app is in English.",
-      "kind": "Government or contractor",
+      "kind": "Company type",
       "rank": "Rank",
       "rankOption": "Rank {rank}",
       "category": "Category",
@@ -3546,8 +3552,6 @@
       "city": "City",
       "cityNeedsProvince": "Pick the province first.",
       "address": "Street address",
-      "contactPerson": "Person",
-      "contactTitle": "Job title",
       "contactLabel": "Type",
       "contactPhone": "Number",
       "contactEmail": "Email (optional)",
@@ -3555,10 +3559,6 @@
       "removeGrade": "Remove",
       "removeGradeAria": "Remove rank / category row {n}",
       "gradeIncomplete": "Pick both a rank and a category, or remove this row.",
-      "addContact": "Add contact",
-      "removeContact": "Remove contact",
-      "noContacts": "No contacts yet.",
-      "contactIncomplete": "A contact needs a person and a number.",
       "similarTitle": "Companies with a word in common — is it one of these?",
       "useThis": "Use this one",
       "open": "Open",
@@ -3576,7 +3576,25 @@
       "newCity": "New city in {province}",
       "nameFa": "Name (Farsi)",
       "nameEnOptional": "Name (English, optional)",
-      "create": "Create"
+      "create": "Create",
+      "activity": "Description of activity",
+      "activityHint": "What the company does. Needed when it has no rank.",
+      "sectionPeople": "Key people",
+      "ceoCard": "Managing director (CEO)",
+      "ceoPhone": "CEO direct phone (optional)",
+      "personName": "Name",
+      "personTitle": "Title",
+      "noTitle": "—",
+      "hiddenTitle": "{title} (hidden)",
+      "addNumber": "Add number",
+      "removeNumber": "Remove number",
+      "addPerson": "Add key person",
+      "addCompanyLine": "Add company line",
+      "companyLine": "Company line",
+      "removePerson": "Remove",
+      "noPeople": "No key people yet.",
+      "phoneInvalid": "This number is not valid.",
+      "personIncomplete": "Add a name, title or number, or remove this entry."
     },
     "customerProfile": {
       "add": "Add customer",
@@ -3592,7 +3610,14 @@
       "contacts": "Contacts",
       "noContacts": "No contacts yet.",
       "call": "Call {phone}",
-      "mail": "Email {email}"
+      "mail": "Email {email}",
+      "people": "Key people",
+      "activity": "Activity",
+      "createdBy": "Registered by {name} · {date}",
+      "tabProfile": "Profile",
+      "tabHistory": "History",
+      "numbers": "Numbers",
+      "email": "Email"
     },
     "customerMissing": {
       "name_en": "English name",
@@ -3601,9 +3626,11 @@
       "province": "Province",
       "city": "City",
       "address": "Address",
-      "contacts": "Contacts",
       "rank": "Rank",
-      "category": "Category"
+      "category": "Category",
+      "phones": "Phone number",
+      "grade_or_activity": "Rank & category or activity description",
+      "unknown": "A field"
     },
     "contactLabel": {
       "office": "Office",
@@ -3618,7 +3645,7 @@
       "template": "Download template",
       "templateFile": "customers-template.xlsx",
       "acceptedTitle": "Accepted values",
-      "acceptedKind": "Type: دولتی / Government, پیمانکار / Contractor",
+      "acceptedKind": "Type: دولتی / Government, پیمانکار / Contractor, خصوصی / Private",
       "acceptedLabel": "Phone type: دفتر / Office, موبایل / Mobile, فکس / Fax, سایر / Other",
       "acceptedRank": "Rank: 1 to 5. Province, city and category: their Farsi or English name.",
       "pickFile": "Choose .xlsx file",
@@ -3681,9 +3708,15 @@
         "contact_title": "Contact job title",
         "contact_label": "Phone type",
         "phone": "Phone",
-        "email": "Email"
+        "email": "Email",
+        "ceo_phone": "CEO phone",
+        "activity": "Activity description"
       },
-      "errorInvalid": "Has a value that is not valid"
+      "errorInvalid": "Has a value that is not valid",
+      "acceptedContactTitle": "Job title: must match one in the list (Settings › Customer lists); otherwise it is left empty.",
+      "unknownTitles": "Unknown titles",
+      "unknownTitle": "Title “{value}” ({rows, plural, one {# row} other {# rows}})",
+      "titleHint": "Titles are added only in Settings: pick one or leave it empty."
     },
     "customerLists": {
       "section": "Customer lists",
@@ -3701,7 +3734,99 @@
       "moveDown": "Move down",
       "edit": "Edit",
       "empty": "None yet.",
-      "count": "{count, plural, one {# city} other {# cities}}"
+      "count": "{count, plural, one {# city} other {# cities}}",
+      "titles": "Key-person titles",
+      "addTitle": "Add title"
+    },
+    "history": {
+      "title": "History",
+      "beforeHistory": "Registered before history began · {date}",
+      "privateChanged": "Private details changed",
+      "empty": "No changes recorded yet.",
+      "loadMore": "Load more",
+      "peopleChanged": "Key people: {added} added, {changed} changed, {removed} removed",
+      "recordStage": "Stage changed",
+      "recordOther": "Record changed",
+      "recordComment": "Note: {text}",
+      "action": {
+        "created": "Created",
+        "edited": "Edited",
+        "renamed": "Renamed: {from} → {to}",
+        "merged_into": "Merged into “{name}”",
+        "merged_from": "“{name}” was merged into this customer",
+        "imported_created": "Imported from a file",
+        "imported_updated": "Updated by an import",
+        "removed_by_import_undo": "Removed by undoing an import",
+        "alias_added": "Alias added: {name}",
+        "alias_removed": "Alias removed: {name}",
+        "deleted": "Deleted",
+        "currency": "Currency: {name}",
+        "stage": "Stage: {name}",
+        "stage_order": "Stage order",
+        "field": "Field: {name}",
+        "general": "General settings",
+        "category": "Category: {name}",
+        "city": "City: {name}",
+        "title": "Title: {name}",
+        "name_match": "Name matching: {name} → {profile}",
+        "ledger_import": "Ledger import: {file}",
+        "inquiry_import": "Inquiry import: {file}",
+        "customer_import": "Customer import: {file}",
+        "batch_removed": "Import removed: {file}"
+      },
+      "op": {
+        "created": "added",
+        "edited": "edited",
+        "hidden": "hidden",
+        "shown": "shown",
+        "deleted": "deleted"
+      },
+      "source": {
+        "record": "from a record form",
+        "ledger_import": "from an import",
+        "inquiry_import": "from an import",
+        "import": "from an import"
+      },
+      "field": {
+        "name": "Name",
+        "name_en": "English name",
+        "kind": "Company type",
+        "rank": "Rank",
+        "category": "Category",
+        "grades": "Further rank / category pairs",
+        "province": "Province",
+        "city": "City",
+        "address": "Address",
+        "ceo_name": "Managing director",
+        "ceo_phone": "CEO phone",
+        "activity": "Activity description",
+        "people": "Key people",
+        "name_fa": "Name (Farsi)",
+        "code": "Code",
+        "active": "Active",
+        "position": "Order",
+        "fields": "Default fields"
+      }
+    },
+    "activityPage": {
+      "title": "Sales activity",
+      "who": "Who",
+      "when": "When",
+      "what": "What",
+      "item": "Item",
+      "anyone": "Anyone",
+      "anyType": "Everything",
+      "entity": {
+        "record": "Record",
+        "customer": "Customer",
+        "product": "Product",
+        "settings": "Settings",
+        "import": "Import"
+      },
+      "from": "From",
+      "to": "To",
+      "gone": "(no longer exists)",
+      "empty": "Nothing found."
     }
   }
 }

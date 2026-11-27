@@ -17,21 +17,27 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { mergeSalesCustomers, renameSalesCustomer } from '@/lib/actions/sales';
-import { barPercent, persianYearOf } from '@/lib/sales/customers';
+import { LinkPending } from '@/components/LinkPending';
+import { tabClass, tabListClass } from '@/lib/ui/tabs';
+import { barPercent, hasGrades, persianYearOf } from '@/lib/sales/customers';
 import { customerLabel } from '@/lib/sales/customerLabel';
+import { tehranDay } from '@/lib/sales/history';
 import { DEFAULT_RECORD_SORT } from '@/lib/sales/recordSort';
-import type { Bootstrap, CustomerDetail, CustomerFilters, CustomerRef, RecordPage, RecordSort, SalesMetrics } from '@/lib/sales/types';
+import type { Bootstrap, CustomerDetail, CustomerFilters, CustomerPerson, CustomerRef, HistoryRow, RecordPage, RecordSort, SalesMetrics } from '@/lib/sales/types';
 import { CustomerCombo } from './CustomerCombo';
 import { Sums, useIncompleteHint } from './CustomersList';
 import { CustomerForm } from './CustomerForm';
 import { FilterBar } from './FilterBar';
+import { HistoryList } from './HistoryList';
 import { MetricsStrip } from './MetricsStrip';
 import { RecordSortSelect, RecordsTable } from './RecordsTable';
 import { Tag, useRun, useSalesFormat } from './parts';
 import { useViewAs } from '../../_components/ViewAsContext';
 
-export function CustomerView({ boot, detail, page, metrics, filters }: {
+export function CustomerView({ boot, detail, page, metrics, filters, tab = 'profile', history = null, historyError = null }: {
   boot: Bootstrap; detail: CustomerDetail; page: RecordPage; metrics: SalesMetrics | null; filters: CustomerFilters;
+  /** `?tab=history`: the page fetched the history (only then). `history` null = failed to load (`historyError`). */
+  tab?: 'profile' | 'history'; history?: HistoryRow[] | null; historyError?: string | null;
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
@@ -58,6 +64,22 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
   const [name, setName] = useState(c.name);
   const [merging, setMerging] = useState(false);
   const [target, setTarget] = useState<CustomerRef | null>(null);
+
+  const tabHref = (next: 'profile' | 'history') => {
+    const qs = new URLSearchParams(params.toString());
+    if (next === 'history') qs.set('tab', 'history'); else qs.delete('tab');
+    const q = qs.toString();
+    return q ? `${pathname}?${q}` : pathname;
+  };
+  const titleOf = (x: CustomerPerson) => (f.locale === 'en' && x.title_en ? x.title_en : x.title_fa) ?? null;
+  // Phone book: the CEO first, named key people, company lines last.
+  const book: { key: string; name: string | null; title: string | null; line: boolean; email: string | null; phones: { label: string | null; phone: string }[] }[] = p.ceo_name !== undefined
+    ? [
+        ...(p.ceo_name || p.ceo_phone ? [{ key: 'ceo', name: p.ceo_name ?? null, title: t('customerForm.ceoCard'), line: false, email: null, phones: p.ceo_phone ? [{ label: null, phone: p.ceo_phone }] : [] }] : []),
+        ...(p.people ?? []).filter((x) => x.name || x.title_id).map((x, i) => ({ key: x.id ?? `p${i}`, name: x.name, title: titleOf(x), line: false, email: x.email, phones: x.phones })),
+        ...(p.people ?? []).filter((x) => !x.name && !x.title_id).map((x, i) => ({ key: x.id ?? `l${i}`, name: null, title: null, line: true, email: x.email, phones: x.phones })),
+      ]
+    : [];
 
   const targets = useMemo(() => boot.customers.filter((x) => x.id !== c.id), [boot.customers, c.id]);
   const years = useMemo(() => [...detail.per_year].sort((a, b) => b.year - a.year).slice(0, 10), [detail.per_year]);
@@ -111,24 +133,39 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
           ) : null}
         </div>
         {missing.length > 0 ? <p className="text-sm text-warning">{hint(missing)}</p> : null}
+        <nav className={tabListClass} aria-label={t('customerProfile.profile')}>
+          {(['profile', 'history'] as const).map((k) => (
+            <Link key={k} href={tabHref(k)} scroll={false} className={tabClass(tab === k)} aria-current={tab === k ? 'page' : undefined} data-testid={`sales-customer-tab-${k}`}>
+              {k === 'profile' ? t('customerProfile.tabProfile') : t('customerProfile.tabHistory')}
+              <LinkPending />
+            </Link>
+          ))}
+        </nav>
       </div>
+
+      {tab === 'history' ? (
+        <section className="flex flex-col gap-3" data-testid="sales-customer-history">
+          <h3 className="text-sm font-semibold">{t('history.title')}</h3>
+          {history === null ? <p role="alert" className="text-sm text-destructive">{historyError ?? t('history.empty')}</p>
+            : history.length === 0 && !p.created_at ? <EmptyState message={t('history.empty')} />
+            : <HistoryList rows={history} entityKind="customer" createdAt={p.created_at} entityId={c.id} />}
+        </section>
+      ) : (<>
 
       <section className="flex flex-col gap-3 border border-border bg-card p-4" data-testid="sales-customer-profile">
         <h3 className="text-sm font-semibold">{t('customerProfile.profile')}</h3>
         <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {([
             [t('customerForm.kind'), p.kind ? t(`customerKind.${p.kind}`) : null],
-            ...(p.kind === 'contractor' ? [[
+            ...(hasGrades(p.kind) ? [[
               t('customerMissing.rank') + ' · ' + t('customerMissing.category'),
               [...(p.rank || p.category_fa ? [{ rank: p.rank, category_fa: p.category_fa, category_en: p.category_en }] : []), ...(p.grades ?? [])]
                 .map((g) => t('customerProfile.rankCategory', { rank: g.rank ? f.number(g.rank) : '—', category: (f.locale === 'en' && g.category_en ? g.category_en : g.category_fa) ?? '—' }))
                 .join('\n') || null,
             ] as [string, string | null]] : []),
             [t('customerProfile.location'), [f.locale === 'en' ? p.province_en : p.province_fa, f.locale === 'en' && p.city_en ? p.city_en : p.city_fa].filter(Boolean).join(' · ') || null],
-            ...(p.ceo_name !== undefined ? [
-              [t('customerProfile.ceo'), p.ceo_name],
-              [t('customerProfile.address'), p.address ?? null],
-            ] as [string, string | null][] : []),
+            [t('customerProfile.activity'), p.activity],
+            ...(p.ceo_name !== undefined ? [[t('customerProfile.address'), p.address ?? null]] as [string, string | null][] : []),
           ] as [string, string | null][]).map(([label, value]) => (
             <div key={label} className="flex flex-col gap-0.5">
               <dt className="text-xs text-muted-foreground">{label}</dt>
@@ -136,27 +173,39 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
             </div>
           ))}
         </dl>
-        {p.contacts !== undefined ? (
-          p.contacts.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerProfile.noContacts')}</p> : (
+        {p.created_by_name ? (
+          <p className="text-xs text-muted-foreground">{t('customerProfile.createdBy', { name: p.created_by_name, date: f.date(tehranDay(p.created_at)) })}</p>
+        ) : null}
+        {p.ceo_name !== undefined ? (
+          book.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerForm.noPeople')}</p> : (
             <div className="overflow-x-auto border-b border-border">
-              <table className="data-table w-full text-sm" data-testid="sales-customer-contacts" aria-label={t('customerProfile.contacts')}>
+              <table className="data-table w-full text-sm" data-testid="sales-customer-contacts" aria-label={t('customerProfile.people')}>
                 <thead>
                   <tr>
-                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactPerson')}</th>
-                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactTitle')}</th>
-                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactLabel')}</th>
-                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactPhone')}</th>
-                    <th className="px-3 py-2.5 text-start">{t('customerForm.contactEmail')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.personName')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerForm.personTitle')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerProfile.numbers')}</th>
+                    <th className="px-3 py-2.5 text-start">{t('customerProfile.email')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {p.contacts.map((k, i) => (
-                    <tr key={k.id ?? i}>
-                      <td className="px-3 py-2">{k.person}</td>
-                      <td className="px-3 py-2">{k.title ?? dash}</td>
-                      <td className="px-3 py-2">{t(`contactLabel.${k.label}`)}</td>
-                      <td className="px-3 py-2"><a href={`tel:${k.phone}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.call', { phone: k.phone })}>{k.phone}</a></td>
-                      <td className="px-3 py-2">{k.email ? <a href={`mailto:${k.email}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.mail', { email: k.email })}>{k.email}</a> : dash}</td>
+                  {book.map((r) => (
+                    <tr key={r.key}>
+                      <td className="px-3 py-2">{r.name ? <bdi>{r.name}</bdi> : r.line ? <span className="text-muted-foreground">{t('customerForm.companyLine')}</span> : dash}</td>
+                      <td className="px-3 py-2">{r.title ? <bdi>{r.title}</bdi> : dash}</td>
+                      <td className="px-3 py-2">
+                        {r.phones.length === 0 ? dash : (
+                          <ul className="flex flex-col gap-0.5">
+                            {r.phones.map((ph, i) => (
+                              <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+                                <a href={`tel:${ph.phone}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.call', { phone: ph.phone })}>{ph.phone}</a>
+                                {ph.label ? <span className="text-xs text-muted-foreground">{t(`contactLabel.${ph.label as 'office'}`)}</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{r.email ? <a href={`mailto:${r.email}`} dir="ltr" className="text-primary" aria-label={t('customerProfile.mail', { email: r.email })}>{r.email}</a> : dash}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -252,6 +301,7 @@ export function CustomerView({ boot, detail, page, metrics, filters }: {
           </>
         )}
       </section>
+      </>)}
 
       {editing ? (
         <CustomerForm

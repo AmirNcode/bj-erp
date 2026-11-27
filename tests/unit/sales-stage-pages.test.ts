@@ -18,7 +18,7 @@ const contract = [
 const caps = (extra: Partial<SalesCaps> = {}): SalesCaps => ({
   edit: true, prices: false, prices_edit: false, bonds: false, bonds_edit: false, decide: false,
   reports: false, settings: false, items: false, items_edit: false, remove_records: false,
-  customers: false, customers_import: false, ...extra,
+  customers: false, customers_import: false, activity: false, ...extra,
 });
 const rec = (extra: Partial<RecordRow>): RecordRow => ({
   stage_id: 'technical', stage_kind: 'open', flow_id: 'bid', flow_kind: 'bid', bid_decision: 'bid', needs_quote: true,

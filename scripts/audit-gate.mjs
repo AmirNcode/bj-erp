@@ -6,12 +6,9 @@
  */
 import { execFileSync } from 'node:child_process';
 
-const IGNORED = new Map([
-  // picomatch ReDoS (all versions <= 4.0.7, no patch yet, 2026-11-18). Reached only through
-  // next-intl → @parcel/watcher (the message-extractor file watcher); the app never passes
-  // user input to a glob.
-  ['GHSA-fc5q-39xc-vjpf', 'picomatch ReDoS via next-intl → @parcel/watcher; no fixed version yet'],
-]);
+// Empty since 2026-11-27 (picomatch GHSA-fc5q-39xc-vjpf no longer reported). Entry shape:
+// ['GHSA-xxxx-xxxx-xxxx', '<package> <issue> via <path>; no fixed version yet'],
+const IGNORED = new Map([]);
 
 let raw;
 try {

@@ -54,7 +54,7 @@ export type LedgerRow = {
   rec: number;
   buyer: string | null;
   client: string | null;
-  kind: 'government' | 'contractor' | null;
+  kind: 'government' | 'contractor' | 'private' | null;
   customer_ref: string | null;
   project_site: string | null;
   delivery_amount: number | null;
@@ -305,6 +305,7 @@ export function parseLedger(sheet: Cell[][], currencies: Currency[]): LedgerPars
           const v = value.toLowerCase();
           if (v === 'g' || v.startsWith('gov')) row.kind = 'government';
           else if (v === 'c' || v.startsWith('con')) row.kind = 'contractor';
+          else if (v === 'p' || v.startsWith('pri')) row.kind = 'private';
           else warn(column.label, cell, 'bad_value');
           break;
         }

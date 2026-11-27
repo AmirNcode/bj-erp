@@ -9,6 +9,14 @@ was deployed; semantic versioning starts at the first tag.
 
 ## [Unreleased]
 
+### ERP › Sales change history + customer phone book (FR-99) — 2026-11-27, branch `feat/sales-customer-phonebook`
+- **Every Sales change is recorded** — who, when, and what changed (old → new) — for records, customers, products, Settings, Name matching and imports. Nobody can edit or delete the log.
+- **History** tab on every customer and product page; **Sales › Activity** lists every change with filters (person, dates, type) for holders of the new permission **Sales: activity log**. Private customer details show as "Private details changed" to people without customer rights.
+- **Customer phone book:** one **Key people** section replaces CEO + contacts: the CEO with an optional direct phone, then any number of key people (title picked from a list, several numbers, email) and company lines. Titles are managed only in Settings › Customer lists.
+- **Activity description** (شرح فعالیت) on every customer, and a third company type **Private**; a customer is complete with a rank + category **or** an activity description, plus at least one phone number.
+- Customer import template: two more columns at the end (CEO phone, Activity description); type accepts Private; contact titles are matched to the list.
+- The Activity page's person filter lists only people with a Sales permission at edit level (migration `20261127130000`), not the whole company.
+
 ### ERP › Sales customer form feedback (FR-98 follow-up) — 2026-11-26, branch `feat/sales-customer-form-feedback`
 - A contractor customer can hold several rank + category pairs (CEO): "Add rank / category" in the customer form, every pair on the customer page. The first pair stays the main one (completeness, import); further pairs live in `sales_customer_grades` (migration `20261126150000`), and a merge keeps both customers' pairs.
 - The "is it one of these?" company matches now open as a dropdown under the name / English name field instead of growing the form; Escape closes the list, not the dialog (any open picker in a Sales dialog).
