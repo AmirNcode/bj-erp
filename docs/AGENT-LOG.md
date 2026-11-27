@@ -78,6 +78,10 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — FR-99 on `:3501` for owner test (Claude)
+
+PR #37 (`36f23d3` + review fixes `9493ecc`) pushed. `:3501`: applied `20261127120000_sales_fr99_review_fixes.sql` with a ledger row (`fr99-review-local`), restarted rest, rebuilt the app via `.bj-deploy/approvals-finance/compose-cust` (health 200; customer History, Activity and English profile pages render). Throwaway users `9990990011/12`, their roles, the test customer and their `sales_audit` rows deleted (as `supabase_admin`); title order restored. Clone `x_fr99` dropped. **Waiting for the owner to test on `:3501` and confirm the merge** — do not merge `main` before that. After merge: grant **Sales: activity log** to the CEO role on Liara.
+
 ## 2026-11-27 — PR #37 review (FR-99) by a review subagent: fixes left uncommitted (Claude)
 
 **Agent:** Claude Opus 5.5 via Claude Code (review subagent of the lead)
