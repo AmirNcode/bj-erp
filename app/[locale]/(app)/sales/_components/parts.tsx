@@ -284,10 +284,16 @@ const inCalendar = (target: EventTarget | null) => target instanceof Element && 
  * (so a scrolling dialog cannot cut it off); a press or focus there must not count as
  * "outside the dialog" and close it.
  */
-export function ModalContent({ onPointerDownOutside, onInteractOutside, ...props }: React.ComponentProps<typeof DialogContent>) {
+export function ModalContent({ onPointerDownOutside, onInteractOutside, onEscapeKeyDown, ...props }: React.ComponentProps<typeof DialogContent>) {
   return (
     <DialogContent
       {...props}
+      // Radix hears Escape in the capture phase, before the field: a field with an open list
+      // (aria-expanded) closes that list on its own keydown and the dialog stays open.
+      onEscapeKeyDown={(e) => {
+        if (document.activeElement?.getAttribute('aria-expanded') === 'true') e.preventDefault();
+        else onEscapeKeyDown?.(e);
+      }}
       onPointerDownOutside={(e) => {
         if (inCalendar(e.target)) e.preventDefault();
         else onPointerDownOutside?.(e);

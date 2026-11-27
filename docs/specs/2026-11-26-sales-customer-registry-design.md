@@ -23,7 +23,7 @@ spotted; "the same in the main table" (the Records list).
 | D2 | Who | New role permission **Customers: create / edit** (`sales_customers`): create, edit, and *see* contact details. |
 | D3 | Names | **Farsi name** (required) + **one English field** for the English name *or* the English abbreviation (e.g. `NISOC`). No separate abbreviation field. |
 | D4 | Display | Language **en** → English field, else Farsi name. Language **fa** → Farsi name. |
-| D5 | Type | Government / Contractor. Contractor → **rank** (1–5) + **category**, one pair per company for now (multiple pairs may come later: keep it a single pair, but nothing should make a later child table hard). |
+| D5 | Type | Government / Contractor. Contractor → **rank** (1–5) + **category**, one pair per company for now (multiple pairs may come later: keep it a single pair, but nothing should make a later child table hard). **Amended 2026-11-26 (CEO confirmed):** several pairs; the first stays on `sales_customers`, further complete pairs in `sales_customer_grades` (max 9). |
 | D6 | Category | Picked from a list; **"Create …"** in the picker when the search finds none. The list is editable in Sales › Settings (rename, hide), like currencies. |
 | D7 | Contacts | A phone book per company: any number of entries, each **person**, **job title**, **label** (office / mobile / fax / other), **number**, optional **email**. |
 | D8 | Contact privacy | CEO, contacts and street address are visible only to `sales_customers` holders. |

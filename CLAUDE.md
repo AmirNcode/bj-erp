@@ -237,6 +237,9 @@ finance: `4002`). `hr-101` needs `SUPABASE_SERVICE_ROLE_KEY` (local: `SERVICE_RO
 - **`sales_customers.missing` is trigger-maintained** (customers + contacts): don't compute completeness in a reader or the UI (live form feedback excepted, `lib/sales/customerForm.ts`).
 - **Word search = `private.sales_word_key` (SQL) ≡ `nameKey` (TS);** a shared fold fixture is asserted in `tests/unit/sales-customer-search.test.ts` and `tests/sql/sales-customer-registry.sql`. Uniqueness keys stay `sales_name_key`.
 - **Customer lists (cities, contractor categories) are seeded once per company by `private.sales_ensure`** (only while both are empty) — never re-seed in a migration; fix entries in Settings › Customer lists.
+- **Customer rank / category pairs:** the first (main) pair is `sales_customers.rank` / `category_id` (completeness, import read it); further pairs are `sales_customer_grades`, written only by `private.sales_customer_set_grades` (save key `grades`; absent = keep). A trigger drops them when the customer stops being a contractor.
+- **Escape in a Sales dialog:** Radix hears it in the capture phase; `ModalContent` keeps the dialog open while the focused field has `aria-expanded="true"`, so a picker/dropdown must set that attribute and close itself on Escape.
+- **Throwaway browser-test users made with the GoTrue admin API get `auth.users.role = ''`:** set `role`/`aud` to `authenticated` or PostgREST fails (`role "" does not exist`) and the login page says "inactive". On `:3501` sign in at `APP_ORIGIN` (LAN URL), not localhost.
 - More: `docs/MEMORY.md`.
 
 ## Working agreements

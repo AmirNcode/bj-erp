@@ -418,4 +418,60 @@ select pg_temp.expect('an import that writes nothing keeps no batch',
   (select (j->>'batch_id') is null and (j->>'created')='0' and (j->>'updated')='0'
      from (select pg_temp.as_json('imp',$q$select public.app_sales_customer_import('{"file_name":"empty.xlsx","default_action":"skip","rows":[{"row":2}]}'::jsonb)$q$) j) t)::text,'true');
 
+-- ============================================================ several rank / category pairs (2026-11-26 CEO)
+create function pg_temp.cat_en(p_name text) returns uuid language sql as $$
+  select id from public.sales_contractor_categories where company_id=pg_temp.fx('company') and name_en=p_name;
+$$;
+insert into sl_j select 'MP1',pg_temp.svj('cust',null,jsonb_build_object('name','پیمانکار چند رتبه','kind','contractor',
+  'rank','1','category_id',pg_temp.cat_en('Building'),
+  'grades',jsonb_build_array(
+    jsonb_build_object('rank','۳','category_id',pg_temp.cat_en('Oil and gas')),
+    jsonb_build_object('rank',1,'category_id',pg_temp.cat_en('Building')),
+    jsonb_build_object('rank',3,'category_id',pg_temp.cat_en('Oil and gas')),
+    jsonb_build_object('rank',2,'category_id',pg_temp.cat_en('Water')))));
+insert into sl_fx select 'MP1',(j->>'id')::uuid from sl_j where k='MP1';
+select pg_temp.expect('further pairs saved in order, first-pair and repeated pairs dropped',
+  (select string_agg((g->>'rank')||':'||(g->>'category_en'),',' order by o) from sl_j, jsonb_array_elements(j->'grades') with ordinality t(g,o) where k='MP1'),
+  '3:Oil and gas,2:Water');
+select pg_temp.expect('first pair stays on the customer',(select j->>'rank'||':'||(j->>'category_en') from sl_j where k='MP1'),'1:Building');
+select pg_temp.expect('half-filled further pair is refused',
+  pg_temp.msg(pg_temp.sv('cust',pg_temp.fx('MP1'),jsonb_build_object('name','پیمانکار چند رتبه','kind','contractor',
+    'grades',jsonb_build_array(jsonb_build_object('rank',2))))),'sales: invalid input');
+select pg_temp.expect('rank 6 in a further pair is refused',
+  pg_temp.msg(pg_temp.sv('cust',pg_temp.fx('MP1'),jsonb_build_object('name','پیمانکار چند رتبه','kind','contractor',
+    'grades',jsonb_build_array(jsonb_build_object('rank',6,'category_id',pg_temp.cat_en('Water')))))),'sales: invalid input');
+select pg_temp.expect('more than 9 further pairs is refused',
+  pg_temp.msg(pg_temp.sv('cust',pg_temp.fx('MP1'),jsonb_build_object('name','پیمانکار چند رتبه','kind','contractor',
+    'grades',(select jsonb_agg(jsonb_build_object('rank',1+(n%5),'category_id',pg_temp.cat_en('Water'))) from generate_series(1,10) n)))),
+  'sales: invalid input');
+select pg_temp.expect('refused saves kept the stored pairs',
+  (select count(*)::text from public.sales_customer_grades where customer_id=pg_temp.fx('MP1')),'2');
+select pg_temp.expect('a save without grades keeps them (old app)',
+  (select jsonb_array_length(pg_temp.svj('cust',pg_temp.fx('MP1'),jsonb_build_object('name','پیمانکار چند رتبه','kind','contractor',
+     'rank',1,'category_id',pg_temp.cat_en('Building')))->'grades')::text),'2');
+select pg_temp.expect('the client cannot read the grades table',
+  (pg_temp.as_scalar('cust','select count(*)::text from public.sales_customer_grades') like 'ERROR 42501%')::text,'true');
+select pg_temp.expect('viewer sees the pairs on the profile',
+  (select jsonb_array_length(pg_temp.as_json('viewer',format('select public.app_sales_customer(%L)',pg_temp.fx('MP1')))->'profile'->'grades')::text),'2');
+update public.sales_customers set rank=3,category_id=pg_temp.cat_en('Oil and gas') where id=pg_temp.fx('MP1');
+select pg_temp.expect('a further pair that becomes the first pair is dropped',
+  (select string_agg(rank||':'||category_id,',') from public.sales_customer_grades where customer_id=pg_temp.fx('MP1')),
+  '2:'||pg_temp.cat_en('Water'));
+-- merge: the source's pairs join the target's further pairs
+insert into sl_j select 'MP2',pg_temp.svj('cust',null,jsonb_build_object('name','پیمانکار مبدا','kind','contractor',
+  'rank',4,'category_id',pg_temp.cat_en('Power'),
+  'grades',jsonb_build_array(jsonb_build_object('rank',2,'category_id',pg_temp.cat_en('Water')),
+                             jsonb_build_object('rank',5,'category_id',pg_temp.cat_en('Agriculture')))));
+insert into sl_fx select 'MP2',(j->>'id')::uuid from sl_j where k='MP2';
+select pg_temp.expect('merge with pairs runs',
+  pg_temp.msg(pg_temp.as_scalar('setm',format('select public.app_sales_merge_customers(%L,%L)::text',pg_temp.fx('MP2'),pg_temp.fx('MP1')))),'ok');
+select pg_temp.expect('target: own first pair, own further pair, then the source''s pairs without repeats',
+  (select rank||':'||(select name_en from public.sales_contractor_categories where id=category_id) from public.sales_customers where id=pg_temp.fx('MP1'))
+  ||' | '||(select string_agg(g.rank||':'||c.name_en,',' order by g.position) from public.sales_customer_grades g
+              join public.sales_contractor_categories c on c.id=g.category_id where g.customer_id=pg_temp.fx('MP1')),
+  '3:Oil and gas | 2:Water,4:Power,5:Agriculture');
+update public.sales_customers set kind='government',rank=null,category_id=null where id=pg_temp.fx('MP1');
+select pg_temp.expect('a customer that stops being a contractor loses its further pairs',
+  (select count(*)::text from public.sales_customer_grades where customer_id=pg_temp.fx('MP1')),'0');
+
 rollback;

@@ -463,6 +463,8 @@ export type CustomerProfile = {
   category_id: string | null;
   category_fa: string | null;
   category_en: string | null;
+  /** Further rank + category pairs (the first pair is rank / category_id above). */
+  grades: CustomerGrade[];
   province_code: string | null;
   province_fa: string | null;
   province_en: string | null;
@@ -478,6 +480,9 @@ export type CustomerProfile = {
   contacts?: CustomerContact[];
 };
 
+/** A contractor's further rank + category pair (always complete). */
+export type CustomerGrade = { rank: number; category_id: string; category_fa: string; category_en: string | null };
+
 /** What the customer form sends to app_sales_save_customer. */
 export type CustomerInput = {
   name: string;
@@ -489,6 +494,8 @@ export type CustomerInput = {
   address: string | null;
   rank: number | null;
   category_id: string | null;
+  /** Further pairs, both values set; the first pair travels in rank / category_id. */
+  grades: { rank: number; category_id: string }[];
   contacts: CustomerContact[];
 };
 

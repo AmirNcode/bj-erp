@@ -11,6 +11,8 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - [ ] During the deploy swap only: the old app's typed buyer + buyer type no longer fills an empty customer type (minutes-long window; no action needed after deploy).
 - [ ] CEO to confirm: one rank + category per contractor is enough (D5), or several pairs.
 - [ ] Review the seeded city list (396 county seats, written from memory; uncertain towns left out — e.g. Karun, Bavi, Hamun, Bahestan): fix or add in Settings › Customer lists.
+- [ ] Several rank / category pairs (2026-11-26): the customer import still takes one pair per row (the main pair); add extra pair columns if the CEO wants them imported.
+- [ ] e2e for the customer form should also cover: Add rank / category rows, the name-match dropdown + Escape.
 - [ ] Owner: every existing customer starts Incomplete — fill the data in the form, or import it with the template (action Update).
 
 ## Speed on slow links (spec 2026-11-24)
