@@ -296,6 +296,26 @@ select pg_temp.assert('ledger import: one import row with the counts, by batch i
      from pg_temp.last_audit()));
 select pg_temp.expect('ledger import: the creation source is cleared after the call',
   coalesce(current_setting('bj.sales_source',true),''),'');
+-- Review fix (20261127120000): an extra column the import turns into a record field is a logged Settings change.
+-- In a savepoint: the later Activity counts stay as they were.
+savepoint fr99_field;
+select pg_temp.expect('ledger import with an extra column',
+  pg_temp.as_json('s1',$q$select public.app_sales_import('history-ledger-2.csv',
+    '[{"rec":900503,"description":"History ledger 2","status":"current","custom":{"Site manager":"Karimi"}}]',
+    '["Site manager"]')$q$)->>'created','1');
+select pg_temp.assert('ledger import: the new record field is logged settings/field created (source import), once',
+  (select count(*)=1 and bool_and(a.entity_id=d.id and a.body->>'op'='created' and a.body->>'source'='import'
+                                  and a.body->>'key'=d.key and a.entity_label='Site manager' and a.actor_id=pg_temp.fx('s1'))
+     from public.sales_audit a join public.sales_field_defs d
+       on d.company_id=pg_temp.fx('company') and d.entity='rfp' and d.label_en='Site manager'
+    where a.company_id=pg_temp.fx('company') and a.entity='settings' and a.action='field' and a.entity_id=d.id));
+select pg_temp.expect('ledger import: the same column again creates and logs no second field',
+  pg_temp.as_json('s1',$q$select public.app_sales_import('history-ledger-3.csv',
+    '[{"rec":900503,"description":"History ledger 2","status":"current","custom":{"Site manager":"Rahimi"}}]',
+    '["Site manager"]')$q$)->>'updated'
+  ||'/'||(select count(*) from public.sales_audit a where a.company_id=pg_temp.fx('company') and a.entity='settings'
+            and a.action='field' and a.entity_label='Site manager'),'1/1');
+rollback to savepoint fr99_field;
 select pg_temp.expect('inquiry import',
   pg_temp.as_json('s1',$q$select public.app_sales_import_inquiries(null,'history-inquiries.csv','[{"rec":900502,"description":"History inquiry"}]','{}','2026-06-01',true)$q$)->>'created','1');
 select pg_temp.assert('inquiry import: one import row with the counts',

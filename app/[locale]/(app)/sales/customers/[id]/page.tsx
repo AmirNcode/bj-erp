@@ -42,5 +42,5 @@ export default async function SalesCustomerPage({ params, searchParams }: Props)
   ]);
   if (!detail.ok) notFound();
   if (!page.ok) return <p role="alert" className="text-sm text-destructive">{page.error}</p>;
-  return <CustomerView boot={boot} detail={detail.data} page={page.data} metrics={metrics.ok ? metrics.data : null} filters={filters} tab={tab} history={history?.ok ? history.data : null} />;
+  return <CustomerView boot={boot} detail={detail.data} page={page.data} metrics={metrics.ok ? metrics.data : null} filters={filters} tab={tab} history={history?.ok ? history.data : null} historyError={history && !history.ok ? history.error : null} />;
 }

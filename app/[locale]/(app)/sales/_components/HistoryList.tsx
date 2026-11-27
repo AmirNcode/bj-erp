@@ -10,7 +10,8 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import {
-  changeList, formatChangeValue, historyLine, historyOp, historySource, isPrivateChanged, personText,
+  changeList, formatChangeValue, hasCreationRow, historyLine, historyOp, historySource, isPrivateChanged, isStrippedChange,
+  personText, tehranDay,
 } from '@/lib/sales/history';
 import type { HistoryChange, HistoryRow } from '@/lib/sales/types';
 import { useSalesFormat } from './parts';
@@ -25,7 +26,7 @@ export function useHistoryParts() {
   const rich = t.rich as unknown as (key: string, values: Record<string, unknown>) => React.ReactNode;
   const arrow = f.locale === 'fa' ? '←' : '→';
   const when = (iso: string) =>
-    `${f.date(iso)} ${new Intl.DateTimeFormat(f.locale === 'fa' ? 'fa-IR' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(iso))}`;
+    `${f.date(tehranDay(iso))} ${new Intl.DateTimeFormat(f.locale === 'fa' ? 'fa-IR' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(iso))}`;
   const has = (key: string) => t.has(key as never);
 
   function line(row: HistoryRow): React.ReactNode {
@@ -57,7 +58,8 @@ export function useHistoryParts() {
   }
 
   function change(c: HistoryChange) {
-    if (c.field === 'people' && !c.private) {
+    // Holders: the phone-book change keeps its entries (it is always flagged private); readers get it stripped.
+    if (c.field === 'people' && !isStrippedChange(c)) {
       const from = Array.isArray(c.from) ? c.from.map(personText) : [];
       const to = Array.isArray(c.to) ? c.to.map(personText) : [];
       return (
@@ -72,7 +74,7 @@ export function useHistoryParts() {
     return (
       <li key={c.field}>
         <span className="text-muted-foreground">{fieldLabel(c.field)}: </span>
-        {c.private && c.from === undefined && c.to === undefined ? tr('history.privateChanged')
+        {isStrippedChange(c) ? tr('history.privateChanged')
           : c.hidden ? tr('stagePage.changedHidden')
             : (
               <>
@@ -114,18 +116,20 @@ export function useHistoryParts() {
   return { t, f, tr, when, line, changes, itemOf };
 }
 
-export function HistoryList({ rows, entityKind, createdAt, showEntity = false }: {
+export function HistoryList({ rows, entityKind, createdAt, entityId, showEntity = false }: {
   rows: HistoryRow[];
   entityKind: 'customer' | 'product' | 'mixed';
-  /** Customer pages: when the customer was registered (shown as "before history began" when no `created` row). */
+  /** Customer pages: when the customer was registered (shown as "before history began" when no creation row). */
   createdAt?: string;
+  /** Customer pages: the customer's own id (rows of customers merged into it do not count as its creation). */
+  entityId?: string;
   showEntity?: boolean;
 }) {
   const { t, f, tr, when, line, changes, itemOf } = useHistoryParts();
   // A merged customer's history carries other ids: then each row says whose it was.
   const multi = new Set(rows.map((r) => r.entity_id)).size > 1;
   const showLabel = showEntity || (entityKind === 'customer' && multi);
-  const beforeHistory = entityKind === 'customer' && !!createdAt && !rows.some((r) => r.action === 'created');
+  const beforeHistory = entityKind === 'customer' && !!createdAt && !hasCreationRow(rows, entityId);
 
 
   if (rows.length === 0 && !beforeHistory) {
@@ -144,7 +148,7 @@ export function HistoryList({ rows, entityKind, createdAt, showEntity = false }:
       ))}
       {beforeHistory ? (
         <li className="py-2.5 text-sm text-muted-foreground" data-testid="sales-history-before">
-          {tr('history.beforeHistory', { date: f.date(createdAt) })}
+          {tr('history.beforeHistory', { date: f.date(createdAt ? tehranDay(createdAt) : createdAt) })}
         </li>
       ) : null}
     </ol>

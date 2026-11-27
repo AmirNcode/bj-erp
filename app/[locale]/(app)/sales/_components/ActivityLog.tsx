@@ -11,6 +11,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { addSalesComment } from '@/lib/actions/sales';
+import { tehranDay } from '@/lib/sales/history';
 import type { Bootstrap, EventRow, RecordRow } from '@/lib/sales/types';
 import { useRun, useSalesFormat } from './parts';
 import { FieldText, labelKey } from './StageFields';
@@ -23,7 +24,8 @@ export function ActivityLog({ boot, record, events }: { boot: Bootstrap; record:
   const { run, pending } = useRun();
   const [text, setText] = useState('');
   const stageName = (id: unknown) => f.stageName(boot.stages.find((s) => s.id === id));
-  const when = (iso: string) => `${f.date(iso)} ${new Intl.DateTimeFormat(f.locale === 'fa' ? 'fa-IR' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(iso))}`;
+  // The day in Tehran too (the timestamp is UTC): the time below is Tehran's.
+  const when = (iso: string) => `${f.date(tehranDay(iso))} ${new Intl.DateTimeFormat(f.locale === 'fa' ? 'fa-IR' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tehran' }).format(new Date(iso))}`;
 
   function label(field: string) {
     if (field.startsWith('custom.')) {

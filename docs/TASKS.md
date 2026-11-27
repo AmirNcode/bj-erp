@@ -9,6 +9,7 @@ it closes instead of ticking it. Status: ☐ todo · ◐ in progress · ⊘ bloc
 - [ ] Admin: grant **Sales: activity log** to the CEO's role (Settings › Roles) after deploy.
 - [ ] e2e spec for the phone book form and the History tab (checked by hand on `:3501`).
 - [ ] Customers registered before 2026-11-27 have no history (shown as "Registered before history began").
+- [ ] History rows for stages, currencies and general settings show raw field keys (`decimals`, `warn_days`, …): add `history.field.*` labels.
 
 ## FR-98 Sales customer registry (2026-11-26, branch `feat/sales-customer-registry`)
 

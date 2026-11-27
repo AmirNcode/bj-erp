@@ -78,6 +78,31 @@ Copy this block verbatim and fill it in.
 
 # Entries
 
+## 2026-11-27 — PR #37 review (FR-99) by a review subagent: fixes left uncommitted (Claude)
+
+**Agent:** Claude Opus 5.5 via Claude Code (review subagent of the lead)
+**Branch / HEAD at start:** `feat/sales-customer-phonebook` @ `36f23d3` (worktree `../bj-cust`)
+**Trigger:** Lead asked for a defect hunt on PR #37 (privacy, logging, SQL, TS/UI, tests) and fixes in the worktree.
+
+**What changed**
+- New migration `supabase/migrations/20261127120000_sales_fr99_review_fixes.sql`: `app_sales_import` (ledger) logs `settings/field {op: created, source: import}` for a record field it creates from an extra file column (the one Settings write left unlogged); rest of the function copied unchanged. `supabase/schema.sql` patched with only that hunk (clone dump diff). Test: `tests/sql/sales-history.sql` block "ledger import with an extra column" (in a savepoint; fails without the fix).
+- `HistoryList.tsx`: a holder's phone-book change (always flagged `private`, but with from / to) fell to the generic branch and showed only names ("Ali → Ali"); now `isStrippedChange` decides. Dates in History / Activity / record activity log / "Registered by" use the Tehran day (`tehranDay`; the DB sends UTC, so 00:00–03:30 Tehran showed yesterday). "Registered before history began" no longer shows for customers made by a customer import (`hasCreationRow`, own id only). Customer History load failure shows the error instead of "No changes recorded yet".
+- `lib/sales/history.ts` (+ `isStrippedChange`, `tehranDay`, `hasCreationRow`), unit tests in `tests/unit/sales-history.test.ts`.
+
+**Actions outside the repo**
+- Docker VM disk was full again (65 MB free): `docker builder prune -f` (5 GB).
+- Applied `20261127120000` to clone `x_fr99` only (not to `:3501`'s db `postgres`).
+
+**Verification**
+- SQL on `x_fr99` after the fix: all `tests/sql/sales*.sql`, request-edit, fr55 (14 known soft FAILs) — no error; sales-history now 81 PASS.
+- `tsc`, `npm run lint` clean; vitest 1723 passed / 5 skipped; `npm run build` ok.
+
+**State left behind**
+- Uncommitted. `:3501` still lacks `20261127120000` (apply with a ledger row when the branch is redeployed there).
+
+**For the next agent**
+- Settings history rows for stage / currency / general settings show raw field keys (no `history.field.*` labels for them): cosmetic, not changed.
+
 ## 2026-11-27 — FR-99: Sales change history + customer phone book, activity description, Private type (Claude)
 
 **Agent:** Claude Opus 5.5 via Claude Code (lead); Opus subagents wrote the SQL tasks, Sonnet subagents the TS / UI tasks

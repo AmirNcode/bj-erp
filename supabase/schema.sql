@@ -11579,7 +11579,7 @@ declare
   v_updated integer := 0; v_skipped integer := 0; v_deleted integer := 0; r public.sales_rfps; v_buyer uuid; v_client uuid;
   v_stage uuid; v_status text; v_owner uuid; v_name text; v_custom jsonb; v_map jsonb := '{}';
   v_header text; v_key text; v_try integer; v_b jsonb; v_id uuid; v_title text; v_form text;
-  v_kind text; v_seq integer; v_bstatus text; v_reasons jsonb := '[]';
+  v_kind text; v_seq integer; v_bstatus text; v_reasons jsonb := '[]'; v_fid uuid;
   -- Values a caller may not edit by hand are not written by their import either.
   v_prices boolean := private.sales_can('sales_prices'); v_bonds boolean := private.sales_can('sales_bonds');
 begin
@@ -11610,7 +11610,13 @@ begin
       insert into public.sales_field_defs (company_id, entity, key, label_fa, label_en, type, position)
         values (v_company, 'rfp', v_name, left(v_header, 80), left(v_header, 80), 'text',
                 (select coalesce(max(position), 0) + 1 from public.sales_field_defs
-                  where company_id = v_company and entity = 'rfp'));
+                  where company_id = v_company and entity = 'rfp'))
+        returning id into v_fid;
+      -- FR-99 review: a record field the file's extra column creates is a Settings change (like the
+      -- categories / cities a customer import creates).
+      perform private.sales_log(v_company, 'settings', v_fid, left(v_header, 80), 'field',
+        jsonb_build_object('op', 'created', 'source', 'import', 'name', left(v_header, 80),
+                           'name_en', left(v_header, 80), 'entity', 'rfp', 'key', v_name, 'batch_id', v_batch));
       v_key := v_name;
     end if;
     v_map := v_map || jsonb_build_object(v_header, v_key);

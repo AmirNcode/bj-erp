@@ -21,6 +21,7 @@ import { LinkPending } from '@/components/LinkPending';
 import { tabClass, tabListClass } from '@/lib/ui/tabs';
 import { barPercent, hasGrades, persianYearOf } from '@/lib/sales/customers';
 import { customerLabel } from '@/lib/sales/customerLabel';
+import { tehranDay } from '@/lib/sales/history';
 import { DEFAULT_RECORD_SORT } from '@/lib/sales/recordSort';
 import type { Bootstrap, CustomerDetail, CustomerFilters, CustomerPerson, CustomerRef, HistoryRow, RecordPage, RecordSort, SalesMetrics } from '@/lib/sales/types';
 import { CustomerCombo } from './CustomerCombo';
@@ -33,10 +34,10 @@ import { RecordSortSelect, RecordsTable } from './RecordsTable';
 import { Tag, useRun, useSalesFormat } from './parts';
 import { useViewAs } from '../../_components/ViewAsContext';
 
-export function CustomerView({ boot, detail, page, metrics, filters, tab = 'profile', history = null }: {
+export function CustomerView({ boot, detail, page, metrics, filters, tab = 'profile', history = null, historyError = null }: {
   boot: Bootstrap; detail: CustomerDetail; page: RecordPage; metrics: SalesMetrics | null; filters: CustomerFilters;
-  /** `?tab=history`: the page fetched the history (only then). `history` null = failed to load. */
-  tab?: 'profile' | 'history'; history?: HistoryRow[] | null;
+  /** `?tab=history`: the page fetched the history (only then). `history` null = failed to load (`historyError`). */
+  tab?: 'profile' | 'history'; history?: HistoryRow[] | null; historyError?: string | null;
 }) {
   const t = useTranslations('sales');
   const f = useSalesFormat();
@@ -145,9 +146,9 @@ export function CustomerView({ boot, detail, page, metrics, filters, tab = 'prof
       {tab === 'history' ? (
         <section className="flex flex-col gap-3" data-testid="sales-customer-history">
           <h3 className="text-sm font-semibold">{t('history.title')}</h3>
-          {history === null ? <p role="alert" className="text-sm text-destructive">{t('history.empty')}</p>
+          {history === null ? <p role="alert" className="text-sm text-destructive">{historyError ?? t('history.empty')}</p>
             : history.length === 0 && !p.created_at ? <EmptyState message={t('history.empty')} />
-            : <HistoryList rows={history} entityKind="customer" createdAt={p.created_at} />}
+            : <HistoryList rows={history} entityKind="customer" createdAt={p.created_at} entityId={c.id} />}
         </section>
       ) : (<>
 
@@ -173,7 +174,7 @@ export function CustomerView({ boot, detail, page, metrics, filters, tab = 'prof
           ))}
         </dl>
         {p.created_by_name ? (
-          <p className="text-xs text-muted-foreground">{t('customerProfile.createdBy', { name: p.created_by_name, date: f.date(p.created_at) })}</p>
+          <p className="text-xs text-muted-foreground">{t('customerProfile.createdBy', { name: p.created_by_name, date: f.date(tehranDay(p.created_at)) })}</p>
         ) : null}
         {p.ceo_name !== undefined ? (
           book.length === 0 ? <p className="text-sm text-muted-foreground">{t('customerForm.noPeople')}</p> : (

@@ -4,6 +4,7 @@
  * Every key returned is a full key under the `sales` message namespace. No React.
  */
 
+import { todayInAppTz } from '../appDate';
 import type { HistoryChange, HistoryRow } from './types';
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v));
@@ -12,6 +13,28 @@ const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object'
 /** True when the reader lacks `sales_customers` and some private value was removed from this row's body. */
 export function isPrivateChanged(row: Pick<HistoryRow, 'body'>): boolean {
   return row.body?.private_changed === true;
+}
+
+/**
+ * A change whose values the database removed for this reader (`{field, private: true}` only).
+ * Holders get private changes too, flagged `private` but with their `from` / `to`.
+ */
+export function isStrippedChange(c: HistoryChange): boolean {
+  return c.private === true && c.from === undefined && c.to === undefined;
+}
+
+/**
+ * The Tehran calendar day (YYYY-MM-DD) of a timestamp. The database sends timestamps in UTC, so the
+ * first 10 characters are the UTC day: wrong between 00:00 and 03:30 Tehran time.
+ */
+export function tehranDay(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : todayInAppTz(d);
+}
+
+/** True when the rows hold this customer's own creation (by hand, a record form or an import). */
+export function hasCreationRow(rows: Pick<HistoryRow, 'action' | 'entity_id'>[], entityId?: string): boolean {
+  return rows.some((r) => (r.action === 'created' || r.action === 'imported_created') && (!entityId || r.entity_id === entityId));
 }
 
 /** The change lines of a row's body (`changes: [{field, from, to}]`); private ones have no from / to. */
