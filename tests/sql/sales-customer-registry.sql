@@ -451,6 +451,9 @@ select pg_temp.expect('a save without grades keeps them (old app)',
      'rank',1,'category_id',pg_temp.cat_en('Building')))->'grades')::text),'2');
 select pg_temp.expect('the client cannot read the grades table',
   (pg_temp.as_scalar('cust','select count(*)::text from public.sales_customer_grades') like 'ERROR 42501%')::text,'true');
+select pg_temp.expect('the client cannot call the grades helper',
+  (pg_temp.as_scalar('cust',format('select private.sales_customer_set_grades(%L,%L,%L)::text',
+     pg_temp.fx('company'),pg_temp.fx('MP1'),'[]')) like 'ERROR 42501%')::text,'true');
 select pg_temp.expect('viewer sees the pairs on the profile',
   (select jsonb_array_length(pg_temp.as_json('viewer',format('select public.app_sales_customer(%L)',pg_temp.fx('MP1')))->'profile'->'grades')::text),'2');
 update public.sales_customers set rank=3,category_id=pg_temp.cat_en('Oil and gas') where id=pg_temp.fx('MP1');

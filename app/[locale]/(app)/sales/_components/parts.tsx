@@ -288,10 +288,11 @@ export function ModalContent({ onPointerDownOutside, onInteractOutside, onEscape
   return (
     <DialogContent
       {...props}
-      // Radix hears Escape in the capture phase, before the field: a field with an open list
-      // (aria-expanded) closes that list on its own keydown and the dialog stays open.
+      // Radix hears Escape in the capture phase, before the field: a combobox with an open list
+      // (aria-expanded) closes that list on its own keydown and the dialog stays open. Only
+      // comboboxes: an open disclosure button must not keep Escape from closing the dialog.
       onEscapeKeyDown={(e) => {
-        if (document.activeElement?.getAttribute('aria-expanded') === 'true') e.preventDefault();
+        if (document.activeElement?.matches('[role="combobox"][aria-expanded="true"]')) e.preventDefault();
         else onEscapeKeyDown?.(e);
       }}
       onPointerDownOutside={(e) => {

@@ -22637,6 +22637,13 @@ REVOKE ALL ON FUNCTION private.sales_customer_find(p_company uuid, p_name text) 
 
 
 --
+-- Name: FUNCTION sales_customer_grades_trg(); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_grades_trg() FROM PUBLIC;
+
+
+--
 -- Name: TABLE sales_customers; Type: ACL; Schema: public; Owner: -
 --
 
@@ -22712,6 +22719,13 @@ REVOKE ALL ON FUNCTION private.sales_customer_rows(p_company uuid, p_prices bool
 --
 
 REVOKE ALL ON FUNCTION private.sales_customer_set_contacts(p_company uuid, p_customer uuid, p_contacts jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sales_customer_set_grades(p_company uuid, p_customer uuid, p_grades jsonb); Type: ACL; Schema: private; Owner: -
+--
+
+REVOKE ALL ON FUNCTION private.sales_customer_set_grades(p_company uuid, p_customer uuid, p_grades jsonb) FROM PUBLIC;
 
 
 --

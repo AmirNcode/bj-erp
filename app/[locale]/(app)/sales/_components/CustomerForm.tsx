@@ -214,8 +214,9 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
             <h3 className="text-sm font-semibold">{t('customerForm.sectionNames')}</h3>
             <NameField label={t('customerForm.name')} field="fa" focus={nameFocus} setFocus={setNameFocus}
               dropdown={showSimilar ? similarList : null}>
-              {(id) => (
+              {(id, listId) => (
                 <Input id={id} maxLength={200} value={nameFa} autoComplete="off"
+                  role="combobox" aria-autocomplete="list" aria-controls={listId}
                   onChange={(e) => { setNameFa(e.target.value); setDup(null); setSimilarHidden(false); }}
                   onKeyDown={nameKeys} aria-expanded={showSimilar && nameFocus === 'fa'}
                   aria-invalid={dup !== null} data-testid="sales-customer-form-name" />
@@ -223,8 +224,9 @@ export function CustomerForm({ customerId, initial, initialName, customers, onSa
             </NameField>
             <NameField label={t('customerForm.nameEn')} hint={t('customerForm.nameEnHint')} field="en" focus={nameFocus} setFocus={setNameFocus}
               dropdown={showSimilar ? similarList : null}>
-              {(id) => (
+              {(id, listId) => (
                 <Input id={id} maxLength={200} dir="ltr" value={nameEn} autoComplete="off"
+                  role="combobox" aria-autocomplete="list" aria-controls={listId}
                   onChange={(e) => { setNameEn(e.target.value); setDup(null); setSimilarHidden(false); }}
                   onKeyDown={nameKeys} aria-expanded={showSimilar && nameFocus === 'en'}
                   className={invalidCls('name_en')} data-testid="sales-customer-form-name-en" />
@@ -453,9 +455,10 @@ function NameField({ label, hint, field, focus, setFocus, dropdown, children }: 
   focus: null | 'fa' | 'en';
   setFocus: (f: null | 'fa' | 'en' | ((f: null | 'fa' | 'en') => null | 'fa' | 'en')) => void;
   dropdown: React.ReactNode;
-  children: (id: string) => React.ReactNode;
+  children: (id: string, listId: string) => React.ReactNode;
 }) {
   const id = useId();
+  const listId = `${id}-similar`;
   return (
     <div className="flex min-w-0 flex-col gap-1.5 text-sm">
       <label htmlFor={id} className="font-medium text-foreground">{label}</label>
@@ -467,8 +470,8 @@ function NameField({ label, hint, field, focus, setFocus, dropdown, children }: 
           setFocus((f) => (f === field ? null : f));
         }}
       >
-        {children(id)}
-        {focus === field ? dropdown : null}
+        {children(id, listId)}
+        {focus === field && dropdown ? <div id={listId} className="contents">{dropdown}</div> : null}
       </div>
       {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
     </div>
